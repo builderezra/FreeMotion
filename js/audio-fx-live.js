@@ -9,15 +9,68 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
+  /* ---- Volume above 100% (queue 195) ---------------------------------------------------------
+   * His words: "I want to be able adjust the volume up to like 1000%." Measured before building
+   * (tests/_volclamp.html), the two audio paths DISAGREED above unity: the preview sets
+   * `el.volume`, an HTMLMediaElement property where assigning 2 THROWS and the value stays 1, while
+   * the export runs a Web Audio GainNode that happily amplifies. Widening the slider alone would
+   * have meant hearing nothing while you dragged and then getting a loud, distorted file.
+   *
+   * So a boost needs Web Audio in the PREVIEW too — and that is the risky part, which is why it
+   * lives here instead of in a new module. Creating a MediaElementSource is irreversible: a second
+   * call throws, and once one exists the element's audio flows ONLY through the graph, so a dangling
+   * source is a permanently silent clip. This file already owns that hazard and already gets it
+   * right — one source per element, cached on the media rec, `passthrough` on every exit. Boost
+   * simply becomes another reason to route, so there is exactly one place that can get it wrong.
+   *
+   * A layer at or below 100% is still NEVER routed, and keeps today's exact native path. */
+  function boostOf(layer) {
+    if (!layer || layer.muted) return 1;
+    const v = layer.volume;
+    if (v == null) return 1;
+    if (typeof v === 'number') return v > 1 ? v : 1;
+    // Keyframed: the chain has to exist for the whole clip if ANY keyframe goes above unity,
+    // because it cannot be built halfway through a drag without a gap in the sound.
+    const kf = v && v.kf;
+    if (!Array.isArray(kf)) return 1;
+    let peak = 1;
+    for (let i = 0; i < kf.length; i++) { const k = kf[i]; if (k && k.v > peak) peak = k.v; }
+    return peak;
+  }
+  function needsBoost(layer) { return boostOf(layer) > 1.0001; }
+  FM._audioNeedsBoost = needsBoost;   // read by the suite
+
   // Structure = what forces a rebuild (order, types, enabled). Param values do not; they ride applyAt.
+  // The boost STAGE's presence is structural too — its gain value is not, that rides setBoost.
   function signature(layer) {
     const fx = (layer && layer.audioFx) || [];
-    let s = '';
+    let s = needsBoost(layer) ? 'B|' : '';
     for (let i = 0; i < fx.length; i++) {
       const f = fx[i]; if (!f) continue;
       s += f.type + (f.enabled === false ? '0' : '1') + '|';
     }
     return s;
+  }
+
+  /* Gain, then a limiter. The limiter is not optional garnish: at 1000% anything already near full
+   * scale clips hard, and hard clipping sounds like a broken file rather than a loud one, which is
+   * the next bug report. A DynamicsCompressor with a high ratio just below 0 dBFS is a limiter —
+   * it only engages on what would have clipped, so ordinary boosts pass through unshaped.
+   * The EXPORT gets the identical stage (exporter.js), because a preview that disagrees with the
+   * file is the exact failure this whole entry exists to prevent. */
+  function makeBoostStage(ctx) {
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    const lim = ctx.createDynamicsCompressor();
+    try {
+      lim.threshold.value = -1.5;    // dBFS — start holding just under the ceiling
+      lim.knee.value = 0;            // hard knee: a limiter, not a compressor colouring the sound
+      lim.ratio.value = 20;
+      lim.attack.value = 0.003;
+      lim.release.value = 0.12;
+    } catch (e) {}
+    gain.connect(lim);
+    return { input: gain, output: lim, gain: gain };
   }
 
   // The element's source node is created ONCE per element, ever: a second call throws, and once it

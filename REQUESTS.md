@@ -1721,6 +1721,28 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **252 — PC: the settings cog does not open the way he traced, and the menu should not need
+      scrolling. (16 Aug, with a traced screenshot.)** His words: *"the way i said the settings cog to
+      open up does not open up like how i showed, look at my screenshot and replicate it. you dont have
+      to follow the sizing strictly as i want it to all fit on screen nicely"* and *"so you dont have to
+      scroll through the menu"*.
+      **This is #241 revisited** — v7.93 anchored the canvas dialog to the cog (`--cv-anchor-right` /
+      `--cv-anchor-top`) and kept the cog out of its own blur, which was the part he asked for then. What
+      it did NOT do is match the SHAPE he drew.
+      **What the new trace actually shows:** a tall panel filling the empty area to the RIGHT of the
+      canvas, rising UPWARD from the cog — its bottom edge sitting on the transport row where the cog
+      lives, its top reaching roughly the vertical middle of the stage. v7.93 drops the card DOWNWARD
+      from the cog (`top: sr.bottom + 8`), which on a desktop puts it over the timeline and, being a
+      fixed-width card, makes it scroll. He is pointing at the large unused region above instead.
+      **So two changes, and the second is the reason for the first:** open the card UPWARD from the cog
+      into that empty space, and size it so **every setting is visible at once with no scrolling** —
+      which is the whole point (*"so you dont have to scroll through the menu"*). He has explicitly
+      released the sizing: *"you dont have to follow the sizing strictly"*, so widen or re-flow the rows
+      (two columns, say) if that is what makes it fit.
+      Desktop-only — the phone sheet is a different layout and must not change. Verify by measuring the
+      card's scrollHeight against its clientHeight and asserting it does not scroll, rather than by
+      eyeballing a screenshot.
+
 - [ ] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
       aligned. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin
       in this photo, make the backdrop more subtle, maybe instead of being brighter than everything else
