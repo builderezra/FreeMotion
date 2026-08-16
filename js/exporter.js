@@ -214,6 +214,12 @@ window.FM = window.FM || {};
     // source advances sp× per output sample. A RAMPED speed prop is an object (raw arithmetic = NaN
     // = broken export audio); approximate it with the clip's average rate so audio spans the clip and
     // stays synced at the endpoints (per-sample ramp resampling isn't worth the complexity here).
+    /* Which SOURCE sample output sample `i` reads from — pulled out as a pure function so the suite
+     * can assert it (the loop it came from is inside an async export nothing can call). It was the
+     * only part of the reversed-audio path with no coverage at all: the one reversed test in the suite
+     * checks the WAVEFORM DRAWING, not a single exported sample. Fractional on purpose — the caller
+     * interpolates, which is what keeps a non-1x rate smooth.
+     * Reversed reads from the end of the covered span, so output 0 is the clip's LAST source sample. */
     const sp = FM.isAnimated && FM.isAnimated(layer.speed)
       ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
       : (layer.speed || 1);
@@ -224,8 +230,7 @@ window.FM = window.FM || {};
       const src = ab.getChannelData(ch);
       const dst = out.getChannelData(ch);
       for (let i = 0; i < lenSamples; i++) {
-        // fractional source position; reversed reads from the end of the covered span
-        const pos = layer.reversed ? (startSample + (lenSamples - 1 - i) * sp) : (startSample + i * sp);
+        const pos = FM.srcSampleAt(startSample, i, lenSamples, sp, layer.reversed);
         const i0 = Math.floor(pos), frac = pos - i0;
         const a = src[i0] || 0, b = src[i0 + 1] || 0;
         dst[i] = a + (b - a) * frac;                       // linear interp (smooth at non-1× rates)
@@ -233,6 +238,12 @@ window.FM = window.FM || {};
     }
     return out;
   }
+
+  /* Exported so the suite can reach it — see the note at its call site above. Pure arithmetic:
+   * forward output 0 is the clip's first source sample, reversed output 0 is its last. */
+  FM.srcSampleAt = function (startSample, i, lenSamples, speed, reversed) {
+    return reversed ? (startSample + (lenSamples - 1 - i) * speed) : (startSample + i * speed);
+  };
 
   async function buildAudioMix(scene, from, to) {
     const P = scene.project;

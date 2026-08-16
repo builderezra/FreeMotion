@@ -16445,6 +16445,32 @@
     }
   });
 
+  /* ---- unnumbered ("Rebuild the two lost audio diffs"): reversed EXPORT audio had no test ----
+   * The entry asked for two lost diffs to be rebuilt. The reverse one does not need rebuilding — the
+   * feature is in main on BOTH paths (js/audio-play.js synthesizes the preview buffer, js/exporter.js
+   * reverses the sample index for the file). What was missing was any test of the export side: the
+   * only reversed test in the suite checks the WAVEFORM DRAWING, which would keep passing while every
+   * exported reversed clip came out forwards. */
+
+  test('exported audio reads backwards for a reversed clip', { item: 'reverse-export' }, function () {
+    if (typeof FM.srcSampleAt !== 'function') throw new Error('FM.srcSampleAt is not exported, so the export path is still untestable');
+    const N = 100, START = 0;
+    // forward: output 0 is the FIRST source sample, output N-1 the last
+    if (FM.srcSampleAt(START, 0, N, 1, false) !== 0) throw new Error('forward output 0 did not read source 0');
+    if (FM.srcSampleAt(START, N - 1, N, 1, false) !== N - 1) throw new Error('forward output ' + (N-1) + ' did not read the last source sample');
+    // reversed: those two swap. This is the whole feature, and it had no assertion anywhere.
+    if (FM.srcSampleAt(START, 0, N, 1, true) !== N - 1) throw new Error('REVERSED output 0 read source ' + FM.srcSampleAt(START, 0, N, 1, true) + ' — it should read the clip\'s LAST sample');
+    if (FM.srcSampleAt(START, N - 1, N, 1, true) !== 0) throw new Error('reversed output ' + (N-1) + ' should read source 0');
+    // strictly decreasing across the whole clip — a reversal that is not monotonic is a scramble
+    let prev = Infinity;
+    for (let i = 0; i < N; i++) { const p = FM.srcSampleAt(START, i, N, 1, true); if (!(p < prev)) throw new Error('reversed positions are not strictly decreasing at i=' + i); prev = p; }
+    // the clip's own offset is respected, not assumed to be zero
+    if (FM.srcSampleAt(500, 0, N, 1, true) !== 500 + N - 1) throw new Error('a trimmed clip\'s start offset is dropped when reversed');
+    // and speed scales the step in both directions
+    if (FM.srcSampleAt(0, 2, N, 2, false) !== 4) throw new Error('speed is not scaling the forward step');
+    if (FM.srcSampleAt(0, 0, N, 2, true) !== (N - 1) * 2) throw new Error('speed is not scaling the reversed step');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

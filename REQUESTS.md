@@ -2628,9 +2628,26 @@ better still, keep working inside the turn rather than parking work for a later 
       textedit → v6.29, voice-recorder → v6.34, letterbox → v6.35, squish → v6.42). They have moved to
       `.claude/staged/applied/` with a README saying so, because a folder named "staged" full of
       diffs reads as unlanded work and costs a session an hour to disprove.
-- [ ] **Rebuild the two lost audio diffs** (reverse + misc). These were verified but staged in /tmp and
-      the reboot destroyed them. No worktree has them — they are genuinely gone and must be rebuilt.
-      *Held:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
+- [x] **Rebuild the two lost audio diffs** (reverse + misc). **RESOLVED 16 Aug — neither needs
+      rebuilding, and one of them was never rebuildable.** These were verified but staged in /tmp and
+      the reboot destroyed them. No worktree has them.
+      **REVERSE: already in main, on both paths.** `js/audio-play.js` synthesizes the reversed
+      AudioBuffer for the preview (honouring trim, speed and solo) and `js/exporter.js` reverses the
+      sample index for the file. So this is the same shape as the twelve staged diffs above — work
+      recorded as missing that had actually shipped. Checked before rebuilding anything, which is the
+      only reason it did not cost a morning.
+      **What WAS genuinely missing was a test.** The single reversed test in the suite checks the
+      **waveform drawing**, so every exported reversed clip could have come out forwards and the suite
+      would have stayed green. The export path's sample-index arithmetic is now `FM.srcSampleAt`, pulled
+      out as a pure function (the loop it lived in is inside an async export nothing can call) and
+      asserted: forward output 0 reads the first source sample, reversed output 0 reads the **last**,
+      positions are strictly decreasing across the clip, a trimmed clip's start offset survives the
+      reversal, and speed scales the step in both directions. **DONE v8.45.**
+      **MISC: cannot be actioned as written.** Nobody recorded what "misc" contained, so there is
+      nothing to rebuild — "rebuild the misc diff" is not a task, it is a gap in the notes. Closing it
+      rather than leaving it to be re-read forever. **If you remember what it did, say so and it gets
+      its own entry.**
+      *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
 - [ ] **Clear the rest of the BUG-HUNT backlog** (~59 items).
 
