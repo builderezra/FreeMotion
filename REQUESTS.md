@@ -4086,10 +4086,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **So when it happens to you again, read the toast and the console line and send me those** — that
       is the whole answer, and it takes one screenshot.
 
-- [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
+- [x] **216 — An "audio only" export option. DONE v8.23.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
       hide themselves when it is chosen, rather than sitting there meaning nothing.
+
+      **DONE v8.23 — and I went with WAV rather than the m4a this entry suggested, for a reason worth
+      knowing.** The mix already comes out of the audio engine as raw samples, and WAV needs no codec;
+      **#215 proved a browser can flatly refuse to encode AAC** and hand you silence with nothing to
+      show for it. An audio export that cannot fail for want of a codec beats a smaller one that
+      sometimes does. Files are bigger — about 10MB a minute — so say the word if you would rather have
+      m4a with a WAV fallback.
+      The resolution, frame rate, custom size and transparency controls all hide themselves, and come
+      back when you switch away (that has its own test — forgetting it would break the dialog for good
+      after one visit). It uses the SAME mixer and the SAME range logic as the video export, so the two
+      cannot disagree about what the soundtrack is.
+      *(Two real bugs found by running it: `buildAudioMix` returns a wrapper, not a bare buffer, so the
+      first version produced no file at all in silence; and **the WAV writer was mono-only** — built for
+      sound effects — so it was quietly throwing away the right channel of your stereo mix. Caught by
+      weighing the file, not by listening: 192KB where 384KB was due.)*
 - [x] **220 — The filters section isn't what I asked for. Three corrections. ALL DONE (v7.48–v7.49).** (15 Aug.) His words:
       *"With the filters I wanted them to have a section like how effects and audio does, not how it
       currently is, idk if this is just the base state while you work on it. Also there should be an add

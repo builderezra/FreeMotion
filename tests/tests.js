@@ -14894,6 +14894,89 @@
     }
   });
 
+  /* ---------------- queue 216: audio-only export ----------------
+   * "Add an export option to just export audio." Plus the entry's own requirement: the picture
+   * controls must hide themselves rather than sitting there meaning nothing. */
+
+  test('choosing Audio only hides every control that cannot affect it', { item: 'audio-export' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const sel = document.getElementById('exp-format');
+    if (!sel) throw new Error('no export format select');
+    const opts = Array.prototype.map.call(sel.options, function (o) { return o.value; });
+    if (opts.indexOf('audio') < 0) throw new Error('there is no audio-only option: ' + opts.join(', '));
+    const was = sel.value;
+    const visible = function (id) {
+      const n = document.getElementById(id); if (!n) return false;
+      const f = n.classList.contains('field') ? n : (n.closest('.field') || n.parentElement);
+      return !!f && !f.classList.contains('hidden');
+    };
+    try {
+      sel.value = 'mp4'; sel.dispatchEvent(new Event('change', { bubbles: true })); await frame();
+      // CONTROL FIRST: they have to be showing on MP4, or "hidden on audio" proves nothing.
+      if (!visible('exp-res') || !visible('exp-fps')) throw new Error('control failed: resolution/fps are already hidden on MP4, so this test cannot see the change');
+      sel.value = 'audio'; sel.dispatchEvent(new Event('change', { bubbles: true })); await frame();
+      if (visible('exp-res')) throw new Error('Resolution is still showing on an audio-only export — it cannot affect the output');
+      if (visible('exp-fps')) throw new Error('Frame rate is still showing on an audio-only export');
+      const go = document.getElementById('exp-go');
+      if (go && !/audio/i.test(go.textContent)) throw new Error('the button still says "' + go.textContent + '" for an audio export');
+      // …and switching BACK must bring them home, or one visit to audio breaks the dialog for good.
+      sel.value = 'mp4'; sel.dispatchEvent(new Event('change', { bubbles: true })); await frame();
+      if (!visible('exp-res') || !visible('exp-fps')) throw new Error('resolution/fps did not come back when switching away from audio — one visit breaks the dialog permanently');
+    } finally { sel.value = was; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+
+  test('the WAV writer keeps both channels', { item: 'audio-export' }, async function () {
+    /* It did not. encodeWav was written for sound effects, which are mono: it read
+       getChannelData(0) and declared 1 channel. Correct for that job, and silently wrong the moment
+       the audio-only export handed it the project mix, which is stereo — the whole right channel went
+       in the bin and nothing said a word. Found by checking the exported file's SIZE against what a
+       stereo mix should weigh, not by listening. */
+    if (!FM.sfx || !FM.sfx.encodeWav) throw new Error('no WAV writer');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return;
+    const sr = 8000;
+    // A stereo buffer with DIFFERENT content per channel — identical channels would pass even if one
+    // were dropped and the other duplicated.
+    const ctx = new OAC(2, sr, sr);
+    const src = ctx.createBufferSource();
+    const b = ctx.createBuffer(2, sr, sr);
+    for (let i = 0; i < sr; i++) { b.getChannelData(0)[i] = 0.5; b.getChannelData(1)[i] = -0.5; }
+    src.buffer = b; src.connect(ctx.destination); src.start(0);
+    const rendered = await ctx.startRendering();
+    const blob = FM.sfx.encodeWav(rendered);
+    const ab = await blob.arrayBuffer(), dv = new DataView(ab);
+    if (dv.getUint16(22, true) !== 2) throw new Error('the WAV header declares ' + dv.getUint16(22, true) + ' channel(s) for a stereo buffer');
+    const expected = 44 + sr * 2 * 2;
+    if (ab.byteLength !== expected) throw new Error('a stereo second came out ' + ab.byteLength + ' bytes, expected ' + expected + ' — half of it is missing');
+    // and the two channels must differ in the file, i.e. both were actually written
+    const l = dv.getInt16(44, true), r = dv.getInt16(46, true);
+    if (!(l > 1000 && r < -1000)) throw new Error('the interleaved samples do not carry both channels: L=' + l + ' R=' + r);
+    // a MONO buffer must still encode exactly as it always did — sound effects depend on it
+    const mctx = new OAC(1, sr, sr);
+    const ms = mctx.createBufferSource(); const mb = mctx.createBuffer(1, sr, sr);
+    for (let i = 0; i < sr; i++) mb.getChannelData(0)[i] = 0.25;
+    ms.buffer = mb; ms.connect(mctx.destination); ms.start(0);
+    const mrend = await mctx.startRendering();
+    const mblob = FM.sfx.encodeWav(mrend);
+    const mdv = new DataView(await mblob.arrayBuffer());
+    if (mdv.getUint16(22, true) !== 1) throw new Error('a mono buffer no longer encodes as mono');
+    if (mblob.size !== 44 + sr * 2) throw new Error('mono size changed to ' + mblob.size + ' — the sound effects depend on this being unchanged');
+  });
+
+  test('the audio export uses the same range and the same mixer as the video', { item: 'audio-export' }, function () {
+    /* Two copies of "whole project / this clip / the loop region" is exactly how an audio export ends
+       up covering a different span from the video it accompanies, so there is one definition and both
+       paths read it. And the mix comes from the exporter's own buildAudioMix, so the soundtrack
+       cannot drift into a second meaning — it also inherits the dropped-clip reporting from v7.90. */
+    if (typeof FM.exportRange !== 'function') throw new Error('FM.exportRange is not shared — the audio path would need its own copy of the range logic');
+    if (typeof FM._runAudioOnlyExport !== 'function') throw new Error('the audio-only export is not reachable');
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('buildAudioMix is not exported, so the audio path cannot share the video mixer');
+    if (!FM.sfx || typeof FM.sfx.encodeWav !== 'function') throw new Error('FM.sfx.encodeWav is missing — the WAV writer the export depends on');
+    const r = FM.exportRange();
+    if (!r || typeof r !== 'object') throw new Error('exportRange returned nothing');
+    if (!('from' in r) || !('to' in r)) throw new Error('exportRange did not report a range: ' + JSON.stringify(r));
+  });
+
   /* ---------------- queue 214: notes belong to ONE project ----------------
    * "Currently the notes carry across projects, I want each projects notes only for that project,
    * and when you save the project file as well it should save the notes."

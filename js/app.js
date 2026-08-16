@@ -3054,9 +3054,83 @@ window.FM = window.FM || {};
     const qEl = document.getElementById('exp-quality');
     const qField = qEl && (qEl.closest('.field') || qEl.parentElement);
     if (qField) qField.classList.toggle('hidden', fmt !== 'mp4');
+    /* AUDIO ONLY hides everything about the PICTURE (queue 216). The entry asks for exactly this —
+       "the export dialog's resolution/fps controls should hide themselves when it is chosen, rather
+       than sitting there meaning nothing". A control that cannot affect the output is worse than no
+       control: it invites you to set it and then quietly ignores you. */
+    const audioOnly = fmt === 'audio';
+    ['exp-res', 'exp-fps', 'exp-custom-field', 'exp-transparent-field'].forEach(function (id) {
+      const n = document.getElementById(id);
+      const f = n && (n.classList.contains('field') ? n : (n.closest('.field') || n.parentElement));
+      if (!f) return;
+      if (audioOnly) { f.dataset.audioHid = '1'; f.classList.add('hidden'); }
+      else if (f.dataset.audioHid) { delete f.dataset.audioHid; if (id !== 'exp-custom-field' && id !== 'exp-transparent-field') f.classList.remove('hidden'); }
+    });
     const go = document.getElementById('exp-go');
-    if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames' : 'Export MP4');
+    if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames'
+      : (fmt === 'audio' ? 'Export audio' : (fmt === 'frame' ? 'Save frame' : 'Export MP4')));
   }
+
+  /* WHICH RANGE IS BEING EXPORTED — one definition, read by the video path and the audio-only path
+   * (queue 216). Pulled out of runExport rather than copied, because two copies of "whole project /
+   * this clip / the loop region" is exactly how an audio export ends up covering a different span
+   * from the video it is supposed to accompany. Returns nulls for "the whole project", which is what
+   * the exporter already treats as its default. */
+  function exportRange() {
+    const P = FM.scene.project;
+    const rangeEl = document.getElementById('exp-range');
+    const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    if (rangeEl && rangeEl.value === 'clip') {
+      if (!selLayer) { if (FM.toast) FM.toast('Select a clip first, then export', 2200); return { stop: true }; }
+      const f = Math.max(0, selLayer.start), t = Math.min(P.duration, selLayer.start + selLayer.duration);
+      if (!(t > f)) { if (FM.toast) FM.toast('That clip sits outside the project — nothing to export', 2200); return { stop: true }; }
+      return { from: f, to: t };
+    }
+    if (rangeEl && rangeEl.value === 'loop') {
+      if (FM.hasLoopRegion && FM.hasLoopRegion()) return { from: P.loopIn, to: P.loopOut };
+      if (FM.toast) FM.toast('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
+    }
+    return { from: null, to: null };
+  }
+  FM.exportRange = exportRange;
+
+  /* The soundtrack, on its own, as a WAV (queue 216). WAV rather than m4a on purpose: the mix comes
+   * out of OfflineAudioContext as raw samples and WAV needs no codec, which matters because #215
+   * established that a browser can simply refuse to encode AAC. An audio export that cannot fail for
+   * want of a codec is worth more than a smaller one that sometimes hands you silence. */
+  async function runAudioOnlyExport() {
+    const P = FM.scene.project;
+    const range = exportRange();
+    if (range.stop) return;
+    const from = range.from == null ? 0 : range.from;
+    const to = range.to == null ? (P.duration || 0) : range.to;
+    if (!(to > from)) { if (FM.toast) FM.toast('Nothing to export — the range is empty'); return; }
+    if (FM.toast) FM.toast('Mixing audio…', 1500);
+    let mix = null;
+    try { mix = await FM.exporter.buildAudioMix(FM.scene, from, to); }
+    catch (e) { console.warn('audio-only mix failed', e); mix = null; }
+    if (!mix) {
+      // buildAudioMix already toasts WHY when it drops clips (v7.90); this covers "there was no audio
+      // at all", which is otherwise an export that silently produces a file of silence.
+      if (FM.toast) FM.toast('No audio to export — nothing in this range makes a sound', 3500);
+      return;
+    }
+    /* buildAudioMix returns { audioBuffer, sampleRate, channels }, NOT a bare AudioBuffer — handing
+       the wrapper straight to encodeWav produced no file at all, silently. Caught by running the
+       export for real against a synthesised tone rather than trusting the shape. */
+    const abuf = mix.audioBuffer || mix;
+    let blob = null;
+    try { blob = FM.sfx && FM.sfx.encodeWav ? FM.sfx.encodeWav(abuf) : null; }
+    catch (e) { console.warn('wav encode failed', e); blob = null; }
+    if (!blob) { if (FM.toast) FM.toast('Could not write the audio file'); return; }
+    const name = ((P.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name + '.wav';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (FM.toast) FM.toast('Audio exported — ' + (Math.round((to - from) * 10) / 10) + 's', 2600);
+  }
+  FM._runAudioOnlyExport = runAudioOnlyExport;   // read by the suite
 
   async function runExport() {
     expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
@@ -3071,6 +3145,16 @@ window.FM = window.FM || {};
     if (((document.getElementById('exp-format') || {}).value) === 'frame') {
       if (FM.snapshotPNG) FM.snapshotPNG();
       else if (FM.toast) FM.toast('Frame capture unavailable');
+      return;
+    }
+    /* AUDIO ONLY (queue 216) — handled here for the same reason the single frame is: it shares almost
+       nothing with the video encoders. No renderer, no bitrate, no frame loop, no resume; just the
+       mix the exporter already builds, written straight out.
+       It reuses buildAudioMix, which is the SAME mixer the MP4 path uses, so this cannot drift into
+       a second definition of "the soundtrack" that disagrees with the video — and it inherits the
+       drop reporting added in v7.90 for free, so a clip the mixer cannot read still says so. */
+    if (((document.getElementById('exp-format') || {}).value) === 'audio') {
+      await runAudioOnlyExport();
       return;
     }
     /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the
@@ -3098,18 +3182,9 @@ window.FM = window.FM || {};
     const bpW = outW || (P.width * scale), bpH = outH || (P.height * scale);
     const bitrate = Math.min(80e6, Math.round(bpW * bpH * fps * qf));
     // Resolve the range BEFORE showing the overlay so early exits can bounce back to the dialog.
-    const rangeEl = document.getElementById('exp-range');
-    const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-    let from = null, to = null;
-    if (rangeEl && rangeEl.value === 'clip') {
-      if (!selLayer) { if (FM.toast) FM.toast('Select a clip first, then export', 2200); showExportDialog(); return; }
-      from = Math.max(0, selLayer.start);
-      to = Math.min(P.duration, selLayer.start + selLayer.duration);
-      if (!(to > from)) { if (FM.toast) FM.toast('That clip sits outside the project — nothing to export', 2200); showExportDialog(); return; }
-    } else if (rangeEl && rangeEl.value === 'loop') {
-      if (FM.hasLoopRegion && FM.hasLoopRegion()) { from = P.loopIn; to = P.loopOut; }
-      else if (FM.toast) FM.toast('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
-    }
+    const rr = exportRange();
+    if (rr.stop) { showExportDialog(); return; }
+    let from = rr.from, to = rr.to;
     const overlay = document.getElementById('export-overlay');
     const bar = document.getElementById('export-bar');
     const status = document.getElementById('export-status');

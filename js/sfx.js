@@ -320,19 +320,34 @@ window.FM = window.FM || {};
   /* WAV, not WebM: this is decoded again immediately by FM.loadVideoFile, and 16-bit PCM is the one
    * container every engine reads without a codec question. A 2-second mono effect is ~176 KB, which
    * never touches disk — it goes straight into the media pipeline. */
+  /* WAV writer. Sound effects are mono, and this used to hard-code that: it read getChannelData(0)
+   * and declared 1 channel in the header. Correct for its original job, and silently WRONG the
+   * moment the audio-only export (queue 216) handed it the project mix, which is stereo — the whole
+   * right channel went in the bin and nothing said a word. Measured, not guessed: a 2-second stereo
+   * mix came out as a 192KB file where 384KB was expected.
+   * It follows the buffer's own channel count now and interleaves. A mono buffer produces byte-for-
+   * byte what it always did, so nothing the sound effects do changes. */
   function encodeWav(buf) {
-    const n = buf.length, ch = buf.getChannelData(0);
-    const bytes = 44 + n * 2;
+    const n = buf.length;
+    const nch = Math.max(1, buf.numberOfChannels || 1);
+    const chans = [];
+    for (let c = 0; c < nch; c++) chans.push(buf.getChannelData(c));
+    const blockAlign = nch * 2;                     // 16-bit samples
+    const bytes = 44 + n * blockAlign;
     const dv = new DataView(new ArrayBuffer(bytes));
     const str = (off, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); };
     str(0, 'RIFF'); dv.setUint32(4, bytes - 8, true); str(8, 'WAVE');
-    str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-    dv.setUint32(24, buf.sampleRate, true); dv.setUint32(28, buf.sampleRate * 2, true);
-    dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
-    str(36, 'data'); dv.setUint32(40, n * 2, true);
+    str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, nch, true);
+    dv.setUint32(24, buf.sampleRate, true); dv.setUint32(28, buf.sampleRate * blockAlign, true);
+    dv.setUint16(32, blockAlign, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, n * blockAlign, true);
+    let off = 44;
     for (let i = 0; i < n; i++) {
-      const v = Math.max(-1, Math.min(1, ch[i]));
-      dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+      for (let c = 0; c < nch; c++) {
+        const v = Math.max(-1, Math.min(1, chans[c][i]));
+        dv.setInt16(off, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+        off += 2;
+      }
     }
     return new Blob([dv.buffer], { type: 'audio/wav' });
   }
