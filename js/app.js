@@ -3624,8 +3624,11 @@ window.FM = window.FM || {};
     });
     // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
     FM.showExportDialog = showExportDialog;
-    const helpBtn = document.getElementById('btn-help');
-    if (helpBtn) helpBtn.addEventListener('click', () => { if (FM.shortcuts) FM.shortcuts.toggle(); });
+    /* Both "?" buttons open the same overlay — the desktop one and the phone one added in queue 248.
+       One handler over both, rather than a second copy that could drift. */
+    document.querySelectorAll('#btn-help, #m-help').forEach((b) => {
+      b.addEventListener('click', () => { if (FM.shortcuts) FM.shortcuts.toggle(); });
+    });
     const fitBtn = document.getElementById('btn-fit');
     if (fitBtn) fitBtn.addEventListener('click', () => FM.fitToContent());
     const onionBtn = document.getElementById('btn-onion');
@@ -3961,7 +3964,12 @@ window.FM = window.FM || {};
      * of them moved. */
     const far = document.createElement('div'); far.id = 't-far';
     const ver = document.querySelector('.brand .ver'); if (ver) far.appendChild(ver);
-    ['btn-notes', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+    /* "On pc it can go on the play button row along side everything else" (queue 248) — so btn-help
+       comes DOWN out of the desktop top bar and rides here, before notes, matching the phone's order.
+       Adding it to this list is the whole PC half: #171's order becomes ver · ? · notes · cog ·
+       Export · ⛶. The suite's Studio test carries the list, so dropping one in a future migration is
+       red rather than shipped — which is exactly how btn-notes went missing in v7.52. */
+      ['btn-help', 'btn-notes', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
     if (far.childNodes.length) t.appendChild(far);
 
     t._pcBuilt = true;

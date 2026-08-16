@@ -15741,6 +15741,66 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 248: a "?" for the keyboard shortcuts ----------------
+   * "Put a question mark in the top right corner to the left of note pad" and "On pc it can go on
+   * the play button row along side everything else." Half already existed as #btn-help, desktop-only
+   * and stranded in the top bar. */
+
+  test('the phone top bar has a "?" that opens the shortcuts, in both selection states', { item: 'help-btn' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 120));
+    return atPhoneWidth(async function () {
+      const b = document.getElementById('m-help');
+      if (!b) throw new Error('there is no "?" in the phone top bar');
+      const layers0 = FM.scene.layers.slice();
+      try {
+        // The notepad only appears with NOTHING selected, so a "?" pinned to it would come and go
+        // with the selection. It must be there either way — that is what this checks.
+        if (FM.selectLayer) FM.selectLayer(null);
+        if (FM.refreshAll) FM.refreshAll();
+        await frame();
+        const noSel = b.getBoundingClientRect();
+        if (!(noSel.width > 0)) throw new Error('the "?" is not visible with nothing selected');
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers.push(L); FM.selectLayer(L.id);
+        if (FM.refreshAll) FM.refreshAll();
+        await frame();
+        const withSel = b.getBoundingClientRect();
+        if (!(withSel.width > 0)) throw new Error('the "?" disappears when a layer is selected');
+        // It may shift a few px as the right-hand cluster changes width — the version chip beside it
+        // already does — but it must not jump slots.
+        if (Math.abs(withSel.left - noSel.left) > 12) {
+          throw new Error('the "?" moved ' + Math.round(Math.abs(withSel.left - noSel.left)) + 'px when the selection changed — it is shuffling position');
+        }
+        // and it must actually open the overlay
+        b.click(); await frame();
+        const ov = document.getElementById('shortcuts-overlay');
+        if (!ov) throw new Error('no shortcuts overlay');
+        if (ov.classList.contains('hidden')) throw new Error('pressing "?" did not open the shortcuts');
+        if (FM.shortcuts && FM.shortcuts.toggle) FM.shortcuts.toggle();
+      } finally {
+        FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+        const ov = document.getElementById('shortcuts-overlay'); if (ov) ov.classList.add('hidden');
+      }
+    }, 380);
+  });
+
+  test('on PC the "?" rides the transport row, not the top bar', { item: 'help-btn' }, function () {
+    /* "On pc it can go on the play button row along side everything else." btn-notes went missing in
+       exactly this migration once (v7.52 left it behind in the header), which is why the list is
+       asserted rather than assumed. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const help = document.getElementById('btn-help');
+    if (!help) throw new Error('#btn-help is gone');
+    const far = document.getElementById('t-far');
+    if (!far) return;                       // classic layout does not build the cluster
+    if (!far.contains(help)) throw new Error('the "?" is not on the transport row — it is still stranded in the desktop top bar');
+    // …and it sits before the notepad, matching the phone's order
+    const ids = Array.prototype.slice.call(far.children).map(function (n) { return n.id; }).filter(Boolean);
+    const iH = ids.indexOf('btn-help'), iN = ids.indexOf('btn-notes');
+    if (iH >= 0 && iN >= 0 && iH > iN) throw new Error('the "?" is to the RIGHT of the notepad on PC: ' + ids.join(' · '));
+  });
+
   /* ---------------- queue 244: the add menu drags over the canvas ----------------
    * Five behaviours in one request. The load-bearing one is "it shouldn't push the canvas to be
    * smaller but just go over the canvas" — which measuring showed is a STRUCTURAL requirement, not a

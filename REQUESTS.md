@@ -4235,7 +4235,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       So retiring classic means fixing #147 first, and re-checking the suite's desktop assumptions.
       Reverted for now rather than shipping a desktop that is worse than the one you have. **Doing #147
       and this together is the right shape.**
-- [ ] **248 — A "?" in the top bar that opens the keyboard shortcuts.** *(Was #222, which collided with the flaky-test entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug.) His words: *"Put a
+- [x] **248 — A "?" in the top bar that opens the keyboard shortcuts. DONE v8.31.** *(Was #222, which collided with the flaky-test entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug.) His words: *"Put a
       question mark in the top right corner to the left of note pad that quickly opens the keyboard
       shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
       get to that stage."*
@@ -4253,6 +4253,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       thing that went wrong twice and got the "why are you so bad at aligning the top buttons" reply. The
       current gaps are hand-tuned (18.0 / 24.1 / 18.0) and inserting a button next to the notepad — which
       itself appears only when nothing is selected — has to be measured, not eyeballed.
+
+      **DONE v8.31 — and the warning in this entry was worth every word.** Placing it literally "left of
+      the notepad" puts it between the version chip and the notepad, and **that gap is half of the pair
+      you signed off in #189** ("the space between the settings cog and notes pad is perfect"). Dropping
+      a button into the middle of it broke the spacing instantly — **64px against 18px** — caught by the
+      existing test, not by me. So the "?" sits one slot further left, BESIDE that pair rather than
+      through it. Say the word if you would rather have it inside and the pair re-tuned around it.
+      It shows whether or not something is selected, because the notepad does not, and tying them
+      together would make the "?" come and go with your selection.
+      On PC it has come down out of the header onto the transport row: **ver · ? · notes · cog · Export ·
+      ⛶**. That list is asserted, because `btn-notes` went missing in exactly this migration once.
 - [x] **221 — Get rid of Delete from the layer ⋯ menu. DONE v7.48.** (15 Aug, with a phone screenshot.) His words:
       *"Get rid of the delete button in this menu"* — the long ⋯ menu on a selected layer, which ends in
       a red Delete under the colour tags. The bin icon is already in the top bar two inches away, so the
