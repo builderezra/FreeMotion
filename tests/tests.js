@@ -15741,6 +15741,52 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 228: drift and orbit at a frame edge ----------------
+   * The same defect he reported for wiggle in #93(b), sitting unfixed in two more effects. The plate
+   * handed to a canvas effect is COMP-SIZED, so anything outside the frame was thrown away before the
+   * effect ran, and translating it slides in empty space. Measured before the fix: drift wrong over
+   * 1,519 pixels with worst 255 — solid content against solid nothing.
+   * Scored against GROUND TRUTH — the same layer with no effect, genuinely moved by the same delta —
+   * because that is the only reference that says which is RIGHT rather than which is different. Every
+   * case carries a control so a row where nothing actually moved cannot pass by accident. */
+
+  test('drift and orbit keep their content at a frame edge', { item: 'edge-motion' }, function () {
+    const W = 320, H = 320;
+    function off() { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+    function scn(layers) { return { project: { width: W, height: H, fps: 30, duration: 5, bg: '#000000' }, layers: layers }; }
+    function px(scene, t) { const c = off(); FM.renderScene(c.getContext('2d'), scene, t); return c.getContext('2d').getImageData(0, 0, W, H).data; }
+    function diff(a, b) {
+      let n = 0, worst = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        let any = 0;
+        for (let k = 0; k < 3; k++) { const d = Math.abs(a[i + k] - b[i + k]); if (d > 1) { any = 1; if (d > worst) worst = d; } }
+        n += any;
+      }
+      return { px: n, worst: worst };
+    }
+    function mk(x, y) { return FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 5 }); }
+
+    const places = [['fully inside', 160, 160], ['half off the left', 0, 160], ['off the corner', 0, 0]];
+    const cases = [
+      { name: 'drift', t: 0.5, dx: 60, fx: { type: 'drift', enabled: true, params: { x: 120, y: 0 } } },
+      { name: 'orbit', t: 0, dx: 80, fx: { type: 'orbit', enabled: true, params: { radius: 80, speed: 0.5 } } },
+    ];
+    cases.forEach(function (c) {
+      places.forEach(function (pl) {
+        const withFx = mk(pl[1], pl[2]); withFx.effects = [JSON.parse(JSON.stringify(c.fx))];
+        const truth = mk(pl[1] + c.dx, pl[2]);      // the same layer, genuinely moved
+        const still = mk(pl[1], pl[2]);             // control: did the move actually change anything?
+        const a = px(scn([withFx]), c.t), b = px(scn([truth]), c.t), ctl = px(scn([still]), c.t);
+        const moved = diff(b, ctl);
+        if (moved.px < 50) throw new Error('control failed for ' + c.name + ' ' + pl[0] + ': ground truth differs from the unmoved layer by only ' + moved.px + 'px, so this row proves nothing');
+        const d = diff(a, b);
+        /* A small resample softness is expected and is not the defect — the defect was CONTENT, at
+           worst 255. A handful of edge pixels at low delta is the plate's own resampling. */
+        if (d.worst > 40) throw new Error(c.name + ' ' + pl[0] + ': ' + d.px + ' pixels differ from ground truth, worst ' + d.worst + ' — it is showing empty space where the layer should be');
+      });
+    });
+  });
+
   /* ---------------- queue 202/125: the ladder can see PLAYBACK cost now ----------------
    * His first on-device sample showed the app's own `avgGapMs` reading ZERO while the real frame
    * intervals were p95 38ms and worst 494ms, with 14 late frames of 446 — so the quality ladder was

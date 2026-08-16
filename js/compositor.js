@@ -6413,15 +6413,46 @@ window.FM = window.FM || {};
       B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
       B.drawImage(A, 0, 0); B.restore();
     },
-    drift: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    /* DRIFT AND ORBIT GET WIGGLE'S EXPANDED PLATE (queue 228) — they are the same three lines wiggle
+     * was before v7.32, and they carry the same defect he reported for wiggle in #93(b).
+     * The plate handed to a canvas effect is COMP-SIZED, so anything the layer had outside the frame
+     * was already thrown away before the effect ran. Translating that plate slides in empty space
+     * rather than the content that is really there. Measured against ground truth (the same layer
+     * with no effect, genuinely moved by the same delta) on a 60x60 layer half off the left edge:
+     * drift wrong over 1,519 pixels, mean error 6.38/255, WORST 255 — solid content against solid
+     * nothing — and 2,048 pixels at the corner; orbit 567.
+     * `expand(m)` re-renders the layer into a plate with an m-pixel margin and stamps its origin, so
+     * blitting from a window shifted by the effect's own delta shows what was really out there. It
+     * already caps the margin at 60% of the comp, which is what makes this safe for drift, whose
+     * offset grows without bound with time — past the cap it degrades to today's behaviour rather
+     * than allocating an ever-larger canvas.
+     * The `near` test keeps the cost off every other frame: a layer nowhere near an edge cannot lose
+     * anything, so it takes the cheap path exactly as before. */
+    drift: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       const k = ps || 1;   // the plate is in its own pixels — a distance in project px must ride the scale
       const vx = fparam(p, 'x', 120, t) * k, vy = fparam(p, 'y', 0, t) * k;
-      B.save(); B.translate(vx * tl, vy * tl); B.drawImage(A, 0, 0); B.restore();
+      const dx = vx * tl, dy = vy * tl;
+      const need = Math.max(Math.abs(dx), Math.abs(dy));
+      const near = !!bb && need > 0.5 && (bb.x < need || bb.y < need || bb.x + bb.w > W - need || bb.y + bb.h > H - need);
+      if (near && expand) {
+        const ex = expand(Math.ceil(need / k) + 2);
+        if (ex && ex.cv) { B.drawImage(ex.cv, ex.mx * ex.ps - dx, ex.my * ex.ps - dy, W, H, 0, 0, W, H); return; }
+      }
+      B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
-    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps) {
-      const r = fparam(p, 'radius', 80, t) * (ps || 1), spd = fparam(p, 'speed', 0.5, t);
+    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+      const k = ps || 1;
+      const r = fparam(p, 'radius', 80, t) * k, spd = fparam(p, 'speed', 0.5, t);
       const a = 2 * Math.PI * spd * tl;
-      B.save(); B.translate(r * Math.cos(a), r * Math.sin(a)); B.drawImage(A, 0, 0); B.restore();
+      const dx = r * Math.cos(a), dy = r * Math.sin(a);
+      // The RADIUS bounds how far it can ever reach, so the margin is the same all the way round and
+      // the plate is built once rather than re-sized every frame of the orbit.
+      const near = !!bb && r > 0.5 && (bb.x < r || bb.y < r || bb.x + bb.w > W - r || bb.y + bb.h > H - r);
+      if (near && expand) {
+        const ex = expand(Math.ceil(r / k) + 2);
+        if (ex && ex.cv) { B.drawImage(ex.cv, ex.mx * ex.ps - dx, ex.my * ex.ps - dy, W, H, 0, 0, W, H); return; }
+      }
+      B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
     // ---- Particles — deterministic generative emitter ----
     // A pure function of tl: particle i is born at bornT = i/rate and evolved from a hash of i, keeping

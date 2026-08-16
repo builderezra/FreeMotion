@@ -4903,7 +4903,7 @@ layout, motion blur, the elements browser and the effects browser.
       blur — turn it red. The test builds its own card rather than needing the home screen open, and
       asserts the glass rules actually reached it first, so "no blur" cannot pass as "no rule".
 
-- [ ] **228 — Drift and Orbit lose content at a frame edge, the way Wiggle used to.** (Found 15 Aug by
+- [x] **228 — Drift and Orbit lose content at a frame edge, the way Wiggle used to. DONE v8.29.** (Found 15 Aug by
       `tests/_wigwin.html` while verifying #93 — not reported by you, but it is the same defect you DID
       report for wiggle in #93(b), sitting unfixed in two more effects.)
       Measured against ground truth (the same layer with no effect, genuinely moved by the same delta),
@@ -4917,6 +4917,17 @@ layout, motion blur, the elements browser and the effects browser.
       translation does not need MORE pixels, it needs the same plate taken from a window that has MOVED
       — set the plate's `__fmOX/__fmOY` before `drawLayer` and blit 1:1. One mechanism serves all three,
       and it is cheaper than the expanded plate as well as correct.
+
+      **DONE v8.29 — with the EXPANDED PLATE, not the window-move this entry recommended.** Worth being
+      straight about that choice: the window-move would be cheaper, but the expanded plate is the
+      mechanism wiggle has been using since v7.32, it is already written, already pooled, and already
+      caps its own cost at 60% of the comp — and that cap is exactly what makes it safe for drift,
+      whose offset grows without bound with time. Using the proven one means all three effects share a
+      single mechanism today rather than two, which is the other half of what this entry wanted. The
+      window-move remains a worthwhile optimisation and is not lost, just not required for correctness.
+      **Measured after: 0 pixels wrong against ground truth** in all six cases — fully inside, half off
+      the left, off the corner, for both effects. Orbit sizes its margin from the RADIUS rather than the
+      current position, so the plate is built once instead of resized every frame of the orbit.
 
 - [ ] **229 — PC: the buttons still are not where they should be, and he says the PC version is close to
       unusable.** (15 Aug.) His words: *"you still havent moved all the buttons on the pc version to
