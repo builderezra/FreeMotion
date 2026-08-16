@@ -811,6 +811,15 @@ window.FM = window.FM || {};
       var main = document.createElement('div'); main.className = 'addmenu-main';
       var tabsEl = document.createElement('div'); tabsEl.className = 'addmenu-tabs';
       var bodyEl = document.createElement('div'); bodyEl.className = 'addmenu-body';
+      /* THE PINNED ROW (queue 269 + 276). His words for Audio: "the three that I highlighted like the
+         three options that are just default options … should be segregated from the ones at the bottom
+         and when you scroll to the left and right it shouldn't scroll those top buttons. It should just
+         scroll through the ones that you've added so those are always on screen." And for Media, the
+         same thing plus how to divide it: "those stay at the top and like a separated and like by line".
+         It is a SIBLING ABOVE the body, not a row inside it, and that is what makes it cheap: fitBox
+         measures from bodyEl's own top down, so a strip above it comes out of the tile budget by
+         construction — none of the fit arithmetic (queue 50/208) has to learn about it. */
+      var pinnedEl = document.createElement('div'); pinnedEl.className = 'addmenu-pinned';
       // QUEUE 51: an explicit jump (a number-key shortcut) wins, then the remembered tab, then the
       // default. knownTab() is what makes a stale key harmless.
       var active = _startTab || knownTab(memGet().tab) || TABS[0].key; _startTab = null;
@@ -870,8 +879,23 @@ window.FM = window.FM || {};
 
       function drawBody() {
         bodyEl.innerHTML = '';
+        pinnedEl.innerHTML = '';
+        pinnedEl.classList.remove('is-on');
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
         var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
+        /* WHICH ONES ARE PINNED: the tab's own actions, i.e. everything that is NOT a library tile.
+           `mid` is the discriminator and it is the real one — it is the media-library id, so a card
+           either came from his library or it is one of the buttons the tab ships with. No name list to
+           fall out of date when a button is added.
+           Only Media and Audio, because they are the two tabs that mix actions with a growing list;
+           Shape, Elements and Template have nothing to scroll past. And only once there IS something
+           to scroll — with no imports yet, splitting would just draw a divider under everything. */
+        var splitTab = (tab.key === 'media' || tab.key === 'audio');
+        var pinnedOpts = [];
+        if (splitTab && opts.some(function (o) { return o.mid; })) {
+          pinnedOpts = opts.filter(function (o) { return !o.mid; });
+          opts = opts.filter(function (o) { return o.mid; });
+        }
         var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
            button keeps its colour when the pager moves and two pages never open with the same run of
@@ -934,6 +958,17 @@ window.FM = window.FM || {};
          *     whether that second plan happened to succeed, which is not monotonic in the panel at
          *     all. Measured, classic, Elements: panel 278 planned in a 81px box (20.25px icons) and
          *     panel 282 \u2014 FOUR PIXELS TALLER \u2014 planned in a 55px one (18px icons). */
+        /* Drawn BEFORE the plan is measured, so the strip is already occupying its space when fitBox
+           reads what is left for the tiles. Same card builder and the same makeCard index, so a pinned
+           button keeps the colour it has always had — these are the buttons he picked colours for by
+           name in #210, and they must not repaint just because they moved. */
+        if (pinnedOpts.length) {
+          var pgrid = document.createElement('div');
+          pgrid.className = 'addmenu-grid addmenu-grid--pinned';
+          pinnedOpts.forEach(function (o, j) { pgrid.appendChild(makeCard(o, j)); });
+          pinnedEl.appendChild(pgrid);
+          pinnedEl.classList.add('is-on');
+        }
         var plan = null, box = null;
         if (fitOn) {
           var cfg = iconOnly ? FIT_CFG.ico : FIT_CFG.lbl;
@@ -1124,7 +1159,7 @@ window.FM = window.FM || {};
         tabsEl.appendChild(tb);
       });
       placeGlint();
-      main.appendChild(tabsEl); main.appendChild(bodyEl);
+      main.appendChild(tabsEl); main.appendChild(pinnedEl); main.appendChild(bodyEl);
 
       /* The rail is EMPTY of tools now. Text / Captions / Freehand Drawing / Vector Drawing moved into
        * the Elements tab (which opens first), so this row of cards would have been a duplicate of what

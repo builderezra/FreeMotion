@@ -17032,6 +17032,73 @@
     }
   });
 
+  /* ------- queue 269 + 276: the tab's own buttons scrolled away with the library -------
+   * Audio: "the three that I highlighted … should be segregated from the ones at the bottom and when
+   * you scroll to the left and right it shouldn't scroll those top buttons. It should just scroll
+   * through the ones that you've added so those are always on screen."
+   * Media: the same, and how to divide it — "those stay at the top and like a separated and like by
+   * line". Built as ONE mechanism for both tabs, because he asked for identical behaviour and building
+   * it twice is how the two end up subtly different.
+   * The strip is a SIBLING ABOVE .addmenu-body, outside the pager, so it cannot scroll by
+   * construction rather than by a rule someone has to maintain. */
+
+  test('Media and Audio pin their own buttons above the scrolling library (queue 269, 276)', { item: 'am-pinned' }, async function () {
+    const realList = FM.mediaLib.list;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:420px;height:620px';
+    document.body.appendChild(host);
+    try {
+      /* BOTH KINDS, because the two tabs do not see the same library: Media shows the visual entries
+         and Audio shows the songs, partitioned by FM.mediaLib.isAudio. A fixture of only one kind
+         leaves the other tab with nothing to scroll past and no reason to pin anything — which is
+         exactly how the first version of this test failed, on Audio, against working code. */
+      const VISUAL = 4, SONGS = 3;
+      const lib = [];
+      for (let i = 0; i < VISUAL; i++) lib.push({ mid: 'v' + i, key: 'kv' + i, fp: 'fv' + i, name: 'Clip ' + i, kind: 'video', audio: false, w: 1920, h: 1080, dur: 4 });
+      for (let i = 0; i < SONGS; i++) lib.push({ mid: 's' + i, key: 'ks' + i, fp: 'fs' + i, name: 'Song ' + i, kind: 'video', audio: true, w: 0, h: 0, dur: 9 });
+      const expected = { Media: VISUAL, Audio: SONGS };
+      FM.mediaLib.list = () => lib;
+      FM.addMenu.render(host, { variant: 'panel' });
+      const open = async name => {
+        const t = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === name);
+        if (!t) throw new Error('no ' + name + ' tab');
+        t.click(); await sleep(180);
+        return host.querySelector('.addmenu-pinned');
+      };
+      for (const name of ['Media', 'Audio']) {
+        const pin = await open(name);
+        if (!pin || !pin.classList.contains('is-on')) throw new Error(name + ': nothing was pinned, so the tab buttons still page away with the library');
+        const pinnedCards = [...pin.querySelectorAll('.addmenu-card')];
+        if (!pinnedCards.length) throw new Error(name + ': the pinned strip is on but empty');
+        /* It must be OUTSIDE the pager — that is the whole guarantee. A pinned row that lives inside
+           a page would look right on page 1 and vanish on page 2. */
+        if (pin.closest('.addmenu-pager')) throw new Error(name + ': the pinned strip is inside the pager, so it will scroll away with the pages');
+        /* And the split must be by what the card IS, not by counting: every library tile below, none
+           above. A library tile is the one carrying a thumbnail/duration; the actions are not. */
+        const bodyCards = [...host.querySelectorAll('.addmenu-body .addmenu-card')];
+        if (bodyCards.length !== expected[name]) throw new Error(name + ': the scrolling area holds ' + bodyCards.length + ' cards against ' + expected[name] + ' library items for this tab — actions and imports are still mixed');
+        if (pinnedCards.length + bodyCards.length < 4) throw new Error(name + ': too few cards rendered to be measuring anything');
+        const divider = getComputedStyle(pin).borderBottomWidth;
+        if (parseFloat(divider) <= 0) throw new Error(name + ': there is no line under the pinned row — he asked for it "separated and like by line"');
+      }
+      /* Tabs that do not mix actions with a growing list must be untouched. */
+      for (const name of ['Shape', 'Elements']) {
+        const pin = await open(name);
+        if (pin && pin.classList.contains('is-on')) throw new Error(name + ' grew a pinned strip it was never meant to have');
+      }
+      /* And with NO imports there is nothing to scroll past, so a divider would just underline
+         everything. */
+      FM.mediaLib.list = () => [];
+      FM.addMenu.render(host, { variant: 'panel' });
+      const empty = await open('Audio');
+      if (empty && empty.classList.contains('is-on')) throw new Error('an empty library still drew the divider — it would underline the whole tab for no reason');
+      if (!host.querySelectorAll('.addmenu-body .addmenu-card').length) throw new Error('with no library the tab lost its own buttons as well');
+    } finally {
+      FM.mediaLib.list = realList;
+      host.remove();
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

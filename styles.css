@@ -994,6 +994,18 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .add-emoji { font-size: 22px; line-height: 1; }
 .addmenu-lbl { font-size: 10.5px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
 .addmenu-body { flex: 1 1 auto; }
+/* THE PINNED ACTION STRIP (queue 269 + 276). Media and Audio mix the tab's own buttons with a list
+   that grows every time he imports something, and the buttons were paging away with it: "when you
+   scroll to the left and right it shouldn't scroll those top buttons… so those are always on screen".
+   It sits ABOVE .addmenu-body and outside the pager, so it cannot scroll by construction rather than
+   by a rule that has to be maintained. Empty on every other tab, and `is-on` keeps it from drawing a
+   divider under nothing while a tab has no imports yet.
+   The divider is his: "those stay at the top and like a separated and like by line or like whatever". */
+.addmenu-pinned { flex: 0 0 auto; }
+.addmenu-pinned.is-on { padding-bottom: 9px; margin-bottom: 9px; border-bottom: 1px solid var(--line); }
+/* The strip lays its buttons out on ONE row whatever the tab's column count is — three actions on
+   Audio, three on Media — so the divider always sits directly under a single row of buttons. */
+.addmenu-grid--pinned { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; gap: 8px; }
 .addmenu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .addmenu-side { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
 /* .addmenu-close removed in v5.28 — the phone sheet's ✕ is gone (four other ways to close it). */

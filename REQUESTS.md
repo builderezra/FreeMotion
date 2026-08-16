@@ -1877,7 +1877,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **"still" matters** — this has been reported before, so measure the actual box rather than eyeball
       it, and check it at a DESKTOP width in the Studio layout, which is what he is looking at.
 
-- [ ] **276 — Same pinned-top-row treatment for the MEDIA menu. (16 Aug.)** His words, verbatim:
+- [x] **276 — Same pinned-top-row treatment for the MEDIA menu. (16 Aug.)** His words, verbatim:
       *"Also how I said in the audio section how the different buttons at the top like the three buttons
       at the top that actually do something and just previous stuff you've added like how I said those
       should stay on screen all the the same thing should happen to the media menu where like those stay
@@ -1888,6 +1888,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ("separated and like by line"), which also settles how #269 should look.
       Note his phrasing "the two rows underneath": in the media panel only the rows BELOW the pinned
       action row pan.
+      **DONE v8.59 — built as one mechanism with #269, which is what you asked for. See that entry.**
 
 - [ ] **275 — Mobile shapes menu scrolls up and down; it should all fit. (16 Aug.)** His words, verbatim:
       *"On mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
@@ -1921,7 +1922,7 @@ better still, keep working inside the turn rather than parking work for a later 
       the actual icon for the import button to be more white colour with a gradient instead of grey how
       it is right now."* Only the ICON changes — he says twice to keep the rest the same.
 
-- [ ] **269 — Audio menu: the three default buttons must not scroll away. (16 Aug, with a screenshot he
+- [x] **269 — Audio menu: the three default buttons must not scroll away. (16 Aug, with a screenshot he
       drew a red line on.)** His words, verbatim: *"Also in the audio menu if you look at the image I sent
       the three that I highlighted like the three options that are just default options like import audio
       sound effects work voice record like all of those ones should be segregated from the ones at the
@@ -1929,6 +1930,24 @@ better still, keep working inside the turn rather than parking work for a later 
       just scroll through the ones that you've added so those are always on screen."*
       The red line in the screenshot sits under Import audio / Sound effects / Record voice…, separating
       them from the .wav tiles below. So: pin that first row, and let only the added items pan.
+      **DONE v8.59, together with #276 — one mechanism, both tabs.** You asked for identical behaviour
+      on Media, and building it twice is how the two end up subtly different.
+      **The split is by what a card IS, not by counting.** A library tile carries `mid` — the media
+      library's own id — so a card either came from your imports or it is one of the buttons the tab
+      ships with. No list of names to fall out of date the next time a button is added.
+      **The strip is a SIBLING ABOVE the body, outside the pager**, which is what makes it cheap and
+      what makes the guarantee real: it cannot scroll by construction, rather than by a rule someone has
+      to keep maintaining. It also means none of the fit arithmetic (#50/#208, which sizes the tiles from
+      a measured box) had to learn about it — `fitBox` measures from the body's own top down, so a strip
+      above it comes out of the tile budget automatically. The one thing that did matter was ORDER: the
+      strip has to be drawn before the plan is measured, or the tiles are sized for a box the divider
+      then eats into.
+      The divider is yours: *"separated and like by line"*.
+      **Two cases handled on purpose:** a tab with NO imports gets no strip and no divider — otherwise
+      the line would just underline the whole tab — and Shape / Elements / Template are untouched, since
+      they have nothing to scroll past. Both asserted.
+      Verified at 375px with a screenshot: Import audio · Sound effects · Record voice pinned, a line
+      under them, the .wav tiles below — the line falling exactly where you drew yours.
 
 - [x] **268 — Template tiles need a real picture of the template, not a logo. DONE v8.58.** His words,
       verbatim: *"In the templates menu, all of the different templates should be pictures of the template
