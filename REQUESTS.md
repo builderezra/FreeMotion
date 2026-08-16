@@ -1721,6 +1721,15 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **259 — Phone: make the trash icon red. (16 Aug, with a screenshot.)** His words, verbatim:
+      *"Make the trash icon red."* Screenshot is the PHONE top bar — back · "Laurel" · version chip ·
+      duplicate · trash · ⋯ — where the bin is the same plain white as everything beside it.
+      **The PC already does this** (v7.79 made the transport row's delete red), so this is the phone
+      catching up rather than a new idea: the one destructive control in a row of neutral ones should
+      not look like its neighbours. Match the tone used on PC rather than inventing a second red.
+      Check the ⋯ menu's Delete entry at the same time — if that is still neutral on the phone the two
+      doors to the same action disagree.
+
 - [ ] **258 — Elements: the BACKGROUNDS should be fainter, but the ICONS should pop like they used to.
       (16 Aug, with a before/after pair of phone screenshots.)** His words, verbatim: *"In this section
       I wanted the colours of the background for each option more faint, not the actual icon itself,
