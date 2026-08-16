@@ -16679,6 +16679,49 @@
     } finally { B.classList.toggle('layout-studio', had); }
   });
 
+  /* ------- queue 211, the OTHER half: track-head thumbnails were stretched, not just spilling -------
+   * "The images for each layer on the left side are glitched out, you see how they're like stretched
+   * and going out too far? Looks shit." v8.50 fixed "going out too far"; this is "stretched".
+   * FM.renderThumb's shape branch traced into the WHOLE padded box, so every shape was scaled to the
+   * thumbnail's aspect (a 26x12 box → a ~2.2:1 lozenge) rather than its own. A square shape and a tall
+   * shape came out the same width and the same height as a wide one. */
+
+  test('a shape thumbnail keeps the shape\'s aspect, it is not stretched to the box (queue 211)', { item: 'thumb-fit' }, function () {
+    if (typeof FM.renderThumb !== 'function') throw new Error('FM.renderThumb is not exported');
+    /* Measures the PAINTED EXTENT, not the numbers the code used — a fix that computed a nice box and
+       still traced into the old one would pass any check that read variables instead of pixels. */
+    const paintedAspect = (shapeW, shapeH) => {
+      const c = offscreen(38, 24), ctx = c.getContext('2d');
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: shapeW, shapeH: shapeH, fill: '#ffffff' });
+      FM.renderThumb(L, c);
+      const d = ctx.getImageData(0, 0, 38, 24).data;
+      let minX = 99, maxX = -1, minY = 99, maxY = -1;
+      for (let y = 0; y < 24; y++) for (let x = 0; x < 38; x++) {
+        const i = (y * 38 + x) * 4;
+        if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) {          // the white fill only
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < 0) return null;
+      return { w: maxX - minX + 1, h: maxY - minY + 1, aspect: (maxX - minX + 1) / (maxY - minY + 1) };
+    };
+    const square = paintedAspect(300, 300);
+    if (!square) throw new Error('the square shape painted nothing, so this test cannot see the defect');
+    if (Math.abs(square.aspect - 1) > 0.25)
+      throw new Error('a SQUARE shape drew at ' + square.aspect.toFixed(2) + ':1 (' + square.w + 'x' + square.h + ') — it is being stretched to the thumbnail box, not fitted');
+    const wide = paintedAspect(600, 150);   // 4:1
+    if (!wide) throw new Error('the wide shape painted nothing');
+    if (wide.aspect < 2.2)
+      throw new Error('a 4:1 shape drew at only ' + wide.aspect.toFixed(2) + ':1 — wide shapes are not keeping their proportions either');
+    /* And the two must DIFFER. Before the fix both came out the same lozenge, so a test that only
+       checked one of them could pass while the thumbnail still said nothing about the layer. */
+    if (Math.abs(wide.aspect - square.aspect) < 0.8)
+      throw new Error('a square and a 4:1 shape drew at nearly the same aspect (' + square.aspect.toFixed(2) + ' vs ' + wide.aspect.toFixed(2) + ') — the thumbnail is not reflecting the layer at all');
+    // it must still FILL the box in its long direction, or "fitted" has quietly become "shrunk"
+    if (wide.w < 20) throw new Error('the wide shape only used ' + wide.w + 'px of a 38px thumbnail — it is being shrunk rather than fitted');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

@@ -10061,8 +10061,22 @@ window.FM = window.FM || {};
       return;
     }
     if (layer.type === 'shape') {
-      const pad = 6, iw = W - 2 * pad, ih = H - 2 * pad;
-      const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih, FM.time || 0);
+      /* CONTAIN-FIT THE SHAPE'S OWN ASPECT (queue 211, the "stretched" half of his report).
+       * This traced into the whole padded box, so the shape was scaled to the THUMBNAIL's aspect
+       * instead of its own: a 26x12 box turned every layer into a ~2.2:1 lozenge, which is why he said
+       * "they're like stretched and going out too far. Looks shit." A square shape came out as a wide
+       * pill and a tall one came out as a wide pill too — the thumbnail said nothing true about the
+       * layer's proportions.
+       * The layer's on-canvas aspect IS shapeW:shapeH, because traceShapePath maps the normalized path
+       * into exactly that box, so fitting those two numbers makes the thumbnail agree with the canvas.
+       * Same fix as the add menu got in #159, for the same reason — that one reads FM.SHAPE_ASPECT
+       * because it has no layer yet; here the layer already carries the numbers. */
+      const pad = 6, bw = W - 2 * pad, bh = H - 2 * pad;
+      const aw = Math.max(1, layer.shapeW || 400), ah = Math.max(1, layer.shapeH || 300);
+      const fk = Math.min(bw / aw, bh / ah);
+      const iw = aw * fk, ih = ah * fk;
+      const ox = pad + (bw - iw) / 2, oy = pad + (bh - ih) / 2;   // centred in what is left over
+      const mode = FM.traceShapePath(ctx, layer, ox, oy, iw, ih, FM.time || 0);
       if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
       const fmode = FM.fillModeOf(layer);
       // Outline-only: the CANVAS strokes this with layer.stroke.color, so the thumb has to as well —
@@ -10076,11 +10090,11 @@ window.FM = window.FM || {};
         if (fimg && fimg.width) {
           ctx.save(); ctx.clip();
           const sc = Math.max(iw / fimg.width, ih / fimg.height), dw = fimg.width * sc, dh = fimg.height * sc;
-          try { ctx.drawImage(fimg, pad + (iw - dw) / 2, pad + (ih - dh) / 2, dw, dh); } catch (e) {}
+          try { ctx.drawImage(fimg, ox + (iw - dw) / 2, oy + (ih - dh) / 2, dw, dh); } catch (e) {}
           ctx.restore(); return;
         }
       }
-      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: pad, y: pad, w: iw, h: ih }, FM.time || 0) : (FM.evalProp(layer.fill, FM.time || 0) || '#3a7bd5');
+      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: iw, h: ih }, FM.time || 0) : (FM.evalProp(layer.fill, FM.time || 0) || '#3a7bd5');
       ctx.fill();
       return;
     }

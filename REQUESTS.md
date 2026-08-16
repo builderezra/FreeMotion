@@ -5237,7 +5237,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       GitHub holding the reverted content; it is merged into nothing and affects nothing, but **he may
       want to delete it from GitHub's branches page** — that session was refused permission to.
 
-- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
+- [x] **211 — The layer thumbnails in the track heads are stretched and overflow their box. DONE — overflow v8.50, stretch v8.52. BOTH clauses.** His words:
       *"The images for each layer on the left side are glitched out, you see how they're like stretched
       and going out too far? Looks shit."* Screenshot: a blue house and an orange umbrella in the track
       heads, both squashed wide and spilling past their rounded frame.
@@ -5275,7 +5275,23 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       `FM.renderThumb` (js/compositor.js, the shape branch) traces into a **fixed 26x12 rect** instead of
       contain-fitting the layer's own `shapeW`/`shapeH`, so a shape renders as a ~2.17:1 lozenge whatever
       its real aspect. That is the same defect #159 fixed in the add menu via `FM.SHAPE_ASPECT`, so the
-      remedy already exists in the codebase. **Do not tick this entry until that lands.**
+      remedy already exists in the codebase.
+
+      **STRETCH FIXED v8.52 — and the predicted number was exact.** The thumbnail now contain-fits the
+      layer's own `shapeW:shapeH` and centres what is left over, so it agrees with what the canvas draws
+      (`traceShapePath` maps the normalized path into exactly that box, so those two numbers ARE the
+      layer's on-canvas aspect). The media-fill and gradient branches were moved onto the same fitted
+      box, or the picture and the outline would have disagreed.
+      Measured by PAINTED PIXELS rather than by the variables the code used — a fix that computed a
+      tidy box and still traced into the old one would sail past anything that read numbers. Before: a
+      **square** shape painted **26x12, i.e. 2.17:1**. After: a square paints square, a 4:1 shape paints
+      wide, and the two differ — which is the assertion that matters, because before the fix a square
+      and a 4:1 shape came out as the SAME lozenge, so a test checking only one of them could pass while
+      the thumbnail still said nothing about the layer.
+      Verified at 375px with a screenshot: a tall bar, a circle and a wide bar, each recognisably its
+      own layer, none of them over the divider.
+      **BOTH CLAUSES ARE NOW DONE, so this is ticked** — "stretched" (v8.52) and "going out too far"
+      (v8.50). It was one report and it needed two fixes with two different causes.
 
 
 - [x] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words. ELEMENTS/MEDIA/AUDIO DONE v8.20; Template still open.**
