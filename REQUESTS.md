@@ -3799,6 +3799,12 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a fifth struck off — **the zoomed preview never re-measuring after a stage
+      resize (v8.90)**, which is the one #284 named as "the same root cause, so fix both together rather
+      than twice" and which I left open when I shipped that. It had been **attempted and reverted twice**
+      before, both times because it was written around a ResizeObserver that fires in neither browser
+      available here. It goes through the door #284 built instead — the resizers CALL the re-measure —
+      so it is demonstrable, and the suite drives the real splitter drag to prove the pinned box moves.
 
 ### Held, on purpose
 - [ ] **The visual identity pass before any public release.** The UI is modelled on Alight Motion and

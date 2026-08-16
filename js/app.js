@@ -485,7 +485,16 @@ window.FM = window.FM || {};
     _rsTimer = setTimeout(() => {
       // PAN changes the visible slice too, not just zoom — so the key includes the crop rect.
       const c = previewCrop();
-      const key = c ? ('c' + c.u0.toFixed(3) + ',' + c.v0.toFixed(3) + ',' + c.u1.toFixed(3) + ',' + c.v1.toFixed(3)) : ('f' + previewScale().toFixed(2));
+      /* THE STAGE'S OWN SIZE IS PART OF THE KEY (BUG-HUNT: "Zoomed preview renders stretched/wrong-aspect
+         after any stage resize"). Without it a pure resize — drag the timeline splitter, rotate the
+         phone — produces the same crop rect and the same zoom, so this early-returns and the canvas keeps
+         the box it was measured into. In the zoomed branch the wrap is pinned to hard pixels, which
+         overrides its `aspect-ratio`, so it cannot self-correct either: a 1:1 circle was measured
+         rendering as a 2.13x-wide ellipse. */
+      const st = document.getElementById('stage');
+      const sr = st ? st.getBoundingClientRect() : null;
+      const stageKey = sr ? ('|' + Math.round(sr.width) + 'x' + Math.round(sr.height)) : '';
+      const key = (c ? ('c' + c.u0.toFixed(3) + ',' + c.v0.toFixed(3) + ',' + c.u1.toFixed(3) + ',' + c.v1.toFixed(3)) : ('f' + previewScale().toFixed(2))) + stageKey;
       if (key === _lastKey) return;
       _lastKey = key;
       resizeCanvas();
@@ -3408,7 +3417,19 @@ window.FM = window.FM || {};
        Called explicitly rather than observed: a ResizeObserver on #preview logs zero callbacks in the
        browser this is developed and tested against, which is why the same fix was written and reverted
        once already. */
-    const stageResized = () => { if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); };
+    const stageResized = () => {
+      if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized();
+      /* …AND THE PREVIEW ITSELF (BUG-HUNT, the entry queue 284 named as "the same root cause, so fix
+         both together rather than twice"). Nothing re-ran resizeCanvas when the stage changed size —
+         there is no window resize hook for it anywhere in the codebase — so a zoomed preview kept a
+         pinned wrap box and rendered stretched, and even unzoomed the backing store stayed at a stale
+         resolution (measured: 961x1709 painted every frame where 367x653 was correct, 6.8x the pixels).
+         It goes through the SAME door as the selection gizmo for the same reason that door exists: the
+         ResizeObserver this was originally written around fires in neither browser available here, which
+         is why the fix was attempted and reverted once already. `refreshPreviewScale` debounces 120ms,
+         so a drag re-measures once at the end rather than reallocating per frame. */
+      if (FM.refreshPreviewScale) FM.refreshPreviewScale();
+    };
 
     const clampH = (h) => {
       const vh = window.innerHeight;
@@ -3586,6 +3607,10 @@ window.FM = window.FM || {};
       };
       window.addEventListener('resize', () => { if (!studioAdd()) FM.dropAddMenuFloat(); });
     }
+    /* A WINDOW RESIZE OR A PHONE ROTATION IS A STAGE RESIZE TOO, and it is the case the BUG-HUNT entry
+       leads with ("rotate the phone / resize the window / open the on-screen keyboard"). Kept separate
+       from the clamp below, which is desktop-only — this half matters most on a phone. */
+    window.addEventListener('resize', () => { stageResized(); });
     // window shrank below a stored height → re-clamp so the timeline can't exceed the viewport
     window.addEventListener('resize', () => {
       if (isPhone()) return;

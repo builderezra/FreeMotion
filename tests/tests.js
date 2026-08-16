@@ -18168,6 +18168,75 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: the zoomed preview was never re-measured after a stage resize ------- */
+
+  test('a zoomed preview re-measures when the stage changes size (BUG-HUNT)', { item: 'preview-remeasure' }, async function () {
+    /* The entry queue 284 named as "the same root cause, so fix both together rather than twice", and
+     * which had already been attempted and reverted once: "Zoomed preview renders stretched/wrong-aspect
+     * after any stage resize — the pinned #canvas-wrap box is never re-measured."
+     * Above 1.35x the wrap is pinned to hard pixels so overlays keep a comp-sized rectangle, and that
+     * inline size overrides its own `aspect-ratio`, so it cannot self-correct. Nothing re-ran the
+     * measure — there is no window resize hook for it anywhere — so it stayed stretched until something
+     * unrelated happened to call it. Measured before the fix: a 1:1 circle rendered as a 2.13x-wide
+     * ellipse.
+     * It goes through the same door as the selection gizmo, for the reason that door exists: the
+     * ResizeObserver both fixes were originally written around fires in neither browser available here.
+     * This asserts the PIN MOVED, not just that the aspect is fine — an unzoomed preview keeps its
+     * aspect for free, so aspect alone would pass with the hook removed. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    if (!FM.viewport || FM.viewport.scale === undefined) return;      // no zoom model to drive
+    const root = document.documentElement;
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    const zoom0 = FM.viewport.scale;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      root.style.setProperty('--tl-h', '240px');
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'circle', x: Math.round(P.width / 2), y: Math.round(P.height / 2), shapeW: 300, shapeH: 300, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(null); FM.refreshAll();
+      await sleep(260);
+      const wrap = document.getElementById('canvas-wrap');
+      if (!wrap) throw new Error('no #canvas-wrap');
+
+      FM.viewport.scale = 2.0;
+      if (FM.viewport.apply) FM.viewport.apply();
+      if (FM.refreshPreviewScale) FM.refreshPreviewScale();
+      await sleep(420);                                   // past the 120ms debounce
+      const pinnedBefore = wrap.style.width;
+      if (!pinnedBefore) return;                          // this build does not pin the wrap; nothing to check
+      const comp = P.width / P.height;
+      const arOf = () => { const r = wrap.getBoundingClientRect(); return r.width / r.height; };
+      if (Math.abs(arOf() - comp) > 0.03) throw new Error('the zoomed wrap starts at aspect ' + arOf().toFixed(3) + ' against a comp of ' + comp.toFixed(3) + ' — it is already wrong before the resize');
+
+      const rez = document.getElementById('tl-resizer');
+      if (!rez) throw new Error('no #tl-resizer to change the stage with');
+      const r = rez.getBoundingClientRect(), y0 = Math.round(r.top + r.height / 2);
+      const pd = (t, y) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 600, clientY: y, pointerId: 1, buttons: 1 }));
+      pd('pointerdown', y0); pd('pointermove', y0 - 200);
+      await sleep(140);
+      pd('pointerup', y0 - 200);
+      await sleep(520);                                   // debounce again
+
+      const pinnedAfter = wrap.style.width;
+      if (pinnedAfter === pinnedBefore) {
+        throw new Error('the wrap is still pinned at ' + pinnedBefore + ' after the stage changed size — nothing re-measured, which is what left a zoomed preview stretched');
+      }
+      if (Math.abs(arOf() - comp) > 0.03) {
+        throw new Error('after the resize the wrap is aspect ' + arOf().toFixed(3) + ' against a comp of ' + comp.toFixed(3) + ' — the preview is stretched');
+      }
+    } finally {
+      FM.viewport.scale = zoom0;
+      if (FM.viewport.apply) FM.viewport.apply();
+      if (FM.refreshPreviewScale) FM.refreshPreviewScale();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      document.body.classList.remove('tl-resizing');
+      await sleep(240);
+    }
+  });
+
   /* ---------------- queue 284: the selection outline drifted when the stage was resized -------- */
 
   test('the selection outline stays on its layer when the timeline is dragged (queue 284)', { item: 'gizmo-resize' }, async function () {
