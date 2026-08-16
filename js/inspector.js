@@ -4307,7 +4307,24 @@ window.FM = window.FM || {};
     return out.length ? out : null;
   };
 
+  /* ---- Which section owns the canvas overlay (queue 205) --------------------------------------
+   * Ezra: "Make it so when you open move and transform it gets rid of the outline on the shape or
+   * layer, and instead just shows the anchor point as a circle depending on where it is." And then:
+   * "Same with when opening edit points."
+   *
+   * ONE rule rather than two special cases, which is what his second sentence asks for in effect:
+   * some sections draw their own thing on the canvas, and when they do, the selection box is clutter
+   * sitting on top of it. Move & Transform wants the anchor visible (it is what everything rotates
+   * and scales around, and it was previously invisible unless you were in the anchor sub-mode); Edit
+   * Points already draws its own handles. Two special cases would drift apart the first time a third
+   * section joined them.
+   * Returns the section key, so the caller can also decide what to draw INSTEAD — not just a bool. */
   FM.inspector = {
+    ownsCanvas() {
+      if (view === 'transform') return 'transform';
+      if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) return 'points';
+      return null;
+    },
     // The category list for a layer, exposed read-only for the suite. Which cards a layer offers is a
     // rule that has been got wrong by accident before — Camera Options leaked onto four layer kinds —
     // and it is invisible until someone opens the wrong layer and sees a card that does nothing.
@@ -4322,7 +4339,13 @@ window.FM = window.FM || {};
     // 'audiofx' is no longer a view of its own (queue 45) — it is the Effects card's audio TAB. The
     // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
     // audio browser ask for, and because a project/session could have persisted it.
-    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
+      /* The canvas overlay has to be told (queue 205). Opening a section that owns the canvas changes
+         whether the selection box should be showing, and nothing else was going to ask — the overlay
+         only updates on a render or a canvas gesture, so without this the outline stayed up until you
+         happened to touch something. Found by a test, but it is a real defect, not a test artifact. */
+      if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
+    },
     // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
     // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on

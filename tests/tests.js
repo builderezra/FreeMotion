@@ -14894,6 +14894,70 @@
     }
   });
 
+  /* ---------------- queue 205: the section that owns the canvas ----------------
+   * "when you open move and transform it gets rid of the outline ... and instead just shows the
+   * anchor point as a circle" / "Same with when opening edit points." One rule, so the two cannot
+   * drift apart — and the box must come BACK, which is the half that is easy to forget. */
+
+  test('Move & Transform hides the outline and shows the anchor instead', { item: 'canvas-owner' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 500, shapeW: 200, shapeH: 200, fill: '#fff' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('home'); await frame();
+      const box = document.getElementById('select-box');
+      if (!box) throw new Error('no #select-box');
+      if (box.style.display === 'none') throw new Error('control failed: the box is already hidden on the home view, so this test cannot tell whether opening the section did it');
+      FM.inspector.openCategory('transform'); await frame();
+      if (FM.inspector.ownsCanvas() !== 'transform') throw new Error('ownsCanvas() did not report the transform section');
+      if (box.style.display !== 'none') throw new Error('the selection outline is still showing in Move & Transform');
+      const dot = document.querySelector('.anchor-dot');
+      if (!dot) throw new Error('no anchor dot element');
+      if (dot.style.display === 'none') throw new Error('the anchor is not shown — it is what replaces the outline he asked to hide');
+      // …and leaving brings the box back. Forgetting this leaves the app with no selection UI at all.
+      FM.inspector.openCategory('home'); await frame();
+      if (box.style.display === 'none') throw new Error('the outline did NOT come back after leaving Move & Transform');
+      if (document.querySelector('.anchor-dot').style.display !== 'none') throw new Error('the anchor dot is still showing outside the section');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.inspector.openCategory('home');
+    }
+  });
+
+  test('the anchor follows the layer through rotation and scale', { item: 'canvas-owner' }, async function () {
+    /* The entry flags this specifically: "the anchor is in the layer's own space, so it has to go
+       through the same matrix the handles use". A dot pinned to an untransformed position would look
+       right on a plain layer and be wrong on every rotated one. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 500, shapeW: 200, shapeH: 200, fill: '#fff' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('transform'); await frame();
+      const dot = document.querySelector('.anchor-dot');
+      const at = () => ({ l: parseFloat(dot.style.left), t: parseFloat(dot.style.top) });
+      const p0 = at();
+      if (!isFinite(p0.l) || !isFinite(p0.t)) throw new Error('the anchor has no position: ' + JSON.stringify(p0));
+      // MOVING the layer must move the dot — the control assertion, so the checks below mean something
+      L.transform.x = 700; FM.requestRender(); await frame();
+      const p1 = at();
+      if (Math.abs(p1.l - p0.l) < 1) throw new Error('the anchor did not follow the layer when it moved (' + p0.l + ' -> ' + p1.l + ')');
+      // rotating and scaling must not throw it off screen or NaN it
+      L.transform.rotation = 37; L.transform.scale = 1.8; FM.requestRender(); await frame();
+      const p2 = at();
+      if (!isFinite(p2.l) || !isFinite(p2.t)) throw new Error('rotation/scale gave the anchor a non-finite position: ' + JSON.stringify(p2));
+      if (Math.abs(p2.l - p1.l) > 2 || Math.abs(p2.t - p1.t) > 2) {
+        throw new Error('rotating about the anchor MOVED the anchor (' + JSON.stringify(p1) + ' -> ' + JSON.stringify(p2) + ') — everything turns around this point, so it must stay put');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.inspector.openCategory('home');
+    }
+  });
+
   /* ---------------- queue 203: "improve quality" ----------------
    * He asked for a button that adds pixels. Nothing in a browser can. What it does instead is
    * sharpen what is there, tuned to how far the clip is being stretched — so the tests care that the

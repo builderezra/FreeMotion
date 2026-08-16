@@ -3811,7 +3811,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       and the dangerous one reports **"scroller at 602/602"** — at the end, with the negated gate
       rejecting it anyway, which is exactly the unscrollable-browser mistake being caught.
       being at the BOTTOM, the mirror of the current `scrollTop <= 0` gate, or it will fight scrolling.
-- [ ] **205 — Move & Transform should hide the outline and show the anchor point instead.** His words:
+- [x] **205 — Move & Transform should hide the outline and show the anchor point instead. DONE v8.15, both halves.** His words:
       *"Make it so when you open move and transform it gets rid of the outline on the shape or layer, and
       instead just shows the anchor point as a circle depending on where it is."*
       Sensible: while you are moving something, the selection box is the one thing you do not need, and
@@ -3824,6 +3824,22 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       already draws its own point handles, so the selection box on top of them is pure clutter. Do both
       in one pass: a single rule for "this section owns the canvas overlay, so the selection box stands
       down", rather than two special cases that will drift apart.
+
+      **DONE v8.15 — built exactly as that last line says, as ONE rule.** `FM.inspector.ownsCanvas()`
+      names the section that owns the overlay (Move & Transform, or Edit Points), and the selection box
+      stands down for whichever it is. Two special cases would have drifted apart the first time a
+      third section joined them.
+      The anchor now shows for the **whole** of Move & Transform rather than only its anchor sub-mode —
+      it is what replaces the outline, so it has to be there the moment the section opens. It is drawn
+      from the box's own transform origin, so it cannot disagree with where the layer really turns, and
+      **there is a test that rotates and scales a layer and asserts the anchor does not move**: a pivot
+      that drifts when you rotate would be worse than not showing one. Groups opt out — a group has no
+      pivot of its own.
+      **Leaving the section brings the outline back**, with its own assertion, because forgetting that
+      would leave the app with no selection UI at all.
+      *(A real bug surfaced doing this: nothing told the canvas overlay that the open section had
+      changed. It only updates on a render or a canvas gesture, so the outline stayed up until you
+      touched something — opening the panel did nothing until then. Fixed.)*
 - [ ] **206 — Shapes need SENSIBLE edit points, not a million dots. ⚠️ HELD — he is doing this one WITH
       me, and asked me not to start it.** His words: *"in alight motion, each shape has sensible edit
       points that are actually useful and make sense, in ours only some shapes have that but most have
