@@ -796,6 +796,13 @@ better still, keep working inside the turn rather than parking work for a later 
       measured under CPU throttle on this Mac. Four real costs have been found and removed and the app's
       own regulator can now see what it was blind to. **If it is still laggy, say so and the next step is
       reading the numbers off your actual device instead of a stand-in.**
+      **BLOCKED, and named properly on 16 Aug so it stops looking actionable.** Its only remaining work
+      is *"reading the numbers off your actual device"* — and there is currently no way for you to read
+      them, which is exactly what **#202 (the "what is slow" readout)** is for. So #125 is blocked on
+      #202 plus one sentence from you, not on more work here. **A fifth measurement on this Mac would be
+      the precise trap this entry already calls out** — *"every time lag comes up I have measured on THIS
+      machine, found acceptable numbers, and moved on"* — so it is not being done. #95's timeline half is
+      blocked on the same thing. Skipped in the queue for those reasons rather than forgotten.
 - [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
       words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas
@@ -1714,6 +1721,38 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
+      aligned. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin
+      in this photo, make the backdrop more subtle, maybe instead of being brighter than everything else
+      make its lightly darker, and also it isnt centred and aligned so fix that"*.
+      This is **`#t-sel.has-sel`, shipped in v7.89** for his own request #242 (*"make these three buttons
+      have a different background to signify their difference"*) — so the idea was right and the
+      execution is wrong in two specific ways he has now named:
+      · **Direction.** It is lighter than the transport row. He wants it **slightly darker** — a recess
+        rather than a raised panel. Same job (telling the group apart), quieter means.
+      · **Alignment.** In the screenshot the pill is visibly taller than the icon row inside it and does
+        not line up with the neighbouring transport controls. Check the vertical centring of the icons
+        within the ground AND the ground's own baseline against the rest of the row — the row is a flex
+        line with 34–40px controls, so a wrapper with its own padding will not sit level by accident.
+      Verify at a DESKTOP width (this is the PC layout, `min-width: 701px`), not at 380px, and compare
+      the pill's box against a neighbouring button's box rather than eyeballing it.
+
+- [ ] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** His words:
+      *"the slam easter egg on pc is competely broken now"* — told to me mid-task with *"dont let this
+      distract you but also dont forget to log it"*, so it is written down here and waits its turn
+      rather than jumping the queue.
+      **"Now" makes this a regression, and there are recent suspects to check FIRST rather than
+      re-deriving it.** The slam was touched three times in quick succession: **v7.86** made it fire
+      while you pull instead of after you stop (the wheel threshold with `wheelSpent` re-arming on
+      130ms of silence), **v7.87** removed the black bar by dealing with the slam's own flat ring
+      against the now-textured home, and **v7.95** changed the home grain to two 256px tiles that
+      actually boil. Any of those could have broken it, and the v7.86 wheel-claiming change is the
+      likeliest — the suite test `slam-wheel` covers the double-fire it was written for, so whatever
+      is broken is something that test does not assert.
+      **Ask when starting it: broken HOW?** No animation at all, an animation that plays wrong, or the
+      screen left in a bad state afterwards? Each points somewhere different. Reproduce on PC at a
+      desktop width before changing anything — this is a PC-only report and the phone path differs.
+
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
