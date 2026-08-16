@@ -1609,6 +1609,14 @@ window.FM = window.FM || {};
 
   function buildTracks() {
     tracksEl.innerHTML = '';
+    /* RESERVE THE CHEVRON COLUMN ONLY WHEN A GROUP EXISTS (queue 295). Every childless layer carries a
+     * `visibility: hidden` chevron so that a group row and a plain row at the same depth line up (#191
+     * — "the arrow pushes the ui over making it ugly"). That is worth 22px in a project that HAS a
+     * group, and it is 22px of dead strip down the left of every row in a project that does not — which
+     * is what he photographed: "you've left a bunch of dead space on the far left side".
+     * Nothing needs aligning when there is nothing to align WITH, so the column is only held open while
+     * the scene actually contains a group. The alignment invariant is untouched the moment one exists. */
+    tracksEl.classList.toggle('tl-no-groups', !FM.scene.layers.some(l => l.type === 'group'));
     if (!FM.scene.layers.length) {
       const empty = document.createElement('div');
       empty.className = 'tl-empty'; empty.textContent = 'No layers yet — Import media, add Text, Captions, or a Sample clip.';

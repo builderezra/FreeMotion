@@ -16818,6 +16818,62 @@
       throw new Error('home\'s paint layer only reaches ' + worst + 'px past its box — the shake travels ~13px plus ~5px of corner swing, so the edges would show the editor');
   });
 
+  /* ---------------- queue 295: the head wasted a dead strip on the far left ----------------
+   * v8.50 widened --head-w to 90 so the head could hold its contents, but 22px of those contents is a
+   * chevron that is `visibility: hidden` on any childless layer. In a project with no groups — his —
+   * every row reserved space for an arrow that can never appear: "you've left a bunch of dead space on
+   * the far left side… you've got more room on the timeline even if it's only a little bit".
+   * The column is only held open while a group actually exists, because alignment with a group row is
+   * the only thing it was ever for. */
+
+  test('with no groups the head reclaims the chevron column (queue 295)', { item: 'head-width' }, function () {
+    return atPhoneWidth(async function () {
+      const settle = () => new Promise(r => setTimeout(r, 60));
+      const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+      try {
+        S.layers = ['star', 'ellipse'].map(sh => FM.makeLayer('shape', { shape: sh, x: 270, y: 480, shapeW: 300, shapeH: 200, fill: '#4a90e2' }));
+        FM.refreshAll(); await settle();
+        const h = document.querySelector('.track-head');
+        if (!h) throw new Error('no track head');
+        const hb = h.getBoundingClientRect();
+        const eye = h.querySelector('.th-eye').getBoundingClientRect();
+        const gap = Math.round(eye.left - hb.left);
+        if (gap > 12) throw new Error('there is still ' + gap + 'px of dead strip left of the eye in a project with no groups');
+        const chev = h.querySelector('.th-chevron--empty');
+        if (chev && Math.round(chev.getBoundingClientRect().width) > 0)
+          throw new Error('the hidden chevron still occupies ' + Math.round(chev.getBoundingClientRect().width) + 'px with no group to align to');
+        /* and the thumbnail must NOT have paid for the reclaimed space */
+        const w = h.querySelector('.th-thumb-wrap').getBoundingClientRect();
+        if (Math.round(w.right - hb.right) > 0) throw new Error('the thumbnail spills again — the head was narrowed too far');
+        if (Math.round(w.width) < 30) throw new Error('the thumbnail shrank to ' + Math.round(w.width) + 'px to fit the narrower head');
+      } finally { S.layers = keep; S.selectedId = keepSel; try { FM.refreshAll(); } catch (e) {} }
+    }, 375);
+  });
+
+  test('the moment a group exists the column comes back, so rows still line up (queue 295)', { item: 'head-width' }, function () {
+    /* The reclaim must not reintroduce #191 — "the arrow pushes the ui over making it ugly". A group
+       row carries a real chevron, so every row needs the column back or the two stop aligning. */
+    return atPhoneWidth(async function () {
+      const settle = () => new Promise(r => setTimeout(r, 60));
+      const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+      try {
+        const g = FM.makeLayer('group', { x: 270, y: 480 });
+        const child = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#7ad' });
+        child.parent = g.id;
+        const plain = FM.makeLayer('shape', { shape: 'star', x: 270, y: 480, shapeW: 300, shapeH: 200, fill: '#4a90e2' });
+        S.layers = [g, child, plain];
+        FM.refreshAll(); await settle();
+        const heads = [...document.querySelectorAll('.track-head')];
+        const groupHead = heads.find(h => h.classList.contains('group-head'));
+        const plainHead = heads.find(h => !h.classList.contains('group-head') && !h.classList.contains('in-group'));
+        if (!groupHead || !plainHead) throw new Error('fixture did not produce both a group row and a plain row');
+        const eyeX = el => { const hb = el.getBoundingClientRect(); return Math.round(el.querySelector('.th-eye').getBoundingClientRect().left - hb.left); };
+        if (Math.abs(eyeX(groupHead) - eyeX(plainHead)) > 1)
+          throw new Error('a group row and a plain row at the same depth have their eye at ' + eyeX(groupHead) + ' and ' + eyeX(plainHead) + 'px — the columns stopped lining up');
+      } finally { S.layers = keep; S.selectedId = keepSel; try { FM.refreshAll(); } catch (e) {} }
+    }, 375);
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

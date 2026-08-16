@@ -2509,6 +2509,12 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      a picture. Measured at 375px with 90: every row clears by 8px, an ordinary row keeps the full 34px
      thumbnail, and the timeline is not squeezed — it scrolls, so the clip width is unchanged at 308px. */
   :root { --head-w: 90px; }
+  /* ...but 90 is only needed to hold the chevron column, and that is only held open when the project
+     HAS a group (see buildTracks). With no group there is nothing to align with, so the column goes and
+     the head goes back to 72 — which fits comfortably: 7 padding + 15 eye + 6 gap + 34 thumb + 7 = 69.
+     That is 18px handed back to the timeline on every row, which is what he asked for: "you've got more
+     room on the timeline even if it's only a little bit of extra room". */
+  #tl-tracks.tl-no-groups { --head-w: 72px; }
   .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
@@ -3620,6 +3626,9 @@ body.hm-selecting .hm-pin { display: none; }
    that, and it caught this. So the space stays reserved and the surplus comes out of the thumbnail
    below, which is the only item in the head that can afford to lose a few pixels. */
 .th-chevron--empty { visibility: hidden; pointer-events: none; }
+/* In a project with no groups the reserved column is dead strip rather than alignment, so it goes
+   entirely — display:none, which removes the box, not just the paint (queue 295). */
+.tl-no-groups .th-chevron--empty { display: none; }
 
 /* THE ACTUAL FIX. Every item in the head was `flex: 0 0 auto`, so when the content needed 82px in a
    72px box nothing could give and the surplus went outside the box — onto the timeline. The thumbnail

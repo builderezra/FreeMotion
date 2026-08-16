@@ -1738,6 +1738,34 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [x] **295 — The track head now wastes dead space on the far left. DONE v8.55. (16 Aug, screenshot with a red line
+      down the left edge.)** His words, verbatim: *"You've fixed the icons from going over the line and
+      pushing out like I asked like the icons each but you've left a bunch of dead space on the far left
+      side. You need to push it over so it's not wasting that dead space and you've got more room on the
+      timeline even if it's only a little bit of extra room and make sure it actually looks good
+      proportional when you do it."*
+      **Direct follow-up to #211 / v8.50, and he is right.** That fix widened `--head-w` from 72 to 90 so
+      the head could hold its contents — but 22px of those contents is the COLLAPSE CHEVRON, which is
+      `visibility: hidden` on any layer with no children. His screenshot has no groups at all, so every
+      row is reserving space for an arrow that can never appear. The red line he drew runs exactly down
+      that reserved strip.
+      **Why it was reserved, so the fix does not just reintroduce the old bug:** the space keeps a group
+      row and a plain row at the same depth aligned (#191 — *"the arrow pushes the ui over making it
+      ugly"*), and there is a test that fails the moment they stop lining up.
+      **The resolution measured out below: reserve it only when the project actually HAS a group.**
+      **DONE v8.55 — the column is only held open when a group actually exists.** Nothing needs aligning
+      when there is nothing to align WITH, so a project without a group gets the space back and the head
+      returns to 72px.
+      Measured at 375px, same scene with and without a group:
+      | | head | gap left of the eye | thumbnail |
+      |---|---|---|---|
+      | no groups (your case) | **72px** | **7px** (was 27) | full 34px, no spill |
+      | with a group | 90px | 27px — the column is back | full 34px, no spill |
+      So **18px per row handed to the timeline** exactly where you said, and the alignment #191 exists to
+      protect is untouched the moment a group appears. Both directions are mutation-checked, and the
+      "always reclaim" mutation trips #191's own test as well as the new one — which is the proof that
+      this did not simply undo it.
+
 - [x] **292 — 🚨 URGENT: refreshing shows an OLD version that looks like Alight Motion. DONE v8.51.** His
       words, verbatim: *"Theres a huge issue you can not miss, when you refresh the page it shows an old
       version that looks a lot like alight motion, this is bad because if someone sees it in the final
