@@ -4232,6 +4232,20 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       been three plausible-but-wrong causes already, so declaring it closed on a match of symptoms would
       be the fourth. **Next time you would have expected the bar: does it still happen?** If yes, it is a
       second cause and this entry is still live; if no, this closes with v7.87.
+      **NEW DETAIL 16 Aug, with a PC screenshot — this is the best lead yet.** His words: *"The black
+      bar still is an issue that pops up on the side of the screen in the home menu"* … *"as u see
+      here"*. The screenshot is the **HOME menu on a wide desktop window**, and the bar is a **vertical
+      strip down the RIGHT edge**: the home background (the teal/purple gradient field) stops roughly
+      50px short of the window's right edge and the bare app ground shows through.
+      That reframes it — every earlier round chased a bar at the TOP/BOTTOM (theme-color, safe-area
+      inset, the document canvas). This one is **horizontal short-fall on the right in the HOME view**,
+      which is a different element and probably a width that is being computed rather than stretched
+      (a `100vw` against a scrollbar-reduced client width would do exactly this, as would a background
+      sized to a container that excludes a gutter).
+      **Reproduce at a wide desktop width on the home screen and measure the field's right edge against
+      `document.documentElement.clientWidth`** before changing anything.
+
+
 - [x] **188 — The notes button still does not sit right.** (v7.17) His words, after v7.13 evened the gaps: *"The
       notes still has two much space from the buttons next to it, make it look good spacing wise."*
       #185 evened the GEOMETRIC gaps at 24px optical each side, and he is still seeing too much air — so

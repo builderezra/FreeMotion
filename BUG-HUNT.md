@@ -503,7 +503,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** The entire crop animation collapses to one static rect. It is not recoverable from the UI: `commit()` then calls `FM.history.commit()`, which snapshots the flattened crop and triggers `FM.storage.autosave()`, so the loss is committed to history and persisted to localStorage. Nothing warns the user; the Free-crop bar's Done is indistinguishable from any other Done.
 - **Fix:** Write through the same API the panel uses, so `{kf}` containers survive and an animated crop auto-keys at the playhead: `if (!l.crop) l.crop = { x: 0, y: 0, w: MW, h: MH };` then `[['x', clamp(rect.x,0,MW)], ['y', clamp(rect.y,0,MH)], ['w', clamp(rect.w,1,MW)], ['h', clamp(rect.h,1,MH)]].forEach(([k, v]) => FM.setProp(l.crop, k, Math.round(v), FM.time));` (FM.setProp, js/scene.js:301, upserts into an animated container and plain-assigns a static one).
 
-### Free-crop overlay ignores flipH/flipV, so the committed crop is the mirror of the box the user dragged
+### ~~Free-crop overlay ignores flipH/flipV, so the committed crop is the mirror of the box the user dragged~~ — FIXED v8.49
 `js/crop-tool.js:36`  · found by `tools`
 
 - **What:** Same root cause as the point editor: crop-tool's `xform()`/`toCanvas()`/`toLocal()` rebuild the layer matrix as T·R·S·K and never read `l.flipH`/`l.flipV`/`l.parent`, while the compositor draws the media through T·R·S·K·F (`ctx.scale(layer.flipH ? -1 : 1, …)` at js/compositor.js:5363, applied after skew, then `drawImage(src, …, -cw*tr.anchorX, -ch*tr.anchorY, cw, ch)` at js/compositor.js:6550). `evtSrc()` maps the pointer to source pixels through that missing mirror.
