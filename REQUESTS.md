@@ -3920,6 +3920,30 @@ better still, keep working inside the turn rather than parking work for a later 
       **(d)** leave both alone.
       My own read, for what it is worth: **(c)**, because her dress geometrically has nowhere to put an
       arm that survives 24px, and a mismatched pair is better than a damaged silhouette.
+      **THIRD ATTEMPT — 16 Aug. THREE MORE DESIGNS TRIED, ALL THREE REJECTED, NOTHING SHIPPED.** I did
+      not hand these to agents: I rendered them at 24/48/96/240px on both figures and could see they
+      were wrong myself, which is cheaper than a review round. Recorded so the fourth attempt does not
+      re-walk the same ground. Nothing on disk was changed — all of it was built in the browser.
+      · **Arms as SEPARATE sub-paths, hanging outboard with a gap.** Reads as two detached BARS floating
+        beside the body — parentheses, not arms. Nothing joins them to the shoulder, so the eye does not
+        attach them. Invisible at 24px. On the woman they collide with her flare.
+      · **Separate capsules OVERLAPPING the shoulder to fuse.** Now attached, but the arm's flat top
+        edge sits proud of the shoulder round as a square tab: it reads as epaulettes or flaps on a box.
+      · **One continuous outline with the arms spliced into the body path** (the geometrically right
+        answer — shoulder round flows out and down the outer arm, rounds at the cuff, returns up into an
+        armpit notch, then down to the hip). Correct in principle and **it destroyed the woman**: her
+        dress became a box and her legs detached into floating bars.
+      **AND THAT LAST FAILURE IS THE USEFUL FINDING.** The two figures do NOT share a torso structure.
+      His is shoulders → hip (a simple taper, 10 points). Hers is shoulders → waist → hem (a flare, 12
+      points), and her legs hang from `hemF`, not `splitF`. **A single arm builder spliced into "the
+      body path" therefore cannot serve both** — it corrupts hers. The previous attempt's note says to
+      build both arms from one builder mirrored by coordinate, and that is still right for LEFT vs
+      RIGHT; it is wrong across MAN vs WOMAN, which is a distinction nothing in this entry had drawn
+      before.
+      **What the fourth attempt should do differently:** hand-author her arms against her own outline
+      rather than deriving them, treat the two figures as two drawings that happen to share a head and
+      legs, and render at 24px FIRST — every version above looked least convincing at the size the add
+      menu actually uses, and that is the size that decides it.
 
 - [x] **161 — Make the Freehand Drawing icon a pencil.** (v7.04) His words: *"Make the free hand drawing
       icon a pencil."* It was a squiggle with a small nib.
