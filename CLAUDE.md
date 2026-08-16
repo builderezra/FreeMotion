@@ -9,6 +9,52 @@ HTTPS URL with no stored credentials and fails with "could not read Username", w
 points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
 against `git rev-parse ssh/main` — do not trust the push output alone.
 
+## ⚠️ SAFEGUARDS MUST BE STRUCTURAL, NOT REMEMBERED
+
+His words, after watching me write myself a note about a mistake I had just made twice:
+*"every safe guard needs to be structural, in fact anything that is important even slightly that could
+be forgotten needs to be structural."*
+
+So: **when something important goes wrong, do not write a reminder — remove the possibility.** A note
+in a file is a hope that the next session reads it. A script that refuses to do the wrong thing is a
+guarantee. Two exist already and both encode a failure that had ALREADY happened:
+
+```bash
+tools/ship.sh "commit message"
+```
+Runs the suite and **refuses to commit or push if it is red** (a red suite got pushed once, by running
+the tests and the commit in the same command and not reading the output). Also checks the version label
+matches the newest POLISH-LOG entry, refuses while a mutation is in progress, and confirms the push
+landed by comparing `HEAD` to `ssh/main` rather than trusting the push output.
+
+```bash
+tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
+```
+Restores the file **on a trap**, so the tree cannot be left mutated by a timeout, a Ctrl-C or a kill —
+which happened. **Refuses if the old string was not found**, because a mutation that silently did not
+apply produces a green run that looks like proof and is not. Holds `.mutation-in-progress` so nothing
+takes a browser measurement against a mutated tree — that produced one confidently wrong reading.
+
+**Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
+or a gate — not a paragraph.
+
+## ⚠️ RUN THE SUITE IN THE FOREGROUND WITH A LONG TIMEOUT — never background-and-poll
+
+**`python3 tests/_cdp.py --port 8777` takes 3–4 minutes. The Bash tool's default timeout is 2 minutes.**
+So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
+the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
+
+**Always pass an explicit timeout instead:** `timeout: 500000` on the Bash call. One call, one result,
+no polling. Ezra has raised this more than once — *"i tried to get you to avoid this. it happens so
+often, you need to stop this issue"* — so treat it as a hard rule, not a preference.
+
+Two things that made it worse, both worth avoiding:
+- A run that times out mid-way **leaves the file mutated** if it was a mutation check. Restore from the
+  backup before doing anything else, and check with `grep -c mutated <file>`.
+- **Never run a browser/preview check while a mutation job is running.** The browser loads whatever is
+  on disk, so a measurement taken then describes the MUTATION, not the code. That has already produced
+  one confidently wrong reading.
+
 ## ⚠️ WORK THE LIST OLDEST FIRST — not whatever he just said
 
 **The next thing to work on is the LOWEST-NUMBERED open item in [REQUESTS.md](REQUESTS.md), always.**
