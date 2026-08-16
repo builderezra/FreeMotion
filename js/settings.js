@@ -396,6 +396,60 @@ window.FM = window.FM || {};
         () => { if (FM.shortcuts) FM.shortcuts.toggle(); }),
     ));
 
+    /* ---- "What's slow" (queue 202, and the thing #125 and #95 are both waiting on) -------------
+     * Three separate lag reports have now died the same death: measured on this Mac, found fine,
+     * moved on. #125 says it outright — "every time lag comes up I have measured on THIS machine,
+     * found acceptable numbers, and moved on" — and #202's own measurement ends with the only useful
+     * next step being "the same measurement running ON HIS PHONE".
+     *
+     * The numbers already exist (FM._perfState, FM.playbackQualityInfo). What has never existed is a
+     * way for Ezra to SEE them on the device that is actually struggling and send them over. That is
+     * all this is: sample while he does the slow thing, then one button that copies a block of text.
+     * Deliberately not a graph — the point is a report that can be pasted into a message. */
+    if (inProject) {
+      const perfWrap = el('div', 'set-row set-perf');
+      const perfOut = el('pre', 'set-perf-out');
+      perfOut.textContent = 'Press Measure, then use the app normally for ten seconds.';
+      const perfBtn = el('button', 'set-action', 'Measure');
+      perfBtn.type = 'button';
+      const copyBtn = el('button', 'set-action', 'Copy'); copyBtn.type = 'button'; copyBtn.disabled = true;
+      let last = '';
+      perfBtn.addEventListener('click', () => {
+        if (perfBtn.disabled) return;
+        perfBtn.disabled = true; copyBtn.disabled = true;
+        FM.settings.close();                       // he has to be able to USE the app while it samples
+        if (FM.perfProbe) FM.perfProbe.run(10000, (report) => {
+          last = report;
+          if (FM.toast) FM.toast('Measurement done — reopen Settings to read and copy it', 4000);
+          try { localStorage.setItem('fm.lastPerfReport', report); } catch (e) {}
+        });
+      });
+      copyBtn.addEventListener('click', async () => {
+        const text = last || perfOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied — paste it to me', 2200); }
+        catch (e) {
+          /* Clipboard access needs a secure context and a user gesture, and on iOS it can still
+             refuse. Selecting the text is the fallback that always works — he can then use the
+             system Copy — rather than a toast saying it failed and leaving him stuck. */
+          try {
+            const r = document.createRange(); r.selectNodeContents(perfOut);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            if (FM.toast) FM.toast('Selected — use Copy from the menu', 3000);
+          } catch (e2) {}
+        }
+      });
+      let stored = '';
+      try { stored = localStorage.getItem('fm.lastPerfReport') || ''; } catch (e) {}
+      if (stored) { perfOut.textContent = stored; last = stored; copyBtn.disabled = false; }
+      const perfHead = el('div', 'set-rowtext');
+      perfHead.appendChild(el('div', 'set-label', 'What\u2019s slow'));
+      perfHead.appendChild(el('div', 'set-hint', 'Measures the preview for ten seconds while you use the app, then gives you a block of text to send me. Nothing leaves the device on its own.'));
+      const perfBtns = el('div', 'set-perf-btns');
+      perfBtns.append(perfBtn, copyBtn);
+      perfWrap.append(perfHead, perfBtns, perfOut);
+      body.appendChild(group(perfWrap));
+    }
+
     const foot = el('div', 'set-foot');
     const ver = document.querySelector('.ver');
     foot.textContent = 'FreeMotion ' + (ver ? ver.textContent.trim() : '') + ' · everything stays on this device';

@@ -14894,6 +14894,100 @@
     }
   });
 
+  /* ---------------- queue 202: the "what's slow" readout ----------------
+   * Three lag reports (#95, #125, #202) have all ended at the same place: measured on this Mac,
+   * looks fine, nothing changes. The readout exists so the numbers can come off HIS device. The
+   * tests therefore care about two things — that it produces a report at all, and that the report
+   * actually contains the numbers worth having. A probe that runs and reports nothing useful would
+   * leave all three entries exactly where they were. */
+
+  test('the perf probe produces a report with the numbers that matter', { item: 'perf-probe' }, async function () {
+    if (!FM.perfProbe || !FM.perfProbe.run) throw new Error('FM.perfProbe.run is not exported');
+    const report = await new Promise(function (resolve) {
+      const ok = FM.perfProbe.run(1000, resolve);
+      if (!ok) resolve(null);
+      setTimeout(function () { resolve(null); }, 6000);   // bounded: never hang the suite on this
+    });
+    if (!report) throw new Error('the probe produced no report');
+    // The frame GAP is the whole point — the app's own render clock cannot see GPU or decode cost,
+    // which is why #125 stayed open for so long. A report without it would repeat that mistake.
+    if (!/fps average/.test(report)) throw new Error('no frame rate in the report:\n' + report);
+    if (!/median gap/.test(report)) throw new Error('no frame GAP in the report — that is the one number the app\'s own clock cannot see');
+    if (!/QUALITY\s+tier/.test(report)) throw new Error('no quality tier in the report');
+    if (!/DEVICE/.test(report)) throw new Error('no device line — a measurement with no device attached cannot be compared to anything');
+    if (!/READ:/.test(report)) throw new Error('no interpretation line — the numbers have looked "fine" three times already; the report has to say what they mean');
+    if (FM.perfProbe.running) throw new Error('the probe is still running after it reported — it must stop itself');
+  });
+
+  test('the perf probe always finishes, even if the frame loop never runs', { item: 'perf-probe' }, async function () {
+    /* Found by running it for real with the browser pane hidden: rAF does not fire in a background
+       tab, so the sample never reached its end condition, `running` stayed true forever, and the
+       Measure button was disabled permanently. Ezra would hit that the first time he pressed Measure
+       and then switched away. A wall-clock timer now finishes the run whatever the frame loop does. */
+    const realRAF = window.requestAnimationFrame;
+    let report = null;
+    try {
+      window.requestAnimationFrame = function () { return 0; };   // the frame loop never fires
+      const started = FM.perfProbe.run(1000, function (r) { report = r; });
+      if (!started) throw new Error('the probe did not start');
+      await new Promise(function (r) { setTimeout(r, 2200); });    // past the deadline + its margin
+      if (FM.perfProbe.running) throw new Error('the probe is STILL running with no frame loop — Measure would stay disabled forever');
+      if (!report) throw new Error('no report was produced, so the button never re-enables');
+      if (!/NOT usable|NOT USABLE/.test(report)) throw new Error('a sample with no frames was reported as if it were real:\n' + report);
+      // …and it must not then contradict itself. The first version printed "NOT USABLE" at the top
+      // and "this sample looks healthy" at the bottom of the same report — found by reading a real
+      // run, not by a test, so there is a test now.
+      if (/looks healthy/.test(report)) throw new Error('the report calls an unusable sample healthy — it contradicts its own warning:\n' + report);
+    } finally { window.requestAnimationFrame = realRAF; FM.perfProbe.stop(); }
+  });
+
+  test('the "what\u2019s slow" row fits a phone and its report does not scroll sideways', { item: 'perf-probe' }, async function () {
+    /* Verified here rather than by hand because the browser pane I check screenshots in reports
+       document.hidden, and FM.settings.open() adds its class inside requestAnimationFrame — which a
+       hidden tab never fires, so the panel cannot be made to paint there at all. The suite's browser
+       is not hidden, so this is the place the measurement can actually be taken. */
+    const frame = () => new Promise(r => setTimeout(r, 100));
+    return atPhoneWidth(async function () {
+      const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      try {
+        if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
+        FM.settings.open(); await frame(); await frame();
+        const row = document.querySelector('.set-perf');
+        if (!row) throw new Error('the "what\u2019s slow" row is not in Settings inside a project');
+        const panel = row.closest('.set-panel');
+        if (!panel) throw new Error('the row is not inside the settings panel');
+        const r = row.getBoundingClientRect(), p = panel.getBoundingClientRect();
+        if (r.right > p.right + 1 || r.left < p.left - 1) {
+          throw new Error('the row overflows the panel by ' + Math.round(Math.max(r.right - p.right, p.left - r.left)) + 'px');
+        }
+        if (p.width > window.innerWidth + 1) throw new Error('the settings panel itself is wider than the screen');
+        const out = row.querySelector('.set-perf-out');
+        if (!out) throw new Error('no report box');
+        // A monospaced block that scrolls sideways on a phone is unreadable, and this one exists to
+        // be READ off a phone — that is the entire point of the feature.
+        if (out.scrollWidth > out.clientWidth + 1) throw new Error('the report scrolls sideways (' + out.scrollWidth + ' vs ' + out.clientWidth + ') — it has to wrap on a phone');
+        const btns = Array.prototype.slice.call(row.querySelectorAll('.set-action'));
+        if (btns.length !== 2) throw new Error('expected Measure and Copy, found ' + btns.length);
+        btns.forEach(function (b) {
+          const bb = b.getBoundingClientRect();
+          if (bb.right > p.right + 1 || bb.left < p.left - 1) throw new Error('the "' + b.textContent + '" button is outside the panel');
+          if (bb.height < 28) throw new Error('the "' + b.textContent + '" button is only ' + Math.round(bb.height) + 'px tall — too small to tap');
+        });
+      } finally { FM.settings.close(); }
+    }, 380);
+  });
+
+  test('the perf probe refuses to run twice at once', { item: 'perf-probe' }, async function () {
+    // Two samplers would each see the other's rAF work and both report inflated frame gaps —
+    // a measurement tool that lies when double-started is worse than none.
+    const first = FM.perfProbe.run(1200, function () {});
+    if (!first) throw new Error('the first run did not start');
+    const second = FM.perfProbe.run(1200, function () {});
+    if (second !== false) throw new Error('a second concurrent run was allowed — both samples would be wrong');
+    FM.perfProbe.stop();
+    if (FM.perfProbe.running) throw new Error('stop() did not stop it');
+  });
+
   /* ---------------- queue 195: volume up to 1000% ----------------
    * "The volume slider needs to be like the effects slider and not a dot on a line, because I want
    * to be able adjust the volume up to like 1000%." The dangerous half is not the number — it is

@@ -5509,3 +5509,19 @@ body.fm-pushing #toast { z-index: 213; }
    40px-square target in a full-width panel looks like something went wrong. */
 .spd-solve-row { display: flex; gap: 8px; margin: 0 0 8px; }
 .spd-solve { flex: 1 1 0; min-width: 0; height: 40px; }
+
+/* "What's slow" (queue 202). A report, not a dashboard — the job is getting numbers off HIS phone
+   and into a message, so it is monospaced text and a Copy button, and it wraps rather than scrolls
+   sideways on a 375px screen. */
+.set-perf { flex-direction: column; align-items: stretch; gap: 8px; }
+.set-perf-btns { display: flex; gap: 8px; }
+.set-perf-btns .set-action { flex: 1 1 auto; }
+.set-perf-out {
+  margin: 0; padding: 10px; border-radius: var(--radius-sm);
+  background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--text-dim); font-size: 11px; line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere;   /* never a sideways scrollbar on a phone */
+  max-height: 260px; overflow-y: auto;
+  -webkit-user-select: text; user-select: text;     /* the clipboard fallback selects this text */
+}

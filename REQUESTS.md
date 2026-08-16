@@ -4206,6 +4206,21 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       slow" readout in Settings rather than more guessing from here.
       Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
       still decoding, the app is competing with the decoder for the same device.
+
+      **THE READOUT IS BUILT — v8.13.** This entry asked for it in its own last line, and #125 and #95
+      are both blocked on the same thing, so it is done rather than guessed around again.
+      **Settings → "What's slow" → Measure.** Use the app normally for ten seconds — do the thing that
+      feels slow — then **Copy** and paste the block to me. Nothing is sent anywhere by itself.
+      It measures the **real frame interval**, not our own render clock, which is the distinction that
+      kept #125 alive: GPU filter work and video decode never touch that clock, and once reported
+      1.1ms a frame while the app stuttered. The report also **interprets itself** — if the frames are
+      slow while our drawing is fast it says the cost is GPU or decode — because "the numbers look
+      fine" is how this has gone wrong three times running.
+      **So #202, #125 and #95 all now need the same one thing from you: one measurement each, taken
+      while it feels bad.** That is the whole remaining work on all three.
+      *(Two flaws found by running it rather than testing it: with the tab hidden rAF never fires, so
+      the probe hung forever and left Measure disabled — there is a wall-clock deadline now; and the
+      first real report warned "NOT USABLE" at the top and said "looks healthy" at the bottom.)*
 - [x] **196 — A Sound Effects button in the Audio tab, with a library of effects.** (v7.29) His words: *"in the
       audio tab we will add a button that is sound effects and you will be able to use that to add sound
       effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
