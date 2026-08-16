@@ -4014,6 +4014,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   flex: 0 0 auto; padding: 9px 14px; border-radius: 10px;
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13px;
 }
+/* The naked/keep toggle (queue 277 clause 9). A quiet pill beside Add rather than a switch with a
+   label: it is a setting you change rarely and read at a glance, and the bar is already narrow. */
+.fxb-commit-keep {
+  flex: 0 0 auto; padding: 9px 12px; border-radius: 10px; font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim);
+}
+.fxb-commit-keep.on { border-color: var(--accent); color: var(--accent); }
 .fxb-commit-go {
   flex: 1 1 auto; padding: 11px 14px; border-radius: 10px;
   background: var(--accent); border: none; color: #04120f; font-size: 14px; font-weight: 700;

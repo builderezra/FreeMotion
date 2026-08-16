@@ -60,7 +60,7 @@ window.FM = window.FM || {};
   // `preset` (optional) = an FM.effectPresets entry: same flow, but the instance carries the
   // preset's params with keyframes re-anchored at the playhead (or the clip start if the playhead
   // is outside the clip) — park the playhead on the beat, add "Beat Slam", the hit lands there.
-  function addEffect(id, preset, quiet) {
+  function addEffect(id, preset, quiet, seed) {
     // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete (Backspace)
     // or undo (Cmd+Z, which rebuilds layer objects) can orphan it — pushing into the detached object would
     // silently lose the effect (history.commit snapshots the live scene without it).
@@ -72,6 +72,10 @@ window.FM = window.FM || {};
       const ph = (typeof FM.time === 'number') ? FM.time : st;
       const anchor = (ph >= st && ph < st + du - 0.01) ? ph : st;
       inst = FM.effectPresets.makeInstance(preset, anchor);
+    } else if (seed) {
+      /* The instance the PREVIEW was drawn with (queue 277 clause 9) — cloned, not adopted, so the
+         layer never ends up holding an object the browser also has a reference to. */
+      inst = JSON.parse(JSON.stringify(seed));
     } else {
       inst = FM.fxRegistry.makeInstance(id);
     }
@@ -264,15 +268,40 @@ window.FM = window.FM || {};
     paintPicks();
     restartPreview();      // every tap re-previews AND restarts the layer, which is what he asked for
   }
+  /* ---- HOW THEY LAND (queue 277, clause 9) ---------------------------------------------------
+   * "Maybe add a button like a toggle button for when you're like done selecting all of the effects
+   * you want to add you can toggle whether they spawn in with the values that were displayed in the
+   * preview on the canvas or they are just added in as a fresh slate like they just added in naked so
+   * you can do what you want to them."
+   * ON  = the effects land carrying exactly the parameters the preview was drawn with.
+   * OFF = fresh instances, default parameters — "naked".
+   * WORTH KNOWING TODAY: the two settings currently produce the SAME parameters, because a previewed
+   * effect is built with `makeInstance` and so is already naked. The difference only starts to mean
+   * something when effects preview with something other than their defaults — which is exactly the
+   * "make each effect load in with changes to it so it actually does something" work he asked me NOT
+   * to start ("I don't want you to start on it yet"). The toggle is the agreed shape for it, so it is
+   * built and wired to carry the real preview objects; it is not a control pretending to do something. */
+  const KEEP_KEY = 'fm.fx.keepPreviewValues';
+  function keepValues() { try { return localStorage.getItem(KEEP_KEY) === '1'; } catch (e) { return false; } }
+  function setKeepValues(on) { try { localStorage.setItem(KEEP_KEY, on ? '1' : '0'); } catch (e) {} }
+  FM._fxKeepValues = keepValues;      // for the suite
+
   function commitPicks() {
     const list = _picked.slice();
+    /* Snapshot the previewed instances BEFORE stopPreview clears them — that is the whole point of the
+       toggle, and reading them afterwards would hand back an empty list. */
+    const shown = (FM._fxPreview && FM._fxPreview.list) ? FM._fxPreview.list.slice() : [];
+    const keep = keepValues();
     _picked = [];
     stopPreview();          // the previewed copies go before the real ones land, or the layer gets both
     if (!list.length) { FM.fxBrowser.close(); return; }
     /* In tap order, and quietly — addEffect closes the browser and jumps the inspector on its own,
        which is right for one tap and wrong nine times in a row. */
     let added = 0;
-    list.forEach(id => { if (addEffect(id, null, true)) added++; });
+    list.forEach((id, i) => {
+      const seed = (keep && shown[i] && (shown[i].type === id || shown[i].id === id)) ? shown[i] : null;
+      if (addEffect(id, null, true, seed)) added++;
+    });
     FM.fxBrowser.close();
     if (FM.inspector) { if (FM.inspector.openCategory) FM.inspector.openCategory('effects'); else FM.inspector.refresh(); }
     if (FM.refreshAll) FM.refreshAll();
@@ -1062,9 +1091,20 @@ window.FM = window.FM || {};
         const bar = el('div', 'fxb-commit hidden');
         const clear = el('button', 'fxb-commit-clear', 'Clear');
         const go = el('button', 'fxb-commit-go', 'Add');
+        const keep = el('button', 'fxb-commit-keep');
+        const paintKeep = () => {
+          const on = keepValues();
+          keep.classList.toggle('on', on);
+          keep.textContent = on ? 'Keep preview values' : 'Add naked';
+          keep.title = on
+            ? 'Effects land with the values the preview was drawn with'
+            : 'Effects land fresh, with their default values';
+        };
+        keep.addEventListener('click', () => { setKeepValues(!keepValues()); paintKeep(); });
+        paintKeep();
         clear.addEventListener('click', () => { _picked = []; paintPicks(); restartPreview(); });
         go.addEventListener('click', commitPicks);
-        bar.appendChild(clear); bar.appendChild(go);
+        bar.appendChild(clear); bar.appendChild(keep); bar.appendChild(go);
         root.appendChild(bar);
       }
       const searchBtn = root.querySelector('.fxb-search-btn');

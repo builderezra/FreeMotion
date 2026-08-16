@@ -17624,6 +17624,71 @@
     }
   });
 
+  test('the sheet\'s toggle decides whether picks land with the previewed values or naked (queue 277)', { item: 'fx-sheet' }, async function () {
+    /* Clause 9: "you can toggle whether they spawn in with the values that were displayed in the preview
+     * on the canvas or they are just added in as a fresh slate like they just added in naked".
+     * The two settings currently produce the same PARAMETERS in ordinary use, because a previewed effect
+     * is built with makeInstance and is therefore already naked — the difference only starts to matter
+     * once effects preview with something other than their defaults, which is the work he asked me not
+     * to start yet. So this proves the WIRING instead, by changing a previewed parameter and checking
+     * which of the two settings carries it through. Without that, the toggle would be a control nobody
+     * could tell was connected. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    const keep0 = FM._fxKeepValues ? FM._fxKeepValues() : false;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.3), y: Math.round(P.height * 0.3), shapeW: Math.round(Math.min(P.width, P.height) * 0.18), shapeH: Math.round(Math.min(P.width, P.height) * 0.18), fill: '#ee3333' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(200);
+
+      const run = async function (wantKeep) {
+        const live = FM.layerById(FM.scene, L.id);
+        live.effects.length = 0;
+        FM.fxBrowser.open(live);
+        await sleep(320);
+        const root = document.getElementById('fx-browser');
+        const tile = root.querySelector('[data-fxid]');
+        if (!tile) throw new Error('no effect tiles in the sheet');
+        tile.click();
+        await sleep(140);
+        const btn = root.querySelector('.fxb-commit-keep');
+        if (!btn) throw new Error('the sheet has no naked/keep toggle — clause 9 of his spec');
+        if (FM._fxKeepValues() !== wantKeep) { btn.click(); await sleep(80); }
+        if (FM._fxKeepValues() !== wantKeep) throw new Error('the toggle did not change state when tapped');
+        const inst = FM._fxPreview && FM._fxPreview.list[0];
+        if (!inst) throw new Error('picking did not produce a previewed instance');
+        const key = Object.keys(inst.params || {})[0];
+        if (key) inst.params[key] = 0.4242;                 // a value only the PREVIEW knows about
+        root.querySelector('.fxb-commit-go').click();
+        await sleep(280);
+        const after = FM.layerById(FM.scene, L.id);
+        if (!after.effects.length) throw new Error('committing added nothing');
+        return { key: key, landed: key ? (after.effects[0].params || {})[key] : null, label: btn.textContent };
+      };
+
+      const kept = await run(true);
+      if (kept.key && kept.landed !== 0.4242) throw new Error('with the toggle ON the effect landed with ' + kept.landed + ' instead of the previewed 0.4242 — "spawn in with the values that were displayed in the preview" is not wired up');
+      const naked = await run(false);
+      if (naked.key && naked.landed === 0.4242) throw new Error('with the toggle OFF the effect still carried the previewed value — "added in naked" is not wired up');
+      if (kept.label === naked.label) throw new Error('the toggle reads "' + kept.label + '" in both states, so nothing on screen says which way it is set');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      try { localStorage.setItem('fm.fx.keepPreviewValues', keep0 ? '1' : '0'); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(220);
+    }
+  });
+
   test('on a desktop width the effects browser still adds on one tap (queue 277 is phone-only)', { item: 'fx-sheet' }, async function () {
     /* "all just for mobile btw". A multi-select that leaked onto the desktop would mean every PC user's
        first tap silently did nothing, which is a worse bug than the one this feature fixes. */

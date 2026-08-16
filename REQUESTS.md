@@ -2993,8 +2993,18 @@ better still, keep working inside the turn rather than parking work for a later 
       7. [x] While the sheet is open the canvas **loops only the selected layer**, restarting from that
              layer's start on each tap. **v8.69.**
       8. [x] Filters tab: leave as is — *"pretty much good how it is right now"*. Untouched.
-      9. [ ] **A toggle for how the chosen effects land:** with the values shown in the preview, or
-             *"naked"* / fresh-slate.
+      9. [x] **A toggle for how the chosen effects land:** with the values shown in the preview, or
+             *"naked"* / fresh-slate. **v8.70** — a pill on the commit bar reading "Keep preview values"
+             or "Add naked", remembered between sessions.
+             **Read this bit before judging it:** the two settings land the SAME parameters in ordinary
+             use today, because a previewed effect is built the same way a fresh one is and so is
+             already naked. The difference only starts to mean something once effects preview with
+             something other than their defaults — *"we might start happening to make each effect by
+             default load in with… changes to it so it actually does something and looks good"* — which
+             is the work you said not to start yet. The toggle is the shape you asked for it to take, it
+             is wired to the real preview objects, and the suite proves it by changing a previewed value
+             and checking which setting carries it through. Nothing about it is decorative; it just has
+             nothing to differ about until the other half exists.
       10. [ ] *(Idea, his words "potentially")* long-press an effect → its variants menu, and pick which
              preset is the one that spawns on a normal tap. *(Half of this exists already: hold an
              effect and its presets open. What is missing is choosing which preset a plain tap uses.)*
@@ -3022,8 +3032,15 @@ better still, keep working inside the turn rather than parking work for a later 
         layer whose element is not ready throws on `.currentTime`, the throw escaped, and **the browser
         was left on screen covering the phone's settings button**. Hiding now happens first and the
         repaint is guarded, so whatever else fails, the sheet closes.
-      **Still to come: clause 9 (the naked / preview-values toggle) and clause 10 (his "potentially"
-      idea about choosing which preset a plain tap spawns).**
+      **STAGE C SHIPPED v8.70 — clause 9.** Nine of the ten clauses are done. **What is left is clause
+      10 only**, which he raised as an idea rather than a requirement (*"potentially we could just make
+      it so people can hold down on an effect and it will show up with its menu"*) — and half of it
+      already exists, because holding an effect opens its presets today. The missing half is choosing
+      WHICH preset a plain tap spawns, and that is worth his opinion before it is built: it is a
+      per-effect setting with nowhere obvious to live.
+      **Also still open, deliberately:** *"most of our filters and stuff I kind of just like basic when
+      you first add them"* — making effects load in with values that actually look like something. His
+      words: *"I don't want you to start on it yet."* Clause 9's toggle is the agreed shape for it.
 
       **DO NOT START the default-good-values work** — his words: *"I don't want you to start on it yet"*.
       The toggle in clause 9 is the agreed shape for it.
