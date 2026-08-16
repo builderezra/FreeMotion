@@ -17211,6 +17211,44 @@
     } finally { host.remove(); }
   });
 
+  /* ---------------- queue 272: the PHONE notepad was never shaded ----------------
+   * "I still want subtle shading to the notepad button just so it looks a little bit more detailed
+   * just like some subtle shading is all I need. Nothing crazy."
+   * The "still" is the whole diagnosis: queue 225 asked for exactly this and only the DESKTOP icon got
+   * it. He uses a phone, so for him nothing had changed. This asserts the two icons carry the SAME
+   * treatment, which is the thing that was actually wrong — one of them having it is how this got
+   * reported twice. */
+
+  test('both notepad buttons carry the same subtle shading (queue 272)', { item: 'notes-shading' }, function () {
+    const read = id => {
+      const b = document.getElementById(id);
+      if (!b) throw new Error('#' + id + ' is not in the document');
+      const page = b.querySelector('path[fill]');
+      const grad = b.querySelector('linearGradient');
+      return {
+        id,
+        fill: page ? page.getAttribute('fill') : null,
+        gradId: grad ? grad.id : null,
+        stops: grad ? [...grad.querySelectorAll('stop')].map(x => (x.getAttribute('stop-color') || '').toLowerCase()) : null,
+        curl: !!b.querySelector('path[stroke-opacity]'),
+      };
+    };
+    const phone = read('m-notes'), pc = read('btn-notes');
+    [phone, pc].forEach(x => {
+      if (!x.fill || !/^url\(#/.test(x.fill)) throw new Error(x.id + ': the page is a flat fill (' + x.fill + ') — it has no shading at all');
+      if (!x.stops || x.stops.length < 2) throw new Error(x.id + ': its gradient has ' + (x.stops ? x.stops.length : 0) + ' stop(s)');
+      if (new Set(x.stops).size < 2) throw new Error(x.id + ': every gradient stop is the same colour — that is a flat page wearing a gradient');
+      if (!x.curl) throw new Error(x.id + ': the faint line under the top edge is missing');
+    });
+    /* THE POINT OF THIS TEST: one having it and the other not is exactly how this came back. */
+    if (JSON.stringify(phone.stops) !== JSON.stringify(pc.stops))
+      throw new Error('the phone and desktop notepads are shaded differently: ' + phone.stops + ' vs ' + pc.stops);
+    /* Two copies of one icon in one document: a shared gradient id silently hands the paint to
+       whichever element asked for it second, so they must be namespaced apart. */
+    if (phone.gradId === pc.gradId)
+      throw new Error('both notepad icons use the gradient id "' + phone.gradId + '" — a duplicate id steals the paint from whichever is second');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

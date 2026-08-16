@@ -1905,9 +1905,22 @@ better still, keep working inside the turn rather than parking work for a later 
       that reads out the name of the thing that voting doesn't go to cover over the plus create button."*
       (He means the loading readout must not overlap the + / create control.)
 
-- [ ] **272 — The notepad button wants subtle shading. (16 Aug.)** His words, verbatim: *"I still want
+- [x] **272 — The notepad button wants subtle shading. DONE v8.62.** His words, verbatim: *"I still want
       subtle shading to the notepad button just so it looks a little bit more detailed just like some
       subtle shading is all I need. Nothing crazy."*
+      **DONE v8.62 — and the word "still" was the whole diagnosis.** Queue **225** asked for exactly
+      this — *"Add subtle shading to the notes button"* — and it was built then. **Only the DESKTOP icon
+      got it.** The phone's notepad has been the flat version the entire time, so from where you were
+      looking, nothing had changed and you were right to say so twice.
+      The phone icon now carries the identical treatment, copied rather than re-invented: a soft
+      top-to-bottom gradient down the sheet and one faint line under the top edge where a real page
+      catches its own curl. Both are drawn INSIDE the page path, so the silhouette at 24px is unchanged
+      — the mark is the same, it just stops being flat. *"Nothing crazy"* was the instruction and it is
+      depth, not a redraw.
+      **The test asserts the two icons MATCH**, not merely that each is shaded — one having it and the
+      other not is precisely how this came back a second time. It also checks their gradient ids are
+      **different**: both icons live in the same document, and a duplicate id silently hands the paint
+      to whichever element asked for it second.
 
 - [x] **271 — Elements menu: the colours are poor, random and too alike. DONE v8.61.** His words, verbatim:
       *"In the elements menu like how you have it now where the actual icon will be a vibrant colour but
