@@ -495,7 +495,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** Verified in the app: 240x240 comp, 100x100 shape centred at (120,120). With one Pixelate at catalog defaults, pixel (70,70) is fully transparent (alpha 0) — mosaic cell rounding removed the corner. With a second Pixelate stacked, the same pixel is fully opaque (200,60,30,255): the clean layer left underneath in `_pxA` shows through. 784 pixels differ visibly, with a maximum alpha delta of 255. The result is a mosaic with the sharp original bleeding through everywhere pixelation made the plate transparent.
 - **Fix:** Depth-index `_pxA`/`_pxS` the way `_pfPool` does (try/finally around a `_pxDepth` counter) so the nested call gets its own plate. A plain `if (ctx.canvas === _pxA) ctx.clearRect(0,0,W,H)` before line 5204 fixes the mosaic path only — it would erase the source on the `size <= 1` path at 5190, so that branch needs to become a no-op when `ctx.canvas === _pxA`.
 
-### crop-tool commit() replaces layer.crop wholesale, destroying a keyframed crop animation
+### ~~crop-tool commit() replaces layer.crop wholesale, destroying a keyframed crop animation~~ — FIXED v8.48
 `js/crop-tool.js:150`  · found by `tools`
 
 - **What:** `layer.crop.x/y/w/h` are animatable containers — `FM.cropOf` evaluates each with `FM.evalProp` (js/compositor.js:6969) and the Edit Shape panel offers a ◆ keyframe button and an easing curve for them (js/inspector.js:1733-1746), writing through `FM.setProp(layer.crop, 'w', nw, FM.time)` (js/inspector.js:1764). crop-tool's `commit()` assigns a brand-new object of four plain numbers, so any `{kf:[…]}` container — every crop keyframe and its easing — is overwritten and gone.

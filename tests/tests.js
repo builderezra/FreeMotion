@@ -16528,6 +16528,69 @@
     if (typeof FM.mediaLib._learn !== 'function') throw new Error('nothing heals a backfilled row from the real file, so a genuine song stays misfiled under Media');
   });
 
+  /* ---- BUG-HUNT: Free crop silently destroyed a keyframed crop animation ----
+   * layer.crop.x/y/w/h are ANIMATABLE containers — FM.cropOf evaluates each through FM.evalProp and
+   * the Edit Shape panel gives them a ◆ and an easing curve. crop-tool's commit() assigned a fresh
+   * object of four plain numbers, throwing every {kf} away, and then called FM.history.commit(),
+   * which snapshots the flattened crop and autosaves it. So an animated crop reveal was collapsed to
+   * one static rect, persisted, with no warning and no way back through the UI. */
+
+  test('Free crop keeps a keyframed crop animation', { item: 'crop-kf' }, function () {
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
+    const wasActive = FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive();
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(64, 48), width: 64, height: 48 });
+      S.layers = [L]; FM.selectLayer(L.id);
+      // an animated crop, built the way the Edit Shape panel builds one
+      L.crop = { x: 0, y: 0, w: 64, h: 48 };
+      FM.time = 0;
+      ['x', 'y', 'w', 'h'].forEach(k => FM.toggleProp(L.crop, k, 0, L.crop[k]));
+      FM.time = 1;
+      FM.setProp(L.crop, 'w', 32, 1);
+      if (!FM.isAnimated(L.crop.w)) throw new Error('the fixture is not animated, so this cannot see the defect');
+      const keysBefore = L.crop.w.kf.length;
+      if (keysBefore < 2) throw new Error('expected two crop keyframes in the fixture, got ' + keysBefore);
+
+      FM.cropTool.start(L.id);
+      if (!FM.cropTool.isActive()) throw new Error('the crop tool did not open, so Done below would prove nothing');
+      const done = document.querySelector('#crop-bar .cb-done');
+      if (!done) throw new Error('no Done button on the crop bar');
+      done.click();
+
+      if (!FM.isAnimated(L.crop.w)) throw new Error('Free crop flattened the crop animation to a static rect — every keyframe and its easing is gone');
+      if (!FM.isAnimated(L.crop.x) || !FM.isAnimated(L.crop.y) || !FM.isAnimated(L.crop.h)) throw new Error('some crop channels survived and others did not');
+      if (L.crop.w.kf.length < keysBefore) throw new Error('crop keyframes were dropped: ' + keysBefore + ' -> ' + L.crop.w.kf.length);
+    } finally {
+      try { if (FM.cropTool.isActive() && !wasActive) FM.cropTool.stop(); } catch (e) {}
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+    }
+  });
+
+  test('Free crop on a plain crop still writes plain numbers', { item: 'crop-kf' }, function () {
+    /* The other half: the fix must not turn every ordinary crop into an animated one. FM.setProp
+       plain-assigns a static container, and that is the common path by far. */
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
+    const wasActive = FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive();
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(64, 48), width: 64, height: 48 });
+      S.layers = [L]; FM.selectLayer(L.id);
+      FM.time = 0;
+      FM.cropTool.start(L.id);
+      const done = document.querySelector('#crop-bar .cb-done');
+      if (!done) throw new Error('no Done button on the crop bar');
+      done.click();
+      if (!L.crop) throw new Error('Done wrote no crop at all');
+      ['x', 'y', 'w', 'h'].forEach(k => {
+        if (typeof L.crop[k] !== 'number') throw new Error('crop.' + k + ' is ' + JSON.stringify(L.crop[k]) + ' — a static crop should stay four plain numbers');
+      });
+    } finally {
+      try { if (FM.cropTool.isActive() && !wasActive) FM.cropTool.stop(); } catch (e) {}
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

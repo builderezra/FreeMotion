@@ -2735,8 +2735,8 @@ better still, keep working inside the turn rather than parking work for a later 
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
 - [ ] **Clear the rest of the BUG-HUNT backlog** (~59 items).
-      *Progress 16 Aug:* three struck off — the two media-leak findings (v8.44 + v8.46) and the
-      library-misfiling one (v8.47). Worth knowing before picking more off it: the file's own warning
+      *Progress 16 Aug:* four struck off — the two media-leak findings (v8.44 + v8.46) and the
+      library-misfiling one (v8.47) and the crop-animation data loss (v8.48). Worth knowing before picking more off it: the file's own warning
       is to re-check the code rather than trust its line numbers, and that cuts both ways. The two
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of

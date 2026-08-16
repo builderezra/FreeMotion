@@ -147,7 +147,21 @@ window.FM = window.FM || {};
   function commit() {
     const l = layer(); if (!l) return;
     l._cropEditing = false;
-    l.crop = { x: Math.round(clamp(rect.x, 0, MW)), y: Math.round(clamp(rect.y, 0, MH)), w: Math.round(clamp(rect.w, 1, MW)), h: Math.round(clamp(rect.h, 1, MH)) };
+    /* WRITE THROUGH FM.setProp, DO NOT REPLACE THE OBJECT (BUG-HUNT).
+     * layer.crop.x/y/w/h are animatable CONTAINERS — FM.cropOf evaluates each with FM.evalProp, and
+     * the Edit Shape panel gives them a ◆ and an easing curve. Assigning a fresh object of four plain
+     * numbers here threw every `{kf:[…]}` away, so building an animated crop reveal and then touching
+     * Free crop collapsed the whole animation to one static rect — and commit() goes straight on to
+     * FM.history.commit(), which snapshots the flattened crop and autosaves it, so the loss was
+     * persisted with no warning and no way back through the UI.
+     * FM.setProp upserts into an animated container and plain-assigns a static one, so a normal crop
+     * behaves exactly as before and an animated one gains a keyframe at the playhead instead of
+     * losing all of them. */
+    if (!l.crop) l.crop = { x: 0, y: 0, w: MW, h: MH };
+    const at = FM.time;
+    [['x', clamp(rect.x, 0, MW)], ['y', clamp(rect.y, 0, MH)],
+     ['w', clamp(rect.w, 1, MW)], ['h', clamp(rect.h, 1, MH)]]
+      .forEach(pair => FM.setProp(l.crop, pair[0], Math.round(pair[1]), at));
     teardown();
     FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
     if (FM.toast) FM.toast('Cropped');
