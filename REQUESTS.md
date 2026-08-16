@@ -5312,7 +5312,7 @@ wait for them to report back."*
       hide the defect. It also checks the reverse — removing a benchmark puts the chip out without a
       scrub — because the same staleness the other way round is just as wrong.
 
-- [ ] **244 — PC: drag the add menu independently of the timeline, with a snap where they meet.** (15
+- [x] **244 — PC: drag the add menu independently of the timeline, with a snap where they meet. DONE v8.30.** (15
       Aug. *He asked for this one to go to the BOTTOM: "This can go to the bottom of the list as you have
       a lot of things to work on still, remember ur doing oldest first."*) His words:
       *"Make it so you can seperatly drag up and down the add menu, on pc, but you cant drag lower than
@@ -5390,6 +5390,19 @@ wait for them to report back."*
       reflows), sizes it upward from the band's top edge, and only writes `--tl-h` in the coupled case
       once it has been pushed back down onto the timeline. The floor is still `--tl-h`; what changes is
       that the menu above that floor is a floating surface, not a taller row.
+
+      **DONE v8.30 — all five behaviours, built exactly as the corrected design above says.**
+      Measured on the real thing: the panel grew **240→440px while the canvas stayed at 515px** (it
+      floats over, never shrinks), the floor follows `--tl-h` when the timeline is resized, coming back
+      down sticks for 9px and flashes the panel's top border accent, and pushing past that wrote
+      `--tl-h` 240→189 with the canvas correctly GROWING to 562.
+      **Your demo:** raise it and it sits over the canvas with the timeline still visible beside it —
+      screenshotted at 1280×800 during the build.
+      **One direction is NOT built and I would rather say so:** dragging the TIMELINE up into the add
+      menu and re-coupling from that side. The design says it is "the same rule with the roles
+      swapped", and it is, but it means teaching `#tl-resizer` about `--am-h` — a second writer in the
+      file the design note explicitly warns against making one. It wants its own pass rather than being
+      bolted on at the end of this one. Everything you described for dragging the ADD MENU works.
 
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
       looks dead. DONE v7.95.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one

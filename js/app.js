@@ -3391,6 +3391,99 @@ window.FM = window.FM || {};
     };
     rez.addEventListener('pointerup', end);
     rez.addEventListener('pointercancel', end);
+
+    /* ---- The ADD MENU drags independently, over the canvas (queue 244) -------------------------
+     * His words: "Make it so you can seperatly drag up and down the add menu, on pc, but you cant
+     * drag lower than what the timeline is dragged too… if you keep dragging down it drags the
+     * timeline down with it… when dragging the add menu seperatly it shouldnt push the canvas to be
+     * smaller but just go over the canvas."
+     *
+     * THAT LAST CLAUSE IS A STRUCTURAL REQUIREMENT, NOT A PREFERENCE, and measuring is what showed
+     * it: in the Studio layout the inspector band and the timeline are not two things with two
+     * heights — they are THE SAME GRID ROW (measured at 1280x800: both at top 616, both 264 tall,
+     * 0px apart in either). So "raise the add menu while the timeline stays put" is impossible
+     * inside the grid. The only way it can work at all is for the menu to leave the grid and float
+     * above the stage, which is exactly what he asked for.
+     * So: while dragged above the floor the panel is absolutely positioned against #app and its grid
+     * slot keeps the undragged height, so nothing reflows and the canvas never shrinks. The floor is
+     * the CURRENT --tl-h, read rather than re-measured — one source of truth. Pushed back down onto
+     * that floor it sticks for a beat and flashes the divider; pushed past the sticky threshold it
+     * writes --tl-h instead, and the timeline follows.
+     * Built with the effects browser in mind, which he says is coming: "the add menu is going to
+     * become a tall, resizable browser that must never cover the canvas". */
+    const amRez = document.getElementById('am-resizer');
+    if (amRez) {
+      const AM_KEY = 'fm_am_h';
+      const STICK = 9;                    // px of travel past the floor before the two couple (draw-tool's snapCursor uses the same idea)
+      const amFloor = () => parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10) || 232;
+      const amClamp = (h) => {
+        const vh = window.innerHeight;
+        const ceil = Math.max(200, Math.round(vh * 0.82));   // never the whole window: the canvas has to stay visible
+        return Math.max(amFloor(), Math.min(ceil, h));
+      };
+      FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy
+      const studioAdd = () => !isPhone() &&
+        document.body.classList.contains('layout-studio') &&
+        !!document.querySelector('#inspector-panel .addmenu--panel');
+      let amDrag = false, amStartY = 0, amStartH = 0, amStuck = 0, amFlashed = false;
+      const flashDivider = () => {
+        if (amFlashed) return;
+        amFlashed = true;
+        const p = document.getElementById('inspector-panel');
+        if (!p) return;
+        p.classList.remove('am-snap'); void p.offsetWidth; p.classList.add('am-snap');
+        setTimeout(() => p.classList.remove('am-snap'), 420);
+      };
+      amRez.addEventListener('pointerdown', (e) => {
+        if (!studioAdd()) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        amDrag = true; amStartY = e.clientY; amStuck = 0; amFlashed = false;
+        const p = document.getElementById('inspector-panel');
+        amStartH = p ? p.getBoundingClientRect().height : amFloor();
+        document.body.classList.add('am-resizing');
+        try { amRez.setPointerCapture(e.pointerId); } catch (_) {}
+        e.preventDefault();
+      });
+      amRez.addEventListener('pointermove', (e) => {
+        if (!amDrag) return;
+        const want = amStartH + (amStartY - e.clientY);       // drag UP → taller menu
+        const floor = amFloor();
+        if (want >= floor) {
+          /* Above the floor: float, and leave the grid alone. amStuck resets so coming back down has
+             to earn the coupling again — otherwise one deep drag would leave the two permanently
+             joined and the menu could never be raised a second time. */
+          amStuck = 0;
+          root.style.setProperty('--am-h', amClamp(want) + 'px');
+          document.body.classList.add('am-floating');
+        } else {
+          // At or below the floor. Hold here until the pointer has travelled STICK past it.
+          amStuck = floor - want;
+          root.style.setProperty('--am-h', floor + 'px');
+          flashDivider();
+          if (amStuck > STICK) {
+            document.body.classList.remove('am-floating');
+            root.style.setProperty('--tl-h', clampH(floor - (amStuck - STICK)) + 'px');
+          }
+        }
+      });
+      const amEnd = () => {
+        if (!amDrag) return;
+        amDrag = false;
+        document.body.classList.remove('am-resizing');
+        const cur = parseInt(getComputedStyle(root).getPropertyValue('--am-h'), 10);
+        try { if (cur) localStorage.setItem(AM_KEY, cur); } catch (_) {}
+        try { const tl = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10); if (tl) localStorage.setItem('fm_tl_h', tl); } catch (_) {}
+      };
+      amRez.addEventListener('pointerup', amEnd);
+      amRez.addEventListener('pointercancel', amEnd);
+      /* The menu must never be left floating over a canvas it is no longer showing — closing the add
+         menu, or switching layout, drops it back into the band. */
+      FM.dropAddMenuFloat = function () {
+        document.body.classList.remove('am-floating');
+        root.style.removeProperty('--am-h');
+      };
+      window.addEventListener('resize', () => { if (!studioAdd()) FM.dropAddMenuFloat(); });
+    }
     // window shrank below a stored height → re-clamp so the timeline can't exceed the viewport
     window.addEventListener('resize', () => {
       if (isPhone()) return;

@@ -5649,3 +5649,48 @@ body.fm-pushing #toast { z-index: 213; }
 .addmenu-card--pinkblue:hover {
   background: linear-gradient(120deg, rgba(255, 88, 132, .36) 0%, rgba(90, 150, 255, .36) 100%);
 }
+
+/* ---- The add menu drags independently, over the canvas (queue 244) ----------------------------
+   Only in the Studio layout, and only while the add menu is what the band is showing — anywhere else
+   the handle is not a control and must not advertise itself. */
+#am-resizer { display: none; }
+@media (min-width: 701px) {
+  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer {
+    display: block; position: absolute; left: 0; right: 0; top: 0; height: 10px;
+    cursor: ns-resize; z-index: 6; touch-action: none;
+  }
+  /* The grab affordance: a short bar, centred, the same language as the timeline's own resizer. */
+  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer::after {
+    content: ''; position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
+    width: 46px; height: 4px; border-radius: 2px; background: var(--line);
+  }
+  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after { background: var(--accent); }
+
+  /* FLOATING. The panel leaves the grid and sits above the stage, so raising it cannot shrink the
+     canvas — which is not a nicety here but the only way the gesture can work at all: the band and
+     the timeline are ONE grid row, so a taller row would take the height out of the stage. Its grid
+     slot keeps the undragged height, so nothing below reflows while dragging. */
+  body.layout-studio.am-floating #inspector-panel {
+    position: absolute; left: 0; right: var(--insp-w, 0);
+    height: var(--am-h, 264px); bottom: 0; z-index: 8;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, .45);
+  }
+  /* No transition while the finger is down — a 120ms ease on height turns a drag into a lag. */
+  body.am-resizing #inspector-panel { transition: none !important; }
+  body.am-resizing { cursor: ns-resize; user-select: none; }
+
+  /* THE SNAP FLASH (queue 244): "it should pause and snap for a second, showing a little blue flash
+     that looks nice in the line that seperates the timeline inspector from the canvas." So it is the
+     panel's TOP BORDER that flashes — that is the line he means — and it is brief, because it fires
+     on a gesture you may repeat several times in a row. */
+  @keyframes am-snap-flash {
+    0%   { border-top-color: var(--line); box-shadow: 0 -18px 40px rgba(0, 0, 0, .45); }
+    18%  { border-top-color: var(--accent); box-shadow: 0 -2px 14px rgba(41, 217, 187, .55), 0 -18px 40px rgba(0, 0, 0, .45); }
+    100% { border-top-color: var(--line); box-shadow: 0 -18px 40px rgba(0, 0, 0, .45); }
+  }
+  body.layout-studio #inspector-panel.am-snap { animation: am-snap-flash 400ms ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    body.layout-studio #inspector-panel.am-snap { animation: none; border-top-color: var(--accent); }
+  }
+}

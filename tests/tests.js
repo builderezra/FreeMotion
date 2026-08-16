@@ -15741,6 +15741,81 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 244: the add menu drags over the canvas ----------------
+   * Five behaviours in one request. The load-bearing one is "it shouldn't push the canvas to be
+   * smaller but just go over the canvas" — which measuring showed is a STRUCTURAL requirement, not a
+   * preference: in Studio the band and the timeline are the same grid row, so a taller row can only
+   * take its height out of the stage. Floating is the only way the gesture works at all. */
+
+  test('the add menu drags up over the canvas without shrinking it', { item: 'am-drag' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    if (!matchMedia('(min-width: 701px)').matches) return;      // desktop-only gesture
+    const root = document.documentElement;
+    const body = document.body;
+    const wasStudio = body.classList.contains('layout-studio');
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    try {
+      body.classList.add('layout-studio');
+      root.style.setProperty('--tl-h', '240px');
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.inspector) FM.inspector.refresh();
+      await frame();
+      const rez = document.getElementById('am-resizer');
+      const panel = document.getElementById('inspector-panel');
+      const cv = document.getElementById('preview');
+      if (!rez || !panel || !cv) throw new Error('need #am-resizer, #inspector-panel and #preview');
+      if (!document.querySelector('#inspector-panel .addmenu--panel')) return;   // band is not showing the add menu here
+      if (getComputedStyle(rez).display === 'none') throw new Error('the drag handle is not shown in Studio with the add menu up');
+
+      const canvasBefore = Math.round(cv.getBoundingClientRect().height);
+      const panelBefore = Math.round(panel.getBoundingClientRect().height);
+      const r = rez.getBoundingClientRect(), y0 = Math.round(r.top + r.height / 2);
+      const pd = function (t, y) { rez.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 400, clientY: y, pointerId: 1, buttons: 1 })); };
+
+      pd('pointerdown', y0); pd('pointermove', y0 - 40); pd('pointermove', y0 - 200);
+      await frame();
+      const panelUp = Math.round(panel.getBoundingClientRect().height);
+      const canvasUp = Math.round(cv.getBoundingClientRect().height);
+      if (!(panelUp > panelBefore + 50)) throw new Error('dragging up did not make the menu taller (' + panelBefore + ' → ' + panelUp + ')');
+      if (!body.classList.contains('am-floating')) throw new Error('the menu did not leave the grid — it is still a row, so it must be shrinking the stage');
+      // THE ONE THAT MATTERS: raising the menu must not cost the canvas a pixel.
+      if (canvasUp !== canvasBefore) throw new Error('the canvas changed from ' + canvasBefore + ' to ' + canvasUp + ' — it is being pushed smaller instead of covered');
+
+      // pushing back down past the floor couples them and takes the timeline with it
+      pd('pointermove', y0 + 60);
+      await frame();
+      const tlNow = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10);
+      if (!(tlNow < 240)) throw new Error('pushing below the floor did not drag the timeline down with it (--tl-h is ' + tlNow + ')');
+      if (body.classList.contains('am-floating')) throw new Error('the menu is still floating after re-coupling with the timeline');
+      pd('pointerup', y0 + 60);
+      await frame();
+    } finally {
+      document.body.classList.remove('am-floating', 'am-resizing');
+      if (!wasStudio) document.body.classList.remove('layout-studio');
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      root.style.removeProperty('--am-h');
+    }
+  });
+
+  test('the add menu cannot be dragged below the timeline, and its clamp is real', { item: 'am-drag' }, function () {
+    /* "you cant drag lower than what the timeline is dragged too" — a clamp, not a collision test,
+       and its floor is the CURRENT --tl-h read from one source of truth rather than re-measured. */
+    if (typeof FM.clampAddMenuH !== 'function') throw new Error('FM.clampAddMenuH is not exposed, so this could only re-derive the formula and agree with itself');
+    const root = document.documentElement;
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    try {
+      root.style.setProperty('--tl-h', '240px');
+      if (FM.clampAddMenuH(100) < 240) throw new Error('the menu can be dragged below the timeline floor: clamp(100) = ' + FM.clampAddMenuH(100));
+      if (FM.clampAddMenuH(400) !== 400) throw new Error('a legitimate height was clamped away: clamp(400) = ' + FM.clampAddMenuH(400));
+      // and it can never swallow the whole window — the canvas has to stay visible
+      const huge = FM.clampAddMenuH(999999);
+      if (huge >= window.innerHeight) throw new Error('the menu can cover the entire window (' + huge + ' of ' + window.innerHeight + ')');
+      // the floor MOVES with the timeline, rather than being a remembered number
+      root.style.setProperty('--tl-h', '400px');
+      if (FM.clampAddMenuH(100) < 400) throw new Error('the floor did not follow the timeline when it was resized');
+    } finally { if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h'); }
+  });
+
   /* ---------------- queue 228: drift and orbit at a frame edge ----------------
    * The same defect he reported for wiggle in #93(b), sitting unfixed in two more effects. The plate
    * handed to a canvas effect is COMP-SIZED, so anything outside the frame was thrown away before the
