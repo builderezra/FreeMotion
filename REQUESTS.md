@@ -3799,7 +3799,11 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
-      *Progress 17 Aug:* a **sixth** struck off — **the intermittent suite failure (v8.91)**, which the
+      *Progress 17 Aug:* a **seventh** struck off — **trim grips ignoring `layer.reversed` (v8.92)**, which
+      was silently dropping footage: a reversed clip's head is the source window's END, so every trim
+      landed on the opposite end from the one grabbed. Two UI paths for one operation disagreed, and now
+      do not.
+      *And a sixth:* — **the intermittent suite failure (v8.91)**, which the
       file had listed for weeks as "the failing test is not yet identified". It is the voice-recorder
       rig: it built a fresh `AudioContext` for every fake mic and closed it again on the way out, so
       under a loaded run the next one had not produced its first quantum inside the 4s budget, the take

@@ -18186,6 +18186,103 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: trim grips ignored layer.reversed ---------------- */
+
+  test('trimming a REVERSED clip edits the end you grabbed (BUG-HUNT)', { item: 'trim-reversed' }, async function () {
+    /* "Trim grips ignore layer.reversed — trimming a reversed video edits the wrong end of the source
+     * and drops footage."
+     * `FM.layerLocalTime` plays a reversed clip as `trimStart + (duration*sp - adv)`, so its FIRST frame
+     * is the source window's END and its LAST is the window's START. `applyTrimAt` had no reversed
+     * branch, so it moved the opposite end: the documented case is a 10s source reversed into a 5s clip
+     * whose head is dragged 2s right — the user cuts 2s off the head and instead loses 2s off the tail,
+     * with source 2s→0s silently discarded.
+     * The numbers below are the entry's own: the correct result is window [0,3], showing source 3s at
+     * the new head — which is also what the inspector's Trim-start button produces on the identical
+     * clip, and the two UI paths disagreeing was half the report. */
+    const layers0 = FM.scene.layers.slice();
+    const realGet = FM.media.get;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'Rev' });
+      L.start = 0; L.duration = 5; L.trimStart = 0; L.reversed = true; L.speed = 1;
+      FM.insertLayer(L);
+      FM.media.get = function (id) { return id === L.id ? { duration: 10, kind: 'video' } : realGet.call(FM.media, id); };
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(320);
+
+      const clip = document.querySelector('.clip[data-id="' + L.id + '"]');
+      if (!clip) return;                                    // no timeline clip in this layout
+      const grips = clip.querySelectorAll('[class*=grip]');
+      if (!grips.length) return;
+      const pps = clip.getBoundingClientRect().width / L.duration;
+      if (!(pps > 4)) throw new Error('the clip is only ' + Math.round(pps) + 'px per second — too small to drag accurately');
+      const drag = async (grip, seconds) => {
+        const r = grip.getBoundingClientRect();
+        const y = Math.round(r.top + r.height / 2), x0 = Math.round(r.left + r.width / 2);
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y, pointerId: 1, buttons: 1 }));
+        await sleep(50);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: Math.round(x0 + seconds * pps), clientY: y, pointerId: 1, buttons: 1 }));
+        await sleep(110);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: Math.round(x0 + seconds * pps), clientY: y, pointerId: 1 }));
+        await sleep(140);
+      };
+
+      // THE HEAD, dragged 2s right.
+      await drag(grips[0], 2);
+      const at = (off) => FM.layerLocalTime(L, L.start + off);
+      if (Math.abs(L.trimStart) > 0.05) throw new Error('after trimming the head of a reversed clip trimStart moved to ' + L.trimStart.toFixed(2) + ' — the head is the window END, so trimStart must not move; this is the edit landing on the wrong end');
+      if (Math.abs(L.duration - 3) > 0.12) throw new Error('the clip is ' + L.duration.toFixed(2) + 's after cutting 2s off a 5s clip');
+      const head = at(0.001);
+      if (Math.abs(head - 3) > 0.15) throw new Error('the new first frame is source ' + head.toFixed(2) + 's, not 3s — it is still showing the old first frame, which means the 2s came off the tail instead');
+      const tail = at(L.duration - 0.001);
+      if (Math.abs(tail) > 0.15) throw new Error('the last frame is source ' + tail.toFixed(2) + 's, not 0s — footage has been dropped off the wrong end');
+    } finally {
+      FM.media.get = realGet;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(160);
+    }
+  });
+
+  test('a FORWARD clip still trims the way it always did (BUG-HUNT control)', { item: 'trim-reversed' }, async function () {
+    /* The other half of a branch: adding a reversed path is only safe if the ordinary one is untouched,
+       and this is the case every user hits. Same drag, same numbers, opposite expectation — a forward
+       clip's head IS its window start, so trimStart must move by exactly what was cut. */
+    const layers0 = FM.scene.layers.slice();
+    const realGet = FM.media.get;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'Fwd' });
+      L.start = 0; L.duration = 5; L.trimStart = 0; L.reversed = false; L.speed = 1;
+      FM.insertLayer(L);
+      FM.media.get = function (id) { return id === L.id ? { duration: 10, kind: 'video' } : realGet.call(FM.media, id); };
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(320);
+      const clip = document.querySelector('.clip[data-id="' + L.id + '"]');
+      if (!clip) return;
+      const grips = clip.querySelectorAll('[class*=grip]');
+      if (!grips.length) return;
+      const pps = clip.getBoundingClientRect().width / L.duration;
+      if (!(pps > 4)) return;
+      const g = grips[0], r = g.getBoundingClientRect();
+      const y = Math.round(r.top + r.height / 2), x0 = Math.round(r.left + r.width / 2);
+      g.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y, pointerId: 2, buttons: 1 }));
+      await sleep(50);
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: Math.round(x0 + 2 * pps), clientY: y, pointerId: 2, buttons: 1 }));
+      await sleep(110);
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: Math.round(x0 + 2 * pps), clientY: y, pointerId: 2 }));
+      await sleep(140);
+      if (Math.abs(L.trimStart - 2) > 0.12) throw new Error('a forward clip trimmed 2s off the head has trimStart ' + L.trimStart.toFixed(2) + ', expected 2 — the reversed branch has changed the ordinary path');
+      const head = FM.layerLocalTime(L, L.start + 0.001);
+      if (Math.abs(head - 2) > 0.15) throw new Error('a forward clip now starts at source ' + head.toFixed(2) + 's instead of 2s');
+    } finally {
+      FM.media.get = realGet;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(160);
+    }
+  });
+
   /* ---------------- BUG-HUNT: the zoomed preview was never re-measured after a stage resize ------- */
 
   test('a zoomed preview re-measures when the stage changes size (BUG-HUNT)', { item: 'preview-remeasure' }, async function () {

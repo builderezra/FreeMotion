@@ -1897,19 +1897,52 @@ window.FM = window.FM || {};
     const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
     const se = snapEdge(L, movingEdge, pps, trimDrag.sup);
     if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
+    /* A REVERSED CLIP'S ENDS ARE SWAPPED, and this function did not know (BUG-HUNT: "Trim grips ignore
+       layer.reversed — trimming a reversed video edits the wrong end of the source and drops footage").
+       `FM.layerLocalTime` evaluates a reversed clip as `trimStart + (duration*sp - adv)`, so its FIRST
+       frame is the source window's END and its LAST frame is the window's START. Every edit below was
+       therefore applied to the opposite end from the one being dragged: cutting 2s off the head of a
+       reversed clip threw away 2s of the TAIL and shifted every remaining frame.
+       The rest of the app already branches on this — `splitLayer` does, and the inspector's Trim-start
+       button refuses on a reversed clip rather than get it wrong — so this is the odd one out, not a new
+       idea. */
+    const rev = L.type === 'video' && !!L.reversed;
     if (trimDrag.edge === 'right') {
       let nd = Math.max(0.1, trimDrag.dur + dt);
-      if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, FM.maxDurForSource(L, trimDrag.srcDur - L.trimStart, nd));
-      L.duration = nd;
+      if (rev) {
+        /* The TAIL is the window START. Lengthening the clip consumes source BELOW trimStart, so the
+           window end is held and trimStart comes down — and the limit is trimStart reaching 0, not
+           `srcDur - trimStart`, which is the head's limit and would have let this run off the source. */
+        const extra = (nd - trimDrag.dur) * sp;
+        let nt = trimDrag.trim - extra;
+        if (nt < 0) { nd = Math.max(0.1, trimDrag.dur + trimDrag.trim / sp); nt = 0; }
+        L.trimStart = nt;
+        L.duration = nd;
+      } else {
+        if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, FM.maxDurForSource(L, trimDrag.srcDur - L.trimStart, nd));
+        L.duration = nd;
+      }
     } else {
       let delta = dt;
       if (trimDrag.start + delta < 0) delta = -trimDrag.start;
       if (trimDrag.dur - delta < 0.1) delta = trimDrag.dur - 0.1;
-      const spL = ramped ? FM.speedAt(L, trimDrag.start + delta) : sp;   // local source rate at the new head
-      if (L.type === 'video' && trimDrag.trim + delta * spL < 0) delta = -trimDrag.trim / spL;
-      L.start = trimDrag.start + delta;
-      L.duration = trimDrag.dur - delta;
-      if (L.type === 'video') L.trimStart = trimDrag.trim + delta * spL;
+      if (rev) {
+        /* The HEAD is the window END, and the window end IS `trimStart + duration*sp` — so shortening
+           from the head is purely a duration change and `trimStart` must not move. Growing it walks the
+           window end up through the source, which is what has to be clamped. */
+        if (isFinite(trimDrag.srcDur)) {
+          const maxDur = (trimDrag.srcDur - trimDrag.trim) / sp;
+          if (trimDrag.dur - delta > maxDur) delta = trimDrag.dur - maxDur;
+        }
+        L.start = trimDrag.start + delta;
+        L.duration = trimDrag.dur - delta;
+      } else {
+        const spL = ramped ? FM.speedAt(L, trimDrag.start + delta) : sp;   // local source rate at the new head
+        if (L.type === 'video' && trimDrag.trim + delta * spL < 0) delta = -trimDrag.trim / spL;
+        L.start = trimDrag.start + delta;
+        L.duration = trimDrag.dur - delta;
+        if (L.type === 'video') L.trimStart = trimDrag.trim + delta * spL;
+      }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene (it cascades into every layout)
     if (!isFinite(L.duration) || L.duration < 0.1) L.duration = trimDrag.dur;

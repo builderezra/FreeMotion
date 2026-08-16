@@ -2544,19 +2544,40 @@ window.FM = window.FM || {};
     const srcDur = (m && m.duration) ? m.duration : Infinity;
     const ramped = FM.isAnimated(layer.speed), sp = ramped ? 1 : (layer.speed || 1);
     const s0 = layer.start, d0 = layer.duration, tr0 = layer.trimStart;
+    /* Same reversed branch as the timeline's trim grips (BUG-HUNT names both sites): a reversed clip's
+       head is the source window's END and its tail is the window's START, so without this the button
+       edits the opposite end from the one it says it does. */
+    const rev = layer.type === 'video' && !!layer.reversed;
     if (side > 0) {                                            // stretch the TAIL out to the playhead
       let nd = Math.max(0.1, t - layer.start);
-      if (layer.type === 'video' && isFinite(srcDur)) nd = Math.min(nd, FM.maxDurForSource(layer, srcDur - (layer.trimStart || 0), nd));
-      layer.duration = nd;
+      if (rev) {
+        const extra = (nd - d0) * sp;                          // the tail is the window START: eat source below trimStart
+        let nt = (tr0 || 0) - extra;
+        if (nt < 0) { nd = Math.max(0.1, d0 + (tr0 || 0) / sp); nt = 0; }
+        layer.trimStart = nt;
+        layer.duration = nd;
+      } else {
+        if (layer.type === 'video' && isFinite(srcDur)) nd = Math.min(nd, FM.maxDurForSource(layer, srcDur - (layer.trimStart || 0), nd));
+        layer.duration = nd;
+      }
     } else {                                                   // stretch the HEAD back to the playhead
       let delta = t - layer.start;                             // negative: the head travels left
       if (layer.start + delta < 0) delta = -layer.start;
       if (layer.duration - delta < 0.1) delta = layer.duration - 0.1;
-      const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // local source rate at the new head
-      if (layer.type === 'video' && (layer.trimStart || 0) + delta * spL < 0) delta = -(layer.trimStart || 0) / spL;
-      layer.start = layer.start + delta;
-      layer.duration = layer.duration - delta;
-      if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * spL;
+      if (rev) {
+        if (isFinite(srcDur)) {                                // the head is the window END: only duration moves
+          const maxDur = (srcDur - (tr0 || 0)) / sp;
+          if (d0 - delta > maxDur) delta = d0 - maxDur;
+        }
+        layer.start = layer.start + delta;
+        layer.duration = layer.duration - delta;
+      } else {
+        const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // local source rate at the new head
+        if (layer.type === 'video' && (layer.trimStart || 0) + delta * spL < 0) delta = -(layer.trimStart || 0) / spL;
+        layer.start = layer.start + delta;
+        layer.duration = layer.duration - delta;
+        if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * spL;
+      }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene — it cascades into every layout
     if (!isFinite(layer.duration) || layer.duration < 0.1) layer.duration = d0;
