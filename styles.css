@@ -2365,6 +2365,36 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 /* The list is far taller than a phone, so the card scrolls INSIDE a viewport-bounded box — it used
    to overflow the screen, cutting the title off the top and pushing Close past the bottom edge.
    min-width is a floor only up to the screen width (360px + padding overflowed a 380px phone). */
+/* The sheet's foot: a way ONWARD beside the way out (queue 274). Tutorials leads, Close is the quiet
+   one — someone opening this sheet is looking for help, not for the exit.
+   THE ROW takes the sticky-footer treatment, not the buttons. `.shortcuts-card .btn` below was written
+   for a SINGLE full-width Close pinned to the bottom of a scrolling card — sticky, stretched, with
+   negative margins that bleed it to the card's edges. Dropping two buttons into it gave each of them
+   that treatment: measured, they overlapped by 38px and the accent one kept the panel background while
+   taking the dark text meant to sit on accent, which rendered it nearly invisible.
+   So the row is the bar, and the buttons inside it are ordinary buttons again. The reset is written at
+   (0,3,0) because `.shortcuts-card .btn` is (0,2,0) — the same specificity trap theme-glass.css sets
+   for the add-menu cards. */
+.shortcuts-foot {
+  position: sticky; bottom: -22px; align-self: stretch; z-index: 1;
+  display: flex; gap: 10px;
+  margin: 6px -24px -22px; padding: 13px 24px;
+  border-top: 1px solid var(--line); border-radius: 0 0 13px 13px;
+  background: var(--panel-2);
+}
+.shortcuts-card .shortcuts-foot .btn {
+  position: static; flex: 1 1 0; margin: 0; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: 10px; border-top: 1px solid var(--line);
+  background: var(--panel-3); text-align: center;
+}
+/* `.btn.shortcuts-tut` — TWO classes on the same element, so this is (0,4,0). It has to be, because
+   theme-glass.css restates `.shortcuts-card .btn { background: #0c1c25 }` at (0,3,0) in a file loaded
+   AFTER this one, which wins any tie. Measured before this: the button kept the panel background and
+   took the dark text meant to sit on accent — contrast 1.05, i.e. invisible — while looking perfectly
+   correct in the stylesheet. Same trap the add-menu cards hit with that file. */
+.shortcuts-card .shortcuts-foot .btn.shortcuts-tut {
+  background: var(--accent); color: #06231d; border-color: var(--accent); font-weight: 700;
+}
 .shortcuts-card { display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; width: min(440px, calc(100vw - 24px)); min-width: min(360px, calc(100vw - 24px)); max-width: 440px; max-height: min(86vh, 86dvh); overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
 /* Close stays reachable without scrolling to the end of a long list. It's a full-width sticky
    footer with its own surface — as a bare sticky button, the list scrolled visibly underneath it. */

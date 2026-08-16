@@ -17295,6 +17295,57 @@
     }, 375);
   });
 
+  /* ---------------- queue 274: the shortcuts sheet needed a way to the tutorials ----------------
+   * "At the bottom of the keyboard shortcuts menu … it should show a button that takes you straight to
+   * the tutorial section." This sheet is where someone lands when they are stuck, and all it offered
+   * was a list of keys and a Close.
+   * Two things nearly shipped broken here and both are asserted below: the button LOOKED right in the
+   * stylesheet while rendering invisible (theme-glass.css restates `.shortcuts-card .btn` in a later
+   * file, so it kept the panel background and took the dark text meant for accent — contrast 1.05),
+   * and the deferred tab-click used requestAnimationFrame, which does not fire in a hidden tab. */
+
+  test('the shortcuts sheet has a legible Tutorials button that goes there (queue 274)', { item: 'tut-button' }, async function () {
+    const wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const wasSheet = FM.shortcuts.isOpen();
+    try {
+      if (wasHome) FM.home.close();
+      FM.shortcuts.show();
+      await sleep(120);
+      const btn = document.querySelector('.shortcuts-tut');
+      if (!btn) throw new Error('there is no Tutorials button on the shortcuts sheet');
+      if (!/tutorial/i.test(btn.textContent)) throw new Error('the button says "' + btn.textContent.trim() + '"');
+
+      /* LEGIBILITY, because "it is styled" and "you can read it" are different claims. This is the
+         assertion that would have caught the invisible first version. */
+      const cs = getComputedStyle(btn);
+      const lum = c => { const m = (c.match(/\d+/g) || []).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+        return m.length >= 3 ? 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] : null; };
+      const lf = lum(cs.color), lb = lum(cs.backgroundColor);
+      if (lf == null || lb == null) throw new Error('could not read the button colours: ' + cs.color + ' on ' + cs.backgroundColor);
+      const contrast = (Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05);
+      if (contrast < 4.5) throw new Error('the Tutorials button is ' + contrast.toFixed(2) + ':1 against its own background — it is styled but not readable');
+
+      /* And it must not sit on top of Close: they share a row that was built for one button. */
+      const close = [...document.querySelectorAll('.shortcuts-foot .btn')].find(b => /close/i.test(b.textContent));
+      if (close) {
+        const a = btn.getBoundingClientRect(), c = close.getBoundingClientRect();
+        if (a.right > c.left + 0.5 && a.top < c.bottom && a.bottom > c.top) throw new Error('the Tutorials and Close buttons overlap');
+      }
+
+      /* IT ACTUALLY GOES THERE. A button that opens home on the wrong tab is the bug, not the fix. */
+      btn.click();
+      await sleep(400);
+      if (FM.shortcuts.isOpen()) throw new Error('the sheet stayed open behind the home screen');
+      if (!FM.home.isOpen()) throw new Error('home did not open');
+      const active = document.querySelector('#home-screen .hm-tab.active');
+      if (!active || active.dataset.tab !== 'tutorials') throw new Error('it landed on the "' + (active && active.dataset.tab) + '" tab, not tutorials');
+    } finally {
+      try { if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      try { if (!wasSheet) FM.shortcuts.hide(); } catch (e) {}
+      await sleep(120);
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

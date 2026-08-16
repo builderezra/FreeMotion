@@ -1895,10 +1895,29 @@ better still, keep working inside the turn rather than parking work for a later 
       that because on mobile it should all just fit on the screen nice and you shouldn't need to scroll
       up and down. I don't even know why that happens or why won't let you do that"*.
 
-- [ ] **274 — The keyboard-shortcuts sheet needs a button through to the tutorials. (16 Aug.)** His words,
+- [x] **274 — The keyboard-shortcuts sheet needs a button through to the tutorials. DONE v8.64.** His words,
       verbatim: *"At the bottom of the keyboard shortcuts menu when you press the? Icon it should show a
       button that takes you straight to the tutorial section and it should also the button should just
       say like tutorials here or whatever and then you click on it and it takes you to tutorials."*
+      **DONE v8.64 — "Tutorials" beside Close at the foot of the sheet.** It reuses the home tab BUTTON
+      rather than reaching into home's state: that click handler is the one thing that switches tab and
+      re-renders, so this takes the same route a finger does and there is no second path to keep in step.
+      **Two things nearly shipped broken, and both are now asserted:**
+      · **It rendered invisible while looking perfect in the stylesheet.** `theme-glass.css` restates
+        `.shortcuts-card .btn { background: #0c1c25 }` at the same specificity but in a LATER file, so it
+        won the tie — the button kept the panel background and took the dark text meant to sit on accent.
+        Measured contrast **1.05:1**. The selector is `.btn.shortcuts-tut` now, two classes on one
+        element, which beats it on specificity rather than on load order. Same trap the add-menu cards
+        hit with that file. Contrast is **8.55:1** after.
+      · **The tab switch used `requestAnimationFrame`, which does not fire in a hidden tab** — home
+        opened on Projects and the button silently did nothing. It is a timer now. The suite already
+        records this exact trap for its own waits; I walked into it anyway.
+      Also: `.shortcuts-card .btn` was written for ONE full-width Close pinned to the bottom of a
+      scrolling card — sticky, stretched, negative margins bleeding it to the edges. Two buttons in that
+      rule overlapped by 38px. The ROW is the sticky bar now and the buttons inside it are ordinary.
+      The test checks it is READABLE, not merely styled — contrast against its own background — because
+      "it has a background colour" and "you can see it" are different claims, and only the second is what
+      you asked for.
 
 - [x] **273 — The layer-loading name bar covers the + create button. DONE v8.63.** His words, verbatim:
       *"When a layer is loading, you added the loading effects like I want it but make sure that the bar
