@@ -15470,7 +15470,14 @@
           t.click(); await frame();
           const grid = document.querySelector('.addmenu--sheet .addmenu-grid');
           if (!grid || !grid.children.length) continue;
-          const br = body.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+          /* Measured against the PAGER, not the body. Until queue 275 the two had the same bottom edge
+             — the pager took `height: 100%` and the page dots simply overflowed past it — so `body`
+             was a correct stand-in. Now the body's stated height is shared between the pager and the
+             dots, and reading the body would count the dots' 15px as "wasted space", failing this test
+             for showing the dots he asked for. The claim here is unchanged: no dead strip under the
+             last row of cards. */
+          const box = grid.closest('.addmenu-pager') || body;
+          const br = box.getBoundingClientRect(), gr = grid.getBoundingClientRect();
           const c0 = grid.children[0].getBoundingClientRect();
           const ratio = c0.width / c0.height;
           if (grid.classList.contains('addmenu-grid--fill')) {
@@ -17343,6 +17350,62 @@
       try { if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       try { if (!wasSheet) FM.shortcuts.hide(); } catch (e) {}
       await sleep(120);
+    }
+  });
+
+  /* ---------------- queue 275: the mobile shapes menu scrolled up and down ----------------
+   * "on mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
+   * that because on mobile it should all just fit on the screen nice … I don't even know why that
+   * happens."
+   * Two separate overflows, both small enough to be baffling and neither of them the grid being too
+   * big for the phone:
+   *   · the sheet body states a height and `.addmenu--sheet .addmenu-pager` took `height: 100%` of it,
+   *     so the page-dots row (6px + 9px margin) had nowhere to go — exactly 15px past the bottom;
+   *   · once the dots had their space, a 667px-tall phone left a 198px pager, and the grid's 64px row
+   *     FLOOR needs 208 for three rows — another 10px.
+   * The PC path never hits either because its fit solver reserves the dots and re-plans the grid, and
+   * that path is desktop-only. */
+
+  test('nothing in the mobile add sheet scrolls vertically (queue 275)', { item: 'sheet-fit' }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    try {
+      /* BOTH a tall and a SHORT phone. The short one is the whole point: the first fix made the tall
+         one clean and left the short one scrolling by 10px, so a single size would have shipped it. */
+      for (const [w, h] of [[390, 844], [375, 667]]) {
+        frame.style.width = w + 'px'; frame.style.height = h + 'px';
+        window.dispatchEvent(new Event('resize'));
+        await sleep(240);
+        const host = document.createElement('div');
+        host.style.cssText = 'position:absolute;left:-10000px;top:0;width:' + w + 'px';
+        document.body.appendChild(host);
+        try {
+          FM.addMenu.render(host, { variant: 'sheet' });
+          for (const name of ['Shape', 'Elements', 'Media', 'Audio', 'Template']) {
+            const tab = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === name);
+            if (!tab) continue;
+            tab.click();
+            await sleep(140);
+            const body = host.querySelector('.addmenu-body');
+            const pager = host.querySelector('.addmenu-pager');
+            if (!body || !pager) throw new Error(name + ' at ' + w + 'x' + h + ': the sheet did not render');
+            /* The BODY holds the pager and the dots; the PAGER holds the grid. Either overflowing is a
+               vertical scroll he did not ask for, and the two have different causes — so both. */
+            const bOver = body.scrollHeight - body.clientHeight;
+            if (bOver > 1) throw new Error(name + ' at ' + w + 'x' + h + ': the sheet body overflows by ' + bOver + 'px — the page dots are being pushed past the bottom');
+            const pOver = pager.scrollHeight - pager.clientHeight;
+            if (pOver > 1) throw new Error(name + ' at ' + w + 'x' + h + ': the pager overflows by ' + pOver + 'px — the grid does not fit the height it was given');
+          }
+          /* And the tiles must not have been shrunk to nothing to achieve it. */
+          const card = host.querySelector('.addmenu-card');
+          if (card && card.getBoundingClientRect().height < 44) throw new Error('at ' + w + 'x' + h + ' the tiles collapsed to ' + Math.round(card.getBoundingClientRect().height) + 'px to make everything fit');
+        } finally { host.remove(); }
+      }
+    } finally {
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(200);
     }
   });
 

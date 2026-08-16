@@ -1039,7 +1039,15 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    minmax rather than a bare 1fr, deliberately: a tab with more rows than fit must keep today's 64px
    and scroll, not squash every card to nothing to make them fit. Grow into spare room, never shrink
    below what works. */
-.addmenu--sheet .addmenu-grid--fill { min-height: 100%; grid-auto-rows: minmax(64px, 1fr); }
+/* The 64px row FLOOR is what makes a short phone scroll (queue 275, the second half). With the dots
+   now taking their 15px, the pager on a 667px-tall phone is 198px — and three rows at a 64px minimum
+   plus two 8px gaps need 208. So the grid overflowed its pager by 10px and, because a flex row with
+   `overflow-x: auto` computes overflow-y to auto as well, that became another little vertical scroll.
+   The floor scales with the screen instead. At 812px tall it still resolves to 64 — nothing changes on
+   the phone he photographed — and on a 667px one it comes down to ~57, which fits. Shrinking the tiles
+   a little on a small screen is the trade he asked for: "it should all just fit on the screen nice and
+   you shouldn't need to scroll up and down". */
+.addmenu--sheet .addmenu-grid--fill { min-height: 100%; grid-auto-rows: minmax(clamp(50px, 8.5vh, 64px), 1fr); }
 /* …and the two wrappers between the body and the grid need a height for that 100% to mean anything.
    The pager and the page were both content-sized (208px), so the grid's `min-height: 100%` resolved
    against the very height it was trying to grow past and nothing moved — measured, after the rule
@@ -3157,7 +3165,23 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* THE PAGE DOTS HAVE TO FIT INSIDE THAT HEIGHT TOO (queue 275). Ezra: "on mobile the shapes menu
+     has like a thing where you can scroll up and down but it shouldn't have that … I don't even know
+     why that happens."
+     Measured on Shape at 375px: the body is 260px and the content 275px — a 15px overflow, which is
+     the dots row exactly (6px tall plus its 9px margin-top). `.addmenu--sheet .addmenu-pager` takes
+     `height: 100%`, so the pager claimed the whole 260 and the dots were pushed past the bottom, and
+     `overflow-y: auto` turned that into the little vertical scroll he could not account for. On the PC
+     path the fit solver reserves this space (fitBox(FIT_DOTS)); that path is desktop-only, so on a
+     phone nothing ever did.
+     A flex column shares the stated height between the two instead. This is NOT the "make the inner
+     content fill its parent" idea the note above warns off — that was circular because the parent was
+     content-sized. The parent states a number here, so the pager simply takes what is left. */
+  display: flex;
+  flex-direction: column;
 }
+.addmenu--sheet .addmenu-body > .addmenu-pager { height: auto; flex: 1 1 auto; min-height: 0; }
+.addmenu--sheet .addmenu-body > .addmenu-dots { flex: 0 0 auto; }
 /* …EXCEPT the Elements tab, which is a searchable list rather than a sideways pager: your own
    elements are an open-ended pile, and a page you have to know to swipe to is the same as not
    having them. This one scrolls. */

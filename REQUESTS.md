@@ -1890,10 +1890,20 @@ better still, keep working inside the turn rather than parking work for a later 
       action row pan.
       **DONE v8.59 — built as one mechanism with #269, which is what you asked for. See that entry.**
 
-- [ ] **275 — Mobile shapes menu scrolls up and down; it should all fit. (16 Aug.)** His words, verbatim:
+- [x] **275 — Mobile shapes menu scrolls up and down; it should all fit. DONE v8.65.** His words, verbatim:
       *"On mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
       that because on mobile it should all just fit on the screen nice and you shouldn't need to scroll
       up and down. I don't even know why that happens or why won't let you do that"*.
+      **DONE v8.65.** Two separate overflows were stacked, and neither was "the grid is too big":
+      1. The sheet body has a stated height and the pager took `height: 100%` of it, so the page-dots
+         row (6px + 9px margin) had nowhere to sit — the 15px of scroll measured on Shape, exactly.
+         The body is a flex column now, so the pager takes what is left after the dots.
+      2. Once the dots had their space, a 667px-tall phone leaves a 198px pager, and the grid's fixed
+         64px row FLOOR needs 208 for three rows — another 10px. It is `clamp(50px, 8.5vh, 64px)` now:
+         a tall phone is pixel-identical to before, a short one shrinks the tiles rather than scrolling.
+      "I don't even know why that happens" — because the PC path DOES handle it: its fit solver reserves
+      the dots and re-plans the grid. That solver is desktop-only, so on a phone nothing ever did.
+      Verified at 390×844, 380×800 and 375×667 — every tab, zero overflow on both the body and the pager.
 
 - [x] **274 — The keyboard-shortcuts sheet needs a button through to the tutorials. DONE v8.64.** His words,
       verbatim: *"At the bottom of the keyboard shortcuts menu when you press the? Icon it should show a
