@@ -151,7 +151,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['squish', 'fractalridges', 'fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape'];
+  FM.FX_FEATURED = ['lensblur', 'zoomblur', 'spinblur', 'zoomstreaks', 'spinstreaks', 'squish', 'fractalridges', 'fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -206,7 +206,7 @@ window.FM = window.FM || {};
     sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo.',
     zoomblur: 'Streaks outward from a centre point, like a fast zoom during the shot.',
     spinblur: 'Streaks in a circle around a centre point — motion from a spin.',
-    lensblur: 'Defocus with real lens character: bright points bloom into the aperture shape.',
+    lensblur: 'Defocus with real lens character: turn up Highlight bloom and bright points swell into discs of the aperture shape you pick.',
     tiltshift: 'Keeps one band sharp and blurs away from it, the miniature-model look.',
     brightness: 'Lifts or drops the whole image evenly.',
     contrast: 'Pushes lights lighter and darks darker, or flattens them together.',

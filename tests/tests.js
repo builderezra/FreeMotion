@@ -18186,6 +18186,137 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 12: the radial blurs get an aim point ---------------- */
+
+  /* Shared rig. FM._FX_TABLES is the suite's door onto the render kernels; these are pure
+   * (data, W, H, params, t) functions, so they can be measured exactly without a canvas. */
+  function fxPlate(W, H, kind) {
+    var d = new Uint8ClampedArray(W * H * 4), i;
+    if (kind === 'specular') {                       // near-black field, one blown 3x3 highlight
+      for (i = 0; i < W * H; i++) { d[i * 4] = 10; d[i * 4 + 1] = 10; d[i * 4 + 2] = 10; d[i * 4 + 3] = 255; }
+      for (var y = (H >> 1) - 1; y <= (H >> 1) + 1; y++) for (var x = (W >> 1) - 1; x <= (W >> 1) + 1; x++) {
+        var j = (y * W + x) * 4; d[j] = 255; d[j + 1] = 255; d[j + 2] = 255; }
+    } else if (kind === 'dot') {                     // a single lit pixel: the splat IS the tap set
+      for (i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
+      var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255;
+    } else {
+      for (i = 0; i < W * H; i++) { d[i * 4] = (i * 7) % 256; d[i * 4 + 1] = (i * 13) % 256; d[i * 4 + 2] = (i * 29) % 256; d[i * 4 + 3] = 255; }
+    }
+    return d;
+  }
+  function fxRun(type, W, H, params, kind) {
+    var fn = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (!fn) throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable — the suite cannot test the real kernel');
+    var d = fxPlate(W, H, kind); fn(d, W, H, params, 0.5, 1); return d;
+  }
+  function fxDiff(a, b) { var n = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; }
+  function fxLum(d, i) { return d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; }
+
+  /* THE ONE THAT PROTECTS EVERY EXISTING PROJECT. Round 12 added eleven controls to five effects that
+   * were shipping with one apiece, and EFFECTS-PLAN.md's one rule is that an old project must render
+   * byte-for-byte identically afterwards. That was verified once, by hand, by diffing each kernel
+   * against its version in the previous commit — a check that cannot be repeated later and so protects
+   * nothing from the NEXT edit. Stated as a property it becomes permanent: an instance carrying only
+   * its original key must render identically to one that also carries every new key at the value the
+   * renderer falls back to. That is exactly the guarantee old projects rely on, and it now has a gate.
+   * A same-code comparison, which is what EFFECTS-PLAN warns is not sufficient on its own — so it is
+   * paired below with tests that assert each control does its specific job. */
+  test('effects: the radial blurs still render an un-upgraded instance exactly as they did', { item: 'fx-radial' }, function () {
+    var W = 96, H = 96;
+    var CASES = [
+      { type: 'zoomblur',    old: { amount: 0.6 }, legacyKeys: { centerx: 50, centery: 50, samples: 9 } },
+      { type: 'spinblur',    old: { amount: 0.6 }, legacyKeys: { centerx: 50, centery: 50, samples: 9 } },
+      { type: 'zoomstreaks', old: { amount: 0.6 }, legacyKeys: { centerx: 50, centery: 50, threshold: 0 } },
+      { type: 'spinstreaks', old: { amount: 0.6 }, legacyKeys: { centerx: 50, centery: 50, decay: 0.6 } },
+      { type: 'lensblur',    old: { radius: 12 },  legacyKeys: { bloom: 0, samples: 16, blades: 0 } },
+    ];
+    var fails = [];
+    CASES.forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old), full = fxRun(c.type, W, H, withKeys);
+      var n = fxDiff(bare, full);
+      if (n) fails.push(c.type + ': ' + n + ' bytes differ between an old instance and one holding the new keys at their fallbacks');
+      // and it must still DO something — the middle gate EFFECTS-PLAN calls out, because a kernel that
+      // broke outright would satisfy the comparison above with both sides equally broken.
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': renders nothing at all at its legacy settings');
+      // every new key must also be reachable: one that changes no pixel is a dead control.
+      Object.keys(c.legacyKeys).forEach(function (k) {
+        var moved = {}; Object.keys(c.old).forEach(function (q) { moved[q] = c.old[q]; });
+        moved[k] = k === 'samples' ? 27 : (k === 'decay' ? 0 : (k === 'blades' ? 1 : (k === 'bloom' ? 250 : 20)));
+        if (!fxDiff(bare, fxRun(c.type, W, H, moved))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* The centre asserted as a LOCATION rather than as "the output changed". At the exact centre of a
+   * radial blur every tap collapses onto one pixel, so that pixel must come out untouched — which
+   * pins the centre precisely where the control says it is. Read at the pixel the kernel samples:
+   * zoomblur truncates its coordinates and spinblur rounds them, so a test that rounds for both looks
+   * one row off zoomblur's centre and reports a working centre as broken. */
+  test('effects: Zoom Blur and Spin Blur spin around the centre you choose, not the frame centre', { item: 'fx-radial' }, function () {
+    var W = 121, H = 121, fails = [];
+    [['zoomblur', 'trunc'], ['spinblur', 'round']].forEach(function (pair) {
+      var type = pair[0], src = fxPlate(W, H);
+      var out = fxRun(type, W, H, { amount: 1, centerx: 20, centery: 80 });
+      var cx = pair[1] === 'trunc' ? (W * 0.2) | 0 : Math.round(W * 0.2);
+      var cy = pair[1] === 'trunc' ? (H * 0.8) | 0 : Math.round(H * 0.8);
+      var at = function (d, x, y) { var i = (y * W + x) * 4; return d[i] + ',' + d[i + 1] + ',' + d[i + 2]; };
+      if (at(out, cx, cy) !== at(src, cx, cy)) {
+        fails.push(type + ': the pixel at the chosen centre (' + cx + ',' + cy + ') was blurred — every tap should land on it, so the centre is not where the control says');
+      }
+      if (at(out, W >> 1, H >> 1) === at(src, W >> 1, H >> 1)) {
+        fails.push(type + ': the FRAME centre came out untouched, so the blur is still pivoting there regardless of the control');
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* Bloom, stated as the thing it fixes. A flat average of sRGB spreads a specular over N taps and
+   * divides by N, so the highlight DISSOLVES — which is why the effect read as a slightly nicer Box
+   * Blur, and why its shipped description ("bright points bloom into the aperture shape") was untrue.
+   * Measured on a plate that HAS a highlight to lose; the generic noise plate cannot answer this. */
+  test('effects: Lens Blur bloom keeps a specular bright instead of averaging it away', { item: 'fx-radial' }, function () {
+    var W = 96, H = 96;
+    var peak = function (d) { var m = 0; for (var i = 0; i < d.length; i += 4) { var l = fxLum(d, i); if (l > m) m = l; } return m; };
+    var flat = peak(fxRun('lensblur', W, H, { radius: 12, samples: 32 }, 'specular'));
+    var lit = peak(fxRun('lensblur', W, H, { radius: 12, samples: 32, bloom: 250 }, 'specular'));
+    if (!(lit > flat * 1.5)) {
+      throw new Error('bloom barely changed the highlight: peak luma ' + flat.toFixed(1) + ' without, ' + lit.toFixed(1) + ' with — a specular should survive the blur as a bright disc, not be averaged into the field');
+    }
+    if (lit > 255) throw new Error('bloom pushed luma past white (' + lit.toFixed(1) + ') — the weights are not being normalised');
+  });
+
+  /* The aperture, measured as geometry. Blurring a SINGLE lit pixel makes the lit output pixels the
+   * tap set itself, so each tap can be asked how far out it sits as a fraction of the polygon's own
+   * boundary at that tap's angle. Confined to the polygon that tops out at 1. The circle is the
+   * control that makes the number mean something: it must EXCEED the hexagon it is measured against,
+   * or a formula that quietly did nothing would pass. Tolerance covers the kernel's own `|0` tap
+   * truncation, which is legacy behaviour and shifts a tap by up to ~1.4px. */
+  test('effects: Lens Blur blades really cut the disc down to a polygon', { item: 'fx-radial' }, function () {
+    var R = 30, W = 4 * R + 9, H = W;
+    var worst = function (blades, n) {
+      var d = fxRun('lensblur', W, H, { radius: R, samples: 32, blades: blades }, 'dot'), m = 0, found = 0;
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4; if (d[i] < 1) continue;
+        var dx = x - (W >> 1), dy = y - (H >> 1); if (!dx && !dy) continue;
+        found++;
+        var a = Math.atan2(dy, dx); if (a < 0) a += Math.PI * 2;
+        var sec = Math.PI * 2 / n, lo = a - Math.floor(a / sec) * sec - sec / 2;
+        var bound = R * Math.cos(Math.PI / n) / Math.cos(lo);
+        var ratio = Math.hypot(dx, dy) / bound; if (ratio > m) m = ratio;
+      }
+      if (!found) throw new Error('no taps were found at all for blades=' + blades + ' — the plate or the radius is wrong, not the aperture');
+      return m;
+    };
+    var hex = worst(1, 6), circleVsHex = worst(0, 6);
+    if (hex > 1.08) throw new Error('with a hexagonal aperture a tap reached ' + hex.toFixed(3) + 'x the hexagon boundary — the disc is not being cut to the polygon');
+    if (circleVsHex <= 1.08) throw new Error('the CIRCLE aperture also stays inside the hexagon (' + circleVsHex.toFixed(3) + 'x), so this test cannot tell a working polygon from a no-op');
+    var sq = worst(3, 4);
+    if (sq > 1.08) throw new Error('the square aperture reached ' + sq.toFixed(3) + 'x its own boundary');
+  });
+
   /* ---------------- BUG-HUNT: Demo mode did not reach the phone Add sheet ---------------- */
 
   test('turning Demo mode on blanks the phone Add sheet before it is shown again (BUG-HUNT)', { item: 'demo-sheet' }, async function () {

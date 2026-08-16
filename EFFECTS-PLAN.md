@@ -204,6 +204,37 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-offline-analysis, Curves) and the
   proposal table of per-effect PARAM upgrades, which is where round 11 should start.
 
+- v8.97 (round 12 — **every radial effect finally has an aim point**) — `zoomblur`, `spinblur`,
+  `zoomstreaks`, `spinstreaks` (centre X/Y each, plus quality / threshold / trail falloff) and
+  `lensblur` (bloom, quality, aperture). Four of the five had their centre welded to `W/2, H/2`,
+  so a zoom rush could not be aimed at the subject and a spin blur could not sit on the wheel that
+  was turning. Findings worth keeping:
+  * **A "quality" knob must not change the REACH.** zoomblur walks `k/N` for `k < N`, so its
+    furthest tap is 8/9 of the span, not the span — raising N would have quietly lengthened the
+    streak as well as smoothing it. The general form reproduces that 8/9, and at N === 9 it uses the
+    literal legacy expression, because `(k/8)*(8/9)` is NOT bit-identical to `k/9`. spinblur needed
+    no correction: its offsets run -span..+span whatever N is.
+  * **The aperture is free if you bake it into the tap offsets.** Distance to an n-gon's edge at
+    angle a is `apothem/cos(a within its sector)`, applied once per tap at setup, not per pixel.
+    Verified at full precision (0 taps outside the polygon, worst ratio 0.9961 for hexagon, pentagon
+    and square alike) — and the CIRCLE measured against the same hexagon bound must exceed it, or
+    the test cannot tell a working polygon from a no-op.
+  * **An odd-sided aperture cannot be judged on the pixel grid.** The kernel's legacy `|0` truncates
+    every tap toward −x/−y by up to ~1.4px. For a hexagon or square that bias cancels by symmetry;
+    a pentagon has no 180° symmetry, so it reads ~11% outside its own boundary at every radius and
+    looks like a geometry bug. It is not — the formula is exact. Measure the formula, not the splat.
+  * **Bloom was recomputing a whole-frame constant inside the tap loop.** A pixel's highlight weight
+    depends only on that pixel, so it was being derived once per tap that landed on it. Hoisted to a
+    single pass: 484ms → 348ms at 1080x1920, same output.
+  * **The proposal's `samples` max of 64 was rejected on measurement**, not on taste. Radius 30 with
+    bloom: 16 taps 372ms, 32 taps 622ms, 64 taps 1217ms. A 1.2s frame is a trap on a phone and the
+    density gain past 32 is invisible; 32 already doubles the tap count that made the disc read as a
+    sparse spray, which was the actual complaint. Capped in the renderer AND the schema.
+  * The identity harness in this file is a ONE-OFF — it diffs against the previous commit, so it
+    protects nothing from the next edit. It is now also a standing suite test (`fx-radial`): an
+    instance carrying only its original key must render byte-identically to one holding every new key
+    at its fallback. That is the guarantee old projects actually rely on, and it has a gate now.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

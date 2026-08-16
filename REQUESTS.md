@@ -3792,6 +3792,13 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 12, v8.97:* the five radial effects. Zoom Blur, Spin Blur, Zoom Streaks and Spin Streaks
+      could only ever pivot on the middle of the frame — they all take a centre now, plus a quality
+      knob, a threshold and a trail-length control. Lens Blur got the real fix: it averaged colours,
+      so bright points dissolved instead of blooming, which its own description claimed they did.
+      Turn up Highlight bloom and a specular survives as a bright disc, in a Circle, Hexagon,
+      Pentagon or Square aperture. The plan's proposed 64-tap quality maximum was cut to 32 because
+      it measured 1.2 seconds a frame. Old projects are untouched, and that is now a suite test.
 - [ ] **Clear the rest of the BUG-HUNT backlog** (~59 items).
       *Progress 16 Aug:* four struck off — the two media-leak findings (v8.44 + v8.46) and the
       library-misfiling one (v8.47) and the crop-animation data loss (v8.48). Worth knowing before picking more off it: the file's own warning
