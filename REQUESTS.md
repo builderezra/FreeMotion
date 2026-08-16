@@ -5960,6 +5960,20 @@ layout, motion blur, the elements browser and the effects browser.
       104px. **No horizontal overflow anywhere, and no unreachable or undersized controls** — so it is
       not broken, it is cramped. One sentence from him about what he was trying to DO when it felt
       unusable would aim the next pass.
+      **RE-MEASURED 16 Aug, and the good news is that the 21% arrived without you having to accept the
+      change you turned down.** Every number in this entry was taken in CLASSIC, and v8.39 made **Studio
+      the only desktop layout** — which is the same route this entry already named as "one other route
+      to the same space… needs no layout change at all".
+      Measured now at **1280×800, 9:16 comp, layer selected, Studio**: canvas **290×515**, against
+      Classic's 264×469. That is the exact pair this entry predicted for reclaiming the top bar — **+21%
+      canvas area** — so the space you said no to taking has been delivered anyway, by a change you did
+      approve, and the header is a wordmark rather than a deleted row.
+      Chrome is now one 40px transport row plus a 240px band, not header 50 + transport 40 + timeline 240.
+      **What is still open is unchanged and still needs one sentence from you:** what you were trying to
+      DO when PC felt unusable. The measurable facts are the same as before — no horizontal overflow, no
+      unreachable or undersized controls, and 730px of dead space either side of a portrait canvas, which
+      is unavoidable for 9:16 on a 16:9 screen unless the stage hosts panels. It is cramped, not broken,
+      and I cannot tell from here which of those you meant.
 
 ### The PC layout message (15 Aug) — one message from him, split into jobs
 
