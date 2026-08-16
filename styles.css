@@ -5525,3 +5525,14 @@ body.fm-pushing #toast { z-index: 213; }
   max-height: 260px; overflow-y: auto;
   -webkit-user-select: text; user-select: text;     /* the clipboard fallback selects this text */
 }
+
+/* The tab you press reacts (queue 207). A press, not a bounce: it dips and returns, which reads as
+   "that registered" without competing with the cards staggering in right underneath it. Short
+   enough (180ms) to be over before the first card lands. */
+@keyframes hm-tab-pop {
+  0%   { transform: scale(1); }
+  38%  { transform: scale(.93); }
+  100% { transform: scale(1); }
+}
+.hm-tab.hm-tab-pop { animation: hm-tab-pop 180ms cubic-bezier(.3, .8, .4, 1); }
+@media (prefers-reduced-motion: reduce) { .hm-tab.hm-tab-pop { animation: none; } }

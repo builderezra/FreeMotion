@@ -14894,6 +14894,77 @@
     }
   });
 
+  /* ---------------- queue 207: the home tabs stagger their contents in ----------------
+   * "when you open up any of the 4 menus like projects elements etc it does something like the
+   * animation when opening the app where all of the spawn in loading from top to bottom, ... also
+   * adding a little animation to the button you press." Two things, plus one the entry adds: reuse
+   * the EXISTING keyframes, and cap the stagger so a long list does not crawl in. */
+
+  test('switching home tab restages the cards, top to bottom, with a capped stagger', { item: 'home-stagger' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const root = document.getElementById('home-screen');
+    if (!root) throw new Error('no home screen');
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasOpen && FM.home.open) { FM.home.open(); await frame(); }
+      const tabs = root.querySelectorAll('.hm-tab');
+      if (tabs.length < 2) throw new Error('expected several home tabs, found ' + tabs.length);
+      const other = Array.prototype.filter.call(tabs, function (t) { return !t.classList.contains('active'); })[0];
+      if (!other) throw new Error('every tab reports itself active');
+      other.click(); await frame();
+      // The class is what arms the shared keyframes — reused, not a second set.
+      if (!root.classList.contains('hm-intro')) throw new Error('the grid was not armed for the entrance animation on a tab switch');
+      const grid = root.querySelector('.hm-grid');
+      /* Drive the stagger against a KNOWN grid rather than whatever projects happen to exist. The
+         first version read the real grid and returned early when it was empty — so "no stagger at
+         all" and "no cap at all" both passed under mutation. A test that quietly proves nothing on
+         an empty screen is exactly the dead assertion this suite keeps catching. 40 cards, because
+         the cap only shows up on a list longer than it. */
+      const saved = Array.prototype.slice.call(grid.children);
+      try {
+        grid.textContent = '';
+        for (let i = 0; i < 40; i++) grid.appendChild(document.createElement('div'));
+        FM._hmStampCards();
+        const cards = Array.prototype.slice.call(grid.children);
+        let prev = -1, maxDelay = 0, distinct = {};
+        cards.forEach(function (c, i) {
+          if (!c.classList.contains('hm-in')) throw new Error('card ' + i + ' was not armed for the entrance animation');
+          const d = parseFloat(c.style.animationDelay || '0');
+          if (!(d >= prev - 1e-6)) throw new Error('card ' + i + ' comes in BEFORE the one above it (' + d + 's after ' + prev + 's)');
+          prev = d; if (d > maxDelay) maxDelay = d; distinct[d.toFixed(3)] = 1;
+        });
+        if (Object.keys(distinct).length < 5) throw new Error('all 40 cards share ' + Object.keys(distinct).length + ' delay value(s) — they are not staggered, they all arrive together');
+        // CAPPED, which the entry asks for by name: a long list must not take a second to appear.
+        if (maxDelay > 0.6) throw new Error('with 40 cards the last one waits ' + maxDelay + 's — the stagger is not capped');
+      } finally {
+        grid.textContent = '';
+        saved.forEach(function (c) { grid.appendChild(c); });
+      }
+    } finally { if (!wasOpen && FM.home.close) FM.home.close(); }
+  });
+
+  test('the pressed tab reacts, and re-tapping the same tab does not restage', { item: 'home-stagger' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const root = document.getElementById('home-screen');
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasOpen && FM.home.open) { FM.home.open(); await frame(); }
+      const tabs = root.querySelectorAll('.hm-tab');
+      const other = Array.prototype.filter.call(tabs, function (t) { return !t.classList.contains('active'); })[0];
+      if (!other) throw new Error('every tab reports itself active');
+      other.click(); await frame();
+      if (!other.classList.contains('hm-tab-pop')) throw new Error('the pressed tab did not react at all');
+      if (other.getAnimations) {
+        const anims = other.getAnimations().filter(function (a) { return /tab-pop/.test(a.animationName || ''); });
+        if (!anims.length) throw new Error('the tab carries the class but nothing is playing — the same failure the cog had');
+      }
+      // Re-tapping the tab you are ALREADY on must not replay the whole grid underneath you.
+      root.classList.remove('hm-intro');
+      other.click(); await frame();
+      if (root.classList.contains('hm-intro')) throw new Error('re-tapping the current tab restaged every card');
+    } finally { if (!wasOpen && FM.home.close) FM.home.close(); }
+  });
+
   test('the cog animation restarts on every press, not just the first', { item: 'cog-turn' }, async function () {
     /* queue 255. "the setttings cog rotates once but never again until you refresh." The cause was
        not the rotation failing to reset — it does. The RESTART failed: the replay trick read

@@ -1712,15 +1712,47 @@ window.FM = window.FM || {};
     // on would restage the screen on every tab switch and every search keystroke. 2s is past the
     // longest possible finish (0.05 + 15×0.055 delay + 0.55 duration ≈ 1.43s).
     clearTimeout(introTimer);
-    introTimer = setTimeout(() => {
-      if (!root) return;
-      root.classList.remove('hm-intro');
-      root.querySelectorAll('.hm-in, .hm-in-fab').forEach(n => {
-        n.classList.remove('hm-in', 'hm-in-fab');
-        n.style.animationDelay = '';
-      });
-    }, 2000);
+    introTimer = setTimeout(stripIntro, 2000);
   }
+
+  // Shared by the first-load stagger and the per-tab one (queue 207) — two copies of this would
+  // drift, and the one that drifted would leave `hm-intro` on and restage the screen on every
+  // keystroke in the search box.
+  function stripIntro() {
+    if (!root) return;
+    root.classList.remove('hm-intro');
+    root.querySelectorAll('.hm-in, .hm-in-fab').forEach(n => {
+      n.classList.remove('hm-in', 'hm-in-fab');
+      n.style.animationDelay = '';
+    });
+  }
+
+  /* ---- Stagger the CARDS on every tab switch (queue 207) ---------------------------------------
+   * His words: "when you open up any of the 4 menus like projects elements etc it does something
+   * like the animation when opening the app where all of the spawn in loading from top to bottom."
+   *
+   * Reuses stampIntro's own class and keyframes rather than a second set, which the entry asks for
+   * by name — two sets of entrance animations would drift, and the drifted one is the one you would
+   * see most. The differences from first load are deliberate:
+   * · only the GRID is stamped. The top bar and the tabs are already on screen and staying there;
+   *   restaging them would make the whole page flinch every time you changed tab.
+   * · a tighter step and a lower cap. First load is a moment you are watching; a tab switch is one
+   *   you are trying to get through, and the entry says to cap it so a long list does not take a
+   *   second to finish appearing. 10 × 0.04 = 0.4s to the last card, whatever the count. */
+  function stampCards() {
+    if (!root || !grid) return;
+    root.classList.add('hm-intro');
+    const step = 0.04, cap = 10;
+    Array.prototype.forEach.call(grid.children, (n, i) => {
+      if (n._fmNoIntro) return;   // pushed off this screen already — see queue 222
+      n.classList.remove('hm-in');
+      n.classList.add('hm-in');
+      n.style.animationDelay = (Math.min(i, cap) * step).toFixed(3) + 's';
+    });
+    clearTimeout(introTimer);
+    introTimer = setTimeout(stripIntro, 1200);   // past 0.4s delay + 0.5s duration
+  }
+  FM._hmStampCards = stampCards;   // read by the suite
 
   // Search bar show/hide. Closing always clears the query so reopening Home is never mysteriously filtered.
   function toggleSearch(force) {
@@ -1866,9 +1898,22 @@ window.FM = window.FM || {};
       grid = root.querySelector('.hm-grid');
       initOverpull();
       root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => {
+        const changed = tab !== b.dataset.tab;
         // keep select MODE across tabs, drop the SELECTION — see the note in render()
-        if (tab !== b.dataset.tab) selected.clear();
+        if (changed) selected.clear();
         tab = b.dataset.tab; render();
+        /* The tab itself reacts (queue 207: "adding a little animation to the button you press").
+           Restarted the careful way — cancel any run in flight, then force layout on the BUTTON.
+           `b` is a real HTMLElement so offsetWidth works here, unlike the <svg> that made the cog
+           turn exactly once per page load (queue 255); the pattern is kept identical anyway so the
+           next person copying it copies the version that works. */
+        if (b.getAnimations) b.getAnimations().forEach(a => { try { a.cancel(); } catch (e) {} });
+        b.classList.remove('hm-tab-pop');
+        void b.offsetWidth;
+        b.classList.add('hm-tab-pop');
+        // …and the cards restage, but ONLY when the tab actually changed. Re-tapping the tab you are
+        // already on should do nothing rather than replay the whole grid.
+        if (changed) stampCards();
       }));
       document.getElementById('hm-new').addEventListener('click', newFromTab);   // per-tab: project / template / element
       // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)

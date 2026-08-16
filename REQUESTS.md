@@ -3879,7 +3879,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
         opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
       · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
         the same polygons), so the tile and the shape cannot drift apart while we work.
-- [ ] **207 — The four home tabs should stagger their contents in, and the tab itself should react.**
+- [x] **207 — The four home tabs should stagger their contents in, and the tab itself should react. DONE v8.17.**
       His words: *"Make it so when you open up any of the 4 menus like projects elements etc it does
       something like the animation when opening the app where all of the spawn in loading from top to
       bottom, i think that would look very clean, also adding a little animation to the button you press
@@ -3889,6 +3889,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       that same treatment on every TAB SWITCH, not just on first load — plus a small press reaction on
       the tab button itself. Reuse the existing keyframes rather than writing a second set, or the two
       will drift; and cap the stagger so a long list does not take a second to finish appearing.
+
+      **DONE v8.17 — both halves, on the existing animation as this entry insisted.** Only the GRID
+      restages: the top bar and the tabs are already on screen, and restaging them would make the whole
+      page flinch on every tab change. Capped at ten cards — 0.4s to the last one however many there
+      are — which is the cap this entry asked for. Re-tapping the tab you are already on does nothing.
+      The tab's own reaction is a 180ms dip-and-return, restarted with the v8.16 pattern (cancel the
+      in-flight run, force layout on the button) so it cannot end up like the cog and fire once per
+      page load.
+      *(Both of my first assertions were DEAD. They read the real grid, which in the test browser holds
+      one card, so "no stagger" and "no cap" both passed under mutation. The test builds a known
+      40-card grid now — with 40 cards an uncapped stagger makes the last one wait 1.56s.)*
 - [ ] **208 — The add sheet wastes a band at the bottom on the phone.** His words: *"We need to utilise
       this wasted space on phone, each icon in that section could be longer and more square so then it
       fits it all nicely"* — with a screenshot of the Elements tab, a red ring drawn round an empty strip
