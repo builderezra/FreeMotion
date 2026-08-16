@@ -1753,7 +1753,7 @@ better still, keep working inside the turn rather than parking work for a later 
       `#tl-resizer` — and measure the outline's box before and after, rather than relying on the
       observer firing on its own.
 
-- [ ] **283 — CHECK: is the add-menu drag (#244, v8.30) actually working for him? (16 Aug.)** His words:
+- [x] **283 — CHECK: is the add-menu drag (#244, v8.30) actually working for him? ANSWERED 16 Aug — it runs, but it is built wrong. Folded into #244, which is reopened.** His words:
       *"I hope you haven't forgotten that you have logged the exact specific details and everything I
       said regarding the ad menu or inspector menu, whatever you wanna call it, slash the layer edit
       menu being separately adjustable to the timeline menu because I still don't see it being added,
@@ -2468,6 +2468,26 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **286 — PC: a glow that follows the cursor on the add menu and layer edit menu. (16 Aug.)** His
+      words, verbatim: *"I just thought of a really premium feature where on the add menu and layer edit
+      menu on pc a glow should follow ur curser, i feel like some other websites or stuff have this but
+      its something really cool we could add, make sure it looks good, its not just a simple glow on ur
+      curser but it makes it feel like the area around ur curser knows its there and is reacting to it,
+      if that makes sense, like this is a thing other people have made just get inspo from that to make
+      it look good"*.
+      **The distinction he draws is the whole brief:** NOT a blob parented to the pointer, but the
+      SURFACE reacting — the panel's own borders/cards lighting where the cursor is near them, so the
+      area feels aware. The common technique is a per-card radial gradient driven by CSS custom
+      properties updated from `pointermove` (a spotlight masked to each card's border, so edges glow as
+      you approach), rather than one element chasing the cursor.
+      **Constraints that already apply here:** PC only (he says so); it must not run a `pointermove`
+      handler that costs frames during playback — the quality ladder work exists because this app is
+      already frame-tight, so throttle to rAF and stand it down while `FM.playing`; and honour
+      `prefers-reduced-motion`.
+      Also worth noting against **BEFORE-PUBLISHING.md**: this is the first deliberately ORIGINAL bit of
+      visual identity anyone has asked for, rather than something modelled on Alight Motion. Worth
+      saying so when the identity pass comes up.
+
 - [ ] **279 — Give the layer menu the Add menu's background. (16 Aug.)** His words, verbatim:
       *"keep the background of the add menu for the menu when u press on a layer"*.
       i.e. the panel that opens when you tap a LAYER should use the same background treatment the ADD
@@ -5126,7 +5146,9 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       after that episode is **empty** — no app file, test or version was touched, and nothing was
       force-pushed. And a stray remote branch `claude/phone-camera-long-exposure-siapuq` still exists on
       GitHub holding the reverted content; it is merged into nothing and affects nothing, but **he may
-      want to delete it from GitHub's branches page** — that session was refused permission to.- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
+      want to delete it from GitHub's branches page** — that session was refused permission to.
+
+- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
       *"The images for each layer on the left side are glitched out, you see how they're like stretched
       and going out too far? Looks shit."* Screenshot: a blue house and an orange umbrella in the track
       heads, both squashed wide and spilling past their rounded frame.
@@ -6091,7 +6113,7 @@ wait for them to report back."*
       hide the defect. It also checks the reverse — removing a benchmark puts the chip out without a
       scrub — because the same staleness the other way round is just as wrong.
 
-- [x] **244 — PC: drag the add menu independently of the timeline, with a snap where they meet. DONE v8.30.** (15
+- [ ] **244 — PC: drag the add menu independently of the timeline. ⚠️ REOPENED 16 Aug — shipped v8.30 and he says it is broken.** (15
       Aug. *He asked for this one to go to the BOTTOM: "This can go to the bottom of the list as you have
       a lot of things to work on still, remember ur doing oldest first."*) His words:
       *"Make it so you can seperatly drag up and down the add menu, on pc, but you cant drag lower than
@@ -6182,6 +6204,28 @@ wait for them to report back."*
       swapped", and it is, but it means teaching `#tl-resizer` about `--am-h` — a second writer in the
       file the design note explicitly warns against making one. It wants its own pass rather than being
       bolted on at the end of this one. Everything you described for dragging the ADD MENU works.
+      **⚠️ REOPENED — HE FOUND IT AND IT IS WRONG. His words, verbatim:** *"i jsut figured out how to do
+      ur version of the add menu dragging up and down and this is dogshit and not what i wanted at all,
+      its completely broken. It shouldnt take up the whole screen only go up"*.
+      **From his screenshot, what it actually does:** dragged up, the add menu becomes a huge panel that
+      covers most of the window — it spans from roughly mid-screen down past the bottom edge and left of
+      x≈1520, squashing the timeline into a strip on the right and leaving the canvas cut off above. The
+      tooltip *"Drag the add menu up over the canvas"* is showing, so this IS the feature, working as
+      built, and the build is wrong.
+      **What he actually wants, restated from his original words plus this correction:** the panel should
+      **only grow upward** — its top edge rises over the canvas while its left/right/bottom stay exactly
+      where they are, and the timeline beside it is not touched at all. It is a taller panel, not a
+      bigger surface.
+      **What v8.30 got wrong, most likely:** taking the panel out of the grid (`position: absolute`
+      against `#app`) without pinning its left/right/bottom to the slot it left, so it resolved against
+      `#app` instead of its own column and grew in every direction. The measurement recorded above
+      ("240→440px while the canvas stayed at 515px") only checked HEIGHT, which is exactly why a panel
+      that also grew sideways passed.
+      **This also answers #283** — the handle exists and works; the drag is simply built wrong. #283 can
+      be closed into this entry.
+      **Next run: do not re-measure only the height.** Assert left, right and bottom are unchanged
+      through the whole drag, and that the timeline's box is untouched.
+
 
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
       looks dead. DONE v7.95.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one

@@ -20,6 +20,21 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 F="REQUESTS.md"
 
+# A MALFORMED ENTRY IS AN INVISIBLE ENTRY. Item 211 sat glued to the end of another entry's last
+# line for weeks — "...refused permission to.- [ ] **211 — ..." — so it never started a line, and
+# every queue tool here matches ^- \[ \]. It was not deprioritised, it was unreachable, and he found
+# it himself: "i said this a long time ago and still no fix". Same failure as the unnumbered items,
+# different cause, so it gets the same treatment: detected loudly rather than trusted.
+BAD="$(grep -n '[^ ]- \[[ x]\] \*\*[0-9]' "$F" || true)"
+if [ -n "$BAD" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! MALFORMED ENTRIES — these do NOT start a line, so NOTHING below sees them:"
+  echo "$BAD" | cut -c1-110
+  echo "!! Put each on its own line before trusting this list."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 echo "=== UNNUMBERED (pre-date the numbering, so these are the OLDEST) ==="
 grep -n '^- \[ \] \*\*[^0-9]' "$F" | sed 's/^\([0-9]*\):- \[ \] \*\*/  line \1: /' | sed 's/\*\*.*//' | cut -c1-100
 
