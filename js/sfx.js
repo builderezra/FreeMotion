@@ -270,6 +270,204 @@ window.FM = window.FM || {};
         o.start(t0); o.stop(t0 + d);
       },
     },
+
+    /* ---------- MORE OF THEM (queue 290) ----------
+     * "give the sound effects menu more sound effects". Twelve added to the sixteen, and they go into
+     * the categories that already exist rather than inventing new headings for the sake of it — except
+     * NATURE, which earns one: wind, rain and fire are the set's obvious gap and calling them "Texture"
+     * would bury them under the glitch and static.
+     * Everything here is synthesised the same way the originals are, which is the point of this menu:
+     * "These are generated in the app, so they cost nothing to download." No file ships. */
+
+    // ---------- movement ----------
+    {
+      id: 'swoosh-by', name: 'Pass by', cat: 'Movement', dur: 1.2,
+      render(ctx, t0, d, out) {
+        /* A doppler-ish pass: the band climbs and falls while the gain peaks in the middle, so the
+           loudest moment is also the highest — which is what "it went past me" sounds like. */
+        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(ctx, d, 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+        env(bp.frequency, t0, [[0, 500], [d * 0.5, 3200], [d, 700]]);
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [d * 0.5, 0.95], [d, 0]]);
+        src.connect(bp); bp.connect(g); g.connect(out);
+        src.start(t0); src.stop(t0 + d);
+      },
+    },
+    {
+      id: 'slide-up', name: 'Slide up', cat: 'Movement', dur: 0.55,
+      render(ctx, t0, d, out) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        env(o.frequency, t0, [[0, 180], [d, 900]]);
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+        env(lp.frequency, t0, [[0, 700], [d, 4200]]);
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [0.03, 0.5], [d * 0.8, 0.4], [d, 0]]);
+        o.connect(lp); lp.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + d);
+      },
+    },
+    // ---------- impact ----------
+    {
+      id: 'punch', name: 'Punch', cat: 'Impact', dur: 0.5,
+      render(ctx, t0, d, out) {
+        // a body thump plus a short noise slap: neither reads as a hit on its own
+        const o = ctx.createOscillator(); o.type = 'sine';
+        env(o.frequency, t0, [[0, 180], [d * 0.5, 55]]);
+        const og = ctx.createGain();
+        env(og.gain, t0, [[0, 0], [0.008, 1], [d * 0.6, 0]]);
+        o.connect(og); og.connect(out); o.start(t0); o.stop(t0 + d);
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9; bp.frequency.value = 1500;
+        const ng = ctx.createGain();
+        env(ng.gain, t0, [[0, 0], [0.005, 0.55], [0.1, 0]]);
+        n.connect(bp); bp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
+      },
+    },
+    {
+      id: 'glass-break', name: 'Glass break', cat: 'Impact', dur: 1.1,
+      render(ctx, t0, d, out) {
+        /* One crack, then shards: a scatter of short high partials at irregular times. Deterministic
+           offsets rather than Math.random, so the same effect renders the same twice — this file is
+           rendered offline and cached, and a sound that changed between renders would be a bug. */
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+        const ng = ctx.createGain();
+        env(ng.gain, t0, [[0, 0], [0.004, 0.9], [0.09, 0.06], [d, 0]]);
+        n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
+        [[0.06, 5200], [0.11, 3900], [0.17, 6400], [0.24, 4600], [0.33, 7100], [0.45, 5000]].forEach(function (p) {
+          const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = p[1];
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t0 + p[0]);
+          g.gain.linearRampToValueAtTime(0.28, t0 + p[0] + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + p[0] + 0.16);
+          o.connect(g); g.connect(out); o.start(t0 + p[0]); o.stop(t0 + p[0] + 0.2);
+        });
+      },
+    },
+    // ---------- build ----------
+    {
+      id: 'reverse-cymbal', name: 'Reverse swell', cat: 'Build', dur: 1.8,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass';
+        env(hp.frequency, t0, [[0, 900], [d, 5200]]);
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [d * 0.92, 0.85], [d, 0]]);   // all swell, cut at the top
+        n.connect(hp); hp.connect(g); g.connect(out);
+        n.start(t0); n.stop(t0 + d);
+      },
+    },
+    {
+      id: 'heartbeat', name: 'Heartbeat', cat: 'Build', dur: 1.6,
+      render(ctx, t0, d, out) {
+        [[0, 1], [0.34, 0.72]].forEach(function (p) {
+          const o = ctx.createOscillator(); o.type = 'sine';
+          env(o.frequency, t0 + p[0], [[0, 90], [0.22, 42]]);
+          const g = ctx.createGain();
+          env(g.gain, t0 + p[0], [[0, 0], [0.02, p[1]], [0.26, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + p[0]); o.stop(t0 + p[0] + 0.3);
+        });
+      },
+    },
+    // ---------- interface ----------
+    {
+      id: 'success', name: 'Success', cat: 'Interface', dur: 0.7,
+      render(ctx, t0, d, out) {
+        [[0, 660], [0.09, 880], [0.18, 1320]].forEach(function (p) {   // a rising third: "done"
+          const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = p[1];
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t0 + p[0]);
+          g.gain.linearRampToValueAtTime(0.5, t0 + p[0] + 0.008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + p[0] + 0.42);
+          o.connect(g); g.connect(out); o.start(t0 + p[0]); o.stop(t0 + p[0] + 0.5);
+        });
+      },
+    },
+    {
+      id: 'error', name: 'Error', cat: 'Interface', dur: 0.45,
+      render(ctx, t0, d, out) {
+        [[0, 330], [0.14, 247]].forEach(function (p) {   // and a falling one: "no"
+          const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = p[1];
+          const g = ctx.createGain();
+          env(g.gain, t0 + p[0], [[0, 0], [0.01, 0.32], [0.13, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + p[0]); o.stop(t0 + p[0] + 0.16);
+        });
+      },
+    },
+    {
+      id: 'swipe', level: 0.7, name: 'Swipe', cat: 'Interface', dur: 0.22,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.2;
+        env(bp.frequency, t0, [[0, 2400], [d, 6000]]);
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [0.015, 0.6], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      },
+    },
+    // ---------- texture ----------
+    {
+      id: 'vinyl', name: 'Vinyl crackle', cat: 'Texture', dur: 2.2,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'pink');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+        const g = ctx.createGain(); g.gain.value = 0.22;
+        n.connect(hp); hp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        // the pops on top, at fixed offsets so the render is repeatable
+        [0.13, 0.41, 0.66, 1.02, 1.28, 1.55, 1.9].forEach(function (at, i) {
+          const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = 900 + i * 130;
+          const pg = ctx.createGain();
+          pg.gain.setValueAtTime(0, t0 + at);
+          pg.gain.linearRampToValueAtTime(0.3, t0 + at + 0.002);
+          pg.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.03);
+          o.connect(pg); pg.connect(out); o.start(t0 + at); o.stop(t0 + at + 0.05);
+        });
+      },
+    },
+    // ---------- nature ----------
+    {
+      id: 'wind', name: 'Wind', cat: 'Nature', dur: 2.6,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
+        // it BREATHES — a steady band reads as static, a moving one as air
+        env(bp.frequency, t0, [[0, 400], [d * 0.3, 900], [d * 0.6, 520], [d, 1000]]);
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [d * 0.2, 0.7], [d * 0.55, 0.45], [d * 0.8, 0.75], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      },
+    },
+    {
+      id: 'rain', name: 'Rain', cat: 'Nature', dur: 2.6,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [0.3, 0.6], [d - 0.3, 0.6], [d, 0]]);
+        n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      },
+    },
+    {
+      id: 'fire', name: 'Fire crackle', cat: 'Nature', dur: 2.4,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [0.2, 0.45], [d - 0.2, 0.45], [d, 0]]);
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        [0.18, 0.37, 0.52, 0.79, 0.96, 1.21, 1.44, 1.7, 1.95, 2.16].forEach(function (at, i) {
+          const c = ctx.createBufferSource(); c.buffer = noiseBuffer(ctx, 0.05, 'white');
+          const cb = ctx.createBiquadFilter(); cb.type = 'bandpass'; cb.Q.value = 2; cb.frequency.value = 1800 + (i % 4) * 700;
+          const cg = ctx.createGain();
+          cg.gain.setValueAtTime(0, t0 + at);
+          cg.gain.linearRampToValueAtTime(0.5, t0 + at + 0.003);
+          cg.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.045);
+          c.connect(cb); cb.connect(cg); cg.connect(out); c.start(t0 + at); c.stop(t0 + at + 0.06);
+        });
+      },
+    },
   ];
 
   // ---- render + encode --------------------------------------------------------------------------

@@ -14393,6 +14393,50 @@
     }
   });
 
+  /* ---------------- queue 290: more sound effects, and a warm menu ---------------- */
+
+  test('the sound-effects menu has grown, and its sheet is warm (queue 290)', { item: 'sfx-warm' }, async function () {
+    /* "give the sound effects menu more sound effects and also give the menu some nice warm background
+     * colours, Specifcally warm."
+     * The count is asserted as a FLOOR, not an exact number — the point was "more", and pinning it
+     * exactly would fail the next time any are added, which is the opposite of the request. */
+    if (!FM.sfx) throw new Error('FM.sfx is missing');
+    const list = FM.sfx.list();
+    if (list.length < 26) throw new Error('the menu has ' + list.length + ' effects — queue 290 took it from 16 to 29, so something has been lost');
+    const cats = {};
+    list.forEach(function (d) { cats[d.cat] = (cats[d.cat] || 0) + 1; });
+    if (!cats.Nature) throw new Error('the Nature category (wind / rain / fire) is gone — that was the set\'s obvious gap');
+    Object.keys(cats).forEach(function (c) {
+      if (cats[c] < 2) throw new Error('the "' + c + '" category has only ' + cats[c] + ' effect in it — a heading for one row is worse than no heading');
+    });
+
+    /* WARM. Asserted as "there is warm light on this sheet", by reading the actual computed background
+       and checking the red channel leads — not against a hex, which would fail the first time the
+       shade is nudged and say nothing about whether it still looks warm. */
+    const wasOpen = !!document.querySelector('.sfx-card');
+    try {
+      if (!wasOpen) FM.sfx.open();
+      await sleep(260);
+      const card = document.querySelector('.sfx-card');
+      if (!card) throw new Error('the sound-effects sheet did not open');
+      const bg = getComputedStyle(card).backgroundImage;
+      const rgbas = (bg.match(/rgba?\(([^)]+)\)/g) || []).map(function (t) {
+        const n = t.replace(/rgba?\(|\)/g, '').split(',').map(parseFloat);
+        return { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 };
+      }).filter(function (c) { return c.a > 0.02; });
+      if (!rgbas.length) throw new Error('the sheet has no tinted background at all — it is the app\'s plain panel colour');
+      const warm = rgbas.filter(function (c) { return c.r > c.b + 40; });
+      if (!warm.length) throw new Error('nothing on the sheet is warm: ' + bg.slice(0, 120) + ' — he asked for warm colours, "Specifcally warm"');
+      /* …and NOT so loud that it fights the rainbow button that opens it, which is the tension recorded
+         when this was logged. Warmth as light, not as paint. */
+      const loud = warm.filter(function (c) { return c.a > 0.35; });
+      if (loud.length) throw new Error('the warm tint runs at ' + loud[0].a + ' opacity — that is paint rather than light, and it will fight the rainbow button that opens this sheet');
+    } finally {
+      if (!wasOpen && FM.sfx.close) FM.sfx.close();
+      await sleep(120);
+    }
+  });
+
   /* #196 — a sound-effects menu, synthesised rather than sampled (his "good ideas btw").
      Three things are worth locking, and "it makes a noise" is only one of them. */
   test('every sound effect renders, at a deliberate level, and lands as a real clip', { item: 'sfx' }, async function () {
@@ -14407,7 +14451,10 @@
        build hung the renderer outright with a geometric gap that never reached its duration), and a
        deliberately quiet one (proves `level` is honoured rather than everything being slammed to the
        same peak). tests/_sfxrender.html measures all sixteen. */
-    for (const id of ['whoosh', 'build-tick', 'click']) {
+    /* 'fire' joins the sample for queue 290: it is the most intricate of the twelve added there — a bed
+       plus ten scheduled noise bursts, each with its own short buffer — so if any new recipe is going to
+       hang the renderer or schedule itself into silence, it is that one. */
+    for (const id of ['whoosh', 'build-tick', 'click', 'fire']) {
       const def = FM.sfx.byId(id);
       if (!def) throw new Error('effect "' + id + '" is gone from the catalogue');
       const buf = await Promise.race([

@@ -3092,12 +3092,33 @@ better still, keep working inside the turn rather than parking work for a later 
       asks for the microphone and the mic tests here are already the flaky ones — a styling check is not
       worth making the suite depend on a device permission.
 
-- [ ] **290 — More sound effects, and warm background colours for that menu. (16 Aug.)** His words,
+- [x] **290 — More sound effects, and warm background colours for that menu. DONE v8.89.** (16 Aug.) His words,
       verbatim: *"When you have time after everything else give the sound effects menu more sound effects
       and also give the menu some nice warm background colours, Specifcally warm."*
       **He explicitly deprioritised this** — *"when you have time after everything else"* — so it waits,
       but it is written down. Note the tension to resolve when it is built: the sound-effects BUTTON is
       the rainbow one (#210), so a warm palette inside the menu needs to not fight that.
+
+      **DONE v8.89 — and it waited, exactly as asked.** Every other numbered item in the queue is either
+      finished or waiting on you, which is the "after everything else" he asked for.
+      **Sixteen effects became twenty-nine.** Twelve added into the categories that already existed —
+      Pass by, Slide up, Punch, Glass break, Reverse swell, Heartbeat, Success, Error, Swipe, Vinyl
+      crackle — plus one new heading, **Nature** (Wind, Rain, Fire crackle), because those were the set's
+      obvious gap and filing them under "Texture" would have buried them with the glitch and static.
+      All synthesised, like the rest: no file ships, which is the whole premise of this menu.
+      **Verified by rendering every one of the 29 through the app's own path**: none failed, none came
+      out silent, none came out too quiet to hear. The suite renders a SAMPLE rather than all of them (a
+      full sweep is ~15s of offline audio), and *fire* was added to that sample deliberately — it is the
+      most intricate of the twelve, a bed plus ten separately scheduled noise bursts, so it is the one
+      most likely to hang a renderer or schedule itself into silence.
+      **The warm colours resolve the tension you flagged, by being LIGHT rather than paint.** Two soft
+      amber pools thrown from the corners over the same panel colour the rest of the app uses, a warm
+      hairline border and a peach title — so the sheet feels lit from somewhere warm instead of being
+      painted orange, and it does not shout over the rainbow button that opens it. The test asserts the
+      tint is warm (red channel leads) AND that it stays under 0.35 opacity, so a future "make it
+      warmer" cannot quietly turn it into paint without failing.
+      `--panel` itself is deliberately untouched: it is the app's ground everywhere, and warming it here
+      would mean this sheet stopped matching the surfaces it sits on.
 
 - [x] **289 — Dissolve the "Other" effects menu into the categories that fit. DONE v8.81.** (16 Aug.) His words,
       verbatim: *"Just put the effects from the other menu into menus that would fit them and get rid of

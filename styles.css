@@ -5387,9 +5387,24 @@ body.fm-pushing #toast { z-index: 213; }
    full-screen browser: this is a short list you pick one thing from. Every row can be HEARD before it
    is added, because the one real difficulty with sound effects is that a name tells you nothing. */
 .sfx-scrim { position: fixed; inset: 0; z-index: 3000; background: rgba(2,6,9,.62); display: flex; align-items: center; justify-content: center; padding: 18px; }
+/* WARM (queue 290). Ezra: "give the menu some nice warm background colours, Specifcally warm."
+   The whole app is cool — teal, slate, blue-grey — so warmth here is a deliberate exception, and the
+   trap noted when this was logged is real: the button that OPENS this sheet is the rainbow one, so a
+   loud warm fill would fight it. This is warmth as LIGHT rather than as paint — two soft amber pools
+   thrown from the corners over the same panel colour everything else uses, so the sheet feels lit from
+   somewhere warm instead of being painted orange. The rows, text and buttons inside are untouched.
+   Kept off `--panel` itself: that variable is the app's ground everywhere, and warming it here would
+   mean this sheet no longer matched the surfaces it sits on. */
 .sfx-card { display: flex; flex-direction: column; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+  background:
+    radial-gradient(120% 70% at 0% 0%, rgba(255, 176, 92, .13), transparent 60%),
+    radial-gradient(95% 60% at 100% 100%, rgba(255, 122, 74, .10), transparent 62%),
+    linear-gradient(165deg, rgba(255, 198, 140, .05), rgba(255, 198, 140, 0) 55%),
+    var(--panel);
+  border: 1px solid rgba(255, 178, 110, .22); border-radius: 16px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55), 0 0 32px rgba(255, 150, 80, .07); }
+.sfx-head { border-bottom-color: rgba(255, 178, 110, .18); }
+.sfx-title { color: #ffd9b3; }
 .sfx-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .sfx-title { font-weight: 800; font-size: 16px; }
 .sfx-hint { font-size: 12px; color: var(--text-dim); padding: 10px 16px 4px; }
