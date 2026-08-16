@@ -56,12 +56,18 @@ claims an AM origin, and I can't tell from the code whether one was used._
 
 ## Progress
 
-- **v4.71 — the desktop Studio layout is ours.** Settings → Layout → Studio moves the editing panel down
-  beside the timeline and stands the top bar up as a rail on the far left. That is a genuinely different
-  composition from AM's top-bar + right-column + full-width-timeline arrangement, and it was Ezra's own
-  design, not a screenshot. It goes a long way on item 2 below and starts item 6. **It does not close
-  them:** Studio is opt-in and desktop-only, so the default look on first run — and the entire phone
-  layout, which is the primary target — is still the AM arrangement. The list below stands.
+- **v4.71 — the desktop Studio layout is ours.** The editing panel sits down beside the timeline and the
+  top bar stands up as a rail on the far left. That is a genuinely different composition from AM's
+  top-bar + right-column + full-width-timeline arrangement, and it was Ezra's own design, not a
+  screenshot. It goes a long way on item 2 below and starts item 6.
+  **v8.83 finished the job on the desktop half.** The note here used to say "Studio is opt-in and
+  desktop-only, so the default look on first run is still the AM arrangement" — that is no longer true.
+  Queue 249 removed the switch, 292 stopped the old layout being painted on a refresh, and **293 deleted
+  the Classic rules from the stylesheet entirely**, so the AM-shaped desktop arrangement is not opt-out,
+  not hidden, and not shipped. Verified by a test that reads the shipped CSS rather than the DOM,
+  because the concern was that someone could read it.
+  **It still does not close item 2:** the entire PHONE layout, which is the primary target, is untouched
+  by all of that and is still the AM arrangement. The list below stands.
 
 ## What "done" looks like
 
