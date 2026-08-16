@@ -16643,6 +16643,42 @@
     }, 375);
   });
 
+  /* ---------------- queue 292: a refresh flashed the OLD Alight-Motion-shaped layout ----------------
+   * His most urgent report: "when you refresh the page it shows an old version that looks a lot like
+   * alight motion, this is bad because if someone sees it in the final version they may be able to use
+   * this against us."
+   * He was looking at the FIRST PAINT. `layout-studio` was added by js/settings.js, so until that ran
+   * the page rendered the UNCLASSED default — the retired Classic layout, with a 50px top bar and the
+   * inspector as a right-hand side column. A cold load hid it behind the splash; a refresh is exactly
+   * the case the splash skips, which is why it only ever appeared on reload. */
+
+  test('the shipped markup cannot paint the pre-Studio layout (queue 292)', { item: 'boot-layout' }, async function () {
+    /* Reads index.html as SHIPPED rather than the live DOM: by the time the suite runs, settings.js has
+       long since added the class, so inspecting document.body here would pass no matter what and prove
+       nothing about the first paint. */
+    const html = await (await fetch('../index.html?boot=' + Date.now())).text();
+    const m = html.match(/<body[^>]*>/i);
+    if (!m) throw new Error('no <body> tag found in index.html');
+    if (!/class\s*=\s*["'][^"']*\blayout-studio\b/.test(m[0]))
+      throw new Error('the shipped <body> does not carry layout-studio: ' + m[0].slice(0, 120) + ' — the first paint after a refresh will render the retired Classic layout');
+  });
+
+  test('Studio and the unclassed default are still visibly different layouts (queue 292)', { item: 'boot-layout' }, function () {
+    /* The guard above is only worth having while the two layouts actually differ. If the Classic CSS is
+       ever deleted and Studio becomes the plain default, this test says so out loud rather than leaving
+       a rule in index.html that nobody can explain. */
+    const B = document.body, had = B.classList.contains('layout-studio');
+    const app = document.getElementById('app');
+    if (!app) throw new Error('no #app');
+    try {
+      B.classList.add('layout-studio');
+      const studio = getComputedStyle(app).gridTemplateRows;
+      B.classList.remove('layout-studio');
+      const plain = getComputedStyle(app).gridTemplateRows;
+      if (studio === plain) throw new Error('the unclassed layout now matches Studio — the Classic CSS appears to be gone, so the index.html guard is obsolete and this pair of tests should be retired together');
+    } finally { B.classList.toggle('layout-studio', had); }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

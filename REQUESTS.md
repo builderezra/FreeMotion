@@ -1721,6 +1721,39 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [x] **292 — 🚨 URGENT: refreshing shows an OLD version that looks like Alight Motion. DONE v8.51.** His
+      words, verbatim: *"Theres a huge issue you can not miss, when you refresh the page it shows an old
+      version that looks a lot like alight motion, this is bad because if someone sees it in the final
+      version they may be able to use this against us. FIX URGENTLY AFTER WHAT UR DOING RN"*.
+      **He jumped this to the front himself**, and the reason is not cosmetic — it is the
+      BEFORE-PUBLISHING.md risk made concrete: a flash of a layout modelled on Alight Motion, visible to
+      anyone who reloads, is exactly the evidence that note exists to worry about.
+      Likeliest causes, in order of suspicion: (1) the static markup in `index.html` painting before CSS
+      and JS rearrange it — a first-paint flash of the pre-layout skeleton; (2) the service worker
+      handing back a stale cached shell; (3) an old splash/loading screen.
+      **DONE v8.51 — and it was the FIRST PAINT, exactly as you saw.** `layout-studio` was added by
+      `js/settings.js`, so until that script ran the page rendered the UNCLASSED default. Measured at
+      1400px, the two are not subtly different:
+      | | grid rows | inspector |
+      |---|---|---|
+      | unclassed (what a refresh painted) | `50px 552px 258px` | right-hand **side column**, x=1092 |
+      | `layout-studio` (the real app) | `602px 258px` | bottom-left panel, x=0 y=602 |
+      A top bar with the inspector as a right-hand side column **is** the Alight-Motion-shaped layout —
+      it is the Classic layout v8.39 retired, still sitting there as the CSS default.
+      **Why it only ever happened on refresh, which is the part worth keeping:** a COLD load is covered
+      by the splash, and the splash deliberately SKIPS on a same-session reload (`sessionStorage`
+      `fm.splashed`). So the one path that shows the naked first paint is precisely the one you were
+      taking, which is why it survived this long without being spotted.
+      The class is on the `<body>` tag in the markup now, so the correct layout is in force at parse
+      time. Studio has been the only desktop layout since v8.39, so it is unconditional; settings.js
+      still toggles it and now merely agrees. Guarded by a test that reads **index.html as shipped**
+      rather than the live DOM — by the time the suite runs, settings.js has long since added the class,
+      so checking `document.body` would pass regardless and prove nothing.
+      **FOLLOW-UP WORTH DOING, and it goes further than the flash — logged as #293.** The Alight-Motion-
+      shaped CSS is still in `styles.css` as the default; this fix stops it being SEEN, not shipped.
+      Making Studio the plain default and deleting the Classic rules would remove it from the bundle
+      altogether, which is closer to what you were actually worried about.
+
 - [ ] **285 — Layer-panel buttons should shrink when the timeline is made small. (16 Aug, screenshot.)**
       His words, verbatim: *"the layer edit pannels buttons should shrink if you make the timeline too
       small, so the button all stay fitting on screen"*.
@@ -2468,6 +2501,20 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **293 — Delete the retired Classic layout CSS, don't just stop showing it. (16 Aug, from #292.)**
+      #292 stopped the old Alight-Motion-shaped layout being PAINTED on refresh by putting
+      `layout-studio` in the markup. But the Classic rules are still the DEFAULT in `styles.css` — a
+      50px top bar and the inspector as a right-hand side column — so the shape he does not want is
+      still shipped, just never rendered.
+      His concern was *"if someone sees it in the final version they may be able to use this against
+      us"*, and CSS in a no-build app is plain text anyone can read. So the honest finish is to make
+      Studio the plain default, delete the Classic-only rules, and drop the now-meaningless class.
+      **Not done with #292 on purpose:** that was urgent and this is a refactor across a large
+      stylesheet, with a real chance of moving something subtly. It wants its own careful pass. There is
+      already a test (`Studio and the unclassed default are still visibly different layouts`) that will
+      fail the moment this lands, which is deliberate — it is the reminder to retire both guards
+      together. Related: **BEFORE-PUBLISHING.md**.
+
 - [ ] **291 — The signature white edge-glow on the sound-effects and voice-record menus. (16 Aug.)** His
       words, verbatim: *"Also put the our signature white line glow that move around the edges in the
       menu for sound effects and the menu for recording ur voice"*.
