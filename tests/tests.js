@@ -15741,6 +15741,60 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 251: the selection cluster's ground ----------------
+   * "make the backdrop more subtle, maybe instead of being brighter than everything else make its
+   * lightly darker, and also it isnt centred and aligned so fix that." Two faults, and measuring
+   * found the second one to be the same class as #209: not the boxes, the INK. */
+
+  test('the selection cluster recesses rather than glowing, and its glyphs are centred', { item: 'sel-ground' }, async function () {
+    if (!matchMedia('(min-width: 701px)').matches) return;   // PC arrangement
+    const frame = () => new Promise(r => setTimeout(r, 120));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const A = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff' });
+      const B = FM.makeLayer('shape', { shape: 'ellipse', x: 200, y: 200, shapeW: 40, shapeH: 40, fill: '#f80' });
+      A.start = 0; A.duration = 5; B.start = 0; B.duration = 5;
+      FM.scene.layers.push(A, B); FM.selectLayer(B.id);
+      if (FM.refreshAll) FM.refreshAll();
+      await frame(); await frame();
+      const sel = document.getElementById('t-sel');
+      if (!sel) return;                                  // classic layout has no cluster
+      if (!sel.classList.contains('has-sel')) return;    // cluster not active in this arrangement
+      const bg = getComputedStyle(sel).backgroundColor;
+      const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+      if (!m) throw new Error('could not read the cluster background: ' + bg);
+      const r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4];
+      /* "instead of being brighter than everything else make its lightly darker" — a WHITE wash over a
+         dark row is a raised panel; a black one is a recess. Asserted as "the wash is dark", not as an
+         exact value, so a later tweak to the strength does not fail this. */
+      if (a > 0.02 && (r + g + b) / 3 > 40) {
+        throw new Error('the cluster is washed with a LIGHT colour (rgb ' + r + ',' + g + ',' + b + ') — he asked for slightly darker, not brighter than everything else');
+      }
+      // the ink, not the boxes — the same class of fault as #209
+      const kids = Array.prototype.slice.call(sel.children).filter(function (k) { return k.getBoundingClientRect().width > 0; });
+      if (kids.length < 2) throw new Error('control failed: only ' + kids.length + ' button(s) in the cluster, so this proves little');
+      kids.forEach(function (btn) {
+        const br = btn.getBoundingClientRect(), svg = btn.querySelector('svg');
+        if (!svg) return;
+        let bb; try { bb = svg.getBBox(); } catch (e) { return; }
+        if (!bb || !bb.width) return;
+        const sr = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+        const sx = sr.width / vb.width, sy = sr.height / vb.height;
+        const dx = (sr.left + (bb.x - vb.x) * sx + bb.width * sx / 2) - (br.left + br.width / 2);
+        const dy = (sr.top + (bb.y - vb.y) * sy + bb.height * sy / 2) - (br.top + br.height / 2);
+        if (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25) {
+          throw new Error(btn.id + ' ink sits ' + dx.toFixed(2) + ',' + dy.toFixed(2) + 'px off its button centre');
+        }
+      });
+      // and the pill must not be taller than the buttons it holds
+      const tall = Math.round(sel.getBoundingClientRect().height) - Math.max.apply(null, kids.map(function (k) { return Math.round(k.getBoundingClientRect().height); }));
+      if (tall > 2) throw new Error('the ground is ' + tall + 'px taller than the icons inside it');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- queue 248: a "?" for the keyboard shortcuts ----------------
    * "Put a question mark in the top right corner to the left of note pad" and "On pc it can go on
    * the play button row along side everything else." Half already existed as #btn-help, desktop-only

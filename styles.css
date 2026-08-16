@@ -5475,11 +5475,17 @@ body.fm-pushing #toast { z-index: 213; }
    Padding sits on the group so the pill has air without changing any button's hit box — the buttons are
    34px either way, which the transport-fit test holds. */
 @media (min-width: 701px) {
+  /* DARKER THAN THE ROW, NOT LIGHTER (queue 251). Ezra: "make the backdrop more subtle, maybe instead
+     of being brighter than everything else make its lightly darker."
+     v7.89 lifted the group with a white wash, which reads as a RAISED panel — and next to a row whose
+     other controls have no resting box at all (v7.79, on his own instruction) the brightest thing in
+     the row ended up being a background. A dark wash recesses it instead: the group still reads as
+     separate, but by sitting back rather than by shouting. The inset hairline goes too — it was the
+     other half of the raised look, and a recess does not need an edge to be legible. */
   #t-sel.has-sel {
     padding: 0 5px; margin: 0 3px;
     border-radius: 11px;
-    background: rgba(255, 255, 255, .045);
-    box-shadow: inset 0 0 0 1px var(--line-soft);
+    background: rgba(0, 0, 0, .22);
   }
 }
 

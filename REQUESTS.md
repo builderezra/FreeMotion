@@ -1872,8 +1872,8 @@ better still, keep working inside the turn rather than parking work for a later 
       upward would push the menu off it. It measures the room on each side and takes the better one. On
       your layout that is always up.
 
-- [ ] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
-      aligned. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin
+- [x] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
+      aligned. DONE v8.32. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin
       in this photo, make the backdrop more subtle, maybe instead of being brighter than everything else
       make its lightly darker, and also it isnt centred and aligned so fix that"*.
       This is **`#t-sel.has-sel`, shipped in v7.89** for his own request #242 (*"make these three buttons
@@ -1887,6 +1887,17 @@ better still, keep working inside the turn rather than parking work for a later 
         line with 34–40px controls, so a wrapper with its own padding will not sit level by accident.
       Verify at a DESKTOP width (this is the PC layout, `min-width: 701px`), not at 380px, and compare
       the pill's box against a neighbouring button's box rather than eyeballing it.
+
+      **DONE v8.32 — and comparing the boxes, as that line says, is what corrected my own guess.**
+      · **Direction:** fixed. It was a WHITE wash at 4.5%, which over a dark row reads as a raised
+        panel — the brightest thing in a row whose other buttons have no resting box at all. It is a
+        dark wash now: still separate, but sitting back instead of shouting. The hairline went too.
+      · **"Isn't centred and aligned":** I logged this as "the pill is visibly taller than the icon row",
+        reading your screenshot. **That was wrong and the measurement says so** — the pill is exactly as
+        tall as its buttons (34px, 0 difference) and dead-centred against play (0px).
+        What was really wrong is the same thing as #209: **the bin's INK sat 0.4px low.** Its path runs
+        y 5→20, so the ink centre is 12.5 in a box centred on 12 — the identical arithmetic to the
+        magnifier, at the identical magnitude you spotted there. All three glyphs now measure 0.00.
 
 - [ ] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** His words:
       *"the slam easter egg on pc is competely broken now"* — told to me mid-task with *"dont let this
