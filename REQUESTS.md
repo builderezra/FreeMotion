@@ -1769,12 +1769,27 @@ better still, keep working inside the turn rather than parking work for a later 
       Fix direction: floor the SCALED size at 2 (a stripe needs two rows to be a stripe), or scale the
       threshold rather than the period so the effect degrades in contrast instead of collapsing.
 
-- [ ] **260 — Bug and issue hunt, plus ideas. (16 Aug.)** His words, verbatim: *"When you finish the last
+- [x] **260 — Bug and issue hunt, plus ideas. DONE 16 Aug — three real bugs found, filed as 261/262/263, plus 264.** His words, verbatim: *"When you finish the last
       thing, do a bug and issue hunt. Also look for potential ideas and things to do. when all is said
       and done, ill do what u need me to. Also pause so i can compact the chat."*
       Asked for straight after v8.39 shipped, so it jumps the queue by his own rule ("do this now").
       Anything the hunt finds gets its OWN numbered entry below rather than living inside this one —
       a hunt that files its findings into a single bullet is a hunt whose findings rot.
+
+      **DONE.** What was checked and found CLEAN, which is worth writing down so it is not re-checked
+      every session: all **197 effects** render without throwing, across four time points, on both text
+      and shape layers, at default parameters AND at every single-parameter extreme; there is no XSS
+      surface (every user string — font names, layer names — goes in through `textContent`, the
+      `innerHTML` calls are all icon constants, and imported fonts use the `FontFace` API with an
+      ArrayBuffer so there is no CSS-string injection either); keyframes and the service worker are
+      correct. Three real bugs came out: **261** (Halftone Lines goes solid black in a downscaled
+      preview), **262** (Hot Colour with Low ≥ High flattens the layer to one colour) and **263**
+      (Kaleidoscope's Centre sliders erase the layer at their ends). **264** is the sweep itself,
+      proposed as a permanent test.
+      *(Two of my own probes were dead assertions before I caught them — a baseline where the
+      background filled the frame, so "the layer vanished" could never fire; and a colour-count check
+      that cannot tell a broken flat layer from a flat test shape. Only findings that survived being
+      re-measured properly are listed above.)*
 
 - [x] **259 — Phone: make the trash icon red. DONE v8.37. (16 Aug, with a screenshot.)** His words, verbatim:
       *"Make the trash icon red."* Screenshot is the PHONE top bar — back · "Laurel" · version chip ·
