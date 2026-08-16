@@ -138,7 +138,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
   allowance), but it is explicitly NOT a verified fix for the observed restarts, and the comment at the
   site says so.
 
-### FLAKE: one desktop suite run in ~4 comes back 230/231, and the failing test is not yet identified
+### ~~FLAKE: one desktop suite run in ~4 comes back 230/231, and the failing test is not yet identified~~ — IDENTIFIED AND FIXED v8.91 (the voice-recorder rig built a fresh AudioContext per fake mic and closed it again; under load the next one had not produced a first quantum inside the 4s budget and the take came out empty. One shared context for the run, never closed. Four consecutive green suites after, against three ship-blocking failures in one night before.)
 
 `tests/_cdp.py`  · observed 2026-08-13 at v6.62
 

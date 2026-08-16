@@ -3799,8 +3799,15 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
-      *Progress 17 Aug:* a fifth struck off — **the zoomed preview never re-measuring after a stage
-      resize (v8.90)**, which is the one #284 named as "the same root cause, so fix both together rather
+      *Progress 17 Aug:* a **sixth** struck off — **the intermittent suite failure (v8.91)**, which the
+      file had listed for weeks as "the failing test is not yet identified". It is the voice-recorder
+      rig: it built a fresh `AudioContext` for every fake mic and closed it again on the way out, so
+      under a loaded run the next one had not produced its first quantum inside the 4s budget, the take
+      came out empty and the test reported a rejected mic. One shared context for the whole run, never
+      closed — the cap it was closing for is on LIVE contexts, and there is now only ever one.
+      Confirmed the way a flake has to be: **four consecutive green suites**, against three
+      ship-blocking failures in one night before it.
+      *And a fifth:* **the zoomed preview never re-measuring after a stage resize (v8.90)**, which is the one #284 named as "the same root cause, so fix both together rather
       than twice" and which I left open when I shipped that. It had been **attempted and reverted twice**
       before, both times because it was written around a ResizeObserver that fires in neither browser
       available here. It goes through the door #284 built instead — the resizers CALL the re-measure —

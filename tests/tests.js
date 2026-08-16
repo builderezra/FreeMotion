@@ -10344,10 +10344,24 @@
    * MediaStreamTrack going to readyState 'ended', not a mock remembering that it was asked to.
    * (The real getUserMedia path is covered separately by a headless run with
    * --use-fake-device-for-media-stream; that cannot live in this file without prompting.) */
-  function vrFakeMic() {
+  /* ONE AudioContext FOR THE WHOLE SUITE, not one per fake mic (the flake this test kept coming back
+     with). Each call used to construct a context and close it again on dispose, and a browser both caps
+     how many can be live at once — this file's own dispose note says iOS allows about four — and takes
+     its time producing a first quantum while an earlier one is still closing. Under a loaded run that
+     tipped past the 4s budget below and the take came out empty, which is what "the fake mic rejected:
+     the test tone never started" was. It cost two ship-blocking re-runs in one night.
+     Shared, resumed once and never closed, so the second and later mics start against a context that is
+     already running. The tone is per-mic still — only the clock is shared. */
+  var _vrCtx = null;
+  function vrCtx() {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) throw new Error('no AudioContext — this browser cannot run the voice-recorder tests at all');
-    var ctx = new AC();
+    if (!_vrCtx || _vrCtx.state === 'closed') _vrCtx = new AC();
+    return _vrCtx;
+  }
+
+  function vrFakeMic() {
+    var ctx = vrCtx();
     var osc = ctx.createOscillator(); osc.frequency.value = 220;
     var gain = ctx.createGain(); gain.gain.value = 0.4;
     var dest = ctx.createMediaStreamDestination();
@@ -10362,7 +10376,7 @@
         var t0 = Date.now();
         (function poll() {
           if (ctx.state === 'running' && ctx.currentTime > 0.02) return res();
-          if (Date.now() - t0 > 4000) return rej(new Error('the test tone never started (AudioContext state "' + ctx.state + '", currentTime ' + ctx.currentTime + ') — this browser will not run an AudioContext until the page has been clicked; click anywhere in the runner and re-run'));
+          if (Date.now() - t0 > 9000) return rej(new Error('the test tone never started (AudioContext state "' + ctx.state + '", currentTime ' + ctx.currentTime + ') — the context is shared and resumed, so this is the environment refusing to run audio at all rather than a slow start'));
           setTimeout(poll, 20);
         })();
       });
@@ -10373,7 +10387,11 @@
       dispose: function () {
         try { osc.stop(); } catch (e) {}
         try { dest.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
-        if (ctx.close) { try { ctx.close(); } catch (e) {} }   // iOS caps live contexts at about four
+        try { gain.disconnect(); } catch (e) {}
+        /* The context is NOT closed — it is shared for the run (see vrCtx). Closing it was the cause of
+           the flake, not a guard against one: the cap it was written for is on LIVE contexts, and this
+           rig now only ever has one. The tone and its tracks are stopped, which is what actually
+           releases the microphone this test is about. */
       },
     };
   }
