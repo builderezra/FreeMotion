@@ -3330,7 +3330,11 @@ body.hm-selecting .hm-card { touch-action: none; }
      (rate variation CV 0.545); linear stalls for 0.0% of it (CV 0.056).
      (The two layers' opacities already summed to a constant .032 — that falls out of the complementary
      keyframes and was true under the old easing too, so it is not what was wrong. The dwell was.)
-     .36s on top of that is genuinely faster — a field change roughly every 180ms. */
+     .36s on top of that is genuinely faster — a field change roughly every 180ms.
+     NOTE, so nobody tunes this one expecting the background to change: #hm-grain sets its own
+     durations further down (it runs a second animation this rule knows nothing about), so for the home
+     field THAT is the live number and this is only the shared default. Learned by editing this line for
+     queue 282 and measuring no change at all. */
   animation-duration: .36s;
   animation-timing-function: linear;   /* NOT ease-in-out — see above; the ease is what made it stop */
   animation-iteration-count: infinite;
@@ -3344,7 +3348,10 @@ body.hm-selecting .hm-card { touch-action: none; }
    up to .05 when this moved off the cards on the argument that a whole screen can carry more than a
    small bright panel, and with the grid gone that argument no longer holds up: at 4.8 repeats you are
    reading the grain itself rather than a pattern, and it does not need to be that loud to be felt. */
-#hm-grain { --hm-grain-alpha: .034; }
+/* …and .034 -> .022 (queue 282), the "more subtle" half of the same sentence. Faster grain reads as
+   STRONGER at the same alpha — more change per second is more for the eye to catch — so speeding it up
+   without softening it would have moved it further from what he asked for, not closer. */
+#hm-grain { --hm-grain-alpha: .022; }
 #hm-grain::before, #hm-grain::after { border-radius: 0; }   /* full bleed — it is the whole screen, not a card */
 /* IT HAS TO BOIL, NOT BREATHE (v7.95, queue 245). Ezra: "the film grain is seemingly still and not
    moving. It looks kind of cheap… it's okay to just have it fast moving like actual film grain on the
@@ -3359,8 +3366,14 @@ body.hm-selecting .hm-card { touch-action: none; }
    it read as fabric moving past a window rather than as grain, and the app's own filmgrain effect
    re-rolls per frame for the same reason ("static grain reads as dirt on the lens"). The two layers run
    at different rates and offsets so they cannot fall into step and re-create the A→B flicker. */
-#hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a, hm-boil-a; animation-duration: .36s, .5s; }
-#hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b, hm-boil-b; animation-duration: .36s, .62s; }
+/* FASTER (queue 282). Ezra, having watched what v7.95 shipped: "Film grain background needs to move
+   faster and be more subtle brw". Both numbers on each layer come down by the same factor, which keeps
+   the property the block above depends on: the two layers stay incommensurate (.31 against .38, as .5
+   against .62 was) so they cannot fall into step and re-create the A→B flicker this was written to
+   kill. The cross-fade at .22s changes the field about nine times a second — inside the range real
+   24fps grain flickers at, and past the point where the eye can follow one field. */
+#hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a, hm-boil-a; animation-duration: .22s, .31s; }
+#hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b, hm-boil-b; animation-duration: .22s, .38s; }
 @keyframes hm-boil-a {
   0%   { background-position:   0px   0px; }
   16%  { background-position: 137px  61px; }

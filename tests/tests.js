@@ -17426,6 +17426,38 @@
     }
   });
 
+  /* ---------------- queue 282: the film grain, faster and fainter ---------------- */
+
+  test('the home film grain runs fast and faint, and its two layers cannot fall into step (queue 282)', { item: 'home-grain' }, async function () {
+    /* "Film grain background needs to move faster and be more subtle brw" — after v7.95 got it moving
+     * at all. Both halves are asserted, plus the invariant the earlier fix depends on: the two layers
+     * step their offsets at DIFFERENT rates, and if those ever match they re-sync into the A→B flicker
+     * that "seemingly still" was about, which is easy to undo by tidying two numbers into one.
+     * Read off the computed style, not the stylesheet text, because the shared rule further up declares
+     * a duration for these same pseudo-elements that #hm-grain overrides — editing that one and
+     * measuring nothing is how this change started. */
+    const wasOpen = FM.home && FM.home.isOpen && FM.home.isOpen();
+    try {
+      if (FM.home && !wasOpen) FM.home.open();
+      await sleep(420);
+      const g = document.getElementById('hm-grain');
+      if (!g) throw new Error('#hm-grain is missing — the home grain field is no longer there to check');
+      const nums = str => str.split(',').map(function (x) { return parseFloat(x); });
+      const before = getComputedStyle(g, '::before'), after = getComputedStyle(g, '::after');
+      const alpha = parseFloat(getComputedStyle(g).getPropertyValue('--hm-grain-alpha'));
+      if (!(alpha > 0)) throw new Error('the grain alpha is ' + alpha + ' — the field is invisible, which is subtler than he meant');
+      if (!(alpha <= 0.028)) throw new Error('the grain is at ' + alpha + ' opacity — he asked for "more subtle" than the .034 it was');
+      const fade = nums(before.animationDuration)[0];
+      if (!(fade <= 0.30)) throw new Error('the grain cross-fades every ' + fade + 's — he asked for faster than the .36s it was');
+      const boilA = nums(after.animationDuration)[1], boilB = nums(before.animationDuration)[1];
+      if (!(boilA > 0 && boilB > 0)) throw new Error('one of the grain layers is not stepping its offset at all, so the field is back to two images alternating');
+      if (boilA === boilB) throw new Error('both grain layers step every ' + boilA + 's — running at the same rate they fall into step and the field reads as one static image breathing, which is the fault v7.95 fixed');
+    } finally {
+      if (FM.home && !wasOpen && FM.home.close) FM.home.close();
+      await sleep(200);
+    }
+  });
+
   /* ---------------- queue 281: the custom-elements card counted itself ---------------- */
 
   test('the Custom elements card does not show how many you have (queue 281)', { item: 'ce-count' }, async function () {

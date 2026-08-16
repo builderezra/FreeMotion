@@ -1851,10 +1851,23 @@ better still, keep working inside the turn rather than parking work for a later 
       the add-menu direction. If that is the direction he is trying, it is missing by design and needs
       its own pass.
 
-- [ ] **282 — Film grain: faster and more subtle. (16 Aug.)** His words, verbatim: *"Film grain
+- [x] **282 — Film grain: faster and more subtle. DONE v8.75.** (16 Aug.) His words, verbatim: *"Film grain
       background needs to move faster and be more subtle brw"*.
       This revisits #245 (v7.95), where he asked for it to move rather than sit still — it moves now,
       but the speed and strength are both wrong: **faster, and fainter.**
+
+      **DONE v8.75.** Cross-fade **.36s → .22s** (the field changes about nine times a second, since the
+      two layers alternate — inside the range real 24fps grain flickers at), the offset steps **.5s/.62s
+      → .31s/.38s**, and the strength **.034 → .022**.
+      Both numbers moved together on purpose: faster grain reads as STRONGER at the same alpha, because
+      there is more change per second for the eye to catch, so speeding it up without softening it would
+      have taken it further from what he asked for rather than closer.
+      The two layers stay **incommensurate** (.31 against .38, as .5 against .62 was) — that is what
+      stops them falling into step and re-creating the A→B flicker v7.95 existed to kill, and the suite
+      now asserts it, because it is exactly the kind of invariant someone tidies into one number.
+      **Worth recording, since it cost a measurement:** the shared `.hm-card / #hm-grain` rule further up
+      the stylesheet also declares `animation-duration`, and `#hm-grain` overrides it below. Editing the
+      shared one changes nothing on the home screen. There is a note on it now.
 
 - [x] **281 — Drop the element count from the custom elements section. DONE v8.74.** (16 Aug.) His words, verbatim:
       *"get rid of the number from the custom elements section that says how many elements you have"*.
