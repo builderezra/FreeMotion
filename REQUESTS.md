@@ -1909,13 +1909,37 @@ better still, keep working inside the turn rather than parking work for a later 
       subtle shading to the notepad button just so it looks a little bit more detailed just like some
       subtle shading is all I need. Nothing crazy."*
 
-- [ ] **271 — Elements menu: the colours are poor, random and too alike. (16 Aug.)** His words, verbatim:
+- [x] **271 — Elements menu: the colours are poor, random and too alike. DONE v8.61.** His words, verbatim:
       *"In the elements menu like how you have it now where the actual icon will be a vibrant colour but
       then the border will be a more dull version of itself like that's good but I think the colour
       choices are kind of poor and they kind of just like random and also similar to a lot of them. Null
       being red is good and you could make the custom elements button be multicoloured."*
       So: KEEP the vibrant-icon / dull-border treatment and keep Null red — the complaint is the palette
       itself, not the scheme. Custom elements → multicoloured.
+      **DONE v8.61 — and "random" was literally true.** The tab drew from an **eight**-hue list **cycled
+      by index** across **nine** cards. So a button's colour came from where it sat rather than from
+      what it does; the list itself held three blues (cyan, azure, indigo), two greens and two pinks —
+      your *"similar to a lot of them"*; and with 8 hues over 9 cards **the ninth card repeated the
+      first exactly**, because the list simply ran out.
+      Hues are assigned **by name** now, the way #210 already established for the buttons you named, and
+      picked to sit apart on the wheel: red 0° · amber 37° · lime 100° · mint 165° · azure 211° · violet
+      255° · magenta 312°. Where a card's own artwork already has a colour the plate agrees with it —
+      the pen is green, the vector path amber, the camera violet — so the tab reads as chosen rather
+      than assorted.
+      **Measured, because "more distinct" is a claim:** the closest pair among the vivid cards is now
+      **76.5** apart against **34.1** before (indigo vs azure — two blues you read as one colour), and
+      the exact duplicate is gone.
+      · **Null keeps precisely the colour it had** — you said it is good, so it is pinned rather than
+        re-picked, and the test fails if it stops being red.
+      · **Custom elements is multicoloured**: four marks, four hues. A CSS gradient cannot paint a
+        stroke — the same wall #267 and #270 hit — so the icon carries its own paint servers.
+      · **The scheme you said to keep is untouched:** vivid icon, faint plate.
+      *(Two neutrals sit close on purpose — Empty group and Custom elements are the quiet pair, at ~20%
+      saturation, told apart by their icons. They were briefly identical, which is the same complaint in
+      miniature, so they are a steel and a lilac-grey now.)*
+      The test asserts the QUALITIES rather than my hues — no two cards share a tint, the vivid ones stay
+      60 apart, Null is red, Custom is multicoloured — so tuning a colour later will not fail it, and it
+      would have caught the original defect.
 
 - [x] **270 — Media: the Import icon should be white with a gradient, not grey. DONE v8.60.** His words,
       verbatim: *"For the import button in the media section keep it all looking the same. I just want

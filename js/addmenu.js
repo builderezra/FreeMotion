@@ -224,7 +224,21 @@ window.FM = window.FM || {};
       var saved = (FM.elements ? FM.elements.list() : []) || [];
       base.push({
         label: saved.length ? 'Custom elements (' + saved.length + ')' : 'Custom elements',
-        icon: ico('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>'),
+        /* Four marks, four colours (queue 271). A CSS gradient cannot paint a stroke, so the icon
+           carries its own paint servers — the same reason #267 and #270 needed them. Each square gets
+           a hue from well apart on the wheel and the plus stays neutral, so it reads as "many things"
+           rather than as a fifth colour competing with them. */
+        icon: icoMulti(
+          '<defs>'
+          + '<linearGradient id="fm-ic-ce1" x1="3" y1="3" x2="10" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7FD4FF"/><stop offset="1" stop-color="#4F9BFF"/></linearGradient>'
+          + '<linearGradient id="fm-ic-ce2" x1="14" y1="3" x2="21" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFC86B"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient>'
+          + '<linearGradient id="fm-ic-ce3" x1="3" y1="14" x2="10" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9BE88A"/><stop offset="1" stop-color="#49C97E"/></linearGradient>'
+          + '<linearGradient id="fm-ic-ce4" x1="14" y1="14" x2="21" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5A8E4"/><stop offset="1" stop-color="#C86BFF"/></linearGradient>'
+          + '</defs>'
+          + '<rect x="3" y="3" width="7" height="7" rx="1.5" stroke="url(#fm-ic-ce1)"/>'
+          + '<rect x="14" y="3" width="7" height="7" rx="1.5" stroke="url(#fm-ic-ce2)"/>'
+          + '<rect x="3" y="14" width="7" height="7" rx="1.5" stroke="url(#fm-ic-ce3)"/>'
+          + '<path d="M17.5 14v7M14 17.5h7" stroke="url(#fm-ic-ce4)"/>'),
         add: function () {
           if (FM.elementsBrowser) FM.elementsBrowser.open();
           else if (FM.toast) FM.toast('Elements browser unavailable');
@@ -721,6 +735,33 @@ window.FM = window.FM || {};
     'Record voice…': '235, 70, 70',      // "a strong red"
     'Record voice': '235, 70, 70',
     'Sample clip': 'PINKBLUE',           // "a pinky red colour and blue gradient"
+
+    /* THE ELEMENTS TAB, BY NAME (queue 271). Ezra: "I think the colour choices are kind of poor and
+       they kind of just like random and also similar to a lot of them. Null being red is good and you
+       could make the custom elements button be multicoloured."
+       Both halves of that are one cause. The tab was drawing from an eight-hue list CYCLED BY INDEX
+       across nine cards, so a colour meant nothing except where a button happened to sit — "random" is
+       the exact word for it — and the list itself held three blues (cyan, azure, indigo), two greens
+       and two pinks, which is the "similar to a lot of them".
+       So the hues are assigned BY NAME, the way #210 already established for the buttons he called out,
+       and chosen to sit apart on the wheel rather than near each other. Roughly: red 0°, amber 38°,
+       lime 96°, mint 166°, azure 212°, violet 258°, magenta 310° — nothing within 38° of its neighbour.
+       Where a card's own artwork already has a colour, the plate agrees with it (the pen is green, the
+       vector path is amber, the camera is violet) so the tab reads as deliberate instead of assorted.
+       NULL KEEPS EXACTLY THE COLOUR IT HAS — he said it is good, so it is pinned rather than re-picked.
+       The SCHEME is untouched: vivid icon, faint plate, which is the part he said to keep. */
+    'Text': '79, 163, 255',              // azure — the writing tool
+    'Captions': '236, 122, 214',         // magenta — speech, deliberately far from Text
+    'Freehand Drawing': '150, 230, 110', // lime, matching its green pen
+    'Vector Drawing': '255, 186, 74',    // amber, matching its orange path
+    'Camera': '156, 124, 255',           // violet, matching its lens
+    'Null': '255, 118, 140',             // "Null being red is good" — the value it already had, pinned
+    'Adjustment': '84, 226, 190',        // mint
+    'Empty group': '150, 165, 190',      // steel — a container, deliberately the quiet one
+    'Custom elements': 'MULTI',          // "you could make the custom elements button be multicoloured"
+    /* Empty group and Custom elements are the two quiet ones, and giving them the same neutral put two
+       identical plates side by side — the "similar to a lot of them" complaint in miniature. They are a
+       steel and a lilac-grey now: still both quiet, still clearly two things. */
   };
 
   /* Elements: "choose more subtle background colours, the main icon can stay bright but the backdrop
@@ -771,6 +812,11 @@ window.FM = window.FM || {};
        --am-tint still carries a representative hue so the ICON and the border have something sane. */
     if (tint === 'RAINBOW') { b.classList.add('addmenu-card--rainbow'); tint = '255, 138, 61'; }
     else if (tint === 'PINKBLUE') { b.classList.add('addmenu-card--pinkblue'); tint = '255, 99, 158'; }
+    /* MULTI is Elements' own multicoloured card and is NOT the Sound-effects rainbow: that one paints
+       a full rainbow PLATE, and this tab's plates are deliberately faint (#258 — "the background for
+       each option more faint… make the icons pop"). Here the colour is in the ICON, which is the
+       treatment he said was right, and the plate keeps a quiet steel so the family holds. */
+    else if (tint === 'MULTI') { b.classList.add('addmenu-card--multi'); tint = '172, 158, 196'; }
     if (tint) b.style.setProperty('--am-tint', tint);
     var hidden = item.mid && demo();
     var label = hidden ? (item.kind === 'video' ? 'Video' : item.kind === 'audio' ? 'Audio' : 'Photo') : item.label;
@@ -927,7 +973,11 @@ window.FM = window.FM || {};
              carrying its own thumb, which is #210's last clause word for word: "it shouldn't even
              colour it should show the hero image of whatever the template is (still keeping the
              text)". A template with no thumb keeps its colour and its glyph. */
-          var tint = (o.mid || o.thumb) ? null : (BY_LABEL[o.label] || pal[idx % pal.length]);
+          /* Custom elements renames itself to "Custom elements (3)" as you save them, so an exact
+             label lookup silently drops back to the index palette the moment you have one. */
+          var byName = BY_LABEL[o.label]
+            || (o.label && o.label.indexOf('Custom elements') === 0 ? BY_LABEL['Custom elements'] : null);
+          var tint = (o.mid || o.thumb) ? null : (byName || pal[idx % pal.length]);
           // Elements gets the quieter plate (queue 210) — his "backdrop more subtle", applied per
           // TAB rather than per card so the whole tab reads as one family.
           var soft = tab.key === 'object' ? ' addmenu-card--soft' : '';

@@ -17145,6 +17145,72 @@
     } finally { host.remove(); }
   });
 
+  /* ---------------- queue 271: the Elements colours were random and too alike ----------------
+   * "I think the colour choices are kind of poor and they kind of just like random and also similar to
+   * a lot of them. Null being red is good and you could make the custom elements button be
+   * multicoloured." The SCHEME — vivid icon, faint plate — is the part he said to keep.
+   * One cause behind both complaints: the tab drew from an eight-hue list CYCLED BY INDEX across nine
+   * cards, so a colour meant nothing but position ("random"), the list held three blues, two greens
+   * and two pinks ("similar"), and with 8 hues for 9 cards the ninth repeated the first exactly.
+   * This asserts the QUALITIES he asked for rather than my particular hues — a test that hard-coded the
+   * palette would fail the next time anyone tunes a colour, and would not have caught the original bug. */
+
+  test('Elements colours are assigned by name, distinct, and Null stays red (queue 271)', { item: 'elem-palette' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:460px;height:640px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      const tab = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === 'Elements');
+      if (!tab) throw new Error('no Elements tab');
+      tab.click();
+      await sleep(200);
+      const cards = [...host.querySelectorAll('.addmenu-card')].filter(c => c.querySelector('.addmenu-lbl'));
+      if (cards.length < 8) throw new Error('only ' + cards.length + ' Elements cards rendered — not enough to judge a palette');
+      const rgb = c => { const t = c.style.getPropertyValue('--am-tint'); return t ? t.split(',').map(n => parseInt(n, 10)) : null; };
+      const label = c => c.querySelector('.addmenu-lbl').textContent.trim();
+      const sat = c => { const mx = Math.max.apply(null, c), mn = Math.min.apply(null, c); return mx ? (mx - mn) / mx : 0; };
+
+      /* NO TWO CARDS SHARE A COLOUR. The old list cycled 8 hues over 9 cards, so two were identical —
+         which is the clearest form of "random": the ninth card's colour came from running out. */
+      const seen = new Map();
+      cards.forEach(c => {
+        const t = c.style.getPropertyValue('--am-tint');
+        if (!t) return;
+        if (seen.has(t)) throw new Error('"' + label(c) + '" and "' + seen.get(t) + '" have the identical tint ' + t);
+        seen.set(t, label(c));
+      });
+
+      /* THE VIVID ONES MUST BE FAR APART. Measured on the old palette its closest pair was 34 (indigo
+         vs azure) — two blues a person reads as the same colour. 60 is comfortably past that and still
+         leaves room to tune a hue without tripping this. The quiet neutrals are excluded on purpose:
+         being alike is what makes them quiet, and their icons tell them apart. */
+      const vivid = cards.map(c => ({ n: label(c), c: rgb(c) })).filter(x => x.c && sat(x.c) > 0.30);
+      if (vivid.length < 5) throw new Error('only ' + vivid.length + ' vivid cards — the tab has gone flat');
+      for (let i = 0; i < vivid.length; i++) for (let j = i + 1; j < vivid.length; j++) {
+        const a = vivid[i], b = vivid[j];
+        const d = Math.hypot(a.c[0] - b.c[0], a.c[1] - b.c[1], a.c[2] - b.c[2]);
+        if (d < 60) throw new Error('"' + a.n + '" and "' + b.n + '" are ' + d.toFixed(0) + ' apart — close enough to read as the same colour');
+      }
+
+      /* "Null being red is good" — pinned, so a future repaint cannot quietly take it. */
+      const nul = cards.find(c => label(c) === 'Null');
+      if (!nul) throw new Error('no Null card');
+      const nc = rgb(nul);
+      if (!nc || !(nc[0] > nc[1] + 60 && nc[0] > nc[2] + 60)) throw new Error('Null is ' + nc + ' — he said its red is good and it is no longer red');
+
+      /* "you could make the custom elements button be multicoloured" */
+      const ce = cards.find(c => /^Custom elements/.test(label(c)));
+      if (!ce) throw new Error('no Custom elements card');
+      if (!ce.classList.contains('addmenu-card--multi')) throw new Error('Custom elements is not marked multicoloured');
+      const grads = ce.querySelectorAll('linearGradient');
+      if (grads.length < 3) throw new Error('the Custom elements icon has ' + grads.length + ' gradient(s) — that is not multicoloured');
+      const cols = new Set();
+      ce.querySelectorAll('stop').forEach(st => cols.add((st.getAttribute('stop-color') || '').toLowerCase()));
+      if (cols.size < 4) throw new Error('the Custom elements icon uses ' + cols.size + ' distinct colours');
+    } finally { host.remove(); }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
