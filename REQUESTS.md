@@ -1759,8 +1759,8 @@ better still, keep working inside the turn rather than parking work for a later 
       **Do NOT just make it slower everywhere** — the same control has to cross 1–100000% on the speed
       row (#184), and a uniformly fine rate makes that untraversable. Whatever lands must serve both.
 
-- [ ] **252 — PC: the settings cog does not open the way he traced, and the menu should not need
-      scrolling. (16 Aug, with a traced screenshot.)** His words: *"the way i said the settings cog to
+- [x] **252 — PC: the settings cog does not open the way he traced, and the menu should not need
+      scrolling. DONE v8.11 (all three clauses). (16 Aug, with a traced screenshot.)** His words: *"the way i said the settings cog to
       open up does not open up like how i showed, look at my screenshot and replicate it. you dont have
       to follow the sizing strictly as i want it to all fit on screen nicely"* and *"so you dont have to
       scroll through the menu"*.
@@ -1783,6 +1783,20 @@ better still, keep working inside the turn rather than parking work for a later 
       **THIRD CLAUSE, added by him while this was being built:** *"Also when youre doing the cog menu
       rework, make it so you press anywhere on the screen out side of it it wil close the menu."* So
       tapping the backdrop closes it — same as Cancel, i.e. without applying.
+
+      **DONE v8.11 — all three clauses, ticked one at a time:**
+      1. ✅ **Opens into the space you traced.** At 1440×900 the card needed **473px** and was given
+         **206** — it hung downward from a cog that sits low on the transport row, into the scraps —
+         while **634px sat empty above it**. It now anchors by its bottom edge and grows upward.
+      2. ✅ **No scrolling.** Everything is visible at once; the test asserts `scrollHeight` does not
+         exceed `clientHeight`, rather than asserting a height, because you released the sizing and a
+         height check would break the next time a row is added.
+      3. ✅ **Tap outside closes it** — backdrop only, on pointerdown, and **without applying**, so a
+         stray tap can never silently resize your project. There is a test for exactly that.
+      **One thing I did NOT do, deliberately: it is not "always upward".** That would just be the old
+      bug mirrored — in the other desktop layout the cog rides near the TOP of the screen and opening
+      upward would push the menu off it. It measures the room on each side and takes the better one. On
+      your layout that is always up.
 
 - [ ] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
       aligned. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin
