@@ -228,6 +228,32 @@ window.FM = window.FM || {};
    * Copy feeds every Paste. It also keeps the localStorage backing the panel buttons never had — the
    * in-memory one died on every reload, and copying a look from one project into another is exactly
    * the case where you close and reopen something. */
+  /* ---- Saved effect lists are UNTRUSTED input too (queue 218) ---------------------------------
+   * The effect clipboard, the effect presets and the layer presets all live in localStorage and all
+   * rebuild layer.effects from whatever they find there. Every one of them checked only that the
+   * effect's NAME was real and then took the values on trust — so a hand-edited or corrupted store
+   * reached the renderer with whatever parameters it liked.
+   * They go through the same sanitiser the import path uses now, rather than a second, weaker set of
+   * checks that would drift from it. It rebuilds each effect from the registry's own schema, so this
+   * is not "validate a few fields" — an effect that does not survive it is not landed at all.
+   * This mattered less when an effect was a flat bag of numbers. #113's filters make it a CONTAINER
+   * with children, so an unchecked list is now a way to smuggle in a nested structure nothing has
+   * ever looked at. */
+  function sanitizeFxList(list) {
+    const arr = (Array.isArray(list) ? list : []).filter(Boolean);
+    if (!arr.length) return [];
+    /* FAIL CLOSED. The first cut returned the list unchecked when the sanitiser was missing, which is
+       the wrong way round: the one situation where validation is unavailable is exactly the situation
+       where unvalidated data should not reach the renderer. storage.js is a hard dependency loaded
+       before this file, so in practice this never fires — and if it ever does, an empty clipboard is
+       a far better outcome than an unchecked one. */
+    if (!(FM.storage && FM.storage._sanitizeEffects)) return [];
+    const holder = { effects: arr };
+    try { FM.storage._sanitizeEffects(holder); } catch (e) { return []; }
+    return Array.isArray(holder.effects) ? holder.effects : [];
+  }
+  FM._sanitizeFxList = sanitizeFxList;   // read by the suite
+
   FM.fxClipboard = {
     _key: 'fm.fxclip',
     // Accepts one effect or an array of them.
@@ -249,7 +275,9 @@ window.FM = window.FM || {};
         const list = Array.isArray(raw) ? raw : [raw];
         // A type that no longer exists (older build, renamed effect) would paste a row that renders
         // nothing and cannot be edited — drop those rather than land them.
-        return list.filter(fx => fx && fx.type && FM.fxRegistry.get(fx.type));
+        // Name-checked AND value-checked (queue 218): the registry test below only ever proved the
+        // effect exists, never that its parameters were sane.
+        return sanitizeFxList(list.filter(fx => fx && fx.type && FM.fxRegistry.get(fx.type)));
       } catch (e) { return []; }
     },
     count() { return this.read().length; },
@@ -324,7 +352,7 @@ window.FM = window.FM || {};
       const p = this.list().find(x => x.name === name);
       if (!p || !layer) return;
       const d = p.data;
-      layer.effects = clone(d.effects) || [];
+      layer.effects = sanitizeFxList(clone(d.effects) || []);   // queue 218 — a saved preset is untrusted too
       if (d.fill != null && layer.type === 'shape') layer.fill = d.fill;
       if (d.fillMode != null && (layer.type === 'shape' || layer.type === 'text')) layer.fillMode = d.fillMode;
       if (d.fillOpacity != null) layer.fillOpacity = d.fillOpacity;

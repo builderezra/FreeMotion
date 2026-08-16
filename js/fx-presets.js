@@ -189,6 +189,9 @@ window.FM = window.FM || {};
      * preset predates get their schema defaults), overlays the preset, shifts kf to atTime. */
     makeInstance: function (preset, atTime) {
       const inst = FM.fxRegistry.makeInstance(preset.fx); if (!inst) return null;
+      /* The instance starts from the registry's own defaults, but every param below is copied out of
+         localStorage — so the finished object is only as trustworthy as that store (queue 218). It
+         goes through the shared sanitiser at the end of this function, not a second set of checks. */
       const t0 = Number.isFinite(atTime) ? atTime : 0;
       Object.keys(preset.params).forEach(key => {
         if (!(key in inst.params)) return;
@@ -196,6 +199,9 @@ window.FM = window.FM || {};
         if (v && typeof v === 'object' && Array.isArray(v.kf)) v.kf.forEach(k => { k.t = (k.t || 0) + t0; });
         inst.params[key] = v;
       });
+      // Value-checked, not just name-checked (queue 218). Returns null rather than an effect the
+      // sanitiser threw out — landing a half-rebuilt one would be worse than not landing it.
+      if (FM._sanitizeFxList) { const out = FM._sanitizeFxList([inst]); return out.length ? out[0] : null; }
       return inst;
     },
 

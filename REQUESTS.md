@@ -1721,6 +1721,22 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **256 — The microphone test is STILL flaky, after #226 was marked fixed at v7.98. (16 Aug.)**
+      *(Found by me, twice in one day.)* `voice: the microphone is handed back on EVERY exit path` failed
+      with **"timed out waiting for the mic to be acquired"** during a mutation run, and again during the
+      v8.24 ship — where it did real damage, because `tools/ship.sh` correctly refused to push a green
+      change on the strength of a red suite. Re-running immediately came back 413/413.
+      **Why this matters more than one flaky test:** a red run that means nothing is worse than no test.
+      It trains you to re-run and shrug, which is exactly how a real regression gets waved through — and
+      it now actively blocks shipping, since the release gate reads the suite and believes it.
+      **v7.98 fixed a DIFFERENT flake in the same test** — it replaced a fixed wait with one that waits
+      on the real signal. This is the acquisition step timing out, not the release step, so it is a
+      second cause rather than the first one returning. Do not assume the v7.98 note covers it.
+      Next pass: find what the test waits on to decide the mic was acquired, and whether that signal can
+      simply be late under load (both failures happened while a mutation run had a second Chrome busy on
+      the same machine) rather than absent. If it is lateness, the wait needs to be on the signal with a
+      generous ceiling, not a race against a timer.
+
 - [x] **255 — The settings cog rotates once and never again until you refresh. DONE v8.16.** His words,
       verbatim: *"the setttings cog rotates once but never again until you refresh, prolly coz it doesnt
       un rotate"*.
@@ -4202,7 +4218,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       and easier than an effect thumbnail in one way, since a filter's settings are already chosen, so
       none of the per-effect preview tuning applies. Static tiles, not animated: 16 animated previews on
       a phone is not worth what it costs.
-- [ ] **217 — Most ways of getting a layer into the app skip the safety checks.** *(Found by me on
+- [x] **217 — Most ways of getting a layer into the app skip the safety checks.** *(Found by me on
       14 Aug while doing #113 step 1 — not something you reported.)* There is a function that rebuilds an
       imported layer's audio effects, masks, behaviours and camera from a known-good schema, so a corrupt
       or hand-edited project file can't reach the renderer. It has exactly ONE caller: importing a
@@ -4212,11 +4228,35 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       Not urgent and nothing you'd see today; the reason to fix it is that #113's filters make
       `layer.effects` a nested structure, and "which paths validate" stops being an academic question the
       moment a container can arrive through one that doesn't.
-- [ ] **218 — Three saved lists write straight into a layer's effects with almost no checking.** *(Also
+
+      **DONE v8.24, and fixed structurally rather than by adding three more calls.** `reIdLayers` is the
+      gate every batch of foreign layers already comes through — importing, template use, template
+      insert, element insert, duplicate — and re-iding them is not optional, so the sanitising lives
+      there. A future way of bringing layers in cannot forget. Running it twice on the import path is
+      harmless: the sanitisers rebuild from a schema, so they are idempotent.
+      **The control assertion is the important one** — a sanitiser that ate good data would be worse
+      than the hole — so a real Luma Matte is tested to keep its cross-layer `params.source` and a real
+      `follow` behaviour to keep its `targetId`, both remapped.
+      *(Switching it on immediately reddened an existing test, and the FIXTURE was wrong, not the code:
+      it built a `follow` with no `prop`, a channel the app never omits, so the sanitiser correctly threw
+      it out. Checked that a realistic one survives before touching the test.)*
+      **Still not covered, deliberately and as before: the autosave load.** It checks effects only, and
+      its own comment says why — rewriting audioFx, masks and behaviours across every project already on
+      your disk is a migration, not a patch. Unchanged here.
+- [x] **218 — Three saved lists write straight into a layer's effects with almost no checking.** *(Also
       found on 14 Aug.)* The effect clipboard, the effect presets and the layer presets all live in
       localStorage and all rebuild `layer.effects` from what they find there, checking only that the
       effect NAME is real — never the values. Same story as #217: harmless-ish today, genuinely not once a
       filter is a container with children inside it. Worth folding into the same pass as #217.
+
+      **DONE v8.24, in the same pass as #217 as this entry asked.** The clipboard, the effect presets
+      and the layer presets all go through the **same** sanitiser the import path uses — not a second,
+      weaker set of checks that would drift from it. It rebuilds each effect from the registry's own
+      schema, so an effect that does not survive is not landed at all.
+      *(A security review of the change caught one thing: the shared helper **failed open** if the
+      sanitiser was unavailable, returning the list unchecked. That is the wrong way round — the one
+      moment validation cannot run is the moment unvalidated data must not reach the renderer. It fails
+      closed now.)*
 - [x] **213 — The + at the bottom of the home screen needs a bigger HIT BOX, not a bigger button. DONE v8.21.** His
       words: *"Make it so the button on the bottom of the screen has a larger hit box, don't make it
       bigger but larger hit box cos I keep accidentally opening projects."*

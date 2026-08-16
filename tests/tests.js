@@ -2268,7 +2268,12 @@
     const matte = FM.makeLayer('shape', { shape: 'rect', name: 'Matte', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#fff' });
     const subject = FM.makeLayer('shape', { shape: 'rect', name: 'Subject', x: 60, y: 60, shapeW: 80, shapeH: 80, fill: '#f00' });
     subject.effects = [{ type: 'lumamatte', enabled: true, params: { source: matte.id } }];
-    subject.behaviors = [{ type: 'follow', params: { targetId: matte.id } }];
+    /* `prop` is not optional: a behaviour names the transform channel it drives, and the app never
+       makes one without it. This fixture went without until v8.24 and got away with it because
+       reIdLayers did no validation at all — once it started sanitising (queue 217), the incomplete
+       behaviour was correctly thrown out and this test failed. The fixture was wrong, not the
+       sanitiser: verified that a `follow` WITH a prop survives with its targetId intact. */
+    subject.behaviors = [{ type: 'follow', prop: 'x', params: { targetId: matte.id } }];
     const res = FM.storage._reIdLayers([matte, subject]);
     const out = res.layers;
     const newMatte = out.find(l => l.name === 'Matte'), newSubject = out.find(l => l.name === 'Subject');
@@ -14892,6 +14897,75 @@
     if (layer.effects.length !== 1 || layer.effects[0].params.amount !== 1.5) {
       throw new Error('a missing registry destroyed the effect stack — one 404 would wipe every effect in every project');
     }
+  });
+
+  /* ---------------- queue 217 + 218: every way in gets checked ----------------
+   * There is one function that rebuilds an imported layer from a known-good schema, and it used to
+   * have exactly ONE caller: importing a .fmotion.json. Inserting a template, inserting an element
+   * and duplicating a project all handed the renderer whatever was in the file — as did the three
+   * saved effect lists in localStorage, which checked that an effect's NAME was real and took its
+   * values on trust. Both matter more since #113 made an effect a CONTAINER with children. */
+
+  test('foreign layers are sanitised however they arrive, not just on import', { item: 'sanitise-paths' }, function () {
+    if (!FM.storage || !FM.storage._reIdLayers) throw new Error('_reIdLayers is not exposed');
+    // reIdLayers is the gate EVERY batch of foreign layers comes through — import, template use,
+    // template insert, element insert, project duplicate. Sanitising there is what makes it
+    // structural: a new route cannot forget, because re-iding is not optional.
+    const junk = {
+      id: 'x1', type: 'shape', shape: 'rect', name: 'Junk',
+      effects: [{ type: 'not-a-real-effect', params: { anything: 1 } }],
+      behaviors: [{ type: 'not-a-real-behaviour', prop: 'x', params: {} }],
+      fillImage: 'javascript:alert(1)',
+      labelColor: 'url(http://evil/x)',
+      fillGradient: { c0: 'url(http://evil/y)', c1: '#000000', angle: 99999, type: 'expression' },
+    };
+    const out = FM.storage._reIdLayers([junk]).layers[0];
+    if ((out.effects || []).length) throw new Error('an unknown effect type survived: ' + JSON.stringify(out.effects));
+    if ((out.behaviors || []).length) throw new Error('an unknown behaviour type survived');
+    if (out.fillImage) throw new Error('a javascript: fillImage survived — it is interpolated into the canvas');
+    if (out.labelColor) throw new Error('a url() labelColor survived');
+    if (out.fillGradient.c0 !== '#3a7bd5') throw new Error('a url() gradient colour survived: ' + out.fillGradient.c0);
+    if (out.fillGradient.angle > 360) throw new Error('the gradient angle was not clamped: ' + out.fillGradient.angle);
+    if (out.fillGradient.type !== 'linear') throw new Error('an unknown gradient type survived: ' + out.fillGradient.type);
+  });
+
+  test('a real layer still survives the trip intact', { item: 'sanitise-paths' }, function () {
+    /* The control, and the one that matters most: a sanitiser that eats good data would be a far
+       worse bug than the hole it closes. A duplicated project must keep its effects, its behaviours
+       and its cross-layer references. */
+    const matte = FM.makeLayer('shape', { shape: 'rect', name: 'M', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+    const subj = FM.makeLayer('shape', { shape: 'rect', name: 'S', x: 20, y: 20, shapeW: 30, shapeH: 30, fill: '#f00' });
+    subj.effects = [{ type: 'lumamatte', enabled: true, params: { source: matte.id, feather: 3 } }];
+    subj.behaviors = [{ type: 'follow', prop: 'x', params: { targetId: matte.id } }];
+    const res = FM.storage._reIdLayers([matte, subj]);
+    const s2 = res.layers.find(function (l) { return l.name === 'S'; });
+    const m2 = res.layers.find(function (l) { return l.name === 'M'; });
+    if (!(s2.effects || []).length) throw new Error('a real luma matte was thrown away by the sanitiser');
+    if (s2.effects[0].params.source !== m2.id) throw new Error('the effect lost its cross-layer reference: ' + s2.effects[0].params.source);
+    if (!(s2.behaviors || []).length) throw new Error('a real follow behaviour was thrown away');
+    if (s2.behaviors[0].params.targetId !== m2.id) throw new Error('the behaviour lost its target');
+  });
+
+  test('the saved effect lists check values, not just names', { item: 'sanitise-paths' }, function () {
+    // queue 218. All three read from localStorage and rebuilt layer.effects from it; all three only
+    // ever asked whether the effect's NAME existed.
+    if (typeof FM._sanitizeFxList !== 'function') throw new Error('the shared list sanitiser is not exposed');
+    const cleaned = FM._sanitizeFxList([
+      { type: 'blur', params: { radius: 6 } },                      // good, keep
+      { type: 'definitely-not-an-effect', params: { x: 1 } },       // bad name, drop
+      null, 7, 'nonsense',                                          // junk, drop
+    ]);
+    const types = cleaned.map(function (f) { return f && f.type; });
+    if (types.indexOf('definitely-not-an-effect') >= 0) throw new Error('an unknown effect type survived the clipboard');
+    if (types.indexOf('blur') < 0) throw new Error('a perfectly good blur was thrown away: ' + JSON.stringify(types));
+    if (cleaned.length !== 1) throw new Error('expected exactly the one good effect, got ' + cleaned.length);
+    // …and the clipboard itself must go through it
+    const key = 'fm.fxclip', keep = localStorage.getItem(key);
+    try {
+      localStorage.setItem(key, JSON.stringify([{ type: 'blur', params: { radius: 6 } }, { type: 'made-up', params: {} }]));
+      const read = FM.fxClipboard.read();
+      if (read.some(function (f) { return f.type === 'made-up'; })) throw new Error('the clipboard pasted an effect that does not exist');
+    } finally { if (keep == null) localStorage.removeItem(key); else localStorage.setItem(key, keep); }
   });
 
   /* ---------------- queue 216: audio-only export ----------------

@@ -659,6 +659,8 @@ window.FM = window.FM || {};
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
   // re-implementation of it in the test (which would only ever agree with itself).
   FM.storage._sanitizeEffects = sanitizeEffects;
+  FM.storage._sanitizeLayers = sanitizeImportedLayers;   // read by the suite, and by history.restore
+  FM.storage._reIdLayers = reIdLayers;
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
@@ -730,9 +732,20 @@ window.FM = window.FM || {};
 
   // Deep-clone layers and re-id them (fresh ids + parent remap) so inserting a pack twice — or
   // into a project that already has those ids — can never collide with existing layers/media.
+  /* SANITISE HERE, not at each call site (queue 217). reIdLayers is the gate every batch of FOREIGN
+   * layers comes through — importing a project file, inserting a template, inserting an element,
+   * duplicating a project — and until now only ONE of those four also called
+   * sanitizeImportedLayers. The other three handed the renderer whatever was in the file.
+   * Putting it here makes it structural: a new way of bringing layers in cannot forget, because
+   * re-iding them is not optional and this is where that happens. Running it twice on the import
+   * path is harmless — the sanitisers rebuild from a known schema, so they are idempotent — and a
+   * duplicated call is a far cheaper mistake than a missed one.
+   * It matters more than it did: #113's filters make layer.effects a NESTED structure, so "which
+   * paths validate" stops being academic the moment a container can arrive through one that does not. */
   function reIdLayers(layers) {
     const map = Object.create(null);   // null-proto: an imported layer.parent of 'constructor' would otherwise "remap" to a prototype function
     const out = JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
+    sanitizeImportedLayers(out);
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
     // Behaviors carry CROSS-LAYER id refs (follow.targetId, audio.sourceId). Remap them through the same

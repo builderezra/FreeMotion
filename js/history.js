@@ -19,6 +19,12 @@ window.FM = window.FM || {};
 
   function restore(str) {
     const s = JSON.parse(str);
+    /* Undo restores from a snapshot we wrote ourselves, so this is belt-and-braces rather than a
+       defence against a hostile file (queue 217). It earns its place anyway: snapshots are strings
+       that have been through localStorage, the sanitisers are idempotent and cheap, and undo is the
+       one path that can put a layer back AFTER the app has already decided it was malformed —
+       without this, "undo" could resurrect exactly the shape an import had just rejected. */
+    if (FM.storage && FM.storage._sanitizeLayers) { try { FM.storage._sanitizeLayers(s.layers); } catch (e) {} }
     suppress = true;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
