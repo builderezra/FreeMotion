@@ -4368,6 +4368,22 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **So the work here is to fix three TESTS, not the app** — their assumptions were written when
       classic was the only layout the suite ever ran in. Much smaller, and a completely different job
       from the one I first wrote down.
+
+      **TWO OF THE THREE ARE FIXED — v8.38. One remains, and it is now instrumented.**
+      · **align buttons** — required to be over 80px tall, a number from when classic's tall column was
+        the only desktop layout. Studio's inspector is a 264px band shared with the timeline, so three
+        buttons that FILL it measure ~43px. Your claim was "fill up the whole section", which the
+        gap-to-the-bottom check already measures; the height line now only rules out the phone strip.
+      · **side-column dock** — skips under studio. Studio has no side column by design; a test
+        insisting on a layout that no longer has to exist is not a defect report.
+      · **Aa popover — STILL RED, and the numbers say it is not a studio problem at all:**
+        `canvas 186×330 at y=14 | popover 560×347 at y=16 | window 900×760`. The popover opens UPWARD
+        from the card, and in a 760px-tall window a 347px popover cannot help but reach back over a
+        canvas that starts at y=14. **That is a SHORT-WINDOW geometry problem** — it would bite classic
+        too at the same height; classic simply happens to place the canvas where it currently misses.
+        Next step is a popover that flips or clamps when the space above the card is smaller than it is.
+      So: **one real fix away from studio being the only desktop layout**, and it is a popover placement
+      rule rather than anything to do with layouts.
       **Not started at the tail of a long session, deliberately** — the same call that was made for #244,
       which then built cleanly in one go. The measurements above mean the next session builds instead of
       re-deriving. #147 should be RE-OPENED as part of it: it is done for the layout you are not using.
