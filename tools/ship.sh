@@ -11,6 +11,13 @@
 set -uo pipefail
 MSG="${1:-}"
 [ -n "$MSG" ] || { echo "ship: needs a commit message"; exit 2; }
+# Backticks in a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. A message
+# written with `void ic.offsetWidth` in it silently executed that and committed the gap where the
+# code should have been — the explanation was gone from the log and nobody would have noticed.
+case "$MSG" in
+  *'`'*) echo "❌ the commit message contains a backtick, which the shell will execute and delete."
+         echo "   Use plain quotes for code, or pass the message via: git commit -F -"; exit 2;;
+esac
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
 
 # Anchored to the LABEL element, not the first version-shaped string in the file — a bare grep
