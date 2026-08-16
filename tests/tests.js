@@ -14899,6 +14899,31 @@
     }
   });
 
+  test('the version number appears exactly once on a phone', { item: 'one-version' }, async function () {
+    /* queue 221. At v7.56 the build number was on screen TWICE at phone width — once in the desktop
+       top bar beside the FreeMotion name and again as a small label near Export. It does not
+       reproduce now: the desktop #topbar is display:none on a phone, which takes `.brand .ver` with
+       it, so only `.m-ver` shows. Verified rather than assumed, then locked down here — two version
+       labels disagreeing after a partial update is exactly the confusion the tap-to-force-update
+       label exists to prevent, and this is a cosmetic bug that a future layout change could quietly
+       reintroduce with nothing to catch it. */
+    return atPhoneWidth(async function () {
+      const shown = [];
+      document.querySelectorAll('*').forEach(function (e) {
+        if (e.children.length) return;
+        const t = (e.textContent || '').trim();
+        if (!/^v?\d+\.\d{2}$/.test(t)) return;
+        const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') {
+          shown.push((e.className || e.id || e.tagName) + ' "' + t + '"');
+        }
+      });
+      // CONTROL: if none is visible the assertion below is vacuous and would pass on a broken app.
+      if (!shown.length) throw new Error('no version label is visible at all on a phone — the tap-to-update control has vanished');
+      if (shown.length > 1) throw new Error('the version is on screen ' + shown.length + ' times: ' + shown.join(', '));
+    }, 380);
+  });
+
   /* ---------------- queue 217 + 218: every way in gets checked ----------------
    * There is one function that rebuilds an imported layer from a known-good schema, and it used to
    * have exactly ONE caller: importing a .fmotion.json. Inserting a template, inserting an element

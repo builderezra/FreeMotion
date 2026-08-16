@@ -2727,6 +2727,15 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 700px) {
   /* the desktop button toolbar is replaced by AM's minimal top bar */
   #topbar { display: none; }
+  /* …and the version chip has to be hidden WHERE IT ACTUALLY IS (queue 221). Hiding #topbar was
+     enough when `.ver` lived inside it, but pcTransportLayout() MOVES it out into #t-far on the
+     transport row — and the transport row is on screen on a phone. So the moment the desktop layout
+     has run once, narrowing the window leaves the build number on screen twice: the mobile bar's
+     copy and the transported original. That is exactly the symptom logged at v7.56, and it survived
+     because the reparenting is one-way and nothing ever puts it back.
+     Two labels disagreeing after a partial update is precisely the confusion the tap-to-force-update
+     chip exists to prevent, so the phone keeps its own and the desktop copy stands down. */
+  #t-far .ver { display: none; }
   #topbar-m {
     /* The bar's own surface has to fill the status-bar strip, or viewport-fit=cover just moves the
        seam rather than removing it — this is the editor half of Ezra's "cut off at the very top".

@@ -1721,6 +1721,39 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **258 — Elements: the BACKGROUNDS should be fainter, but the ICONS should pop like they used to.
+      (16 Aug, with a before/after pair of phone screenshots.)** His words, verbatim: *"In this section
+      I wanted the colours of the background for each option more faint, not the actual icon itself,
+      keep the background colours but make the icons pop like they used to"*.
+      **This is a regression I introduced in v8.20, and he is right.** His original #210 wording was
+      *"choose more subtle background colours, the main icon can stay bright but the backdrop more
+      subtle"* — two separate things, and I collapsed them into one. I gave Elements a muted palette
+      (sky/sea/moss/sand/dusk/ice) AND a fainter plate; but the icon takes its colour from the same
+      `--am-tint`, so muting the palette muted the icons too. His v7.30 screenshot next to v8.24 shows
+      it plainly: the old icons are saturated violet/blue/teal/amber, the new ones are washed out.
+      **The fix is to split the two.** The plate keeps the faint treatment; the ICON needs its own,
+      brighter value rather than sharing the tint. Options: a second `--am-ico` custom property set
+      per card, or deriving a brighter colour from the tint in CSS (`color-mix` toward white, or
+      raising the tint's saturation). A per-card second property is the honest one — a derived colour
+      would still be a function of a palette chosen for backdrops.
+      **Do this with #257** — both are corrections to v8.20's add-menu colour work and touch the same
+      rules, and doing them apart risks a third round.
+
+- [ ] **257 — Sound effects: white icon, and a gradient white border round the rainbow. (16 Aug, with a
+      phone screenshot.)** His words, verbatim: *"The colour of the button for the sound effects should
+      be white and the border colour around the rainbow should be white too, not solid white, give it
+      some gradient"*.
+      Follows v8.20, which gave the card its rainbow. Two changes, both on `.addmenu-card--rainbow`:
+      · the **icon** goes white. It currently inherits the card's representative tint (pink/orange),
+        which fights the rainbow behind it — white is the only colour that sits on all six hues.
+      · the **border** goes white too, but **not flat white**: a gradient. A 1px border cannot take a
+        `linear-gradient` directly, so this wants either `border-image` with a gradient, or a
+        `background-image` pair (padding-box + border-box) — the second composes better with the
+        rainbow fill the card already has, and keeps the rounded corners.
+      Watch the glass theme: v8.20 established that `theme-glass.css` restates card backgrounds at
+      (0,2,0) and silently beat the rainbow until it was restated there too. Whatever lands here needs
+      the same treatment or it will look right in one theme and wrong in the one he actually uses.
+
 - [ ] **256 — The microphone test is STILL flaky, after #226 was marked fixed at v7.98. (16 Aug.)**
       *(Found by me, twice in one day.)* `voice: the microphone is handed back on EVERY exit path` failed
       with **"timed out waiting for the mic to be acquired"** during a mutation run, and again during the
@@ -4688,7 +4721,7 @@ Everything before this is in POLISH-LOG.md from v2.31 onward — roughly 90 more
 including the camera, captions, speed ramping, the easing editor, the shape library, the Studio
 layout, motion blur, the elements browser and the effects browser.
 
-- [ ] **221 — Phone: the version number is on screen TWICE.** Spotted by me at 380px while verifying
+- [x] **221 — Phone: the version number is on screen TWICE. NOT REPRODUCING — verified and locked down, v8.25.** Spotted by me at 380px while verifying
       v7.56, not reported by you — noting it rather than fixing it now, because it is not its turn and
       the queue is the queue. In the phone layout the build number appears both in the top bar next to
       the FreeMotion name and again as a small "v7.55"-style label just above the Export button. Almost
@@ -4696,6 +4729,17 @@ layout, motion blur, the elements browser and the effects browser.
       row for the PC layout; the phone's own copy was presumably never hidden once the row gained one.
       Small, cosmetic, and the fix is likely one CSS rule — but two version labels disagreeing after a
       partial update is exactly the confusion the tap-to-force-update label exists to prevent.
+
+      **CHECKED 16 Aug — it does not reproduce, so nothing was "fixed".** Measured at phone width on the
+      home screen and in the editor: exactly ONE version label is visible. The desktop `#topbar` is
+      `display: none` on a phone, which takes `.brand .ver` with it and leaves only `.m-ver`. Some later
+      layout change closed it in passing — said plainly rather than shipping an invented fix for
+      something that already works.
+      **What shipped in v8.25 is the guard**, because this is exactly the kind of cosmetic bug a future
+      layout change reintroduces with nothing watching: a test that counts every visible version label
+      on a phone and requires exactly one. It asserts a CONTROL first — that at least one is visible —
+      since "zero" would otherwise sail through an assertion aimed at "two" while actually meaning the
+      tap-to-update control had disappeared.
 
 - [x] **222 — A test in the suite is flaky, about 1 run in 5. DONE v7.99.** Found while working #128, and it is
       PRE-EXISTING — measured on a clean tree at HEAD, five runs, one red, so it is not something a
