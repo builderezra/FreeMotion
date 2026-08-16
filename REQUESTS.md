@@ -2468,6 +2468,48 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **291 — The signature white edge-glow on the sound-effects and voice-record menus. (16 Aug.)** His
+      words, verbatim: *"Also put the our signature white line glow that move around the edges in the
+      menu for sound effects and the menu for recording ur voice"*.
+      *"our signature"* — this is an effect the app already has somewhere (a white line travelling around
+      a border). Find the existing implementation and REUSE it rather than writing a second one, or the
+      two will drift and stop looking like one signature. Applies to the sound-effects browser and the
+      voice-recorder sheet.
+
+- [ ] **290 — More sound effects, and warm background colours for that menu. (16 Aug.)** His words,
+      verbatim: *"When you have time after everything else give the sound effects menu more sound effects
+      and also give the menu some nice warm background colours, Specifcally warm."*
+      **He explicitly deprioritised this** — *"when you have time after everything else"* — so it waits,
+      but it is written down. Note the tension to resolve when it is built: the sound-effects BUTTON is
+      the rainbow one (#210), so a warm palette inside the menu needs to not fight that.
+
+- [ ] **289 — Dissolve the "Other" effects menu into the categories that fit. (16 Aug.)** His words,
+      verbatim: *"Just put the effects from the other menu into menus that would fit them and get rid of
+      the other menu"*.
+      So the catch-all category goes away and each of its effects is re-homed into a real one. Note this
+      is a judgement call per effect — list what moves where in the entry when it is built, so the
+      choices are reviewable rather than silent.
+
+- [ ] **288 — Rename the "Colour & Light" effect menu to just "Colouring". (16 Aug.)** His words,
+      verbatim: *"Change colour and light effect menu to just Colouring"*.
+      **This also settles a question that has sat open for weeks.** The standing note in this file says:
+      *"'Color & Light' is spelled the American way in the effects browser, which sits oddly next to the
+      'Colouring' rename you asked for. Your app's voice, not mine to change unasked."* Renaming it to
+      **Colouring** removes the American spelling and the ampersand in one go — do both together and
+      strike that note.
+
+- [ ] **287 — "Move & Transform" becomes "Position / Scale"; every other "&" becomes "/". (16 Aug.)**
+      His words, verbatim: *"Change the name of move and transform to position / Scale. And any other
+      title like background and opacity that has the & in it, replace the & with a /"*.
+      So: **Move & Transform → Position / Scale**, and then a sweep — *"Border & Shadow"* → *"Border /
+      Shadow"*, *"Blending & Opacity"* → *"Blending / Opacity"*, and anything else carrying an `&`.
+      **Sweep it properly rather than fixing the two he named:** grep every user-facing label for `&`
+      (and `&amp;`) across the inspector, the add menu, the effects browser and settings, and list them
+      in the entry so none is missed. He named "background and opacity" as an example, which is
+      *Blending & Opacity* — the point is the RULE, not the two examples.
+      Watch for `&` that is not a label (HTML entities, JS operators) and for the keyboard-shortcuts
+      sheet, which may spell things differently again.
+
 - [ ] **286 — PC: a glow that follows the cursor on the add menu and layer edit menu. (16 Aug.)** His
       words, verbatim: *"I just thought of a really premium feature where on the add menu and layer edit
       menu on pc a glow should follow ur curser, i feel like some other websites or stuff have this but
@@ -5157,6 +5199,38 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       its own. Worth checking that first, since the fix there (read `FM.SHAPE_ASPECT`, fit rather than
       stretch) may apply directly. Check media thumbnails too — if they use the same helper, a video
       whose aspect differs from the box will be stretched the same way and nobody has mentioned it yet.
+      **HALF DONE v8.50 — and this entry stays OPEN, because he asked for two things and one is still
+      wrong.** His new report, verbatim: *"on mobile each layers preview picture is still going over the
+      line onto the timeline like something that isnt there is pushing it out, i said this a long time
+      ago and still no fix"*.
+      **First, why there was "still no fix": this entry was INVISIBLE.** It had been glued onto the end
+      of the previous entry's last line — `...refused permission to.- [ ] **211 — ...` — so it never
+      started a line, and every oldest-first tool here matches `^- \[ \]`. It was not deprioritised, it
+      was unreachable. Fixed, and `tools/next.sh` now shouts about any malformed entry rather than
+      silently skipping it.
+      **"Something that isnt there is pushing it out" was the mechanism, exactly.** The collapse chevron
+      on a childless layer carries `.th-chevron--empty`, which was `visibility: hidden` — the one hiding
+      method that stops an element PAINTING but keeps its full layout box. So 16px of button plus its
+      6px gap, 22px of pure invisible width, sat between the eye and the thumbnail. Measured at 375px:
+      the head is 72px, the thumbnail's right edge sat at **82px**, 10px out over the divider, and
+      `.th-thumb-wrap` is `overflow: visible`, so it spilled onto the timeline instead of clipping.
+      **Two smaller fixes were tried and MEASURED before settling, and both were worse:**
+      · `display: none` on the empty chevron — breaks the column alignment between grouped and ungrouped
+        rows (the eye drops from 28px to 8px), which is what queue 191 exists to prevent. There is a
+        test for it and it caught this.
+      · letting the thumbnail absorb the whole deficit — shrank it to **5px**, which is not a picture.
+      **So the head grew instead: `--head-w` 72 → 90 on phone**, which is simply what its contents need
+      (7 + 14 + 6 + 15 + 6 + 34 + 7 = 89), plus a shrink-with-a-22px-floor as a safety net for the
+      crowded rows. Measured after, at 375px: every row clears by **8px**, an ordinary row keeps the
+      full 34px thumbnail, and the timeline is NOT squeezed — it scrolls, so the clip width is unchanged.
+      **STILL OPEN — the "stretched" half.** His original words were *"stretched and going out too far"*
+      and only the second is fixed. The picture itself is still distorted, and the cause is separate:
+      `FM.renderThumb` (js/compositor.js, the shape branch) traces into a **fixed 26x12 rect** instead of
+      contain-fitting the layer's own `shapeW`/`shapeH`, so a shape renders as a ~2.17:1 lozenge whatever
+      its real aspect. That is the same defect #159 fixed in the add menu via `FM.SHAPE_ASPECT`, so the
+      remedy already exists in the codebase. **Do not tick this entry until that lands.**
+
+
 - [x] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words. ELEMENTS/MEDIA/AUDIO DONE v8.20; Template still open.**
       *"The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
       look quality."* Four screenshots, one per tab. Shape is the one to leave alone — it is the
@@ -6224,7 +6298,15 @@ wait for them to report back."*
       **This also answers #283** — the handle exists and works; the drag is simply built wrong. #283 can
       be closed into this entry.
       **Next run: do not re-measure only the height.** Assert left, right and bottom are unchanged
-      through the whole drag, and that the timeline's box is untouched.
+      through the whole drag, and that the timeline's box is untouched.      **AND THE HANDLE IS IN THE WRONG PLACE — his words:** *"and the button to do it shouldnt be at the
+      top of the screen"*.
+      **This corroborates a measurement already taken and doubted.** While checking #283 earlier the same
+      day I measured `#am-resizer` at **y:0, 1280x10 — full window width, at the very top of the window**
+      — and recorded it as "either a real regression or an artefact of my not opening the add menu from
+      the console". It was real. The handle is pinned to the top of the viewport instead of sitting on
+      the add menu's own top edge, which is both why he could not find it for so long and why it is
+      wrong now that he has.
+      So the drag handle must move to the panel's top edge and travel WITH it, not sit at screen top.
 
 
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself

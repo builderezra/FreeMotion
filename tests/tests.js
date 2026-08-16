@@ -16591,6 +16591,58 @@
     }
   });
 
+  /* ---------------- queue 211: layer thumbnails spill out of the track head ----------------
+   * "each layers preview picture is still going over the line onto the timeline like something that
+   * isnt there is pushing it out" — and the something-that-isnt-there was exact. The collapse chevron
+   * on a layer with no children carries `.th-chevron--empty`, which was `visibility: hidden`: it stops
+   * PAINTING but keeps its layout box, so 16px of button plus a 6px gap went on shoving the thumbnail
+   * out of a 72px head.
+   * This entry had also been INVISIBLE to the queue: it was glued to the end of another entry's last
+   * line, so it never started a line and every oldest-first tool here matches `^- [ ]`. tools/next.sh
+   * now shouts about malformed entries for that reason. */
+
+  test('a layer thumbnail never spills out of the track head on a phone (queue 211)', { item: 'thumb-fit' }, function () {
+    return atPhoneWidth(async function () {
+      const settle = () => new Promise(r => setTimeout(r, 60));
+      const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+      try {
+        /* All three shapes of row, because the fix behaves differently in each and the first version
+           of it only handled the easy one: a plain layer (empty chevron), a GROUP (real chevron), and
+           a group's CHILD (indented). Measured before the fix at 375px: 10px, 10px and 21px out. */
+        const g = FM.makeLayer('group', { x: 270, y: 480 });
+        const child = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#77aadd' });
+        child.parent = g.id;
+        const plain = FM.makeLayer('shape', { shape: 'star', x: 270, y: 480, shapeW: 300, shapeH: 200, fill: '#4a90e2' });
+        S.layers = [g, child, plain];
+        FM.refreshAll();
+        await settle();
+        const heads = [...document.querySelectorAll('.track-head')];
+        if (heads.length < 3) throw new Error('expected three track heads, got ' + heads.length + ' — the fixture did not build');
+        const bad = [];
+        heads.forEach((h, i) => {
+          const hb = h.getBoundingClientRect();
+          const w = h.querySelector('.th-thumb-wrap');
+          if (!w) return;
+          const wb = w.getBoundingClientRect();
+          const over = Math.round(wb.right - hb.right);
+          if (over > 0) bad.push('row ' + i + ' spills ' + over + 'px past the head');
+          if (Math.round(wb.width) <= 0) bad.push('row ' + i + ' has no thumbnail at all');
+        });
+        if (bad.length) throw new Error(bad.join(' · '));
+        /* The thumbnail must still BE a thumbnail — a fix that shrank it to nothing would pass the
+           overflow check above while looking worse than the bug. */
+        const widths = heads.map(h => { const w = h.querySelector('.th-thumb-wrap'); return w ? Math.round(w.getBoundingClientRect().width) : 0; });
+        if (Math.min(...widths) < 12) throw new Error('a thumbnail shrank to ' + Math.min(...widths) + 'px — that is not a picture any more: ' + widths.join('/'));
+        /* And the roomiest row should keep the full size, or the fix is shrinking everything to suit
+           the worst case rather than yielding only where it must. */
+        if (Math.max(...widths) < 30) throw new Error('even the least crowded row only got ' + Math.max(...widths) + 'px — the thumbnail is being shrunk everywhere');
+      } finally {
+        S.layers = keep; S.selectedId = keepSel;
+        try { FM.refreshAll(); } catch (e) {}
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

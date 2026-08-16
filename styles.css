@@ -2493,7 +2493,16 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      reaching for a clip on a phone means reaching past them). Tapping anywhere in this column selects
      the layer, and the picture tells you which layer you're about to get. --head-w stays a constant
      the JS reads back, so clip-x / playhead / scrub maths follow it. */
-  :root { --head-w: 72px; }
+  /* 90, not 72 (queue 211). At 72 the head could not hold what it was asked to hold: 7px padding +
+     a 16px chevron - 2 + 6px gap + a 15px eye + 6px gap + a 34px thumbnail + 7px padding = 89px of
+     content in a 72px box. The surplus went OUTSIDE the box and over the divider onto the timeline —
+     "each layers preview picture is still going over the line onto the timeline". Two smaller fixes
+     were tried and measured first, and both were worse: hiding the empty chevron entirely breaks the
+     column alignment between grouped and ungrouped rows (there is a test for that, and it caught it),
+     and letting the thumbnail absorb the whole 17px deficit on its own shrank it to 5px, which is not
+     a picture. Measured at 375px with 90: every row clears by 8px, an ordinary row keeps the full 34px
+     thumbnail, and the timeline is not squeezed — it scrolls, so the clip width is unchanged at 308px. */
+  :root { --head-w: 90px; }
   .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
@@ -3580,7 +3589,28 @@ body.hm-selecting .hm-pin { display: none; }
 .th-chevron { background: none; border: none; color: var(--text-dim); font-size: 11px; width: 16px; padding: 0; margin-right: -2px; cursor: pointer; flex: none; }
 /* The same slot on a non-group row: holds the width so every head lines up, draws nothing, takes no
    taps. See the note in buildHead (queue 191). */
+/* THE CHEVRON KEEPS ITS BOX ON PURPOSE — and that is why the thumbnail has to be the one that gives.
+   His report named the mechanism exactly: "each layers preview picture is still going over the line
+   onto the timeline like something that isnt there is pushing it out". `visibility: hidden` stops this
+   chevron PAINTING but keeps its layout box, so an invisible 16px button plus its 6px gap — 22px — was
+   shoving the thumbnail out of a 72px head. Measured at 375px: head 72px, thumbnail's right edge at
+   82px, i.e. 10px out over the divider, and `.th-thumb-wrap` is `overflow: visible` so it spilled onto
+   the timeline instead of clipping.
+   `display: none` here is the obvious fix and it is WRONG: the reserved box is what keeps the eye and
+   thumbnail of a plain row aligned with those of a group row at the same depth. Removing it drops the
+   eye from 28px to 8px on ungrouped rows and the columns stop lining up — there is a test for exactly
+   that, and it caught this. So the space stays reserved and the surplus comes out of the thumbnail
+   below, which is the only item in the head that can afford to lose a few pixels. */
 .th-chevron--empty { visibility: hidden; pointer-events: none; }
+
+/* THE ACTUAL FIX. Every item in the head was `flex: 0 0 auto`, so when the content needed 82px in a
+   72px box nothing could give and the surplus went outside the box — onto the timeline. The thumbnail
+   yields now, and only as far as it must: a row with room keeps its full 34px, a crowded one (group
+   chevron, or an indented child that has both a chevron and an indent) gets a slightly smaller picture
+   instead of one that hangs over the divider. `height: auto` keeps it in proportion while it shrinks,
+   so it is never squashed — which was the complaint in this entry's original report. */
+.th-thumb-wrap { flex: 0 1 auto; min-width: 22px; }   /* a floor: yielding is fine, vanishing is not */
+.th-thumb { max-width: 100%; height: auto; }
 /* The group row's tint, layered over an OPAQUE panel base — see the note by .track-head.sel. A bare
    `background: rgba(126,231,255,.06)` here left the group's head column 94% transparent, so the
    group's own clip bar (which is scrolled underneath the sticky head) painted the whole row edge to
