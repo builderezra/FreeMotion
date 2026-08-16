@@ -16296,6 +16296,60 @@
     }
   });
 
+  /* ------- unnumbered: six effects' option buttons run off a phone, last options untappable -------
+   * One of the ten items the old queue grep could never see (it filtered on a leading digit and these
+   * predate the numbering). Re-measured at 375px before fixing, and it was worse than the original
+   * note: the row is clipped by .fx-row.fx-open's overflow-x:hidden, so the buttons past the edge
+   * could not be SCROLLED to either — Channel Remap put five of its eight options genuinely out of
+   * reach, HSL Bands three of nine.
+   * Cause is the flexbox min-width:auto floor: `flex: 1` gives a basis of 0, but a nowrap button will
+   * not shrink below its own text, so the row grew past the panel instead of fitting inside it. */
+
+  test('no effect option button is unreachable on a phone', { item: 'fx-seg-wrap' }, function () {
+    return atPhoneWidth(async function () {
+      const settle = () => new Promise(r => setTimeout(r, 40));
+      const R = FM.fxRegistry, S = FM.scene;
+      const layers0 = S.layers.slice(), sel0 = S.selectedId;
+      try {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#e8a33d' });
+        S.layers = [L]; FM.selectLayer(L.id);
+        /* The six the original note named, plus a sweep of everything else so a NEW long option row
+           cannot quietly reintroduce this. */
+        const named = ['channelremap', 'hslbands', 'texttransform', 'mirror', 'thermal', 'matchgrade'];
+        const keys = (R.allIncludingHidden ? R.allIncludingHidden() : R.all()).map(f => f.key || f.id);
+        const check = [];
+        named.forEach(k => { if (keys.indexOf(k) < 0) throw new Error('the fixture names an effect that no longer exists: ' + k); });
+        named.concat(keys.filter(k => named.indexOf(k) < 0)).forEach(k => check.push(k));
+        const bad = [];
+        let sawSeg = 0;
+        for (const k of check) {
+          let inst; try { inst = R.makeInstance(k); } catch (e) { continue; }
+          L.effects = [inst];
+          FM.inspector.openCategory('effects');
+          const disc = document.querySelector('.fx-disc'); if (disc) disc.click();
+          await settle();
+          const segs = [...document.querySelectorAll('.fx-seg')];
+          segs.forEach(seg => {
+            const btns = [...seg.children];
+            if (!btns.length) return;
+            sawSeg++;
+            btns.forEach(b => {
+              const r = b.getBoundingClientRect();
+              if (r.right > window.innerWidth + 0.5 || r.left < -0.5) bad.push(k + ' "' + b.textContent + '" is off-screen (right ' + Math.round(r.right) + ' > ' + window.innerWidth + ')');
+              else if (r.width < 24) bad.push(k + ' "' + b.textContent + '" is only ' + Math.round(r.width) + 'px wide');
+            });
+          });
+        }
+        L.effects = [];
+        if (sawSeg < 6) throw new Error('only ' + sawSeg + ' option rows were measured — the panel stopped building them and this test is no longer looking at anything');
+        if (bad.length) throw new Error(bad.length + ' option button(s) unreachable on a phone: ' + bad.slice(0, 5).join(' · '));
+      } finally {
+        S.layers = layers0; S.selectedId = sel0;
+        try { FM.inspector.openCategory('home'); } catch (e) {}
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

@@ -2181,10 +2181,32 @@ better still, keep working inside the turn rather than parking work for a later 
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
-- [ ] **Six effects' option buttons run off a phone, last options untappable.** Measured at 380px:
-      Channel Remap overflows by 434px, HSL Bands 169, Text Transform 106, Mirror 97, Thermal 71,
+- [x] **Six effects' option buttons run off a phone, last options untappable. DONE v8.43.** Measured at
+      380px: Channel Remap overflows by 434px, HSL Bands 169, Text Transform 106, Mirror 97, Thermal 71,
       Match Grade 25. Pre-existing. The fix is a taste call — equal-width-with-ellipsis vs wrapping to
       two rows vs horizontal scroll — so it is yours to pick.
+
+      **This item had been UNREACHABLE, not just unstarted.** The command in CLAUDE.md for finding the
+      next job matched `^- \[ \] \*\*[0-9]`, and that `[0-9]` silently skipped every unnumbered
+      item — ten of them, this one included. Fixed structurally first (`tools/next.sh`), so the same
+      thing cannot happen to the other nine.
+      **Re-measured at 375px before touching anything, and it was WORSE than the note said:** the row
+      is clipped by `.fx-row.fx-open`'s `overflow-x: hidden`, so the buttons past the edge could not be
+      scrolled to either. Channel Remap put **five of its eight options genuinely out of reach**, HSL
+      Bands three of nine, the other four one each. Cause is the flexbox `min-width: auto` floor —
+      `flex: 1` sets a basis of 0, but a `nowrap` button will not shrink below its own text, so the row
+      grew past the panel instead of fitting in it.
+      **I picked WRAP, and here is the reasoning so you can overrule it in one word.** Ellipsis is out
+      because these labels are only distinguishable BY their text — "Swap R/B" and "Swap R/G" become
+      the same button once truncated. Horizontal scroll is out because a hidden row of options with no
+      affordance is the same bug wearing a gesture, and it is what the broken state already feels like.
+      Wrapping hides nothing and needs no gesture; it costs vertical space in a panel that already
+      scrolls vertically. Rows that already fitted are untouched — wrapping only engages past the line.
+      Verified at 375px with a screenshot: Channel Remap's eight options now sit on four tidy rows,
+      every one on-screen and tappable. **Say "scroll" or "ellipsis" and I will swap it.**
+      **The test sweeps EVERY effect, not the six named** — that is how it turned out to be 12 buttons
+      across more effects than the note listed, and it means a new long option row cannot reintroduce
+      this quietly.
 - [x] **Landscape phone (844x390) text editing is cramped.** **DONE v6.41.** A landscape phone is
       over 700px wide, so it gets the desktop layout — which gave the bottom row a flat 232px no
       matter how short the screen was, i.e. 60% of it. Worse, if you'd ever dragged the timeline
