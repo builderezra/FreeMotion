@@ -17426,6 +17426,114 @@
     }
   });
 
+  /* ---------------- queue 277: the effects browser becomes a phone sheet you multi-select in --------
+   * "the menu won't cover the whole screen the menu will only go up until where the canvas is" — and,
+   * correcting himself later in the same message, "it covers the play buttons and all of that so it goes
+   * right up to the canvas"; "when you tap on an effect it doesn't just add it selects it… you can select
+   * as many effects as you want… every time you select one it'll put a one or two on it so you know what
+   * order they are being added in"; and "all just for mobile btw", which is why the desktop half of this
+   * test matters as much as the phone half. */
+
+  test('the phone effects browser is a sheet under the canvas and taps SELECT, in order (queue 277)', { item: 'fx-sheet' }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 400, shapeW: 200, shapeH: 200, fill: '#e33' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(200);
+      FM.fxBrowser.open(L);
+      await sleep(320);
+      const root = document.getElementById('fx-browser');
+      const cv = document.getElementById('preview');
+      if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
+      if (!root.classList.contains('fxb-sheet')) throw new Error('at 390px the browser is still the full-screen dialog — it is supposed to become a sheet');
+      const r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
+      if (Math.abs(r.top - c.bottom) > 2) throw new Error('the sheet starts at y=' + Math.round(r.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — it is supposed to go right up to the canvas');
+      /* Against the LAYOUT viewport, not `innerHeight`. Inside the suite's iframe the two disagree —
+         the frame is styled 844 tall while `innerHeight` still reported 760 — so the first version of
+         this assertion failed on correct code and, worse, fired during a mutation check and made a
+         dead assertion look alive. `clientHeight` is the box a `position: fixed; bottom: 0` element is
+         actually laid out against. */
+      const vpH = document.documentElement.clientHeight;
+      if (Math.abs(r.bottom - vpH) > 2) throw new Error('the sheet stops at ' + Math.round(r.bottom) + ' in a ' + vpH + 'px viewport — it should cover everything below the canvas, play buttons included');
+      if (r.top < 40) throw new Error('the sheet covers the canvas (top ' + Math.round(r.top) + ') — the canvas is what he wants to keep watching while he picks');
+
+      const tiles = [].slice.call(root.querySelectorAll('[data-fxid]'));
+      if (tiles.length < 3) throw new Error('only ' + tiles.length + ' selectable tiles — not enough to prove ordering');
+      /* Distinct effects: the same effect appears in Featured AND Recents, and picking one id twice
+         through two tiles would be a de-select, not a second pick. */
+      const seen = {}, pick = [];
+      tiles.forEach(function (t) { const id = t.dataset.fxid; if (!seen[id]) { seen[id] = 1; pick.push(t); } });
+      if (pick.length < 3) throw new Error('fewer than 3 distinct effects on screen');
+
+      pick[0].click(); await sleep(60);
+      pick[1].click(); await sleep(60);
+      pick[2].click(); await sleep(90);
+      const live = FM.layerById(FM.scene, L.id);
+      if ((live.effects || []).length !== 0) throw new Error('tapping added ' + live.effects.length + ' effect(s) — a tap is supposed to SELECT, not add');
+      const badge = t => { const b = t.querySelector('.fxb-pick'); return b ? b.textContent : null; };
+      if (badge(pick[0]) !== '1' || badge(pick[1]) !== '2' || badge(pick[2]) !== '3') {
+        throw new Error('the order badges read ' + [badge(pick[0]), badge(pick[1]), badge(pick[2])].join('/') + ' — they are supposed to number the order they will be added in');
+      }
+      // untapping the middle one renumbers the rest rather than leaving a hole
+      pick[1].click(); await sleep(90);
+      if (badge(pick[1]) !== null) throw new Error('un-tapping left the badge on');
+      if (badge(pick[2]) !== '2') throw new Error('after un-tapping the second pick, the third still reads ' + badge(pick[2]) + ' — the numbers are an ORDER, so they have to close up');
+
+      const want = [pick[0].dataset.fxid, pick[2].dataset.fxid];
+      const bar = root.querySelector('.fxb-commit');
+      if (!bar || bar.classList.contains('hidden')) throw new Error('nothing offers to add the picked effects');
+      bar.querySelector('.fxb-commit-go').click();
+      await sleep(260);
+      const after = FM.layerById(FM.scene, L.id);
+      const got = (after.effects || []).map(function (e) { return e.type || e.id; });
+      if (got.length !== 2) throw new Error('committing added ' + got.length + ' effects, expected 2');
+      if (got[0] !== want[0] || got[1] !== want[1]) throw new Error('they landed as ' + got.join(', ') + ' but were picked as ' + want.join(', ') + ' — the badge order is the promise');
+      if (!root.classList.contains('hidden')) throw new Error('the sheet stayed open after committing');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null);
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(220);
+    }
+  });
+
+  test('on a desktop width the effects browser still adds on one tap (queue 277 is phone-only)', { item: 'fx-sheet' }, async function () {
+    /* "all just for mobile btw". A multi-select that leaked onto the desktop would mean every PC user's
+       first tap silently did nothing, which is a worse bug than the one this feature fixes. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 400, shapeW: 200, shapeH: 200, fill: '#e33' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(160);
+      FM.fxBrowser.open(L);
+      await sleep(300);
+      const root = document.getElementById('fx-browser');
+      if (root.classList.contains('fxb-sheet')) throw new Error('the desktop browser came up in phone sheet mode');
+      const tile = root.querySelector('[data-fxid]');
+      if (!tile) throw new Error('no effect tiles');
+      tile.click();
+      await sleep(220);
+      const after = FM.layerById(FM.scene, L.id);
+      if ((after.effects || []).length !== 1) throw new Error('one tap on the desktop added ' + (after.effects || []).length + ' effects — it must still add exactly one');
+      if (!root.classList.contains('hidden')) throw new Error('the desktop browser stayed open after adding');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null);
+    }
+  });
+
   /* ---------------- queue 160: the two people shapes need arms ----------------
    * "The two people shapes are good but need arms, make sure when adding arms you get other agents to
    * verify if it's any good or not."

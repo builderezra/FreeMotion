@@ -3970,6 +3970,55 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .fxb-thumb-cv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; opacity: 0; transition: opacity .18s; pointer-events: none; }
 .fxb-thumb-cv.ready { opacity: 1; }
 
+/* ---- The effects browser as a PHONE SHEET, with multi-select (queue 277) -----------------------
+   Ezra: "the menu won't cover the whole screen the menu will only go up until where the canvas is",
+   then, correcting himself in the same message, "it covers the play buttons and all of that so it goes
+   right up to the canvas". So it starts at the canvas's bottom edge — measured on open, because that
+   edge moves with the project's aspect ratio — and takes everything below it.
+   Phone only: he said "all just for mobile btw", and on a desktop there is no timeline-sized band for
+   it to become, so that path keeps the centred dialog it already had. */
+@media (max-width: 700px) {
+  #fx-browser.fxb-sheet {
+    top: var(--fxb-top, 0); bottom: 0; left: 0; right: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, .5);
+  }
+  /* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
+     canvas above it already say what this is, so the row keeps only the close and search controls. */
+  #fx-browser.fxb-sheet .fxb-title { display: none; }
+  /* With the title gone the row's two buttons huddled together at the left with a hand's width of
+     nothing beside them. Pushed apart instead: close on the left, search on the right, which is where
+     both already are on every other sheet in the app. */
+  #fx-browser.fxb-sheet .fxb-top { padding: 7px 10px; justify-content: space-between; }
+  #fx-browser.fxb-sheet .fxb-scroll { padding-bottom: 74px; }   /* clear of the commit bar */
+}
+/* The order badge — "every time you select one it'll put a one or two on it so you know what order
+   they are being added in". Numbers, not ticks, because the order IS the information. */
+.fxb-pick {
+  position: absolute; left: 5px; top: 5px; z-index: 3;
+  min-width: 19px; height: 19px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 10px; background: var(--accent); color: #04120f;
+  font-size: 11.5px; font-weight: 700; line-height: 19px; text-align: center;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .45);
+}
+.fxb-tile.is-picked, .fxb-card.is-picked { border-color: var(--accent); }
+.fxb-commit {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--panel, #10141d) 68%, rgba(16, 20, 29, 0));
+}
+.fxb-commit.hidden { display: none; }
+.fxb-commit-clear {
+  flex: 0 0 auto; padding: 9px 14px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13px;
+}
+.fxb-commit-go {
+  flex: 1 1 auto; padding: 11px 14px; border-radius: 10px;
+  background: var(--accent); border: none; color: #04120f; font-size: 14px; font-weight: 700;
+}
+
 /* ---- Add Audio Effect browser: sibling of #fx-browser, glyph tiles instead of canvas thumbs ---- */
 #afx-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 #afx-browser.hidden { display: none; }

@@ -60,7 +60,7 @@ window.FM = window.FM || {};
   // `preset` (optional) = an FM.effectPresets entry: same flow, but the instance carries the
   // preset's params with keyframes re-anchored at the playhead (or the clip start if the playhead
   // is outside the clip) — park the playhead on the beat, add "Beat Slam", the hit lands there.
-  function addEffect(id, preset) {
+  function addEffect(id, preset, quiet) {
     // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete (Backspace)
     // or undo (Cmd+Z, which rebuilds layer objects) can orphan it — pushing into the detached object would
     // silently lose the effect (history.commit snapshots the live scene without it).
@@ -103,6 +103,7 @@ window.FM = window.FM || {};
       if (why) FM.toast(why, 3600);
     }
     pushRecent(id);
+    if (quiet) return true;               // batch commit (queue 277): close and land once, at the end
     FM.fxBrowser.close();
     // Land ON the new effect's controls. inst._expanded above only decides which row is open —
     // it does nothing if the inspector has meanwhile fallen back to the category grid, which is
@@ -171,8 +172,67 @@ window.FM = window.FM || {};
     // desktop parity: right-click = presets (and block the OS menu the mobile hold would trigger)
     elm.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!elm._lpFired) { elm._lpFired = true; openPresets(reg); } });
   }
+  /* ---- MULTI-SELECT (queue 277) -------------------------------------------------------------
+   * Ezra: "when you tap on an effect it doesn't just add it selects it… you can select as many
+   * effects as you want so you can just go and like select a bunch of effects every time you select
+   * one it'll put a one or two on it so you know what order they are being added in… I find in a
+   * light motion. Sometimes I want to go through and out a bunch of effects but every time I tap one
+   * it takes me out of it and it's kind of slow."
+   * PHONE ONLY, because that is what he asked for ("all just for mobile btw") and because the desktop
+   * browser is a centred dialog with no timeline-sized space to become. On desktop a tap still adds
+   * one effect and closes, exactly as before.
+   * The pick list is ORDERED — it is the order they will be added in, which is what the badge says —
+   * so a re-tap removes and renumbers rather than toggling a flag. */
+  let _picked = [];
+  const sheetMode = () => !!(root && root.classList.contains('fxb-sheet'));
+  function pickIndex(id) { return _picked.indexOf(id); }
+  function paintPicks() {
+    if (!root) return;
+    root.querySelectorAll('[data-fxid]').forEach(elm => {
+      const n = pickIndex(elm.dataset.fxid);
+      let b = elm.querySelector('.fxb-pick');
+      if (n < 0) { if (b) b.remove(); elm.classList.remove('is-picked'); return; }
+      if (!b) { b = el('span', 'fxb-pick'); elm.appendChild(b); }
+      b.textContent = String(n + 1);
+      elm.classList.add('is-picked');
+    });
+    const bar = root.querySelector('.fxb-commit');
+    if (bar) {
+      bar.classList.toggle('hidden', !_picked.length);
+      const btn = bar.querySelector('.fxb-commit-go');
+      if (btn) btn.textContent = _picked.length === 1 ? 'Add 1 effect' : 'Add ' + _picked.length + ' effects';
+    }
+  }
+  function togglePick(id) {
+    const i = pickIndex(id);
+    if (i >= 0) _picked.splice(i, 1); else _picked.push(id);
+    paintPicks();
+  }
+  function commitPicks() {
+    const list = _picked.slice();
+    _picked = [];
+    if (!list.length) { FM.fxBrowser.close(); return; }
+    /* In tap order, and quietly — addEffect closes the browser and jumps the inspector on its own,
+       which is right for one tap and wrong nine times in a row. */
+    let added = 0;
+    list.forEach(id => { if (addEffect(id, null, true)) added++; });
+    FM.fxBrowser.close();
+    if (FM.inspector) { if (FM.inspector.openCategory) FM.inspector.openCategory('effects'); else FM.inspector.refresh(); }
+    if (FM.refreshAll) FM.refreshAll();
+    if (FM.history && FM.history.commit) FM.history.commit();
+    if (FM.toast && added) FM.toast(added === 1 ? 'Added 1 effect' : 'Added ' + added + ' effects', 1500);
+  }
+  FM._fxPicks = () => _picked.slice();     // read-only, for the suite
+
   // The click that ENDS a long-press must not also add the plain effect.
-  function guardedAdd(elm, id) { return () => { if (elm._lpFired) { elm._lpFired = false; return; } addEffect(id); }; }
+  function guardedAdd(elm, id) {
+    elm.dataset.fxid = id;                 // so the badge painter can find every tile in one sweep
+    return () => {
+      if (elm._lpFired) { elm._lpFired = false; return; }
+      if (sheetMode()) { togglePick(id); return; }
+      addEffect(id);
+    };
+  }
 
   // ---- "Mask" as an addable entry (Ezra: pressing + Add Effect should offer Mask) ----
   // Not a real effect instance: tapping it ADDS A PEN MASK to the layer and opens the mask editor.
@@ -939,6 +999,17 @@ window.FM = window.FM || {};
       // Click the backdrop (outside the centred panel, on PC) → close. The panel's own clicks have
       // target inside .fxb-top / .fxb-scroll etc., so only a hit on the root backdrop itself closes.
       root.addEventListener('pointerdown', (e) => { if (e.target === root) FM.fxBrowser.close(); });
+      /* The commit bar. It only ever shows in sheet mode and only with something picked, so the
+         desktop dialog and an untouched sheet look exactly as they did. */
+      if (!root.querySelector('.fxb-commit')) {
+        const bar = el('div', 'fxb-commit hidden');
+        const clear = el('button', 'fxb-commit-clear', 'Clear');
+        const go = el('button', 'fxb-commit-go', 'Add');
+        clear.addEventListener('click', () => { _picked = []; paintPicks(); });
+        go.addEventListener('click', commitPicks);
+        bar.appendChild(clear); bar.appendChild(go);
+        root.appendChild(bar);
+      }
       const searchBtn = root.querySelector('.fxb-search-btn');
       searchBtn.addEventListener('click', () => { searchInput.classList.toggle('hidden'); if (!searchInput.classList.contains('hidden')) searchInput.focus(); else { searchInput.value = ''; rebuild(); } });
       searchInput.addEventListener('input', () => { clearTimeout(_searchDebounce); _searchDebounce = setTimeout(rebuild, 120); });   // debounce: every keystroke tore down + rebuilt the whole result grid, re-mounting a canvas per match
@@ -953,14 +1024,30 @@ window.FM = window.FM || {};
       _into = (opts && opts.into) || null;
       if (!_layer) { if (FM.toast) FM.toast('Select a layer first', 1400); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
+      /* THE SHEET (queue 277). "the menu won't cover the whole screen the menu will only go up until
+         where the canvas is" — and then, correcting himself later in the same message, "it covers the
+         play buttons and all of that so it goes right up to the canvas". So the top edge is the bottom
+         of the CANVAS, measured, and everything below it — transport row and timeline — is covered.
+         Measured rather than assumed a height, because the canvas box depends on the project's aspect. */
+      _picked = [];
+      const phone = window.matchMedia('(max-width: 700px)').matches;
+      root.classList.toggle('fxb-sheet', phone);
+      if (phone) {
+        const cv = document.getElementById('preview');
+        const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
+        root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
+      } else {
+        root.style.removeProperty('--fxb-top');
+      }
       root.classList.remove('hidden');
       rebuild();
+      paintPicks();
       // one-time discoverability nudge for the hidden gesture (AM users know it; new users don't)
       if (FM.toast && !localStorage.getItem('fm.fx.presetHint')) {
         try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (_) {}
         FM.toast('Tip: hold any effect to browse its presets', 2600);
       }
     },
-    close: function () { _into = null; if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
+    close: function () { _into = null; if (!root) return; _picked = []; root.classList.remove('fxb-sheet'); root.style.removeProperty('--fxb-top'); stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
   };
 })(window.FM);

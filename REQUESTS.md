@@ -2975,22 +2975,38 @@ better still, keep working inside the turn rather than parking work for a later 
       · **Build this:** the sheet **covers the play buttons and goes right up to the canvas.**
 
       **His clauses, as a checklist — none of this is DONE until every line is ticked:**
-      1. [ ] Mobile only. Top settings row unchanged; canvas stays; the sheet replaces everything from
-             the canvas down (play buttons included).
-      2. [ ] Effects menu keeps its Visual / Filters / Audio tabs.
-      3. [ ] A **filter you add lands in the VISUAL stack**, not a separate filters stack, so it can be
+      1. [x] Mobile only. Top settings row unchanged; canvas stays; the sheet replaces everything from
+             the canvas down (play buttons included). **v8.68** — the top edge is the canvas's own
+             bottom, measured on open because it moves with the project's aspect.
+      2. [x] Effects menu keeps its Visual / Filters / Audio tabs. **v8.68** — untouched, they were
+             already there and the sheet keeps them.
+      3. [x] A **filter you add lands in the VISUAL stack**, not a separate filters stack, so it can be
              layered with other effects and have effects applied to it. *(He explicitly changed his mind
              in favour of the current behaviour here — do not "fix" the filters tab looking different.)*
-      4. [ ] An **"add effect" button** inside Visual opens the browser as that partial sheet.
-      5. [ ] Tapping an effect **SELECTS** rather than adds, and the canvas previews the layer with it.
-      6. [ ] **Multi-select with an order badge** — 1, 2, 3… showing the order they will be added in.
+             Already true; deliberately left alone.
+      4. [x] An **"add effect" button** inside Visual opens the browser as that partial sheet. **v8.68**
+             — the existing + Add Effect button now opens the sheet rather than the full-screen dialog.
+      5. [ ] Tapping an effect **SELECTS** rather than adds — **DONE v8.68** — and the canvas previews
+             the layer with it — **NOT YET**, that is the next stage.
+      6. [x] **Multi-select with an order badge** — 1, 2, 3… showing the order they will be added in.
+             **v8.68**, and re-tapping renumbers the rest rather than leaving a hole.
       7. [ ] While the sheet is open the canvas **loops only the selected layer**, restarting from that
              layer's start on each tap.
-      8. [ ] Filters tab: leave as is — *"pretty much good how it is right now"*.
+      8. [x] Filters tab: leave as is — *"pretty much good how it is right now"*. Untouched.
       9. [ ] **A toggle for how the chosen effects land:** with the values shown in the preview, or
              *"naked"* / fresh-slate.
       10. [ ] *(Idea, his words "potentially")* long-press an effect → its variants menu, and pick which
-             preset is the one that spawns on a normal tap.
+             preset is the one that spawns on a normal tap. *(Half of this exists already: hold an
+             effect and its presets open. What is missing is choosing which preset a plain tap uses.)*
+
+      **STAGE A SHIPPED v8.68 — the sheet and the multi-select.** Measured at 380×800: the sheet's top
+      edge sits exactly on the canvas's bottom (364) and runs to the bottom of the window, so the canvas
+      stays watchable and the transport and timeline are covered, which is the version of this he
+      settled on. Tapping three tiles added **nothing** and badged them 1/2/3; un-tapping the middle one
+      renumbered the third to 2; committing added them in that order and closed. The desktop path is
+      asserted separately to be unchanged — one tap, one effect, closes — because *"all just for mobile
+      btw"* and a multi-select leaking onto PC would mean every first tap there silently did nothing.
+      **Still to come: clauses 5 (the live preview), 7 (loop just that layer) and 9 (the naked toggle).**
 
       **DO NOT START the default-good-values work** — his words: *"I don't want you to start on it yet"*.
       The toggle in clause 9 is the agreed shape for it.
