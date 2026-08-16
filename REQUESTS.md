@@ -3799,7 +3799,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
-      *Progress 17 Aug:* a **seventh** struck off — **trim grips ignoring `layer.reversed` (v8.92)**, which
+      *Progress 17 Aug:* an **eighth** struck off — **the motion tracker ignoring `layer.crop` (v8.93)**,
+      which templated a feature up to 600px away from the one tapped and wrote keyframes following it,
+      silently, because the seed box on screen used the exact inverse transform and looked right.
+      *And a seventh:* — **trim grips ignoring `layer.reversed` (v8.92)**, which
       was silently dropping footage: a reversed clip's head is the source window's END, so every trim
       landed on the opposite end from the one grabbed. Two UI paths for one operation disagreed, and now
       do not.

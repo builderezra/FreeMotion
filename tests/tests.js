@@ -18186,6 +18186,48 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: the motion tracker ignored layer.crop ---------------- */
+
+  test('the motion tracker maps a cropped layer\'s pixels through the crop origin (BUG-HUNT)', { item: 'tracker-crop' }, function () {
+    /* "Motion tracker ignores layer.crop and builds its template from the wrong source pixels."
+     * The seed arrives in CROP-BOX space — `geom()` sizes the layer with `FM.layerSize`, which returns
+     * the crop box for a cropped clip — while the frame cache is scaled from the FULL source. Without
+     * the origin the template is grabbed from somewhere else entirely, the tracker locks onto a
+     * different feature, and the x/y keyframes it writes follow that instead. It fails SILENTLY,
+     * because the seed box drawn on screen uses the exact inverse transform and lands correctly on the
+     * tapped feature.
+     * The entry's own worked example is the case below: a 1080x1920 clip cropped to y=600, tapping the
+     * centre. Content (540,540) is really source (540,1140) — 600px away from what was templated. */
+    if (typeof FM._trkMap !== 'function') throw new Error('FM._trkMap is not exported — the tracker mapping cannot be checked without building a frame cache and running a real track');
+    const crop = { x: 0, y: 600, w: 1080, h: 1080 };
+    const rx = 440 / 1080, ry = 440 / 1080;          // a cache scaled from the FULL source
+    const m = FM._trkMap(crop, rx, ry);
+
+    const seed = { x: 540, y: 540 };                  // the tap, in crop-box space
+    const cache = m.toCache(seed);
+    const wantY = (600 + 540) * ry;
+    if (Math.abs(cache.y - wantY) > 0.01) {
+      throw new Error('a tap at content y=540 on a layer cropped to y=600 maps to cache y=' + cache.y.toFixed(1) +
+        ', but source y is 1140 so it should be ' + wantY.toFixed(1) + ' — the template is being grabbed ' +
+        Math.round(Math.abs(cache.y - wantY) / ry) + 'px away from the tapped feature');
+    }
+    if (Math.abs(cache.x - 540 * rx) > 0.01) throw new Error('the x axis picked up an offset it should not have');
+
+    /* AND THE INVERSE, because a tracked position has to come back into the same space the keyframes
+       are written in. These two being inverses is the property whose absence made the bug invisible. */
+    const back = m.toContent(cache);
+    if (Math.abs(back.x - seed.x) > 0.01 || Math.abs(back.y - seed.y) > 0.01) {
+      throw new Error('round trip gave (' + back.x.toFixed(1) + ',' + back.y.toFixed(1) + ') for a seed of (540,540) — the two conversions are not inverses, so tracked points land offset from where they were found');
+    }
+
+    // An UNCROPPED layer must be exactly as it was — this path is what every ordinary track uses.
+    const plain = FM._trkMap({ x: 0, y: 0, w: 1080, h: 1920, full: true }, rx, ry);
+    const pc = plain.toCache(seed);
+    if (Math.abs(pc.x - seed.x * rx) > 0.01 || Math.abs(pc.y - seed.y * ry) > 0.01) {
+      throw new Error('an uncropped layer no longer maps straight through — the crop branch has changed the ordinary path');
+    }
+  });
+
   /* ---------------- BUG-HUNT: trim grips ignored layer.reversed ---------------- */
 
   test('trimming a REVERSED clip edits the end you grabbed (BUG-HUNT)', { item: 'trim-reversed' }, async function () {

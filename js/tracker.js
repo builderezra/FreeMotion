@@ -114,6 +114,23 @@ window.FM = window.FM || {};
   }
 
   // ================= run the track =================
+  /* CONTENT PIXELS ⇄ CACHE PIXELS, in one place and exported (BUG-HUNT: the crop origin was missing).
+   * A cropped layer's content coordinates start at (crop.x, crop.y) in the source, while the frame
+   * cache is scaled from the FULL source — so the origin has to be added going in and taken off coming
+   * out. These two are each other's inverse by construction, which is exactly the property that was
+   * broken before: the seed box on screen was drawn through one transform and the template grabbed
+   * through another, so the tracker locked onto a feature 600px away and nothing looked wrong.
+   * A factory rather than inline arithmetic so the suite can check it without building a frame cache
+   * and running a real track over it. */
+  function trkMap(cr, rx, ry) {
+    const ox = (cr && cr.x) || 0, oy = (cr && cr.y) || 0;
+    return {
+      toCache: function (p) { return { x: (ox + p.x) * rx, y: (oy + p.y) * ry }; },
+      toContent: function (p) { return { x: p.x / rx - ox, y: p.y / ry - oy }; },
+    };
+  }
+  FM._trkMap = trkMap;
+
   FM.tracker = {
     isPicking() { return !!picking; },
 
@@ -180,6 +197,19 @@ window.FM = window.FM || {};
       // cache frames are stored at (fc.w × fc.h); content(media) px → cache px by this ratio
       const cw = fc.w || (m.width), ch = fc.h || (m.height);
       const rx = cw / m.width, ry = ch / m.height;
+      /* THE CROP ORIGIN (BUG-HUNT: "Motion tracker ignores layer.crop and builds its template from the
+         wrong source pixels"). `geom()` sizes the layer with `FM.layerSize`, which for a cropped clip
+         returns the CROP BOX — so the seed arriving here is in crop-box space, where local (0,0) is
+         source pixel (crop.x, crop.y). But rx/ry above are cache-over-FULL-SOURCE, so without adding the
+         origin the template is grabbed from the wrong part of the picture entirely: the entry's example
+         is a 1080x1920 clip cropped to y=600, where tapping the centre templates source (540,540)
+         instead of (540,1140) — 600px away, locking onto a different feature and writing keyframes that
+         follow it. It fails silently, because the seed box is drawn through the exact inverse transform
+         and lands correctly on the tapped feature.
+         Only the ORIGIN needs adding: a crop does not scale, so rx/ry remain right for converting
+         sizes, which is all `boxContentPx` is used for. */
+      const cr = (FM.cropOf ? FM.cropOf(layer, seedT) : null) || { x: 0, y: 0 };
+      const { toCache, toContent } = trkMap(cr, rx, ry);
       const scratch = document.createElement('canvas'); scratch.width = cw; scratch.height = ch;
       const grayCache = {};
       const grayAt = (idx) => {
@@ -207,7 +237,7 @@ window.FM = window.FM || {};
       const seedGray = grayAt(idxForTime(frames[seedIdxInList]));
       if (!seedGray) return false;
       let template = new Float32Array(tw * th);
-      const scx = seed.x * rx, scy = seed.y * ry;
+      const _sc = toCache(seed); const scx = _sc.x, scy = _sc.y;
       (function seedTpl() {
         const ox = Math.round(scx - tw / 2), oy = Math.round(scy - th / 2);
         for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
@@ -231,7 +261,8 @@ window.FM = window.FM || {};
           const nx = good ? r.x : guess.x, ny = good ? r.y : guess.y;
           vel = { x: (nx - last.x) * 0.6 + vel.x * 0.4, y: (ny - last.y) * 0.6 + vel.y * 0.4 };
           last = { x: nx, y: ny };
-          pos[k] = { cx: nx / rx, cy: ny / ry };
+          const _pc = toContent({ x: nx, y: ny });
+          pos[k] = { cx: _pc.x, cy: _pc.y };   // …and back off on the way out
           if (good) {   // adapt the template slowly toward the current patch (appearance drift)
             const ox = Math.round(nx - tw / 2), oy = Math.round(ny - th / 2), a = 0.12;
             for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
