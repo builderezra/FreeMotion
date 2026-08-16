@@ -135,6 +135,16 @@ answer in this category, but check rather than assume.
 walks through freezes that screen's design — doing it before the visual-identity work above means
 building it twice.
 
+## One thing here is already OURS
+
+**The cursor-proximity glow on the add / layer panel (queue 286, v8.78) is the first piece of visual
+identity in this app that was not modelled on an Alight Motion screenshot.** He asked for it out of
+nowhere — *"I just thought of a really premium feature… it makes it feel like the area around ur curser
+knows its there and is reacting to it"* — and nothing in AM does it.
+Worth saying when the identity pass starts, for two reasons: it is proof the app can carry its own
+ideas rather than only borrowed ones, and it is a good seed to design the rest of the identity AROUND
+(the light temperature, the falloff, the restraint of it) instead of starting from a blank page.
+
 ## Do this before
 
 - Any public link Ezra promotes, any store listing, any tutorial or demo video.

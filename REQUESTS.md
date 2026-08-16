@@ -2968,7 +2968,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Watch for `&` that is not a label (HTML entities, JS operators) and for the keyboard-shortcuts
       sheet, which may spell things differently again.
 
-- [ ] **286 — PC: a glow that follows the cursor on the add menu and layer edit menu. (16 Aug.)** His
+- [x] **286 — PC: a glow that follows the cursor on the add menu and layer edit menu. DONE v8.78.** (16 Aug.) His
       words, verbatim: *"I just thought of a really premium feature where on the add menu and layer edit
       menu on pc a glow should follow ur curser, i feel like some other websites or stuff have this but
       its something really cool we could add, make sure it looks good, its not just a simple glow on ur
@@ -2986,7 +2986,29 @@ better still, keep working inside the turn rather than parking work for a later 
       `prefers-reduced-motion`.
       Also worth noting against **BEFORE-PUBLISHING.md**: this is the first deliberately ORIGINAL bit of
       visual identity anyone has asked for, rather than something modelled on Alight Motion. Worth
-      saying so when the identity pass comes up.
+      saying so when the identity pass comes up. **Written into that file now**, with the argument that
+      it is a good seed to design the rest of the identity around rather than starting from blank.
+
+      **DONE v8.78.** Nothing is drawn at the cursor, which is the distinction you drew and the thing
+      that decided the implementation: every card's BORDER lights on the side the cursor is near, and
+      the panel carries a wide, faint wash underneath, so the light belongs to the surface and the
+      cursor is only where it falls. Rendered and looked at — with the pointer beside "Speed", that
+      card's ring is brightest, Border & Shadow and Presets catch it, the far corners stay dark.
+      The add menu and the layer menu are the same element, so it lands on both by construction — which
+      is the pair you named.
+      **How it stays cheap**, because this app is frame-tight: the ring gradients use
+      `background-attachment: fixed`, so they resolve against the VIEWPORT and all seventy cards sample
+      ONE screen-space spotlight from the same two custom properties. No card needs its own
+      coordinates, so there is no `getBoundingClientRect` per card per frame — the work is two custom
+      property writes, gated to one per 16ms, and it stops entirely while playing. Off under
+      `prefers-reduced-motion`, desktop-only, and a touch pointer never arms it (a finger has no hover,
+      so a tap would leave a ring lit with nothing to move it away).
+      **One thing worth recording because it nearly repeated the queue-284 mistake:** the throttle was
+      `requestAnimationFrame` at first, and rAF does not fire in the browser pane this is developed in
+      *or* under headless Chrome's virtual time — both probes reported an unwritten variable and a dead
+      glow for code that was fine. A 16ms clock gate costs the same and can actually be demonstrated.
+      The same trap has a second half: CSS transitions do not tick there either, so a property mid-fade
+      reads as its start value forever. The test disables transitions before reading, and says why.
 
 - [x] **279 — Give the layer menu the Add menu's background. DONE v8.72.** (16 Aug.) His words, verbatim:
       *"keep the background of the add menu for the menu when u press on a layer"*.

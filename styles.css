@@ -5928,6 +5928,53 @@ body.fm-pushing #toast { z-index: 213; }
   background: linear-gradient(120deg, rgba(255, 88, 132, .36) 0%, rgba(90, 150, 255, .36) 100%);
 }
 
+/* ---- The panel reacts to the cursor (queue 286) -----------------------------------------------
+   Ezra: "on the add menu and layer edit menu on pc a glow should follow ur curser… its not just a
+   simple glow on ur curser but it makes it feel like the area around ur curser knows its there and is
+   reacting to it, if that makes sense".
+   So nothing here is drawn AT the cursor. Two things react to it instead:
+     · every card's BORDER lights on the side the cursor is near — a ring, masked out of the middle, so
+       it reads as the edge catching light rather than as a glow sitting on top of the card;
+     · the panel carries a wide, very faint wash underneath, which is what makes it feel like an area
+       responding rather than nine separate buttons doing a hover trick.
+   `background-attachment: fixed` is what makes this cheap enough to run. It resolves the gradient
+   against the VIEWPORT instead of each element, so all seventy cards sample one screen-space spotlight
+   from the same two custom properties — no per-card coordinates, and therefore no getBoundingClientRect
+   per card per frame. app.js writes those two numbers once per rAF and stops entirely during playback.
+   The add menu and the layer menu are the same element (#inspector-panel), which is exactly the pair he
+   named — since queue 279 they are one surface, so this lands on both by construction. */
+@media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
+  #inspector-panel { --glow-x: -9999px; --glow-y: -9999px; position: relative; }
+  /* The wash. Sits under the content and over the panel's own gradient; large and faint on purpose —
+     at this size and opacity you read it as the surface being lit, not as a shape moving. */
+  #inspector-panel::after {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(420px circle at var(--glow-x) var(--glow-y), rgba(120, 214, 240, .10), transparent 62%);
+    background-attachment: fixed;
+    opacity: 0; transition: opacity .22s ease-out;
+  }
+  #inspector-panel.glow-on::after { opacity: 1; }
+  /* The ring. `padding: 1px` plus the xor mask leaves only a one-pixel border painted, so the gradient
+     lights the EDGE of each card and nothing else. */
+  #inspector-panel .cat-card, #inspector-panel .addmenu-card { position: relative; }
+  #inspector-panel .cat-card::after,
+  #inspector-panel .addmenu-card::after {
+    content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    border-radius: inherit; padding: 1px;
+    background: radial-gradient(220px circle at var(--glow-x) var(--glow-y), rgba(150, 232, 255, .85), rgba(150, 232, 255, .12) 40%, transparent 65%);
+    background-attachment: fixed;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    opacity: 0; transition: opacity .22s ease-out;
+  }
+  #inspector-panel.glow-on .cat-card::after,
+  #inspector-panel.glow-on .addmenu-card::after { opacity: 1; }
+  /* The cards already own a ::after in one place — the order badge on a picked effect tile lives on
+     .fxb-tile, not on these two, so there is no collision. Checked rather than assumed. */
+}
+
 /* ---- The layer buttons shrink with the band (queue 285) ---------------------------------------
    Ezra: "the layer edit pannels buttons should shrink if you make the timeline too small, so the button
    all stay fitting on screen."

@@ -1,47 +1,77 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>glow candidate harness</title>
+<html><head><meta charset="utf-8"><base href="../"><title>#286 — the panel reacting to the cursor</title>
 <style>
-  html, body { margin: 0; background: #05070b; }
-  iframe { border: 0; display: block; }
-</style>
-</head>
-<body>
-<iframe id="f" src="../index.html"></iframe>
+  html,body{margin:0;background:#05090c;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+  iframe{width:1280px;height:800px;border:0;display:block}
+  #out{padding:8px;white-space:pre;color:#8fa}
+</style></head><body>
+<iframe id="app" src="index.html"></iframe>
+<div id="out">…</div>
 <script>
-/* Dev-only harness (not shipped, not linked from the app).
-   Loads the REAL home screen in an iframe so a glow candidate is judged against the real backdrop,
-   the real translucent bar and the real wordmark artwork — not a reconstruction that could flatter it.
-   ?c=A   → also injects /tests/_glow-A.css over the app's own styles (that file is the candidate).
-   ?w/?h  → iframe size, so the same candidate can be shot at phone and desktop widths.
-   Animations are PINNED at the 50% keyframe (the brightest point of the 7s breathe) so two shots of
-   the same candidate are comparable — otherwise every capture lands on a different frame. */
-var q = new URLSearchParams(location.search);
-var cand = q.get('c') || '';
-var f = document.getElementById('f');
-f.style.width = (+(q.get('w') || 380)) + 'px';
-f.style.height = (+(q.get('h') || 300)) + 'px';
-f.addEventListener('load', function () {
-  var d = f.contentDocument;
-  var s = d.createElement('style');
-  s.textContent =
-    '.hm-brand-halo,.hm-brand-glint,.hm-brand-wm::before,.hm-brand-wm::after,.hm-brand-img{' +
-      'animation-delay:-3.5s!important;animation-play-state:paused!important}' +
-    // The backdrop's 48s drift must be KILLED, not merely paused: paused stops it wherever it
-    // happens to be when this style lands, so two captures of the same page disagreed by ~10 levels
-    // of green across the whole bar — which reads exactly like the candidate dimming the backdrop.
-    '#home-screen::before,#home-screen::after{animation:none!important}' +
-    '#home-screen.hm-intro *{animation:none!important}';
-  d.head.appendChild(s);
-  if (cand) {
-    var l = d.createElement('link');
-    l.rel = 'stylesheet';
-    l.href = '/tests/_glow-' + cand + '.css?t=' + Math.random();
-    d.head.appendChild(l);
-  }
-});
+/* #286 — the cursor-proximity glow, driven the way a mouse drives it.
+ *
+ * WHY THIS PAGE EXISTS. The glow is rAF-throttled on purpose (a decoration must not cost playback
+ * frames), and the browser pane this is developed in does not run requestAnimationFrame at all — a
+ * probe there reported the variables unwritten and the opacity at 0 for a feature that is fine. That is
+ * the same trap the slam easter egg produced a confidently wrong reading from. Headless Chrome runs rAF
+ * and advances transitions under --virtual-time-budget, so the gesture is driven HERE and the frame is
+ * left on screen for _shot.sh to photograph. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app');
+  function fail(m) { out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 200) return fail('FM never initialised');
+      if (!w.FM || !w.FM.makeLayer || !d.getElementById('inspector-panel')) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var P = FM.scene.project;
+        var L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 300, shapeH: 300, fill: '#44aaff' });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var panel = d.getElementById('inspector-panel');
+        var cards = [].slice.call(panel.querySelectorAll('.cat-card'));
+        if (!cards.length) return fail('no layer cards to light');
+        /* Aim between two cards in the middle of the grid, which is the case worth photographing: if
+           this were a blob parented to the cursor there would be one bright spot, and what should
+           actually show is the facing EDGES of several cards catching it at once. */
+        var a = cards[Math.min(4, cards.length - 1)].getBoundingClientRect();
+        var x = Math.round(a.right + 4), y = Math.round(a.top + a.height / 2);
+        panel.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse' }));
+        setTimeout(function () {
+          /* Read with transitions OFF. Headless Chrome under --virtual-time-budget advances timers but
+             does not appear to tick the CSS transition clock, so a property mid-fade reads as its FROM
+             value forever — which looked exactly like "the rule is not applying". Killing the
+             transition asks the only question that matters here: with .glow-on set, what does the rule
+             resolve to? The fade itself is 220ms of taste and needs no proving. */
+          var kill = d.createElement('style');
+          kill.textContent = '*, *::before, *::after { transition: none !important; }';
+          d.head.appendChild(kill);
+          void d.body.offsetWidth;
+          var cs = w.getComputedStyle(cards[0], '::after');
+          var ps = w.getComputedStyle(panel);
+          var near = cards[Math.min(4, cards.length - 1)];
+          var ns = w.getComputedStyle(near, '::after');
+          var extra = ['', 'nearest card ::after → content: ' + ns.content + '  opacity: ' + ns.opacity +
+                       '  inset: ' + ns.top + '  mask: ' + (ns.webkitMaskComposite || ns.maskComposite || 'none'),
+                       'reduced-motion matches: ' + w.matchMedia('(prefers-reduced-motion: reduce)').matches,
+                       'panel ::after opacity: ' + w.getComputedStyle(panel, '::after').opacity];
+          out.textContent = [
+            'pointer at ' + x + ',' + y,
+            'glow-on: ' + panel.classList.contains('glow-on'),
+            '--glow-x/y: ' + ps.getPropertyValue('--glow-x').trim() + ' / ' + ps.getPropertyValue('--glow-y').trim(),
+            'ring opacity: ' + cs.opacity + '   (0 means the rAF write or the transition never ran)',
+            'ring attachment: ' + cs.backgroundAttachment,
+          ].concat(extra).join('\n');
+          window.__done = true;
+        }, 700);
+      }, 700);
+    })();
+  });
+})();
 </script>
-</body>
-</html>
+</body></html>

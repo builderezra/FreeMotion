@@ -17426,6 +17426,74 @@
     }
   });
 
+  /* ---------------- queue 286: the panel reacts to the cursor ---------------- */
+
+  test('the layer/add panel lights its card edges from the cursor, and stands down for playback (queue 286)', { item: 'panel-glow' }, async function () {
+    /* "on the add menu and layer edit menu on pc a glow should follow ur curser… its not just a simple
+     * glow on ur curser but it makes it feel like the area around ur curser knows its there and is
+     * reacting to it."
+     * Read with TRANSITIONS OFF. The ring fades in over 220ms and a transition clock does not
+     * necessarily tick in a driven browser — headless Chrome under virtual time reports a property
+     * mid-fade as its FROM value forever, which looks exactly like a rule that is not applying and cost
+     * a diagnosis to find. The fade is taste; what this proves is what the rule resolves to. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // deliberately not armed there
+    const layers0 = FM.scene.layers.slice();
+    const kill = document.createElement('style');
+    kill.textContent = '*, *::before, *::after { transition: none !important; }';
+    try {
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 300, shapeH: 300, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(280);
+      const panel = document.getElementById('inspector-panel');
+      const card = panel.querySelector('.cat-card');
+      if (!card) return;
+      document.head.appendChild(kill);
+      const r = card.getBoundingClientRect();
+      const x = Math.round(r.right + 4), y = Math.round(r.top + r.height / 2);
+      const move = () => panel.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse' }));
+
+      const dark = getComputedStyle(card, '::after').opacity;
+      if (dark !== '0') throw new Error('the card ring is already lit at ' + dark + ' before the cursor has been anywhere near it');
+
+      move();
+      await sleep(60);
+      if (!panel.classList.contains('glow-on')) throw new Error('moving the cursor over the panel did not arm the glow');
+      const cs = getComputedStyle(card, '::after');
+      if (cs.opacity !== '1') throw new Error('the card ring is at opacity ' + cs.opacity + ' with the cursor on the panel — the surface is not reacting');
+      /* The one that says it is a SURFACE effect rather than a blob: every card samples the same
+         screen-space spotlight, which is what `fixed` buys and what makes one write per frame enough. */
+      if (cs.backgroundAttachment !== 'fixed') throw new Error('the ring gradient is ' + cs.backgroundAttachment + '-attached, so it is anchored to each card instead of to the screen — that is a glow per card, not one field the cards sit in');
+      if (cs.backgroundImage.indexOf(String(x)) < 0) throw new Error('the ring gradient is not centred on the cursor (' + cs.backgroundImage.slice(0, 70) + '…)');
+
+      /* …and it gets out of the way of playback. A decoration that keeps writing during playback is
+         exactly the kind of thing the quality ladder exists to protect against. */
+      const wasPlaying = FM.playing;
+      FM.playing = true;
+      const gx0 = panel.style.getPropertyValue('--glow-x');
+      panel.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x + 60, clientY: y + 40, pointerId: 1, pointerType: 'mouse' }));
+      await sleep(60);
+      if (panel.style.getPropertyValue('--glow-x') !== gx0) throw new Error('the glow kept tracking the cursor while FM.playing — it is supposed to stand down');
+      FM.playing = wasPlaying;
+
+      /* A finger has no hover, so a touch pointer must not arm it — otherwise a phone tap leaves a ring
+         lit with nothing to move it away. */
+      panel.classList.remove('glow-on');
+      panel.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 2, pointerType: 'touch' }));
+      await sleep(60);
+      if (panel.classList.contains('glow-on')) throw new Error('a touch pointer armed the cursor glow');
+    } finally {
+      kill.remove();
+      const panel = document.getElementById('inspector-panel');
+      if (panel) { panel.classList.remove('glow-on'); panel.style.removeProperty('--glow-x'); panel.style.removeProperty('--glow-y'); }
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(180);
+    }
+  });
+
   /* ---------------- queue 285: the layer buttons did not shrink with the band ---------------- */
 
   test('the layer buttons shrink with the timeline band so they all stay on screen (queue 285)', { item: 'cat-shrink' }, async function () {

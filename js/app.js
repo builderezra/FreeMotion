@@ -1415,6 +1415,7 @@ window.FM = window.FM || {};
 
   FM.play = function () {
     if (FM.playing) return;
+    if (FM._panelGlowOff) FM._panelGlowOff();   // the cursor glow stands down for playback (queue 286)
     if (FM.timeline && FM.timeline.stopMomentum) FM.timeline.stopMomentum();   // don't fight a timeline glide
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
@@ -4081,6 +4082,60 @@ window.FM = window.FM || {};
    * from refreshAll and syncTopBar remain harmless. */
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pcTransportLayout);
   else pcTransportLayout();
+
+  /* ---- THE PANEL REACTS TO THE CURSOR (queue 286) ---------------------------------------------
+   * Ezra: "on the add menu and layer edit menu on pc a glow should follow ur curser… its not just a
+   * simple glow on ur curser but it makes it feel like the area around ur curser knows its there and
+   * is reacting to it."
+   * That distinction decides the whole implementation. A blob parented to the pointer is one element
+   * moving; what he described is the SURFACE responding — so nothing here draws a glow at the cursor.
+   * The cards' own borders light on the side the cursor is near, and the panel carries a soft wash
+   * under them, so the light belongs to the panel and the cursor is only where it happens to fall.
+   * ONE PAIR OF NUMBERS DOES ALL OF IT. The card rings are painted with a gradient at
+   * `background-attachment: fixed`, which resolves against the VIEWPORT rather than each element — so
+   * every card samples the same screen-space spotlight from the same two variables, and no card needs
+   * its own coordinates. Writing per-card positions would have meant a getBoundingClientRect per card
+   * per frame, on a panel that can hold seventy of them.
+   * Cost, because this app is frame-tight and the quality ladder exists for a reason: pointermove only
+   * stores two numbers, one rAF writes two custom properties, and the whole thing stands down while
+   * FM.playing — a decoration must never take frames from playback. Off entirely under
+   * prefers-reduced-motion, and desktop-only, which is what he asked for. */
+  function setupPanelGlow() {
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    /* COALESCED ON A CLOCK, NOT ON requestAnimationFrame — and that is not a style preference.
+       rAF was the obvious throttle and it made the feature impossible to demonstrate: it does not fire
+       at all in the browser pane this is developed in, and it did not fire under headless Chrome's
+       virtual time either, so both probes reported an unwritten variable and a dead glow for code that
+       was fine. An undemonstrable mechanism is the exact thing that got the queue-284 resize hook
+       written and reverted once already.
+       A 16ms gate costs the same and is observable anywhere: pointermove arrives at most ~120/s, this
+       drops it to one write per frame, and the work per write is two custom properties — no layout is
+       read, which is where a cursor effect would actually cost frames. */
+    let on = false, last = -1e9;
+    panel.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;             // a finger has no hover; this is the PC feature
+      if (!matchMedia('(min-width: 701px)').matches) return;
+      if (FM.playing) return;                            // never spend a playback frame on a decoration
+      const now = (window.performance && performance.now) ? performance.now() : Date.now();
+      if (now - last < 16) return;
+      last = now;
+      if (!on) { on = true; panel.classList.add('glow-on'); }
+      panel.style.setProperty('--glow-x', Math.round(e.clientX) + 'px');
+      panel.style.setProperty('--glow-y', Math.round(e.clientY) + 'px');
+    });
+    const off = () => { on = false; panel.classList.remove('glow-on'); };
+    panel.addEventListener('pointerleave', off);
+    /* Playback starting mid-hover would otherwise leave the ring lit at a stale position for as long as
+       it ran, which reads as a stuck highlight rather than as something reacting. FM.play calls this;
+       there is no play EVENT to listen for, and inventing one would have been a second source of truth
+       for something the function already knows. */
+    FM._panelGlowOff = off;
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupPanelGlow);
+  else setupPanelGlow();
+
   FM.syncViewBar = syncViewBar;
     const bindVb = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', () => { fn(); syncViewBar(); }); return b; };
     bindVb('vb-slower', () => stepViewRate(-1));
