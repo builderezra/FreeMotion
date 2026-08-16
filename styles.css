@@ -5684,7 +5684,15 @@ body.fm-pushing #toast { z-index: 213; }
      radius, so "to the borders" is literal — the gradient now ends where the border is.
      Still no padding anywhere: v7.85 already proved that costs the inspector a scrollbar, and two tests
      catch it. */
-  #inspector-panel:has(.addmenu--panel) {
+  /* …AND THE LAYER MENU KEEPS IT TOO (queue 279). Ezra: "keep the background of the add menu for the
+     menu when u press on a layer." The `:has()` gate meant the surface appeared when nothing was
+     selected and vanished the moment you picked a layer, so the same panel changed material depending
+     on what it was showing — which is the thing he noticed. Dropping the gate is the whole fix: it is
+     the PANEL's surface now, and the add menu and the layer menu read as one place.
+     Still desktop-only, because the gradient always was: on a phone the inspector is its own sheet with
+     its own material. Kept at this specificity (id + :has was 0,2,0; this is 0,1,0) by staying inside
+     the same media block and after `.panel`, which is the only other rule that paints it. */
+  #inspector-panel {
     background:
       radial-gradient(120% 60% at 0% 100%, rgba(53, 133, 161, .20), transparent 62%),
       radial-gradient(90% 45% at 100% 0%, rgba(90, 199, 237, .09), transparent 68%),

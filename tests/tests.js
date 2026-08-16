@@ -17426,6 +17426,42 @@
     }
   });
 
+  /* ---------------- queue 279: the layer menu keeps the add menu's background ---------------- */
+
+  test('the layer menu is painted with the same surface as the add menu (queue 279)', { item: 'insp-surface' }, async function () {
+    /* "keep the background of the add menu for the menu when u press on a layer."
+     * The gradient was gated on `:has(.addmenu--panel)`, so the panel wore it with nothing selected and
+     * dropped to a flat fill the moment a layer was picked — the same surface changing material
+     * depending on what it was showing. Asserted as "the two states paint the same thing" rather than
+     * against a hard-coded colour, so restyling the surface later does not fail this. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const layers0 = FM.scene.layers.slice();
+    const wasStudio = document.body.classList.contains('layout-studio');
+    try {
+      document.body.classList.add('layout-studio');
+      FM.selectLayer(null); if (FM.inspector) FM.inspector.refresh();
+      await sleep(200);
+      const panel = document.getElementById('inspector-panel');
+      const addMenuSurface = getComputedStyle(panel).backgroundImage;
+      if (!/gradient/.test(addMenuSurface)) throw new Error('the add menu itself has no gradient surface, so this test cannot say what the layer menu should match');
+
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.4), y: Math.round(P.height * 0.4), shapeW: 200, shapeH: 200, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(240);
+      if (document.querySelector('#inspector-panel .addmenu--panel')) throw new Error('the add menu is still up with a layer selected, so this proves nothing');
+      const layerSurface = getComputedStyle(panel).backgroundImage;
+      if (layerSurface !== addMenuSurface) {
+        throw new Error('the layer menu paints ' + (/gradient/.test(layerSurface) ? 'a different surface' : 'no gradient at all') + ' — with a layer selected the panel is supposed to keep the add menu\'s background');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (!wasStudio) document.body.classList.remove('layout-studio');
+    }
+  });
+
   /* ---------------- queue 278: the darkened bin pill sat low on the transport row ---------------- */
 
   test('the darkened bin group is vertically centred on the transport row (queue 278)', { item: 'bin-pill' }, async function () {

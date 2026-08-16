@@ -2916,12 +2916,22 @@ better still, keep working inside the turn rather than parking work for a later 
       visual identity anyone has asked for, rather than something modelled on Alight Motion. Worth
       saying so when the identity pass comes up.
 
-- [ ] **279 — Give the layer menu the Add menu's background. (16 Aug.)** His words, verbatim:
+- [x] **279 — Give the layer menu the Add menu's background. DONE v8.72.** (16 Aug.) His words, verbatim:
       *"keep the background of the add menu for the menu when u press on a layer"*.
       i.e. the panel that opens when you tap a LAYER should use the same background treatment the ADD
       menu already has, so the two read as the same surface. Check which one he means by "background" —
       the add menu's panel has a layered gradient (two gradient layers, asserted by a test), not a flat
       fill, so match that rather than just the base colour.
+
+      **DONE v8.72, and it was one selector.** The gradient was written as
+      `#inspector-panel:has(.addmenu--panel)` — so the panel wore that surface while nothing was
+      selected and dropped to a flat fill the instant you picked a layer. The same panel changed
+      material depending on what it was showing, which is exactly what he is describing. Removing the
+      gate makes it the PANEL's surface: the add menu and the layer menu are one place now.
+      Still desktop-only, because the gradient always was — on a phone the inspector is its own sheet
+      with its own material, and nothing about that changed.
+      The test asserts the two states paint the **same** thing rather than checking for a hard-coded
+      colour, so restyling the surface later cannot fail it for the wrong reason.
 
 - [ ] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
       spec + a screenshot he drew on.)** ⚠️ **BIG — design work, and he says himself it is experimental.**
