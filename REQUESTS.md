@@ -1938,12 +1938,27 @@ better still, keep working inside the turn rather than parking work for a later 
       The home screen already renders a real thumbnail per project, so the machinery for this exists —
       check whether the template tiles can use the same renderer before building anything new.
 
-- [ ] **267 — The sound-effects ICON is still red; it should be the white gradient. (16 Aug.)** His words,
+- [x] **267 — The sound-effects ICON is still red; it should be the white gradient. DONE v8.57.** His words,
       verbatim: *"The sound effects icon needs to be the white gradient, it still is red. The rainbow and
       white border is good but the sound icon still isn't."*
       **This is a MISS from the earlier request, not a new idea.** He asked for the button to be white
       with a gradient border; the border landed and the icon did not. Screenshot confirms: the speaker
       glyph is still pink/red on the rainbow tile.
+      **DONE v8.57 — and the reason the earlier fix missed is worth keeping.** The card already carried
+      `.addmenu-card--rainbow > .addmenu-ic { color: #ffffff }` from the pass that answered the border
+      half. That rule is correct and it did **nothing**, because these strokes are painted with
+      `stroke="url(#fm-ic-sfx)"` — an explicit paint server. **A CSS colour cannot override an SVG
+      gradient reference**, so the icon went on using its own pink ramp (`#FBC2E7 → #E8438F`) no matter
+      what the cascade said. That is exactly why it looked fixed in the diff and was still red on your
+      screen.
+      The gradient itself is white now, at falling opacity (1 → .62) rather than white-into-grey — the
+      same language as the ring around this card, and the same answer to the same words you used for it:
+      *"not solid white, give it some gradient"*.
+      Verified on the phone at 375px with a screenshot: white speaker on the rainbow plate, inside the
+      white gradient ring. The test parses the rendered stops rather than matching the source string, so
+      `#fff`, `#ffffff` and `white` all pass and a coloured stop cannot slip through on formatting — and
+      it separately asserts the two ends DIFFER, or a solid white fill wearing a `<linearGradient>` would
+      satisfy it.
 
 - [x] **266 — The ? button is off-centre and in the wrong place. DONE v8.56.** His words, verbatim:
       *"Question mark button is wonky and off centred and I need it to the right of the refresh button."*

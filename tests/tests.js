@@ -16939,6 +16939,48 @@
     }, 375);
   });
 
+  /* ---------------- queue 267: the sound-effects icon was still red ----------------
+   * "The sound effects icon needs to be the white gradient, it still is red. The rainbow and white
+   * border is good but the sound icon still isn't."
+   * The card ALREADY carried `.addmenu-card--rainbow > .addmenu-ic { color: #ffffff }` from the earlier
+   * pass — and it did nothing, because these strokes are painted with `url(#fm-ic-sfx)`, an explicit
+   * paint server. A CSS colour cannot override an SVG gradient reference. The gradient itself had to
+   * change, which is why "it still is red" after a fix that looked right in the diff. */
+
+  test('the sound-effects icon is a WHITE gradient, not a pink one (queue 267)', { item: 'sfx-icon' }, async function () {
+    if (!FM.addMenu || !FM.addMenu.openTab) throw new Error('FM.addMenu.openTab missing');
+    FM.addMenu.openTab('audio');
+    await sleep(220);
+    const grad = document.getElementById('fm-ic-sfx');
+    if (!grad) throw new Error('the sound-effects icon gradient is not in the document — the Audio tab did not render');
+    const stops = [...grad.querySelectorAll('stop')];
+    if (stops.length < 2) throw new Error('the icon gradient has ' + stops.length + ' stop(s) — it cannot be a gradient');
+    /* WHITE: every stop's colour must be neutral. A hex is parsed rather than string-matched so
+       #fff, #ffffff and white all pass and a pink one cannot sneak through on formatting. */
+    const rgbOf = c => {
+      const t = String(c || '').trim().toLowerCase();
+      if (t === 'white') return [255, 255, 255];
+      const m = t.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+      if (!m) return null;
+      const h = m[1].length === 3 ? m[1].split('').map(x => x + x).join('') : m[1];
+      return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+    };
+    stops.forEach(st => {
+      const c = st.getAttribute('stop-color');
+      const rgb = rgbOf(c);
+      if (!rgb) throw new Error('cannot read stop-color "' + c + '" — if it is not a plain hex this test is not checking what it thinks');
+      const [r, g, b] = rgb;
+      const spread = Math.max(r, g, b) - Math.min(r, g, b);
+      if (spread > 12) throw new Error('a stop is coloured, not white: ' + c + ' (channel spread ' + spread + ') — this is the pink that made him say "it still is red"');
+      if (Math.min(r, g, b) < 200) throw new Error('a stop is dark: ' + c + ' — the icon has to read as white on the rainbow');
+    });
+    /* GRADIENT: "not solid white, give it some gradient" — the two ends must actually differ, or it
+       is a flat fill wearing a <linearGradient>. */
+    const key = st => (st.getAttribute('stop-color') || '') + '@' + (st.getAttribute('stop-opacity') == null ? '1' : st.getAttribute('stop-opacity'));
+    if (key(stops[0]) === key(stops[stops.length - 1]))
+      throw new Error('both ends of the icon gradient are identical (' + key(stops[0]) + ') — that is solid white, not a gradient');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

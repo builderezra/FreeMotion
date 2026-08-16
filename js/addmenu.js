@@ -344,8 +344,16 @@ window.FM = window.FM || {};
            as belonging here — and the gradient id is namespaced, because a duplicate id silently steals
            the fill from whichever element asked for it second. */
         { label: 'Sound effects', icon: icoMulti(
+          /* WHITE, WITH A GRADIENT (queue 267). "The sound effects icon needs to be the white
+             gradient, it still is red." It stayed red because the fix for the card set
+             `.addmenu-card--rainbow > .addmenu-ic { color: #ffffff }` — and these strokes are painted
+             with `url(#fm-ic-sfx)`, an explicit paint server, so `color` never reached them. A CSS
+             colour cannot override an SVG gradient reference; the gradient itself has to change.
+             White at falling opacity rather than white into grey, which is the same language as the
+             ring around this card and answers the same words he used for it: "not solid white, give it
+             some gradient". */
           '<defs><linearGradient id="fm-ic-sfx" x1="20" y1="4" x2="6" y2="20" gradientUnits="userSpaceOnUse">'
-          + '<stop offset="0" stop-color="#FBC2E7"/><stop offset="1" stop-color="#E8438F"/></linearGradient></defs>'
+          + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".62"/></linearGradient></defs>'
           + '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z" stroke="url(#fm-ic-sfx)" stroke-linejoin="round"/>'
           + '<path d="M15.4 9.2a4 4 0 0 1 0 5.6" stroke="url(#fm-ic-sfx)" stroke-linecap="round"/>'
           + '<path d="M18.1 6.6a7.7 7.7 0 0 1 0 10.8" stroke="url(#fm-ic-sfx)" stroke-linecap="round"/>'),
