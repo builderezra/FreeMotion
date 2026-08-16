@@ -1733,8 +1733,8 @@ better still, keep working inside the turn rather than parking work for a later 
       stop silently deletes your layer. Either clamp the centre to a range that always has content, or
       wrap the sample back into frame. Worth asking him which he'd expect before choosing.
 
-- [ ] **262 — Hot Colour (thermal): setting Low at or above High turns the layer into a flat black
-      rectangle. (Found in the 16 Aug hunt.)** Two independent sliders, nothing stops them crossing.
+- [x] **262 — Hot Colour (thermal): setting Low at or above High turns the layer into a flat black
+      rectangle. DONE v8.41. (Found in the 16 Aug hunt.)** Two independent sliders, nothing stops them crossing.
       Measured on a shape whose real colour is rgb(53,220,175):
       | Low / High | what the layer becomes |
       |---|---|
@@ -1750,7 +1750,19 @@ better still, keep working inside the turn rather than parking work for a later 
       destroyed" is unmeasurable on it; it needs a textured layer. `counter`'s from/to also cross, but
       there that is the feature (counting down), so leave it alone.
 
-- [ ] **261 — Halftone Lines goes SOLID BLACK in the preview while the export is fine. (Found in the
+      **DONE v8.41.** Crossed sliders are now read as the WINDOW they describe — 80/20 and 20/80 mean
+      the same thing, and the test asserts they agree, because otherwise "swap" is just a different
+      way of being arbitrary. A zero-width window widens to the narrowest one that still maps a range.
+      No Low < High setting that already worked is touched.
+      **The test needed a GRADIENT layer, and that is the point worth keeping:** on the flat test shape
+      I first reached for, "all detail destroyed" is unmeasurable — a flat layer is one colour whether
+      the effect is broken or not. The fixture asserts it produces a range BEFORE testing the defect,
+      and that guard fired on the first run and caught me using the wrong gradient shape
+      (`layer.fillGradient` with c0/c1, not a stops array).
+      **pixelsort is still unchecked** — same low/high pair, same crossing risk, now with a gradient
+      fixture available to test it properly.
+
+- [x] **261 — Halftone Lines goes SOLID BLACK in the preview while the export is fine. DONE v8.41. (Found in the
       16 Aug hunt — a preview/export mismatch, the class this codebase keeps getting bitten by.)**
       Measured, same project (1080×1920), same effect, size 3, counting white pixels:
       | rendered at | white px | result |
@@ -1768,6 +1780,14 @@ better still, keep working inside the turn rather than parking work for a later 
       found it and he never did.
       Fix direction: floor the SCALED size at 2 (a stripe needs two rows to be a stripe), or scale the
       threshold rather than the period so the effect degrades in contrast instead of collapsing.
+
+      **DONE v8.41 — the scaled period is floored at 2.** A stripe needs two rows; at one, every row
+      shares the same position in the pattern and the threshold beats it for any luminance below pure
+      white. **Honest trade:** at the very smallest sizes the preview's stripes are now slightly
+      COARSER than the export's, because two device rows is the finest a stripe can be. That is the
+      resolution limit rather than a bug, and it beats a black rectangle. The test renders the same
+      project at full, half and preview scale and counts white pixels, so a collapse at any one of
+      them fails.
 
 - [x] **260 — Bug and issue hunt, plus ideas. DONE 16 Aug — three real bugs found, filed as 261/262/263, plus 264.** His words, verbatim: *"When you finish the last
       thing, do a bug and issue hunt. Also look for potential ideas and things to do. when all is said

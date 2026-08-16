@@ -16083,6 +16083,68 @@
     }
   });
 
+  /* ---------------- queue 261: Halftone Lines went solid black in the preview ----------------
+   * Found by the 16 Aug parameter sweep, not by him — which is the point of it. The stripe period is
+   * multiplied by the preview's pixel scale, and at a period of 1 every row shares the same rowMod, so
+   * the threshold beats it for any luminance below pure white and the layer is written black. The
+   * quality ladder MOVES that scale under load, so this could strike mid-playback while the exported
+   * file stayed correct — a preview/export disagreement, the class this codebase keeps getting bitten
+   * by, and one that is nearly impossible to report ("it went black sometimes"). */
+
+  test('Halftone Lines still draws stripes when the preview is downscaled (queue 261)', { item: 'halftone-ps' }, function () {
+    const R = FM.fxRegistry;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 900, shapeH: 1700, fill: '#35dcaf' });
+    L.effects = [R.makeInstance('halftonelines')];
+    L.effects[0].params = Object.assign(L.effects[0].params || {}, { size: 3 });   // the slider's own MINIMUM
+    const S = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
+    // Count pure-white pixels: the halftone writes only 0 or 255, so white rows ARE the stripes.
+    const whiteAt = (w, h) => {
+      const c = offscreen(w, h), ctx = c.getContext('2d');
+      FM.renderScene(ctx, S, 0.5);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240) n++;
+      return n;
+    };
+    const full = whiteAt(1080, 1920);
+    if (!(full > 0)) throw new Error('no stripes even at full resolution, so this test cannot see the defect it is for');
+    /* The preview scale that broke it: 1080 -> 360 is a third, which rounds a period of 3 down to 1. */
+    const prev = whiteAt(360, 640);
+    if (prev === 0) throw new Error('the downscaled preview is SOLID BLACK — the stripes collapsed (full res had ' + full + ' white pixels)');
+    // and a half-scale preview, so this is not accidentally passing at one specific ratio
+    if (whiteAt(540, 960) === 0) throw new Error('the half-scale preview is solid black');
+  });
+
+  test('Hot Colour survives its Low and High sliders crossing (queue 262)', { item: 'thermal-range' }, function () {
+    /* Two independent sliders with nothing stopping them crossing. The failure was not a crash — it
+       was the layer flattening to ONE colour (black in four of the six palettes), which on a dark
+       canvas reads as the layer having been deleted. So the assertion is about DETAIL SURVIVING, not
+       about any particular colour: a gradient in must still be a gradient out. */
+    const R = FM.fxRegistry;
+    // A gradient layer, so "all detail destroyed" is actually measurable — a flat shape could not show it.
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 300, shapeH: 220, fill: '#808080' });
+    L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#000000', c1: '#ffffff' };
+    L.effects = [R.makeInstance('thermal')];
+    const S = scene([L]);
+    const distinct = (low, high) => {
+      L.effects[0].params = Object.assign(L.effects[0].params || {}, { amount: 1, low: low, high: high });
+      const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, S, 0.5);
+      const d = ctx.getImageData(0, 0, 320, 240).data, seen = new Set();
+      for (let i = 0; i < d.length; i += 4) seen.add(d[i] + ',' + d[i + 1] + ',' + d[i + 2]);
+      return seen.size;
+    };
+    const normal = distinct(0, 100);
+    if (normal < 4) throw new Error('the gradient fixture is not producing a range of colours (' + normal + '), so this test could not see the defect');
+    const equal = distinct(50, 50);
+    if (equal < 3) throw new Error('Low == High flattened the layer to ' + equal + ' colour(s) — it has lost all detail');
+    const crossed = distinct(80, 20);
+    if (crossed < 3) throw new Error('Low above High flattened the layer to ' + crossed + ' colour(s)');
+    /* Crossed sliders should read as the WINDOW they describe, so 80/20 and 20/80 must agree —
+       otherwise "swap" is just a different way of being arbitrary. */
+    if (crossed !== distinct(20, 80)) throw new Error('80/20 and 20/80 disagree, so crossing is not being read as the same window');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
