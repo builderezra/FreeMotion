@@ -2636,6 +2636,28 @@ better still, keep working inside the turn rather than parking work for a later 
       what he describes, so the two platforms may want one shared "insertion index" with two different
       renderings. Also: what happens to it in an empty project, and whether it appears in exports or
       layer counts (it must not).
+      **ADDITION 16 Aug — what the Add layer SAYS. His words, verbatim:**
+      > *"I just had a great idea for what the new add button should say when you have nothing else in
+      > the project. Like, when you start a new project, the new, like, button slash layer should say
+      > tap here to start creating. or something along those lines, if anything is something a bit more
+      > inspirational. But, like, tap here to start creating or something like that would be good. And
+      > then once you add stuff, it would obviously change to something else. Like, tap here to add
+      > audio layer or whatever. I don't know. Just start making it overexplementary. Like, explain
+      > itself way too much. Like, a little tutorial for explaining what it does. You'd seem to do that
+      > a lot where you just, like, put an explanation for everything in every section, and it just
+      > looks messy. So just don't overexplain it."*
+      13. [ ] **Empty project:** the Add layer reads something like *"tap here to start creating"* — his
+              example, and he says *"if anything"* make it **a bit more inspirational**.
+      14. [ ] **Once the project has layers:** the label CHANGES to something contextual — his example is
+              *"tap here to add audio layer"*.
+      15. [ ] **Keep it SHORT.** The dictation garbles mid-way (*"Just start making it overexplementary"*)
+              but the sentences either side of it settle the meaning and the last one is explicit:
+              *"So just don't overexplain it."* One short line, not a tutorial.
+      **AND HE IS TELLING ME SOMETHING ABOUT MY OWN HABITS, WHICH IS WORTH MORE THAN THIS FEATURE:**
+      *"You'd seem to do that a lot where you just, like, put an explanation for everything in every
+      section, and it just looks messy."* That is about the app's UI copy, not this file's notes — hint
+      lines, empty states and helper text that explain what is already obvious. Worth a sweep of its own
+      some time; for now, read it as a standing constraint on any new label or hint I add anywhere.
 
 - [ ] **293 — Delete the retired Classic layout CSS, don't just stop showing it. (16 Aug, from #292.)**
       #292 stopped the old Alight-Motion-shaped layout being PAINTED on refresh by putting
