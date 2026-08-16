@@ -1721,6 +1721,26 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **254 — Edit Points has no keyframe functionality at all. (16 Aug, with a screenshot.)** His
+      words, verbatim: *"edit points has literally no keyframe functionality. add it"*.
+      The screenshot is the **Edit Points** panel on a Drawing layer: an X and a Y readout (522.9 /
+      818.6), the "Swipe here to move point" pad, the three point-mode buttons down the left, and the
+      hint line. **No ◆ anywhere** — every other property panel in the app has the keyframe diamond and
+      its easing button on a left rail (`mt-rail`), and this one simply does not, so a point's position
+      cannot be animated.
+      **Check before building — the machinery may already exist.** The pen-mask system stores its path
+      as EITHER a static `pts` array or an animated `{ kf }` (see the masks note in js/inspector.js), so
+      an animated point-list is already a shape the app understands and renders. If shape/drawing points
+      use the same representation, this is largely wiring the existing rail onto the points panel rather
+      than inventing path interpolation. If they do NOT, say so in this entry before starting — that is
+      a much bigger job (interpolating between two point lists needs matching point COUNTS, and a
+      keyframe that adds or deletes a point has no obvious tween).
+      **Two things to decide and record while building:** whether a keyframe captures the WHOLE path or
+      just the selected point (whole-path is far simpler and is what mask animation already does), and
+      what happens when a point is added or removed between two keyframes.
+      Related: **#206** (sensible edit points) is HELD because he wants to do it with me — do not fold
+      these together without asking.
+
 - [ ] **253 — Shape sliders scrub too fast to hit an exact size. (16 Aug.)** His words, verbatim:
       *"when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
       cos it jumps a lot of numbers, leaving me to type in what i want"*.
