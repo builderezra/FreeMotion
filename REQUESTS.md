@@ -1721,6 +1721,22 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [x] **255 — The settings cog rotates once and never again until you refresh. DONE v8.16.** His words,
+      verbatim: *"the setttings cog rotates once but never again until you refresh, prolly coz it doesnt
+      un rotate"*.
+      **His instinct was right that it was a restart problem, but the cause was one level down.** The
+      animation has no fill mode, so it DOES un-rotate — the icon really is back at 0° afterwards. What
+      failed was the replay. The code did the standard trick: remove the class, force a reflow, add it
+      back. Forcing the reflow was `void ic.offsetWidth` — and **`ic` is an `<svg>` element, where
+      `offsetWidth` is `undefined`**, because it is an `HTMLElement` property and `SVGElement` does not
+      have it. So nothing was read, no layout was forced, the browser coalesced the remove and the add
+      into no change at all, and the animation only ever ran the first time the class appeared.
+      Measured before fixing: `typeof ic.offsetWidth === 'undefined'`, `ic instanceof SVGElement === true`.
+      **Fixed** by forcing layout on the BUTTON (a real `HTMLElement`) and cancelling any in-flight
+      animation first, so a fast double-press restarts cleanly rather than being swallowed. The test
+      clicks twice and asserts a fresh animation each time; the old `offsetWidth`-on-SVG version turns
+      it red.
+
 - [ ] **254 — Edit Points has no keyframe functionality at all. (16 Aug, with a screenshot.)** His
       words, verbatim: *"edit points has literally no keyframe functionality. add it"*.
       The screenshot is the **Edit Points** panel on a Drawing layer: an X and a Y readout (522.9 /

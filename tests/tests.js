@@ -14894,6 +14894,39 @@
     }
   });
 
+  test('the cog animation restarts on every press, not just the first', { item: 'cog-turn' }, async function () {
+    /* queue 255. "the setttings cog rotates once but never again until you refresh." The cause was
+       not the rotation failing to reset — it does. The RESTART failed: the replay trick read
+       `ic.offsetWidth` to force a reflow, and `ic` is an <svg>, where offsetWidth is undefined. No
+       layout was forced, the remove and the add were coalesced, and the animation ran once ever.
+       So this counts ANIMATIONS, not classes — a class can be present with nothing playing, which is
+       exactly the state the bug left it in. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const btn = document.getElementById('btn-settings');
+    if (!btn) throw new Error('no settings cog');
+    const ic = btn.querySelector('.ico');
+    if (!ic) throw new Error('the cog has no .ico');
+    if (!ic.getAnimations) return;                       // engine cannot answer the question
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      btn.click(); await frame();
+      const first = ic.getAnimations().filter(function (a) { return /cog/.test(a.animationName || ''); });
+      if (!first.length) throw new Error('the first press started no animation at all');
+      // let it finish, exactly as it would in use
+      first.forEach(function (a) { try { a.finish(); } catch (e) {} });
+      await frame();
+      btn.click(); await frame();
+      const second = ic.getAnimations().filter(function (a) { return /cog/.test(a.animationName || ''); });
+      if (!second.length) throw new Error('the SECOND press started no animation — the cog turns once and never again');
+    } finally {
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg) dlg.classList.add('hidden');
+      document.body.classList.remove('cv-anchored', 'cv-up');
+      document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
+      if (homeWasOpen && FM.home && FM.home.open) { /* left as found */ }
+    }
+  });
+
   /* ---------------- queue 205: the section that owns the canvas ----------------
    * "when you open move and transform it gets rid of the outline ... and instead just shows the
    * anchor point as a circle" / "Same with when opening edit points." One rule, so the two cannot

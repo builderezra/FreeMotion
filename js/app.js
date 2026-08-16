@@ -3502,8 +3502,20 @@ window.FM = window.FM || {};
       /* A quarter turn on press (queue 241). Ezra: "Make the cog do a little turn animation when you
        * click it." Restarted by hand — remove, force a reflow, add — because a class that is already
        * present does not replay its animation, so a second click would do nothing at all. */
+      /* RESTARTING THIS IS FIDDLIER THAN IT LOOKS (queue 255). Ezra: "the setttings cog rotates once
+         but never again until you refresh." The remove/reflow/add trick was right in shape and broken
+         in detail: `ic` is an <svg>, and `offsetWidth` is an HTMLElement property that is UNDEFINED on
+         SVGElement — so the read forced no layout, the browser coalesced the remove and the add into
+         no change, and the animation ran exactly once, ever.
+         So the reflow is forced on the BUTTON, which is a real HTMLElement, and any in-flight run is
+         cancelled first so a fast double-press restarts instead of being swallowed. */
       const ic = setBtn.querySelector('.ico');
-      if (ic) { ic.classList.remove('cog-turn'); void ic.offsetWidth; ic.classList.add('cog-turn'); }
+      if (ic) {
+        if (ic.getAnimations) { ic.getAnimations().forEach(a => { try { a.cancel(); } catch (e) {} }); }
+        ic.classList.remove('cog-turn');
+        void setBtn.offsetWidth;                 // NOT ic.offsetWidth — see above
+        ic.classList.add('cog-turn');
+      }
       const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
       const cv = document.getElementById('btn-canvas');
       if (inProject && cv) {
