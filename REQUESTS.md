@@ -5748,6 +5748,43 @@ better still, keep working inside the turn rather than parking work for a later 
       save) — all three are the same card and should go in one pass.
 
 
+- [ ] **332 — Use his own car photos as the effect preview art, and rename the Move/Transform effect
+      group to "Shakes / Movement".** (17 Aug, two photos sent in chat.) His words, verbatim:
+
+      > Use this as the photo for all the stuff in the move / transform section and change its name to shakes / movement
+
+      *(photo 1: an orange McLaren 720S Spider, rear three-quarter, parked kerbside)*
+
+      > And use this for some others
+
+      *(photo 2: an orange Lamborghini Revuelto beside a black SUV in a car park)*
+
+      > And also this
+
+      *(photo 3: a black Tesla Model Y on a driveway, overcast sky)*
+
+      then, settling what they are all for:
+
+      > All just for the shake section
+
+      **Clauses:**
+      1. [ ] **All three photos** become the sample art for the **Move / Transform (shake) category** —
+             his last message resolves the earlier ambiguity: none of them go anywhere else.
+      2. [ ] That category is **renamed to "Shakes / Movement"**.
+      Three photos across one category means the tiles in it can differ from each other, which is
+      probably the point — a row of identical cars would read as one repeated tile.
+
+      ⚠️ **BLOCKED ON THE FILES, and this one is genuinely blocked.** The art is loaded from
+      `fx-art/<name>.jpg` (fourteen files today: city, ramp, dusk, towers, dog, sunpath, bush, shore,
+      bay, run, clouds, figures, cat, pair). **A photo pasted into chat is not a file I can write to
+      disk** — I can see it, but I cannot reproduce its bytes. So this needs him to save the two images
+      into `~/Claude/FreeMotion/fx-art/` (any names; I will wire them up and add them to `ALL_PHOTOS`).
+      Three files now, not two.
+      Told him so in the reply rather than leaving it silently un-started.
+      Everything else about the entry is ready: the category rename is independent of the photos and can
+      ship on its own.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.

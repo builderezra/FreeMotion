@@ -155,7 +155,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
   `--quiet` keeps them, to name the test; then decide whether the test or the app is at fault. Do NOT
   simply retry-until-green in the meantime.
 
-### Dragging an audio-drive source clip recomputes a full loudness envelope every frame and caches every one forever
+### ~~Dragging an audio-drive source clip recomputes a full loudness envelope every frame and caches every one forever~~ — FIXED v9.31
 `js/audio-react.js:221`  · found by `audio`
 
 - **What:** `envSig()` folds the clip's timing (`start | trimStart | duration | reversed | speed`) into the cache key. `audioEnvelopeSync` is called from `behaviors.js:148` on every rendered frame for any layer carrying an Audio Drive behavior. A cache miss fires `FM.audioEnvelope` as a microtask — a synchronous main-thread RMS pass whose cost is proportional to the clip's ENTIRE decoded sample count (`for j in [s0,s1): acc += mono[j]*mono[j]`, summed over `clipDur*fps` frames ≈ `clipDur*sampleRate` iterations) — and the result is written into `m._audioEnvCache[sig]` with no cap and no eviction. Dragging or trimming the source clip mutates `start`/`duration`/`trimStart` on every `pointermove` and calls `FM.requestRender()` (timeline.js:1266, timeline.js:1490), so each rAF produces a brand-new signature: a new full-clip recompute plus a new permanently-retained envelope.
@@ -748,7 +748,7 @@ still correct, and the row handles still sit at the right edge where it used to 
 - **Fix:** Grow the hit area without moving the glyph, the same way .kf-dot does: `.th-eye { position: relative; }` and `.th-eye::after { content: ""; position: absolute; inset: -11px -8px; }` — a ~31x37px target that still leaves the thumbnail as the select surface.
 - **Measured:** Measured in the live DOM: .th-eye is 15 x 15 px, against a 44 px minimum.
 
-### Audio-drive envelope cache (m._audioEnvCache) has no eviction and is keyed on continuously-varying slider values — one slider drag adds 101 permanent entries and fires 101 full-clip envelope recomputes _(unverified)_
+### ~~Audio-drive envelope cache (m._audioEnvCache) has no eviction and is keyed on continuously-varying slider values — one slider drag adds 101 permanent entries and fires 101 full-clip envelope recomputes~~ — FIXED v9.31 (it was NOT unverified — same root cause as the drag entry, confirmed by test)
 `js/audio-react.js:227`  · found by `leaks`
 
 - **What:** `FM.audioEnvelopeSync` memoises computed envelopes into `m._audioEnvCache[sig]`, a plain object on the media record with no size cap and no eviction anywhere in the file. The key comes from `envSig` (js/audio-react.js:193-210), which folds in `gain`, `attack`, `release` and the source clip's `start|trimStart|duration|reversed|speedSig`. Those are not discrete: `audioDelta` (js/behaviors.js:146-148) derives `attack = 0.005 + smooth * 0.055` and `release = 0.03 + smooth * 0.37` from the Smoothing slider, and `audioDelta` runs inside `FM.behaviorValue`, which the compositor calls per layer per frame (js/compositor.js:5312, 6895). The inspector renders Smoothing as a `rangeRow` (js/inspector.js:2276-2279) whose `input` listener fires on every step and calls `FM.requestRender()` (js/inspector.js:118). So each slider step produces a brand-new sig, a permanent new cache entry, and a fresh `FM.audioEnvelope` run scheduled as a microtask (line 225). The code comment at js/audio-react.js:191-192 claims a retime means "the stale entry is abandoned" — it is abandoned but never deleted.

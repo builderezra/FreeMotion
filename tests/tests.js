@@ -25127,5 +25127,82 @@
     }
   });
 
+  /* An audio-drive envelope costs a full RMS pass over the clip's entire decoded audio — about 8 million
+     float operations on a three-minute track — and its cache key folds in the source clip's start, trim
+     and speed AND the behaviour's gain/attack/release. All of those move CONTINUOUSLY under a gesture,
+     and the accessor runs per layer per frame. So dragging the song fired ~60 full-track passes a second
+     on the main thread and kept every result forever. */
+  function envFixture() {
+    var L = FM.makeLayer('video', { name: 'Song' });
+    L.start = 0; L.duration = 10;
+    FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 8, height: 8, duration: 10 });
+    return L;
+  }
+
+  test('dragging an audio-drive source does not fire a full-clip envelope pass per frame', { item: 'env-cache' }, async function () {
+    var real = FM.audioEnvelope;
+    var layers0 = FM.scene.layers.slice();
+    try {
+      var computes = 0;
+      FM.audioEnvelope = function () { computes++; return Promise.resolve({ fps: 30, times: [0], values: [0] }); };
+      var L = envFixture();
+      FM.scene.layers.push(L);
+      var opts = { band: 'overall', gain: 1, attack: 0.02, release: 0.15 };
+
+      // A DRAG: `start` moves every frame, so every frame is a brand-new cache key.
+      for (var i = 0; i < 60; i++) { L.start = i * 0.01; FM.audioEnvelopeSync(L, opts); }
+      await new Promise(function (r) { setTimeout(r, 40); });
+      if (computes > 0) throw new Error('a 60-frame drag fired ' + computes + ' full-clip envelope passes — that is the drag stuttering to unusability on a phone');
+
+      // …and the moment it settles, exactly one compute runs.
+      FM.audioEnvelopeSync(L, opts);            // first sighting of the settled signature
+      FM.audioEnvelopeSync(L, opts);            // second — this is the one that computes
+      await new Promise(function (r) { setTimeout(r, 40); });
+      if (computes !== 1) throw new Error('a settled signature produced ' + computes + ' computes, expected exactly 1');
+      var got = FM.audioEnvelopeSync(L, opts);
+      if (!got) throw new Error('the computed envelope was not returned on the next call — the cache did not take it');
+
+      // TWO layers reading the same song alternate signatures every frame. A "same as last time" check
+      // would starve both forever; counting sightings must not.
+      computes = 0;
+      var a = { band: 'overall', gain: 1, attack: 0.02, release: 0.15, fps: 24 };
+      var b = { band: 'overall', gain: 2, attack: 0.02, release: 0.15, fps: 24 };
+      for (var j = 0; j < 6; j++) { FM.audioEnvelopeSync(L, a); FM.audioEnvelopeSync(L, b); }
+      await new Promise(function (r) { setTimeout(r, 40); });
+      if (computes !== 2) throw new Error('two interleaved behaviours produced ' + computes + ' computes, expected 1 each — a previous-signature check would have starved them');
+    } finally {
+      FM.audioEnvelope = real;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
+  test('the envelope cache is bounded, so a long gesture cannot strand megabytes', { item: 'env-cache' }, async function () {
+    var real = FM.audioEnvelope;
+    var layers0 = FM.scene.layers.slice();
+    try {
+      FM.audioEnvelope = function () { return Promise.resolve({ fps: 30, times: [0], values: [0] }); };
+      var L = envFixture();
+      FM.scene.layers.push(L);
+      var cap = (FM._envCaps && FM._envCaps.cache) || 6;
+      // 40 DIFFERENT settled signatures — each seen twice so each really is computed and cached.
+      for (var i = 0; i < 40; i++) {
+        var o = { band: 'overall', gain: 1 + i * 0.01, attack: 0.02, release: 0.15 };
+        FM.audioEnvelopeSync(L, o); FM.audioEnvelopeSync(L, o);
+        await new Promise(function (r) { setTimeout(r, 0); });
+      }
+      var m = FM.media.get(L.id);
+      var size = (m._audioEnvCache instanceof Map) ? m._audioEnvCache.size : Object.keys(m._audioEnvCache || {}).length;
+      if (size > cap) throw new Error('the cache holds ' + size + ' envelopes after 40 settled looks — it has no cap, and each entry is ~100 KB on a real track');
+      if (size < 1) throw new Error('the cache is empty — nothing was retained at all, so this test is not measuring the cap');
+      var seen = (m._audioEnvSeen instanceof Map) ? m._audioEnvSeen.size : 0;
+      if (seen > ((FM._envCaps && FM._envCaps.seen) || 32)) throw new Error('the settle-gate bookkeeping is itself unbounded (' + seen + ' entries) — the leak just moved');
+    } finally {
+      FM.audioEnvelope = real;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

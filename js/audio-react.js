@@ -190,8 +190,9 @@ window.FM = window.FM || {};
   // Signature captures every opt that changes the computed envelope (fps/band/gain/attack/release/floor)
   // AND the clip's source→timeline mapping (start/trim/duration/reversed/speed) — the envelope bakes
   // that mapping in, so without it a timeline edit left every audio-drive behavior sampling the clip's
-  // OLD timing forever. Two behaviors with the same settings share one cached envelope; a retime just
-  // changes the key, so the stale entry is abandoned and a fresh compute kicks off. '_' => never saved.
+  // OLD timing forever. Two behaviors with the same settings share one cached envelope; a retime changes
+  // the key, and the stale entry is now EVICTED rather than merely abandoned — see the note on the LRU
+  // above audioEnvelopeSync, which is where that wording turned out to be covering a leak. '_' => never saved.
   function envSig(layer, opts) {
     opts = opts || {};
     const P = FM.scene && FM.scene.project;
@@ -214,19 +215,55 @@ window.FM = window.FM || {};
   // Return the cached envelope object for (layer,opts) if already computed, else return null and kick
   // off FM.audioEnvelope in the background (fire-and-forget) so a later frame gets it. A no-audio clip
   // caches null (via `sig in cache`) so it isn't re-decoded every frame. Allocation-free on the hit path.
+  /* THE ENVELOPE CACHE IS BOUNDED, AND A COMPUTE WAITS FOR THE SIGNATURE TO HOLD STILL.
+   *
+   * Computing one envelope is a synchronous RMS pass over the clip's ENTIRE decoded sample count —
+   * roughly 8 million float operations on a three-minute track. The signature that keys it folds in the
+   * source clip's start, trim, duration and speed AND the behaviour's gain, attack and release. Every
+   * one of those changes CONTINUOUSLY under a gesture: dragging the song along the timeline rewrites
+   * `start` on every pointermove, and the Smoothing slider derives attack and release from its position,
+   * so each step is a fresh key. audioEnvelopeSync is called per layer per FRAME.
+   *
+   * So a drag fired roughly sixty full-track passes a second on the main thread — the drag itself
+   * stuttered to unusability on a phone — and every one of those results was written into a plain object
+   * with no cap and no eviction anywhere in the file. A ten-second drag stranded tens of megabytes that
+   * nothing ever freed, and repeated drags ended in a mobile-Safari reload. The comment that used to sit
+   * above this said a retime meant "the stale entry is abandoned"; it was abandoned, never deleted.
+   *
+   * Two changes, and the second is the one that matters:
+   *   · the cache is a bounded LRU, so it cannot grow without limit;
+   *   · a signature must be seen TWICE before anything is computed. During a gesture every frame
+   *     produces a brand-new signature that is never seen again, so nothing is computed at all; the
+   *     moment the finger stops, the next two frames share a signature and one compute runs. Counting
+   *     sightings rather than comparing against "the previous signature" is deliberate — two behaviours
+   *     on different layers reading the same song alternate signatures every frame, and a
+   *     previous-value check would starve both of them forever.
+   * The export path is untouched: audioEnvelopePrewarm computes explicitly, ahead of the frame loop. */
+  const ENV_CACHE_MAX = 6;    // per media record — a handful of settled looks, not a session's worth
+  const ENV_SEEN_MAX = 32;
+  function lruPut(map, key, val, max) {
+    if (map.has(key)) map.delete(key);       // re-insert so the newest is last and the oldest evicts first
+    map.set(key, val);
+    while (map.size > max) map.delete(map.keys().next().value);
+  }
+  function envMap(m, k) { if (!(m[k] instanceof Map)) m[k] = new Map(); return m[k]; }
+  FM._envCaps = { cache: ENV_CACHE_MAX, seen: ENV_SEEN_MAX };   // suite seam
+
   FM.audioEnvelopeSync = function (layer, opts) {
     if (!layer) return null;
     const m = FM.media && FM.media.get(layer.id);
     if (!m) return null;
     const sig = envSig(layer, opts);
-    const cache = m._audioEnvCache;
-    if (cache && (sig in cache)) return cache[sig];
+    const cache = envMap(m, '_audioEnvCache');
+    if (cache.has(sig)) { const hit = cache.get(sig); lruPut(cache, sig, hit, ENV_CACHE_MAX); return hit; }
+    // Seen once is a gesture in progress; seen twice is a value someone has settled on. See above.
+    const seen = envMap(m, '_audioEnvSeen');
+    if (!seen.has(sig)) { lruPut(seen, sig, 1, ENV_SEEN_MAX); return null; }
     if (!m._audioEnvPending) m._audioEnvPending = {};
     if (!m._audioEnvPending[sig]) {
       m._audioEnvPending[sig] = 1;
       Promise.resolve().then(function () { return FM.audioEnvelope(layer, opts); }).then(function (env) {
-        if (!m._audioEnvCache) m._audioEnvCache = {};
-        m._audioEnvCache[sig] = env || null;   // cache null too — a clip with no audio must not re-decode forever
+        lruPut(envMap(m, '_audioEnvCache'), sig, env || null, ENV_CACHE_MAX);   // null too — a clip with no audio must not re-decode forever
         delete m._audioEnvPending[sig];
         if (env && FM.requestRender) FM.requestRender();
       }).catch(function () { if (m._audioEnvPending) delete m._audioEnvPending[sig]; });
@@ -243,10 +280,10 @@ window.FM = window.FM || {};
     const m = FM.media && FM.media.get(layer.id);
     if (!m) return null;
     const sig = envSig(layer, opts);
-    if (m._audioEnvCache && (sig in m._audioEnvCache)) return m._audioEnvCache[sig];
+    const cache = envMap(m, '_audioEnvCache');
+    if (cache.has(sig)) return cache.get(sig);
     const env = await FM.audioEnvelope(layer, opts).catch(function () { return null; });
-    if (!m._audioEnvCache) m._audioEnvCache = {};
-    m._audioEnvCache[sig] = env || null;
+    lruPut(cache, sig, env || null, ENV_CACHE_MAX);
     return env;
   };
 
