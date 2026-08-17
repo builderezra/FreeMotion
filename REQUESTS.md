@@ -3795,6 +3795,10 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 23, v9.09:* the four film-look grades (Bleach Bypass, Teal & Orange, Faded Film, Cross
+      Process). Each had its look welded into a constant, so one Amount slider dragged several
+      unrelated things together — you could not get bleached contrast while keeping colour, could not
+      choose where teal/orange splits, and a COOL faded look did not exist at all.
       *Round 22, v9.08:* the blur/sharpen family. Sharpen amplified grain in flat sky and skin as hard
       as a real edge (threshold + brightness-only mode now); Box Blur was stuck square and single-pass;
       and Inner Blur had a real bug — it mixed the transparent black outside a shape into the blur and

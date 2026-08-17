@@ -417,6 +417,24 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     read as working on only half its pixels because the 200/40 test plate clamps at both ends once
     sharpened. On a mid-range plate it is 150 of 150.
 
+- v9.09 (round 23 — **the colour grades**) — `bleachbypass` (colour loss, harshness), `crossprocess`
+  (cast, curve), `faded` (lift, colour loss, warm/cool) and `tealorange` (split point, crossover).
+  Every one of these had its look welded into a constant, so a single Amount slider drove several
+  unrelated things at once. Findings:
+  * **A GREY RAMP is the right fixture for a grade.** Every luminance appears exactly once, so "which
+    tone is the neutral point" and "how far apart are the quarter and three-quarter tones" have single
+    readable answers. A noise plate only gives averages, which cannot locate a pivot at all.
+  * **The sharpest assertion available was an UNCHANGED pixel.** At exactly the teal/orange pivot the
+    warm/cool weight is zero, so that one tone must come back untouched — measured at 24.3% / 49% /
+    79.2% for pivots of 25 / 50 / 80, with an error of EXACTLY zero. That pins the control to a
+    luminance; "some pixels moved" could never have done it.
+  * **Two claims in one row need two fixtures.** "Bleached contrast while KEEPING the colour" is a
+    saturation measurement on a coloured patch AND a tonal-range measurement on the ramp; neither
+    alone shows it. Measured: saturation 0.700 source, 0.379 stock, 0.716 with colour loss at 0, while
+    the tonal range still goes 128 to 242.
+  * **A sign change is a stronger claim than a magnitude.** Faded's cool look is asserted as red-minus-
+    blue crossing from +14 to -21, with 0 at tone 0 — not as "the cast changed".
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

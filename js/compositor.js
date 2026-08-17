@@ -624,9 +624,21 @@ window.FM = window.FM || {};
       { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
     ] },
     // ---- batch 20: cinematic grades + framing ----
-    { type: 'bleachbypass', label: 'Bleach Bypass', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
-    { type: 'tealorange', label: 'Teal & Orange', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
-    { type: 'crossprocess', label: 'Cross Process', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    { type: 'bleachbypass', label: 'Bleach Bypass', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
+      { key: 'desat', label: 'Colour loss', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      { key: 'contrast', label: 'Harshness', min: 0, max: 200, step: 5, def: 100, unit: '%' },
+    ] },
+    { type: 'tealorange', label: 'Teal & Orange', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'pivot', label: 'Split point', min: 5, max: 95, step: 1, def: 50, unit: '%' },
+      { key: 'spread', label: 'Crossover', min: 10, max: 200, step: 5, def: 100, unit: '%' },
+    ] },
+    { type: 'crossprocess', label: 'Cross Process', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+    ] },
     { type: 'lightleak', label: 'Light Leak', color: true, defColor: '#ff7a3c', colorLabel: 'Leak', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'x', label: 'Source X', min: 0, max: 100, step: 1, def: 85, unit: '%' },
@@ -650,7 +662,12 @@ window.FM = window.FM || {};
     ] },
     { type: 'border', label: 'Border Frame', param: 'width', min: 1, max: 60, step: 1, def: 10, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Border' },
     // ---- batch 21 ----
-    { type: 'faded', label: 'Faded Film', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    { type: 'faded', label: 'Faded Film', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'lift', label: 'Milky blacks', min: 0, max: 100, step: 1, def: 26 },
+      { key: 'desat', label: 'Colour loss', min: 0, max: 100, step: 1, def: 15, unit: '%' },
+      { key: 'tone', label: 'Warm / cool', min: -200, max: 200, step: 5, def: 100, unit: '%' },
+    ] },
     { type: 'nightvision', label: 'Night Vision', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
     { type: 'sketch', label: 'Pencil Sketch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
@@ -4314,9 +4331,41 @@ window.FM = window.FM || {};
           if(!hatch&&l<chT3){ if(hym<chWt)hatch=true; }
           if(hatch){ d[ci]=ir; d[ci+1]=ig; d[ci+2]=ib; } } } },
     // ---- batch 20: cinematic grades + framing ----
-    bleachbypass: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.7; if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=r*0.299+g*0.587+b*0.114; var dr=r+(l-r)*0.6, dg=g+(l-g)*0.6, db=b+(l-b)*0.6; d[i]=r+(ov(dr,l)-r)*a; d[i+1]=g+(ov(dg,l)-g)*a; d[i+2]=b+(ov(db,l)-b)*a; } },
-    tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=(l-0.5)*2; var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
-    crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,0.10,0.90), ng=cv(g,0.06,0.95), nb=cv(b,-0.12,1.10); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
+    bleachbypass: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.7; if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); }
+      // The silver-retention desaturation was welded at 0.6, so the one Amount slider tied colour loss
+      // and contrast harshness together — and keeping the bleached CONTRAST while keeping the COLOUR
+      // is the entire point of the process. They are two controls now.
+      var bbDs=p.desat==null?60:FM.evalProp(p.desat,t); if(bbDs<0)bbDs=0; if(bbDs>100)bbDs=100;
+      var bbK=bbDs===60?0.6:bbDs/100;
+      var bbCn=p.contrast==null?100:FM.evalProp(p.contrast,t); if(bbCn<0)bbCn=0; if(bbCn>200)bbCn=200;
+      var bbC=bbCn===100?1:bbCn/100;
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=r*0.299+g*0.587+b*0.114;
+        var dr=r+(l-r)*bbK, dg=g+(l-g)*bbK, db=b+(l-b)*bbK;
+        var tr=ov(dr,l), tg=ov(dg,l), tb=ov(db,l);
+        if(bbC!==1){ tr=dr+(tr-dr)*bbC; tg=dg+(tg-dg)*bbC; tb=db+(tb-db)*bbC; }
+        d[i]=r+(tr-r)*a; d[i+1]=g+(tg-g)*a; d[i+2]=b+(tb-b)*a; } },
+    tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+      // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
+      // orange half was decided by how the shot happened to be exposed rather than by any choice.
+      // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes
+      // almost everything fully warm or fully cool, a large one keeps a wide neutral middle).
+      var toPv=p.pivot==null?50:FM.evalProp(p.pivot,t); if(toPv<5)toPv=5; if(toPv>95)toPv=95;
+      var toSpP=p.spread==null?100:FM.evalProp(p.spread,t); if(toSpP<10)toSpP=10; if(toSpP>200)toSpP=200;
+      var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
+        if(w<-1)w=-1; else if(w>1)w=1;
+        var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
+    crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+      // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
+      // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
+      // crossed colour cast goes away and only the gamma remains); GAIN scales how far each channel's
+      // gamma departs from neutral, which is written as 1 + (g-1)*k rather than g*k so that 0 means
+      // "no curve at all" instead of "collapse everything to white".
+      var cpL=p.lift==null?100:FM.evalProp(p.lift,t); if(cpL<0)cpL=0; if(cpL>300)cpL=300;
+      var cpG=p.gain==null?100:FM.evalProp(p.gain,t); if(cpG<0)cpG=0; if(cpG>300)cpG=300;
+      var lk=cpL===100?1:cpL/100, gk=cpG===100?1:cpG/100;
+      var l1=cpL===100?0.10:0.10*lk, l2=cpL===100?0.06:0.06*lk, l3=cpL===100?-0.12:-0.12*lk;
+      var g1=cpG===100?0.90:1+(0.90-1)*gk, g2=cpG===100?0.95:1+(0.95-1)*gk, g3=cpG===100?1.10:1+(1.10-1)*gk;
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,l1,g1), ng=cv(g,l2,g2), nb=cv(b,l3,g3); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
     lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
       // The leak always entered from the top-right at a fixed size, so it could not be placed to match
       // where the sun actually is in the shot — which is the only thing that makes a light leak read as
@@ -4469,7 +4518,19 @@ window.FM = window.FM || {};
         for(lt_s=1;lt_s<=lt_segs;lt_s++){ var lt_y=H*lt_s/lt_segs, lt_py=H*(lt_s-1)/lt_segs; var lt_jit=Math.sin(lt_seed+lt_s*2.3)*W*0.06+Math.sin(lt_seed*2.1+lt_s*5.1)*W*0.025; var lt_x=lt_x0+lt_jit+ (lt_s/lt_segs-0.5)*W*0.15*Math.sin(lt_seed*0.9);
           var lt_steps=Math.ceil(H/lt_segs); var lt_k; for(lt_k=0;lt_k<lt_steps;lt_k++){ var lt_f=lt_k/lt_steps; var lt_cx2=lt_prevX+(lt_x-lt_prevX)*lt_f, lt_cy2=lt_py+(lt_y-lt_py)*lt_f; var lt_ixc=Math.round(lt_cx2); var lt_rad=Math.ceil(lt_wid*2); var lt_ox; for(lt_ox=-lt_rad;lt_ox<=lt_rad;lt_ox++){ var lt_xx=lt_ixc+lt_ox, lt_yy=Math.round(lt_cy2); if(lt_xx<0||lt_xx>=W||lt_yy<0||lt_yy>=H)continue; var lt_dist=Math.abs(lt_ox)/lt_wid; var lt_g=Math.exp(-lt_dist*lt_dist)*lt_int; if(lt_g<=0.004)continue; var lt_i=(lt_yy*W+lt_xx)*4; d[lt_i]=255-(255-d[lt_i])*(1-lt_col[0]/255*lt_g); d[lt_i+1]=255-(255-d[lt_i+1])*(1-lt_col[1]/255*lt_g); d[lt_i+2]=255-(255-d[lt_i+2])*(1-lt_col[2]/255*lt_g); if(d[lt_i+3]<255)d[lt_i+3]=Math.min(255,d[lt_i+3]+lt_g*255); } } lt_prevX=lt_x; } } },
     // ---- batch 21 ----
-    faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var lift=26*a, con=1-0.25*a; function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b); var nr=cr+(L-cr)*0.15*a+8*a, ng=cg+(L-cg)*0.15*a+2*a, nb=cb+(L-cb)*0.15*a-6*a; d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
+    faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+      // ONE slider drove the black lift, the contrast crush, the desaturation AND the warm cast at
+      // once, so milky blacks with the colour intact was unreachable and so was a COOL faded look.
+      // TONE going negative is what gives the cool one — the cast offsets simply flip sign.
+      var fdL=p.lift==null?26:FM.evalProp(p.lift,t); if(fdL<0)fdL=0; if(fdL>100)fdL=100;
+      var fdD=p.desat==null?15:FM.evalProp(p.desat,t); if(fdD<0)fdD=0; if(fdD>100)fdD=100;
+      var fdT=p.tone==null?100:FM.evalProp(p.tone,t); if(fdT<-200)fdT=-200; if(fdT>200)fdT=200;
+      var lift=fdL*a, con=1-0.25*a;
+      var ds=fdD===15?0.15:fdD/100, tk=fdT===100?1:fdT/100;
+      function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; }
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b);
+        var nr=cr+(L-cr)*ds*a+8*a*tk, ng=cg+(L-cg)*ds*a+2*a*tk, nb=cb+(L-cb)*ds*a-6*a*tk;
+        d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
     nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
     sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510

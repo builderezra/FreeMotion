@@ -18195,6 +18195,98 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 23: the colour grades ---------------- */
+
+  test('effects: the colour grades still render an un-upgraded instance exactly as they did', { item: 'fx-grade' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      { type: 'bleachbypass', old: { amount: 0.7 }, legacyKeys: { desat: 60, contrast: 100 }, moved: { desat: 0, contrast: 180 } },
+      { type: 'crossprocess', old: { amount: 0.6 }, legacyKeys: { lift: 100, gain: 100 },     moved: { lift: 0, gain: 250 } },
+      { type: 'faded',        old: { amount: 0.6 }, legacyKeys: { lift: 26, desat: 15, tone: 100 }, moved: { lift: 80, desat: 90, tone: -150 } },
+      { type: 'tealorange',   old: { amount: 0.6 }, legacyKeys: { pivot: 50, spread: 100 },   moved: { pivot: 25, spread: 40 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* A GREY RAMP is the right fixture for a grade: every luminance appears exactly once, so questions
+   * like "which tone is the neutral point" and "how far apart are the quarter and three-quarter tones"
+   * have single readable answers instead of averages over a noise field. */
+  function gradeRamp(W, H) {
+    var d = new Uint8ClampedArray(W * H * 4);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4;
+      d[i] = x; d[i + 1] = x; d[i + 2] = x; d[i + 3] = 255; }
+    return d;
+  }
+
+  /* Teal & Orange's split sat permanently at mid-grey, so whether FACES landed in the orange half was
+   * decided by the shot's exposure rather than by any choice. Asserted at the sharpest possible point:
+   * at exactly the pivot tone the warm/cool weight is zero, so that one tone must come back COMPLETELY
+   * unchanged — which pins the split to a specific luminance rather than merely "it moved". */
+  test('effects: Teal & Orange decides where the warm/cool split falls', { item: 'fx-grade' }, function () {
+    var W = 256, H = 8, fx = FM._FX_TABLES.PIXEL_FX.tealorange;
+    var neutral = function (p) { var d = gradeRamp(W, H); fx(d, W, H, p, 0.5, 1);
+      var best = -1, bestErr = 1e9;
+      for (var x = 0; x < W; x++) { var i = (3 * W + x) * 4, err = Math.abs(d[i] - x) + Math.abs(d[i + 2] - x);
+        if (err < bestErr) { bestErr = err; best = x; } }
+      return { at: best / 255 * 100, err: bestErr }; };
+    var mid = neutral({ amount: 0.6 });
+    if (mid.err !== 0 || Math.abs(mid.at - 50) > 2) throw new Error('the default neutral tone is at ' + mid.at.toFixed(1) + '% (error ' + mid.err + '), not mid-grey');
+    var low = neutral({ amount: 0.6, pivot: 25 }), high = neutral({ amount: 0.6, pivot: 80 });
+    if (low.err !== 0 || Math.abs(low.at - 25) > 2) throw new Error('with the split at 25% the untouched tone came out at ' + low.at.toFixed(1) + '%');
+    if (high.err !== 0 || Math.abs(high.at - 80) > 2) throw new Error('with the split at 80% the untouched tone came out at ' + high.at.toFixed(1) + '%');
+    // spread: a tight crossover must push more of the ramp to its extremes than a wide one
+    var extremes = function (p) { var d = gradeRamp(W, H); fx(d, W, H, p, 0.5, 1); var n = 0;
+      for (var x = 0; x < W; x++) { var i = (3 * W + x) * 4; if (Math.abs(d[i] - d[i + 2]) > 40) n++; } return n; };
+    if (!(extremes({ amount: 0.6, spread: 40 }) > extremes({ amount: 0.6, spread: 200 })))
+      throw new Error('a tight crossover did not push more of the ramp to the warm/cool extremes than a wide one');
+  });
+
+  /* "The bleached contrast while KEEPING the colour is the whole point of the process" — his row, and
+   * it was impossible because one slider drove both. Two separate measurements on two fixtures: the
+   * saturation of a coloured patch, and the tonal range of the ramp. */
+  test('effects: Bleach Bypass can keep the colour and still bleach the contrast', { item: 'fx-grade' }, function () {
+    var W2 = 64, H2 = 64, fx = FM._FX_TABLES.PIXEL_FX.bleachbypass;
+    var patch = function () { var d = new Uint8ClampedArray(W2 * H2 * 4);
+      for (var i = 0; i < W2 * H2; i++) { d[i * 4] = 200; d[i * 4 + 1] = 90; d[i * 4 + 2] = 60; d[i * 4 + 3] = 255; } return d; };
+    var sat = function (p) { var d = patch(); fx(d, W2, H2, p, 0.5, 1);
+      var mx = Math.max(d[0], d[1], d[2]), mn = Math.min(d[0], d[1], d[2]); return mx === 0 ? 0 : (mx - mn) / mx; };
+    var src = sat({ amount: 0 });
+    if (!(sat({ amount: 1 }) < src * 0.7)) throw new Error('the stock grade no longer strips saturation (' + sat({ amount: 1 }).toFixed(3) + ' against the source ' + src.toFixed(3) + '), so keeping it cannot be shown to differ');
+    if (!(sat({ amount: 1, desat: 0 }) > src * 0.9)) throw new Error('with colour loss at 0 the saturation still fell to ' + sat({ amount: 1, desat: 0 }).toFixed(3) + ' from ' + src.toFixed(3));
+    var W = 256, H = 8;
+    var range = function (p) { var d = gradeRamp(W, H); fx(d, W, H, p, 0.5, 1); return d[(3 * W + 192) * 4] - d[(3 * W + 64) * 4]; };
+    var plainRange = gradeRamp(W, H)[(3 * W + 192) * 4] - gradeRamp(W, H)[(3 * W + 64) * 4];
+    if (!(range({ amount: 1, desat: 0 }) > plainRange * 1.2)) throw new Error('with the colour kept, contrast is no longer being bleached (range ' + range({ amount: 1, desat: 0 }) + ' against the source ' + plainRange + ')');
+    if (!(range({ amount: 1, desat: 0, contrast: 180 }) > range({ amount: 1, desat: 0 }))) throw new Error('the harshness control did not increase contrast further');
+  });
+
+  /* Faded Film drove the black lift, the crush, the desaturation AND a warm cast off one slider, so a
+   * COOL faded look did not exist. Tone crossing zero is the assertion: the cast must change SIGN. */
+  test('effects: Faded Film can be cool instead of warm, and milky without the rest', { item: 'fx-grade' }, function () {
+    var W = 256, H = 8, fx = FM._FX_TABLES.PIXEL_FX.faded;
+    var cast = function (p) { var d = gradeRamp(W, H); fx(d, W, H, p, 0.5, 1); var i = (3 * W + 128) * 4; return d[i] - d[i + 2]; };
+    if (!(cast({ amount: 1 }) > 4)) throw new Error('the default is no longer warm (red minus blue = ' + cast({ amount: 1 }) + ')');
+    if (!(cast({ amount: 1, tone: -150 }) < -4)) throw new Error('a negative tone gave ' + cast({ amount: 1, tone: -150 }) + ' — it must go COOL, i.e. blue above red');
+    if (Math.abs(cast({ amount: 1, tone: 0 })) > 1) throw new Error('at tone 0 there is still a colour cast of ' + cast({ amount: 1, tone: 0 }));
+    var black = function (p) { var d = gradeRamp(W, H); fx(d, W, H, p, 0.5, 1); return d[(3 * W) * 4]; };
+    if (!(black({ amount: 1, lift: 80 }) > black({ amount: 1 }))) throw new Error('a higher lift did not raise the black point');
+    if (!(black({ amount: 1, lift: 0 }) < black({ amount: 1 }))) throw new Error('a zero lift did not lower the black point below the default');
+  });
+
   /* ---------------- EFFECTS-PLAN round 22: the blur / sharpen family ---------------- */
 
   test('effects: the blur family still renders an un-upgraded instance exactly as it did', { item: 'fx-blur' }, function () {
