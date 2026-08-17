@@ -5282,9 +5282,14 @@ better still, keep working inside the turn rather than parking work for a later 
       Also reset on `startDraw`, not just `stop()`: without that a second drawing would silently append
       its strokes to the first drawing's layer, which is a worse bug than the one being fixed.
 
-- [ ] **296 — The + on the create-layer button is not centred in its circle.** (17 Aug.) His words,
+- [x] **296 — The + on the create-layer button is not centred in its circle. DONE v9.44 — it was a font glyph.** (17 Aug.) His words,
       verbatim: *"The plus button on the create layer isn't centred inside the circle."*
       Arrived in the same message as 297.
+      **DONE v9.44, and the cause was the one this codebase has hit twice before.** It was the CHARACTER
+      "+": flex centring centres the LINE BOX, and where a glyph's ink sits inside that box is the font's
+      choice — so it can look level on one screen and high on another, which is exactly the disagreement
+      queue 209 had about the × and the magnifier. It is an SVG cross about its own centre now, symmetric
+      by construction, and the test measures the INK against the circle to half a pixel.
 
 - [ ] **297 — Inside an effect's sub-menu there should be a Done button.** (17 Aug.) His words,
       verbatim: *"When adding effects the done button should be there if ur inside one of the effects
@@ -5614,7 +5619,7 @@ better still, keep working inside the turn rather than parking work for a later 
          probably fixes 31b too: both need the ACTUAL frame-to-frame position after every effect has
          had its say, not the authored transform.** Worth solving once, properly, for both.
 
-- [ ] **324 — Give the Add-layer row's + button its old colours back, and make the whole bar stand
+- [x] **324 — DONE v9.44. Give the Add-layer row's + button its old colours back, and make the whole bar stand
       out.** (17 Aug.) His words, verbatim: *"Make the tiny plus button that's on the tap to create
       layer have some nice colours to it like the old plus button did, and also just make that whole
       bar stand out with some nice colours like the background menu does"*.
@@ -5624,6 +5629,12 @@ better still, keep working inside the turn rather than parking work for a later 
       menu actually use before inventing something.
       Sits with 296 (the + not centred in its circle) and 307 (four other things about that same row) —
       worth doing all of them in one pass, since they are the same control.
+      **DONE v9.44, in one pass with 296 and 326 exactly as this line suggested.** The colour is taken
+      from the add FAB he was comparing it to — a caught highlight over a tinted fill — rather than
+      invented, and the bar now runs the app's accent through it instead of fading to nothing, which is
+      what made it read as a disabled strip. **307 is still open**: its four clauses are about BEHAVIOUR
+      (the PC disappearing button, hover, and the drag animation), not the look, so they did not belong
+      in this pass.
 
 - [ ] **325 — His answers to the open questions (17 Aug).** Logged VERBATIM first, mapped underneath,
       because the mapping is mine and could be wrong — if any line below has been attached to the
@@ -5675,7 +5686,7 @@ better still, keep working inside the turn rather than parking work for a later 
         rather than holding the queue waiting for an answer.
 
 
-- [ ] **326 — The "Tap here to start creating" row should fill the WHOLE empty timeline, with a big
+- [x] **326 — DONE v9.44. The "Tap here to start creating" row should fill the WHOLE empty timeline, with a big
       + in the middle.** (17 Aug, screenshot of an empty Project 24 on his phone.) His words, verbatim:
       *"Make the tap to start creating button actually take up the whole timeline while the projects
       empty and have it so the plus button is big and in the middle, this should make it very apparent
@@ -5686,6 +5697,14 @@ better still, keep working inside the turn rather than parking work for a later 
       layer" once a clip exists, and that one must stay the slim row it is.
       Sits with 296 (+ not centred in its circle), 307 (four things about that row) and 324 (its
       colours) — all the same control, worth one pass.
+      **DONE v9.44.** An empty project now opens with the whole timeline as one panel, a 64px + in the
+      middle and the invitation under it. It reverts to the slim row the instant a clip exists — asserted,
+      because that is the state his second screenshot shows and it must not change.
+      Two measurements corrected the build: centring the + "in the row" put it off the side of the phone,
+      because the row spans the whole SCROLLABLE timeline rather than the screen; and once that was fixed
+      it was still 17px out, because the drag grip is a flex sibling and was stealing exactly its own
+      width. The grip is hidden in this state, which it should be regardless — it exists to choose where
+      new layers land, and with nothing in the timeline there is nowhere to put it.
 
 - [x] **327 — The timeline is broken: it starts EARLY. FIXED v9.29 — it was 18px, in every project, since v8.55.** (17 Aug, two screenshots, one correction.)
       His words, verbatim, in order:
@@ -6082,7 +6101,7 @@ better still, keep working inside the turn rather than parking work for a later 
      which is written for Ezra, would have taken them as finished. Moved back up 17 Aug. tools/next.sh
      now refuses to print a quiet list if it ever happens again. -->
 
-- [ ] **187 — The black bar is STILL there, and it CREEPS in.** His words: *"The black bar that comes in
+- [ ] **187 — The black bar is STILL there, and it CREEPS in.** ⚠️ **WATCHING, not open work (17 Aug):** his answer that day was *"I think black bar is gone"*. Not ticked — it has come back before — but there is nothing to act on until he sees it again, so it does not hold the queue. His words: *"The black bar that comes in
       is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
       urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
       **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
@@ -6619,6 +6638,26 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Cost check before shipping: this recomputes the cell centres per frame. Measure at 380px —
       Voronoi is already a per-pixel nearest-seed search, and the plan's own history has a round where a
       64-tap quality maximum measured 1.2 seconds a frame and had to be cut to 32.
+
+
+- [ ] **351 — Swiping the timeline is not smooth if your finger starts ON a layer.** (17 Aug.) His
+      words, verbatim: *"Timeline doesn't scrub smoothly when you press on a layer when swiping, this is
+      annoying please add to list"*.
+      Read the sentence precisely: it is not "scrubbing is laggy" in general — it is specifically a swipe
+      that BEGINS on a clip. So the lead is the gesture handoff, not the render path. A pointerdown on a
+      clip has to decide between "you are dragging this clip" and "you are scrubbing the timeline", and
+      whatever it does while it is deciding is what he is feeling — most likely a slop threshold the
+      scrub only starts after, so the first few millimetres of the swipe are dropped and it catches up in
+      a jump rather than following the finger from the first pixel.
+      ⚠️ **Measure the gesture, not the frame rate.** The frame cost of scrubbing has been measured
+      repeatedly and is fine (queue 95's re-measurement: 20 scrub steps cost ZERO rebuilds, updatePlayhead
+      0.30ms). So this will not show up as dropped frames; it will show up as the playhead not moving for
+      the first N pixels of travel, or as a jump when it starts. Compare a swipe starting on empty
+      timeline against one starting on a clip, at 380px, and look at where the playhead is after the
+      first few pointermoves — that difference IS the bug.
+      Related: **336** (trim grips should need a hold first) is the same question from the other side —
+      what a press on a clip means before it has moved. Worth deciding both together, since one adds a
+      delay deliberately and this one is a complaint about a delay.
 
 
 ## Done

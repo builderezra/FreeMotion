@@ -1678,14 +1678,26 @@ window.FM = window.FM || {};
        than there were layers and failed — correctly, because the app was telling it there was an extra
        track. Everything that walks the timeline asks for `.track-row`, and this is not one: it has no
        layer, no clip, no index. It brings its own layout instead of borrowing that class's. */
-    row.className = 'tl-addrow' + (phone ? '' : ' tl-addrow--line') + (addDragging ? ' tl-addrow-dragging' : '');
+    /* EMPTY PROJECT → the row IS the timeline (queue 326). His words: "make the tap to start creating
+       button actually take up the whole timeline while the projects empty and have it so the plus button
+       is big and in the middle, this should make it very apparent and obvious for beginners on how to
+       start". Only while there is nothing to show: the moment a clip exists it goes back to the slim row,
+       which is the state his second screenshot shows and which must not change. */
+    const empty = phone && !FM.scene.layers.length;
+    row.className = 'tl-addrow' + (phone ? '' : ' tl-addrow--line') + (empty ? ' tl-addrow--empty' : '') + (addDragging ? ' tl-addrow-dragging' : '');
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
     row.setAttribute('aria-label', phone ? addRowLabel() : 'Where new layers go — click to add, drag to move');
     const inner = document.createElement('div');
     inner.className = 'tl-addrow-inner';
+    /* AN SVG CROSS, NOT THE CHARACTER "+" (queue 296). His report was that it "isn't centred inside the
+       circle", and it was not: flex centring centres the LINE BOX, and where a glyph's ink sits inside
+       that box is up to the font — so it can look level on one screen and high on another. Exactly the
+       same finding as the × and the magnifier in queue 209, which were fixed the same way. Two strokes
+       about (12,12) are symmetric by construction, so no font can move them again. */
     const plus = document.createElement('span');
-    plus.className = 'tl-addrow-plus'; plus.textContent = '+';
+    plus.className = 'tl-addrow-plus';
+    plus.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.6v12.8M5.6 12h12.8"/></svg>';
     const label = document.createElement('span');
     label.className = 'tl-addrow-label'; label.textContent = phone ? addRowLabel() : 'New layers go here';
     inner.append(plus, label);

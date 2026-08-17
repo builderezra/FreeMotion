@@ -6004,9 +6004,39 @@ body.fm-pushing #toast { z-index: 213; }
   cursor: pointer; position: relative;
   border-radius: 10px;
   border: 1px dashed rgba(120, 214, 240, .45);
-  background: linear-gradient(90deg, rgba(90, 199, 237, .10), rgba(90, 199, 237, .02) 60%, transparent);
+  /* "make that whole bar stand out with some nice colours like the background menu does" (queue 324).
+     A single cyan wash fading to nothing read as a disabled strip; this runs the app's accent through it
+     so the bar has a direction and a warm end, which is what makes it read as a thing you press. */
+  background:
+    linear-gradient(90deg, rgba(90, 199, 237, .17) 0%, rgba(41, 217, 187, .12) 42%, rgba(150, 232, 255, .05) 78%, transparent 100%);
   box-shadow: 0 0 9px rgba(90, 199, 237, .16);
 }
+/* EMPTY PROJECT (queue 326): the row becomes the whole timeline, with a big + in the MIDDLE, so the
+   first thing a beginner sees is where to start. Reverts to the slim row the moment a clip exists. */
+.tl-addrow--empty {
+  min-height: min(52vh, 300px);
+  justify-content: center;
+  background:
+    radial-gradient(90% 70% at 50% 42%, rgba(90, 199, 237, .16), rgba(90, 199, 237, .04) 60%, transparent 100%),
+    linear-gradient(160deg, rgba(41, 217, 187, .07), transparent 70%);
+}
+/* STICKY, and a viewport wide — NOT `width: 100%`. The row spans the whole SCROLLABLE timeline, which
+   is far wider than the phone, so centring inside the row puts the + off the side of the screen. It has
+   to be centred in what you can SEE, which is what sticky + 100vw gives, and it then stays centred as
+   the timeline scrolls under it. (Measured: 17px out with width:100%.) */
+.tl-addrow--empty .tl-addrow-inner {
+  position: sticky; left: 0; width: 100vw;
+  flex-direction: column; gap: 14px; padding: 0; justify-content: center;
+}
+/* NO GRIP IN THE EMPTY STATE. It is a flex sibling of the inner, so it was stealing exactly its own
+   width from the centring — measured, the + sat 17px left of the middle. And it has no job here: the
+   grip drags the row to choose where new layers land, and with nothing in the timeline there is nowhere
+   to put it. It comes back with the slim row the moment a clip exists. */
+.tl-addrow--empty .tl-addrow-grip { display: none; }
+.tl-addrow--empty .tl-addrow-plus { width: 64px; height: 64px; box-shadow: 0 0 26px rgba(90, 199, 237, .45), inset 0 0 0 1px rgba(255,255,255,.4); }
+.tl-addrow--empty .tl-addrow-plus svg { width: 40px; height: 40px; }
+.tl-addrow--empty .tl-addrow-plus svg path { stroke-width: 2.2; }
+.tl-addrow--empty .tl-addrow-label { font-size: 15px; color: var(--text); }
 .tl-addrow:hover, .tl-addrow:focus-visible {
   border-color: rgba(150, 232, 255, .8);
   box-shadow: 0 0 14px rgba(90, 199, 237, .30);
@@ -6017,13 +6047,22 @@ body.fm-pushing #toast { z-index: 213; }
   display: flex; align-items: center; gap: 9px;
   padding: 0 12px; max-width: 100vw; box-sizing: border-box;
 }
+/* THE + (queue 296 + 324). It is an SVG now — see the note in timeline.js: the character "+" is placed
+   by the font, so it could not be centred reliably. And it carries colour again: queue 324, "make the
+   tiny plus button that's on the tap to create layer have some nice colours to it like the old plus
+   button did". The old one is the add FAB, which is glass — a caught highlight over a tinted fill — so
+   this is the same idea at 21px rather than a new invention. */
 .tl-addrow-plus {
   flex: 0 0 auto; width: 21px; height: 21px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1; font-weight: 600;
-  color: #04121a; background: linear-gradient(150deg, #8fe3ff, #4fb9e8);
-  box-shadow: 0 0 8px rgba(90, 199, 237, .45);
+  color: #04121a;
+  background:
+    radial-gradient(120% 100% at 30% 18%, rgba(255,255,255,.85), rgba(255,255,255,0) 58%),
+    linear-gradient(150deg, #9beeff 0%, #5cc6ee 46%, #35a7dd 100%);
+  box-shadow: 0 0 10px rgba(90, 199, 237, .5), inset 0 0 0 1px rgba(255,255,255,.35);
 }
+.tl-addrow-plus svg { width: 15px; height: 15px; display: block; }
+.tl-addrow-plus svg path { stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; fill: none; }
 .tl-addrow-label { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
 /* The ≡ grip, in the same place every other row keeps its one (queue 294, clause 6). Sticky to the
    RIGHT edge so it is reachable however far the timeline is scrolled — the row spans the whole

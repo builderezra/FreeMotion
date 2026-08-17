@@ -25843,5 +25843,61 @@
     }
   });
 
+  /* The + on the Add-layer row "isn't centred inside the circle" (queue 296). It was the CHARACTER "+",
+     and flex centres the line box, not the ink — where a glyph sits inside that box is the font's
+     choice, which is why it can look level on one screen and high on another. Same finding as the × and
+     the magnifier in queue 209, fixed the same way. This measures the INK, not the box, because
+     measuring the box is what makes a wrong glyph look correct. */
+  test('the Add-layer + is centred in its circle, and is not a font glyph', { item: 'addrow-plus' }, async function () {
+    await atPhoneWidth(async function () {
+      var settle = function () { return new Promise(function (r) { setTimeout(r, 130); }); };
+      var layers0 = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.length = 0;
+        FM.refreshAll(); FM.timeline.rebuild();
+        await settle();
+        var plus = document.querySelector('.tl-addrow-plus');
+        if (!plus) throw new Error('no + on the Add-layer row');
+        var svg = plus.querySelector('svg');
+        if (!svg) throw new Error('the + is still a text glyph — a font decides where its ink sits, so it cannot be reliably centred');
+        if ((plus.textContent || '').trim()) throw new Error('the + still carries text as well as the SVG: ' + JSON.stringify(plus.textContent));
+
+        /* The ink is two strokes about the SVG's own centre, so the check is that the drawn box is
+           concentric with the circle. A tolerance of 0.5px: queue 209 found a real defect of 0.4px and
+           had to tighten its own test from 0.75 to catch it. */
+        var pb = plus.getBoundingClientRect(), sb = svg.getBoundingClientRect();
+        var dx = (sb.left + sb.width / 2) - (pb.left + pb.width / 2);
+        var dy = (sb.top + sb.height / 2) - (pb.top + pb.height / 2);
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)
+          throw new Error('the + sits ' + dx.toFixed(2) + 'px across and ' + dy.toFixed(2) + 'px down from the centre of its circle');
+        if (Math.abs(pb.width - pb.height) > 0.5) throw new Error('the circle is not round: ' + pb.width.toFixed(1) + 'x' + pb.height.toFixed(1));
+
+        // EMPTY PROJECT (queue 326): the row fills the timeline and the + is big and centred.
+        var row = document.querySelector('.tl-addrow');
+        if (!row.classList.contains('tl-addrow--empty')) throw new Error('an empty project did not get the full-height Add row');
+        var rb = row.getBoundingClientRect();
+        if (rb.height < 180) throw new Error('the empty-state row is only ' + Math.round(rb.height) + 'px tall — it is meant to take up the whole timeline');
+        if (pb.width < 48) throw new Error('the + is only ' + Math.round(pb.width) + 'px in the empty state — it is meant to be big');
+        /* Centred in what you can SEE, not in the row: the row spans the whole scrollable timeline, so
+           "the middle of the row" is somewhere off the side of a phone. */
+        var offCentre = Math.abs((pb.left + pb.width / 2) - window.innerWidth / 2);
+        if (offCentre > 3) throw new Error('the big + is ' + Math.round(offCentre) + 'px from the middle of the screen — he asked for it in the MIDDLE, not tucked at the left');
+
+        // …and the moment a clip exists it goes back to the slim row, which must not change.
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+        L.start = 0; L.duration = 1;
+        FM.scene.layers.push(L);
+        FM.refreshAll(); FM.timeline.rebuild();
+        await settle();
+        var row2 = document.querySelector('.tl-addrow');
+        if (row2.classList.contains('tl-addrow--empty')) throw new Error('the row stayed full-height after a clip was added');
+        if (row2.getBoundingClientRect().height > 80) throw new Error('the row is still ' + Math.round(row2.getBoundingClientRect().height) + 'px tall with a clip present');
+      } finally {
+        FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      }
+    });
+  });
+
   window.FMTests = { tests: T, run: run };
 })();
