@@ -24943,12 +24943,13 @@
   test('a clip at t=0 is drawn under the playhead line, with a group and without', { item: 'tl-origin' }, async function () {
     await atPhoneWidth(async function () {
       var settle = function () { return new Promise(function (r) { setTimeout(r, 140); }); };
-      var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+      var layers0 = FM.scene.layers.slice(), t0 = FM.time, mk0 = FM.scene.project.markers;
       try {
         var mkClip = function () { var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#d8e83d' }); L.start = 0; L.duration = 2; return L; };
 
         async function measure(label) {
           FM.time = 0;
+          FM.scene.project.markers = [{ t: 0, label: 'zero' }];   // a benchmark exactly on t=0
           FM.refreshAll(); FM.timeline.rebuild();
           await settle();
           var tracks = document.getElementById('tl-tracks');
@@ -24958,11 +24959,18 @@
           if (!clip) throw new Error(label + ': no clip rendered');
           var head = document.querySelector('#tl-tracks .tl-headspace') || document.querySelector('#tl-tracks .track-head');
           if (!head) throw new Error(label + ': no track-head column to measure');
+          var tick = document.querySelector('#tl-rulerrow .tick') || document.querySelector('.tick');
+          var mark = document.querySelector('.tl-marker');
+          var rh = document.querySelector('#tl-rulerrow .tl-headspace');
+          var mr = mark && mark.getBoundingClientRect();
           return {
             label: label,
             noGroups: tracks.classList.contains('tl-no-groups'),
             clipLeft: clip.getBoundingClientRect().left,
             centreLeft: centre.getBoundingClientRect().left,
+            tickLeft: tick ? tick.getBoundingClientRect().left : null,
+            markCentre: mr ? (mr.left + mr.width / 2) : null,
+            rulerHead: rh ? Math.round(rh.getBoundingClientRect().width) : null,
             renderedHead: Math.round(head.getBoundingClientRect().width),
             usedHead: FM._tlHeadW ? FM._tlHeadW() : null
           };
@@ -24977,6 +24985,19 @@
           throw new Error('the timeline is doing its maths with a head width of ' + a.usedHead + ' while the column rendered ' + a.renderedHead + ' — read off the wrong element');
         if (Math.abs(a.clipLeft - a.centreLeft) > 1.5)
           throw new Error('a clip starting at t=0 is drawn at x=' + a.clipLeft.toFixed(1) + ' but the playhead line for t=0 is at x=' + a.centreLeft.toFixed(1) + ' — ' + Math.round(a.clipLeft - a.centreLeft) + 'px out, so every clip sits at the wrong time');
+        /* AND EVERYTHING ELSE THAT STANDS FOR A TIME. The first version of this test checked the CLIP
+           and nothing else, and that gap is exactly how the bug survived its own fix: v9.29 corrected
+           the JS that reads the head width, while the CSS still DECLARED the narrow head on #tl-tracks
+           — and the ruler row is a sibling of that element, not a child. So the lanes rendered at 72px
+           and the ruler at 90, and every tick and benchmark pin sat 18px right of the clips. He found
+           it: "when I add benchmarks they don't add where my playhead is".
+           A marker is positioned by its left edge but reads as a pin, so its CENTRE is the time. */
+        if (a.tickLeft != null && Math.abs(a.tickLeft - a.centreLeft) > 1.5)
+          throw new Error('the ruler tick for t=0 is at x=' + a.tickLeft.toFixed(1) + ' while the playhead line is at x=' + a.centreLeft.toFixed(1) + ' — the ruler and the lanes disagree about where time starts by ' + Math.round(a.tickLeft - a.centreLeft) + 'px');
+        if (a.markCentre != null && Math.abs(a.markCentre - a.centreLeft) > 1.5)
+          throw new Error('a benchmark at t=0 is centred at x=' + a.markCentre.toFixed(1) + ' but t=0 is at x=' + a.centreLeft.toFixed(1) + ' — ' + Math.round(a.markCentre - a.centreLeft) + 'px out');
+        if (a.rulerHead != null && Math.abs(a.rulerHead - a.renderedHead) > 0.6)
+          throw new Error('the ruler reserves ' + a.rulerHead + 'px for the track-head column while the tracks render ' + a.renderedHead + 'px — the two halves of the timeline are built on different origins, which is the whole bug');
 
         // 2. WITH A GROUP — the head widens to hold the chevron column, and it must still line up.
         FM.scene.layers.length = 0;
@@ -24989,13 +25010,18 @@
           throw new Error('with a group: maths uses ' + b.usedHead + ', column rendered ' + b.renderedHead);
         if (Math.abs(b.clipLeft - b.centreLeft) > 1.5)
           throw new Error('with a group, t=0 is drawn ' + Math.round(b.clipLeft - b.centreLeft) + 'px from the playhead line');
+        if (b.tickLeft != null && Math.abs(b.tickLeft - b.centreLeft) > 1.5)
+          throw new Error('with a group, the ruler tick for t=0 is ' + Math.round(b.tickLeft - b.centreLeft) + 'px from the playhead line');
+        if (b.rulerHead != null && Math.abs(b.rulerHead - b.renderedHead) > 0.6)
+          throw new Error('with a group, the ruler reserves ' + b.rulerHead + 'px and the tracks render ' + b.renderedHead + 'px');
 
         // …and the two states really do differ, or neither case proved anything about the other.
         if (a.renderedHead === b.renderedHead)
           throw new Error('the head is ' + a.renderedHead + 'px either way — the two branches this test exists to separate are the same, so it can no longer catch a mismatch');
       } finally {
         FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
-        FM.time = t0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        FM.time = t0; FM.scene.project.markers = mk0;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
       }
     });
   });

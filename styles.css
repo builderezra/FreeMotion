@@ -2596,7 +2596,11 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      the head goes back to 72 — which fits comfortably: 7 padding + 15 eye + 6 gap + 34 thumb + 7 = 69.
      That is 18px handed back to the timeline on every row, which is what he asked for: "you've got more
      room on the timeline even if it's only a little bit of extra room". */
-  #tl-tracks.tl-no-groups { --head-w: 72px; }
+  /* ON #tl-inner. The ruler row is a SIBLING of #tl-tracks, not a child, and a custom property only
+     cascades downwards — declared on #tl-tracks the ruler kept the 90px default while the lanes
+     rendered at 72, so every tick and benchmark pin sat 18px right of the clips and the playhead.
+     Same defect as v9.29 seen from the CSS side; see the note at buildTracks in js/timeline.js. */
+  #tl-inner.tl-no-groups { --head-w: 72px; }
   .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);

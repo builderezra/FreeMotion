@@ -5836,7 +5836,7 @@ better still, keep working inside the turn rather than parking work for a later 
       This entry is the evidence that 277's multi-select is shipped but not working, which 277 does not say.
 
 
-- [ ] **334 — Benchmarks do not land on the playhead.** (17 Aug, screenshot, v9.31.) His words:
+- [x] **334 — Benchmarks do not land on the playhead. FIXED v9.33 — the ruler was 18px out, the other half of 327.** (17 Aug, screenshot, v9.31.) His words:
       *"When I add benchmarks they don't add where my playhead is"*.
       The shot shows the playhead (white) at **00:00:00** and the benchmark line (yellow) clearly to its
       RIGHT, by roughly 16 CSS pixels, with "Benchmark added" still on screen.
@@ -5847,10 +5847,14 @@ better still, keep working inside the turn rather than parking work for a later 
       head column the way the lanes are, they land exactly one head-width-related offset out. The snap
       line at js/timeline.js:122 uses `HEAD_W + PAD + t*pps`, a THIRD spelling of the same origin, which
       is the shape of a bug that has already bitten once.
-      ⚠️ Verify by measuring, not by reading: put a benchmark at t=0 and compare its rect against
-      `#tl-centerline`, exactly as the v9.29 test does for clips. If it is the same cause, the fix is to
-      make markers, clips, the snap line and the playhead read ONE origin — and the test should cover all
-      four, not just clips, which is the gap that let this survive 327.
+      **IT WAS THE SAME CAUSE, and v9.29 was only half a fix — mine to finish, not a new job.** Measured
+      at 375px on v9.32: the clip at t=0 sat exactly on the playhead line at x=187.5, and the ruler tick
+      for t=0 sat at x=205.5. v9.29 fixed the JS that READS the track-head width; the CSS still DECLARED
+      the narrow head on `#tl-tracks`, and the ruler row is a SIBLING of that element, not a child — a
+      custom property only cascades down, so the lanes rendered a 72px head and the ruler reserved 90.
+      Every tick and benchmark pin was shifted by the 18px difference. The declaration now sits on the
+      element containing both halves. The test asserts the clip, the tick, a benchmark's centre AND that
+      both halves reserve the same head width — the narrow version of it is what let this survive.
 
 - [ ] **335 — Motion Blur is not really an effect, and is badly designed.** (17 Aug.) His words:
       *"Motion blur doesn't even act as an effect and is pretty poorly designed"*.
@@ -5909,6 +5913,134 @@ better still, keep working inside the turn rather than parking work for a later 
       recolour them; at that size the SHAPE has to differ.
       ⚠️ Verify at 380px in the Studio layout, not just at desktop width — that is the exact mistake the
       v7.79 note is about, and it is how one of these got fixed on one layout and not the other.
+
+
+- [ ] **339 — The layer category cards: same background, a unique GRADIENT border per card, with a
+      subtle moving glow — each one out of step with the others.** (17 Aug, screenshot of the phone
+      inspector's 3x3 category grid, v9.31.) His words, verbatim:
+
+      > In this layer menu, make it so each buttons background is the same but the line around it is a unique colour that matches the colours in the icon, using gradients, make it shine and have a bit of glow that subtly moves around so it doesn’t look stale and make sure each one is doing its own thing so it doesn’t look like they’re all moving in the same pattern
+
+      **Clauses:**
+      1. [ ] Every card keeps the **same background** — the change is the border, not the fill.
+      2. [ ] Each card's **border is a gradient**, in colours **taken from that card's own icon**
+             (Colouring = the pink/magenta droplet, Border/Shadow = the blue square, Blending = the
+             pink/blue circles, Position/Scale = the blue arrows, Speed = the red/amber/green dial,
+             Volume = the green speaker, Edit Shape = the green diamond, Presets = the yellow star,
+             Effects = the multicoloured burst).
+      3. [ ] It should **shine** — the gradient reads as lit, not flat.
+      4. [ ] A **subtle moving glow**, so it does not look stale.
+      5. [ ] **Each card animates independently** — no two in the same phase, or the grid reads as one
+             synchronised pattern, which is exactly what he is ruling out.
+
+      Before building: this is nine cards animating continuously on the phone screen he has just spent
+      three days telling me is laggy. **It has to be CSS-only and compositor-friendly** — an animated
+      `background-position` on a border-image, or a masked conic gradient, with no per-frame JS and
+      nothing that invalidates layout. Measure the cost at 380px before and after; if it moves the frame
+      budget at all it needs `prefers-reduced-motion` off-switch treatment at minimum. Independence is
+      free: give each card an `animation-delay` derived from its index rather than nine separate
+      keyframe sets.
+      ⚠️ Also flag against BEFORE-PUBLISHING.md — this is a deliberate visual-identity move away from
+      the Alight Motion look, which is the direction that file wants, so it is worth noting there.
+
+
+- [ ] **340 — "New element" on the home screen just makes a PROJECT, and the add-element menu looks
+      unconsidered.** (17 Aug.) His words, verbatim: *"When you create a new element it just creates a
+      new project (element tab in Home Screen) and also when you press the add element button the menu
+      is not thought and looks lazy and shit , make it good"*.
+      **Two clauses, and the first is a straight bug:**
+      1. [ ] Home screen → **Elements tab → create** produces a new *project* instead of a new element.
+             Read what that button is actually wired to before assuming — it may be sharing the new-project
+             path wholesale, in which case the element case was never built rather than broken.
+      2. [ ] The **add-element menu** is visually lazy. ⚠️ Taste, so it needs looking at next to the
+             tabs he already signed off — **queue 210** settled the per-tab colour direction for
+             Elements ("more subtle background colours, the main icon can stay bright but the backdrop
+             more subtle… we don't want it the exact same as the shape menu") and that shipped in v8.20.
+             So there is an agreed direction to build on rather than a fresh guess; check what the tab
+             looks like now against what 210 asked for before redesigning anything.
+
+
+- [ ] **341 — The film-grain background does not move on mobile, and he prefers it that way.** (17 Aug,
+      home-screen screenshot.) His words, verbatim: *"Film grain background isn't even moving on mobile,
+      and honestly I prefer it, maybe pc moving and mobile not"*.
+      **This is a decision, not a bug report — and he has made it.** Keep the grain STATIC on phone and
+      ANIMATED on PC. Worth finding out WHY it is already still on mobile before changing anything: if a
+      media query or a reduced-motion guard is already doing it, the work is to make that deliberate and
+      documented rather than accidental. If it is stopped for a reason that also applies to PC (cost),
+      say so.
+      Cheap, independent, and it makes the phone slightly cheaper to run — which is the direction
+      95/125/202 want anyway.
+
+- [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
+      Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
+      well in the element section it just adds the element to ur open project, you can't even open it as
+      a project and edit it. You need to put a lot more effort into the elements feature"*.
+      **Goes with 340**, which is the other half of the same complaint (creating an element makes a
+      project instead). Together they say the Elements tab is a shell: it can neither create nor open an
+      element as its own editable thing.
+      His screenshot on 341 corroborates 340 directly — **"My element" is sitting in the PROJECTS list**,
+      1:1, 0 layers, alongside Project 25 and Project 24. So an element really is being created as a
+      project, and it lands in the wrong tab.
+      **Clauses:**
+      1. [ ] Opening an element from the Elements tab must OPEN it for editing, not insert it into
+             whatever project happens to be open.
+      2. [ ] An element created from the home screen must be an ELEMENT, not a project, and must not
+             appear in the Projects list.
+      3. [ ] *"a lot more effort into the elements feature"* — ⚠️ deliberately not guessed at. When this
+             reaches the top, the question is what an element IS to him: a reusable clip you drop in
+             (which is what the insert behaviour assumes), or a small project you build and re-use
+             (which is what "open it and edit it" assumes). Those are different features and the answer
+             decides the shape of all of it.
+
+
+- [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
+      (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
+
+      > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
+
+      > And also people will eventually be able to create templates and share them a round so noobs can use them or whoever and get quick easy edits, and also we can create templates for people to use
+
+      then, on opening one:
+
+      > And the same thing happens for templates
+
+      *(i.e. the 342 complaint applies here too — opening a template inserts it instead of opening it.)*
+
+      **The reference screenshot is specific and worth following:** a full-screen "Insert your Media"
+      view with the template previewing at the top, a scrub bar under it, then **"Tap to Replace with
+      your Media"** and a row of slots — one per replaceable clip, each showing its duration — with a
+      **Replace Media** button. Done in the corner. So the model is: a template declares which of its
+      clips are placeholders, and you fill them.
+      **Clauses, longest-term last:**
+      1. [ ] Opening a template OPENS it, rather than dumping it into the current project (same as 342).
+      2. [ ] A template's media clips are **swappable** — tap a slot, pick your own clip, it takes that
+             slot's place and keeps the template's timing and effects.
+      3. [ ] *(long term)* People can **create** templates.
+      4. [ ] *(long term)* Templates can be **shared** — his words: *"so noobs can use them or whoever
+             and get quick easy edits"* — plus ones we make ourselves.
+      ⚠️ **Clause 4 is the one with a real constraint attached, and it should be said before anyone
+      builds toward it:** this app is deliberately local-only with no backend — nothing leaves the
+      device. Sharing templates between people needs either a file you export and send by hand (which
+      fits the current architecture and needs no server), or an actual backend (which is a different
+      kind of project, with hosting, moderation and cost). **The file route is almost certainly right
+      first** and it is a natural extension of what export already does. Not deciding that for him,
+      but it is the fork in the road and it is worth knowing it is there before clauses 2 and 3 get
+      built in a shape that assumes a server.
+      Related: **342** (elements have the same open-vs-insert problem), **210** (the Template tab card
+      should show the template's hero image — still open).
+
+
+- [ ] **344 — The "Custom elements" card's ring should be multi-coloured like its own icon.** (17 Aug,
+      screenshot of the Add sheet's Elements tab.) His words, verbatim: *"Also just for the ring around
+      custom elements make it have multiple colours like the logo itself but keep the background the
+      same just the ring around it"*.
+      The card's icon is four small squares in blue / orange / green / pink plus a magenta +. The border
+      is a flat neutral line; he wants it to carry those same colours. **Background unchanged** — same
+      instruction as **339**, which asks for exactly this treatment across the layer-category grid.
+      **So do 339 and 344 together.** They are one idea applied in two places, and building the
+      gradient-ring technique twice would guarantee they end up looking different from each other. 339
+      also carries the performance constraint (CSS-only, no per-frame JS, independent phases) — it
+      applies here too.
 
 
 ## Done

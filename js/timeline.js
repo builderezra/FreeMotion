@@ -117,7 +117,7 @@ window.FM = window.FM || {};
    * exactly under the fixed centre line. It was read as
    *     getComputedStyle(document.body).getPropertyValue('--head-w')
    * in three places — and since v8.55 that has been the WRONG ELEMENT. The narrow head is declared as
-   *     #tl-tracks.tl-no-groups { --head-w: 72px; }
+   *     #tl-inner.tl-no-groups { --head-w: 72px; }   (it was on #tl-tracks — see the note at buildTracks)
    * and a custom property cascades DOWN, never up, so body kept reporting the :root value of 90 while
    * the column rendered at 72. A project with no groups — which is most projects — therefore drew every
    * clip 18px to the LEFT of the time the playhead said it was at, in every project, in every session,
@@ -1831,7 +1831,20 @@ window.FM = window.FM || {};
      * is what he photographed: "you've left a bunch of dead space on the far left side".
      * Nothing needs aligning when there is nothing to align WITH, so the column is only held open while
      * the scene actually contains a group. The alignment invariant is untouched the moment one exists. */
-    tracksEl.classList.toggle('tl-no-groups', !FM.scene.layers.some(l => l.type === 'group'));
+    /* ON #tl-inner, NOT #tl-tracks — and that one word is the whole of queue 334.
+     * This class carries `--head-w: 72px`, the narrow track-head a project without groups gets. It used
+     * to live on #tl-tracks, and the RULER ROW is a sibling of that element, not a child: a custom
+     * property cascades DOWN, so the ruler kept the 90px default while the lanes rendered at 72. The
+     * ruler — and therefore every tick and every benchmark pin on it — sat 18px to the RIGHT of the
+     * clips and of the playhead line that share their origin. He reported it as "when I add benchmarks
+     * they don't add where my playhead is", and he was reading it exactly right.
+     * This is the SAME defect as v9.29 (queue 327), which fixed the JS side and left the CSS side: there,
+     * the maths read the variable off the wrong element; here, the variable was declared on one. Putting
+     * it on the shared ancestor is what makes both halves of the timeline agree by construction. The
+     * class stays on #tl-tracks too, because .tl-no-groups .th-chevron--empty keys off it. */
+    const noGroups = !FM.scene.layers.some(l => l.type === 'group');
+    tracksEl.classList.toggle('tl-no-groups', noGroups);
+    if (innerEl) innerEl.classList.toggle('tl-no-groups', noGroups);
     if (!FM.scene.layers.length) {
       /* On a phone the Add row IS the empty state — it says "tap here to start creating", which is both
          the invitation and the control, so a sentence above it explaining the same thing is the exact
