@@ -6015,6 +6015,16 @@ better still, keep working inside the turn rather than parking work for a later 
          effect's own notes use a circle for exactly this reason. My 268-vs-160 read as "worse" for
          half an hour when it was the fix working. **Use a circle.**
       Reverted to the shipped state rather than leaving a half-migrated render path in the app.
+      📏 **18 Aug, sizing it properly: this is ALL-OR-NOTHING, at ~20 call sites.** `__fmOX = 0` — a
+      plate pinning its origin to the comp — appears **23 times**, and they do NOT share one idiom:
+      most work in plate pixels, `drawPixelate` works in project units, the mask and camera passes have
+      their own conventions again. So it is ~20 individual reads, not one scripted edit.
+      And there is no shippable increment: the user-visible fix only lands when EVERY path stops
+      clipping AND the pin is inverted, because inverting it early is what broke `[squish, pixelate]`.
+      Half a migration ships nothing and risks the whole effects system.
+      **So this wants a session of its own**, with the suite run between small batches. Everything
+      needed to start is above: the mechanism, the two paths already proven, the ordering dependency,
+      and the circle-not-square metric. Not held up by anything from Ezra.
       Clause 1 (corners) is untouched and still unmeasured.
 
 - [x] **324 — DONE v9.44. Give the Add-layer row's + button its old colours back, and make the whole bar stand
