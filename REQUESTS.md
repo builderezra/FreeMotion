@@ -5973,11 +5973,28 @@ better still, keep working inside the turn rather than parking work for a later 
       the layer's half-extent whenever it carries another effect. **The number did not move — 160 both
       ways — so the reach box is not the cause, or not the only one.** Backed the change out rather than
       shipping an unproven cost.
-      **Where to look next:** the effect chain's ORDER. The notes on drawSquish say "Squish composites
-      innermost now — see the pin in drawLayer", which would mean it runs BEFORE the other effects
-      rather than after them — in which case Drift displaces pixels that Squish has already finished
-      with, and no amount of padding will help. If that is it, the fix is about where Squish sits in
-      the chain, not about what it can see.
+      🎯 **18 Aug — THE MECHANISM IS PINNED. Not fixed, but no longer a guess.**
+      The ordering lead was half right and led somewhere better. Squish IS pinned to composite
+      innermost (`drawLayer`, the `pp` reorder), and the note there explains why: every other effect
+      renders its copy of the layer into a **comp-sized** plate, so anything running before Squish has
+      already clipped away the off-frame part that Squish exists to squash back in.
+      **But that pin is not what defeats his case, and here is the actual chain.** Squish renders its
+      own padded plate with all the OTHER effects applied — `drawLayer(tmp)` where `tmp` is the layer
+      minus Squish — so Drift really is inside that plate and the padding really would hold the
+      displaced pixels. The problem is one level down: `drawWarpEffect` (and the generic pixel path with
+      it) sizes ITS plates from `scene.project.width/height` — the comp — rather than from
+      `ctx.canvas`, which IS the padded plate it has been handed. So Drift, running inside Squish's
+      generous plate, allocates a comp-sized one anyway, clips the layer to the frame, and hands back
+      a picture with the overhang already gone. Squish then measures an alpha bbox that stops exactly
+      on the wall, finds no penetration, and correctly does nothing.
+      **So the fix is plate sizing, not ordering and not the reach box.** Effect plates should inherit
+      the target's size and origin when the target is already an expanded plate — the machinery is
+      half there (`plateScale`, `__fmRS` / `__fmOX` / `__fmOY`, and queue 9.26 already moved buffers
+      onto the target's pixel grid); this extends it from scale to extent. **That is very likely the
+      same fix #31b needs** — "Transform blur can't smear effect- or camera-driven motion" is the same
+      shape: a pass that cannot see outside the comp.
+      ⚠️ Deliberately NOT started at the end of a long session: it is a change to how every effect
+      allocates its buffer, and getting it wrong is visible on every layer in the app.
       Clause 1 (corners) is untouched and still unmeasured.
 
 - [x] **324 — DONE v9.44. Give the Add-layer row's + button its old colours back, and make the whole bar stand
