@@ -1269,13 +1269,21 @@ window.FM = window.FM || {};
   function filtersSection(layer) {
     const s = section('Filters');
     const h4 = s.querySelector('h4'); if (h4) h4.remove();
-    s.appendChild(el('div', 'insp-hint', 'A filter is a group of effects that act as one, with a single Strength. Add one and you can open it up and change anything inside.'));
+    /* NO EXPLANATION PARAGRAPH, and no sub-line under the Empty filter row (queue 301). His words:
+       "Get rid of the explanations here, the top one saying what filters are and the second one
+       underneath the add empty filter, so the empty filter button can be smaller and take up less
+       space." Both were mine, both were prose above the thing you came here to tap, and on a phone
+       they pushed the actual looks below the fold. The grid of filters says what this tab is. */
     /* Build-your-own lives here now (queue 220). "+ Add Filter" is gone from the Effects tab because he
        wants one door — so this door has to carry BOTH things people arrive for, a ready-made look and an
        empty one to fill yourself, or removing that button would have removed the feature. */
     const mkEmpty = el('button', 'flt-row flt-empty');
-    mkEmpty.appendChild(el('div', 'flt-name', 'Empty filter'));
-    mkEmpty.appendChild(el('div', 'flt-desc', 'Start with nothing in it and add your own effects.'));
+    /* The + is not decoration and is not scope creep: it is doing the job the deleted sub-line was
+       doing. Stripped to the bare words "Empty filter", a full-width row directly under a heading reads
+       as ANOTHER heading rather than a button. The + is this app's own add idiom ("+ Add Effect",
+       "+ Add Audio Effect"), costs no height, and is how he referred to the control himself — "the add
+       empty filter". */
+    mkEmpty.appendChild(el('div', 'flt-name', '+  Empty filter'));
     mkEmpty.addEventListener('click', () => {
       const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
       if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }

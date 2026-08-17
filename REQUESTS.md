@@ -5377,8 +5377,18 @@ better still, keep working inside the turn rather than parking work for a later 
       sits under the canvas so you can see what you are doing — the audio one was not converted with
       it, so picking an audio effect still covers the whole screen. Same fix, same place.
 
-- [ ] **301 — Drop the two explanation blocks in the Filters tab so the Empty filter button can
-      shrink.** (17 Aug, screenshot at v9.02 of the Filters tab.) His words, verbatim: *"Get rid of the
+- [x] **301 — Drop the two explanation blocks in the Filters tab so the Empty filter button can
+      shrink.** ✅ **v9.49.** All three clauses: the "A filter is a group of effects…" paragraph is
+      gone, the "Start with nothing in it…" sub-line is gone, and the button is genuinely smaller —
+      **37px, one line** at 380px, measured, not assumed. That third one is the clause a
+      delete-the-text change skips: removing a sub-line does not shrink a button whose padding was
+      sized for two lines, so the test asserts the HEIGHT and was mutation-checked against a
+      restored two-line box (57px). The Filters tab now runs toggle → button → the actual looks,
+      with four filter tiles visible without scrolling.
+      **One judgement call, tell me to revert it if you disagree:** with its description gone, a
+      full-width row saying only "Empty filter" reads as another heading rather than a button, so it
+      says **"+  Empty filter"** now — this app's own add idiom ("+ Add Effect"), no extra height,
+      and the way you referred to it yourself ("the add empty filter"). Original entry: (17 Aug, screenshot at v9.02 of the Filters tab.) His words, verbatim: *"Get rid of the
       explanations here, the top one saying what filters are and the second one underneath the add
       empty filter, so the empty filter button can be smaller and take up less space."*
       The two blocks are: the paragraph *"A filter is a group of effects that act as one, with a single

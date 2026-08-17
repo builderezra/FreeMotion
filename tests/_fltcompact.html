@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#301 — the Filters tab with the explanations gone</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #301 — "Get rid of the explanations here… so the empty filter button can be smaller and take up
+   less space." The suite proves the row is one line; this is here to see what the tab looks like with
+   the prose gone, because "takes up less space" is judged by looking at how much of the LOOKS you can
+   see without scrolling, which no single measurement says. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (W > 700 ? 860 : 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.inspector || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var P = FM.scene.project;
+        var L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 240, shapeH: 240, fill: '#c04070' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers = [L]; FM.selectLayer(L.id); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        // The inspector opens on the CATEGORY grid — Effects is one of nine cards, not the landing page.
+        var cat = [].slice.call(d.querySelectorAll('#inspector .cat-label'))
+          .filter(function (n) { return /^Effects$/i.test((n.textContent || '').trim()); })[0];
+        if (!cat) return fail('no Effects category card');
+        cat.closest('[class*=cat]').click();
+        setTimeout(function () {
+          var wrap = [].slice.call(d.querySelectorAll('.fxmode')).filter(function (x) { return x.getClientRects().length; })[0];
+          if (!wrap) return fail('no Visual/Filters/Audio toggle on screen');
+          var pill = [].slice.call(wrap.querySelectorAll('.fxmode-btn')).filter(function (x) { return /^Filters$/.test(x.textContent.trim()); })[0];
+          if (!pill) return fail('no Filters pill');
+          pill.click();
+          setTimeout(function () {
+            var row = [].slice.call(d.querySelectorAll('.flt-row')).filter(function (b) { return /empty filter/i.test(b.textContent || ''); })[0];
+            var tiles = [].slice.call(d.querySelectorAll('.flt-tile'));
+            var panel = d.getElementById('inspector-panel') || d.getElementById('inspector');
+            var pb = panel ? panel.getBoundingClientRect().bottom : 0;
+            var visible = tiles.filter(function (t) { return t.getBoundingClientRect().bottom <= pb + 1; }).length;
+            out.textContent = [
+              'width ' + W,
+              'Empty filter row: ' + (row ? Math.round(row.getBoundingClientRect().height) + 'px' : 'MISSING'),
+              'filter tiles fully visible without scrolling: ' + visible + ' of ' + tiles.length
+            ].join('\n');
+            window.__done = true;
+          }, 400);
+        }, 400);
+      }, 700);
+    })();
+  });
+})();
+</script>
+</body></html>

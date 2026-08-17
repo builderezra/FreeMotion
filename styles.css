@@ -5627,6 +5627,13 @@ body.fm-pushing #toast { z-index: 213; }
 .flt-row:hover { background: color-mix(in srgb, var(--accent, #4d8bf0) 10%, var(--panel-2, #151d24)); border-color: color-mix(in srgb, var(--accent, #4d8bf0) 34%, transparent); }
 .flt-row:active { transform: scale(0.988); }
 .flt-name { font-weight: 650; font-size: 14px; margin-bottom: 3px; }
+/* The Empty filter row, compact (queue 301). "so the empty filter button can be smaller and take up
+   less space" — with its sub-line gone it is a single line of text, and the row's two-line padding and
+   the name's gap-to-the-line-below are both paying for something that is no longer there. Scoped to
+   .flt-empty rather than loosened on .flt-row, because the ready-made looks below still have a
+   description and an ingredients line and still need the taller box. */
+.flt-row.flt-empty { padding: 9px 13px; }
+.flt-row.flt-empty .flt-name { margin-bottom: 0; }
 .flt-desc { font-size: 12px; line-height: 1.42; color: var(--muted, #8fa3b0); }
 /* What the look is built from. Quieter still, and allowed to wrap — on a phone a five-ingredient
    filter is two lines, and truncating it would hide the very thing this row exists to show. */

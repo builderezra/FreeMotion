@@ -22756,6 +22756,44 @@
     n.click(); return n;
   }
 
+  /* ---------------- queue 301: the Filters tab loses its two explanations --------------------------
+   * His words, verbatim: *"Get rid of the explanations here, the top one saying what filters are and
+   * the second one underneath the add empty filter, so the empty filter button can be smaller and take
+   * up less space."* Three clauses, and the third is the one a delete-the-text change quietly skips —
+   * removing a sub-line does not shrink a button whose padding was sized for two lines, and "take up
+   * less space" is the reason he asked. So the height is MEASURED, not assumed to have followed. */
+  test('the Filters tab has no explanation blocks, and the Empty filter row is one line (queue 301)', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function () {
+      visibleFxPill(/^Filters$/).click();
+      await sleep(180);
+      const row = Array.prototype.slice.call(document.querySelectorAll('.flt-row'))
+        .filter(function (b) { return /empty filter/i.test(b.textContent || ''); })[0];
+      if (!row) throw new Error('the Empty filter row is gone entirely — building your own filter has no door');
+      const sec = row.closest('.insp-section') || row.parentElement;
+
+      // 1. the paragraph above.
+      const hint = Array.prototype.slice.call(sec.querySelectorAll('.insp-hint'))
+        .filter(function (n) { return /a filter is a group of effects/i.test(n.textContent || ''); })[0];
+      if (hint) throw new Error('the "A filter is a group of effects…" paragraph is still at the top of the Filters tab');
+
+      // 2. the sub-line under the button.
+      if (row.querySelector('.flt-desc')) throw new Error('the Empty filter row still carries its "Start with nothing in it…" sub-line');
+      if (/start with nothing/i.test(row.textContent || '')) throw new Error('the sub-line text is still in the row under a different class');
+
+      /* 3. …and it actually got smaller. Against a real number rather than "shorter than before",
+         because there is no before to compare with inside one run. 44px is a full tap target and one
+         line of 14px text with padding lands around 37 — a row that still reserves two lines measures
+         about 58, so the threshold separates the two states with room to spare and does not fail on a
+         font that renders a point taller. */
+      const h = row.getBoundingClientRect().height;
+      if (!(h > 20)) throw new Error('the Empty filter row measures ' + Math.round(h) + 'px — it is not on screen, so this proves nothing');
+      if (h > 44) throw new Error('the Empty filter row is still ' + Math.round(h) + 'px tall — the text went but the two-line padding stayed, and "take up less space" was the point');
+
+      // The label still has to read as something you press, not as a heading.
+      if (!/\+/.test(row.textContent || '')) throw new Error('nothing marks the row as an ADD action now that its description is gone');
+    });
+  });
+
   test('filter row: Add Filter drops an empty filter into the stack, opened', { item: 'fx-filter-ui' }, async function () {
     await withFilterLayer(async function (L) {
       /* One door (queue 220): the Visual tab has no Add Filter button at all, and building your own
