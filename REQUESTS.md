@@ -9082,3 +9082,17 @@ wait for them to report back."*
       is an argument each way: Canvas settings changes resolution and fps live, so pausing is arguably
       right; App settings is appearance, and stopping playback to toggle a theme would be irritating.
       **One word and either or both get the same treatment.**
+
+- [ ] **354 — Hide the playhead while the big add button is up, and give that + real colours.**
+      (18 Aug, phone screenshot of Project 30 at v9.74: the empty-project state with the big **+** and
+      "Tap here to start creating", with the white playhead line running straight down through the
+      middle of the + and the label.) His words, verbatim: *"Hide the player head while the add button
+      is big and also give the plus add button some actual nice colours not just basic blue"*.
+      Two clauses:
+      1. **Hide the playhead while the add row is in its BIG empty state.** It is drawn over the + and
+         through the text, and there is nothing to scrub — the project is empty, so the playhead points
+         at nothing while sitting on top of the one control that matters.
+      2. **The big + wants real colours, not basic blue.** It currently takes the slim row's plus
+         treatment scaled up (a blue glass gradient, #9beeff → #5cc6ee → #35a7dd). At 64px that reads as
+         flat blue. Worth looking at what he has said before about colour here — the add-menu tiles and
+         the custom-elements ring are both multi-colour, and he has asked for that idea twice.
