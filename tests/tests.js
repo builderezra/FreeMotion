@@ -16407,6 +16407,15 @@
       'magnifybg:zoom=min': 1, 'magnifybg:zoom=max': 1,
       'levels:inblack=max': 1, 'levels:outwhite=min': 1,
       'chromakeypro:tolerance=max': 1, 'dispersion:progress=max': 1,
+      /* BLINK, added v9.04 when it gained duty/min/phase. This sweep renders at a FIXED t=0.5, and at
+         the default rate of 2Hz that instant falls in the blink's OFF half — so any variant that
+         reaches the legacy path correctly shows nothing. It never surfaced before because the effect
+         had one param and moving RATE to either extreme happens to land ON at t=0.5.
+         Each of these four is the effect working: duty=1% is on for 1% of the cycle; min=0 is "dim to
+         nothing", which is the default and the whole original behaviour; phase 0 and 1 are the same
+         point in the cycle, i.e. the legacy phase. Blink's real coverage is the fx-atmos test, which
+         drives it at times where the settings genuinely disagree. */
+      'blink:duty=min': 1, 'blink:min=min': 1, 'blink:phase=min': 1, 'blink:phase=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -18186,6 +18195,128 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 19: the atmosphere effects ---------------- */
+
+  test('effects: the atmosphere effects still render an un-upgraded instance exactly as they did', { item: 'fx-atmos' }, function () {
+    var W = 96, H = 96, fails = [];
+    var CASES = [
+      // t MATTERS for blink, and NO SINGLE t works for all of its controls — which is worth stating,
+      // because the obvious fix (pick one time) silently guts whichever assertion it does not suit.
+      // At t=0.5 the default 2Hz blink is in its OFF half, so the effect visibly does something and
+      // `min` and `phase` both bite. But a 15% duty is ALSO off at 0.5, so duty reads as dead there.
+      // At t=0.3 the blink is ON, so it returns immediately and nothing at all can be measured.
+      // Duty is therefore asserted in the dedicated fx-atmos blink test below, at t=0.3.
+      { type: 'blink', old: { rate: 2 }, at: 0.5, legacyKeys: { duty: 50, phase: 0, min: 0 },
+        moved: { min: 40, phase: 0.5 } },
+      { type: 'lightleak', old: { amount: 0.6, color: '#ff7a3c' }, legacyKeys: { x: 85, y: 12, size: 100 },
+        moved: { x: 20, y: 70, size: 250 } },
+      { type: 'starfield', old: { amount: 0.5, color: '#ffffff' }, legacyKeys: { size: 1, twinkle: 0, variation: 0 },
+        moved: { size: 4, variation: 0.9, twinkle: 0.9 } },
+      { type: 'grunge', old: { amount: 0.5 }, legacyKeys: { scale: 1, darkness: 1, color: 0 },
+        moved: { scale: 8, darkness: 0.2, color: 1 } },
+    ];
+    CASES.forEach(function (c) {
+      var tAt = c.at == null ? 0.5 : c.at;
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old, null, tAt);
+      var n = fxDiff(bare, fxRun(c.type, W, H, withKeys, null, tAt));
+      if (n) fails.push(c.type + ': ' + n + ' bytes differ between an old instance and one holding the new keys at their fallbacks');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': draws nothing at all at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m, null, tAt))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) {
+        var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, stamped, null, tAt))) fails.push(c.type + ': a NEW instance renders differently from an old one');
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* THIS TEST EXISTS BECAUSE THE FIRST VERSION OF THE CONTROL WAS BROKEN AND LOOKED FINE.
+   * Twinkle needs a per-star PHASE, and the phase came from `(cx*k1)^(cy*k2)` with no avalanche step —
+   * on a 96px plate that tops out near 2^21, so `>>>8 / 2^24` returned about 0.004 for EVERY star.
+   * They shared one phase and dimmed in lockstep, which is a global flicker, not a twinkle. And it was
+   * invisible at the obvious sample time: sin(1.5) is 0.997, so the dimming rounded clean away and the
+   * control read as completely dead. Hence both assertions — MANY distinct brightnesses at one instant
+   * (that is the per-star phase) and the field CHANGING between two instants (that is the motion).
+   * A lockstep implementation passes the second on its own. */
+  test('effects: Starfield twinkle gives every star its own phase, not one global flicker', { item: 'fx-atmos' }, function () {
+    var W = 64, H = 64;
+    var bright = function (p, tAt) { var d = fxRun('starfield', W, H, p, 'flat', tAt), set = {};
+      for (var i = 0; i < d.length; i += 4) if (d[i] > 0 && d[i] !== 160) set[d[i]] = 1; return set; };
+    var plain = Object.keys(bright({ amount: 1, color: '#ffffff' }, 0.5)).length;
+    if (plain !== 1) throw new Error('without twinkle the stars are no longer one flat colour (' + plain + ' shades) — something else is varying them');
+    var lit = Object.keys(bright({ amount: 1, color: '#ffffff', twinkle: 0.9 }, 0.5)).length;
+    if (lit < 10) throw new Error('with twinkle the stars show only ' + lit + ' distinct brightnesses — they are sharing a phase and flickering in lockstep instead of twinkling');
+    var a = fxRun('starfield', W, H, { amount: 1, color: '#ffffff', twinkle: 0.9 }, 'flat', 0.5);
+    var b = fxRun('starfield', W, H, { amount: 1, color: '#ffffff', twinkle: 0.9 }, 'flat', 1.2);
+    if (!fxDiff(a, b)) throw new Error('the twinkling field is identical at t=0.5 and t=1.2 — it is not animating');
+    /* SIZE is the other half of the complaint: a one-pixel star is what an encoder throws away.
+     * Measured as the WIDTH OF A STAR, not as total coverage — and that distinction is the point.
+     * Hashing on a 4x4 cell gives 16x fewer candidate positions and makes each hit 16x bigger, so the
+     * total ink is unchanged BY DESIGN. A coverage test therefore reads a working control as dead,
+     * which is exactly what the first version of this assertion did. */
+    var widest = function (p) { var d = fxRun('starfield', W, H, p, 'flat', 0.5), best = 0;
+      for (var y = 0; y < H; y++) { var run = 0;
+        for (var x = 0; x < W; x++) { var i = (y * W + x) * 4;
+          if (d[i] > 200) { run++; if (run > best) best = run; } else run = 0; } }
+      return best; };
+    var small = widest({ amount: 0.3, color: '#ffffff' }), big = widest({ amount: 0.3, color: '#ffffff', size: 4 });
+    if (small !== 1) throw new Error('a default star is ' + small + 'px wide, not 1 — the baseline for this comparison has moved');
+    if (big < 4) throw new Error('a size-4 star came out only ' + big + 'px wide — stars are still being drawn one pixel at a time, which is what an encoder discards');
+  });
+
+  /* Blink was one hard 50/50 square wave locked to t=0. DUTY is asserted at a time inside the window
+   * where a 15% and a 50% duty genuinely disagree — at t=0.5 they happen to agree, and testing there
+   * reports a working control as dead. MIN is the difference between a strobe and a gap. PHASE is the
+   * one that could not be faked at all: two layers could never alternate because every instance read
+   * the same clock, so the assertion is exactly that — same rate, opposite phase, opposite state. */
+  test('effects: Blink can flash briefly, dim instead of vanish, and alternate with another layer', { item: 'fx-atmos' }, function () {
+    var W = 48, H = 48;
+    var alpha = function (p, tAt) { var d = fxRun('blink', W, H, p, null, tAt), a = 0, n = 0;
+      for (var i = 3; i < d.length; i += 4) { a += d[i]; n++; } return a / n; };
+    if (!(alpha({ rate: 2 }, 0.3) !== alpha({ rate: 2, duty: 15 }, 0.3)))
+      throw new Error('a 15% duty matches the default 50% at t=0.3, where they must differ');
+    var off = alpha({ rate: 2 }, 0.5);
+    if (off !== 0) throw new Error('the default blink is not fully blanking in its off half (mean alpha ' + off + ')');
+    var dim = alpha({ rate: 2, min: 40 }, 0.5);
+    if (!(dim > 0)) throw new Error('min=40 still blanked the layer completely — it is supposed to dim to 40%, which is a pulse rather than a gap');
+    if (!(dim < alpha({ rate: 2, min: 100 }, 0.5))) throw new Error('min=40 is not dimmer than min=100');
+    // the alternation claim, which is the whole reason phase exists
+    var atA = alpha({ rate: 2, phase: 0 }, 0.5), atB = alpha({ rate: 2, phase: 0.5 }, 0.5);
+    if (atA === atB) throw new Error('two blinks at the same rate and opposite phase are in the same state — they still cannot alternate');
+  });
+
+  /* Both of these were single-pixel or single-position effects: at 1080p the grain reads as
+   * compression noise rather than grime, and a leak that always enters top-right cannot be matched to
+   * where the sun is. Grain size is measured as the SIZE OF A RUN of identical output, which is what a
+   * grain actually is — a pixel count would rise and fall with the threshold instead. */
+  test('effects: Grunge has a grain size and a colour, Light Leak has a position', { item: 'fx-atmos' }, function () {
+    var W = 96, H = 96;
+    var longestRun = function (p) { var d = fxRun('grunge', W, H, p, 'flat'), best = 0;
+      for (var y = 0; y < H; y++) { var run = 1;
+        for (var x = 1; x < W; x++) { var i = (y * W + x) * 4, j = (y * W + x - 1) * 4;
+          if (d[i] === d[j]) { run++; if (run > best) best = run; } else run = 1; } }
+      return best; };
+    var fine = longestRun({ amount: 0.5 }), coarse = longestRun({ amount: 0.5, scale: 8 });
+    if (!(coarse > fine * 2)) throw new Error('grain size 8 produced runs of ' + coarse + ' against ' + fine + ' at size 1 — the dirt is still per-pixel speckle');
+    var warm = function (p) { var d = fxRun('grunge', W, H, p, 'flat'), n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] > d[i + 2] + 8) n++; return n; };
+    if (warm({ amount: 0.5 }) !== 0) throw new Error('black dirt is already tinting warm without being asked to');
+    if (warm({ amount: 0.5, color: 1 }) < 20) throw new Error('rust dirt did not tint the grime warm');
+    // the leak's brightest point must follow the control across the frame
+    var peakX = function (p) { var d = fxRun('lightleak', W, H, p, 'flat'), best = -1, bx = 0;
+      for (var x = 0; x < W; x++) { var i = ((H >> 1) * W + x) * 4;
+        if (d[i] > best) { best = d[i]; bx = x; } } return bx; };
+    var right = peakX({ amount: 1, color: '#ff7a3c' }), left = peakX({ amount: 1, color: '#ff7a3c', x: 10 });
+    if (!(right > W * 0.6)) throw new Error('the default leak no longer enters from the right (peak at x=' + right + ')');
+    if (!(left < W * 0.4)) throw new Error('moving the source to x=10% left the brightest point at x=' + left + ' — the leak is still anchored where it was');
+  });
+
   /* ---------------- EFFECTS-PLAN round 18: the text-string effects ---------------- */
 
   /* A TEXT_FX is neither a pixel kernel nor a warp: it takes (st, params, t, info) and mutates
@@ -18818,10 +18949,10 @@
     }
     return d;
   }
-  function fxRun(type, W, H, params, kind) {
+  function fxRun(type, W, H, params, kind, tAt) {
     var fn = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
     if (!fn) throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable — the suite cannot test the real kernel');
-    var d = fxPlate(W, H, kind); fn(d, W, H, params, 0.5, 1); return d;
+    var d = fxPlate(W, H, kind); fn(d, W, H, params, tAt == null ? 0.5 : tAt, 1); return d;
   }
   function fxDiff(a, b) { var n = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; }
   function fxLum(d, i) { return d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; }

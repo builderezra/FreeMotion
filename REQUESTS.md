@@ -3792,6 +3792,12 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 19, v9.04:* the atmosphere effects. Starfield's stars were single pixels of one flat
+      colour (sensor dirt at 1080p, and gone entirely after export); Grunge was a single-pixel speckle
+      that always dried to black; Light Leak always came from the top-right; Blink was one hard 50/50
+      square wave, so two blinking layers could never alternate. All four fixed.
+      *Note:* three of round 19's four new tests still want their mutation check — the starfield one is
+      done (and caught a real bug I had just written). Doing the other three next, because 306 jumped.
       *Round 18, v9.03:* the text-string effects. The typewriter could only reveal one LETTER at a
       time (half-words on screen every frame — wrong for captions); it does words and lines now, from
       either end or outward from the middle, with a caret. Timecode could only count UP from zero at
@@ -5162,6 +5168,95 @@ better still, keep working inside the turn rather than parking work for a later 
       words, verbatim: *"The media and audio screens open taller than the others, this can be fixed by
       removing one layer of recent clips added, instead of three rows just two"*.
       He has given the fix as well as the report: show TWO rows of recent clips, not three.
+
+- [ ] **300 — The audio effects browser still opens full screen.** (17 Aug, screenshot at v9.02 of
+      "Add Audio Effect" filling the whole phone screen — X top-left, search top-right, Visual /
+      Filters / Audio tabs, FEATURED, RECENTS / FAVES, CATEGORIES.) His words, verbatim:
+      *"Audio effects menu still opens full screen"*.
+      **"Still" is the important word.** Queue 277 turned the VISUAL effects browser into a sheet that
+      sits under the canvas so you can see what you are doing — the audio one was not converted with
+      it, so picking an audio effect still covers the whole screen. Same fix, same place.
+
+- [ ] **301 — Drop the two explanation blocks in the Filters tab so the Empty filter button can
+      shrink.** (17 Aug, screenshot at v9.02 of the Filters tab.) His words, verbatim: *"Get rid of the
+      explanations here, the top one saying what filters are and the second one underneath the add
+      empty filter, so the empty filter button can be smaller and take up less space."*
+      The two blocks are: the paragraph *"A filter is a group of effects that act as one, with a single
+      Strength. Add one and you can open it up and change anything inside."* and the sub-line under the
+      Empty filter heading, *"Start with nothing in it and add your own effects."* Both go; the Empty
+      filter button becomes a compact row.
+
+- [ ] **302 — PC: the inspector's drag handle overlaps the project name; move it outside and hide it
+      until hover.** (17 Aug.) His words, verbatim: *"On PC the little drag bar for the inspector menu
+      to drag it up in that individually is hovering kind of over the project name this can be fixed by
+      instead of it sitting inside. It can sit outside on the top. Just make it invisible until you
+      hover over it"*.
+      Three clauses to tick separately: (1) it currently sits INSIDE the panel and overlaps the project
+      name; (2) move it OUTSIDE, above the panel's top edge; (3) invisible until hovered.
+      ⚠️ Verify at a DESKTOP width in the STUDIO layout, not Classic — that is the #241 lesson.
+
+- [ ] **303 — PC should get the phone's effects layout: a panel over everything except the canvas.**
+      (17 Aug.) His words, verbatim: *"Also on PC I want to make it so when you add an effect like when
+      you press out effect the same sort of thing happens on mobile that happens on PC like I want the
+      same thing from mobile on PC with basically it'll cover everything on the bottom except for the
+      canvas so you can still see it and you can tap to selecting all that stuff and it will just
+      playback basically just the layout that you have selected"*.
+      Reading it back: on PC, opening the effects browser should behave like the phone's — it covers
+      the bottom of the screen but LEAVES THE CANVAS VISIBLE, so you can tap through effects and watch
+      the result play back on the layer you have selected. Same shape as queue 277's phone work, ported
+      to desktop. Related to 300 (the audio browser still being full screen).
+
+- [ ] **304 — The circle animation in the sound-effects menu stops halfway and glitches.** (17 Aug.)
+      His words, verbatim: *"The circle that moves around the sound effects menu stops halfway and like
+      glitches a little bit"*. (Sent twice, the first cut off mid-sentence.)
+      Then, in a follow-up: *"It also kind of glitches out on the record voice menu"* — so the SAME
+      circle/spinner misbehaves in at least two places, which points at one shared animation rather
+      than two separate bugs. Find the shared one before fixing either.
+
+- [ ] **305 — The help "?" button: thinner strokes, and the glyph is off-centre in its circle.**
+      (17 Aug.) His words, verbatim: *"I would like the lines on the question button to be a little bit
+      thinner and also I would like it to be fixed up a bit because the question isn't in the centre of
+      its little circle and it looks weird"*.
+      Two clauses: (1) thinner stroke weight on the question mark; (2) it is not optically centred
+      inside its circle. Related in kind to 296 (the + not centred in its circle) — worth checking
+      whether both come from the same icon-drawing helper before fixing either separately.
+
+- [ ] **306 — 🚨 AN OLDER VERSION OF HIS PROJECT COMES BACK ON REFRESH. He says he reported this ages
+      ago and it is still not fixed.** (17 Aug.) His words, verbatim: *"I just had the glitch again we're
+      an older version of our project shows up when you refresh this still needs to be fixed. I said
+      ages ago this needs to be urgently fixed and you still haven't done it."*
+      **He is right that something with this description was reported before, and I need to be careful
+      about WHICH.** #292 (v8.51) was *"when you refresh the page it shows an old version that looks a
+      lot like alight motion"* — and I read that as APPEARANCE and fixed a first-paint flash of the
+      retired Classic layout. That fix is real and tested.
+      **But this message says "an older version of OUR PROJECT", which reads as the project's CONTENT
+      reverting — losing recent edits on reload. That is a different and much worse bug, and if that is
+      what he meant in the first place then #292 was closed on the wrong reading.**
+      So: treat #292 as possibly-misread, and investigate the DATA path — autosave timing, what
+      `projects.open()` restores, and whether a reload can serve a snapshot older than the last edit.
+      Losing work is the worst class of bug in this app and it jumps the queue on his say-so.
+      **JUMPED THE QUEUE — being worked immediately after v9.04 ships.**
+
+- [ ] **307 — Four things about the Add-layer row (PC and mobile).** (17 Aug.) His words, verbatim:
+      *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
+      page for it's like a little plus button to come back like it's a small non-issue really but
+      should still fix it and also on PC just make it so when you're hovering over it the three lines
+      of the right shop but you don't need to grab it from the three lines. It's just there to
+      demonstrate that you can move it and also maybe just make it through the three lines extend out a
+      bit longer and then like slowly fade out so it's like the whole thing is like you can drag it
+      from anywhere and also make it so on PC and on mobile that when you're actually dragging the new
+      layers go here or add new layer thing like when you're driving that it should drag smoothly and
+      like show the cool animation like when I'm driving layers because currently it kind of just jumps
+      and it's a bit shitty looking so yeah."*
+      Read back as a checklist ("driving" is dictation for "dragging"):
+      1. **PC bug:** the Add-layer + button vanished and only came back after a page refresh.
+      2. **PC:** the three-line grip should APPEAR ON HOVER, and must not be the only place you can
+         grab — it is a hint that the row is draggable, not the handle. Drag from anywhere on the row.
+      3. **PC:** make the three lines extend further out and fade off gradually, so it reads as
+         "the whole thing is grabbable".
+      4. **PC and mobile:** dragging the Add-layer marker must move SMOOTHLY with the same animation
+         a layer drag has. It currently jumps between positions, which looks bad.
+      Related to 298 (the marker not actually placing layers where it points) — same control.
 
 ## Done
 

@@ -373,7 +373,12 @@ window.FM = window.FM || {};
       { key: 'aspect', label: 'Block aspect', min: 0.1, max: 6, step: 0.05, def: 1 },
       { key: 'speed', label: 'Speed', min: 0, max: 30, step: 0.5, def: 8, unit: 'Hz' },
     ] },
-    { type: 'starfield', label: 'Starfield', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5, color: true, defColor: '#ffffff', colorLabel: 'Star' },
+    { type: 'starfield', label: 'Starfield', color: true, defColor: '#ffffff', colorLabel: 'Star', params: [
+      { key: 'amount', label: 'Density', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'size', label: 'Star size', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
+      { key: 'variation', label: 'Brightness spread', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'twinkle', label: 'Twinkle', min: 0, max: 1, step: 0.05, def: 0 },
+    ] },
     { type: 'curl', label: 'Curl', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
       { key: 'wavelength', label: 'Spacing', min: 8, max: 300, step: 1, def: 40, unit: 'px' },
@@ -401,7 +406,12 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 2, max: 60, step: 1, def: 8, legacy: 3, unit: 'px' },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     { type: 'contourlines', label: 'Contour Lines', param: 'levels', min: 2, max: 24, step: 1, def: 8 },
-    { type: 'grunge', label: 'Grunge', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'grunge', label: 'Grunge', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'scale', label: 'Grain size', min: 1, max: 24, step: 1, def: 1, unit: 'px' },
+      { key: 'darkness', label: 'Darkness', min: 0, max: 1, step: 0.05, def: 1 },
+      { key: 'color', label: 'Dirt', def: 0, options: [[0, 'Black'], [1, 'Rust'], [2, 'Sepia'], [3, 'Soot']] },
+    ] },
     /* Iridescence. BLUR and MOTION were both added after this shipped, and both are the answer to a
      * thing the effect could not do at all.
      *  - BLUR softens the SHEEN, not the footage. Blurring the composited RESULT is what stacking the
@@ -450,7 +460,12 @@ window.FM = window.FM || {};
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
     { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }] },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
-    { type: 'blink', label: 'Blink', param: 'rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
+    { type: 'blink', label: 'Blink', params: [
+      { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'duty', label: 'On for', min: 1, max: 99, step: 1, def: 50, unit: '%' },
+      { key: 'min', label: 'Dims to', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0 },
+    ] },
     { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }] },
     { type: 'pulseopacity', label: 'Pulse Opacity', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }] },
     { type: 'dissolve', label: 'Dissolve', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -579,7 +594,12 @@ window.FM = window.FM || {};
     { type: 'bleachbypass', label: 'Bleach Bypass', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
     { type: 'tealorange', label: 'Teal & Orange', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     { type: 'crossprocess', label: 'Cross Process', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
-    { type: 'lightleak', label: 'Light Leak', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6, color: true, defColor: '#ff7a3c', colorLabel: 'Leak' },
+    { type: 'lightleak', label: 'Light Leak', color: true, defColor: '#ff7a3c', colorLabel: 'Leak', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'x', label: 'Source X', min: 0, max: 100, step: 1, def: 85, unit: '%' },
+      { key: 'y', label: 'Source Y', min: 0, max: 100, step: 1, def: 12, unit: '%' },
+      { key: 'size', label: 'Spread', min: 10, max: 400, step: 5, def: 100, unit: '%' },
+    ] },
     /* Letterbox. BARS ARE MEASURED AGAINST — the one param that had to change meaning when these two
      * effects were confined to the layer they are attached to (see PIXEL_FX.letterbox / fxBounds).
      * `size` has always been "% of H"; H moved from the FRAME to the LAYER, so on anything smaller
@@ -3483,7 +3503,36 @@ window.FM = window.FM || {};
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>16)st_w=16; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0; var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
     smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } var seWin=seR*2+1,seInv=1/seWin; for(sey=0;sey<seH;sey++){ var seRow=sey*seW,seSum=0,sek; for(sek=-seR;sek<=seR;sek++){ var seXc=sek<0?0:(sek>=seW?seW-1:sek); seSum+=seA[seRow+seXc]; } for(sex=0;sex<seW;sex++){ seTmp[seRow+sex]=seSum*seInv; var seAddX=sex+seR+1; seAddX=seAddX>=seW?seW-1:seAddX; var seSubX=sex-seR; seSubX=seSubX<0?0:seSubX; seSum+=seA[seRow+seAddX]-seA[seRow+seSubX]; } } for(sex=0;sex<seW;sex++){ var seSumV=0,sekk; for(sekk=-seR;sekk<=seR;sekk++){ var seYc=sekk<0?0:(sekk>=seH?seH-1:sekk); seSumV+=seTmp[seYc*seW+sex]; } for(sey=0;sey<seH;sey++){ var seVal=seSumV*seInv; d[(sey*seW+sex)*4+3]=seVal<0?0:(seVal>255?255:seVal); var seAddY=sey+seR+1; seAddY=seAddY>=seH?seH-1:seAddY; var seSubY=sey-seR; seSubY=seSubY<0?0:seSubY; seSumV+=seTmp[seAddY*seW+sex]-seTmp[seSubY*seW+sex]; } } },
     blocknoise: function(d,W,H,p,t,ps){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
-    starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4; for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue; var sf_h=(sf_x*374761393+sf_y*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16); var sf_r=(sf_h>>>0)/4294967295; if(sf_r<sf_thr){ sf_d[sf_i]=sf_col[0]; sf_d[sf_i+1]=sf_col[1]; sf_d[sf_i+2]=sf_col[2]; sf_d[sf_i+3]=255; } } } },
+    starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
+      // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
+      // dirt, and a one-pixel highlight is exactly what an encoder throws away — so it also shimmered
+      // to nothing on export. SIZE hashes on the CELL rather than the pixel so a star becomes a block
+      // that survives compression; VARIATION gives each one its own brightness so the field has depth
+      // instead of reading as a flat stipple; TWINKLE moves them.
+      var sf_szP=sf_p.size==null?1:Math.round(FM.evalProp(sf_p.size,sf_t)); if(sf_szP<1)sf_szP=1; if(sf_szP>8)sf_szP=8;
+      var sf_tw=sf_p.twinkle==null?0:FM.evalProp(sf_p.twinkle,sf_t); if(sf_tw<0)sf_tw=0; if(sf_tw>1)sf_tw=1;
+      var sf_var=sf_p.variation==null?0:FM.evalProp(sf_p.variation,sf_t); if(sf_var<0)sf_var=0; if(sf_var>1)sf_var=1;
+      var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
+      for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
+        var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
+        var sf_h=(sf_cx*374761393+sf_cy*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16);
+        var sf_r=(sf_h>>>0)/4294967295;
+        if(sf_r<sf_thr){
+          if(sf_plain){ sf_d[sf_i]=sf_col[0]; sf_d[sf_i+1]=sf_col[1]; sf_d[sf_i+2]=sf_col[2]; sf_d[sf_i+3]=255; }
+          else { var sf_b=1;
+            if(sf_var>0){ var sf_hv=((sf_cx*83492791)^(sf_cy*2654435761))>>>0; sf_hv=(sf_hv^(sf_hv>>>15))>>>0;
+              sf_b*=1-sf_var*((sf_hv>>>8)/16777216)*0.9; }
+            // THE PHASE HASH MUST AVALANCHE. `(cx*k1)^(cy*k2)` on a 96px plate tops out around 2^21,
+            // so `>>>8 / 2^24` returned ~0.004 for EVERY star: they all shared one phase and dimmed in
+            // lockstep, which is a global flicker and not a twinkle at all. Worse, it was invisible at
+            // the obvious test time — sin(1.5) is 0.997, so the dimming rounded clean away and the
+            // control read as dead. Same mix as sf_h two lines up, which does it correctly.
+            if(sf_tw>0){ var sf_ht=((sf_cx*40503)^(sf_cy*12289))|0; sf_ht=(sf_ht^(sf_ht>>>13))*1274126177|0; sf_ht=(sf_ht^(sf_ht>>>16))>>>0;
+              var sf_pz=(sf_ht/4294967295)*6.283;
+              sf_b*=1-sf_tw*0.5*(1-Math.sin(sf_t*3+sf_pz)); }
+            if(sf_b<0)sf_b=0;
+            sf_d[sf_i]=sf_col[0]*sf_b; sf_d[sf_i+1]=sf_col[1]*sf_b; sf_d[sf_i+2]=sf_col[2]*sf_b; sf_d[sf_i+3]=255; }
+        } } } },
     // ---- batch 10 (pixel) ----
     bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=d.slice(); var bmW4=W*4;
       // Every embossed surface in the app was lit from the same top-left corner at the same depth.
@@ -3674,7 +3723,26 @@ window.FM = window.FM || {};
       }
     },
     contourlines: function(d,W,H,p,t){ var clLv=Math.round(FM.evalProp(p.levels,t)||8); if(clLv<2)clLv=2; if(clLv>24)clLv=24; var clS=d.slice(),clW4=W*4,clScl=clLv/255; var clBand=new Int16Array(W*H); for(var clI=0,clJ=0;clI<clS.length;clI+=4,clJ++){ var clLum=0.299*clS[clI]+0.587*clS[clI+1]+0.114*clS[clI+2],clB=Math.floor(clLum*clScl); if(clB>=clLv)clB=clLv-1; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ d[clIdx]=0; d[clIdx+1]=0; d[clIdx+2]=0; } } } },
-    grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4; for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_h=(gr_x*73856093)^(gr_y*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216; var gr_h2=(gr_x*83492791)^(gr_y*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216; var gr_mul=1-gr_mot*(gr_n-0.5); if(gr_n<gr_thr){ gr_mul*=(0.25+0.6*gr_n2); } if(gr_mul<0)gr_mul=0; gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul; } } },
+    grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4;
+      // The dirt was a single-pixel speckle that always dried to black — which at 1080p reads as
+      // compression noise, not grime, and gave no way to get rust, sepia or soot. SCALE hashes on a
+      // CELL so the grime has a grain size; DARKNESS controls how far down the speckle pulls;
+      // COLOUR tints only the dirt, never the clean pixels.
+      var gr_sc=gr_p.scale==null?1:Math.round(FM.evalProp(gr_p.scale,gr_t)); if(gr_sc<1)gr_sc=1; if(gr_sc>24)gr_sc=24;
+      var gr_dk=gr_p.darkness==null?1:FM.evalProp(gr_p.darkness,gr_t); if(gr_dk<0)gr_dk=0; if(gr_dk>1)gr_dk=1;
+      var gr_cm=gr_p.color==null?0:(Math.round(FM.evalProp(gr_p.color,gr_t))|0);
+      var gr_tint=gr_cm===1?[122,60,24]:(gr_cm===2?[148,116,66]:(gr_cm===3?[38,34,30]:null)); for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_gx=gr_sc===1?gr_x:Math.floor(gr_x/gr_sc), gr_gy=gr_sc===1?gr_y:Math.floor(gr_y/gr_sc);
+        var gr_h=(gr_gx*73856093)^(gr_gy*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216;
+        var gr_h2=(gr_gx*83492791)^(gr_gy*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216;
+        var gr_mul=1-gr_mot*(gr_n-0.5); var gr_hit=gr_n<gr_thr;
+        if(gr_hit){ var gr_v=0.25+0.6*gr_n2; gr_mul*=gr_dk===1?gr_v:1-gr_dk*(1-gr_v); }
+        if(gr_mul<0)gr_mul=0;
+        gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul;
+        if(gr_tint&&gr_hit){ var gr_w=(1-gr_mul)*0.75;
+          gr_d[gr_i]=gr_d[gr_i]+(gr_tint[0]-gr_d[gr_i])*gr_w;
+          gr_d[gr_i+1]=gr_d[gr_i+1]+(gr_tint[1]-gr_d[gr_i+1])*gr_w;
+          gr_d[gr_i+2]=gr_d[gr_i+2]+(gr_tint[2]-gr_d[gr_i+2])*gr_w; }
+        } } },
     /* Iridescence — its FM.EFFECTS def says WHY Blur and Motion exist; this says how.
      *
      * MOTION IS A PHASE, NOT A LENGTH, which is why it is the one number in here with no `ps` on it.
@@ -3744,7 +3812,21 @@ window.FM = window.FM || {};
     hextiles: function(d,W,H,p,t,ps){ var hxSize=FM.evalProp(p.size,t); if(hxSize==null)hxSize=20; if(hxSize<4)hxSize=4; if(hxSize>80)hxSize=80; hxSize=Math.max(2,hxSize*(ps||1));   /* tile size is PROJECT px — see plateScale */ var hxRowH=hxSize*0.75; if(hxRowH<1)hxRowH=1; var hxHalf=hxSize*0.5; var hxSrc=d.slice(); var hxW4=W*4; for(var hxY=0;hxY<H;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=0;hxX<W;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
     linstreaks: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng=FM.evalProp(p.angle,t); if(lsAng==null)lsAng=90; var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=8; var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=d.slice(); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
-    blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; var blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1; if (blkOn === 1) return; var blkN = W * H; for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } },
+    blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
+      // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
+      // short flash possible; MIN dims instead of vanishing (a strobe that drops to 30% reads as a
+      // pulse, not a gap); and PHASE is what lets two blinking layers ALTERNATE, which nothing could
+      // do before because every instance was locked to the same clock.
+      var blkDuty = p.duty == null ? 50 : FM.evalProp(p.duty, t); if (blkDuty < 1) blkDuty = 1; if (blkDuty > 99) blkDuty = 99;
+      var blkPh = p.phase == null ? 0 : FM.evalProp(p.phase, t); if (blkPh < 0) blkPh = 0; if (blkPh > 1) blkPh = 1;
+      var blkMin = p.min == null ? 0 : FM.evalProp(p.min, t); if (blkMin < 0) blkMin = 0; if (blkMin > 100) blkMin = 100;
+      var blkOn;
+      if (blkDuty === 50 && blkPh === 0) blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1;
+      else { var blkU = (blkTime * blkRate / 2 + blkPh) % 1; if (blkU < 0) blkU += 1; blkOn = blkU < blkDuty / 100 ? 1 : 0; }
+      if (blkOn === 1) return;
+      var blkN = W * H;
+      if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
+      else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
     flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = Math.floor(fl_tt * fl_spd); var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
     pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt=FM.evalProp(p.amount,t); if(dsAmt==null)dsAmt=0.5; if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return; var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296); for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue; var dsH=(dsX*374761393+dsY*668265263)>>>0; dsH=(dsH^(dsH>>>13))>>>0; dsH=(dsH*1274126177)>>>0; dsH=(dsH^(dsH>>>16))>>>0; if(dsH<dsThr)d[dsI+3]=0; } } },
@@ -3997,7 +4079,16 @@ window.FM = window.FM || {};
     bleachbypass: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.7; if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=r*0.299+g*0.587+b*0.114; var dr=r+(l-r)*0.6, dg=g+(l-g)*0.6, db=b+(l-b)*0.6; d[i]=r+(ov(dr,l)-r)*a; d[i+1]=g+(ov(dg,l)-g)*a; d[i+2]=b+(ov(db,l)-b)*a; } },
     tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=(l-0.5)*2; var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,0.10,0.90), ng=cv(g,0.06,0.95), nb=cv(b,-0.12,1.10); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
-    lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15; var lx=W*(0.85+0.12*Math.sin(ph)), ly=H*(0.12+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*1.8; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
+    lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
+      // The leak always entered from the top-right at a fixed size, so it could not be placed to match
+      // where the sun actually is in the shot — which is the only thing that makes a light leak read as
+      // light rather than as a sticker. The drift stays; only its ANCHOR moves.
+      var llX=p.x==null?85:FM.evalProp(p.x,t); if(llX<0)llX=0; if(llX>100)llX=100;
+      var llY=p.y==null?12:FM.evalProp(p.y,t); if(llY<0)llY=0; if(llY>100)llY=100;
+      var llSz=p.size==null?100:FM.evalProp(p.size,t); if(llSz<10)llSz=10; if(llSz>400)llSz=400;
+      var llBx=llX===85?0.85:llX/100, llBy=llY===12?0.12:llY/100;
+      var llFall=llSz===100?1.8:1.8*(100/llSz);
+      var lx=W*(llBx+0.12*Math.sin(ph)), ly=H*(llBy+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*llFall; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
     /* Letterbox / Border Frame — the two effects that DRAW a frame instead of grading one. Both take
      * `bb`, the layer's own box in plate pixels, from BOUNDED_FX in drawPixelEffect; the full story
      * of why (and of the erasure it stops) is in the block above fxBounds. Read them together.
