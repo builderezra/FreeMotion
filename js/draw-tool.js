@@ -206,7 +206,7 @@ window.FM = window.FM || {};
     sessionSubs = sessionSubs.concat([sub]);
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
     if (!layer) {
-      layer = FM.addPathLayer(sub, { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
+      layer = FM.addPathLayer(sub, { closed: false, name: 'Sketch', color: t.color, stroke: t.stroke });
       if (layer) { sessionLayerId = layer.id; strokes.push(layer.id); }
     } else if (FM.refitPathLayer) {
       FM.refitPathLayer(layer, sessionSubs);
@@ -325,7 +325,7 @@ window.FM = window.FM || {};
     } else if (!layer) {
       // Every stroke was undone and now one is coming back: the layer has to be built again, with the
       // FIRST surviving stroke, and the rest re-fitted on top of it.
-      layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Freehand', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
+      layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Sketch', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
       if (layer) {
         sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
         if (sessionSubs.length > 1 && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
@@ -603,7 +603,7 @@ window.FM = window.FM || {};
     bar.classList.remove('hidden');
     bar.querySelector('.db-width').style.display = mode === 'freehand' ? '' : 'none';
     updateBar();
-    if (FM.toast) FM.toast(mode === 'freehand' ? 'Freehand: draw on the canvas' : 'Vector: tap the canvas, or nudge with the pad and + Add point', 2800);
+    if (FM.toast) FM.toast(mode === 'freehand' ? 'Sketching: draw on the canvas' : 'Custom shape: tap the canvas, or nudge with the pad and + Add point', 2800);
   };
 
   FM.drawTools = {

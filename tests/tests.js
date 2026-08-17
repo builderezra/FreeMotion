@@ -3913,7 +3913,7 @@
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
     const stroke = (y) => { FM.drawTool.points = [[80, y], [140, y], [200, y], [260, y]]; FM.drawTool._commit(); };
     const subs = () => {
-      const l = FM.scene.layers.filter(x => x.name === 'Freehand').pop();
+      const l = FM.scene.layers.filter(x => x.name === 'Sketch').pop();   // renamed from 'Freehand' at queue 314
       return l ? (l.subs ? l.subs.length : (l.points ? 1 : 0)) : 0;
     };
     try {
@@ -3933,7 +3933,7 @@
       // layer has to go) and the first one back (the layer has to be rebuilt).
       FM.drawTool._undo(); FM.drawTool._undo(); FM.drawTool._undo();
       if (subs() !== 0) throw new Error('after undoing every stroke there are still ' + subs() + ' left');
-      if (FM.scene.layers.some(l => l.name === 'Freehand')) throw new Error('every stroke is undone but an empty Freehand layer is still on the timeline');
+      if (FM.scene.layers.some(l => l.name === 'Sketch')) throw new Error('every stroke is undone but an empty Sketch layer is still on the timeline');
       FM.drawTool._redo();
       if (subs() !== 1) throw new Error('redoing the first stroke should rebuild the layer with one stroke, got ' + subs() + ' across ' + FM.scene.layers.length + ' layer(s)');
 
@@ -26976,5 +26976,60 @@
   });
 
 
+
+
+  /* ================= queue 314 + 316: two renames, swept ==========================================
+   * *"Change the name of free hand drawing to Sketching"* and *"Rename vector drawing to custom
+   * shape"*, and the note on the second says the part that matters: *every* label, not just the first.
+   *
+   * WHY THIS IS A TEST AND NOT JUST A FIND-AND-REPLACE. The add menu tints each tile from a map keyed
+   * by the tile's VISIBLE LABEL. A rename that misses that map does not throw and does not break the
+   * button — the tile keeps working and quietly loses its colour, which is exactly the kind of
+   * half-rename that survives a release and gets reported back weeks later as "why is this one grey". */
+  test('Freehand Drawing is Sketching and Vector Drawing is Custom shape, everywhere (queue 314, 316)', { item: 'renames' }, function () {
+    const gone = ['Freehand Drawing', 'Vector Drawing'];
+    const want = ['Sketching', 'Custom shape'];
+
+    // 1. The instant-tools list — what the tiles and the Shift+1..3 shortcuts both index.
+    if (!FM._instantLabels) throw new Error('FM._instantLabels is missing — this test cannot see the list it is about');
+    const labels = FM._instantLabels();
+    gone.forEach(g => { if (labels.indexOf(g) >= 0) throw new Error('the add menu still offers "' + g + '": ' + labels.join(', ')); });
+    want.forEach(n => { if (labels.indexOf(n) < 0) throw new Error('there is no "' + n + '" tool — the rename dropped it instead of renaming it: ' + labels.join(', ')); });
+
+    /* 2. THE TINT MAP, WHICH IS KEYED BY THE VISIBLE LABEL. This is the assertion that earns the test:
+       a rename that misses this map does not throw and does not break the button — the tile keeps
+       working and quietly loses its colour, which is the half-rename that survives a release and comes
+       back weeks later as "why is this one grey". */
+    if (!FM._tileTints) throw new Error('FM._tileTints is missing');
+    const tints = FM._tileTints();
+    gone.forEach(g => { if (tints.indexOf(g) >= 0) throw new Error('the tile-colour map is still keyed by the old name "' + g + '"'); });
+    want.forEach(n => { if (tints.indexOf(n) < 0) throw new Error('"' + n + '" has no entry in the tile-colour map, so its tile renders grey while every other one is tinted'); });
+
+    // 3. The printed shortcut list, which nothing else in the app would catch.
+    const wasOpen = FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen();
+    try {
+      if (FM.shortcuts && FM.shortcuts.show) {
+        FM.shortcuts.show();
+        const ov = document.getElementById('shortcuts-overlay');
+        const txt = ov ? (ov.textContent || '') : '';
+        if (!txt) throw new Error('the shortcuts overlay rendered nothing to check');
+        gone.forEach(g => { if (txt.indexOf(g) >= 0) throw new Error('the keyboard-shortcuts list still says "' + g + '"'); });
+        if (txt.indexOf('Sketching') < 0) throw new Error('the shortcuts list does not mention Sketching — its ⇧2 row was left on the old name');
+      }
+    } finally {
+      if (!wasOpen && FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
+    }
+
+    /* 4. Nothing user-facing still carries the old names — SCOPED TO THE APP'S OWN CHROME, not to the
+       whole document. The first version read document.body.textContent and failed instantly, because
+       the suite prints every test's TITLE on the page and this test's title contains both old names.
+       A search that can match the searcher is not a search. */
+    ['topbar', 'inspector-panel', 'add-sheet', 'shortcuts-overlay'].forEach(function (id) {
+      const host = document.getElementById(id);
+      if (!host) return;
+      const txt = host.textContent || '';
+      gone.forEach(g => { if (txt.indexOf(g) >= 0) throw new Error('"' + g + '" is still on screen inside #' + id); });
+    });
+  });
 
 })();

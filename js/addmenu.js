@@ -154,7 +154,7 @@ window.FM = window.FM || {};
        problem. The stroke is one deep S rather than a ripple, because a shallow one flattened to a dash
        at 24px, and it starts under the nib rather than beside it so it reads as a line coming OUT of the
        pencil. See tests/_iconsheet.html — it renders both icons at 24/48/96 on the real cell colour. */
-    { label: 'Freehand Drawing', icon: ico('<g transform="translate(2.4,-2.6) scale(0.9)" fill="currentColor" stroke="none"><path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/></g><path d="M6.2 18.7c1.7-2.7 3.4 2.7 5.1 0"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
+    { label: 'Sketching', icon: ico('<g transform="translate(2.4,-2.6) scale(0.9)" fill="currentColor" stroke="none"><path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/></g><path d="M6.2 18.7c1.7-2.7 3.4 2.7 5.1 0"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
     /* …and Vector stops being a pencil too, which is not scope creep but the other half of the same
        change: its old mark was ALSO a pencil silhouette (with two anchor dots), so giving Freehand the
        pencil would have left two pencils side by side in one list. That is the fault the Elements cube
@@ -173,7 +173,7 @@ window.FM = window.FM || {};
        part that says pen tool rather than graph — an easing curve never has one hanging off it. The knob
        is solid because as a 1px ring its counter half-closed at 24px into a grey blob beside two crisp
        square counters. */
-    { label: 'Vector Drawing', icon: ico('<path d="M5 16.6c0-5.6 8-3.2 8-8.8" stroke-linecap="butt"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.4" stroke-linecap="butt"/><circle cx="20.5" cy="5.2" r="1.5" fill="currentColor" stroke="none"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
+    { label: 'Custom shape', icon: ico('<path d="M5 16.6c0-5.6 8-3.2 8-8.8" stroke-linecap="butt"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.4" stroke-linecap="butt"/><circle cx="20.5" cy="5.2" r="1.5" fill="currentColor" stroke="none"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
@@ -755,8 +755,11 @@ window.FM = window.FM || {};
        The SCHEME is untouched: vivid icon, faint plate, which is the part he said to keep. */
     'Text': '79, 163, 255',              // azure — the writing tool
     'Captions': '236, 122, 214',         // magenta — speech, deliberately far from Text
-    'Freehand Drawing': '150, 230, 110', // lime, matching its green pen
-    'Vector Drawing': '255, 186, 74',    // amber, matching its orange path
+    /* KEYED BY THE VISIBLE LABEL, which is why a rename has to come here too (queue 314/316). A miss
+       does not throw — it silently drops the tile's colour, so the tile keeps working and just looks
+       wrong, which is the kind of half-rename that survives a release. */
+    'Sketching': '150, 230, 110',        // lime, matching its green pen
+    'Custom shape': '255, 186, 74',      // amber, matching its orange path
     'Camera': '156, 124, 255',           // violet, matching its lens
     'Null': '255, 118, 140',             // "Null being red is good" — the value it already had, pinned
     'Adjustment': '84, 226, 190',        // mint
@@ -859,6 +862,12 @@ window.FM = window.FM || {};
     }
     return b;
   }
+
+  /* Seams for the suite (queue 314/316). A rename has to reach the LABELS and the tint map that is
+     KEYED by them, and a miss on the second is silent — the tile keeps working and loses its
+     colour. Reading both from outside is what lets that be asserted instead of hoped. */
+  FM._instantLabels = function () { return INSTANT.map(function (o) { return o.label; }); };
+  FM._tileTints = function () { return Object.keys(BY_LABEL); };
 
   FM.addMenu = {
     // container: where to render. opts: { variant: 'panel' | 'sheet', onAfterAdd, onClose }
@@ -1231,7 +1240,7 @@ window.FM = window.FM || {};
       placeGlint();
       main.appendChild(tabsEl); main.appendChild(pinnedEl); main.appendChild(bodyEl);
 
-      /* The rail is EMPTY of tools now. Text / Captions / Freehand Drawing / Vector Drawing moved into
+      /* The rail is EMPTY of tools now. Text / Captions / Sketching / Custom shape moved into
        * the Elements tab (which opens first), so this row of cards would have been a duplicate of what
        * is already on screen — Ezra: "i want them moved not duplicated". The element itself stays
        * because the phone sheet hangs its ✕ here; CSS collapses it when it holds nothing, so the panel
@@ -1286,7 +1295,7 @@ window.FM = window.FM || {};
       if (b && !b.classList.contains('active')) b.click();
       _startTab = null;
     },
-    // Shift+1..4 → the instant rail: Text / Captions / Freehand Drawing / Vector Drawing.
+    // Shift+1..4 → the instant rail: Text / Captions / Sketching / Custom shape.
     instant: function (i) { if (INSTANT[i]) INSTANT[i].add(); },
   };
 })(window.FM);

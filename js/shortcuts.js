@@ -5,7 +5,7 @@ window.FM = window.FM || {};
   const SHORTCUTS = [
     ['Space', 'Play / pause'],
     ['1 – 5', 'Add menu → Shape · Media · Audio · Object/Element · Template'],
-    ['⇧ 1 / 2 / 3', 'Add Text · Freehand Drawing · Vector Drawing'],
+    ['⇧ 1 / 2 / 3', 'Add Text · Sketching · Custom shape'],
     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
     ['↑ / ↓', 'Nudge selected layer vertically'],
     [', / .', 'Step one frame back / forward'],

@@ -5755,7 +5755,9 @@ better still, keep working inside the turn rather than parking work for a later 
       Fair. Redo it properly rather than nudging it — and it sits beside 305 (the "?" glyph is
       off-centre and its strokes are too thick), which is the same icon row, so do them together.
 
-- [ ] **314 — Rename "Freehand Drawing" to "Sketching".** (17 Aug.) His words, verbatim: *"Change the
+- [x] **314 — Rename "Freehand Drawing" to "Sketching".** ✅ **v9.61.** Every label: the tile, the
+      tile-colour map, the keyboard-shortcuts list, the toast the tool shows when it starts, and the
+      name a new drawing arrives in the timeline with ("Sketch"). (17 Aug.) His words, verbatim: *"Change the
       name of free hand drawing to Sketching"*.
       It appears in the add menu (js/addmenu.js) and on the instant rail beside Text and Vector
       Drawing — check for every label, not just the first one found.
@@ -5769,7 +5771,11 @@ better still, keep working inside the turn rather than parking work for a later 
       before — "which I don't want" — so whatever simplification runs on commit needs to be off, or
       at least off by default. Goes with 314 (renaming it to Sketching).
 
-- [ ] **316 — Rename "Vector Drawing" to "Custom shape".** (17 Aug.) His words, verbatim: *"Rename
+- [x] **316 — Rename "Vector Drawing" to "Custom shape".** ✅ **v9.61.** Same sweep, same release.
+      **The one that makes this worth a test rather than a find-and-replace:** the tile colours are
+      keyed by the VISIBLE label, so a rename that misses that map does not throw and does not break
+      the button — the tile keeps working and quietly turns grey while every other one is tinted.
+      That is now asserted, and mutation-checked by putting the old key back. (17 Aug.) His words, verbatim: *"Rename
       vector drawing to custom shape"*. Same sweep as 314 — every label, not just the first.
 
 - [ ] **317 — In Add Effect, tapping Filters acts like Audio and throws you out with a popup.**
