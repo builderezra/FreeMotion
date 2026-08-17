@@ -813,6 +813,29 @@ window.FM = window.FM || {};
   };
 
   /* ---------- time / scrubbing ---------- */
+  /* HOW LONG THE SOURCE REALLY IS, and whether a given moment is past it — ONE answer, two readers.
+   *
+   * A clip can outlive the file behind it: a speed ramp, a trim, or simply a layer longer than its
+   * media leaves an overhang where the timeline still has clip but the source has run out. Playing an
+   * element that has already ended does not sit still — it REWINDS and plays from the beginning, which
+   * is the "the audio restarts from the start" report.
+   * syncMediaToClock has refused to resume past this point for a while. FM.play() never did: it seeks
+   * and calls play() unconditionally, so pressing Play inside the overhang restarted the sound, and the
+   * tick could not correct it afterwards because the element was then playing rather than paused.
+   * That is one rule written down in one place and missing from the other — the same shape as the
+   * timeline-origin bug that had to be fixed twice. So it lives here now and both paths read it.
+   *
+   * TAKE WHICHEVER LENGTH IS LONGER. The element believes its container header, which routinely
+   * undersells the file — a song claiming 11.21s that really runs 26.38s had everything past 11.21s
+   * treated as "off the end", and even a well-formed control disagreed by 60ms, giving every import a
+   * small dead tail. The decoded figure wins where we have one; the header is only a fallback. */
+  FM.sourceEnd = function (m) {
+    const elEnd = (m && m.el && isFinite(m.el.duration) && m.el.duration > 0) ? m.el.duration : 0;
+    const decEnd = (m && isFinite(m.duration) && m.duration > 0) ? m.duration : 0;
+    return Math.max(elEnd, decEnd) || Infinity;
+  };
+  FM.pastSourceEnd = function (m, local) { return local != null && local >= FM.sourceEnd(m); };
+
   FM.seekVideosToTime = function () {
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
@@ -1281,10 +1304,7 @@ window.FM = window.FM || {};
              * at the end. The mechanism is general; only its size varies.
              * Take whichever is longer. The element's figure is only trusted when we have nothing
              * better, and a source is never cut short by a container that undersold it. */
-            const elEnd = (isFinite(m.el.duration) && m.el.duration > 0) ? m.el.duration : 0;
-            const decEnd = (isFinite(m.duration) && m.duration > 0) ? m.duration : 0;
-            const srcEnd = Math.max(elEnd, decEnd) || Infinity;
-            if (local >= srcEnd) { try { m.el.muted = true; } catch (e) {} return; }
+            if (FM.pastSourceEnd(m, local)) { try { m.el.muted = true; } catch (e) {} return; }   // see FM.sourceEnd
             // Open SILENT and let declickGain bring it up: play() on an arbitrary sample at full volume
             // is the same click as pausing on one, and this is the path a loop takes every lap. (#148)
             try { m.el.volume = 0; } catch (e) {}
@@ -1457,6 +1477,10 @@ window.FM = window.FM || {};
       if (local == null) { try { m.el.pause(); } catch (e) {} return; }
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
       if (!layer.reversed) {
+        /* THE OVERHANG. Past the source's real end there is nothing left to play, and calling play()
+           on an ended element rewinds it to zero — which is the bug this guard exists for. Leave it
+           paused and silent; the tick applies the same rule every frame from here. */
+        if (FM.pastSourceEnd(m, local)) { try { m.el.pause(); m.el.muted = true; } catch (e) {} return; }
         try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
         // A new pass learns its own output latency from scratch (queue 148) — the offset from the
         // last one belongs to a different position, and on a phone often to a different device state.

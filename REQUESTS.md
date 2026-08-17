@@ -6549,6 +6549,28 @@ better still, keep working inside the turn rather than parking work for a later 
       hit before.
 
 
+- [ ] **350 — Voronoi Cells needs to MOVE, and move like it is alive.** (17 Aug.) His words, verbatim:
+      *"Voronoi cells needs the ability to make them move, and I want it to actually move in a cool way
+      and not just a drag it up and down, like they're alive. Because that's what alight motion has"*.
+      **Confirmed against the code: it is completely static today.** `{ type: 'voronoi', params: [cells,
+      edge] }` — two parameters, neither of them time-based, so the pattern is frozen for the whole clip.
+      **The clause that matters is the second one, and it is a design instruction, not a nice-to-have.**
+      "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field in one
+      direction, which is what a single Speed slider usually produces and what most of the plan's earlier
+      rounds did. "Like they're alive" means each cell should wander on its own path, so the pattern
+      breathes and the edges creep, with no shared direction anyone can point at.
+      **How to actually do that** (the same shape as the Starfield twinkle fix, which had exactly this
+      problem — every star flickered in lockstep because its phase hash had no avalanche step): give each
+      SEED its own drift, not the field. Hash the seed's index into a private phase and a private
+      direction, then orbit it slowly — `sx + r*cos(t*speed + phase)`, `sy + r*sin(t*speed*k + phase2)`
+      with k a non-integer so the two axes never re-sync and the motion never visibly loops. Parameters
+      along the lines of **Motion** (how far a cell wanders) and **Speed**, with 0 = today's static field
+      exactly, which is the EFFECTS-PLAN rule: an existing project must render byte-for-byte the same.
+      ⚠️ Cost check before shipping: this recomputes the cell centres per frame. Measure at 380px —
+      Voronoi is already a per-pixel nearest-seed search, and the plan's own history has a round where a
+      64-tap quality maximum measured 1.2 seconds a frame and had to be cut to 32.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.

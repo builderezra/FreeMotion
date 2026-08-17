@@ -25466,5 +25466,58 @@
     }
   });
 
+  /* A clip can outlive the file behind it — a speed ramp, a trim, or just a layer longer than its
+     media leaves an overhang where the timeline still has clip but the source has run out. Calling
+     play() on an element that has already ended does not sit still: it REWINDS and plays from the
+     beginning. That is the "the audio restarts from the start" report.
+     The per-frame sync had refused to resume past that point for a while. FM.play() never did — so
+     pressing Play inside the overhang restarted the sound, and the tick could not undo it, because by
+     then the element was playing rather than paused. One rule, written in one place and missing from
+     the other. */
+  test('pressing Play inside a clip’s overhang does not restart the source from the beginning', { item: 'src-end' }, function () {
+    if (!FM.pastSourceEnd) throw new Error('FM.pastSourceEnd is not exposed — the rule still lives at its call sites');
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time, playing0 = FM.playing;
+    var dur0 = FM.scene.project.duration;
+    /* THE PROJECT HAS TO BE LONGER THAN THE PLAYHEAD. FM.play() rewinds to 0 when you press it at the
+       end of the project — so with the suite's 5s default and a playhead at 5s, the first version of
+       this test was silently measuring t=0, where there IS source left and play() is correct. It
+       failed against a working guard. */
+    FM.scene.project.duration = 20;
+    try {
+      var played = 0, seeks = [];
+      var el = { muted: false, paused: true, duration: 2, playbackRate: 1, volume: 1, _t: 0,
+        play: function () { played++; this.paused = false; return Promise.resolve(); },
+        pause: function () { this.paused = true; } };
+      Object.defineProperty(el, 'currentTime', { get: function () { return this._t; }, set: function (v) { this._t = v; seeks.push(v); } });
+
+      var L = FM.makeLayer('video', { name: 'Overhang' });
+      L.start = 0; L.duration = 10;                    // ten seconds of clip…
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: el, width: 64, height: 48, duration: 2 });   // …over two seconds of file
+
+      // The rule itself, first — both ends of it.
+      if (!FM.pastSourceEnd(FM.media.get(L.id), 5)) throw new Error('5s into a 2s source is not being treated as past the end');
+      if (FM.pastSourceEnd(FM.media.get(L.id), 1)) throw new Error('1s into a 2s source was treated as past the end');
+
+      // …then the path that was missing it.
+      FM.time = 5;
+      FM.play();
+      if (played) throw new Error('Play started the element ' + played + ' time(s) at 5s into a 2s source — an ended element rewinds to zero when you play it, which is the sound restarting from the beginning');
+      if (!el.muted) throw new Error('the element past its source end was left audible');
+
+      // And inside the source it must still play normally — the guard must not deafen ordinary clips.
+      FM.pause && FM.pause();
+      played = 0; el.paused = true; el.muted = false;
+      FM.time = 1;
+      FM.play();
+      if (!played) throw new Error('Play did nothing at 1s into a 2s source — the guard is firing on clips that have plenty of source left');
+    } finally {
+      try { FM.pause && FM.pause(); } catch (e) {}
+      FM.playing = playing0; FM.time = t0; FM.scene.project.duration = dur0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

@@ -115,7 +115,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** Preview still plays Mix 0.9 — the undo is inaudible. Worse, from that point on the inspector edits the NEW object while the chain reads the OLD one, so every further parameter drag on that effect does nothing in preview until the user adds/removes/disables an effect. Export (`exporter.js:174` builds a fresh chain from the live scene) renders the correct value, so preview and export silently disagree.
 - **Fix:** Make the cache key identity-aware, not just structure-aware. In `sync()`, stash the filtered instance list on the rec and compare it element-by-element before the early return:  ```js const list = (layer.audioFx || []).filter(f => f && f.enabled !== false && FM.audioFxRegistry.get(f.type)); const same = m._afxInsts && m._afxInsts.length === list.length && m._afxInsts.every((x, i) => x === list[i]); if (m._afxChain && m._afxSig === sig && same) return; ... m._afxInsts = list;   // set alongside m._afxChain / m._afxSig ```  This also fixes the sibling case of reordering two effects of the same type (identical signature, different order).
 
-### OPEN: a clip that outlives its source restarts the audio from the beginning, and the mechanism is NOT yet established
+### ~~A clip that outlives its source restarts the audio from the beginning~~ — FIXED v9.37 (the guard existed on ONE of the two paths; the auditor called it closed, the skeptic found the hole)
 
 `js/app.js:1060` (resume branch) · `js/scene.js` layerSourceAdvance · found by the audio-cluster workflow
 
