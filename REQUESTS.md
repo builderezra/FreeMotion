@@ -5586,6 +5586,26 @@ better still, keep working inside the turn rather than parking work for a later 
       good one. Refresh and you get the old version. On a phone, backgrounding the browser fires that
       handler in EVERY open tab, so it needs no unusual behaviour from you at all. The existing guard
       (`boundId`) only ever covered a second tab on a DIFFERENT project.
+      🔎 **v9.54 — THE SERVICE-WORKER PATH IS NOW FIXED WHERE IT COULD BE, AND WIRED TO TELL US WHEN IT
+      FIRES. STILL NOT TICKED, because I still have not reproduced your glitch.**
+      What I changed:
+      1. **One dropped fetch on refresh is retried.** The fallback only triggers when `fetch` THROWS,
+         and on a phone that is a momentary radio blip, not a tunnel. A single immediate retry costs
+         nothing when the network is fine and removes the whole "it did it again for a second" class.
+      2. **If it ever DOES hand you the cached build, it now says so and names it.** A toast, on boot:
+         *"Your connection dropped on refresh, so FreeMotion loaded v9.42 from its offline copy — that
+         is why it looks old. Tap the version chip to get the latest."*
+      ✅ **THIS IS THE ONE THING I NEED FROM YOU, and it ends the guessing either way:** next time the
+      old-looking app appears, look for that message.
+      · **If you see it** — this was the cause, it is understood, and I can harden it properly.
+      · **If you DON'T see it** and the glitch is there — the service worker is ruled out for good and I
+        stop spending time on it. That is worth just as much.
+      Also worth doing at the same time: read the version chip. An OLD number confirms a whole old build;
+      the CURRENT number means it is a styling problem and the worker is innocent.
+      **And sw.js finally has tests.** The reason it never did is written above — two sessions could not
+      get a worker to install under test. It is not installed now: sw.js is fetched and run in a stub
+      scope with a fake cache and a fake network, and synthetic refreshes are thrown at it. Both the
+      retry and the record were mutation-checked.
       Every save now carries a version number that only goes up, and a save that would move it backwards
       is refused: the tab tells you it is behind and stops writing until you reload, instead of silently
       destroying the newer file. Same change closes a second route — a save that failed silently (a full

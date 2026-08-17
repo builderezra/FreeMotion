@@ -26458,4 +26458,89 @@
   });
 
   window.FMTests = { tests: T, run: run };
+
+  /* ================= queue 306: the service worker's silent downgrade =============================
+   * Ezra, for weeks: *"an older version of our project shows up when you refresh"*, and later *"The
+   * glitch that shows the old version of FreeMotion that has a more alight motion look STILL shows up
+   * when I press refresh… it's such a big issue, PLEASE"*.
+   *
+   * WHY THIS PATH AND WHY IT SURVIVED. A failed navigation is answered from cache; the stale index.html
+   * names OLD `?v=` script urls; the asset branch answers those cache-first. So one failed fetch does
+   * not give a slightly-off page — it hands over a complete older build, which is the only theory that
+   * fits his whole description. It survived because two sessions could not install a worker to test it.
+   *
+   * SO THE WORKER IS RUN HERE INSTEAD OF INSTALLED. sw.js is fetched and evaluated in a stub scope with
+   * a fake cache and a fake network, and synthetic navigations are dispatched at it. That tests the file
+   * that actually ships, on the exact failure it is accused of, with no registration involved — which is
+   * the thing that was blocking this.
+   */
+  async function runSW(net, seed) {
+    const src = await fetch('../sw.js?probe=1').then(r => r.text());
+    const store = new Map();
+    (seed || []).forEach(([k, v]) => store.set(k, v));
+    const key = k => (typeof k === 'string' ? k : k.url);
+    const cache = {
+      match: k => Promise.resolve(store.get(key(k))),
+      put: (k, v) => { store.set(key(k), v); return Promise.resolve(); },
+      delete: k => { store.delete(key(k)); return Promise.resolve(); },
+    };
+    const handlers = {};
+    const scope = {
+      addEventListener: (t, fn) => { (handlers[t] = handlers[t] || []).push(fn); },
+      skipWaiting: () => {},
+      clients: { claim: () => Promise.resolve() },
+      location: { origin: location.origin },
+    };
+    const cachesStub = { open: () => Promise.resolve(cache), keys: () => Promise.resolve([]), delete: () => Promise.resolve(true) };
+    // eslint-disable-next-line no-new-func
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cachesStub, net.fetch, Response, URL);
+    if (!handlers.fetch || !handlers.fetch.length) throw new Error('sw.js registered no fetch handler — it would do nothing at all');
+    let answered = null;
+    const ev = {
+      request: { method: 'GET', url: location.origin + '/index.html', mode: 'navigate' },
+      respondWith: p => { answered = p; },
+    };
+    handlers.fetch[0](ev);
+    if (!answered) throw new Error('sw.js did not answer a navigation at all');
+    return { res: await answered, store: store, tries: () => net.tries };
+  }
+
+  test('the service worker retries a dropped navigation before serving an old build (queue 306)', { item: 'sw-stale' }, async function () {
+    const FALLBACK = new Response('<span class="ver">v9.42</span>', { status: 200 });
+
+    /* 1. THE BLIP — the case that is actually his. One throw, then the network is back. Before this,
+       a single momentary failure on refresh was enough to hand over the whole cached build. */
+    const blip = { tries: 0, fetch: function () { blip.tries++; return blip.tries === 1 ? Promise.reject(new Error('blip')) : Promise.resolve(new Response('<span class="ver">v9.53</span>', { status: 200 })); } };
+    let r = await runSW(blip, [['index-fallback', FALLBACK.clone()]]);
+    if (r.tries() < 2) throw new Error('the worker gave up after ' + r.tries() + ' attempt — one dropped fetch on refresh still serves the old build');
+    if (!/v9\.53/.test(await r.res.clone().text())) throw new Error('after the retry succeeded the worker still served the cached shell');
+    if (r.store.has('served-stale-shell')) throw new Error('a recovered navigation left a stale-build warning behind — it would cry wolf on a load that was fine');
+
+    /* 2. GENUINELY OFFLINE — the fallback is still served, because that is the whole point of the
+       feature, but it now SAYS SO and names the build, which is what turns "I cannot reproduce it"
+       into one observation from his phone. */
+    const dead = { tries: 0, fetch: function () { dead.tries++; return Promise.reject(new Error('offline')); } };
+    r = await runSW(dead, [['index-fallback', FALLBACK.clone()]]);
+    if (!/v9\.42/.test(await r.res.clone().text())) throw new Error('offline, the worker served no cached page at all — the PWA cannot open without signal');
+    const note = r.store.get('served-stale-shell');
+    if (!note) throw new Error('the worker served an old build and left no record of it — that silence is why this went unexplained for weeks');
+    if ((await note.clone().text()) !== 'v9.42') throw new Error('the record does not name the build that was served, so it cannot tell him which version he is looking at');
+
+    /* 3. A GOOD LOAD CLEARS IT, or the warning outlives the problem and starts lying. */
+    const fine = { tries: 0, fetch: function () { fine.tries++; return Promise.resolve(new Response('<span class="ver">v9.53</span>', { status: 200 })); } };
+    r = await runSW(fine, [['index-fallback', FALLBACK.clone()], ['served-stale-shell', new Response('v9.42')]]);
+    if (r.store.has('served-stale-shell')) throw new Error('a successful load left the old warning in place — it would fire on the next boot and blame nothing');
+  });
+
+  test('the stale-build warning says which build and how to escape it (queue 306)', { item: 'sw-stale' }, function () {
+    if (FM.staleShellNotice(null) !== null) throw new Error('with no marker the app must say nothing at all');
+    const m = FM.staleShellNotice('v9.42');
+    if (!m) throw new Error('a recorded stale build produced no message');
+    if (m.indexOf('v9.42') < 0) throw new Error('the message does not name the build he is looking at: ' + m);
+    if (!/version chip/i.test(m)) throw new Error('the message does not point at the one control that fixes it: ' + m);
+    // An unparseable stamp still has to produce a warning rather than a blank or the literal '?'.
+    const q = FM.staleShellNotice('?');
+    if (!q || q.indexOf('?') >= 0) throw new Error('an unrecognised stamp leaks into the message: ' + q);
+  });
+
 })();

@@ -872,6 +872,46 @@ window.FM = window.FM || {};
   // duration-less caller, e.g. "Grouped 3 layers", on screen forever). Pass ms=0 for a sticky
   // progress toast paired with FM.hideToast(). The seq guard stops an old timer from hiding a newer toast.
   let toastSeq = 0;
+  /* ---------- "you are looking at an old build, and here is why" (queue 306) --------------------
+   * His report, for weeks: *"an older version of our project shows up when you refresh"*, *"The glitch
+   * that shows the old version of FreeMotion that has a more alight motion look STILL shows up when I
+   * press refresh… it's such a big issue, PLEASE"*. It has never been reproduced on this machine, and
+   * the one path that fits the WHOLE description is the service worker answering a failed navigation
+   * from cache: the stale index.html names old `?v=` script urls, which the worker then serves
+   * cache-first, so you get a complete older build rather than a slightly-off page.
+   *
+   * The reason it has survived this long is that it is SILENT. So sw.js now leaves a note when it does
+   * it, and this reads the note. One look at his own phone then settles what no amount of guessing here
+   * has: if this message appears, that was the cause; if the glitch happens and this never appears, the
+   * service worker is exonerated and the search moves on. Either answer is worth more than another
+   * theory.
+   *
+   * Split from the reading so the wording is testable without a live service worker — installing one in
+   * the suite is exactly the thing the last two sessions could not get to work, and a warning nobody
+   * can test is a warning that will be broken on the day it is needed. `null` in, `null` out: no note,
+   * no message, and the caller does nothing.
+   */
+  FM.staleShellNotice = function (ver) {
+    if (!ver) return null;
+    const which = (/^v\d/.test(ver)) ? ver : 'an older build';
+    return 'Your connection dropped on refresh, so FreeMotion loaded ' + which +
+           ' from its offline copy — that is why it looks old. Tap the version chip to get the latest.';
+  };
+  FM.checkStaleShell = function () {
+    if (!window.caches || !navigator.serviceWorker) return Promise.resolve(null);
+    return caches.open('freemotion-v1')
+      .then(c => c.match('served-stale-shell').then(r => r ? r.text().then(t => ({ c: c, v: t })) : null))
+      .then(hit => {
+        if (!hit) return null;
+        // Clear it first: the note describes THIS load, and one left behind would cry wolf on the next.
+        try { hit.c.delete('served-stale-shell'); } catch (_) {}
+        const msg = FM.staleShellNotice(hit.v);
+        if (msg && FM.toast) FM.toast(msg, 9000);
+        return msg;
+      })
+      .catch(() => null);
+  };
+
   FM.toast = function (msg, ms) {
     const t = document.getElementById('toast'); if (!t) return;
     t.textContent = msg; t.classList.remove('hidden');
