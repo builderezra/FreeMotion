@@ -1744,7 +1744,15 @@ window.FM = window.FM || {};
      * pressing play does nothing at all, because there is nothing left to play. Both read as broken.
      * The first clip in an empty project should start you at its beginning. */
     if (start !== FM.time) FM.time = start;
-    scene.layers.unshift(layer);
+    /* THROUGH THE ONE INSERT (queue 298). This unshifted straight to the top, so every imported clip —
+     * video, image, audio, a sound effect, the sample clip — ignored the Add-layer marker and landed
+     * above everything, which is his report word for word: "the tap to add layer button doesn't actually
+     * make layers land below it, they just go to the top still".
+     * The comment on insertLayer already LISTS "imported media" among the creators it was written to
+     * cover; this one was simply missed when that refactor happened, so the note has been describing a
+     * fix that was never applied here. Imported media is also the most common thing anyone adds, which
+     * is why the marker looked broken rather than partly working. */
+    FM.insertLayer(layer);
     scene.selectedId = layer.id;
     scene.selectedIds = [layer.id];
     // Composition grows to fit: the first clip sets the length; later clips extend it.
@@ -2159,8 +2167,9 @@ window.FM = window.FM || {};
   FM.addEmptyGroup = function () {
     const P = FM.scene.project;
     const g = FM.makeLayer('group', { name: 'Group', x: 0, y: 0, start: 0, duration: P.duration || 5 });
-    if (FM.groupContext) g.parent = FM.groupContext;   // made while editing a group → nests inside it
-    FM.scene.layers.unshift(g);
+    // Same insert as everything else (queue 298) — it honours the Add-layer marker, and it does the
+    // group-context parenting this line used to do by hand, so the two cannot disagree.
+    FM.insertLayer(g);
     FM.selectLayer(g.id);
     if (FM.toast) FM.toast('Empty group — parent layers to it, or drag them under it', 2400);
     if (FM.history) FM.history.commit();

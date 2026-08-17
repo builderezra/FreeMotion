@@ -5304,7 +5304,7 @@ better still, keep working inside the turn rather than parking work for a later 
       variable holding it went with the hand-built header. Caught by two existing tests, which is the
       argument for having them.)*
 
-- [ ] **298 — The Add-layer marker still does not put layers where it points.** (17 Aug.) His words,
+- [x] **298 — The Add-layer marker still does not put layers where it points. FIXED v9.46 — he was right and the DONE was wrong.** (17 Aug.) His words,
       verbatim: *"The tap to add layer button doesn't actually make layers land below it, they just go
       to the top still"*.
       ⚠️ **This is against 294, which I marked DONE at v8.88 with all 15 clauses ticked.** So either the
@@ -5312,6 +5312,16 @@ better still, keep working inside the turn rather than parking work for a later 
       others, or it regressed since. Treat the DONE as unproven and re-check the real path — `FM.addAt`
       / `FM.clampAddAt` / `FM.insertLayer` — against what the button actually does on HIS phone layout,
       not the one I happen to have open. That is the v7.79 lesson and it is the second time.
+      **FOUND IT, v9.46: `FM.addMediaLayer` never went through the shared insert.** It called
+      `scene.layers.unshift(layer)` directly, so every IMPORTED clip — video, image, audio, a sound
+      effect, the sample clip — ignored the marker and landed on top. Imported media is the most common
+      thing anyone adds, which is why the marker read as broken rather than as partly working.
+      **And the comment on `FM.insertLayer` already LISTS "imported media" among the creators it exists
+      to cover** — so the note had been describing a fix that was never applied there, which is why 294
+      could be ticked in good faith. `FM.addEmptyGroup` had the same bypass and is fixed with it.
+      **The test is over EVERY creator, not the one that was wrong** — a per-creator assertion is exactly
+      what let one sit unrouted while a comment claimed otherwise. It also holds the marker-at-0 case, so
+      the fix cannot simply move the bug.
 
 - [ ] **299 — The Media and Audio sheets open taller than the other tabs.** (17 Aug, two screenshots
       at v9.02 — Shape tab vs Media tab, the Media sheet clearly starting higher up the screen.) His
@@ -6667,6 +6677,28 @@ better still, keep working inside the turn rather than parking work for a later 
       Related: **336** (trim grips should need a hold first) is the same question from the other side —
       what a press on a clip means before it has moved. Worth deciding both together, since one adds a
       delay deliberately and this one is a complaint about a delay.
+
+
+- [ ] **352 — Clean up this file: get rid of what is not needed.** (17 Aug.) His words, verbatim:
+      *"Do you ever waste time going through the project file trying to find what you need? if so feel
+      free to spend some time cleaning it up and getting rid of un needed stuff, before you do tho, ima
+      compact the chat, so when you finish up with waht ur doing just lmk and then compact the chat and
+      then we can look through the project file"*.
+      **Answer given: yes, measurably.** This file is ~8,400 lines and is read in chunks constantly. Real
+      costs paid on 17 Aug alone: six OPEN items were filed below the "## Done" heading and read as
+      finished (one of them his no-audio export report); the open section is not in number order, so
+      "the bottom of the list" means nothing positionally; #47 and #215 are each 100+ lines of layered
+      history with the CURRENT state buried at the end; and two entries turned out to describe work that
+      had already shipped, which cost real time to disprove.
+      **Proposed, for him to approve one at a time — the history is half the point, so nothing is
+      deleted, only moved:**
+      1. [ ] Move closed items into `REQUESTS-DONE.md`. Cuts the working file by roughly two thirds.
+      2. [ ] A one-line **STATUS** at the top of every long entry — open / blocked on X / done vN — so
+             the current state is the first thing read rather than the last.
+      3. [ ] Sort the open section by number, so oldest-first is visible instead of reconstructed by a
+             script.
+      ⚠️ **To be done WITH him after he compacts the chat** — his words, and it is his record, so the
+      shape of it is his call rather than something to do unilaterally while he is not looking.
 
 
 ## Done

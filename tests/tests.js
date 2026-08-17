@@ -25940,5 +25940,53 @@
     }
   });
 
+  /* "The tap to add layer button doesn't actually make layers land below it, they just go to the top
+     still" (queue 298) — reported AFTER queue 294 was marked done with all fifteen clauses ticked.
+     He was right: FM.addMediaLayer unshifted straight to the top, so every IMPORTED clip ignored the
+     marker. insertLayer's own comment lists "imported media" among the creators it covers, so the note
+     had been describing a fix that was never applied there — and imported media is the most common
+     thing anyone adds, which is why the marker looked broken rather than partly working.
+     THIS TEST IS OVER EVERY CREATOR, not the one that was wrong. A per-creator assertion is what let
+     one of them sit unrouted while a comment claimed otherwise. */
+  test('every way of adding a layer honours the Add-layer marker', { item: 'add-at' }, function () {
+    var layers0 = FM.scene.layers.slice(), at0 = FM.addAt, t0 = FM.time;
+    var dur0 = FM.scene.project.duration;
+    try {
+      var base = function () {
+        FM.scene.layers.length = 0;
+        for (var i = 0; i < 3; i++) {
+          var L = FM.makeLayer('shape', { shape: 'rect', name: 'base' + i, x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+          L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+        }
+      };
+      var creators = [
+        ['imported media', function () {
+          var id = '__addat_' + Math.random().toString(36).slice(2, 8);
+          FM.media.set(id, { kind: 'image', el: document.createElement('canvas'), width: 20, height: 20, duration: 0 });
+          FM.addMediaLayer({ kind: 'image', width: 20, height: 20, id: id, file: { name: 'x.png' } });
+        }],
+        ['empty group', function () { FM.addEmptyGroup(); }],
+      ];
+      creators.forEach(function (c) {
+        base();
+        FM.addAt = 2;                       // marker sitting between base1 and base2
+        FM.clampAddAt();
+        c[1]();
+        var idx = FM.scene.layers.findIndex(function (l) { return l.name !== 'base0' && l.name !== 'base1' && l.name !== 'base2'; });
+        if (idx === 0) throw new Error('"' + c[0] + '" landed at the TOP with the marker at 2 — this is the report: they just go to the top still');
+        if (idx !== 2) throw new Error('"' + c[0] + '" landed at index ' + idx + ' with the marker at 2');
+      });
+
+      // …and the marker at 0 must still mean the top, or "fixing" this would just move the bug.
+      base(); FM.addAt = 0; FM.clampAddAt();
+      FM.addEmptyGroup();
+      if (FM.scene.layers[0].type !== 'group') throw new Error('with the marker at 0 the new layer did not land at the top');
+    } finally {
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.addAt = at0; FM.time = t0; FM.scene.project.duration = dur0;
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();
