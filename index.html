@@ -1,5 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- data-theme IS IN THE MARKUP, and it has to be (queue 306). theme-glass.css gates 75 rules on
+     html[data-theme="glass"], and until v9.11 that attribute was set by js/settings.js — which loads
+     at the BOTTOM of the body, after ~1.5MB of scripts. So every load painted the bare styles.css
+     first and only snapped to the real appearance once settings.js ran. settings.js's own comment
+     spelled the consequence out: "with it absent the app falls back to the bare stylesheet, which is
+     exactly the Classic look queue 178 removed" — i.e. the Alight-Motion-shaped app Ezra kept seeing
+     flash on refresh, reported as #292 and again as #306.
+     Glass is the ONLY theme (queue 178 deleted the option), and settings.js sets it unconditionally,
+     so putting it here changes nothing except WHEN it takes effect: parse time instead of script time.
+     settings.js still sets it and now merely agrees. Same fix, same reason, as queue 292's markup
+     class — and the same trap in testing it: by the time the suite runs settings.js has long since
+     set the attribute, so a test that reads document.documentElement passes either way and proves
+     nothing. The guard reads index.html AS SHIPPED. -->
+<html lang="en" data-theme="glass">
 <head>
 <meta charset="UTF-8">
 <!-- viewport-fit=cover (v5.49). Without it iOS letterboxes a standalone web app BELOW the status
@@ -157,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.10</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.11</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing

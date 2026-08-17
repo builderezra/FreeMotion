@@ -5269,6 +5269,35 @@ better still, keep working inside the turn rather than parking work for a later 
       cache-busters only version the SCRIPTS — if the cached shell itself is old, he gets an old app
       wholesale, which is exactly "an old version of FreeMotion". Check the SW's fetch strategy for
       the navigation request before anything else.
+      **v9.11 — I FOUND AND FIXED A REAL FIRST-PAINT BUG, AND I DO NOT THINK IT IS YOURS. Read this
+      before assuming it is done.**
+      What I found: `theme-glass.css` gates 75 rules on `html[data-theme="glass"]`, and that attribute
+      was applied by `js/settings.js` — which loads at the BOTTOM of the body, after ~1.5MB of scripts.
+      So every single load painted the bare `styles.css` first and only snapped to the real appearance
+      once settings.js ran. settings.js's own comment states the consequence in as many words: *"with it
+      absent the app falls back to the bare stylesheet, which is exactly the Classic look queue 178
+      removed."* The attribute is in the markup now, so the theme is in force at parse time, and there
+      is a guard that reads index.html AS SHIPPED (checking the live DOM proves nothing — by the time
+      any test runs, settings.js has long since set it).
+      **Why I am not ticking this.** I rendered index.html with every `<script>` stripped — which IS
+      first paint — before and after. The layout was already correct in both (queue 293 deleted the
+      Classic rules, so there is no second layout to land on), and the difference the fix makes is a
+      COLOUR SHIFT: inspector background rgb(10,20,26) vs rgb(22,28,40), and the page background. That
+      is a real flash and worth removing, but it is not "an old version that looks a lot like Alight
+      Motion". I could not reproduce what you are describing.
+      **THE HYPOTHESIS I HAVE NOT TESTED, and where I would start next — the SERVICE WORKER.**
+      `sw.js` serves navigations network-first and falls back to a cached `index-fallback` when the
+      fetch THROWS. On a phone, a momentary connectivity blip on refresh is exactly that. And because
+      the cache name is a fixed `freemotion-v1` that is never rotated, that fallback can be an
+      arbitrarily old `index.html` — which references OLD `?v=` script URLs, which the same worker then
+      serves cache-first. That would hand you a genuinely old build of the whole app, wholesale, which
+      fits "an old version of FreeMotion" far better than any theme flash does. **Next session: test
+      that path directly (throttle/kill the network on a refresh and see what loads), and if it is the
+      cause, stamp the fallback with its version and refuse to serve one older than the last build the
+      device successfully ran.**
+      **Also worth you knowing:** if it happens again, the version chip in the top bar shows which build
+      you are actually on — if it reads an OLD version number when the glitch appears, that confirms the
+      service-worker theory outright and I can stop guessing.
       **A CAUSE WAS FIXED IN v9.05 — a different one — and that stays true:**
       What I found: two tabs on the SAME project were unguarded. Tab A holds an old scene, you work in
       tab B, you switch back to tab A — and tab A's hidden-tab handler flushes its stale scene over the
@@ -5358,6 +5387,45 @@ better still, keep working inside the turn rather than parking work for a later 
       name of free hand drawing to Sketching"*.
       It appears in the add menu (js/addmenu.js) and on the instant rail beside Text and Vector
       Drawing — check for every label, not just the first one found.
+
+- [ ] **315 — Freehand drawing stops after the first line, and it still reshapes what you drew.**
+      (17 Aug.) His words, verbatim: *"Also free hand drawing stops working after ur first line, like
+      when you let go it doesn't let you draw more, and also it still has the issue where it will change
+      what you drew to look different, which I don't want"*.
+      Two clauses: (1) after releasing the first stroke you cannot draw a second; (2) the stroke is
+      still being smoothed/simplified into something that is not what he drew. He has asked for (2)
+      before — "which I don't want" — so whatever simplification runs on commit needs to be off, or
+      at least off by default. Goes with 314 (renaming it to Sketching).
+
+- [ ] **316 — Rename "Vector Drawing" to "Custom shape".** (17 Aug.) His words, verbatim: *"Rename
+      vector drawing to custom shape"*. Same sweep as 314 — every label, not just the first.
+
+- [ ] **317 — In Add Effect, tapping Filters acts like Audio and throws you out with a popup.**
+      (17 Aug.) His words, verbatim: *"When you're in the add effect menu and press filters it thinks
+      you pressed audio effects and then boots you out with a pop up, fix it"*.
+      **DIAGNOSED — and it is NOT my featuring work.** `FM.fxModeToggle` (inspector.js:2214) is correct:
+      it builds all three tabs and calls `onPick(key)` with which one you pressed. The FULL-SCREEN
+      visual browser's callback then throws that key away:
+      `FM.fxModeToggle(_layer, 'visual', () => { FM.fxBrowser.close(); FM.audioFxBrowser.open(layer); })`
+      — js/fx-browser.js:1027. No `key` parameter at all, so ANY tab that is not the current one closes
+      the browser and opens the AUDIO one. That is exactly "it thinks you pressed audio effects and then
+      boots you out", and the popup is the audio browser saying the layer has no audio track.
+      Written when there were only two states (visual ↔ audio) and never revisited when Filters became
+      the third (queue 113). The inspector's own caller at inspector.js:4109 does it correctly
+      (`k => { fxTab = k; ... }`), which is why it only misbehaves in the full-screen browser.
+      **Fix:** switch on the key — 'audio' opens the audio browser, 'filters' shows the filters view.
+      Check `js/audio-fx-browser.js:254` for the same shape of mistake while there.
+
+- [ ] **318 — Filters are appearing in the Featured row of the effects menu.** (17 Aug.) His words,
+      verbatim: *"Also in the effects menu filters are showing up in the featured menu"*.
+      ⚠️ Same suspicion as 317, and the two are almost certainly one bug: if the Featured row is being
+      fed filter entries, the tab it belongs to and the thing it adds will both be wrong.
+
+- [ ] **319 — Noise: make the preview grain smaller, and add a round / square grain toggle.**
+      (17 Aug.) His words, verbatim: *"For the noise preview make the noise smaller so it doesn't look
+      shit, and also give the noise effect a toggle to circle noise or square noise"*.
+      Two clauses: (1) the grain in the effect BROWSER'S preview tile is too coarse — that is the
+      thumbnail, not necessarily the effect itself; (2) the noise effect gains a grain-shape choice.
 
 ## Done
 

@@ -18666,6 +18666,46 @@
     }
   });
 
+  /* ---------------- #306 / #292: the app must look like itself at FIRST PAINT ---------------- */
+
+  /* HIS REPORT, twice, months apart: "when you refresh the page it shows an old version that looks a
+   * lot like alight motion" (#292) and then "the glitch that shows the old version of FreeMotion that
+   * has a more alight motion look STILL shows up when I press refresh" (#306).
+   * THE CAUSE, found at v9.11: theme-glass.css gates 75 rules on html[data-theme="glass"], and that
+   * attribute was applied by js/settings.js — which loads at the BOTTOM of the body, after roughly
+   * 1.5MB of script. So the browser painted the bare styles.css first and only snapped to the real
+   * appearance once settings.js ran. settings.js's own comment states the consequence exactly: "with
+   * it absent the app falls back to the bare stylesheet, which is exactly the Classic look queue 178
+   * removed." That bare look IS the Alight-Motion-shaped one he kept seeing.
+   * My v8.51 fix for #292 addressed a DIFFERENT first-paint flash (the layout-studio class) and was
+   * real, but it was not this one — which is why the report came back.
+   *
+   * THE TEST MUST READ index.html AS SHIPPED. By the time the suite runs, settings.js has long since
+   * set the attribute, so checking document.documentElement passes whether or not the markup carries
+   * it and proves nothing whatsoever. This is the same trap the v8.51 guard was written to avoid, and
+   * it is the only reason that guard was worth anything. */
+  test('boot: the theme is in the markup, so a refresh cannot flash the unthemed app (#306)', { item: 'first-paint' }, async function () {
+    // location.href, not a hand-written path: tests.js is injected INTO the app frame.
+    const src = await fetch(location.href, { cache: 'no-store' }).then(r => r.text()).catch(() => '');
+    if (!src || src.length < 500) throw new Error('could not read index.html as shipped, so this guard cannot check anything');
+    const htmlTag = (/<html\b[^>]*>/i.exec(src) || [''])[0];
+    if (!htmlTag) throw new Error('no <html> tag found in the shipped markup');
+    if (!/data-theme\s*=\s*["']glass["']/i.test(htmlTag)) {
+      throw new Error('the shipped <html> tag does not carry data-theme="glass" (' + htmlTag.slice(0, 120) + ') — every load will paint the unthemed stylesheet until settings.js runs, which is the old Alight-Motion-looking flash reported as #292 and #306');
+    }
+    // and the attribute has to still MEAN something: if theme-glass.css stopped gating on it, this
+    // guard would be protecting nothing and should be rewritten rather than left to pass forever.
+    const css = await fetch('theme-glass.css', { cache: 'no-store' }).then(r => r.text()).catch(() => '');
+    if (!css) throw new Error('could not read theme-glass.css');
+    const gated = (css.match(/data-theme\s*=\s*["']glass["']/g) || []).length;
+    if (gated < 10) throw new Error('theme-glass.css now gates only ' + gated + ' rules on data-theme — the attribute may no longer be what makes the app look like itself, so re-derive what first paint depends on');
+    // settings.js must still agree, so the two cannot drift apart
+    const set = await fetch('js/settings.js', { cache: 'no-store' }).then(r => r.text()).catch(() => '');
+    if (set && !/setAttribute\(\s*['"]data-theme['"]\s*,\s*['"]glass['"]\s*\)/.test(set)) {
+      throw new Error('settings.js no longer sets data-theme="glass" — the markup and the runtime have drifted apart');
+    }
+  });
+
   /* ---------------- #306: a stale tab must not overwrite newer work ---------------- */
 
   /* HIS REPORT, and he had made it before: "an older version of our project shows up when you refresh".
