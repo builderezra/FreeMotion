@@ -38,6 +38,14 @@ window.FM = window.FM || {};
     if (FM.groupContext && !FM.scene.layers.some(l => l.id === FM.groupContext)) {
       if (FM.exitGroup) FM.exitGroup(true); else FM.groupContext = null;
     }
+    /* The on-canvas mask editor is aimed at a mask OBJECT, and the swap above just replaced it with a
+       different object carrying the restored coordinates — while the editor still holds the pre-undo
+       point list. It does not tear itself down, because it resolves its layer and mask by id and both
+       ids survive. Left alone, the overlay keeps drawing the old shape and the next drag writes the
+       whole pre-undo path back over the restored one, throwing the undo away without saying so.
+       Every other on-canvas tool re-reads the live layer on each operation (point-edit does; crop,
+       fill-drag and text-edit hold no geometry), so this is the only one that needs pointing again. */
+    if (FM.maskTool && FM.maskTool.resync) FM.maskTool.resync();
     // Snapshots don't include FM.time; clamp it into the restored duration so undoing a duration-grow
     // (with the playhead parked past the new end) doesn't blank the preview / divide-by-zero in pxPerSec.
     FM.time = Math.max(0, Math.min((FM.scene.project && FM.scene.project.duration) || 0, FM.time || 0));

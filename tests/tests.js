@@ -24466,5 +24466,125 @@
     }
   });
 
+  /* The pen-mask editor must FOLLOW the model, not hold a copy of it.
+     open() seeds its point list once and every read and write afterwards goes through that copy. Undo
+     replaces FM.scene.layers wholesale with objects parsed from JSON, so the mask the editor resolves
+     becomes a different object carrying the restored path — while the copy still holds the pre-undo
+     one. Nothing tore the editor down, because the layer and mask IDs both survive the swap. Touching
+     any point then wrote the entire pre-undo path back and committed it, so the undo was gone. */
+  function maskEditorFixture() {
+    /* PIN THE FRAME SIZE. Whatever ran before this can leave the project at any size, and the editor
+       clamps every dragged point into the frame — the first version of this test used a square bigger
+       than the frame it landed in, so every drag clamped to the corner and the test measured nothing
+       but the clamp. The caller restores it. */
+    var P = FM.scene.project;
+    P.width = 640; P.height = 480;
+    if (FM.resizeCanvas) FM.resizeCanvas();
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 320, y: 240, shapeW: 400, shapeH: 300, fill: '#8cf' });
+    L.start = 0; L.duration = 4;
+    var m = FM.masks.make('add');
+    // A rectangle well inside the frame, with the corners far enough apart that a 16px hit radius
+    // cannot confuse one for another (or for an edge-insert ring at the midpoints).
+    m.path = [[160, 120], [480, 120], [480, 360], [160, 360]];
+    m.closed = true;
+    L.masks = [m];
+    FM.scene.layers.push(L); FM.selectLayer(L.id);
+    FM.history.commit();                       // the state an undo will come back to
+    FM.maskTool.open(L.id, m.id);
+    var cv = document.getElementById('preview');
+    var toClient = function (px, py) {
+      var r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+      return { x: r.left + ((px - (cv.__fmOX || 0)) * sc / cv.width) * r.width,
+               y: r.top + ((py - (cv.__fmOY || 0)) * sc / cv.height) * r.height };
+    };
+    // Prove the mapping before relying on it — if the preview's coordinate scheme ever changes, this
+    // test must fail loudly rather than quietly aim its drags at empty canvas and pass.
+    var probe = toClient(300, 250), back = FM.eventToProject({ clientX: probe.x, clientY: probe.y });
+    if (Math.abs(back.x - 300) > 1 || Math.abs(back.y - 250) > 1)
+      throw new Error('project<->screen mapping is off (300,250 round-tripped to ' + Math.round(back.x) + ',' + Math.round(back.y) + ') — the drags below would miss every point');
+    // …and the hit radius must be small enough to tell one corner from its neighbour's insert ring.
+    var thr = 16 / (FM.previewDispScale ? FM.previewDispScale() : 1);
+    if (thr > 60) throw new Error('a mask point grabs anything within ' + Math.round(thr) + ' project px at this display scale — the corners are 160 apart, so this test could pick the wrong one');
+    var ov = document.getElementById('mask-overlay');
+    if (!ov) throw new Error('the mask editor did not put an overlay on the canvas');
+    var pev = function (node, type, c, buttons) {
+      node.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'mouse', isPrimary: true, clientX: c.x, clientY: c.y, button: 0, buttons: buttons }));
+    };
+    return {
+      layer: L, maskId: m.id,
+      path: function () { var l = FM.scene.layers.find(function (x) { return x.id === L.id; }); var mm = l && l.masks && l.masks[0]; return (mm && mm.path) || []; },
+      drag: function (from, to) {
+        pev(ov, 'pointerdown', toClient(from[0], from[1]), 1);
+        pev(window, 'pointermove', toClient(to[0], to[1]), 1);
+        pev(window, 'pointerup', toClient(to[0], to[1]), 0);
+      }
+    };
+  }
+
+  test('undo inside the pen-mask editor is not silently thrown away by the next drag', { item: 'mask-undo' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 60); }); };
+    var layers0 = FM.scene.layers.slice(), W0 = FM.scene.project.width, H0 = FM.scene.project.height;
+    try {
+      var f = maskEditorFixture();
+      await frame();
+      f.drag([160, 120], [220, 200]);                 // move the top-left corner; onUp commits it
+      await frame();
+      var moved = f.path()[0];
+      if (Math.abs(moved[0] - 220) > 3 || Math.abs(moved[1] - 200) > 3)
+        throw new Error('the drag did not move the point (corner is at ' + moved + ') — the rest of this test would prove nothing');
+
+      /* NO await HERE ON PURPOSE. undo() is synchronous, so nothing has had a chance to run an
+         animation frame — which is exactly the window the bug lived in, and the reason the editor is
+         pointed at the live model by history.restore() itself rather than only by its draw loop. */
+      FM.history.undo();
+      if (FM.maskTool.resync())
+        throw new Error('the editor was still holding the pre-undo path immediately after undo() — restoring a snapshot must re-point it, not leave it for the next animation frame');
+      f.drag([480, 360], [520, 400]);                 // touch a DIFFERENT corner, the reported trigger
+      await frame();
+
+      var p = f.path();
+      if (Math.abs(p[0][0] - 160) > 3 || Math.abs(p[0][1] - 120) > 3)
+        throw new Error('the undo was thrown away: the top-left corner is back at ' + p[0] + ' (pre-undo) instead of 160,120, because touching another point wrote the whole stale path back');
+      if (Math.abs(p[2][0] - 520) > 3 || Math.abs(p[2][1] - 400) > 3)
+        throw new Error('the second drag did not take effect (corner at ' + p[2] + ', expected 520,400) — the editor is following the model but no longer editable');
+    } finally {
+      if (FM.maskTool.isActive()) FM.maskTool.stop();
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.scene.project.width = W0; FM.scene.project.height = H0;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.selectLayer(null); FM.inspector.refresh();
+    }
+  });
+
+  test('the pen-mask editor re-seeds itself when the scene is replaced by any other route', { item: 'mask-undo' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 60); }); };
+    var layers0 = FM.scene.layers.slice(), W0 = FM.scene.project.width, H0 = FM.scene.project.height;
+    try {
+      var f = maskEditorFixture();
+      await frame();
+      /* Loading a project swaps FM.scene.layers for freshly parsed objects without going near
+         history.restore(). The draw loop is the safety net for those, so this one DOES wait a frame. */
+      var fresh = JSON.parse(JSON.stringify(FM.scene.layers, FM.jsonReplacer));
+      fresh.forEach(function (l) { if (l.id === f.layer.id && l.masks && l.masks[0]) l.masks[0].path = [[80, 60], [400, 60], [400, 300], [80, 300]]; });
+      FM.scene.layers = fresh;
+      await frame();
+      if (FM.maskTool.resync())
+        throw new Error('the draw loop did not notice the scene had been replaced — the editor is still holding the old mask object');
+      f.drag([400, 300], [440, 340]);
+      await frame();
+      var p = f.path();
+      if (Math.abs(p[0][0] - 80) > 3)
+        throw new Error('the replaced path was overwritten: corner 0 is at ' + p[0] + ', expected 80,60');
+      if (Math.abs(p[2][0] - 440) > 3 || Math.abs(p[2][1] - 340) > 3)
+        throw new Error('the drag hit nothing after the re-seed (corner 2 at ' + p[2] + ', expected 440,340) — the editor re-seeded but its handles are in the wrong place');
+    } finally {
+      if (FM.maskTool.isActive()) FM.maskTool.stop();
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.scene.project.width = W0; FM.scene.project.height = H0;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.selectLayer(null); FM.inspector.refresh();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

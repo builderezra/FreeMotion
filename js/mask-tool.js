@@ -18,6 +18,7 @@ window.FM = window.FM || {};
   let closed = false;         // false → PEN mode (drawing); true → EDIT mode (closed fill)
   let drag = null;            // { pi } index of the point being dragged
   let sel = -1;               // selected point index (drives Delete / Smooth)
+  let seedOf = null;          // the mask OBJECT `pts` was seeded from — IDENTITY, not contents. See reseed().
   let dirty = false;          // did anything actually change since open()? gates the flush on Done so
                               // just opening + closing the editor on an ANIMATED path can't inject a
                               // spurious keyframe at the playhead (a no-op roto inspection must not mutate)
@@ -54,6 +55,32 @@ window.FM = window.FM || {};
     return [];
   }
 
+  /* Point the editor at the mask the scene actually holds now.
+   *
+   * WHY. `pts` is seeded ONCE in open() and every read and write afterwards goes through it. Undo,
+   * redo and loading a project all replace FM.scene.layers wholesale with objects freshly parsed from
+   * JSON — so the mask this editor is aimed at becomes a DIFFERENT object carrying different
+   * coordinates, while `pts` still holds the pre-undo list. Nothing tore the editor down, because it
+   * resolves its layer and mask by id and both ids survive the swap. Two things followed: the teal
+   * overlay went on drawing the old shape while the rendered layer snapped back, so the handles sat
+   * visibly off the mask; and the very next drag ran flush(), which for a static path does
+   * `m.path = pts` — writing every pre-undo coordinate back over the restored ones and committing it.
+   * The user's step back was silently thrown away by touching a point.
+   *
+   * `dirty` is cleared too: after a swap nothing the editor holds is an unsaved edit of the user's, so
+   * Done must not flush it — on an animated path that would inject a keyframe the undo had removed.
+   */
+  function reseed(m) {
+    drag = null;                       // an in-flight drag indexes the old array
+    lastTap = { t: 0, pi: -1 };        // …and a pending double-tap indexes it too
+    dirty = false;
+    pts = seedPts(m);
+    closed = pts.length >= 3 && m.closed !== false;
+    if (!isAnim() && !Array.isArray(m.path)) m.path = pts;
+    sel = -1; seedOf = m;
+    updateBar();
+  }
+
   // Write the working points back into the model. Animated path → upsert the keyframe at the playhead
   // (new roto key when none sits there); static path → the array is already the live reference.
   function flush() {
@@ -74,6 +101,7 @@ window.FM = window.FM || {};
   function draw() {
     const l = layer(), m = mask(), cv = preview();
     if (!l || !m || !cv || !overlay) { FM.maskTool.stop(); return; }
+    if (m !== seedOf) reseed(m);   // the scene was replaced under us (undo/redo, project load)
     const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
     overlay.style.left = (r.left - wr.left) + 'px'; overlay.style.top = (r.top - wr.top) + 'px';
     overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
@@ -238,7 +266,7 @@ window.FM = window.FM || {};
   }
 
   function teardown() {
-    active = null; drag = null; pts = null; sel = -1;
+    active = null; drag = null; pts = null; sel = -1; seedOf = null;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     window.removeEventListener('pointermove', onMove, true);
     window.removeEventListener('pointerup', onUp, true);
@@ -269,7 +297,11 @@ window.FM = window.FM || {};
       // Empty → PEN. Existing points that the mask marks closed → EDIT. (A lone <3-point path stays pen.)
       closed = pts.length >= 3 && m.closed !== false;
       if (!isAnim() && !Array.isArray(m.path)) m.path = pts;   // seed a static path so pen edits are live
-      sel = -1;
+      sel = -1; seedOf = m;
+      /* A double-tap deletes a point, and `lastTap` is module state that outlived the editor: close
+         the editor and reopen it inside 350ms, tap the point that happened to share an index with the
+         last one you touched, and it vanished. Nothing about the previous session should carry in. */
+      lastTap = { t: 0, pi: -1 };
       const wrap = document.getElementById('canvas-wrap');
       overlay = document.createElement('canvas'); overlay.id = 'mask-overlay';
       overlay.style.cssText = 'position:absolute;z-index:44;touch-action:none;cursor:crosshair;';
@@ -304,5 +336,18 @@ window.FM = window.FM || {};
       if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
     },
     redraw() { if (active) draw(); },
+    // Called by history.restore() the moment FM.scene.layers is swapped, so the editor follows an undo
+    // instead of holding the pre-undo path. draw() checks the same thing every frame, which covers any
+    // other route that replaces the scene; this call exists so there is no window at all — a drag
+    // starting before the next animation frame would otherwise still write the stale array back.
+    // Returns true if it had to do something (used by the suite).
+    resync() {
+      if (!active) return false;
+      const m = mask();
+      if (!m) { FM.maskTool.stop(); return true; }     // the layer or the mask did not survive the swap
+      if (m === seedOf) return false;
+      reseed(m); if (overlay) draw();
+      return true;
+    },
   };
 })(window.FM);

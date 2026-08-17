@@ -3886,6 +3886,15 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **twenty-first** struck off — **undo inside the mask editor being thrown
+      away the moment you touched a point (v9.25)**. Edit a mask path, press undo, drag any point, and
+      the whole pre-undo shape went back in and was committed — your step back gone, with nothing said.
+      The teal outline had already stopped agreeing with the picture before that. The editor took one
+      copy of the points when it opened and worked from that copy forever, and undo swaps every layer
+      for a fresh one; it never noticed, because it finds its layer by id and the id survives. It
+      follows the model now. Writing the test turned up a second one: the double-tap-to-delete timer
+      outlived the editor, so reopening it within a third of a second and tapping a point could delete
+      that point. 15 left.
       *Progress 17 Aug:* a **twentieth** struck off — **the X and Y boxes in Move & Transform
       going dead the moment they touched a snap line (v9.24)**. Drag the X number and, as soon as it
       reached the middle of your frame (or either edge, or any X the layer sits at on one of its own
@@ -5572,6 +5581,56 @@ better still, keep working inside the turn rather than parking work for a later 
       Sits with 296 (the + not centred in its circle) and 307 (four other things about that same row) —
       worth doing all of them in one pass, since they are the same control.
 
+- [ ] **325 — His answers to the open questions (17 Aug).** Logged VERBATIM first, mapped underneath,
+      because the mapping is mine and could be wrong — if any line below has been attached to the
+      wrong item, the original is right here to check against.
+
+      > 1 pretty sure it’s fine now
+      > 2 - no - no still laggy on phone - yes still laggy scrolling -  I think black bar is gone - pc buttons seem fine
+      > 3 well idk if it’ll be good or not, just ship it as good as you can and remind me to test it - leave text default white - lap is good I think - yes camera blur when moving with that effect is fine - I’m confused by the three audio sliders so explain better - the preset menu I wanted to show what the layer would look like with that effect and I sent an image of alight motion showing a menu that you could scroll through and when you would tap on one thing it would show how the effects preset would make the layer look, this is similar to how we have the effects menu as it is so it wouldn’t be much work to get this working.
+      > #223 idk im confused what ur talking about.
+      >
+      > long exposure camera tool was a seperate project not meant for FreeMotion.
+
+      **What is unambiguous and has been acted on:**
+      · **212 — CLOSED, not ours.** *"long exposure camera tool was a seperate project not meant for
+        FreeMotion"*. Struck from the queue rather than deleted, per the never-delete rule.
+      · **306 — the old-version glitch: "pretty sure it's fine now".** Not being closed on that alone —
+        it has come back twice before — but the two fixes (v9.05 stale-tab guard, v9.11 theme in the
+        markup) are now his own evidence rather than mine. Downgraded from urgent to WATCHING.
+      · **31b — answered YES.** *"yes camera blur when moving with that effect is fine"*.
+      · **187 — the black bar: "I think black bar is gone".** Same treatment as 306 — WATCHING, not closed.
+      · **229 — PC buttons: "pc buttons seem fine".** Closing this one; it was a taste call and he made it.
+      · **98 — Add Text: "leave text default white".** That clause is settled; the rest of 98 stands.
+      · **223 — NOT answered.** *"idk im confused what ur talking about"* — that is on me, the question
+        was badly written. It needs re-asking in plain words: the app ships a 2.8 MB splash VIDEO, which
+        is about as big as all its code put together, and it plays before he can do anything. The
+        question is only whether to keep it, shrink it, or drop it. **Re-ask, do not guess.**
+
+      **Still laggy — these stay OPEN and are now confirmed live, not suspected:**
+      · **95 / 202 — still laggy on phone.** His words: *"no still laggy on phone"*.
+      · **125 — scrolling the timeline still lags.** His words: *"yes still laggy scrolling"*.
+      These two were the oldest items sitting on "left open until Ezra confirms". He has now confirmed
+      the opposite of fixed, so they are live work again with no ambiguity.
+
+      **New work this message creates:**
+      · **The three audio sliders need explaining better.** His words: *"I'm confused by the three audio
+        sliders so explain better"*. ⚠️ Which three is not yet certain — most likely the Motion Blur
+        trio or the audio-react Sensitivity/Smoothing/Threshold set. Identify them before writing a word.
+      · **The preset menu should PREVIEW the layer.** His words, in full: *"the preset menu I wanted to
+        show what the layer would look like with that effect and I sent an image of alight motion showing
+        a menu that you could scroll through and when you would tap on one thing it would show how the
+        effects preset would make the layer look, this is similar to how we have the effects menu as it
+        is so it wouldn't be much work to get this working."* This ANSWERS the long-standing "Check I
+        changed the right Presets" question: he means the **inspector's Presets card**, and he wants it
+        to work the way the effects browser already does — scroll a list, tap one, see his own layer
+        rendered with it. He has explicitly said the engine is already there, which is correct: the
+        effects browser's live per-layer preview is exactly the machinery this needs.
+      · **"Just ship it as good as you can and remind me to test it."** Standing instruction on anything
+        where the question was "is this what you want?" — build it, ship it, and TELL HIM to test it
+        rather than holding the queue waiting for an answer.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
@@ -6562,7 +6621,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       12px, because the ring also blocks scroll drags that start inside it; more would make the bottom
       of the list feel dead. The outer edge stays 12px above the viewport bottom, clear of the home
       indicator.
-- [ ] **212 — A long-exposure camera tool for his phone (Slow Shutter Cam style). NOT DECIDED — he asked
+- [x] **212 — CLOSED (17 Aug, not a FreeMotion job) — A long-exposure camera tool for his phone (Slow Shutter Cam style). NOT DECIDED — he asked
       whether it was possible, not for it to be built.** His words: *"Would it be possible for you to
       create me a camera tool for my phone that can do cool long exposure photography? Like this app
       here, if so make a plan on how ur gonna do this and lmk if it would be better if I switched this
@@ -7211,7 +7270,7 @@ layout, motion blur, the elements browser and the effects browser.
       the left, off the corner, for both effects. Orbit sizes its margin from the RADIUS rather than the
       current position, so the plate is built once instead of resized every frame of the orbit.
 
-- [ ] **229 — PC: the buttons still are not where they should be, and he says the PC version is close to
+- [x] **229 — DONE (17 Aug, his call) — PC: the buttons still are not where they should be, and he says the PC version is close to
       unusable.** (15 Aug.) His words: *"you still havent moved all the buttons on the pc version to
       where they should be, like the notepad button and all the different options when you have a layer
       selected, i know u gotta work from oldest to newest but you should focus on this because pc
