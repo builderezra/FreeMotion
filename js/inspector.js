@@ -2635,6 +2635,10 @@ window.FM = window.FM || {};
   // NaN and the layer disappears entirely. The mode still needs an entry here or the keyframe rail
   // throws the moment you enter it.
   const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'], anchor: [] };
+  // Suite seam: the easing editor keeps its OWN copy of this table (MODE_PROPS in graph-editor.js),
+  // and the two silently disagreeing about Rotate is what left 3D tilts un-eased. Exposed so a test can
+  // hold them equal rather than restating either list a third time.
+  FM._mtProps = MT_PROPS;
   // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)

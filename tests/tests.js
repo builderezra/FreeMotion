@@ -25277,5 +25277,51 @@
     if (rec3.el.seeks < 5) throw new Error('an unaborted decode only seeked ' + rec3.el.seeks + ' times for a 6-frame clip');
   });
 
+  /* The easing-curve button edits every animated channel of a Move & Transform mode at once. Two ways
+     that went wrong, and they make each other worse — which is why they are fixed together. */
+  test('the rotate easing editor covers all three rotation channels, not just the flat spin', { item: 'ease-pick' }, function () {
+    if (!FM._easeModeProps) throw new Error('FM._easeModeProps is not exposed');
+    var ed = FM._easeModeProps.rotate, panel = FM._mtProps && FM._mtProps.rotate;
+    ['rotation', 'rotationX', 'rotationY'].forEach(function (k) {
+      if (ed.indexOf(k) < 0) throw new Error('the easing editor does not touch ' + k + ' — a 3D tilt keeps linear easing while the spin eases, and the two halves of one rotation drift apart');
+    });
+    /* AGAINST THE PANEL'S OWN LIST, not against a copy of it here. These two lists have to agree —
+       the panel keyframes what its list says and the editor eases what its list says — and a literal
+       in this test would just be a third list to drift from. */
+    if (panel) {
+      panel.forEach(function (k) { if (ed.indexOf(k) < 0) throw new Error('Move & Transform keyframes ' + k + ' in Rotate mode but the easing editor skips it'); });
+      ed.forEach(function (k) { if (panel.indexOf(k) < 0) throw new Error('the easing editor rewrites ' + k + ' in Rotate mode but the panel never keyframes it'); });
+    }
+  });
+
+  test('an easing preset does not reach back into a channel whose animation already ended', { item: 'ease-pick' }, function () {
+    if (!FM._pickEaseKfs) throw new Error('FM._pickEaseKfs is not exposed');
+    var t0 = FM.time;
+    try {
+      // His measured case: x keyed at 0/1/2s, y only at 0/0.5s, playhead at 1.5s.
+      var props = { x: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 50, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] },
+                    y: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.5, v: 30, e: 'linear' }] } };
+      var get = function (k) { return props[k]; };
+
+      FM.time = 1.5;
+      var r = FM._pickEaseKfs(get, ['x', 'y']);
+      if (r.keys.indexOf('y') >= 0)
+        throw new Error('y was picked at t=1.5 even though its animation ended at 0.5s — picking a preset would silently re-shape a move that finished a second earlier, and the graph only ever draws the first channel so nothing shows it');
+      if (r.keys.indexOf('x') < 0) throw new Error('x was dropped at t=1.5, but its 1→2s segment is exactly what the playhead is inside');
+      if (r.kfs.length !== 1 || r.kfs[0].t !== 2) throw new Error('expected x’s 1→2s segment (end key t=2), got ' + JSON.stringify(r.kfs.map(function (k) { return k.t; })));
+
+      // Inside a span both channels share, BOTH are still edited — that is the whole point of the editor.
+      FM.time = 0.25;
+      var r2 = FM._pickEaseKfs(get, ['x', 'y']);
+      if (r2.keys.length !== 2) throw new Error('at t=0.25 both channels are animating, but only ' + JSON.stringify(r2.keys) + ' were picked');
+
+      // Past EVERYTHING, the old behaviour has to survive: with no live segment anywhere, the last one
+      // is the only sensible reading, and the single-property editor has always relied on it.
+      FM.time = 9;
+      var r3 = FM._pickEaseKfs(get, ['x', 'y']);
+      if (r3.keys.length !== 2) throw new Error('past the end of both channels nothing was selected (' + JSON.stringify(r3.keys) + ') — the easing button would do nothing at all there');
+    } finally { FM.time = t0; }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

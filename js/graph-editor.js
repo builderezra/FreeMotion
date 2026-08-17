@@ -10,7 +10,17 @@ window.FM = window.FM || {};
   'use strict';
 
   const MODE_PROPS = {
-    move: ['x', 'y', 'z'], rotate: ['rotation'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'],
+    move: ['x', 'y', 'z'],
+    /* ALL THREE ROTATION CHANNELS. This listed only 'rotation', while the Move & Transform panel's
+     * own MT_PROPS.rotate is ['rotation','rotationX','rotationY'] and its ◆ keyframes all three the
+     * moment a tilt is in use. So picking an easing preset eased the flat spin and silently left the
+     * 3D tilt linear: measured after Ease In-Out, at t=0.25 rotation was 11.25° (eased) while
+     * rotationX was 37.5° (linear — it should have been 33.75°). The two halves of one rotation drift
+     * apart for the whole segment, in preview and in export, with nothing on screen saying half of it
+     * was skipped. The timeline even highlights all three as the keyframes you are editing, because
+     * kfFocusProps reads the FULL list. move/scale/skew already matched; rotate was the odd one. */
+    rotate: ['rotation', 'rotationX', 'rotationY'],
+    scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'],
     // anchor keyframes nothing (see MT_PROPS in inspector.js). Present so the `|| MODE_PROPS.all`
     // fallback below can't quietly re-ease every transform channel if this ever gets opened.
     anchor: [],
@@ -121,18 +131,40 @@ window.FM = window.FM || {};
 
   // getProp(k) returns the animatable prop object for key k (layer.transform[k] for transform modes,
   // or e.g. () => layer.volume for the audio panel). Lets this editor drive ANY keyframed prop.
+  /* WHICH SEGMENT OF WHICH CHANNEL AN EASING PRESET LANDS ON.
+   *
+   * One keyframe per animated channel of the mode — the segment the playhead is inside. The catch is
+   * the fallback for a playhead that is PAST a channel's last keyframe: it clamps to that channel's
+   * final segment. For a single-property editor that is exactly right ("edit the last segment"). This
+   * editor edits every channel of a mode TOGETHER, so a channel whose animation finished long before
+   * the playhead was having an old, already-played segment rewritten — and the canvas only ever draws
+   * kfs[0], so nothing on screen showed it happening.
+   * Measured: with x keyed at 0/1/2s and y keyed at 0/0.5s, the playhead at 1.5s and Bounce picked,
+   * y's 0→0.5s move became Bounce as well. The layer's vertical motion changed shape in preview and
+   * export without being asked for or shown.
+   *
+   * So a channel that has already ENDED is dropped — unless every channel has, in which case there is
+   * no live segment anywhere and "the last one" is the only sensible reading, which is what the
+   * single-property case has always relied on. That guard matters more since MODE_PROPS.rotate grew
+   * to three channels: more channels means more chances one of them finished early. */
   function pickKfs(getProp, propKeys) {
     const props = propKeys.filter(k => { const p = getProp(k); return FM.isAnimated(p) && p.kf.length >= 2; });
-    const t = FM.time, keys = [], kfs = [];
+    const t = FM.time, picked = [];
     props.forEach(k => {
       const kf = getProp(k).kf;
       let idx = kf.findIndex(x => x.t >= t - 1e-3);
+      const ended = idx < 0;                                          // playhead is past this channel's last key
       if (idx < 1) idx = (t <= kf[0].t + 1e-3) ? 1 : kf.length - 1;   // epsilon on the fallback too — a playhead a hair past kf[0] used to select the LAST segment
       if (idx > kf.length - 1) idx = kf.length - 1;
-      keys.push(k); kfs.push(kf[idx]);
+      picked.push({ k: k, kf: kf[idx], ended: ended });
     });
-    return { keys: keys, kfs: kfs };
+    const live = picked.filter(p => !p.ended);
+    const use = live.length ? live : picked;
+    return { keys: use.map(p => p.k), kfs: use.map(p => p.kf) };
   }
+  // Suite seams: the mode→channel table and the segment picker are where both of these bugs lived.
+  FM._easeModeProps = MODE_PROPS;
+  FM._pickEaseKfs = pickKfs;
 
   /* ---- parameterised families (v5.47) --------------------------------------------------------
    * A keyframe carrying `ez` belongs to the Bounce or Steps family; anything else is the Bezier

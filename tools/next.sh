@@ -46,6 +46,22 @@ if [ -n "$BAD" ]; then
   echo
 fi
 
+# AN OPEN ITEM FILED UNDER "## Done" IS A DONE ITEM, to anyone reading the file — and REQUESTS.md is
+# written for EZRA to read, not only for a script. Six of them were sitting down there on 17 Aug,
+# including "EXPORTED VIDEO CAME OUT WITH NO AUDIO" and the entry this file calls "the most serious
+# thing open". The greps below scan the WHOLE file, so they were never invisible to the tooling — which
+# is exactly why nothing caught it. Same family as the malformed-entry check above: detected loudly
+# rather than trusted.
+MISFILED="$(awk '/^## Done/{d=1} d && /^- \[ \] \*\*/{printf "%d:%s\n", NR, substr($0,1,100)}' "$F")"
+if [ -n "$MISFILED" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! OPEN items filed under '## Done' — they read as FINISHED to anyone opening this file:"
+  echo "$MISFILED"
+  echo "!! Move them back above the Done heading."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 echo "=== UNNUMBERED (pre-date the numbering, so these are the OLDEST) ==="
 grep -n '^- \[ \] \*\*[^0-9]' "$F" | sed 's/^\([0-9]*\):- \[ \] \*\*/  line \1: /' | sed 's/\*\*.*//' | cut -c1-100
 

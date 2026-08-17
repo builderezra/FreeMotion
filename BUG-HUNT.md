@@ -544,7 +544,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** The user is told the preset was saved. It was not written; it is absent from the effect's preset sheet and gone after reload. The one warning that would have explained it is replaced before it can render.
 - **Fix:** Make `writeCustom` return `true`/`false` (`try { …; return true; } catch (e) { …; return false; }`) and have `save` return that value, so the caller's else-branch fires instead of the false "Saved" toast.
 
-### Rotate-mode easing editor never touches rotationX/rotationY, so a 3D tilt keeps linear easing while the spin eases
+### ~~Rotate-mode easing editor never touches rotationX/rotationY, so a 3D tilt keeps linear easing while the spin eases~~ — FIXED v9.34
 `js/graph-editor.js:13`  · found by `inspector-keyframes`
 
 - **What:** graph-editor's MODE_PROPS.rotate lists only ['rotation'], but the Move & Transform panel's MT_PROPS.rotate (js/inspector.js:1591) is ['rotation','rotationX','rotationY'] and its ◆ keyframes all three whenever the extra channels are in use. buildEasingEditor therefore collects (pickKfs) and rewrites (applyPreset/applyBez) only the `rotation` keyframe, silently leaving rotationX/rotationY on whatever easing they had. kfFocusProps (inspector.js:2921) also uses the full MT_PROPS.rotate list, so the timeline highlights those keyframes as the ones you are editing while the easing button skips them.
@@ -552,7 +552,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** Only the flat spin eases; the 3D tilt keeps animating linearly. Verified live: after picking Ease In-Out, at t=0.25 rotation = 11.25° (eased) while rotationX = 37.5° (still linear, would be 33.75° eased). The two channels of one rotation drift apart for the whole segment, identically in preview and export, with no indication in the UI that half the rotation was skipped.
 - **Fix:** Make MODE_PROPS.rotate match MT_PROPS.rotate: `rotate: ['rotation', 'rotationX', 'rotationY'],`. (move/scale/skew already agree; rotate is the only row out of sync.)
 
-### Easing preset is applied to properties whose animation already ended, silently re-easing an earlier, unrelated segment
+### ~~Easing preset is applied to properties whose animation already ended, silently re-easing an earlier, unrelated segment~~ — FIXED v9.34
 `js/graph-editor.js:96`  · found by `inspector-keyframes`
 
 - **What:** pickKfs picks one keyframe per animated channel of the mode. When the playhead is past a channel's LAST keyframe, findIndex returns -1 and the fallback clamps idx to kf.length-1 — that channel's final segment. That fallback is right for a single-property editor, but the transform editor edits every channel of the mode together, so a channel whose animation finished long before the playhead gets its last (already-played) segment rewritten by applyPreset/applyBez. The canvas only ever draws cur.kfs[0], so nothing on screen shows the second channel being changed.

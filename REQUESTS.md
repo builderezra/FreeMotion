@@ -6043,6 +6043,383 @@ better still, keep working inside the turn rather than parking work for a later 
       applies here too.
 
 
+
+<!-- These six were sitting BELOW "## Done" while still unticked — so anyone reading this file,
+     which is written for Ezra, would have taken them as finished. Moved back up 17 Aug. tools/next.sh
+     now refuses to print a quiet list if it ever happens again. -->
+
+- [ ] **187 — The black bar is STILL there, and it CREEPS in.** His words: *"The black bar that comes in
+      is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
+      urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
+      **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
+      canvas painted #000, and earlier rounds chased `theme-color` and the safe-area inset. A band that
+      *creeps* is not a painted background at all; something is being TRANSITIONED or is growing over
+      time (a height/transform animation, a lazily-applied inset, a layer resizing after first paint).
+      So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
+      state — the previous rounds all measured the finished picture, which is exactly why they kept
+      finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
+
+      **A CONFIRMED BLACK-BAR MECHANISM WAS FOUND AND FIXED IN v7.87 (#239), AND IT MATCHES THIS
+      DESCRIPTION — including the "creeps in" that nobody could explain.** #239 gave the reproduction
+      this entry never had: *"it seems to happen when you, like, do the easter egg thing where you're
+      slamming the screen."* The cause was the slam's OWN ring — `#home-screen.hm-slam` carried a 140px
+      `box-shadow` of flat `--bg`, added in #144 so the shake could not reveal the editor behind home.
+      That was correct while home was a flat surface. Home is not flat any more (its own drifting light,
+      and a grain field since v7.76), so every slam painted a band of dead `#060c0f` against a lit,
+      textured screen.
+      **And it explains the word this entry is built around.** You said it *creeps* in, and this entry
+      rightly concluded that a band which animates is not a painted background — it is something moving.
+      It was: the ring is attached to a 420ms shake animation, so the band arrives WITH that movement
+      rather than appearing at once. Every earlier round screenshotted the end state, by which time the
+      animation had finished and the band was gone — which is exactly why they kept finding
+      plausible-but-wrong static causes, as this entry predicted.
+      **The frame capture this entry asked for was done, and it is what proved the fix:** home's box was
+      sampled 24 times across the whole 420ms with the editor painted bright red behind it, and the
+      largest uncovered edge is **0px** — nothing can appear at any frame. The ring is gone; the shake
+      now overscans by 6% so home's own surface fills the edges.
+      **This is NOT ticked, deliberately, and it needs one word from you.** I cannot prove your original
+      sighting was this mechanism — you reported it long before the slam was implicated, and there have
+      been three plausible-but-wrong causes already, so declaring it closed on a match of symptoms would
+      be the fourth. **Next time you would have expected the bar: does it still happen?** If yes, it is a
+      second cause and this entry is still live; if no, this closes with v7.87.
+      **NEW DETAIL 16 Aug, with a PC screenshot — this is the best lead yet.** His words: *"The black
+      bar still is an issue that pops up on the side of the screen in the home menu"* … *"as u see
+      here"*. The screenshot is the **HOME menu on a wide desktop window**, and the bar is a **vertical
+      strip down the RIGHT edge**: the home background (the teal/purple gradient field) stops roughly
+      50px short of the window's right edge and the bare app ground shows through.
+      That reframes it — every earlier round chased a bar at the TOP/BOTTOM (theme-color, safe-area
+      inset, the document canvas). This one is **horizontal short-fall on the right in the HOME view**,
+      which is a different element and probably a width that is being computed rather than stretched
+      (a `100vw` against a scrollbar-reduced client width would do exactly this, as would a background
+      sized to a container that excludes a gutter).
+      **Reproduce at a wide desktop width on the home screen and measure the field's right edge against
+      `document.documentElement.clientWidth`** before changing anything.
+      **INVESTIGATED 16 Aug and NOT reproduced — here is what is ruled out, so the next run does not
+      repeat it.** Measured on the home screen at 1400px and again at 1900px, after a resize, listing
+      every element wider than 600px that paints a background: **every one reaches the right edge
+      exactly** (`shortBy: 0`) — the ground, `#stage`, `#home-screen` and the field. The only element
+      that stops short is the decorative conic glow, which is 980px and centred by design.
+      **The hypothesis that fits, and why I cannot test it here.** `#home-screen` is
+      `position: fixed; inset: 0`, so it spans `clientWidth` — which EXCLUDES a classic scrollbar. This
+      browser reports `innerWidth - clientWidth = 0`: it uses **overlay** scrollbars, so a gutter can
+      never appear for me. On a machine with classic scrollbars the gutter would be bare ground to the
+      right of the fixed overlay — a dark vertical strip exactly where his screenshot shows one, and one
+      that "creeps in" as the list grows long enough to need scrolling. **Three rounds of fixes have
+      missed this bug, and an artefact that is invisible in the only browser I can drive is a very good
+      explanation for that.**
+      Against the hypothesis: at the moment of measuring, `body` was `overflow: hidden`, the document
+      did not scroll, and no element inside `#home-screen` was scrollable — though the project list was
+      not populated in my programmatic open, so that last point is weak.
+      **What would settle it, and it needs him:** with the home screen open and his project list long
+      enough to scroll, run this and send the numbers —
+      `JSON.stringify({iw: innerWidth, cw: document.documentElement.clientWidth, home: document.getElementById('home-screen').getBoundingClientRect().right})`.
+      If `iw - cw` is about 15 and `home.right` equals `cw`, the strip IS the scrollbar gutter and the
+      fix is to paint the ground behind it (or `scrollbar-gutter: stable both-edges`), not to chase the
+      field's width again.
+
+
+- [ ] **206 — Shapes need SENSIBLE edit points, not a million dots. ⚠️ HELD — he is doing this one WITH
+      me, and asked me not to start it.** His words: *"in alight motion, each shape has sensible edit
+      points that are actually useful and make sense, in ours only some shapes have that but most have
+      just got a million little edit dots, which is finicky as shit, so we're going to have to fix that
+      up but I know if you just go and do that urself ur gonna ruin every shape and make it look shit.
+      So wait for me."*
+      **DO NOT START THIS ALONE.** He is right about the risk: editing the point sets IS the shape
+      library, and a bad pass would quietly wreck fifty-four shapes at once. This entry exists to hold
+      the ask, not to authorise the work.
+      What is worth knowing when he is ready — recorded now so the session with him starts informed
+      rather than starting from scratch:
+      · The dots come straight from `FM.SHAPE_POLYS`. A shape traced from a reference carries every
+        sampled vertex, so a curve that reads as one smooth arc is a dozen points to drag; a shape drawn
+        as geometry (rect, triangle, chevron) has only the points that mean something. That is exactly
+        the split he is describing — "only some shapes have that".
+      · So the fix is per-shape and is a DRAWING job, not a code job: choosing which points carry the
+        form and letting the existing smooth-flag/bezier machinery (`FM.pointCtrl`) hold the curve
+        between them, instead of approximating it with vertices.
+      · Suggested first step, and it costs nothing and changes nothing: count the points per shape and
+        rank them, so the conversation starts from "these eleven are the finicky ones" rather than from
+        opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
+      · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
+        the same polygons), so the tile and the shape cannot drift apart while we work.
+- [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
+      exported and got no audio even tho the video had audio."*
+      **I rate this the most serious open item.** Everything else is the app being awkward; this is the
+      app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
+      It is going to the bottom of the queue per the oldest-first rule, but **say the word and it jumps
+      to the front** — I think it should.
+      Where to start: the export mix is built separately from the preview (`buildAudioMix` in
+      js/exporter.js), so this is NOT the same code as #96, though it may be the same CLASS of bug —
+      that one was a duration gate silently muting a clip. Check first whether the track is being muted,
+      mixed at zero, or never decoded at all; and check `layer.muted`, since Extract Audio deliberately
+      mutes the original and a muted ORIGINAL plus a missing twin would produce exactly this. Establish
+      which by exporting a known clip and inspecting the file, not by reading.
+      **REPRODUCTION, 15 Aug — the first one this entry has ever had.** His words: *"I made a fresh
+      project, added some sound effects, pressed export with some pretty normal export settings and got
+      an audioless clip."*
+      **Read what is specific in that sentence, because it narrows this a long way:**
+      · **A FRESH project** — so it is not state accumulated over a long edit, not a project migrated
+        from an older build, and not something a previous export left behind.
+      · **SOUND EFFECTS** — not an imported song. If he means the app's own audio (Elements / the audio
+        browser) then these layers are created by a different path from `FM.loadVideoFile`, and every
+        audio fix this file records (#96's duration disagreement, #95's start-up gap, #72's truncation)
+        was measured on IMPORTED files. A sound-effect layer may never have been exported with audio at
+        all, which would explain why this keeps coming back after each of those fixes.
+      · **Normal export settings** — so it is not an exotic codec or resolution combination.
+      **First move for whoever picks this up: build exactly that scene and export it.** Fresh project,
+      add a sound effect the way the UI does, export at defaults, then count the audio samples in the
+      resulting MP4 (`tests/_xresume.html` already counts video samples and shows how). Do NOT start from
+      the encoder — start from whether the exporter can even SEE that layer as an audio source, because
+      "a layer type the audio path does not recognise" fits every symptom here and nothing measured so
+      far rules it out.
+      **This is the most serious open item in the file** and now has a concrete repro, so it should go
+      first once the current PC run is finished.
+
+      **FIRST LOOK AT THE EXPORTER, 15 Aug — two lines that can silently drop a layer's sound.**
+      `buildAudioMix` (js/exporter.js) opens its loop with:
+      ```
+      for (const layer of scene.layers) {
+        if (layer.type !== 'video' || ...) continue;      // <- line 250
+        const m = FM.media.get(layer.id);
+        if (!m || !m.file) continue;                       // <- line 252
+      ```
+      Both are `continue`, not an error, so **anything they skip produces a silent export with no
+      warning anywhere** — which is precisely the shape of this report.
+      · **Line 250** mixes only layers whose type is `'video'`. Imported audio rides the video path (an
+        mp3 becomes a `'video'` layer with a 0×0 picture — that is documented in the compositor), so
+        imports are fine. A layer created by any other route with a different `type` is skipped.
+      · **Line 252** also requires `m.file`, a real File object. Audio that arrives as a bundled asset or
+        a URL rather than a picked file may have a decoded buffer and no `.file`, and would be skipped
+        even if its type were right.
+      **What I could not settle before running out of room, and it decides which of the two it is:** I
+      could not find a distinct "sound effects" source in the code — no `sfx`, no `addAudioLayer`, no
+      `type: 'audio'` layer constructor. So either "sound effects" means audio files he imported through
+      the Audio tab (in which case both guards pass and the cause is further down the encoder), or they
+      come from somewhere I did not find.
+      **One line from him settles it: where did the sound effects come from — the Audio tab / his own
+      files, or a built-in library inside the app?** Not blocking: the next session should build the
+      scene both ways and count audio samples in the output, because the two guards above are testable
+      without knowing the answer.
+
+      **FOLLOWED THAT LEAD AND IT DIED — recorded because a wrong lead left lying about costs a morning.**
+      The Audio tab does not open a picker: it lists previously-imported files as one-tap tiles and
+      re-adds them by media id (`addmenu.js` → `FM.mediaLib.use(mid)`). That looked like the answer — a
+      library re-add restoring from IndexedDB rather than a picked File would leave `m.file` empty and
+      hit the line-252 guard exactly as reported. **It does not.** `mediaLib.use()` pulls the real File
+      back out of storage and then calls `FM.loadVideoFile(file)` — *the identical path an import takes*.
+      So a re-added audio tile ends up with the same media record as a fresh import, and **both guards
+      pass**.
+      **What that rules out, which is the useful part:** if his "sound effects" came from the Audio tab
+      (his own files, either freshly imported or re-added), the mixer is NOT the thing dropping them, and
+      the cause is downstream — the AAC encoder, the muxer's audio track, or the `!any` path. #47's own
+      notes already flag that the muxer will commit an empty audio track to the moov on some iOS Safari
+      versions and produce a silent file, which is worth reading before anything else.
+      **So the question narrows rather than disappears:** if the effects came from the Audio tab, look
+      downstream of the mix; if they came from somewhere else, find that path first. **v7.90's toast now
+      answers this for him without him having to know any of it** — if it says "could not be read" the
+      mixer dropped them and the reason is named; if no toast appears at all and the file is still
+      silent, the mix was built fine and the loss is downstream.
+
+      **WENT DOWNSTREAM AND FOUND A SECOND SILENT LOSS — v7.91, and this one fits your report better
+      than the first.** Before declaring an audio track the exporter probes whether the browser can
+      encode AAC, which is right: a muxer that commits an empty audio track to the moov makes a file
+      strict players reject. But if the probe failed it threw the ENTIRE mix away and said so only in a
+      `console.warn`. Nothing on screen at all.
+      **And at that point the mix was built perfectly** — every clip read, every sample in place — so
+      v7.90's reporting stays silent here. Normal settings, no warning, no sound. That is your sentence.
+      It now toasts *"This browser cannot encode AAC — exporting WITHOUT SOUND."*
+      **The bit that explains five rounds of failing to pin this down:** `AudioEncoder` support is a
+      property of the BROWSER, not of your project or your settings. The same project exports with sound
+      in one browser and without it in another, on the same machine, with nothing changed — which is
+      unfalsifiable from a description alone.
+      **Three outcomes are now distinguishable from the outside**, which is what this entry has always
+      lacked: a toast naming a clip = the mixer; the AAC toast = the encoder; NEITHER toast and still a
+      silent file = the muxer, and that is the last place left to look.
+      *Known gap, stated rather than papered over: the AAC path has no direct test. It sits mid-`run()`
+      behind a real `isConfigSupported` probe, so covering it needs a full export with a stubbed encoder
+      — a bigger rig than this change earned today.*
+
+      **AND THE THIRD PATH — v7.92, the worst of them.** `encodeAudio` throwing was also a bare
+      `console.warn`, and it matters more than the other two because **the muxer has already declared an
+      audio track by then** (`audio: mix ? {…} : undefined` is decided far higher up, while the mix still
+      existed). So a throw there did not just lose the sound — it shipped a file whose moov **promises an
+      audio track that was never fed**. That is exactly the "broken/silent track that strict players
+      reject" the AAC probe was written to prevent, arriving by a route the probe cannot see: it answers
+      "can this browser encode AAC", not "did this encode survive". Such a file can play silently in one
+      player and be refused outright by another.
+      **All three silent losses now report themselves, and the toast alone says which half broke:**
+      | what you see | what broke |
+      |---|---|
+      | a toast naming a clip | the MIXER could not read that layer |
+      | "cannot encode AAC" | the BROWSER has no AAC encoder |
+      | "soundtrack failed to encode" | the encode started and threw |
+      | no toast, still silent | none of the three — and that would be genuinely new information |
+      This entry had no evidence attached for five rounds of asking precisely because every one of these
+      was a bare `console.warn`. **The next occurrence answers itself.**
+
+      **CHECKED END TO END, 16 Aug — the toast really does reach the screen**, which was worth proving
+      rather than assuming: a diagnostic that only exists in a unit test is no use at the moment you
+      need it. Building the scene his report describes (a clip whose audio cannot be read) produces, on
+      screen and visible: **"Exporting with NO SOUND — 1 audio clip could not be read (see the console)"**,
+      with the console naming it: *"Boom SFX (no file on its media record — a bundled or URL-backed
+      clip?)"*.
+      **So when it happens to you again, read the toast and the console line and send me those** — that
+      is the whole answer, and it takes one screenshot.
+
+- [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
+      *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
+      lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading
+      properly."*
+      **This is the most serious thing open.** One clip, no effects, quality set to smooth, and it still
+      lags — that is the core experience being wrong, not an edge case, and it sits with #125/#130 (the
+      long-running lag) and #128. The second half — "seemingly broken and not loading properly" — may be
+      the same root cause as #201: the media not being decoded/ready while the timeline already thinks it
+      should draw. Measure both together: what the frame budget is spent on with exactly one video layer,
+      and what state the media element is in during the period he calls broken. Do NOT tune anything
+      before that measurement — this area has already produced three plausible-but-wrong causes.
+      **MEASURED (`tests/_onevideo.html`), and the two halves give different answers.**
+      · **"Not loading properly" is REAL and is now fixed** — see #201. There is a genuine window where
+        the clip cannot draw at all, and the app said nothing about it.
+      · **The LAG did not reproduce here.** Recording a real 1280×720 clip, importing it through the
+        app's own path, quality on *smooth*, one layer, no effects: `renderScene` runs at a **median of
+        4.40ms** (mean 4.62, p95 9.10) against the 16.7ms a 60fps frame has, and the app held itself on
+        **tier 0 of 6** — it never even felt the need to drop quality. Nothing here is over budget.
+      So the lag is **device-specific, or outside renderScene**, and I am not tuning anything on that
+      basis — that is exactly how this area has already produced three plausible-but-wrong causes.
+      **What would settle it:** the same measurement running ON HIS PHONE. `FM._perfState()` and
+      `FM.playbackQualityInfo()` already report the tier, the frame average and the canvas size; the
+      missing piece is a way for him to read them and send them over. That argues for a small "what is
+      slow" readout in Settings rather than more guessing from here.
+      Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
+      still decoding, the app is competing with the decoder for the same device.
+
+      **FINDING 1's FIRST REAL FIX, v9.26 — and it is a pixel count, not a stopwatch.** Chasing the
+      12.2-megapixel project led somewhere concrete on the way: every buffer in the compositor is
+      allocated on the TARGET's pixel grid — effect plates, the camera plate, the manual-blend plate —
+      except **two**, which were built at full project size and never stamped with the render scale, so
+      the drawing inside them ran at 1:1 however small the preview was. They are the plate a GROUP is
+      flattened onto and the plate a MASK BLEND MODE rasterises through. On his 3024x4032 project
+      previewing into the 762k-pixel canvas his own report shows, that is **16.0x the pixels needed**,
+      allocated, cleared and drawn per group per frame. On an ordinary 1080x1920 comp on a phone it was
+      **4.3x**, measured live in the app. Export is unaffected — an export canvas is project-sized, so
+      the scale is 1 — and that is a test, not a claim. **Deliberately measured as a SIZE:** this entry
+      records four passes that measured this area on a fast Mac, found fine milliseconds and moved on,
+      and a pixel count reads the same on his phone as it does here. **What it is NOT:** the scene in
+      his measurement had no group in it, so this is a real cost removed rather than proof his lag is
+      gone. Finding 1 itself — the 12.2 MP project — is still unanswered and is still the biggest number
+      in that report.
+
+      **AND THE PROJECT HE ALREADY HAS CAN NOW BE REPAIRED, v9.28.** v9.27 could only stop it happening
+      again, because Canvas settings changed the width and height and nothing else — every layer kept
+      coordinates that meant something in the old frame, so shrinking a finished project scattered it.
+      That was a silent bug in its own right for anyone who ever resized. There is a **Scale the layers
+      to fit** switch under Size now (on by default, shown only when there is something to move), so a
+      12.2-megapixel project can be brought down to a sane size with the work intact. Undo restores the
+      size and the geometry together. **For Ezra: open the big project, Canvas settings, pick a smaller
+      resolution, Apply — and tell me whether it still feels slow afterwards.** That is the measurement
+      that would close 125, 202 and 95 together.
+
+      **FINDING 1 IS ANSWERED AT THE SOURCE, v9.27 — and the source was one uncapped line.**
+      `FM.addMediaLayer` sets the project's size from the FIRST file you import, and it took that
+      file's pixel dimensions verbatim with no limit. A stock iPhone still is 3024x4032, so importing
+      one into an empty project built a **12.2-megapixel** composition — larger than anything the app's
+      own Canvas picker offers, which tops out at 2160p. That is precisely the project in his report,
+      and it explains why it looked like a *project setup* problem: it was, and the app set it up.
+      Capped now to the short side the top preset means (3024x4032 → 2160x2880), aspect kept, both
+      sides even so it can still be exported, and it says so rather than doing it silently. Sizes at or
+      under the preset range are untouched. **It cannot repair the project he already has** — Canvas
+      settings does not rescale existing layer geometry, which is a separate job and is noted as one.
+      A second allocation of the same kind went with it: the onion-skin ghost plate was project-sized
+      and REALLOCATED every frame (48 MB thrown away twice a frame on his project).
+
+      **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
+      Verbatim:
+      ```
+      FRAMES   44.6 fps average
+               median gap 17.0ms · p95 38.0ms · worst 494.0ms
+               14 of 446 frames were late (over 42ms)
+      QUALITY  tier 0 (6 available) · mode smooth
+               app-measured render 0.34ms · app-measured gap 0ms
+      CANVAS   762k pixels
+      PROJECT  3024×4032 @30fps · 8 layers (6 shape, 1 video, 1 image) · 2 effects
+      DEVICE   screen 440×956 @dpr3 · 4 cores · Safari · iOS
+      ```
+      **Three findings, and the first is probably the whole story.**
+      1. **The PROJECT is 3024×4032 — 12.2 megapixels.** That is a photo's dimensions, almost certainly
+         inherited from an imported image, on a 4-core phone. Every frame composites 12.2M pixels. No
+         amount of tuning the render path fixes a canvas that size; this is very likely the cause of the
+         lag reported across #95, #125 and #202, and it is a *project setup* problem rather than an
+         engine one. **Needs a product answer, not a perf fix** — a warning when a project is created
+         far larger than any screen or export will use, and/or an offer to scale it down.
+      2. **`app-measured gap 0ms` is a BUG.** v7.57 added gap-watching precisely so the ladder could see
+         GPU and decode cost that its own render clock cannot. His report shows real gaps — p95 38ms,
+         worst 494ms, 14 late frames — while the app's own gap metric reads **zero**. So the ladder is
+         blind again, still sat on **tier 0 of 6** in *smooth* mode, and never shed quality through
+         half-second freezes. That is exactly the shape of "nothing much ever gets resolved" from #125.
+      **FINDING 2 IS FIXED — v8.27.** Playback now feeds the ladder a frame interval, judged against
+      the PROJECT frame time rather than the display interval. The old behaviour was deliberate and its
+      reasoning was written down — a 30fps comp renders every other rAF, so 33ms is healthy and would
+      have read as permanently late against 1000/60 — and that note said measuring against the project
+      frame time was "a separate change and is not this one". His measurement is what made it necessary.
+      So the ladder can now see the cost it was blind to during playback, which is the whole complaint
+      behind #125. **Whether it actually helps HIS phone is the next measurement, not an assumption.**
+
+      3. **The readout's own READ line was wrong.** It printed *"this sample looks healthy"* because the
+         MEDIAN (17ms) is fine, while ignoring 14 late frames and a 494ms worst case. A report that
+         reaches a confident wrong verdict is the precise failure this feature exists to end, so the
+         heuristic has to weigh the tail and the late count, not just the middle.
+
+      **THE READOUT IS BUILT — v8.13.** This entry asked for it in its own last line, and #125 and #95
+      are both blocked on the same thing, so it is done rather than guessed around again.
+      **Settings → "What's slow" → Measure.** Use the app normally for ten seconds — do the thing that
+      feels slow — then **Copy** and paste the block to me. Nothing is sent anywhere by itself.
+      It measures the **real frame interval**, not our own render clock, which is the distinction that
+      kept #125 alive: GPU filter work and video decode never touch that clock, and once reported
+      1.1ms a frame while the app stuttered. The report also **interprets itself** — if the frames are
+      slow while our drawing is fast it says the cost is GPU or decode — because "the numbers look
+      fine" is how this has gone wrong three times running.
+      **So #202, #125 and #95 all now need the same one thing from you: one measurement each, taken
+      while it feels bad.** That is the whole remaining work on all three.
+      *(Two flaws found by running it rather than testing it: with the tab hidden rAF never fires, so
+      the probe hung forever and left Measure disabled — there is a wall-clock deadline now; and the
+      first real report warned "NOT USABLE" at the top and said "looks healthy" at the bottom.)*
+- [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
+      you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
+      the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
+      thirds of the screen empty black below them, no canvas, no timeline. So on finishing a vector
+      drawing the inspector opens in its full-height/editing state instead of the normal docked one, and
+      the only way out is a swipe down. Related to #165's "puts the screen to the bottom" complaint about
+      freehand drawing — check whether both come from the same place before fixing either.
+
+      **NOT REPRODUCED, 16 Aug — and the entry's own hypothesis looks right.** Driven the way you do it
+      at 380×820: `startDraw('vector')`, three points, finish. Measured immediately after:
+      | | |
+      |---|---|
+      | inspector panel | **281px of an 820px screen (34%)**, docked at the bottom |
+      | canvas | **visible**, 312px |
+      | timeline | **visible**, 440px |
+      Your screenshot showed the nine cards at the top with roughly two thirds of the screen empty black
+      below them, no canvas and no timeline. What is there now is the ordinary docked layout with the new
+      shape selected on a visible canvas — the opposite picture.
+      **Almost certainly fixed by v7.35**, exactly as this entry guessed: it said to check whether this
+      and #165's "puts the screen to the bottom" come from the same place, and #165 point 1 was fixed by
+      a single CSS rule in v7.35 (the same one as the "#97 update" band). Two symptoms, one rule.
+      **Left OPEN rather than ticked**, because "I cannot reproduce it" is not the same as "it is fixed",
+      and I do not have your exact route — you may have reached it from somewhere I did not. **If you
+      finish a vector drawing and still land in a full-height panel, say so and it is live again**;
+      otherwise it closes with v7.35.
+- [ ] **223 — The splash video is 2.8 MB, about as much as the whole app's code.** Found while
+      answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
+      that is images and video — almost all of it `splash.mp4`, which is decoration. The app's entire
+      JavaScript is 2.82 MB, so the intro costs us more bytes than the editor does.
+      It is cached by the service worker after the first visit, so this is a FIRST-RUN cost only — but
+      first run on a phone on cellular is exactly the moment someone decides whether the app is any
+      good. Options, cheapest first: re-encode it smaller (it is almost certainly nowhere near
+      optimised), drop its resolution to what a phone actually shows, or load it lazily and let the
+      poster image carry the first moment.
+      **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
+      I should quietly optimise away. Say which and it is quick.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
@@ -6179,76 +6556,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       It was a plain stroked outline in the bar's own colour like every other icon; now it is a small
       sheet of paper — white page, yellow edge, dark ruled lines — which is the same object the panel it
       opens now is.
-- [ ] **187 — The black bar is STILL there, and it CREEPS in.** His words: *"The black bar that comes in
-      is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
-      urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
-      **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
-      canvas painted #000, and earlier rounds chased `theme-color` and the safe-area inset. A band that
-      *creeps* is not a painted background at all; something is being TRANSITIONED or is growing over
-      time (a height/transform animation, a lazily-applied inset, a layer resizing after first paint).
-      So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
-      state — the previous rounds all measured the finished picture, which is exactly why they kept
-      finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
-
-      **A CONFIRMED BLACK-BAR MECHANISM WAS FOUND AND FIXED IN v7.87 (#239), AND IT MATCHES THIS
-      DESCRIPTION — including the "creeps in" that nobody could explain.** #239 gave the reproduction
-      this entry never had: *"it seems to happen when you, like, do the easter egg thing where you're
-      slamming the screen."* The cause was the slam's OWN ring — `#home-screen.hm-slam` carried a 140px
-      `box-shadow` of flat `--bg`, added in #144 so the shake could not reveal the editor behind home.
-      That was correct while home was a flat surface. Home is not flat any more (its own drifting light,
-      and a grain field since v7.76), so every slam painted a band of dead `#060c0f` against a lit,
-      textured screen.
-      **And it explains the word this entry is built around.** You said it *creeps* in, and this entry
-      rightly concluded that a band which animates is not a painted background — it is something moving.
-      It was: the ring is attached to a 420ms shake animation, so the band arrives WITH that movement
-      rather than appearing at once. Every earlier round screenshotted the end state, by which time the
-      animation had finished and the band was gone — which is exactly why they kept finding
-      plausible-but-wrong static causes, as this entry predicted.
-      **The frame capture this entry asked for was done, and it is what proved the fix:** home's box was
-      sampled 24 times across the whole 420ms with the editor painted bright red behind it, and the
-      largest uncovered edge is **0px** — nothing can appear at any frame. The ring is gone; the shake
-      now overscans by 6% so home's own surface fills the edges.
-      **This is NOT ticked, deliberately, and it needs one word from you.** I cannot prove your original
-      sighting was this mechanism — you reported it long before the slam was implicated, and there have
-      been three plausible-but-wrong causes already, so declaring it closed on a match of symptoms would
-      be the fourth. **Next time you would have expected the bar: does it still happen?** If yes, it is a
-      second cause and this entry is still live; if no, this closes with v7.87.
-      **NEW DETAIL 16 Aug, with a PC screenshot — this is the best lead yet.** His words: *"The black
-      bar still is an issue that pops up on the side of the screen in the home menu"* … *"as u see
-      here"*. The screenshot is the **HOME menu on a wide desktop window**, and the bar is a **vertical
-      strip down the RIGHT edge**: the home background (the teal/purple gradient field) stops roughly
-      50px short of the window's right edge and the bare app ground shows through.
-      That reframes it — every earlier round chased a bar at the TOP/BOTTOM (theme-color, safe-area
-      inset, the document canvas). This one is **horizontal short-fall on the right in the HOME view**,
-      which is a different element and probably a width that is being computed rather than stretched
-      (a `100vw` against a scrollbar-reduced client width would do exactly this, as would a background
-      sized to a container that excludes a gutter).
-      **Reproduce at a wide desktop width on the home screen and measure the field's right edge against
-      `document.documentElement.clientWidth`** before changing anything.
-      **INVESTIGATED 16 Aug and NOT reproduced — here is what is ruled out, so the next run does not
-      repeat it.** Measured on the home screen at 1400px and again at 1900px, after a resize, listing
-      every element wider than 600px that paints a background: **every one reaches the right edge
-      exactly** (`shortBy: 0`) — the ground, `#stage`, `#home-screen` and the field. The only element
-      that stops short is the decorative conic glow, which is 980px and centred by design.
-      **The hypothesis that fits, and why I cannot test it here.** `#home-screen` is
-      `position: fixed; inset: 0`, so it spans `clientWidth` — which EXCLUDES a classic scrollbar. This
-      browser reports `innerWidth - clientWidth = 0`: it uses **overlay** scrollbars, so a gutter can
-      never appear for me. On a machine with classic scrollbars the gutter would be bare ground to the
-      right of the fixed overlay — a dark vertical strip exactly where his screenshot shows one, and one
-      that "creeps in" as the list grows long enough to need scrolling. **Three rounds of fixes have
-      missed this bug, and an artefact that is invisible in the only browser I can drive is a very good
-      explanation for that.**
-      Against the hypothesis: at the moment of measuring, `body` was `overflow: hidden`, the document
-      did not scroll, and no element inside `#home-screen` was scrollable — though the project list was
-      not populated in my programmatic open, so that last point is weak.
-      **What would settle it, and it needs him:** with the home screen open and his project list long
-      enough to scroll, run this and send the numbers —
-      `JSON.stringify({iw: innerWidth, cw: document.documentElement.clientWidth, home: document.getElementById('home-screen').getBoundingClientRect().right})`.
-      If `iw - cw` is about 15 and `home.right` equals `cw`, the strip IS the scrollbar gutter and the
-      fix is to paint the ground behind it (or `scrollbar-gutter: stable both-edges`), not to chase the
-      field's width again.
-
-
 - [x] **188 — The notes button still does not sit right.** (v7.17) His words, after v7.13 evened the gaps: *"The
       notes still has two much space from the buttons next to it, make it look good spacing wise."*
       #185 evened the GEOMETRIC gaps at 24px optical each side, and he is still seeing too much air — so
@@ -6560,29 +6867,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       *(A real bug surfaced doing this: nothing told the canvas overlay that the open section had
       changed. It only updates on a render or a canvas gesture, so the outline stayed up until you
       touched something — opening the panel did nothing until then. Fixed.)*
-- [ ] **206 — Shapes need SENSIBLE edit points, not a million dots. ⚠️ HELD — he is doing this one WITH
-      me, and asked me not to start it.** His words: *"in alight motion, each shape has sensible edit
-      points that are actually useful and make sense, in ours only some shapes have that but most have
-      just got a million little edit dots, which is finicky as shit, so we're going to have to fix that
-      up but I know if you just go and do that urself ur gonna ruin every shape and make it look shit.
-      So wait for me."*
-      **DO NOT START THIS ALONE.** He is right about the risk: editing the point sets IS the shape
-      library, and a bad pass would quietly wreck fifty-four shapes at once. This entry exists to hold
-      the ask, not to authorise the work.
-      What is worth knowing when he is ready — recorded now so the session with him starts informed
-      rather than starting from scratch:
-      · The dots come straight from `FM.SHAPE_POLYS`. A shape traced from a reference carries every
-        sampled vertex, so a curve that reads as one smooth arc is a dozen points to drag; a shape drawn
-        as geometry (rect, triangle, chevron) has only the points that mean something. That is exactly
-        the split he is describing — "only some shapes have that".
-      · So the fix is per-shape and is a DRAWING job, not a code job: choosing which points carry the
-        form and letting the existing smooth-flag/bezier machinery (`FM.pointCtrl`) hold the curve
-        between them, instead of approximating it with vertices.
-      · Suggested first step, and it costs nothing and changes nothing: count the points per shape and
-        rank them, so the conversation starts from "these eleven are the finicky ones" rather than from
-        opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
-      · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
-        the same polygons), so the tile and the shape cannot drift apart while we work.
 - [x] **207 — The four home tabs should stagger their contents in, and the tab itself should react. DONE v8.17.**
       His words: *"Make it so when you open up any of the 4 menus like projects elements etc it does
       something like the animation when opening the app where all of the spawn in loading from top to
@@ -6666,130 +6950,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       Say so if you want duplicates cleaned too.
       Stripped at save AND when a template is used, so the templates already on your disk stop leaking
       without any migration.
-- [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
-      exported and got no audio even tho the video had audio."*
-      **I rate this the most serious open item.** Everything else is the app being awkward; this is the
-      app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
-      It is going to the bottom of the queue per the oldest-first rule, but **say the word and it jumps
-      to the front** — I think it should.
-      Where to start: the export mix is built separately from the preview (`buildAudioMix` in
-      js/exporter.js), so this is NOT the same code as #96, though it may be the same CLASS of bug —
-      that one was a duration gate silently muting a clip. Check first whether the track is being muted,
-      mixed at zero, or never decoded at all; and check `layer.muted`, since Extract Audio deliberately
-      mutes the original and a muted ORIGINAL plus a missing twin would produce exactly this. Establish
-      which by exporting a known clip and inspecting the file, not by reading.
-      **REPRODUCTION, 15 Aug — the first one this entry has ever had.** His words: *"I made a fresh
-      project, added some sound effects, pressed export with some pretty normal export settings and got
-      an audioless clip."*
-      **Read what is specific in that sentence, because it narrows this a long way:**
-      · **A FRESH project** — so it is not state accumulated over a long edit, not a project migrated
-        from an older build, and not something a previous export left behind.
-      · **SOUND EFFECTS** — not an imported song. If he means the app's own audio (Elements / the audio
-        browser) then these layers are created by a different path from `FM.loadVideoFile`, and every
-        audio fix this file records (#96's duration disagreement, #95's start-up gap, #72's truncation)
-        was measured on IMPORTED files. A sound-effect layer may never have been exported with audio at
-        all, which would explain why this keeps coming back after each of those fixes.
-      · **Normal export settings** — so it is not an exotic codec or resolution combination.
-      **First move for whoever picks this up: build exactly that scene and export it.** Fresh project,
-      add a sound effect the way the UI does, export at defaults, then count the audio samples in the
-      resulting MP4 (`tests/_xresume.html` already counts video samples and shows how). Do NOT start from
-      the encoder — start from whether the exporter can even SEE that layer as an audio source, because
-      "a layer type the audio path does not recognise" fits every symptom here and nothing measured so
-      far rules it out.
-      **This is the most serious open item in the file** and now has a concrete repro, so it should go
-      first once the current PC run is finished.
-
-      **FIRST LOOK AT THE EXPORTER, 15 Aug — two lines that can silently drop a layer's sound.**
-      `buildAudioMix` (js/exporter.js) opens its loop with:
-      ```
-      for (const layer of scene.layers) {
-        if (layer.type !== 'video' || ...) continue;      // <- line 250
-        const m = FM.media.get(layer.id);
-        if (!m || !m.file) continue;                       // <- line 252
-      ```
-      Both are `continue`, not an error, so **anything they skip produces a silent export with no
-      warning anywhere** — which is precisely the shape of this report.
-      · **Line 250** mixes only layers whose type is `'video'`. Imported audio rides the video path (an
-        mp3 becomes a `'video'` layer with a 0×0 picture — that is documented in the compositor), so
-        imports are fine. A layer created by any other route with a different `type` is skipped.
-      · **Line 252** also requires `m.file`, a real File object. Audio that arrives as a bundled asset or
-        a URL rather than a picked file may have a decoded buffer and no `.file`, and would be skipped
-        even if its type were right.
-      **What I could not settle before running out of room, and it decides which of the two it is:** I
-      could not find a distinct "sound effects" source in the code — no `sfx`, no `addAudioLayer`, no
-      `type: 'audio'` layer constructor. So either "sound effects" means audio files he imported through
-      the Audio tab (in which case both guards pass and the cause is further down the encoder), or they
-      come from somewhere I did not find.
-      **One line from him settles it: where did the sound effects come from — the Audio tab / his own
-      files, or a built-in library inside the app?** Not blocking: the next session should build the
-      scene both ways and count audio samples in the output, because the two guards above are testable
-      without knowing the answer.
-
-      **FOLLOWED THAT LEAD AND IT DIED — recorded because a wrong lead left lying about costs a morning.**
-      The Audio tab does not open a picker: it lists previously-imported files as one-tap tiles and
-      re-adds them by media id (`addmenu.js` → `FM.mediaLib.use(mid)`). That looked like the answer — a
-      library re-add restoring from IndexedDB rather than a picked File would leave `m.file` empty and
-      hit the line-252 guard exactly as reported. **It does not.** `mediaLib.use()` pulls the real File
-      back out of storage and then calls `FM.loadVideoFile(file)` — *the identical path an import takes*.
-      So a re-added audio tile ends up with the same media record as a fresh import, and **both guards
-      pass**.
-      **What that rules out, which is the useful part:** if his "sound effects" came from the Audio tab
-      (his own files, either freshly imported or re-added), the mixer is NOT the thing dropping them, and
-      the cause is downstream — the AAC encoder, the muxer's audio track, or the `!any` path. #47's own
-      notes already flag that the muxer will commit an empty audio track to the moov on some iOS Safari
-      versions and produce a silent file, which is worth reading before anything else.
-      **So the question narrows rather than disappears:** if the effects came from the Audio tab, look
-      downstream of the mix; if they came from somewhere else, find that path first. **v7.90's toast now
-      answers this for him without him having to know any of it** — if it says "could not be read" the
-      mixer dropped them and the reason is named; if no toast appears at all and the file is still
-      silent, the mix was built fine and the loss is downstream.
-
-      **WENT DOWNSTREAM AND FOUND A SECOND SILENT LOSS — v7.91, and this one fits your report better
-      than the first.** Before declaring an audio track the exporter probes whether the browser can
-      encode AAC, which is right: a muxer that commits an empty audio track to the moov makes a file
-      strict players reject. But if the probe failed it threw the ENTIRE mix away and said so only in a
-      `console.warn`. Nothing on screen at all.
-      **And at that point the mix was built perfectly** — every clip read, every sample in place — so
-      v7.90's reporting stays silent here. Normal settings, no warning, no sound. That is your sentence.
-      It now toasts *"This browser cannot encode AAC — exporting WITHOUT SOUND."*
-      **The bit that explains five rounds of failing to pin this down:** `AudioEncoder` support is a
-      property of the BROWSER, not of your project or your settings. The same project exports with sound
-      in one browser and without it in another, on the same machine, with nothing changed — which is
-      unfalsifiable from a description alone.
-      **Three outcomes are now distinguishable from the outside**, which is what this entry has always
-      lacked: a toast naming a clip = the mixer; the AAC toast = the encoder; NEITHER toast and still a
-      silent file = the muxer, and that is the last place left to look.
-      *Known gap, stated rather than papered over: the AAC path has no direct test. It sits mid-`run()`
-      behind a real `isConfigSupported` probe, so covering it needs a full export with a stubbed encoder
-      — a bigger rig than this change earned today.*
-
-      **AND THE THIRD PATH — v7.92, the worst of them.** `encodeAudio` throwing was also a bare
-      `console.warn`, and it matters more than the other two because **the muxer has already declared an
-      audio track by then** (`audio: mix ? {…} : undefined` is decided far higher up, while the mix still
-      existed). So a throw there did not just lose the sound — it shipped a file whose moov **promises an
-      audio track that was never fed**. That is exactly the "broken/silent track that strict players
-      reject" the AAC probe was written to prevent, arriving by a route the probe cannot see: it answers
-      "can this browser encode AAC", not "did this encode survive". Such a file can play silently in one
-      player and be refused outright by another.
-      **All three silent losses now report themselves, and the toast alone says which half broke:**
-      | what you see | what broke |
-      |---|---|
-      | a toast naming a clip | the MIXER could not read that layer |
-      | "cannot encode AAC" | the BROWSER has no AAC encoder |
-      | "soundtrack failed to encode" | the encode started and threw |
-      | no toast, still silent | none of the three — and that would be genuinely new information |
-      This entry had no evidence attached for five rounds of asking precisely because every one of these
-      was a bare `console.warn`. **The next occurrence answers itself.**
-
-      **CHECKED END TO END, 16 Aug — the toast really does reach the screen**, which was worth proving
-      rather than assuming: a diagnostic that only exists in a unit test is no use at the moment you
-      need it. Building the scene his report describes (a clip whose audio cannot be read) produces, on
-      screen and visible: **"Exporting with NO SOUND — 1 audio clip could not be read (see the console)"**,
-      with the console naming it: *"Boom SFX (no file on its media record — a bundled or URL-backed
-      clip?)"*.
-      **So when it happens to you again, read the toast and the console line and send me those** — that
-      is the whole answer, and it takes one screenshot.
-
 - [x] **216 — An "audio only" export option. DONE v8.23.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
@@ -7164,123 +7324,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       Both now measure **exactly 0.000px** from centre. Red × and blue search, tinted rather than solid
       — a hard red disc reads as a warning and this is just a close button.
       *(My first centring test was dead: a 0.75px tolerance against a 0.4px defect. It is 0.25px now.)*
-- [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
-      *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
-      lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading
-      properly."*
-      **This is the most serious thing open.** One clip, no effects, quality set to smooth, and it still
-      lags — that is the core experience being wrong, not an edge case, and it sits with #125/#130 (the
-      long-running lag) and #128. The second half — "seemingly broken and not loading properly" — may be
-      the same root cause as #201: the media not being decoded/ready while the timeline already thinks it
-      should draw. Measure both together: what the frame budget is spent on with exactly one video layer,
-      and what state the media element is in during the period he calls broken. Do NOT tune anything
-      before that measurement — this area has already produced three plausible-but-wrong causes.
-      **MEASURED (`tests/_onevideo.html`), and the two halves give different answers.**
-      · **"Not loading properly" is REAL and is now fixed** — see #201. There is a genuine window where
-        the clip cannot draw at all, and the app said nothing about it.
-      · **The LAG did not reproduce here.** Recording a real 1280×720 clip, importing it through the
-        app's own path, quality on *smooth*, one layer, no effects: `renderScene` runs at a **median of
-        4.40ms** (mean 4.62, p95 9.10) against the 16.7ms a 60fps frame has, and the app held itself on
-        **tier 0 of 6** — it never even felt the need to drop quality. Nothing here is over budget.
-      So the lag is **device-specific, or outside renderScene**, and I am not tuning anything on that
-      basis — that is exactly how this area has already produced three plausible-but-wrong causes.
-      **What would settle it:** the same measurement running ON HIS PHONE. `FM._perfState()` and
-      `FM.playbackQualityInfo()` already report the tier, the frame average and the canvas size; the
-      missing piece is a way for him to read them and send them over. That argues for a small "what is
-      slow" readout in Settings rather than more guessing from here.
-      Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
-      still decoding, the app is competing with the decoder for the same device.
-
-      **FINDING 1's FIRST REAL FIX, v9.26 — and it is a pixel count, not a stopwatch.** Chasing the
-      12.2-megapixel project led somewhere concrete on the way: every buffer in the compositor is
-      allocated on the TARGET's pixel grid — effect plates, the camera plate, the manual-blend plate —
-      except **two**, which were built at full project size and never stamped with the render scale, so
-      the drawing inside them ran at 1:1 however small the preview was. They are the plate a GROUP is
-      flattened onto and the plate a MASK BLEND MODE rasterises through. On his 3024x4032 project
-      previewing into the 762k-pixel canvas his own report shows, that is **16.0x the pixels needed**,
-      allocated, cleared and drawn per group per frame. On an ordinary 1080x1920 comp on a phone it was
-      **4.3x**, measured live in the app. Export is unaffected — an export canvas is project-sized, so
-      the scale is 1 — and that is a test, not a claim. **Deliberately measured as a SIZE:** this entry
-      records four passes that measured this area on a fast Mac, found fine milliseconds and moved on,
-      and a pixel count reads the same on his phone as it does here. **What it is NOT:** the scene in
-      his measurement had no group in it, so this is a real cost removed rather than proof his lag is
-      gone. Finding 1 itself — the 12.2 MP project — is still unanswered and is still the biggest number
-      in that report.
-
-      **AND THE PROJECT HE ALREADY HAS CAN NOW BE REPAIRED, v9.28.** v9.27 could only stop it happening
-      again, because Canvas settings changed the width and height and nothing else — every layer kept
-      coordinates that meant something in the old frame, so shrinking a finished project scattered it.
-      That was a silent bug in its own right for anyone who ever resized. There is a **Scale the layers
-      to fit** switch under Size now (on by default, shown only when there is something to move), so a
-      12.2-megapixel project can be brought down to a sane size with the work intact. Undo restores the
-      size and the geometry together. **For Ezra: open the big project, Canvas settings, pick a smaller
-      resolution, Apply — and tell me whether it still feels slow afterwards.** That is the measurement
-      that would close 125, 202 and 95 together.
-
-      **FINDING 1 IS ANSWERED AT THE SOURCE, v9.27 — and the source was one uncapped line.**
-      `FM.addMediaLayer` sets the project's size from the FIRST file you import, and it took that
-      file's pixel dimensions verbatim with no limit. A stock iPhone still is 3024x4032, so importing
-      one into an empty project built a **12.2-megapixel** composition — larger than anything the app's
-      own Canvas picker offers, which tops out at 2160p. That is precisely the project in his report,
-      and it explains why it looked like a *project setup* problem: it was, and the app set it up.
-      Capped now to the short side the top preset means (3024x4032 → 2160x2880), aspect kept, both
-      sides even so it can still be exported, and it says so rather than doing it silently. Sizes at or
-      under the preset range are untouched. **It cannot repair the project he already has** — Canvas
-      settings does not rescale existing layer geometry, which is a separate job and is noted as one.
-      A second allocation of the same kind went with it: the onion-skin ghost plate was project-sized
-      and REALLOCATED every frame (48 MB thrown away twice a frame on his project).
-
-      **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
-      Verbatim:
-      ```
-      FRAMES   44.6 fps average
-               median gap 17.0ms · p95 38.0ms · worst 494.0ms
-               14 of 446 frames were late (over 42ms)
-      QUALITY  tier 0 (6 available) · mode smooth
-               app-measured render 0.34ms · app-measured gap 0ms
-      CANVAS   762k pixels
-      PROJECT  3024×4032 @30fps · 8 layers (6 shape, 1 video, 1 image) · 2 effects
-      DEVICE   screen 440×956 @dpr3 · 4 cores · Safari · iOS
-      ```
-      **Three findings, and the first is probably the whole story.**
-      1. **The PROJECT is 3024×4032 — 12.2 megapixels.** That is a photo's dimensions, almost certainly
-         inherited from an imported image, on a 4-core phone. Every frame composites 12.2M pixels. No
-         amount of tuning the render path fixes a canvas that size; this is very likely the cause of the
-         lag reported across #95, #125 and #202, and it is a *project setup* problem rather than an
-         engine one. **Needs a product answer, not a perf fix** — a warning when a project is created
-         far larger than any screen or export will use, and/or an offer to scale it down.
-      2. **`app-measured gap 0ms` is a BUG.** v7.57 added gap-watching precisely so the ladder could see
-         GPU and decode cost that its own render clock cannot. His report shows real gaps — p95 38ms,
-         worst 494ms, 14 late frames — while the app's own gap metric reads **zero**. So the ladder is
-         blind again, still sat on **tier 0 of 6** in *smooth* mode, and never shed quality through
-         half-second freezes. That is exactly the shape of "nothing much ever gets resolved" from #125.
-      **FINDING 2 IS FIXED — v8.27.** Playback now feeds the ladder a frame interval, judged against
-      the PROJECT frame time rather than the display interval. The old behaviour was deliberate and its
-      reasoning was written down — a 30fps comp renders every other rAF, so 33ms is healthy and would
-      have read as permanently late against 1000/60 — and that note said measuring against the project
-      frame time was "a separate change and is not this one". His measurement is what made it necessary.
-      So the ladder can now see the cost it was blind to during playback, which is the whole complaint
-      behind #125. **Whether it actually helps HIS phone is the next measurement, not an assumption.**
-
-      3. **The readout's own READ line was wrong.** It printed *"this sample looks healthy"* because the
-         MEDIAN (17ms) is fine, while ignoring 14 late frames and a 494ms worst case. A report that
-         reaches a confident wrong verdict is the precise failure this feature exists to end, so the
-         heuristic has to weigh the tail and the late count, not just the middle.
-
-      **THE READOUT IS BUILT — v8.13.** This entry asked for it in its own last line, and #125 and #95
-      are both blocked on the same thing, so it is done rather than guessed around again.
-      **Settings → "What's slow" → Measure.** Use the app normally for ten seconds — do the thing that
-      feels slow — then **Copy** and paste the block to me. Nothing is sent anywhere by itself.
-      It measures the **real frame interval**, not our own render clock, which is the distinction that
-      kept #125 alive: GPU filter work and video decode never touch that clock, and once reported
-      1.1ms a frame while the app stuttered. The report also **interprets itself** — if the frames are
-      slow while our drawing is fast it says the cost is GPU or decode — because "the numbers look
-      fine" is how this has gone wrong three times running.
-      **So #202, #125 and #95 all now need the same one thing from you: one measurement each, taken
-      while it feels bad.** That is the whole remaining work on all three.
-      *(Two flaws found by running it rather than testing it: with the tab hidden rAF never fires, so
-      the probe hung forever and left Measure disabled — there is a wall-clock deadline now; and the
-      first real report warned "NOT USABLE" at the top and said "looks healthy" at the bottom.)*
 - [x] **196 — A Sound Effects button in the Audio tab, with a library of effects.** (v7.29) His words: *"in the
       audio tab we will add a button that is sound effects and you will be able to use that to add sound
       effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
@@ -7436,31 +7479,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       corner radius and the transform curves (rotation/scale/opacity and x-y deltas). So applying one
       can change a layer's colour, not just its effects. Say the word and it becomes something like
       "Save layer's look as preset…"; left as you asked it for now.
-- [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
-      you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
-      the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
-      thirds of the screen empty black below them, no canvas, no timeline. So on finishing a vector
-      drawing the inspector opens in its full-height/editing state instead of the normal docked one, and
-      the only way out is a swipe down. Related to #165's "puts the screen to the bottom" complaint about
-      freehand drawing — check whether both come from the same place before fixing either.
-
-      **NOT REPRODUCED, 16 Aug — and the entry's own hypothesis looks right.** Driven the way you do it
-      at 380×820: `startDraw('vector')`, three points, finish. Measured immediately after:
-      | | |
-      |---|---|
-      | inspector panel | **281px of an 820px screen (34%)**, docked at the bottom |
-      | canvas | **visible**, 312px |
-      | timeline | **visible**, 440px |
-      Your screenshot showed the nine cards at the top with roughly two thirds of the screen empty black
-      below them, no canvas and no timeline. What is there now is the ordinary docked layout with the new
-      shape selected on a visible canvas — the opposite picture.
-      **Almost certainly fixed by v7.35**, exactly as this entry guessed: it said to check whether this
-      and #165's "puts the screen to the bottom" come from the same place, and #165 point 1 was fixed by
-      a single CSS rule in v7.35 (the same one as the "#97 update" band). Two symptoms, one rule.
-      **Left OPEN rather than ticked**, because "I cannot reproduce it" is not the same as "it is fixed",
-      and I do not have your exact route — you may have reached it from somewhere I did not. **If you
-      finish a vector drawing and still land in a full-height panel, say so and it is live again**;
-      otherwise it closes with v7.35.
 - [x] **180 — Lots of effects don't work on text. ANSWERED v8.07** — the effects work, the layer is white; the app now says so.
       **MEASURED, 2026-08-14 — he is right about what he sees, and the cause is arithmetic, not a bug.**
       Text defaults to pure WHITE (`js/scene.js`: `base.color = props.color || '#ffffff'`), and on pure
@@ -7612,18 +7630,6 @@ layout, motion blur, the elements browser and the effects browser.
       **Both flaky tests are now closed** (#226 in v7.98, this in v7.99), which matters more than either
       alone: a suite that is red one run in five stops meaning anything, and it cost this session real
       doubt about a green result during a release.
-
-- [ ] **223 — The splash video is 2.8 MB, about as much as the whole app's code.** Found while
-      answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
-      that is images and video — almost all of it `splash.mp4`, which is decoration. The app's entire
-      JavaScript is 2.82 MB, so the intro costs us more bytes than the editor does.
-      It is cached by the service worker after the first visit, so this is a FIRST-RUN cost only — but
-      first run on a phone on cellular is exactly the moment someone decides whether the app is any
-      good. Options, cheapest first: re-encode it smaller (it is almost certainly nowhere near
-      optimised), drop its resolution to what a phone actually shows, or load it lazily and let the
-      poster image carry the first moment.
-      **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
-      I should quietly optimise away. Say which and it is quick.
 
 - [x] **226 — A second flaky test: the microphone one. DONE v7.98.** *(Was numbered 224 by mistake — there were two
       #224s, and the other one is YOUR request, so it keeps the number and this one moved.)* Caught on 15 Aug while working #150 — the suite
