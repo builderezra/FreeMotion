@@ -5291,9 +5291,18 @@ better still, keep working inside the turn rather than parking work for a later 
       queue 209 had about the × and the magnifier. It is an SVG cross about its own centre now, symmetric
       by construction, and the test measures the INK against the circle to half a pixel.
 
-- [ ] **297 — Inside an effect's sub-menu there should be a Done button.** (17 Aug.) His words,
-      verbatim: *"When adding effects the done button should be there if ur inside one of the effects
-      sub menus"*. Arrived in the same message as 296.
+- [x] **297 — Inside an effect's sub-menu there should be a Done button. DONE v9.45.** (17 Aug.) His
+      words, verbatim: *"When adding effects the done button should be there if ur inside one of the
+      effects sub menus"*. Arrived in the same message as 296.
+      He was right that it was missing: from inside a category the only way out of the browser was Back
+      and THEN the close button — two taps, one of them going the wrong way. Back closes the SUB-VIEW,
+      Done closes the whole browser.
+      **Built as ONE shared header used by all three sub-views** (a tile's preset sheet, Faves, and a
+      category), which each hand-built the same bar before. That is why they had drifted from the root
+      header in the first place, and three copies would have drifted again.
+      *(The refactor broke Faves on the first run — it re-labels its own title with the count, and the
+      variable holding it went with the hand-built header. Caught by two existing tests, which is the
+      argument for having them.)*
 
 - [ ] **298 — The Add-layer marker still does not put layers where it points.** (17 Aug.) His words,
       verbatim: *"The tap to add layer button doesn't actually make layers land below it, they just go

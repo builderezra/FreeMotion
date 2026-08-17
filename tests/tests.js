@@ -25899,5 +25899,46 @@
     });
   });
 
+  /* "when adding effects the done button should be there if ur inside one of the effects sub menus"
+     (queue 297). From inside a category the only way out of the browser was Back and THEN the close
+     button — two taps, one of them going the wrong way. Back closes the SUB-VIEW; Done closes the whole
+     browser. Built as one shared header so the three sub-views cannot drift apart again. */
+  test('every effects sub-menu has a Done that closes the browser', { item: 'fxb-done' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 120); }); };
+    var layers0 = FM.scene.layers.slice();
+    try {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#fff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open(L);
+      await frame();
+
+      var cat = document.querySelector('.fxb-cat, .fxb-catbtn, [data-cat]');
+      // Open a CATEGORY sub-view through the real path if there is a button for it; else call it.
+      if (FM.fxBrowser._openCategory) FM.fxBrowser._openCategory(FM.fxRegistry.categories()[0]);
+      else if (cat) cat.click();
+      await frame();
+
+      var view = document.querySelector('.fxb-catview');
+      if (!view) throw new Error('no sub-view opened, so this test proves nothing');
+      var done = view.querySelector('.fxb-subdone');
+      if (!done) throw new Error('the sub-menu has no Done — the only way out of the browser from here is Back and then the close button');
+      var back = view.querySelector('.fxb-back:not(.fxb-subdone)');
+      if (!back) throw new Error('the sub-menu lost its Back');
+      /* Done must sit AFTER the title in the header, or it is not where a Done goes. */
+      if (!(done.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_PRECEDING))
+        throw new Error('Done is not after Back in the header');
+
+      done.click();
+      await frame();
+      if (document.querySelector('.fxb-catview')) throw new Error('Done left the sub-view open');
+      if (FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) throw new Error('Done closed the sub-view but not the browser — that is what Back already does');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.inspector.refresh();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

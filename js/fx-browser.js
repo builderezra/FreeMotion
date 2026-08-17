@@ -441,11 +441,7 @@ window.FM = window.FM || {};
     _catDepth++; stopAuto();
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
     tapOutToClose(view, closeView);
-    const top = el('div', 'fxb-catview-top');
-    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
-    top.appendChild(back);
-    top.appendChild(el('div', 'fxb-catview-title', reg.label));
-    view.appendChild(top);
+    view.appendChild(subTop(reg.label, closeView));
     // What it does, then the words it answers to. Holding a tile is the one moment someone is asking
     // "what IS this?", so the answer goes above the presets rather than after them.
     if (reg.desc) {
@@ -872,12 +868,11 @@ window.FM = window.FM || {};
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
     tapOutToClose(view, closeView);
 
-    const top = el('div', 'fxb-catview-top');
-    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
-    top.appendChild(back);
-    const title = el('div', 'fxb-catview-title', 'Faves');
-    top.appendChild(title);
-    view.appendChild(top);
+    /* Faves re-labels its own title as the count changes, so it keeps a handle on it. Asked for from the
+       shared header rather than hand-built, which is the whole point of having one. */
+    const favTop = subTop('Faves', closeView);
+    const title = favTop.querySelector('.fxb-catview-title');
+    view.appendChild(favTop);
 
     const bar = el('div', 'fxb-favsort');
     const scroller = el('div', 'fxb-catview-scroll');
@@ -952,6 +947,29 @@ window.FM = window.FM || {};
     return sec;
   }
 
+  /* ONE header for every sub-view of the browser — Back on the left, the title, Done on the right.
+   *
+   * The three sub-views (a tile's preset sheet, Faves, and a category) each built this by hand, and each
+   * had only "‹ Back". Ezra: "when adding effects the done button should be there if ur inside one of
+   * the effects sub menus" — and he is right that it was missing: from inside a category the only way
+   * out of the browser was Back and THEN the close button, so finishing took two taps and one of them
+   * went the wrong way.
+   * Back closes the SUB-VIEW, Done closes the WHOLE browser. Built once rather than three times so the
+   * two cannot drift apart — which is how they came to differ from the root header in the first place. */
+  function subTop(titleText, closeView) {
+    const top = el('div', 'fxb-catview-top');
+    const back = el('button', 'fxb-back', '‹ Back');
+    back.addEventListener('click', closeView);
+    top.appendChild(back);
+    top.appendChild(el('div', 'fxb-catview-title', titleText));
+    const done = el('button', 'fxb-back fxb-subdone', 'Done');
+    done.type = 'button';
+    done.title = 'Finish adding effects';
+    done.addEventListener('click', () => FM.fxBrowser.close());
+    top.appendChild(done);
+    return top;
+  }
+
   function openCategory(cat) {
     const view = el('div', 'fxb-catview');
     // pause the featured auto-scroll + its thumbnail ticker while a full-cover category view is open
@@ -959,11 +977,7 @@ window.FM = window.FM || {};
     _catDepth++; stopAuto();
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
     tapOutToClose(view, closeView);
-    const top = el('div', 'fxb-catview-top');
-    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
-    top.appendChild(back);
-    top.appendChild(el('div', 'fxb-catview-title', cat.label));
-    view.appendChild(top);
+    view.appendChild(subTop(cat.label, closeView));
     const grid = el('div', 'fxb-grid');
     if (cat.key === 'matte') grid.appendChild(maskTile());   // Mask leads its home category
     if (cat.key === 'blur') grid.appendChild(objectBlurTile());   // …and the object blur leads Blur, beside Motion Blur (Footage)
@@ -1077,6 +1091,10 @@ window.FM = window.FM || {};
 
   FM.fxBrowser = {
     isFav: isFav, toggleFav: toggleFav,   // so an applied effect's ⋯ menu can favourite it too (#62)
+    // Suite seams: whether the sheet is up, and a way to open a category sub-view without hunting for
+    // its tile in the grid.
+    isOpen: function () { return !!(root && !root.classList.contains('hidden')); },
+    _openCategory: function (cat) { return openCategory(cat); },
     init: function () {
       root = document.getElementById('fx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');
