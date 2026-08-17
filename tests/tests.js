@@ -25626,5 +25626,59 @@
     }
   });
 
+  /* Saving an effect as a preset rebuilt each animated parameter as just its keyframe list — dropping
+     the sibling field that tells evalProp to keep repeating past the last key. So a looping animation
+     came back from a preset frozen on its final value. The layer-level loop writes that field onto
+     every animated property, so this is not an exotic setting: anyone who has ever set a clip to loop
+     has it. Tested through the REAL round trip — capture, save, read back, apply — because the drop
+     happens in the sanitiser that runs on the way back out of storage. */
+  test('a preset keeps a looping animation looping', { item: 'preset-loop' }, function () {
+    /* THE REAL KEY, checked against js/fx-presets.js — the first version of this test guessed
+       'fm.effectpresets', so its restore wrote to a store nothing reads and it left two junk presets
+       behind in his actual app. A cleanup that silently cleans the wrong thing is worse than none. */
+    var KEY = 'fm.fx.userpresets', saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    try {
+      var fx = { type: 'blur', enabled: true, params: { radius: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 50, e: 'linear' }], loopMode: 'cycle' } } };
+
+      // The source loops: at t=1.5 it is half way round its second lap, not clamped at 50.
+      var srcAt = FM.evalProp(fx.params.radius, 1.5);
+      if (Math.abs(srcAt - 25) > 2) throw new Error('the FIXTURE does not loop (source reads ' + srcAt + ' at t=1.5, expected ~25) — evalProp may not honour loopMode, so this test would prove nothing');
+
+      var preset = FM.effectPresets.capture(fx, '__loop_test');
+      if (!preset) throw new Error('capture() returned nothing');
+      if (!FM.effectPresets.save(preset)) throw new Error('save() refused the preset: ' + (FM.effectPresets.lastNote && FM.effectPresets.lastNote()));
+
+      var back = (FM.effectPresets.custom() || []).find(function (p) { return p.name === '__loop_test'; });
+      if (!back) throw new Error('the saved preset did not come back out of storage');
+      if (back.params.radius.loopMode !== 'cycle')
+        throw new Error('the preset lost loopMode on the way through storage (' + JSON.stringify(back.params.radius) + ') — an animation saved as a preset stops dead at its last keyframe');
+
+      var inst = FM.effectPresets.makeInstance(back, 0);
+      if (!inst) throw new Error('makeInstance returned nothing');
+      /* THE ASSERTION THAT MATTERS is what it EVALUATES to, not whether a field survived — the field is
+         only useful if it is still on the object the compositor reads. */
+      var got = FM.evalProp(inst.params.radius, 1.5);
+      if (Math.abs(got - 25) > 2)
+        throw new Error('the preset instance reads ' + got + ' at t=1.5 where the source reads ' + srcAt + ' — it is frozen on its last keyframe instead of cycling');
+
+      // 'none' and anything unexpected must NOT be stored — this sanitiser's job is that only known
+      // values reach the compositor.
+      var fx2 = { type: 'blur', enabled: true, params: { radius: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 50, e: 'linear' }], loopMode: 'wat' } } };
+      var p2 = FM.effectPresets.capture(fx2, '__loop_test2');
+      FM.effectPresets.save(p2);
+      var back2 = (FM.effectPresets.custom() || []).find(function (p) { return p.name === '__loop_test2'; });
+      if (back2 && back2.params.radius.loopMode !== undefined)
+        throw new Error('an unknown loop mode "' + back2.params.radius.loopMode + '" was carried into storage — the whitelist is not a whitelist');
+    } finally {
+      // Remove by id as well as restoring the blob — belt and braces, since a failure part-way through
+      // can leave a preset saved before the restore runs.
+      try {
+        (FM.effectPresets.custom() || []).forEach(function (p) { if (/^__loop_test/.test(p.name || '')) FM.effectPresets.remove(p.id); });
+      } catch (e) {}
+      try { if (saved != null) localStorage.setItem(KEY, saved); else localStorage.removeItem(KEY); } catch (e) {}
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

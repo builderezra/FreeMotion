@@ -106,7 +106,22 @@ window.FM = window.FM || {};
       const v = rp[key];
       if (typeof v === 'number' && Number.isFinite(v)) params[key] = v;
       else if (typeof v === 'string' && v.length <= 32) params[key] = v;
-      else if (v && typeof v === 'object' && Array.isArray(v.kf)) { const kf = saneKf(v.kf); if (kf) params[key] = { kf: kf }; }
+      else if (v && typeof v === 'object' && Array.isArray(v.kf)) {
+        const kf = saneKf(v.kf);
+        /* CARRY loopMode, ON A WHITELIST. This rebuilt an animated parameter as `{ kf: kf }` and nothing
+         * else — but FM.evalProp reads `loopMode` off that same object to keep repeating past the last
+         * keyframe, so a looping animation came out of a preset frozen on its final value. Measured: a
+         * parameter keyed t=1..4 with loopMode 'cycle' reads 40 at t=5; the preset made from it read 20,
+         * the clamped last value. The layer-level loop writes this field onto every animated prop, so it
+         * is not an exotic setting — anyone who has ever set a clip to loop has it.
+         * Whitelisted rather than copied, because this function's whole job is that nothing arbitrary
+         * from a saved file reaches the compositor; 'none' is the default and is not worth storing. */
+        if (kf) {
+          const o = { kf: kf };
+          if (v.loopMode === 'cycle' || v.loopMode === 'pingpong') o.loopMode = v.loopMode;
+          params[key] = o;
+        }
+      }
     }
     if (!Object.keys(params).length) { _why = 'none of its values are settings ' + reg.label + ' has'; return null; }
     return {

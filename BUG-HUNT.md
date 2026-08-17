@@ -796,7 +796,7 @@ still correct, and the row handles still sit at the right edge where it used to 
 - **Costs:** The persisted project loses its background colour. It self-heals only if a later save runs after the export finishes; if the PWA is force-quit from the app switcher or the tab is OOM-killed first — most likely right after an export, the app's most memory-hungry operation — the project reopens with no background, and every subsequent render and export is missing it. The same window also lets `save()`'s thumbnail capture (js/storage.js:679) bake a background-less thumbnail into the project index.
 - **Fix:** Do not mutate persisted state to signal a render option. Set a transient flag the compositor reads instead — e.g. `FM._exportTransparent = true` in the exporter's try (cleared in the finally), and change js/compositor.js:6908 to `if (!cam && P.background && !FM._exportTransparent)` plus the matching camera-path background guard. If the mutation must stay as a stopgap, call `FM.storage.markDirty(); FM.storage.save();` after restoring `P.background = savedBg` so the correct value is re-persisted immediately.
 
-### Preset capture drops a keyframed effect param's loopMode, so a looping animation stops at its last keyframe
+### ~~Preset capture drops a keyframed effect param's loopMode, so a looping animation stops at its last keyframe~~ — FIXED v9.40
 `js/fx-presets.js:77`  · found by `fx-registry`
 
 - **What:** `sanePreset()` rebuilds an animated param as `{ kf: kf }`, keeping only the keyframe array. `FM.evalProp` (scene.js) reads `p.loopMode` ('cycle' / 'pingpong') off the prop object to repeat past the last keyframe, and that sibling field is discarded here — and again on every `readCustom()`.
