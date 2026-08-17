@@ -321,9 +321,15 @@ window.FM = window.FM || {};
       // is a video with nothing to process. Unknown (not probed yet) still opens: see FM.hasAudioTrack.
       if (FM.fxAudioSideOk ? !FM.fxAudioSideOk(_layer) : _layer.type !== 'video') { if (FM.toast) FM.toast('Audio effects only work on a clip with sound', 2000); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
+      /* The sheet, on a phone (queue 300). His words: "Audio effects menu still opens full screen" —
+         and "still" is the whole report. Queue 277 turned the VISUAL browser into a sheet that stops
+         at the canvas so you can see the clip you are working on; this one, a sibling overlay with the
+         same markup, was not converted with it. FM.fxSheet is that geometry, so both are now the same
+         thing rather than two things that happen to match. */
+      FM.fxSheet(root);
       root.classList.remove('hidden');
       rebuild();
     },
-    close: function () { if (!root) return; stopAuto(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
+    close: function () { if (!root) return; stopAuto(); root.classList.add('hidden'); FM.fxSheet(root, false); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
   };
 })(window.FM);

@@ -21056,6 +21056,85 @@
    * order they are being added in"; and "all just for mobile btw", which is why the desktop half of this
    * test matters as much as the phone half. */
 
+  /* ---------------- queue 300: the AUDIO browser is a sheet too -----------------------------------
+   * His words: *"Audio effects menu still opens full screen"*. "Still" is the report — queue 277 made
+   * the VISUAL browser a sheet that stops at the canvas, and the audio one, a sibling overlay built
+   * from the same markup and the same class names, was not converted with it.
+   *
+   * SO THIS TEST HOLDS THE TWO TOGETHER rather than measuring the audio one on its own. A test that
+   * only asserted "#afx-browser starts at the canvas bottom" would pass just as happily against a
+   * second, independent copy of the geometry — which is the state that produced this bug in the first
+   * place, and would produce it again the next time the sheet's top edge moves. The assertion is that
+   * both browsers land in the SAME place, and that the shared seam is what puts them there. */
+  test('the phone AUDIO effects browser is the same sheet as the visual one, not full screen (queue 300)', { item: 'afx-sheet' }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+      /* A VIDEO layer with a media record: the audio browser refuses to open on anything the app
+         believes has no sound (FM.fxAudioSideOk), and a bare shape is exactly that. Get this wrong and
+         open() bails at the toast, the overlay stays hidden, and every assertion below reads a
+         display:none box — 0×0 at the origin, which is neither full screen nor a sheet, so the test
+         would pass on code that never ran. Hence the "did it open at all" check first. */
+      const vid = FM.makeLayer('video', { name: 'q300 clip', duration: 5 });
+      FM.scene.layers.push(vid); saved.media.push(vid.id);
+      /* `el` is not decoration. The visual half of this test opens the sheet, which starts the queue-277
+         preview loop, which calls FM.setTime — and that walks the media records re-seeking them, so a
+         record with no element throws on `.currentTime`. The first version of this fixture left it out
+         and the test died there, on a fixture defect that says nothing about the sheet. */
+      FM.media.set(vid.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+      FM.selectLayer(vid.id); FM.refreshAll();
+      await sleep(200);
+
+      const aRoot = document.getElementById('afx-browser');
+      const cv = document.getElementById('preview');
+      FM.audioFxBrowser.open(vid);
+      await sleep(300);
+      if (!aRoot || aRoot.classList.contains('hidden')) throw new Error('the audio browser did not open at all — every measurement below would be of a hidden box');
+      if (!aRoot.classList.contains('fxb-sheet')) throw new Error('at 390px the audio browser is still the full-screen dialog — "Audio effects menu still opens full screen"');
+
+      const a = aRoot.getBoundingClientRect(), c = cv.getBoundingClientRect();
+      const vpH = document.documentElement.clientHeight;
+      if (a.top < 40) throw new Error('the audio browser starts at y=' + Math.round(a.top) + ' — it is still covering the canvas');
+      if (Math.abs(a.top - c.bottom) > 2) throw new Error('the audio sheet starts at y=' + Math.round(a.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — it is supposed to go right up to the canvas');
+      if (Math.abs(a.bottom - vpH) > 2) throw new Error('the audio sheet stops at ' + Math.round(a.bottom) + ' in a ' + vpH + 'px viewport — it should cover everything below the canvas');
+      /* The header must not keep the status-bar inset it needs when it IS the top of the screen. Read
+         as a number rather than trusted: env(safe-area-inset-top) is 0 in this browser, so the check
+         that matters on HIS phone is that the shorthand overrode the max() at all. */
+      const topPad = parseFloat(getComputedStyle(aRoot.querySelector('.fxb-top')).paddingTop);
+      if (!(topPad < 12)) throw new Error('the sheet header still carries ' + topPad + 'px of top padding — the status-bar inset would open an empty band above the ✕');
+      if (!aRoot.querySelector('.fxb-scroll').children.length) throw new Error('the audio sheet is empty — it opened but rendered nothing');
+      FM.audioFxBrowser.close();
+      await sleep(120);
+      if (aRoot.classList.contains('fxb-sheet')) throw new Error('closing left fxb-sheet on, so the desktop dialog would come back sheet-shaped');
+
+      // …and the same box as the visual browser, from the same seam.
+      FM.fxBrowser.open(vid);
+      await sleep(300);
+      const vRoot = document.getElementById('fx-browser');
+      const v = vRoot.getBoundingClientRect();
+      if (Math.abs(v.top - a.top) > 1 || Math.abs(v.bottom - a.bottom) > 1) {
+        throw new Error('the two browsers are different sheets: audio ' + Math.round(a.top) + '–' + Math.round(a.bottom) + ' vs visual ' + Math.round(v.top) + '–' + Math.round(v.bottom));
+      }
+      FM.fxBrowser.close();
+      if (typeof FM.fxSheet !== 'function') throw new Error('FM.fxSheet is gone — the geometry has been copied back into each browser, which is the bug this closed');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close();
+      FM.scene.layers.length = 0; saved.layers.forEach(function (l) { FM.scene.layers.push(l); });
+      saved.media.forEach(function (id) { FM.media.remove(id); });
+      FM.time = saved.time;
+      FM.selectLayer(saved.sel);
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(220);
+    }
+  });
+
   test('the phone effects browser is a sheet under the canvas and taps SELECT, in order (queue 277)', { item: 'fx-sheet' }, async function () {
     const frame = window.frameElement;
     if (!frame) throw new Error('this test owns its viewport and has no frameElement');

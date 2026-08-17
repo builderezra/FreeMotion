@@ -4073,7 +4073,11 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    Phone only: he said "all just for mobile btw", and on a desktop there is no timeline-sized band for
    it to become, so that path keeps the centred dialog it already had. */
 @media (max-width: 700px) {
-  #fx-browser.fxb-sheet {
+  /* Both browsers (queue 300 added the audio one). The selector is deliberately not `.fxb-sheet` on
+     its own: these are `position: fixed; inset: 0` overlays and the class only ever means anything on
+     one of those two roots, so a bare class would invite it onto something that has no inset to
+     override. */
+  #fx-browser.fxb-sheet, #afx-browser.fxb-sheet {
     top: var(--fxb-top, 0); bottom: 0; left: 0; right: 0;
     border-top: 1px solid var(--line);
     border-radius: 14px 14px 0 0;
@@ -4081,12 +4085,19 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   }
   /* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
      canvas above it already say what this is, so the row keeps only the close and search controls. */
-  #fx-browser.fxb-sheet .fxb-title { display: none; }
+  #fx-browser.fxb-sheet .fxb-title, #afx-browser.fxb-sheet .fxb-title { display: none; }
   /* With the title gone the row's two buttons huddled together at the left with a hand's width of
      nothing beside them. Pushed apart instead: close on the left, search on the right, which is where
-     both already are on every other sheet in the app. */
-  #fx-browser.fxb-sheet .fxb-top { padding: 7px 10px; justify-content: space-between; }
-  #fx-browser.fxb-sheet .fxb-scroll { padding-bottom: 74px; }   /* clear of the commit bar */
+     both already are on every other sheet in the app.
+     The shorthand also RESETS .fxb-top's `padding-top: max(14px, env(safe-area-inset-top))`, which
+     matters: that inset exists because the header normally touches the physical top of the screen, and
+     in a sheet it does not — left in, it would open a notch-sized hole above the close button. */
+  #fx-browser.fxb-sheet .fxb-top, #afx-browser.fxb-sheet .fxb-top { padding: 7px 10px; justify-content: space-between; }
+  #fx-browser.fxb-sheet .fxb-scroll { padding-bottom: 74px; }   /* clear of the commit bar — visual browser only, the audio one has no multi-select */
+  /* Same reasoning one level in: a category view is `position:absolute; inset:0` INSIDE the sheet, so
+     its header does not touch the top of the screen either, and the status-bar inset it inherits would
+     open an empty notch-high band above the back arrow. */
+  #fx-browser.fxb-sheet .fxb-catview-top, #afx-browser.fxb-sheet .fxb-catview-top { padding-top: 14px; }
 }
 /* The order badge — "every time you select one it'll put a one or two on it so you know what order
    they are being added in". Numbers, not ticks, because the order IS the information. */

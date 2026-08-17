@@ -5355,7 +5355,21 @@ better still, keep working inside the turn rather than parking work for a later 
         shape when the flag is absent, so a dimensionless fixture is filed as a SONG and lands in the
         Audio tab — leaving the Media tab empty and the test measuring nothing.
 
-- [ ] **300 — The audio effects browser still opens full screen.** (17 Aug, screenshot at v9.02 of
+- [x] **300 — The audio effects browser still opens full screen.** ✅ **v9.48.** It is the same sheet
+      as the visual browser now: it starts at the bottom of the canvas and takes everything below.
+      Measured at 380px — sheet top 364, canvas bottom 364, viewport 800 — and the desktop path was
+      photographed too, because it must NOT become a sheet, and it does not.
+      **The geometry is one function now (`FM.fxSheet`), not two copies.** It was written inline inside
+      the visual browser's `open()`, which is exactly why its neighbour never got it; a second copy
+      would have fixed today and drifted again, and there is a third overlay built the same way. The
+      test asserts the two browsers land in the SAME box rather than measuring the audio one alone,
+      because a test that only checked "#afx-browser starts at the canvas bottom" would pass just as
+      happily against the duplicated state that caused this in the first place. Both the JS call and the
+      CSS selector were mutation-checked. Two smaller things went with it: the sheet's header no longer
+      keeps the status-bar inset it needs only when it IS the top of the screen (that would have opened
+      a notch-high empty band above the ✕ on his phone — invisible in a desktop browser, where the inset
+      reads 0), and the same correction for a category view's header inside the sheet. Original entry:
+      (17 Aug, screenshot at v9.02 of
       "Add Audio Effect" filling the whole phone screen — X top-left, search top-right, Visual /
       Filters / Audio tabs, FEATURED, RECENTS / FAVES, CATEGORIES.) His words, verbatim:
       *"Audio effects menu still opens full screen"*.
@@ -6726,8 +6740,23 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **To be done WITH him after he compacts the chat** — his words, and it is his record, so the
       shape of it is his call rather than something to do unilaterally while he is not looking.
 
-
-## Done
+- [ ] **353 — Standing instructions for the loop, restated after the compact.** (17 Aug.) His words,
+      verbatim: *"Continue with the list, ticking one thing off at a time from top to bottom, oldest
+      first, use workflows if you need, make sure you don't wait too long to wait for one of the work
+      flow people to reply because sometimes they freeze and you just do nothing for hours, so make it
+      so you only wait for a certain amount of time. make sure you have a loop and dont stop until i
+      tell you to, make sure no workflow agents get stuck in a never ending loop like last time, make
+      sure everything is quality tested as good as possible, dont stop to ask me questions, ask but
+      keep going and re ask next time i say something"*.
+      Not a feature — a standing instruction, kept here so it is not lost with a transcript. The clauses:
+      1. One item at a time, oldest first. (Already the rule; `tools/next.sh` enforces the ordering.)
+      2. **A workflow gets a hard step budget and a wait limit.** He has watched one freeze and cost
+         hours of nothing. So: bounded rounds, no `while (true)`, and if an agent has not returned,
+         carry on with the work rather than waiting on it.
+      3. Quality-test everything as hard as possible — suite green, new test mutation-checked, phone
+         screenshot when the UI moved.
+      4. **Questions go in the entry and the work continues.** Never block on him; re-ask the next time
+         he speaks.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 

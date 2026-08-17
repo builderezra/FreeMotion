@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#300 — the audio effects browser as a sheet</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #300 — "Audio effects menu still opens full screen".
+ *
+ * The suite proves the numbers; this page exists to SEE it, because "full screen" is a thing you
+ * recognise by looking. ?w= picks the width so the same probe shows the phone sheet and the desktop
+ * dialog — the desktop path must NOT become a sheet, and photographing only the phone would not say so.
+ *
+ * The layer has to be a VIDEO with a media record: the audio browser refuses to open on anything the
+ * app believes has no sound, and a bare shape is exactly that. It also needs an `el`, because opening
+ * the visual browser next starts the queue-277 preview loop and FM.setTime walks the media records. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (W > 700 ? 860 : 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.audioFxBrowser || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var L = FM.makeLayer('video', { name: 'clip', duration: 5 });
+        L.start = 0;
+        FM.scene.layers = [L];
+        FM.media.set(L.id, { kind: 'video', el: d.createElement('video'), width: 640, height: 360, duration: 5 });
+        FM.selectLayer(L.id); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        try { FM.audioFxBrowser.open(FM.scene.layers[0]); } catch (e) { return fail('open threw: ' + (e && e.message || e)); }
+        setTimeout(function () {
+          var root = d.getElementById('afx-browser'), cv = d.getElementById('preview');
+          if (!root || root.classList.contains('hidden')) return fail('the audio browser did not open');
+          var r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
+          out.textContent = [
+            'width ' + W + '   sheet: ' + root.classList.contains('fxb-sheet'),
+            'browser ' + Math.round(r.top) + '–' + Math.round(r.bottom) + '   canvas ends ' + Math.round(c.bottom),
+            'viewport ' + d.documentElement.clientHeight
+          ].join('\n');
+          window.__done = true;
+        }, 600);
+      }, 700);
+    })();
+  });
+})();
+</script>
+</body></html>

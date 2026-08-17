@@ -7,6 +7,36 @@ window.FM = window.FM || {};
 
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
+  /* THE SHEET GEOMETRY, shared (queue 277 built it, queue 300 made it shared).
+   *
+   * Ezra: "the menu won't cover the whole screen the menu will only go up until where the canvas is",
+   * then, correcting himself in the same message, "it covers the play buttons and all of that so it
+   * goes right up to the canvas". So the top edge is the bottom of the CANVAS, MEASURED — the canvas
+   * box depends on the project's aspect, so a hard-coded height would be wrong for most projects.
+   *
+   * WHY IT LIVES HERE RATHER THAN INSIDE ONE BROWSER'S open(). It was written inline in
+   * FM.fxBrowser.open, so the AUDIO browser — a sibling overlay with the same markup and the same
+   * class names — never got it, and kept covering the whole screen for three weeks after the visual
+   * one stopped. That is queue 300 in one sentence. A second copy would fix today and drift tomorrow
+   * (there is a third overlay, #el-browser, built the same way); one function that every browser calls
+   * cannot drift. FM.fxSheet is the seam the suite holds both browsers against.
+   *
+   * Returns whether the sheet is on, because both callers branch on it.
+   */
+  FM.fxSheet = function (root, on) {
+    if (!root) return false;
+    const phone = on !== false && window.matchMedia('(max-width: 700px)').matches;
+    root.classList.toggle('fxb-sheet', phone);
+    if (phone) {
+      const cv = document.getElementById('preview');
+      const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
+      root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
+    } else {
+      root.style.removeProperty('--fxb-top');
+    }
+    return phone;
+  };
+
   const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8;   // PAGE_SIZE went with the sideways pager (queue 92); js/audio-fx-browser.js keeps its own
   // Two entries in this browser are NOT registry effects — Mask and Motion Blur (Object) are
   // pseudo-tiles that drive layer state directly. They still look like effects and sit in the same
@@ -1139,21 +1169,8 @@ window.FM = window.FM || {};
       _into = (opts && opts.into) || null;
       if (!_layer) { if (FM.toast) FM.toast('Select a layer first', 1400); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
-      /* THE SHEET (queue 277). "the menu won't cover the whole screen the menu will only go up until
-         where the canvas is" — and then, correcting himself later in the same message, "it covers the
-         play buttons and all of that so it goes right up to the canvas". So the top edge is the bottom
-         of the CANVAS, measured, and everything below it — transport row and timeline — is covered.
-         Measured rather than assumed a height, because the canvas box depends on the project's aspect. */
       _picked = [];
-      const phone = window.matchMedia('(max-width: 700px)').matches;
-      root.classList.toggle('fxb-sheet', phone);
-      if (phone) {
-        const cv = document.getElementById('preview');
-        const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
-        root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
-      } else {
-        root.style.removeProperty('--fxb-top');
-      }
+      const phone = FM.fxSheet(root);      // the sheet (queue 277) — geometry defined once, up top
       root.classList.remove('hidden');
       rebuild();
       paintPicks();
@@ -1170,7 +1187,7 @@ window.FM = window.FM || {};
     close: function () {
       _into = null; if (!root) return;
       root.classList.add('hidden');
-      _picked = []; root.classList.remove('fxb-sheet'); root.style.removeProperty('--fxb-top');
+      _picked = []; FM.fxSheet(root, false);
       stopPreview(); stopAuto();
       if (FM.fxThumbs) FM.fxThumbs.stopAll();
       root.querySelectorAll('.fxb-catview').forEach(v => v.remove());
