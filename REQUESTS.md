@@ -5329,6 +5329,30 @@ better still, keep working inside the turn rather than parking work for a later 
       removing one layer of recent clips added, instead of three rows just two"*.
       He has given the fix as well as the report: show TWO rows of recent clips, not three.
 
+      **ATTEMPTED 17 Aug AND BACKED OUT — not shipped. Everything learned is here so the next attempt
+      starts from it rather than re-deriving it.**
+      **His diagnosis is confirmed.** Measured at 375px: the Media/Audio body is CONTENT-SIZED, so it
+      genuinely grows a row at a time as imports pile up — 260px on Media with nine clips in the library,
+      against a Shape tab that never changes. Those two tabs are the only ones whose body is a growing
+      library (there is already a `splitTab` branch for exactly them), which is why only they got taller.
+      **The design decision, which should survive into the next attempt:** cap the height and let it
+      SCROLL, do not truncate the list. Showing only the four newest would satisfy "two rows" and quietly
+      make every older import unreachable — and one-tap re-adding of an old clip is the whole point of
+      that list.
+      **What defeated it, and it is a real trap:** the grid's rows are sized `minmax(…, 1fr)` so they
+      share the body's height — that is the queue 208 fix for the dead band under the last row. Inside a
+      `max-height`, `1fr` makes five rows SQUASH into the two-row cap instead of overflowing, so nothing
+      scrolls and the cap becomes a truncation by another route. Overriding `grid-auto-rows` to a fixed
+      clamp did not settle it either; that is where I stopped rather than keep guessing at CSS.
+      **Two measurement gotchas that cost most of the time, worth knowing before touching this again:**
+      · **There are TWO add-menus in the DOM at once** — `.addmenu--panel` (PC) and `.addmenu--sheet`
+        (phone). An unscoped `document.querySelector('.addmenu-body')` finds the PANEL's, so a phone test
+        can be measuring the desktop layout while believing otherwise. Scope every selector to
+        `.addmenu--sheet`.
+      · **A fake library row needs `audio: false` and real `w`/`h`.** `mediaLib.isAudio` guesses from
+        shape when the flag is absent, so a dimensionless fixture is filed as a SONG and lands in the
+        Audio tab — leaving the Media tab empty and the test measuring nothing.
+
 - [ ] **300 — The audio effects browser still opens full screen.** (17 Aug, screenshot at v9.02 of
       "Add Audio Effect" filling the whole phone screen — X top-left, search top-right, Visual /
       Filters / Audio tabs, FEATURED, RECENTS / FAVES, CATEGORIES.) His words, verbatim:
