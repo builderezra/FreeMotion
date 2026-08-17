@@ -5285,7 +5285,26 @@ better still, keep working inside the turn rather than parking work for a later 
       COLOUR SHIFT: inspector background rgb(10,20,26) vs rgb(22,28,40), and the page background. That
       is a real flash and worth removing, but it is not "an old version that looks a lot like Alight
       Motion". I could not reproduce what you are describing.
-      **THE HYPOTHESIS I HAVE NOT TESTED, and where I would start next — the SERVICE WORKER.**
+      **v9.11 CONTINUED — WHAT I HAVE NOW TESTED AND RULED OUT. Do not redo these.**
+      1. *Layout at first paint* — RULED OUT. Rendered index.html with every `<script>` stripped (which
+         IS first paint) at 1280px and at 380px. Both give the correct shape: at desktop, main on top
+         with the inspector bottom-left and the timeline bottom-right (Studio, not the retired Classic
+         side-column); at phone width the top bar matches your own Project 8 screenshot exactly. The
+         phone/desktop split is a plain CSS media query at 700px, so it needs no JS and cannot flash.
+         The only structural difference at 380px is the inspector's height (102px vs 325px).
+      2. *The theme* — FOUND AND FIXED (above). Real, but it is a colour shift, not a different app.
+      3. *Service worker serving a stale shell* — WEAKER THAN I FIRST WROTE, and still untested end to
+         end. The cached `index-fallback` is overwritten on EVERY successful navigation, so it is the
+         last build you loaded successfully, not an arbitrarily old one. It only serves when the network
+         fetch THROWS. I could not test it here at all: the browser pane will not keep a service worker
+         registered (`registrations: 0` after a reload, though it had created the cache), so this needs
+         a real device or a proper headless run with one installed.
+      **WHAT WOULD SETTLE IT IN ONE LOOK — please do this next time it happens:** read the version chip
+      in the top bar while the wrong-looking app is on screen. If it shows an OLD version number, it is
+      the service worker handing you a whole old build and #3 is the answer. If it shows the CURRENT
+      version, it is a first-paint/styling problem and #3 is dead. That single observation is worth more
+      than anything else I can do from here, because I cannot reproduce it on this machine.
+      **THE ORIGINAL SERVICE-WORKER HYPOTHESIS, kept for the detail:**
       `sw.js` serves navigations network-first and falls back to a cached `index-fallback` when the
       fetch THROWS. On a phone, a momentary connectivity blip on refresh is exactly that. And because
       the cache name is a fixed `freemotion-v1` that is never rotated, that fallback can be an
@@ -5426,6 +5445,22 @@ better still, keep working inside the turn rather than parking work for a later 
       shit, and also give the noise effect a toggle to circle noise or square noise"*.
       Two clauses: (1) the grain in the effect BROWSER'S preview tile is too coarse — that is the
       thumbnail, not necessarily the effect itself; (2) the noise effect gains a grain-shape choice.
+
+- [ ] **320 — The Lightning effect looks bad; rework it.** (17 Aug.) His words, verbatim: *"The
+      lightning effect looks pretty bad, give it a work over,"*.
+      Open-ended, so worth looking at real reference before touching it: a bolt wants a jagged
+      main channel with forked branches that taper and die out, a bright core with a wider soft glow
+      around it, and it should not read as a uniform-width zigzag line.
+
+- [ ] **321 — Mask: tapping it adds immediately instead of previewing, and mask editing needs the
+      trackpad.** (17 Aug.) His words, verbatim: *"With the mask effect when you press on it it
+      instantly adds instead of previewing, fix this and also make it when editing the mask and where
+      it actually masks, you can use the touch pad thing like when editing points on a shape"*.
+      Two clauses: (1) the mask entry should PREVIEW on tap like the other effects in the reworked
+      browser (queue 277), not commit straight away; (2) while editing a mask — both the path and where
+      it masks — offer the same on-screen trackpad that point editing has, so a fingertip can nudge
+      precisely instead of dragging the point directly. `js/point-edit.js` is the existing pattern and
+      `js/mask-tool.js` is the thing to add it to.
 
 ## Done
 
