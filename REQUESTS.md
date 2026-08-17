@@ -3886,6 +3886,11 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **twelfth** struck off — **the AI writing NaN into every tick-box and
+      layer-picker parameter (v9.17)**. It clamped each value against that parameter's min and max,
+      but those two kinds have neither, and clamping against nothing gives NaN — so the default was
+      destroyed precisely when a value WAS supplied, and nothing complained: NaN is not null, so the
+      "fall back to the default" checks downstream all sailed past it. Six parameters, silently dead.
       *Progress 17 Aug:* an **eleventh** struck off — **Demo mode never reaching the phone Add sheet
       (v8.96)**. The sheet was drawn once at startup and the setting is only read while a tile is built, so
       turning it on left real filenames and video thumbnails on screen until you happened to change tab —

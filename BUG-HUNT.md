@@ -752,7 +752,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 
 ## Low (4)
 
-### addEffect stores NaN for any non-range, non-colour param because clamp() is called with undefined bounds
+### ~~addEffect stores NaN for any non-range, non-colour param because clamp() is called with undefined bounds~~ — FIXED v9.17
 `js/ai-ops.js:310`  · found by `ai-security`
 
 - **What:** The param loop special-cases only `segment` and `color`; everything else falls to `clamp(num(inp[p.key], p.default), p.min, p.max)`. fx-registry's `toggle` params (js/fx-registry.js:158) and the `layer` source-picker param (js/fx-registry.js:172) are built with no min/max, so `clamp(v, undefined, undefined)` evaluates `Math.max(undefined, Math.min(undefined, v))` → NaN. The registry default that makeInstance seeded is overwritten with NaN precisely when the model DID supply a value.

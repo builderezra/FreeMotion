@@ -314,6 +314,16 @@ window.FM = window.FM || {};
                 params[p.key] = allowed.indexOf(raw) >= 0 ? raw : (allowed.indexOf(n) >= 0 ? n : p.default);
               } else if (p.type === 'color') {
                 params[p.key] = hex(inp[p.key], p.default);
+              } else if (p.type === 'toggle') {
+                /* A TOGGLE HAS NO min/max, and clamp(v, undefined, undefined) is
+                   Math.max(undefined, Math.min(undefined, v)) === NaN. So this branch used to
+                   overwrite the registry's perfectly good default with NaN precisely WHEN the model
+                   supplied a value — and NaN is not == null, so every downstream `fparam(p,'style',0,t)`
+                   fallback sailed past it and the feature silently did nothing. It also serialises to
+                   null in the saved project. Same for the layer picker below. */
+                params[p.key] = (inp[p.key] === true || num(inp[p.key], p.default) === 1) ? 1 : 0;
+              } else if (p.type === 'layer') {
+                params[p.key] = str(inp[p.key], 64) || p.default;
               } else {
                 params[p.key] = clamp(num(inp[p.key], p.default), p.min, p.max);
               }

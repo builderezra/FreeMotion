@@ -32,7 +32,14 @@ window.FM = window.FM || {};
     return FM.EFFECTS.map(function (e) {
       var p;
       if (Array.isArray(e.params)) {   // MULTI-param effect: list every key (was emitting "undefined(undefined..undefined)") (#2)
-        p = e.params.map(function (pp) { return pp.key + '(' + pp.min + '..' + pp.max + ', def ' + pp.def + ')'; }).join(', ');
+        /* Print each param in terms it actually HAS. A toggle and a segment carry no min/max, and
+           advertising them as "undefined..undefined" both reads as broken and invites the model to
+           send a number into a control that has no numeric range. (#755) */
+        p = e.params.map(function (pp) {
+          if (pp.toggle) return pp.key + '(0|1, def ' + pp.def + ')';
+          if (pp.options) return pp.key + '(modes: ' + pp.options.map(function (o) { return (Array.isArray(o) ? o[0] + '=' + o[1] : o); }).join(', ') + ', def ' + pp.def + ')';
+          return pp.key + '(' + pp.min + '..' + pp.max + ', def ' + pp.def + ')';
+        }).join(', ');
       } else if (e.options) {
         p = e.param + '(modes: ' + e.options.map(function (o) { return o[0] + '=' + o[1]; }).join(', ') + ')';
       } else if (e.param) {

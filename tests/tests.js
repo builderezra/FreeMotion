@@ -18195,6 +18195,65 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: addEffect stored NaN for every bound-less param ---------------- */
+
+  /* THE BUG. ai-ops' addEffect special-cased `segment` and `color` and sent everything else through
+   * `clamp(num(v), p.min, p.max)`. A TOGGLE and a LAYER-PICKER carry no min/max, and
+   * clamp(v, undefined, undefined) is Math.max(undefined, Math.min(undefined, v)) === NaN. So the
+   * registry's perfectly good default was overwritten with NaN precisely WHEN a value was supplied.
+   * It then failed silently in both directions: NaN is not `== null`, so every downstream
+   * `fparam(p, 'style', 0, t)` fallback sailed straight past it, and NaN serialises to `null` in the
+   * saved project. Round Corners' Apple-squircle just quietly drew a plain rounded rectangle, and
+   * every layer-picker effect (Displacement Map, Luma Matte, Compound Blur, Match Grade, Polar
+   * Displace) became a no-op with no source.
+   * Asserted over the WHOLE CATALOGUE rather than one effect, because the defect is a property of the
+   * param TYPE — any future bound-less type would land in the same branch. */
+  test('ai: addEffect never stores NaN for a param that has no min/max', { item: 'ai-params' }, function () {
+    if (!FM.aiOps || !FM.aiOps.applyOps) throw new Error('FM.aiOps.applyOps is not exposed — the suite cannot drive the real op path');
+    var boundless = [];
+    FM.fxRegistry.all().forEach(function (e) {
+      (e.params || []).forEach(function (p) {
+        if (p.type !== 'range' && p.type !== 'segment' && p.type !== 'color') boundless.push({ fx: e.id, p: p });
+      });
+    });
+    if (!boundless.length) throw new Error('no bound-less params left in the catalogue — this guard can no longer see the defect it was written for, rewrite it');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var bad = [];
+    try {
+      boundless.forEach(function (b, n) {
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#ffffff' });
+        L.start = 0; L.duration = 3; L.name = 'NANGUARD_' + n;
+        FM.scene.layers.push(L);
+        // supply a plausible value for the type — the bug only bit when a value WAS supplied
+        var v = b.p.type === 'layer' ? L.id : 1, ps = { };
+        ps[b.p.key] = v;
+        FM.aiOps.applyOps([{ op: 'addEffect', ref: L.id, type: b.fx, params: ps }]);
+        var fx = (L.effects || []).filter(function (f) { return f.type === b.fx; })[0];
+        if (!fx) return;                                  // refused for this layer type; not this test's business
+        var got = fx.params[b.p.key];
+        if (typeof got === 'number' && isNaN(got)) bad.push(b.fx + '.' + b.p.key + ' [' + b.p.type + '] = NaN');
+        else if (got == null) bad.push(b.fx + '.' + b.p.key + ' [' + b.p.type + '] = ' + got);
+      });
+      if (bad.length) throw new Error(bad.length + ' of ' + boundless.length + ' bound-less params came back unusable: ' + bad.slice(0, 6).join(', '));
+      // and the value must be the one ASKED FOR, not merely non-NaN
+      var T = FM.scene.layers.filter(function (l) { return /^NANGUARD_/.test(l.name || ''); })[0];
+      var rc = FM.fxRegistry.all().filter(function (e) { return (e.params || []).some(function (p) { return p.type === 'toggle'; }); })[0];
+      if (rc) {
+        var key = rc.params.filter(function (p) { return p.type === 'toggle'; })[0].key;
+        var L2 = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+        L2.start = 0; L2.duration = 3; L2.name = 'NANGUARD_OFF';
+        FM.scene.layers.push(L2);
+        var off = {}; off[key] = 0;
+        FM.aiOps.applyOps([{ op: 'addEffect', ref: L2.id, type: rc.id, params: off }]);
+        var f2 = (L2.effects || []).filter(function (f) { return f.type === rc.id; })[0];
+        if (f2 && f2.params[key] !== 0) throw new Error('asking for ' + rc.id + '.' + key + ' = 0 stored ' + f2.params[key] + ' — an explicit OFF is being lost, which is the same class of silent failure');
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- EFFECTS-PLAN round 29: spin + fliplayer, and the table is done -------------- */
 
   /* A CANVAS_FX is the fourth kind of effect in this file: it takes (A, B, W, H, bb, p, t, tl) — a
