@@ -259,6 +259,35 @@ window.FM = window.FM || {};
         bar.appendChild(sm); bar.appendChild(del);
       }
     }
+    /* THE PRECISION PAD (queue 321, clause 2). Ezra: *"make it when editing the mask and where it
+       actually masks, you can use the touch pad thing like when editing points on a shape"*.
+       Shown only when a point is SELECTED, because that is the thing it moves — with nothing selected
+       there is no "the point" and a pad that silently did nothing would be worse than no pad. Its feel
+       comes from FM.nudgePad, the same function the drawing bar's uses, so the two cannot be retuned
+       apart. Nudging a point is an ordinary edit: it goes through the same write path a drag does, so
+       it keyframes, undoes and saves identically. */
+    if (sel >= 0 && pts && pts[sel]) {
+      const pad = document.createElement('div');
+      pad.className = 'mk-pad';
+      pad.title = 'Swipe here to move the selected point precisely';
+      pad.style.cssText = 'flex:1 1 90px;min-width:70px;max-width:180px;min-height:40px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;text-align:center;touch-action:none;cursor:grab;';
+      const ph = document.createElement('span');
+      ph.style.cssText = 'font-size:10.5px;color:var(--text-faint);pointer-events:none;padding:0 8px;line-height:1.3;';
+      ph.textContent = 'Swipe to nudge';
+      pad.appendChild(ph);
+      bar.appendChild(pad);
+      FM.nudgePad(pad, {
+        get: () => (pts[sel] ? [pts[sel][0], pts[sel][1]] : null),
+        set: (x, y) => {
+          const P = FM.scene.project;
+          const p2 = pts[sel]; if (!p2) return;
+          p2[0] = Math.max(0, Math.min(P.width, x));
+          p2[1] = Math.max(0, Math.min(P.height, y));
+          dirty = true; flush(); FM.requestRender(); draw();
+        },
+      });
+    }
+
     const done = mkBtn('Done', 'mk-done');
     done.style.cssText += 'background:var(--accent);border-color:var(--accent);color:#06231d;font-weight:700;';
     done.addEventListener('click', () => FM.maskTool.stop());
@@ -279,6 +308,12 @@ window.FM = window.FM || {};
   }
 
   FM.maskTool = {
+    /* Seams for the suite (queue 321). The precision pad only exists while a point is SELECTED, and
+       selection happens by hitting a 12px vertex on a canvas overlay — synthesising that is testing the
+       hit-test, not the pad. These reach the same state the finger does and nothing more: one sets the
+       selection, the other reads the working points back. */
+    _select(i) { sel = (i == null ? -1 : i); updateBar(); draw(); },
+    _points() { return pts ? pts.map(p => p.slice()) : []; },
     isActive() { return !!active; },
     layerId() { return active ? active.layerId : null; },
     maskId() { return active ? active.maskId : null; },

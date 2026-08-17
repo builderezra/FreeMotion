@@ -551,29 +551,54 @@ window.FM = window.FM || {};
       redraw(); updateBar();
     });
 
-    // The pad. Same gain as Move & Transform's (project width / 640), which is finer than touching the
-    // canvas directly — on a phone a finger pixel there is ~3.5 project px, here it is ~1.7 — so a
-    // point can be put somewhere a fingertip simply cannot reach.
-    var pad = bar.querySelector('.db-pad'), pd = null;
-    pad.addEventListener('pointerdown', function (e) {
-      var t = FM.drawTool; if (t.mode !== 'vector') return;
-      if (!t.cursor) setCursor(FM.scene.project.width / 2, FM.scene.project.height / 2);
-      pd = { x: e.clientX, y: e.clientY, cx: t.cursor[0], cy: t.cursor[1] };
-      try { pad.setPointerCapture(e.pointerId); } catch (_) {}
+    // The pad, from the shared helper (queue 321). See FM.nudgePad below for why it is shared.
+    FM.nudgePad(bar.querySelector('.db-pad'), {
+      enabled: function () { return FM.drawTool.mode === 'vector'; },
+      get: function () {
+        var t = FM.drawTool;
+        if (!t.cursor) setCursor(FM.scene.project.width / 2, FM.scene.project.height / 2);
+        return t.cursor;
+      },
+      set: function (x, y) { setCursor(x, y); redraw(); updateBar(); },
+    });
+  }
+
+  /* ---- THE PRECISION PAD, SHARED (queue 321) ----------------------------------------------------
+   * Ezra: *"make it when editing the mask and where it actually masks, you can use the touch pad thing
+   * like when editing points on a shape"*.
+   * The gain is the point of the control and is why it is worth having twice: it is Move & Transform's
+   * (project width / 640), which is FINER than touching the canvas — on a phone a finger pixel on the
+   * canvas is about 3.5 project px and here it is about 1.7 — so a point can be put somewhere a
+   * fingertip physically cannot reach.
+   * IT IS ONE FUNCTION RATHER THAN A SECOND COPY IN THE MASK TOOL, and that is not tidiness: #116 is
+   * this project's standing note about what happens when two surfaces meant to feel identical get
+   * their own copies — the timeline's glide was retuned and the sliders' was not, and it took him
+   * asking twice to notice. The number above is exactly the kind of thing that gets retuned in one
+   * place. The caller supplies where the point IS and what to do when it moves; everything about how
+   * the gesture feels lives here. */
+  FM.nudgePad = function (el, opts) {
+    if (!el || !opts) return;
+    var pd = null;
+    el.addEventListener('pointerdown', function (e) {
+      if (opts.enabled && !opts.enabled()) return;
+      var at = opts.get(); if (!at) return;
+      pd = { x: e.clientX, y: e.clientY, cx: at[0], cy: at[1] };
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault(); e.stopPropagation();
     });
-    pad.addEventListener('pointermove', function (e) {
+    el.addEventListener('pointermove', function (e) {
       if (!pd) return;
+      // A mouse that was released outside the pad never sends pointerup here; buttons===0 is the only
+      // honest signal that the drag is over, and without it the cursor follows the mouse forever.
       if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; return; }
       var sens = (FM.scene.project.width || 1080) / 640;
-      setCursor(pd.cx + (e.clientX - pd.x) * sens, pd.cy + (e.clientY - pd.y) * sens);
-      redraw(); updateBar();
+      opts.set(pd.cx + (e.clientX - pd.x) * sens, pd.cy + (e.clientY - pd.y) * sens);
       e.preventDefault();
     });
-    function endPad(e) { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} }
-    pad.addEventListener('pointerup', endPad);
-    pad.addEventListener('pointercancel', endPad);
-  }
+    function end(e) { if (!pd) return; pd = null; try { el.releasePointerCapture(e.pointerId); } catch (_) {} }
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  };
 
   // Exposed for the suite (queue 179): the Done BUTTON is the only other door, and driving a click on
   // a bar that may be mid-layout tests the bar, not the finish path this covers.

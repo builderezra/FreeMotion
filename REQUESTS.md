@@ -5876,7 +5876,7 @@ better still, keep working inside the turn rather than parking work for a later 
       main channel with forked branches that taper and die out, a bright core with a wider soft glow
       around it, and it should not read as a uniform-width zigzag line.
 
-- [ ] **321 — Mask: tapping it adds immediately instead of previewing, and mask editing needs the
+- [x] **321 — Mask: tapping it adds immediately instead of previewing, and mask editing needs the
       trackpad.** (17 Aug.) His words, verbatim: *"With the mask effect when you press on it it
       instantly adds instead of previewing, fix this and also make it when editing the mask and where
       it actually masks, you can use the touch pad thing like when editing points on a shape"*.
@@ -5885,7 +5885,7 @@ better still, keep working inside the turn rather than parking work for a later 
       it masks — offer the same on-screen trackpad that point editing has, so a fingertip can nudge
       precisely instead of dragging the point directly. `js/point-edit.js` is the existing pattern and
       `js/mask-tool.js` is the thing to add it to.
-      ✅ **v9.67 — clause 1 done. Clause 2 still open, which is why this is not ticked.**
+      ✅ **v9.67 + v9.68 — both clauses.**
       · **1 (it adds instead of previewing).** Mask and Motion Blur (Object) are the only two tiles in
         that grid that are not really effects — they change the LAYER — and the select-then-Add flow
         was built around effects, so both were left committing straight from the tap. That difference
@@ -5894,10 +5894,15 @@ better still, keep working inside the turn rather than parking work for a later 
         tiles are built from, so a third one cannot be added to the grid and forgotten in Add.
         One honest limit: these two cannot show a live preview of themselves, because a mask has no
         result until you have drawn one — that is what the editor opening on Add is for.
-      · **2 (the trackpad while editing a mask) — next up on this item.** The pad you are describing
-        is the one on the drawing bar and it is bespoke to that bar, so doing this properly means
-        lifting it out into something both tools use rather than writing a second one — two copies of
-        a feel is the thing that has bitten this project repeatedly.
+      · **2 (the trackpad while editing a mask) — v9.68.** Select a mask point and the pad appears on
+        the mask bar; swipe it to nudge that point. It only shows with a point selected, because
+        that is what it moves.
+        **It is the SAME pad, not a second one.** I lifted it out of the drawing bar into one
+        function both tools call — the sensitivity (finer than touching the canvas, which is the
+        entire reason the control exists) is exactly the kind of number that gets retuned in one
+        place and forgotten in the other, which has already happened here once with the timeline
+        glide and the sliders. The test checks the SENSITIVITY rather than just that the point
+        moved: a pad running one-for-one with your finger would look right, work, and be useless.
 
 - [ ] **322 — Freehand drawing: stop converting it to points, add draw-on (start/end), and a real
       re-edit with a proper eraser.** (17 Aug.) His words, verbatim: *"Also I just realised why I think

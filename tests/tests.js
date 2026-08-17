@@ -27359,4 +27359,74 @@
     }
   });
 
+
+  /* ================= queue 321 clause 2: the precision pad, on the mask tool too ==================
+   * *"make it when editing the mask and where it actually masks, you can use the touch pad thing like
+   * when editing points on a shape"*.
+   *
+   * THE GAIN IS THE WHOLE POINT OF THE CONTROL, so it is what gets asserted. The pad is deliberately
+   * FINER than the canvas — project width / 640 — so a point can be put somewhere a fingertip cannot
+   * reach. A pad that moved the point one-for-one with the finger would look right, work, and be
+   * pointless, which is the failure a "does the point move" test would wave through.
+   * ONE FUNCTION, NOT TWO: #116 is this project's standing note about two surfaces meant to feel
+   * identical getting their own copies and being retuned apart. Held by driving the mask pad and
+   * checking the number it produces is the shared one. */
+  test('a selected mask point can be nudged on a precision pad, at the shared gain (queue 321)', { item: 'mask-pad' }, async function () {
+    if (!FM.nudgePad) throw new Error('FM.nudgePad is missing — the pad is not shared, so the drawing bar and the mask tool can drift apart');
+    const layers0 = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const size0 = { w: P.width, h: P.height };
+    try {
+      /* PIN THE PROJECT SIZE. The suite's project is 64x48, and both halves of this test depend on it:
+         the pad's gain IS project width / 640, so at 64 wide a 64px swipe moves the point six pixels,
+         and the write clamps to the project box, so the point lands in the corner whatever the gain
+         is. The first run reported 64,48 — which is not a measurement of sensitivity, it is the corner
+         of a tiny canvas. Same trap as the drag tests at v9.24. */
+      P.width = 1080; P.height = 1920;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width / 2), y: Math.round(P.height / 2), shapeW: 200, shapeH: 200, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      L.masks = [{ id: 'mk1', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true,
+                   path: [[100, 100], [300, 100], [300, 300], [100, 300]] }];
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(160);
+      if (!FM.maskTool || !FM.maskTool.open) throw new Error('FM.maskTool.open is missing');
+      FM.maskTool.open(L.id, 'mk1');
+      await sleep(260);
+
+      const bar = document.querySelector('#mask-bar') || document.querySelector('.mk-bar');
+      const barEl = bar || document.body;
+      // Nothing selected yet → no pad, deliberately: it moves "the point", and there isn't one.
+      if (barEl.querySelector('.mk-pad')) throw new Error('the pad is shown with no point selected — it would move nothing');
+
+      // Select a point through the tool's own seam, then rebuild the bar.
+      if (!FM.maskTool._select) throw new Error('no seam to select a mask point from the suite');
+      FM.maskTool._select(1);
+      await sleep(160);
+      const pad = (document.querySelector('#mask-bar') || document.body).querySelector('.mk-pad');
+      if (!pad) throw new Error('selecting a mask point did not offer the precision pad');
+
+      const before = FM.maskTool._points()[1].slice(0, 2);
+      const DX = 64, DY = 32;
+      const send = (t, x, y, b) => pad.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', buttons: b }));
+      send('pointerdown', 100, 100, 1);
+      send('pointermove', 100 + DX, 100 + DY, 1);
+      send('pointerup', 100 + DX, 100 + DY, 0);
+      await sleep(140);
+      const after = FM.maskTool._points()[1].slice(0, 2);
+
+      if (after[0] === before[0] && after[1] === before[1]) throw new Error('swiping the pad did not move the selected point at all');
+      /* THE GAIN. project width / 640 — finer than the canvas, which is the reason the control exists. */
+      const sens = (FM.scene.project.width || 1080) / 640;
+      const wantX = before[0] + DX * sens, wantY = before[1] + DY * sens;
+      if (Math.abs(after[0] - wantX) > 1.5 || Math.abs(after[1] - wantY) > 1.5) {
+        throw new Error('the pad moved the point to ' + after.map(n => Math.round(n)) + ' but its gain says ' + [wantX, wantY].map(n => Math.round(n)) + ' — it is not running at the shared sensitivity, so it is either one-for-one with the finger or a second copy that has drifted');
+      }
+    } finally {
+      if (FM.maskTool && FM.maskTool.stop) FM.maskTool.stop();
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();
