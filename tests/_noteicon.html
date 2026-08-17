@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#313 — the notepad icon, blown up</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:1280px;height:700px}
+#zoom{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
+#zoom figure{margin:0;text-align:center}
+#zoom svg{background:#0d141b;border:1px solid #22303c;border-radius:10px}
+#zoom figcaption{padding-top:6px;color:#8fa}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="zoom"></div><div id="out">…</div>
+<script>
+/* #313 — *"The “shading” you added to the note pad looks so bad, you barely did anything and what you
+   did do is complete ass"*.
+   Shading is judged by eye, so this blows the icon up. It is also shown at its REAL size beside the
+   big one, because a gradient that looks handsome at 200px and turns to mud at 24 is the failure mode
+   here — the old one was tuned at a size nobody sees it at, and shading with no range survives being
+   enlarged perfectly well while doing nothing on the bar.
+   Both copies are drawn: the desktop button and the phone one share a single <defs>, so a change that
+   reached one and not the other would show up as two different pictures. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), zoom = document.getElementById('zoom');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      try { if (w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close(); } catch (e) {}
+      setTimeout(function () {
+        var lines = [];
+        [['btn-notes', 'desktop bar'], ['m-notes', 'phone bar']].forEach(function (p) {
+          var b = d.getElementById(p[0]);
+          if (!b) { lines.push(p[0] + ': MISSING'); return; }
+          var svg = b.querySelector('svg');
+          [200, 24].forEach(function (px) {
+            var fig = d.createElement('figure');
+            var big = svg.cloneNode(true);
+            big.removeAttribute('class');
+            big.setAttribute('width', String(px)); big.setAttribute('height', String(px));
+            /* A CLONE CANNOT REACH THE ORIGINAL'S <defs>. The gradient is defined once, inside the
+               button that happens to hold it, so a clone of the OTHER button references a paint that is
+               not in its subtree and renders as nothing. Carrying the defs across is what makes this
+               probe show the real fill rather than a black rectangle. */
+            if (!big.querySelector('defs')) {
+              var src = d.querySelector('#btn-notes svg defs') || d.querySelector('#m-notes svg defs');
+              if (src) big.insertBefore(src.cloneNode(true), big.firstChild);
+            }
+            fig.appendChild(big);
+            fig.appendChild(d.createElement('figcaption')).textContent = p[1] + ' @' + px;
+            zoom.appendChild(fig);
+          });
+          var stops = [].slice.call((d.querySelector('#fm-note-sheet') || { querySelectorAll: function () { return []; } }).querySelectorAll('stop'))
+            .map(function (n) { return n.getAttribute('offset') + ':' + n.getAttribute('stop-color'); });
+          lines.push(p[0] + '  page fill: ' + (svg.querySelector('path[fill]') || {}).getAttribute('fill'));
+          lines.push('   gradient stops: ' + stops.join('  '));
+          lines.push('   extra shading paths: ' + svg.querySelectorAll('path[stroke-opacity]').length + '  (the old smudge under the top edge was one of these)');
+        });
+        out.textContent = lines.join('\n');
+        window.__done = true;
+      }, 700);
+    })();
+  });
+})();
+</script>
+</body></html>

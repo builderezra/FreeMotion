@@ -5736,7 +5736,20 @@ better still, keep working inside the turn rather than parking work for a later 
       "tapping a layer scrolls the timeline back to the top" bug by preserving vertical scroll across
       a rebuild — so the machinery exists; this is the DESELECT direction of the same thing.
 
-- [ ] **313 — The shading on the notepad icon looks bad.** (17 Aug, screenshot of the top bar showing
+- [x] **313 — The shading on the notepad icon looks bad.** ✅ **v9.60.** Fair, and the numbers back
+      you up: the old gradient ran #fffefb to #fffdf7 across the first 55% of the icon — a
+      one-value change, invisible at any size — and only shaded at the very bottom, so it read as
+      a flat page with a dirty hem. The other thing it drew was a 7%-black line under the top
+      edge, meant as a page curl; at 24px that is a smudge, and it is gone.
+      It is lit from the top left now, diagonally, #ffffff → #e2d2ac — a falloff you can actually
+      see at the size it is used — on the same axis as every other glass surface in the app, so
+      the notepad stops being the one thing lit from a different direction. Same path, same
+      silhouette.
+      **The first pass only fixed half of it:** the desktop and phone icons carry separate
+      gradient definitions, so the phone one stayed flat, and the only reason that was caught is
+      a probe that blows both up side by side. The test now measures the shading as a NUMBER —
+      "there is a gradient" and "the gradient does something" are different claims, and the bad
+      version passed every check that only asked the first — and holds the two copies equal. (17 Aug, screenshot of the top bar showing
       the "?" and the yellow notepad icon.) His words, verbatim: *"The “shading” you added to the note
       pad looks so bad, you barely did anything and what you did do is complete ass"*.
       Fair. Redo it properly rather than nudging it — and it sits beside 305 (the "?" glyph is

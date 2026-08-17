@@ -17539,7 +17539,23 @@
       if (!x.fill || !/^url\(#/.test(x.fill)) throw new Error(x.id + ': the page is a flat fill (' + x.fill + ') — it has no shading at all');
       if (!x.stops || x.stops.length < 2) throw new Error(x.id + ': its gradient has ' + (x.stops ? x.stops.length : 0) + ' stop(s)');
       if (new Set(x.stops).size < 2) throw new Error(x.id + ': every gradient stop is the same colour — that is a flat page wearing a gradient');
-      if (!x.curl) throw new Error(x.id + ': the faint line under the top edge is missing');
+      /* THE LINE UNDER THE TOP EDGE IS GONE ON PURPOSE (queue 313), and this assertion is inverted
+         rather than deleted. It was a 7%-black stroke meant to read as a page catching its own curl,
+         and at 24px it read as a smudge under the border — Ezra: *"what you did do is complete ass"*.
+         Held at zero so it cannot come back as someone's idea of depth. */
+      if (x.curl) throw new Error(x.id + ': the faint line under the top edge is back — at 24px it is a smudge, not a page curl');
+      /* …AND THE SHADING HAS TO DO SOMETHING (queue 313). "there is a gradient" and "the gradient is
+         visible" are different claims, and only the first was ever checked: the version he called
+         "you barely did anything" passed every assertion above while moving 9 levels of brightness end
+         to end, most of that in the last stretch. So the range is a number now.
+         Measured on luminance rather than on any one channel, because the page is warm — a shade that
+         drops the blue channel alone would look yellow, not lit. */
+      const lum = c => { const m = c.match(/^#(\w\w)(\w\w)(\w\w)$/); return m ? (parseInt(m[1], 16) * 0.3 + parseInt(m[2], 16) * 0.59 + parseInt(m[3], 16) * 0.11) : NaN; };
+      const vals = x.stops.map(lum);
+      if (vals.some(isNaN)) throw new Error(x.id + ': a stop colour this test cannot read — ' + x.stops.join(','));
+      const range = Math.max.apply(null, vals) - Math.min.apply(null, vals);
+      if (range < 40) throw new Error(x.id + ': the shading spans only ' + Math.round(range) + ' levels of brightness — that is the version he called "you barely did anything", invisible at the size it is used');
+      if (!(vals[0] - vals[1] > 4)) throw new Error(x.id + ': it is flat through its first stops (' + Math.round(vals[0]) + ' then ' + Math.round(vals[1]) + ') — the shading arrives only at the bottom, which reads as a dirty hem rather than as light');
     });
     /* THE POINT OF THIS TEST: one having it and the other not is exactly how this came back. */
     if (JSON.stringify(phone.stops) !== JSON.stringify(pc.stops))
@@ -26958,5 +26974,7 @@
       }
     }, 390);
   });
+
+
 
 })();
