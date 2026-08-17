@@ -5858,7 +5858,19 @@ better still, keep working inside the turn rather than parking work for a later 
       Two clauses: (1) the grain in the effect BROWSER'S preview tile is too coarse — that is the
       thumbnail, not necessarily the effect itself; (2) the noise effect gains a grain-shape choice.
 
-- [ ] **320 — The Lightning effect looks bad; rework it.** (17 Aug.) His words, verbatim: *"The
+- [x] **320 — The Lightning effect looks bad; rework it.** ✅ **v9.66.** The note below had it right
+      about what a bolt wants, and the old one had none of it: fourteen straight segments displaced
+      by two sine waves, drawn at ONE width with ONE falloff. So the jaggedness undulated instead
+      of breaking, nothing tapered, nothing died out, and there was no bright core inside a glow —
+      which is the thing that makes a bolt look like it is emitting light rather than being a line
+      someone drew.
+      Now: a jagged channel, two to four forks that leave it and thin out to nothing, a taper the
+      whole way down, and two passes — a wide soft halo in your colour, then a near-white core
+      over it. Bolts / Intensity / Colour all still mean what they meant, so anything you have
+      already made keeps its settings and just looks better.
+      It is hashed rather than random on purpose: this runs in the EXPORTER too, and a random bolt
+      would flicker differently in the export than in the preview — which is the sort of thing you
+      could never fix from the outside. The test renders the same frame twice and compares. (17 Aug.) His words, verbatim: *"The
       lightning effect looks pretty bad, give it a work over,"*.
       Open-ended, so worth looking at real reference before touching it: a bolt wants a jagged
       main channel with forked branches that taper and die out, a bright core with a wider soft glow

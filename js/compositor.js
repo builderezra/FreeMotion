@@ -4905,11 +4905,110 @@ window.FM = window.FM || {};
     // Lightning: procedural bolts — a few jagged vertical paths (deterministic sine-hash jitter, phase
     // driven by t so they flicker), each drawn as an additive glow that fades with distance. Screen-
     // composited over the content in the bolt colour. Count/Intensity params; no random (export-safe).
-    lightning: function(d,W,H,p,t){ var lt_n=FM.evalProp(p.count,t); if(lt_n==null)lt_n=3; lt_n=Math.round(lt_n); if(lt_n<1)lt_n=1; if(lt_n>8)lt_n=8; var lt_int=FM.evalProp(p.intensity,t); if(lt_int==null)lt_int=0.8; if(lt_int<0)lt_int=0; if(lt_int>1)lt_int=1; if(lt_int<=0)return; var lt_col=hexToRGB(p.color)||[150,200,255]; var lt_ph=Math.floor(t*8);   // 8 flickers/sec, quantised so a frame's bolt is stable
-      var lt_wid=Math.max(1.5,W*0.006); var lt_b;
-      for(lt_b=0;lt_b<lt_n;lt_b++){ var lt_seed=lt_b*97.13+lt_ph*3.7; var lt_x0=(0.5+0.5*Math.sin(lt_seed*1.7))*W; var lt_prevX=lt_x0; var lt_segs=14, lt_s;
-        for(lt_s=1;lt_s<=lt_segs;lt_s++){ var lt_y=H*lt_s/lt_segs, lt_py=H*(lt_s-1)/lt_segs; var lt_jit=Math.sin(lt_seed+lt_s*2.3)*W*0.06+Math.sin(lt_seed*2.1+lt_s*5.1)*W*0.025; var lt_x=lt_x0+lt_jit+ (lt_s/lt_segs-0.5)*W*0.15*Math.sin(lt_seed*0.9);
-          var lt_steps=Math.ceil(H/lt_segs); var lt_k; for(lt_k=0;lt_k<lt_steps;lt_k++){ var lt_f=lt_k/lt_steps; var lt_cx2=lt_prevX+(lt_x-lt_prevX)*lt_f, lt_cy2=lt_py+(lt_y-lt_py)*lt_f; var lt_ixc=Math.round(lt_cx2); var lt_rad=Math.ceil(lt_wid*2); var lt_ox; for(lt_ox=-lt_rad;lt_ox<=lt_rad;lt_ox++){ var lt_xx=lt_ixc+lt_ox, lt_yy=Math.round(lt_cy2); if(lt_xx<0||lt_xx>=W||lt_yy<0||lt_yy>=H)continue; var lt_dist=Math.abs(lt_ox)/lt_wid; var lt_g=Math.exp(-lt_dist*lt_dist)*lt_int; if(lt_g<=0.004)continue; var lt_i=(lt_yy*W+lt_xx)*4; d[lt_i]=255-(255-d[lt_i])*(1-lt_col[0]/255*lt_g); d[lt_i+1]=255-(255-d[lt_i+1])*(1-lt_col[1]/255*lt_g); d[lt_i+2]=255-(255-d[lt_i+2])*(1-lt_col[2]/255*lt_g); if(d[lt_i+3]<255)d[lt_i+3]=Math.min(255,d[lt_i+3]+lt_g*255); } } lt_prevX=lt_x; } } },
+    /* LIGHTNING, REWORKED (queue 320). Ezra: *"The lightning effect looks pretty bad, give it a work
+     * over"*. What was there: fourteen straight segments per bolt, displaced by two sine waves, drawn
+     * at ONE width with a single narrow falloff. Three things follow from that and all three are why it
+     * read as a zigzag line rather than as lightning —
+     *   · a sine is smooth, so the "jaggedness" repeated and undulated instead of breaking;
+     *   · one width from top to bottom, so nothing tapered and nothing died out;
+     *   · one narrow falloff, so there was no bright core inside a wider glow — the thing that makes a
+     *     bolt look like it is emitting light rather than being a stroke someone drew.
+     * Now: a random-walk channel (hashed, so a given frame is identical every time it renders — this
+     * runs in the exporter too and Math.random would make an export flicker differently from the
+     * preview), forks that leave the channel, get thinner and stop, a taper along every path, and TWO
+     * passes — a wide dim halo, then a narrow near-white core over it.
+     * The params are untouched on purpose: Bolts, Intensity and Colour still mean what they meant, so
+     * an existing project keeps its settings and just looks better. */
+    lightning: function (d, W, H, p, t) {
+      let n = FM.evalProp(p.count, t); if (n == null) n = 3;
+      n = Math.max(1, Math.min(8, Math.round(n)));
+      let intensity = FM.evalProp(p.intensity, t); if (intensity == null) intensity = 0.8;
+      intensity = Math.max(0, Math.min(1, intensity));
+      if (intensity <= 0) return;
+      const col = hexToRGB(p.color) || [150, 200, 255];
+      // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
+      // blown out; the tint lives in the glow around it, which is what this keeps.
+      const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      const phase = Math.floor(t * 8);   // 8 flickers/sec, quantised so a frame's bolt holds still
+
+      /* Hashed, not random. Same integer mix the noise effect uses. */
+      const rnd = (a, b) => {
+        let h = (a * 374761393 + b * 668265263) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        return ((h >>> 0) % 100000) / 100000;
+      };
+
+      const unit = Math.max(1, Math.min(W, H));
+      const stamp = (cx, cy, rad, amp, rgb) => {
+        if (rad < 0.4 || amp <= 0.004) return;
+        const r = Math.ceil(rad);
+        const x0 = Math.max(0, (cx - r) | 0), x1 = Math.min(W - 1, Math.ceil(cx + r));
+        const y0 = Math.max(0, (cy - r) | 0), y1 = Math.min(H - 1, Math.ceil(cy + r));
+        const inv = 1 / (rad * rad);
+        for (let y = y0; y <= y1; y++) {
+          const dy = y - cy;
+          for (let x = x0; x <= x1; x++) {
+            const dx = x - cx;
+            const q = (dx * dx + dy * dy) * inv;
+            if (q > 1) continue;
+            const g = (1 - q) * (1 - q) * amp;      // smooth to zero at the rim, no hard disc edge
+            if (g <= 0.004) continue;
+            const i = (y * W + x) * 4;
+            d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
+            d[i + 1] = 255 - (255 - d[i + 1]) * (1 - rgb[1] / 255 * g);
+            d[i + 2] = 255 - (255 - d[i + 2]) * (1 - rgb[2] / 255 * g);
+            if (d[i + 3] < 255) d[i + 3] = Math.min(255, d[i + 3] + g * 255);
+          }
+        }
+      };
+
+      // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
+      // is what makes a fork read as dying out rather than as being cut off.
+      const draw = (pts, wScale, aScale) => {
+        for (let s = 1; s < pts.length; s++) {
+          const a = pts[s - 1], b = pts[s];
+          const seg = Math.max(1, Math.hypot(b[0] - a[0], b[1] - a[1]));
+          const steps = Math.max(1, Math.ceil(seg / 1.4));
+          for (let k = 0; k <= steps; k++) {
+            const f = (s - 1 + k / steps) / (pts.length - 1);
+            const taper = 1 - f * 0.75;
+            const x = a[0] + (b[0] - a[0]) * (k / steps);
+            const y = a[1] + (b[1] - a[1]) * (k / steps);
+            stamp(x, y, unit * 0.016 * wScale * taper, 0.16 * intensity * aScale * taper, col);
+            stamp(x, y, unit * 0.0035 * wScale * taper + 0.6, 0.95 * intensity * aScale * taper, core);
+          }
+        }
+      };
+
+      for (let b = 0; b < n; b++) {
+        const seed = (b * 131 + phase * 977) | 0;
+        const startX = (0.12 + 0.76 * rnd(seed, 1)) * W;
+        const lean = (rnd(seed, 2) - 0.5) * W * 0.4;
+        const SEGS = 20;
+        const main = [];
+        for (let s = 0; s <= SEGS; s++) {
+          const f = s / SEGS;
+          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * W * 0.1, H * f]);
+        }
+        draw(main, 1, 1);
+
+        /* FORKS. Two to four per bolt, leaving the channel partway down, running shorter and at a
+           steeper angle, and drawn at under half the width — the taper in `draw` finishes them off. */
+        const forks = 2 + ((rnd(seed, 3) * 3) | 0);
+        for (let k = 0; k < forks; k++) {
+          const at = 2 + ((rnd(seed, 40 + k) * (SEGS - 5)) | 0);
+          const dir = rnd(seed, 60 + k) < 0.5 ? -1 : 1;
+          const len = 3 + ((rnd(seed, 80 + k) * 5) | 0);
+          const fp = [main[at]];
+          for (let s = 1; s <= len; s++) {
+            const prev = fp[s - 1];
+            fp.push([prev[0] + dir * W * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05),
+                     prev[1] + (H / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
+          }
+          draw(fp, 0.45, 0.6);
+        }
+      }
+    },
     // ---- batch 21 ----
     faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
       // ONE slider drove the black lift, the contrast crush, the desaturation AND the warm cast at

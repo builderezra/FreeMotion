@@ -27226,4 +27226,82 @@
     }
   });
 
+
+  /* ================= queue 320: the Lightning rework ==============================================
+   * *"The lightning effect looks pretty bad, give it a work over"*.
+   *
+   * "LOOKS BAD" IS NOT TESTABLE; WHAT IT WAS MISSING IS. The old bolt was fourteen straight segments
+   * displaced by two sine waves, drawn at ONE width with ONE falloff, so it had no forks, no taper and
+   * no bright core inside a wider glow — and those three absences are what made it read as a zigzag
+   * line rather than as lightning. Each is a number the render either produces or does not, and each
+   * of them the old implementation would fail by construction. Determinism is checked too, because
+   * this runs in the exporter as well as the preview and a bolt that differs between them is a flicker
+   * nobody can fix. */
+  test('a lightning bolt forks, tapers, has a bright core, and is the same every render (queue 320)', { item: 'lightning' }, function () {
+    const T = FM._FX_TABLES || {};
+    const fn = T.PIXEL_FX && T.PIXEL_FX.lightning;
+    if (!fn) throw new Error('the lightning renderer is not reachable');
+    const W = 200, H = 260, COUNT = 1;
+    const render = (t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = 8; d[i + 1] = 10; d[i + 2] = 16; d[i + 3] = 255; }
+      fn(d, W, H, { count: COUNT, intensity: 0.9, color: '#96c8ff' }, t);
+      return d;
+    };
+    const d = render(0.3);
+    const lit = (x, y) => d[(y * W + x) * 4 + 2] > 60;
+
+    // It drew SOMETHING, or every measurement below is of an empty frame.
+    let total = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (lit(x, y)) total++;
+    if (total < 200) throw new Error('only ' + total + ' pixels lit — the bolt barely rendered, so nothing below means anything');
+
+    /* 1. FORKS. Count separate lit runs across each row. One bolt with no branches can only ever give
+       one run per row, which is exactly what the old implementation did. */
+    let maxRuns = 0;
+    for (let y = 0; y < H; y++) {
+      let runs = 0, wasLit = false;
+      for (let x = 0; x < W; x++) { const on = lit(x, y); if (on && !wasLit) runs++; wasLit = on; }
+      if (runs > maxRuns) maxRuns = runs;
+    }
+    if (maxRuns <= COUNT) throw new Error('a single bolt never puts more than ' + maxRuns + ' separate strand(s) across a row — it has no forks, which is most of why it read as a zigzag line');
+
+    /* 2. TAPER. Average lit width near the top against near the bottom. A constant-width stroke —
+       what was there — gives the same number twice. */
+    const bandWidth = (y0, y1) => {
+      let n = 0, rows = 0;
+      for (let y = y0; y < y1; y++) { let c = 0; for (let x = 0; x < W; x++) if (lit(x, y)) c++; if (c) { n += c; rows++; } }
+      return rows ? n / rows : 0;
+    };
+    const top = bandWidth(Math.round(H * 0.05), Math.round(H * 0.25));
+    const bottom = bandWidth(Math.round(H * 0.75), Math.round(H * 0.95));
+    if (!(top > 0 && bottom > 0)) throw new Error('the bolt does not span the frame (top ' + top.toFixed(1) + ', bottom ' + bottom.toFixed(1) + ')');
+    if (!(top > bottom * 1.15)) throw new Error('the bolt is ' + top.toFixed(1) + 'px wide near the top and ' + bottom.toFixed(1) + 'px near the bottom — it does not taper, so nothing dies out');
+
+    /* 3. A BRIGHT CORE INSIDE A WIDER GLOW. The brightest pixels have to be far above the average lit
+       one; a single narrow falloff drawn in the layer colour cannot reach near-white. */
+    let peak = 0, sum = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = (d[i] + d[i + 1] + d[i + 2]) / 3;
+      if (d[i + 2] > 60) { sum += v; n++; if (v > peak) peak = v; }
+    }
+    const mean = n ? sum / n : 0;
+    if (peak < 230) throw new Error('the brightest pixel in the bolt is ' + Math.round(peak) + ' — there is no blown-out core, only a tinted stroke');
+    if (!(peak > mean * 1.5)) throw new Error('peak ' + Math.round(peak) + ' against a mean of ' + Math.round(mean) + ' — the bolt is one flat brightness rather than a core inside a glow');
+
+    /* 4. DETERMINISTIC. It renders in the exporter too; Math.random here would make an export flicker
+       differently from the preview, which is unfixable from the outside. */
+    const again = render(0.3);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] !== again[i] || d[i + 1] !== again[i + 1] || d[i + 2] !== again[i + 2]) {
+        throw new Error('two renders of the same frame differ at pixel ' + (i >> 2) + ' — the bolt is not deterministic, so an export would not match the preview');
+      }
+    }
+    // …and it does change over time, or it is a static scribble rather than lightning.
+    const later = render(1.9);
+    let diff = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 2] !== later[i + 2]) diff++;
+    if (diff < 100) throw new Error('the bolt is identical half a second later — it does not flicker at all');
+  });
+
 })();

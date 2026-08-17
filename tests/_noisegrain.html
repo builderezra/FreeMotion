@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><base href="../"><title>#319 — square vs round grain, and the tile</title>
+<html><head><meta charset="utf-8"><base href="../"><title>#319 / #320 — grain shapes, and the reworked bolt</title>
 <style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
 iframe{border:0;display:block;width:1000px;height:600px}
 #zoom{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
@@ -44,6 +44,27 @@ iframe{border:0;display:block;width:1000px;height:600px}
         zoom.appendChild(fig);
         lines.push(m[1] + ': ' + moved + ' of ' + (W * H) + ' pixels touched (' + Math.round(moved / (W * H) * 100) + '%)');
       });
+      /* #320 — the reworked bolt, at a size you can judge it at. A still frame is the right test here:
+         the complaint is what it LOOKS like, and the flicker is quantised to 8/sec so any one frame is
+         a whole bolt rather than a smear. */
+      (function () {
+        var bw = 260, bh = 300;
+        var img2 = new w.ImageData(bw, bh);
+        for (var i = 0; i < img2.data.length; i += 4) { img2.data[i] = 8; img2.data[i+1] = 10; img2.data[i+2] = 16; img2.data[i+3] = 255; }
+        var lf = FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.lightning;
+        if (!lf) { lines.push('no lightning renderer'); return; }
+        lf(img2.data, bw, bh, { count: 2, intensity: 0.9, color: '#96c8ff' }, 0.3);
+        var lit = 0;
+        for (var k2 = 0; k2 < img2.data.length; k2 += 4) if (img2.data[k2+2] > 40) lit++;
+        var cv2 = d.createElement('canvas'); cv2.width = bw; cv2.height = bh;
+        cv2.style.width = bw + 'px'; cv2.style.height = bh + 'px';
+        cv2.getContext('2d').putImageData(img2, 0, 0);
+        var f3 = d.createElement('figure'); f3.appendChild(cv2);
+        f3.appendChild(d.createElement('figcaption')).textContent = 'Lightning, 2 bolts';
+        zoom.appendChild(f3);
+        lines.push('lightning: ' + lit + ' pixels lit of ' + (bw * bh));
+      })();
+
       // …and the real browser tile, at the size it is actually used.
       var tile = d.createElement('canvas');
       tile.style.width = '77px'; tile.style.height = '77px';
