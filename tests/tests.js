@@ -25730,5 +25730,67 @@
     }
   });
 
+  /* A whip pan never smeared. Measured when the entry was written: with a camera moving, the output was
+     BYTE-IDENTICAL with motion blur on — because layers do not render through the camera. Every layer is
+     drawn into one plate and the camera transform is applied to that whole plate at composite time, so a
+     layer's own matrix never moves when the camera does, and the per-layer blur (which re-projects a
+     layer through the change in ITS matrix) has nothing to see. Fixed at the composite, where it is also
+     far cheaper: one plate blitted N times, whatever the layer count. */
+  /* The camera brings the scene point at (camX, camY) to the middle of the frame, so the subject has to
+     sit where the camera will be LOOKING at the moment being measured — the first version of this put
+     the shape at the frame centre and swept the camera a thousand pixels away from it, photographing
+     empty background and reporting no smear against no smear. */
+  function camScene(camX) {
+    var cam = FM.makeLayer('camera', { name: 'Cam' });
+    cam.start = 0; cam.duration = 5;
+    cam.transform.x = camX; cam.transform.y = 120;
+    var sh = FM.makeLayer('shape', { shape: 'rect', x: 300, y: 120, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+    sh.start = 0; sh.duration = 5;
+    return { cam: cam, scene: scene([cam, sh], { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' } }) };
+  }
+  function softCount(cv) {
+    var d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, n = 0;
+    for (var i = 0; i < d.length; i += 4) { var v = d[i]; if (v > 12 && v < 243) n++; }   // partially-lit = smear
+    return n;
+  }
+
+  test('camera movement smears the whole scene, and a still camera is untouched', { item: 'cam-blur' }, function () {
+    if (!FM._camBlurSlices) throw new Error('FM._camBlurSlices is not exposed');
+
+    // A MOVING camera: x sweeps fast enough that half a shutter is tens of pixels.
+    var moving = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 600, e: 'linear' }] };   // 600px/s: ~10px of travel across a 180-degree shutter at 30fps
+    var offC = offscreen(320, 240), onC = offscreen(320, 240);
+    var a = camScene(moving); a.cam.motionBlur = { enabled: false, shutter: 0.5, samples: 12 };
+    FM.renderScene(offC.getContext('2d'), a.scene, 0.5);
+    var b = camScene(moving); b.cam.motionBlur = { enabled: true, shutter: 0.5, samples: 12 };
+    FM.renderScene(onC.getContext('2d'), b.scene, 0.5);
+
+    var softOff = softCount(offC), softOn = softCount(onC);
+    if (!(softOn > softOff * 2 + 40))
+      throw new Error('a moving camera produced ' + softOn + ' soft pixels against ' + softOff + ' with blur off — the pan is still not smearing, which is the whole of this finding');
+
+    // A STILL camera must be byte-identical to blur-off, or it would not be safe to leave on.
+    var stillOff = offscreen(320, 240), stillOn = offscreen(320, 240);
+    var c = camScene(300); c.cam.motionBlur = { enabled: false, shutter: 0.5, samples: 12 };
+    FM.renderScene(stillOff.getContext('2d'), c.scene, 0.5);
+    var d2 = camScene(300); d2.cam.motionBlur = { enabled: true, shutter: 0.5, samples: 12 };
+    FM.renderScene(stillOn.getContext('2d'), d2.scene, 0.5);
+    var p1 = stillOff.getContext('2d').getImageData(0, 0, 320, 240).data;
+    var p2 = stillOn.getContext('2d').getImageData(0, 0, 320, 240).data;
+    var diff = 0;
+    for (var i = 0; i < p1.length; i++) if (p1[i] !== p2[i]) diff++;
+    if (diff) throw new Error(diff + ' bytes differ on a STILL camera with blur on — switching it on must cost nothing and change nothing until the camera moves');
+
+    // The slice chooser must decline both of the cases that would waste work.
+    var stillCam = camScene(300).cam; stillCam.motionBlur = { enabled: true, shutter: 0.5, samples: 12 };
+    var fakeCtx = offscreen(320, 240).getContext('2d');
+    var camAt = function () { return { zoom: 1, x: 300, y: 120, rot: 0 }; };
+    if (FM._camBlurSlices(stillCam, 0.5, camScene(300).scene, fakeCtx, camAt) !== null)
+      throw new Error('a camera that is not moving still asked for slices');
+    var offCam = camScene(moving).cam; offCam.motionBlur = { enabled: false, shutter: 0.5, samples: 12 };
+    if (FM._camBlurSlices(offCam, 0.5, camScene(moving).scene, fakeCtx, camAt) !== null)
+      throw new Error('slices were produced with motion blur switched off');
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

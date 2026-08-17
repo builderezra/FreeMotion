@@ -11161,6 +11161,43 @@ window.FM = window.FM || {};
     drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
   }
 
+  /* The camera transforms to blit the plate under, or null for "just draw it once".
+   *
+   * Returns null whenever the result would be the sharp frame anyway — switched off, or the camera has
+   * not moved enough to see. That keeps blur-on byte-identical to blur-off on a still camera, which is
+   * the same bargain drawMotionBlur makes and the reason it is safe to leave on.
+   * "Enough to see" is measured in DEVICE pixels at the corner of the frame, so it accounts for a
+   * ZOOM or a ROTATION as well as a pan — a dolly that moves no pixel at the centre still smears at the
+   * edges, and a threshold on x/y alone would miss both. */
+  function camBlurSlices(cam, t, scene, ctx, camAt) {
+    const mb = cam && cam.motionBlur;
+    if (!mb || !mb.enabled) return null;
+    const P = (scene && scene.project) || null; if (!P) return null;
+    const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
+    const fps = P.fps || 30;
+    const dt = Math.max(0, Math.min(1, _num(mb.shutter, 0.5))) / fps;
+    if (!(dt > 0)) return null;
+    const maxN = Math.max(2, Math.min(32, Math.round(_num(mb.samples, 8))));
+    const a = camAt(t - dt / 2), b = camAt(t + dt / 2);
+    // Where a frame CORNER lands under each end of the shutter — the honest measure of visible travel.
+    const corner = (k, px, py) => {
+      const dx = px - k.x, dy = py - k.y, c = Math.cos(k.rot), s = Math.sin(k.rot);
+      return { x: P.width / 2 + k.zoom * (dx * c - dy * s), y: P.height / 2 + k.zoom * (dx * s + dy * c) };
+    };
+    let travel = 0;
+    [[0, 0], [P.width, 0], [0, P.height], [P.width, P.height]].forEach(pt => {
+      const p1 = corner(a, pt[0], pt[1]), p2 = corner(b, pt[0], pt[1]);
+      travel = Math.max(travel, Math.hypot(p2.x - p1.x, p2.y - p1.y));
+    });
+    const ps = plateScale(ctx);
+    if (travel * ps < 0.75) return null;                      // nothing anyone could see
+    const N = Math.max(2, Math.min(maxN, Math.ceil(travel * ps / 1.5)));   // ~1.5 device px per slice keeps the trail continuous
+    const out = [];
+    for (let i = 0; i < N; i++) out.push(camAt(t - dt / 2 + (dt * i) / (N - 1)));
+    return out;
+  }
+  FM._camBlurSlices = camBlurSlices;   // suite seam
+
   FM.renderScene = function (ctx, scene, t) {
     const P = scene.project;
     // Supersample factor for THIS target: how many canvas pixels exist per project pixel. Export and
@@ -11328,22 +11365,51 @@ window.FM = window.FM || {};
     _camParallax = null;   // parallax is scoped to the layer loop above only
     _camLens = null;
     if (cam) {
-      const cx = P.width / 2, cy = P.height / 2, tr = cam.transform;
-      // Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
-      // off the shake): camera behaviors = whole-scene shake/drift with one tap.
-      const bv2 = FM.behaviorValue;
-      const zoom = Math.max(1e-3, (bv2 ? bv2(cam, 'scale', FM.evalProp(tr.scale, t) || 1, t) : (FM.evalProp(tr.scale, t) || 1)));   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
-      const camX = bv2 ? bv2(cam, 'x', FM.evalProp(tr.x, t), t) : FM.evalProp(tr.x, t);
-      const camY = bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, t), t) : FM.evalProp(tr.y, t);
-      const rot = ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, t) || 0, t) : (FM.evalProp(tr.rotation, t) || 0))) * Math.PI / 180;
+      const cx = P.width / 2, cy = P.height / 2;
+      /* Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
+         off the shake): camera behaviors = whole-scene shake/drift with one tap. */
+      const camAt = (tt) => {
+        const tr = cam.transform, bv2 = FM.behaviorValue;
+        return {
+          zoom: Math.max(1e-3, (bv2 ? bv2(cam, 'scale', FM.evalProp(tr.scale, tt) || 1, tt) : (FM.evalProp(tr.scale, tt) || 1))),   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
+          x: bv2 ? bv2(cam, 'x', FM.evalProp(tr.x, tt), tt) : FM.evalProp(tr.x, tt),
+          y: bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, tt), tt) : FM.evalProp(tr.y, tt),
+          rot: ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, tt) || 0, tt) : (FM.evalProp(tr.rotation, tt) || 0))) * Math.PI / 180,
+        };
+      };
+      const putCam = (k) => { ctx.translate(cx, cy); ctx.scale(k.zoom, k.zoom); ctx.rotate(k.rot); ctx.translate(-k.x, -k.y); };
       ctx.save();
       baseT(ctx);
       ctx.clearRect(0, 0, P.width, P.height);
       if (sceneBg(P)) { ctx.fillStyle = sceneBg(P); ctx.fillRect(0, 0, P.width, P.height); }
-      ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.rotate(rot); ctx.translate(-camX, -camY);
-      // The plate is in its own device pixels now, so it is blitted back at PROJECT size — the
-      // surrounding baseT + camera transform then map that to the screen exactly as before.
-      ctx.drawImage(_camCv, 0, 0, P.width, P.height);   // camX,camY (scene point) lands at screen centre, scaled by zoom
+      /* CAMERA MOTION BLUR, AND IT BELONGS EXACTLY HERE (queue 31b).
+       *
+       * A whip pan never smeared, and the measurement said why: layers do not render THROUGH the
+       * camera. Every layer is drawn into one camera-space plate and the camera's transform is applied
+       * once, to that whole plate, right here — so a layer's own matrix never moves when the camera
+       * does, and the per-layer blur, which re-projects a layer through the change in ITS matrix,
+       * has nothing to see. Doing it per layer would also double-count: the layer would be
+       * re-projected by the camera delta and then this composite would apply the camera again on top.
+       *
+       * At the composite it is both correct and cheap: ONE plate, blitted N times under the camera
+       * transform sampled across the shutter, whatever the layer count — instead of N passes per layer.
+       * The plate's CONTENT is the frame at t, which is the same re-projection bargain the per-layer
+       * blur makes: this smears camera movement, not movement inside the picture.
+       * Shutter and sample conventions are drawMotionBlur's, deliberately, so the number means the
+       * same thing in both places. */
+      const slices = camBlurSlices(cam, t, scene, ctx, camAt);
+      if (slices) {
+        ctx.globalAlpha = 1 / slices.length;
+        for (let i = 0; i < slices.length; i++) {
+          ctx.save(); putCam(slices[i]); ctx.drawImage(_camCv, 0, 0, P.width, P.height); ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        putCam(camAt(t));
+        // The plate is in its own device pixels now, so it is blitted back at PROJECT size — the
+        // surrounding baseT + camera transform then map that to the screen exactly as before.
+        ctx.drawImage(_camCv, 0, 0, P.width, P.height);   // camX,camY (scene point) lands at screen centre, scaled by zoom
+      }
       ctx.restore();
     }
   };

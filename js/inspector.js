@@ -3794,6 +3794,12 @@ window.FM = window.FM || {};
     { key: 'view',  label: 'Camera View', icon: 'M3 8.5 8.5 4v3H14a6 6 0 0 1 0 12H9M3 8.5 8.5 13v-3' },
     { key: 'focus', label: 'Focus Blur',  icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9' },
     { key: 'fog',   label: 'Fog',         icon: 'M4 16h16M6 19h12M7 13h10a5 5 0 0 0-10 0' },
+    /* Motion blur is the CAMERA's, not a layer's (queue 31b). Layers do not render through the camera —
+       they are drawn into one plate and the camera transform is applied to that whole plate — so a
+       per-layer blur cannot see a pan, and putting the switch on a layer would be a switch that does
+       nothing. It is also how every real editor has it, and it is the answer to "why doesn't my whip
+       pan smear". */
+    { key: 'blur',  label: 'Motion Blur',  icon: 'M4 8h16M4 12h11M4 16h16M18 12h2' },
   ];
   // The lens the compositor has always used is f = 2 × project height, which through the ordinary
   // pinhole relation is 28.07° — so that is what Field of view reads on a camera nobody has touched,
@@ -3813,6 +3819,19 @@ window.FM = window.FM || {};
     });
     body.appendChild(rail);
     body.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    if (tab === 'blur') {
+      if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
+      const mb = layer.motionBlur;
+      body.appendChild(checkRow('Motion blur', !!mb.enabled, v => { mb.enabled = !!v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
+      if (mb.enabled) {
+        body.appendChild(rangeRow('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
+          v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); }, 0, 1, 0.01));
+        body.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
+          v => { mb.samples = Math.max(2, Math.min(32, Math.round(v))); FM.requestRender(); }, 2, 32, 1));
+      }
+      body.appendChild(el('div', 'insp-hint', 'Smears the whole scene when the CAMERA moves — a pan, a dolly or a spin. It costs nothing while the camera is still, and nothing at all when it has not moved far enough to see, so it is safe to leave on. Shutter is how long the shutter stays open: 0.5 is the 180° shutter film uses. Samples is how many slices are averaged — more is smoother and slower. This does not smear movement INSIDE the picture: a layer\u2019s own keyframes are Motion Blur (Object), and movement made by an effect is Motion Blur (Footage).'));
+      return;
+    }
     if (tab === 'view') {
       body.appendChild(rangeRow('Field of view', () => (layer.fov != null ? FM.evalProp(layer.fov, FM.time) : camLegacyFov(P)),
         v => { layer.fov = Math.max(5, Math.min(160, v)); FM.requestRender(); }, 5, 160, 0.5));

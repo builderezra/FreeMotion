@@ -3723,7 +3723,7 @@ better still, keep working inside the turn rather than parking work for a later 
       it, a layer with nothing on screen falls back, and rendering a preview never mutates the layer
       document. All green.
       Left as a tick rather than deleted, because the history is half the point of this file.
-- [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
+- [x] **31b — Transform blur can't smear effect- or camera-driven motion. BOTH HALVES DONE — effects v7.50, camera v9.42.**
       **MEASURED 2026-08-14 (`tests/_mbsources.html`) — confirmed exactly as written, and the cause is
       structural rather than a bug.** One 40×40 shape, shutter 0.9, 24 samples, one frame:
       | motion source | layer matrix moves? | smear |
@@ -3774,8 +3774,18 @@ better still, keep working inside the turn rather than parking work for a later 
         *(My first measurement said Footage smears nothing at all — wrong, because it is TEMPORAL and I
         rendered one frame in isolation, giving it no previous frame to compare against. The run-up is
         part of the instrument now, in the test.)*
-        **Still open on 31b: only the CAMERA half**, which needs your call — camera blur belongs at the
-        composite level and means the camera getting its own motion-blur toggle.
+        **THE CAMERA HALF IS BUILT, v9.42** — and exactly where the reading said it belonged, at the
+        COMPOSITE rather than per layer. The camera plate is blitted N times under the camera transform
+        sampled across the shutter, so one pass smears the whole scene whatever the layer count, and
+        there is no double-counting. The camera has its own Motion Blur tab (toggle + Shutter + Samples),
+        because it is a property of the camera and not of a layer — which is also how every real editor
+        has it. Conventions are drawMotionBlur's, so Shutter means the same number in both places.
+        **A still camera is byte-identical to blur-off**, asserted, so it is safe to leave on; it also
+        declines when the camera has moved less than a device pixel. Travel is measured at the frame
+        CORNERS, so a zoom or a spin counts, not just a pan.
+        **For Ezra to test:** add a Camera, keyframe a fast pan, Camera Options → the new Motion Blur
+        tab. Verified at 380px — a pan comes out soft on the leading and trailing edges and sharp
+        across the direction of travel.
 
 ### Work that exists but isn't landed
 - [x] **Every other recovered diff is now landed.** Checked at v6.42, and the answer is that the
@@ -3893,13 +3903,26 @@ better still, keep working inside the turn rather than parking work for a later 
       Turn up Highlight bloom and a specular survives as a bright disc, in a Circle, Hexagon,
       Pentagon or Square aperture. The plan's proposed 64-tap quality maximum was cut to 32 because
       it measured 1.2 seconds a frame. Old projects are untouched, and that is now a suite test.
-- [ ] **Clear the rest of the BUG-HUNT backlog** (~59 items).
+- [x] **Clear the rest of the BUG-HUNT backlog — EMPTY as of v9.41.** Every open finding in that file is now struck. It stood at 21 when this session started.
       *Progress 16 Aug:* four struck off — the two media-leak findings (v8.44 + v8.46) and the
       library-misfiling one (v8.47) and the crop-animation data loss (v8.48). Worth knowing before picking more off it: the file's own warning
       is to re-check the code rather than trust its line numbers, and that cuts both ways. The two
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      **★ THE BACKLOG IS EMPTY, v9.41.** The last stretch cleared: the preview corrupting a frame-cache
+      build (28 of 30 frames measured wrong), Sample clip being dead on Safari/iOS, Play restarting a
+      clip's audio in its overhang, the crop-easing latch, karaoke's double instrumental, presets losing
+      a looping animation, and Replace media pinning the file it replaced.
+      **Two things worth keeping from how it ended.** An adversarial re-sweep — every remaining finding
+      read against the live code by one agent, then handed to a second whose only job was to refute the
+      verdict — came back **0 stale, 6 confirmed, 1 disputed**, which is the opposite of what I expected
+      and means the file was honest. It also **re-opened a finding that had been closed by mistake**:
+      "Sample clip is dead on Safari/iOS" had been marked NOT REPRODUCIBLE after being tested in Chrome
+      headless, the one browser where a Safari-only bug cannot fire — on the platform Ezra actually uses.
+      And the one entry the two agents disagreed about turned out to be the skeptic's: the guard existed
+      on one of two paths. Being unable to refute a verdict is the only thing that makes it worth having.
+
       *Progress 17 Aug:* a **twenty-first** struck off — **undo inside the mask editor being thrown
       away the moment you touched a point (v9.25)**. Edit a mask path, press undo, drag any point, and
       the whole pre-undo shape went back in and was committed — your step back gone, with nothing said.
