@@ -251,10 +251,15 @@ window.FM = window.FM || {};
   // a 0×0 layer has no picture, so FM.fxModeToggle greys the visual half and this stays put.
   function modeToggle() {
     if (!FM.fxModeToggle || !_layer) return null;
-    return FM.fxModeToggle(_layer, 'audio', () => {
+    /* Same fix as the visual browser's (queue 317), and it had the same defect for the same reason:
+       no key, so pressing FILTERS from here opened the visual effects grid. Two overlays written
+       against a two-state toggle, both left behind when the third state arrived. */
+    return FM.fxModeToggle(_layer, 'audio', (key) => {
       const layer = _layer;
+      if (key === 'audio') return;
       FM.audioFxBrowser.close();
-      if (FM.fxBrowser) FM.fxBrowser.open(layer);
+      if (key === 'visual') { if (FM.fxBrowser) FM.fxBrowser.open(layer); return; }
+      if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab(key);
     });
   }
 

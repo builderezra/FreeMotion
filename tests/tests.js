@@ -27048,4 +27048,78 @@
     });
   });
 
+
+  /* ================= queue 317: Filters is not Audio ==============================================
+   * *"When you're in the add effect menu and press filters it thinks you pressed audio effects and
+   * then boots you out with a pop up, fix it"*.
+   *
+   * He described the callback exactly. Both full-screen browsers took NO argument from the toggle, so
+   * any tab that was not the current one did the one thing the callback knew how to do — and the popup
+   * was the audio browser explaining that the layer has no audio track. Written when the toggle had two
+   * states; Filters became the third at queue 113 and neither overlay was revisited.
+   *
+   * BOTH DIRECTIONS ARE DRIVEN, because the two overlays are separate copies of the same shape and
+   * fixing the one he happened to be looking at is how this survived the first time. */
+  test('Filters opens filters, from either full-screen browser (queue 317)', { item: 'fx-filters-tab' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const media0 = [];
+    try {
+      // A layer with NO audio: the popup he saw only fires on one of these, so it is the honest case.
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+
+      const pill = (root, re) => {
+        const w = [].slice.call(root.querySelectorAll('.fxmode')).filter(x => x.getClientRects().length)[0];
+        if (!w) throw new Error('no Visual/Filters/Audio toggle in the browser');
+        const b = [].slice.call(w.querySelectorAll('.fxmode-btn')).filter(x => re.test((x.textContent || '').trim()))[0];
+        if (!b) throw new Error('no pill matching ' + re);
+        return b;
+      };
+
+      // ---- from the VISUAL browser ----
+      FM.fxBrowser.open(L);
+      await sleep(300);
+      const vRoot = document.getElementById('fx-browser');
+      if (vRoot.classList.contains('hidden')) throw new Error('the visual browser did not open');
+      pill(vRoot, /^Filters$/).click();
+      await sleep(300);
+      if (!document.getElementById('afx-browser').classList.contains('hidden')) throw new Error('pressing Filters opened the AUDIO browser — "it thinks you pressed audio effects"');
+      if (!vRoot.classList.contains('hidden')) throw new Error('pressing Filters left the visual browser open, so nothing happened at all');
+      const inspTab = document.querySelector('#inspector .fxmode .fxmode-btn.on');
+      if (!inspTab || !/^Filters$/.test((inspTab.textContent || '').trim())) throw new Error('after pressing Filters the app is not showing the Filters side — it shows "' + (inspTab ? inspTab.textContent.trim() : 'nothing') + '"');
+      if (!document.querySelector('#inspector .flt-row, #inspector .flt-tile')) throw new Error('the Filters view rendered none of its content');
+
+      // ---- and from the AUDIO browser, which is a separate copy of the same shape ----
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(140);
+      const vid = FM.makeLayer('video', { name: 'q317 clip', duration: 5 });
+      FM.scene.layers.push(vid); media0.push(vid.id);
+      FM.media.set(vid.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+      FM.selectLayer(vid.id); FM.refreshAll(); await sleep(160);
+      FM.audioFxBrowser.open(vid);
+      await sleep(300);
+      const aRoot = document.getElementById('afx-browser');
+      if (aRoot.classList.contains('hidden')) throw new Error('the audio browser did not open');
+      pill(aRoot, /^Filters$/).click();
+      await sleep(300);
+      if (!document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('from the audio browser, Filters opened the VISUAL effects grid — the same missing-key bug, the other way round');
+      if (!aRoot.classList.contains('hidden')) throw new Error('pressing Filters left the audio browser open');
+      const t2 = document.querySelector('#inspector .fxmode .fxmode-btn.on');
+      if (!t2 || !/^Filters$/.test((t2.textContent || '').trim())) throw new Error('from the audio browser, Filters did not land on the Filters side');
+
+      // …and Visual/Audio still do what they always did — the fix must not have swapped one bug for another.
+      FM.fxBrowser.open(vid); await sleep(280);
+      pill(document.getElementById('fx-browser'), /^Audio$/).click();
+      await sleep(280);
+      if (document.getElementById('afx-browser').classList.contains('hidden')) throw new Error('Audio no longer opens the audio browser');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      media0.forEach(id => FM.media.remove(id));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();

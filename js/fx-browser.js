@@ -1077,10 +1077,21 @@ window.FM = window.FM || {};
    * what it says when you tap it — is written once, in inspector.js, for all three places it appears. */
   function modeToggle() {
     if (!FM.fxModeToggle || !_layer) return null;
-    const tg = FM.fxModeToggle(_layer, 'visual', () => {
+    /* THE KEY, NOT AN ASSUMPTION (queue 317). Ezra: *"When you're in the add effect menu and press
+       filters it thinks you pressed audio effects and then boots you out with a pop up"*. He is
+       describing this callback exactly: it took no argument, so ANY tab that was not the current one
+       closed the browser and opened the AUDIO one — and the popup was the audio browser explaining
+       that the layer has no audio track. Written when there were only two sides, and never revisited
+       when Filters became the third at queue 113. The inspector's own caller has always passed the key
+       through, which is why this only ever misbehaved in the full-screen browser. */
+    const tg = FM.fxModeToggle(_layer, 'visual', (key) => {
       const layer = _layer;
+      if (key === 'visual') return;                 // already here
       FM.fxBrowser.close();
-      if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer);
+      if (key === 'audio') { if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer); return; }
+      // Filters is a list of ready-made looks rather than a grid of tiles, and it lives in the
+      // inspector. Hand it back there instead of keeping a second copy of it in here.
+      if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab(key);
     });
     // The audio answer may not be known yet (it means decoding the file). The toggle rendered
     // optimistically; if the probe comes back "no track", re-render so the side greys out.

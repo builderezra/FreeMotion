@@ -5799,7 +5799,17 @@ better still, keep working inside the turn rather than parking work for a later 
       That is now asserted, and mutation-checked by putting the old key back. (17 Aug.) His words, verbatim: *"Rename
       vector drawing to custom shape"*. Same sweep as 314 — every label, not just the first.
 
-- [ ] **317 — In Add Effect, tapping Filters acts like Audio and throws you out with a popup.**
+- [x] **317 — In Add Effect, tapping Filters acts like Audio and throws you out with a popup.**
+      ✅ **v9.63.** The diagnosis below was right: the callback took no argument, so any tab that
+      was not the current one did the one thing it knew how to do, and the popup was the audio
+      browser saying the layer has no audio track.
+      **BOTH browsers had it, in both directions** — from the audio one, Filters opened the visual
+      grid. They are separate copies of the same shape, so fixing only the one you were looking at
+      is exactly how this would come back; the test drives both. Filters lands in the inspector
+      rather than a third copy being built inside the browsers, because it is a list of
+      ready-made looks and it already lives there.
+      (The first version of the fix set the tab and then called the thing that resets it — correct
+      for one line. The test caught it, not me reading the code.)
       (17 Aug.) His words, verbatim: *"When you're in the add effect menu and press filters it thinks
       you pressed audio effects and then boots you out with a pop up, fix it"*.
       **DIAGNOSED — and it is NOT my featuring work.** `FM.fxModeToggle` (inspector.js:2214) is correct:

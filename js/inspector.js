@@ -4625,6 +4625,20 @@ window.FM = window.FM || {};
    * section joined them.
    * Returns the section key, so the caller can also decide what to draw INSTEAD — not just a bool. */
   FM.inspector = {
+    /* Open the Effects card on a particular side (queue 317). The full-screen browsers own two of the
+       three sides and have nowhere to put the third — Filters is a list of ready-made looks, not a grid
+       of effect tiles — so they hand it back here rather than each growing their own copy of it.
+       IT LIVES INSIDE THIS OBJECT rather than being assigned next to FM.fxModeToggle further up, which
+       is where it was first written: that is ~2300 lines before `FM.inspector` exists, so it threw on
+       load. A parse check does not catch that — only running it does. */
+    openFxTab(key) {
+      /* DELEGATES rather than setting fxTab itself, and the first version did not — it wrote
+         `fxTab = 'filters'` and then called openCategory('effects'), which sets `fxTab = 'visual'` on
+         its way past. The tab was correct for about a line. openCategory has carried the right mapping
+         all along ('filters' and 'audiofx' both land on the Effects card with the matching side up), so
+         this is a translation from the toggle's vocabulary to that one and nothing else. */
+      this.openCategory(key === 'audio' ? 'audiofx' : key === 'filters' ? 'filters' : 'effects');
+    },
     ownsCanvas() {
       if (view === 'transform') return 'transform';
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) return 'points';
