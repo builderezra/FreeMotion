@@ -25391,5 +25391,80 @@
     }
   });
 
+  /* "Sample clip" was dead on Safari/iOS — which is the device Ezra actually uses. The container ladder
+     probed two webm types and then fell through to a THIRD it never probed, and Safari records mp4 and
+     no webm at all, so the constructor threw. It threw after the audio graph was started with no
+     try/finally, stranding a live AudioContext and a running oscillator per tap; iOS allows about four
+     before every audio feature in the app stops until a reload. And it failed silently, because both
+     call sites invoke the async function bare.
+
+     THIS TEST EXISTS BECAUSE THE FINDING WAS ONCE CLOSED AS "NOT REPRODUCIBLE" — a verdict reached in
+     Chrome headless, the one browser where a Safari-only bug cannot fire. The suite runs in Chrome too,
+     so testing the real MediaRecorder here would repeat that mistake exactly. Instead the chooser is a
+     pure function taking the support predicate, so this machine can be ASKED what it would pick on a
+     browser it is not. */
+  test('the sample clip picks a container Safari can actually record', { item: 'sample-mime' }, function () {
+    if (!FM._sampleMime) throw new Error('FM._sampleMime is not exposed — the container choice cannot be tested without a real Safari');
+
+    // SAFARI: mp4 only, no webm at all. This is the case that was broken.
+    var safari = function (t) { return t.indexOf('mp4') >= 0; };
+    var pick = FM._sampleMime(safari);
+    if (!pick) throw new Error('on a browser that records mp4, nothing was chosen at all');
+    if (pick.indexOf('mp4') < 0) throw new Error('chose "' + pick + '" on an mp4-only browser — that is the NotSupportedError that made the button dead on iOS');
+
+    // CHROME: webm preferred, and the best codec string first — no regression there.
+    var chrome = function (t) { return t.indexOf('webm') >= 0; };
+    if (FM._sampleMime(chrome) !== 'video/webm;codecs=vp9,opus') throw new Error('on a webm browser it chose ' + FM._sampleMime(chrome) + ' rather than the best webm codec');
+
+    // NOTHING SUPPORTED → null, meaning "let the browser decide". Naming a type it just rejected is
+    // the actual defect, so this must never invent one.
+    if (FM._sampleMime(function () { return false; }) !== null) throw new Error('with nothing supported it still named a type — that is exactly the throw this fixes');
+
+    // EVERY candidate must be one the ladder actually probes; a value that is never tested is how the
+    // original bug worked.
+    var probed = [];
+    FM._sampleMime(function (t) { probed.push(t); return false; });
+    (FM._sampleMimeCandidates || []).forEach(function (c) {
+      if (probed.indexOf(c) < 0) throw new Error('"' + c + '" is a candidate but is never passed to isTypeSupported — an untested fallback is the original bug');
+    });
+    if (!probed.some(function (t) { return t.indexOf('mp4') >= 0; })) throw new Error('no mp4 candidate is probed at all, so Safari can never be satisfied');
+  });
+
+  test('a sample clip that fails does not strand a live AudioContext', { item: 'sample-mime' }, async function () {
+    /* THE HALF THAT ACTUALLY BREAKS HIS PHONE. The container choice made the button dead; THIS is why
+       tapping it four times killed every sound in the app. The throw happened after the audio graph was
+       started, with no try/finally anywhere, so each tap left an AudioContext running an oscillator —
+       and iOS allows about four before playback, waveforms, audio FX and export mixing all stop until
+       the page is reloaded. Failure is forced here by making the recorder unconstructable, which is
+       exactly what Safari did. */
+    var realMR = window.MediaRecorder, realAC = window.AudioContext, realWAC = window.webkitAudioContext;
+    var made = [], toasted = null, realToast = FM.toast;
+    try {
+      function FakeAC() {
+        var self = this;
+        this.state = 'running'; this.currentTime = 0;
+        made.push(this);
+        this.createMediaStreamDestination = function () { return { stream: { getAudioTracks: function () { return []; } } }; };
+        this.createOscillator = function () { return { type: '', frequency: { setValueAtTime: function () {}, linearRampToValueAtTime: function () {} }, connect: function () { return { connect: function () {} }; }, start: function () {}, stop: function () {} }; };
+        this.createGain = function () { return { gain: { value: 0 }, connect: function () { return { connect: function () {} }; } }; };
+        this.close = function () { self.state = 'closed'; };
+      }
+      window.AudioContext = FakeAC; window.webkitAudioContext = FakeAC;
+      window.MediaRecorder = function () { throw new Error('NotSupportedError: mimeType not supported'); };
+      window.MediaRecorder.isTypeSupported = function () { return false; };
+      FM.toast = function (m) { toasted = m; };
+
+      var out = await FM.addSampleClip(0.2);   // must NOT reject — both real call sites invoke it bare
+      if (out !== null) throw new Error('a failed sample clip returned ' + JSON.stringify(out) + ' instead of null');
+      if (!made.length) throw new Error('the fixture never got as far as creating an AudioContext, so it proves nothing');
+      var open = made.filter(function (a) { return a.state !== 'closed'; });
+      if (open.length) throw new Error(open.length + ' AudioContext(s) left running after a failed sample clip — about four of these and every sound in the app stops until a reload');
+      if (!toasted) throw new Error('the failure was silent — the button appears to do nothing at all');
+    } finally {
+      window.MediaRecorder = realMR; window.AudioContext = realAC; window.webkitAudioContext = realWAC;
+      FM.toast = realToast;
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

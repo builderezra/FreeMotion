@@ -5776,6 +5776,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
       > Same story as the others, just shake section
 
+      **HIS CALL, 17 Aug: "Leave the kid in."** Asked and answered — photo 4 ships as it is. Original note kept below for the record.
       ⚠️ **One thing to raise about photo 4 before it ships, not after:** there is a stranger's child in
       the frame. It does not matter at all while this is a local-only app on his own phone, but this art
       is BUNDLED — it would ship inside the app to anyone who ever installs it, and that is a different
@@ -5794,8 +5795,11 @@ better still, keep working inside the turn rather than parking work for a later 
       `fx-art/<name>.jpg` (fourteen files today: city, ramp, dusk, towers, dog, sunpath, bush, shore,
       bay, run, clouds, figures, cat, pair). **A photo pasted into chat is not a file I can write to
       disk** — I can see it, but I cannot reproduce its bytes. So this needs him to save the two images
-      into `~/Claude/FreeMotion/fx-art/` (any names; I will wire them up and add them to `ALL_PHOTOS`).
-      FOUR files now.
+      **NO LONGER BLOCKED (v9.35): recovered from the session transcript rather than asking him again.**
+      All four are in `fx-art/` as mclaren.jpg, revuelto.jpg, tesla.jpg, huracan.jpg, cropped to the 320x320
+      the rest of the art uses. What remains is wiring them into `ALL_PHOTOS` and onto the Shake category.
+      *(Original note: they needed saving into `fx-art/` by hand. That turned out to be unnecessary — a
+      pasted image IS recoverable, from the `attachment` records in the session .jsonl.)*
       Told him so in the reply rather than leaving it silently un-started.
       Everything else about the entry is ready: the category rename is independent of the photos and can
       ship on its own.
