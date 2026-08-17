@@ -484,6 +484,25 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     without knowing anything else about the gradient. Likewise solarize's mix must land BETWEEN the
     original and the full flip on every flipped pixel (99%+ of 8000-odd), which no diff could show.
 
+- v9.14 (round 27 — **the pattern effects**) — `dots` (dot size, strength, soft edge), `hexarray`
+  (line weight, strength), `mosaic` (block height, gap, centre sampling) and `dissolve` (sweep
+  direction, soft holes, boil). Findings, and this round was almost entirely about FIXTURES:
+  * **The default noise plate cannot measure block geometry.** It steps by 7 per pixel, so every 16x16
+    block averages to nearly the same value and `mosaic.aspect` reported as a dead control. A ONE-
+    dimensional gradient does not fix it either: it is constant down each column, so block HEIGHT still
+    changes nothing. It needs 2-D structure, and there is a `gradient2d` plate now (red ramps across,
+    green ramps down). **That is the fifth and sixth time in these rounds that a fixture could not
+    express the thing under test.**
+  * **And then the ASSERTION had the same disease.** On gradient2d, red is the horizontal ramp — so
+    comparing the red channel between two rows reports "same block" for every pair of rows whatever
+    the geometry. The comparison has to read the channel that varies along the axis being tested.
+  * **A direction control is worth testing per HALF, not in total.** `dissolve`'s sweep was written
+    backwards — "from the left" ate the right-hand side — and the pixel COUNT was identical either way,
+    so only counting holes per half of the frame could see it.
+  * A near-miss worth recording: I edited the wrong `rowsSame` helper (two tests define one), which
+    briefly put a gradient2d comment on the halftone test. Anchor an edit on the line that FOLLOWS the
+    target when a helper name repeats.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

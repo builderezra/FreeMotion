@@ -18195,6 +18195,92 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 27: the pattern effects ---------------- */
+
+  test('effects: the pattern effects still render an un-upgraded instance exactly as they did', { item: 'fx-pattern2' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      { type: 'dots',     old: { size: 16, color: '#ffffff' }, at: 0.5, legacyKeys: { radius: 0.32, opacity: 0.85, softness: 0 }, moved: { radius: 0.6, opacity: 0.3, softness: 4 } },
+      { type: 'hexarray', old: { size: 24, color: '#19d6c0' }, at: 0.5, legacyKeys: { thickness: 0.12, opacity: 1 },              moved: { thickness: 0.4, opacity: 0.3 } },
+      /* MOSAIC NEEDS A PLATE WITH LARGE-SCALE STRUCTURE. The default noise plate steps by 7 per
+         pixel, so every 16x16 block averages to almost the same value — block geometry becomes
+         invisible and `aspect` reads as a dead control. A gradient varies across the whole frame, so
+         neighbouring blocks genuinely differ. (Fifth time a fixture could not express the thing
+         under test; see EFFECTS-PLAN.) A one-dimensional ramp is not enough either: it is constant
+         down each column, so block HEIGHT still changes nothing. It has to vary in both axes. */
+      { type: 'mosaic',   old: { size: 16 }, kind: 'gradient2d',    at: 0.5, legacyKeys: { aspect: 100, gap: 0, sample: 0 },          moved: { aspect: 300, gap: 30, sample: 1 } },
+      { type: 'dissolve', old: { amount: 0.5 },                at: 0.5, legacyKeys: { direction: 0, soft: 0, speed: 0 },         moved: { direction: 2, soft: 0.3, speed: 12 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var kind = c.kind || null;
+      var bare = fxRun(c.type, W, H, c.old, kind, c.at);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys, kind, c.at))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H, kind), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m, kind, c.at))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st, kind, c.at))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* "One static salt-and-pepper pattern... it always eats the frame uniformly and it never moves."
+   * Three separate claims, and two of them are properties no byte-diff can establish: whether the
+   * pattern MOVES is a question about two times, and whether it SWEEPS is a question about where the
+   * holes are, not how many. */
+  test('effects: Dissolve can sweep, soften and boil', { item: 'fx-pattern2' }, function () {
+    var W = 96, H = 96;
+    var still = fxDiff(fxRun('dissolve', W, H, { amount: 0.5 }, null, 0.5), fxRun('dissolve', W, H, { amount: 0.5 }, null, 2.5));
+    if (still !== 0) throw new Error('the default dissolve already differs between t=0.5 and t=2.5 at ' + still + ' pixels — it is meant to be the static pattern that Boil animates');
+    var moved = fxDiff(fxRun('dissolve', W, H, { amount: 0.5, speed: 12 }, null, 0.5), fxRun('dissolve', W, H, { amount: 0.5, speed: 12 }, null, 2.5));
+    if (moved < 500) throw new Error('with Boil on, only ' + moved + ' pixels differ between two times — the pattern is not re-rolling');
+    // SWEEP: from the left means the left side is eaten harder than the right. Counting per half.
+    var gone = function (p, leftHalf) { var d = fxRun('dissolve', W, H, p, null, 0.5), n = 0;
+      for (var y = 8; y < H - 8; y++) for (var x = leftHalf ? 8 : W / 2; x < (leftHalf ? W / 2 : W - 8); x++)
+        if (d[(y * W + x) * 4 + 3] === 0) n++;
+      return n; };
+    var uL = gone({ amount: 0.5 }, true), uR = gone({ amount: 0.5 }, false);
+    if (Math.abs(uL - uR) > uL * 0.25) throw new Error('the uniform dissolve is already lopsided (' + uL + ' vs ' + uR + '), so a sweep cannot be distinguished from it');
+    var sL = gone({ amount: 0.5, direction: 1 }, true), sR = gone({ amount: 0.5, direction: 1 }, false);
+    if (!(sL > sR * 1.5)) throw new Error('sweeping from the left removed ' + sL + ' on the left against ' + sR + ' on the right — it is not biased across the frame');
+    // SOFT: a binary dissolve has no partial alpha at all
+    var partial = function (p) { var d = fxRun('dissolve', W, H, p, null, 0.5), n = 0;
+      for (var i = 3; i < d.length; i += 4) if (d[i] > 4 && d[i] < 251) n++; return n; };
+    if (partial({ amount: 0.5 }) !== 0) throw new Error('the hard dissolve already has partial alpha, so softness cannot be shown to add any');
+    if (partial({ amount: 0.5, soft: 0.3 }) < 200) throw new Error('softening produced almost no partial alpha — the holes still have hard binary edges');
+  });
+
+  /* Mosaic could only make square, averaged, gapless blocks. GAP is asserted as "the original survives
+   * between the tiles" and CENTRE as "the block colour IS the centre pixel, exactly" — both of which
+   * are statements about specific pixels rather than about how many changed. */
+  test('effects: Mosaic can leave gaps and sample the centre pixel', { item: 'fx-pattern2' }, function () {
+    var W = 96, H = 96, src = fxPlate(W, H, 'gradient2d');
+    var full = fxRun('mosaic', W, H, { size: 16 }, 'gradient2d');
+    var gapped = fxRun('mosaic', W, H, { size: 16, gap: 40 }, 'gradient2d');
+    var survived = function (d) { var n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] === src[i] && d[i + 1] === src[i + 1]) n++; return n; };
+    if (!(survived(gapped) > survived(full) * 1.5)) throw new Error('a 40% gap left ' + survived(gapped) + ' original pixels against ' + survived(full) + ' with none — the tiles are still butted together');
+    // CENTRE: block (0,0) of a 16px grid must come back as exactly the source pixel at (8,8)
+    var cen = fxRun('mosaic', W, H, { size: 16, sample: 1 }, 'gradient2d');
+    var ci = (8 * W + 8) * 4;
+    if (!(cen[0] === src[ci] && cen[1] === src[ci + 1] && cen[2] === src[ci + 2])) {
+      throw new Error('centre sampling gave [' + cen[0] + ',' + cen[1] + ',' + cen[2] + '] for the first block instead of the source pixel at (8,8) [' + src[ci] + ',' + src[ci + 1] + ',' + src[ci + 2] + ']');
+    }
+    if (full[0] === cen[0] && full[1] === cen[1]) throw new Error('averaged and centre sampling gave the same first block, so they cannot be told apart');
+    // ASPECT: a 300% block height must make the vertical period three cells tall
+    var tall = fxRun('mosaic', W, H, { size: 16, aspect: 300 }, 'gradient2d');
+    /* Compare the GREEN channel: on the gradient2d plate green is the VERTICAL ramp and red is the
+       horizontal one, so red is identical down every column by construction — comparing red reports
+       every pair of rows as "the same block" whatever the block geometry actually is. */
+    var rowsSame = function (d, y1, y2) { for (var x = 0; x < W; x++) if (d[(y1 * W + x) * 4 + 1] !== d[(y2 * W + x) * 4 + 1]) return false; return true; };
+    if (!rowsSame(tall, 4, 20)) throw new Error('at 300% block height, rows 4 and 20 are not in the same block — the cell is not taller');
+    if (rowsSame(full, 4, 20)) throw new Error('at the default height rows 4 and 20 are ALREADY in the same block, so the check above proves nothing');
+  });
+
   /* ---------------- EFFECTS-PLAN round 26: the remaining colour effects ---------------- */
 
   /* spotcolor needs the hue it KEEPS to be present in the fixture, or every reading is of an empty
@@ -19719,6 +19805,12 @@
       for (var dy2 = 0; dy2 < H; dy2++) for (var dx2 = 0; dx2 < W; dx2++) {
         var di = (dy2 * W + dx2) * 4;
         if (Math.hypot(dx2 - cx, dy2 - cy) <= rr) { d[di] = 40; d[di + 1] = 60; d[di + 2] = 90; d[di + 3] = 255; } }
+    } else if (kind === 'gradient2d') {
+      /* Smooth in BOTH axes. The plain 'gradient' is a horizontal ramp — constant down every column —
+         so a block's HEIGHT cannot possibly change its average, and Mosaic's aspect control reads as
+         dead on it. Anything measuring 2-D block geometry needs 2-D structure. */
+      for (var qy = 0; qy < H; qy++) for (var qx = 0; qx < W; qx++) { var qi = (qy * W + qx) * 4;
+        d[qi] = Math.round(255 * qx / (W - 1)); d[qi + 1] = Math.round(255 * qy / (H - 1)); d[qi + 2] = 128; d[qi + 3] = 255; }
     } else if (kind === 'gradient') {                // smooth ramp: contains no real edge to detect
       for (var gy = 0; gy < H; gy++) for (var gx = 0; gx < W; gx++) {
         var gi = (gy * W + gx) * 4, gv = Math.round(60 + 120 * gx / (W - 1));

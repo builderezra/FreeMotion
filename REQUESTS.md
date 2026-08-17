@@ -3795,6 +3795,9 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 27, v9.14:* Dots, Hexagon Array, Mosaic and Dissolve. Dissolve was one static pattern
+      that never moved and ate the frame evenly; it sweeps, softens and boils now. Mosaic could only
+      make square averaged gapless blocks.
       *Round 26, v9.13:* Solarize, Spot Colour, Four-Colour Gradient and Night Vision. Spot Colour
       could only do the one hard sin-city look; the gradient painted over your footage instead of
       washing over it; Night Vision was always the same green.
