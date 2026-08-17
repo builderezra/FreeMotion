@@ -6371,6 +6371,15 @@ better still, keep working inside the turn rather than parking work for a later 
       confusion.
 
 
+      🔁 **RESTATED 18 Aug, with a new detail.** His words, verbatim: *"Motion blur is still fucked and
+      doesn't work as a filter"* — with a phone screenshot at v9.74 of Motion Blur (Object) selected in
+      the Visual tab, showing its Shutter / Samples pair and the paragraph under them.
+      The new half is **"doesn't work as a filter"**: a Filter is a container of effects with one
+      Strength, and Motion Blur (Object) is not an effect at all — it is a flag on the LAYER
+      (`layer.motionBlur`), which is why it cannot go inside one. That is the same root as this entry's
+      original complaint ("not really an effect"), seen from a different angle, so it belongs here rather
+      than in a new number.
+      Logged verbatim and NOT acted on yet — it is still #335's turn to come round.
 - [ ] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.**
       (17 Aug.) His words, verbatim: *"To extend out a clip you should have to hold down on the arrows
       first because currently accidentally touching for a second moves it but you should have to hold
@@ -9147,3 +9156,17 @@ wait for them to report back."*
       The machinery already exists and is right there — the Shape tab is a `.addmenu-pager` with
       `.addmenu-page` children and page dots, which is exactly this. So the fix is to give the library
       grid the same paging rather than a max-height, and the v9.47 height cap comes out.
+
+- [ ] **359 — 🚨 The filter thumbnails are the drawn landscape, not the good photos they used to be.**
+      (18 Aug, phone screenshot at v9.74 of the Filters tab: Teal & Orange, Bleach Bypass, Cross Process,
+      Faded Film, VHS Tape, CRT Monitor, Super 8, Old Film, Dreamy Bloom, Golden Hour, Light Leak, Neon
+      Night — every one of them rendered on the parametric mini-landscape.) His words, verbatim: *"Why
+      did you change all the filters images to shit photos instead of the good ones they were before?
+      Change it back man come on, and also I still need the tuff filters like I discussed with the car
+      photos"*.
+      **Treated as a possible REGRESSION FROM MY OWN RECENT WORK and checked first**, because "change it
+      back" means it used to be right. `js/fx-thumbs.js` holds fourteen of his own shots in `fx-art/` and
+      picks between them and a drawn scene by CATEGORY; I touched that file at v9.65 (the noise grain
+      size and a read-only seam) and touched `FM.FX_FEATURED` at v9.64.
+      The second half — **the "tuff" filters on his car photos — is already #349**, and the car art for
+      the shake section is **#332**. Both still open and still wanted; he is restating them, not adding.
