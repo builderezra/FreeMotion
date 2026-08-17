@@ -1665,6 +1665,38 @@ window.FM = window.FM || {};
 
   function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
 
+  /* ---- THE SOLO VIEW, AND THE SCROLL POSITION IT DESTROYS (queue 312) ---------------------------
+   * His words: *"every time I click off of a layer it moves my position in the timeline so the layer is
+   * at the bottom, when realistically it should be putting me back in the position i was"*.
+   *
+   * MEASURED AT 390x800 WITH TEN LAYERS, because the cause is not where it looks. rebuild() has
+   * carried a scroll-preserving line since v2.44 and it is not broken — it reads scrollTop before the
+   * DOM is emptied and writes it back afterwards, which is exactly right. The problem is that by the
+   * time it reads, the number is already gone:
+   *   · scrolled to 76 in a list 488 tall inside a 361 viewport
+   *   · tap a layer -> the phone SOLO view draws ONE row, so the content is now SHORTER than the
+   *     viewport and the browser clamps scrollTop to 0 on its own. Measured: 0.
+   *   · tap off -> rebuild reads 0, restores 0, faithfully. Drift: -76.
+   * Nothing in the app moved the timeline. The browser did, in the gap between the two rebuilds, and
+   * every later read is of a position that has already been thrown away.
+   *
+   * So the position is captured on the way IN to solo — the last moment it still exists — and put back
+   * on the way out. Re-capture is guarded: while solo, ordinary rebuilds (the playhead, a filmstrip
+   * arriving) would otherwise capture the clamped 0 over the good value and the fix would erase itself.
+   *
+   * `soloLayerId` is shared with buildTracks rather than the condition being written twice. It is four
+   * clauses long, and two copies of it are two chances for the capture to fire in a state the drawing
+   * does not agree is solo — which is a bug that would look like this one and not be this one. */
+  let preSoloScroll = null;
+  function soloLayerId() {
+    // Never while multi-selecting: you need every row visible to build the set.
+    if (FM.selectMode || (FM.scene.selectedIds && FM.scene.selectedIds.length > 1)) return null;
+    if (!isPhoneNow()) return null;
+    const id = FM.scene.selectedId;
+    return (id && FM.scene.layers.some(l => l.id === id)) ? id : null;
+  }
+  FM._soloLayerId = soloLayerId;   // seam: the suite asks the real condition, not a copy of it
+
   function buildAddRow() {
     /* TWO RENDERINGS, ONE IDEA (queue 294, clause 7). On a phone it is a layer: "an actual full layer".
        On PC he asked for something smaller — "instead of being like an actual full layer and like taking
@@ -1991,9 +2023,7 @@ window.FM = window.FM || {};
     // AM phone-edit: when a clip is selected on a phone, show ONLY that clip's row
     // (the others hide so the property options can dock right under it).
     // Never solo during multi-select / select-mode — you need every row visible to build the set.
-    const multiSel = FM.selectMode || (FM.scene.selectedIds && FM.scene.selectedIds.length > 1);
-    const soloId = (!multiSel && FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
-      && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
+    const soloId = soloLayerId();
     const gctx = liveGroupCtx();
     FM.scene.layers.forEach((layer, index) => {
       if (soloId && layer.id !== soloId) return;
@@ -2866,6 +2896,13 @@ window.FM = window.FM || {};
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
       // glitch). The browser clamps if the content is now shorter (mobile solo / collapsed group).
       const sTop = timelineEl ? timelineEl.scrollTop : 0;
+      /* …and hold it across the SOLO view, which the line above cannot do on its own (queue 312). See
+         soloLayerId: the one-row view is shorter than the viewport, so the browser clamps scrollTop to
+         0 while it is up and every subsequent read is of a position that no longer exists. Captured
+         here, on the rebuild that ENTERS solo, while the old full-height list is still on screen and
+         the number is still true. */
+      const soloNow = !!soloLayerId();
+      if (soloNow) { if (preSoloScroll === null) preSoloScroll = sTop; }   // guarded: a rebuild WHILE solo would capture the clamped 0 over the good value
       // Newly-keyframed props (loopMode still undefined) INHERIT the layer's loopMode so they don't
       // freeze at their last keyframe — but initialize-only: an explicit per-prop loop set in the graph
       // editor must NOT be clobbered back to the layer value on every rebuild. (The clip-menu Loop toggle
@@ -2884,7 +2921,11 @@ window.FM = window.FM || {};
         this.updateLoopRegion();
         this.updatePlayhead();
       } finally { _laneFrozen = 0; _laneW = 0; }
-      if (timelineEl && timelineEl.scrollTop !== sTop) timelineEl.scrollTop = sTop;
+      /* Coming OUT of solo, the remembered position wins — it is the only copy of where he was. The
+         browser clamps it for us if the list is shorter than it was (a layer deleted while selected). */
+      let want = sTop;
+      if (!soloNow && preSoloScroll !== null) { want = preSoloScroll; preSoloScroll = null; }
+      if (timelineEl && timelineEl.scrollTop !== want) timelineEl.scrollTop = want;
     },
 
     updateLoopRegion() {

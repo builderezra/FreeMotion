@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#312 — where the timeline lands after you click off a layer</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #312 — *"every time I click off of a layer it moves my position in the timeline so the layer is at
+   the bottom, when realistically it should be putting me back in the position i was"*.
+   Three numbers settle this and nothing else will: the scroll position BEFORE selecting, what it
+   becomes while the solo view is up, and what it is after deselecting. The middle one is the
+   interesting one — the solo view draws a single row, so the content may be shorter than the viewport
+   and the browser CLAMPS scrollTop on its own, which would destroy the position before anything got a
+   chance to restore it. Whether that is what happens is exactly what is not known yet. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 390;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.timeline || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.scene.layers.length = 0;
+        for (var i = 0; i < 10; i++) {
+          var L = FM.makeLayer('shape', { name: 'Layer ' + (i + 1), shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        }
+        FM.selectLayer(null); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var tl = d.getElementById('timeline');
+        if (!tl) return fail('no #timeline scroller');
+        var rows = function () { return [].slice.call(d.querySelectorAll('#tl-tracks .track-row')); };
+        var lines = ['window ' + W + 'x' + (+q.get('h') || 800),
+                     'phone: ' + !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()),
+                     'rows drawn: ' + rows().length + '   scrollHeight ' + tl.scrollHeight + ' in ' + tl.clientHeight];
+        // Scroll down so a later layer is on screen, then pick it.
+        tl.scrollTop = Math.round((tl.scrollHeight - tl.clientHeight) * 0.6);
+        var before = tl.scrollTop;
+        var visible = rows().filter(function (r) { var b = r.getBoundingClientRect(), t = tl.getBoundingClientRect(); return b.top >= t.top && b.bottom <= t.bottom; });
+        var pick = visible[Math.floor(visible.length / 2)] || rows()[5];
+        var head = pick && pick.querySelector('.track-head');
+        var idx = head ? +head.dataset.idx : -1;
+        var id = FM.scene.layers[idx] && FM.scene.layers[idx].id;
+        lines.push('scrolled to ' + before + '   picking layer index ' + idx);
+        if (!id) { out.textContent = lines.concat('could not pick a layer').join('\n'); window.__done = true; return; }
+        FM.selectLayer(id); FM.refreshAll();
+        setTimeout(function () {
+          lines.push('WHILE SELECTED: rows drawn ' + rows().length + '   scrollTop ' + tl.scrollTop + '   scrollHeight ' + tl.scrollHeight + ' in ' + tl.clientHeight);
+          FM.selectLayer(null); FM.refreshAll();
+          setTimeout(function () {
+            var after = tl.scrollTop;
+            var back = rows().filter(function (r) { var h = r.querySelector('.track-head'); return h && +h.dataset.idx === idx; })[0];
+            var where = 'not found';
+            if (back) {
+              var b = back.getBoundingClientRect(), t = tl.getBoundingClientRect();
+              where = 'row y ' + Math.round(b.top - t.top) + '–' + Math.round(b.bottom - t.top) + ' inside a ' + Math.round(t.height) + 'px view';
+            }
+            lines.push('AFTER DESELECT: scrollTop ' + after + '   (was ' + before + ', drift ' + (after - before) + ')');
+            lines.push('the layer he had selected is now: ' + where);
+            out.textContent = lines.join('\n');
+            window.__done = true;
+          }, 320);
+        }, 320);
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

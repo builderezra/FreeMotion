@@ -26899,4 +26899,64 @@
     }
   });
 
+
+  /* ================= queue 312: clicking off a layer must put you back where you were ==============
+   * *"every time I click off of a layer it moves my position in the timeline so the layer is at the
+   * bottom, when realistically it should be putting me back in the position i was"*.
+   *
+   * THE MIDDLE ASSERTION IS THE ONE THAT NAMES THE CAUSE, and it is why this test is written in three
+   * steps rather than "scroll, select, deselect, compare". rebuild() has preserved scrollTop across a
+   * DOM rebuild since v2.44 and that line is not broken. What breaks is that the phone SOLO view draws
+   * ONE row, so the content becomes shorter than the viewport and the BROWSER clamps scrollTop to 0 by
+   * itself — measured at 390x800 with ten layers: 76 before, 0 while solo, 0 after. Every read after
+   * the collapse is of a position that has already been thrown away, so the position has to be taken
+   * on the way IN. Asserting the clamp happens keeps the test honest about what it is defending
+   * against: if the solo view ever stops collapsing, this test should be re-read, not silently kept. */
+  test('clicking off a layer puts the timeline back where it was (queue 312)', { item: 'desel-scroll' }, function () {
+    return atPhoneWidth(async function () {
+      const layers0 = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 10; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + (i + 1), shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        }
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(220);
+        const tl = document.getElementById('timeline');
+        if (!tl) throw new Error('no #timeline scroller');
+        const room = tl.scrollHeight - tl.clientHeight;
+        if (room < 40) throw new Error('the timeline has only ' + room + 'px of scroll — there is no position to lose, so this proves nothing');
+        tl.scrollTop = Math.round(room * 0.6);
+        const before = tl.scrollTop;
+        if (!(before > 10)) throw new Error('could not scroll the timeline away from the top');
+
+        const idx = 4;
+        const id = FM.scene.layers[idx].id;
+        FM.selectLayer(id); FM.refreshAll();
+        await sleep(220);
+        if (!FM._soloLayerId || FM._soloLayerId() !== id) throw new Error('selecting did not enter the phone solo view, so this test is not exercising the case he reported');
+        if (tl.scrollTop === before) throw new Error('the solo view no longer clamps the scroll to ' + tl.scrollTop + ' — the bug this defends against has changed shape and the fix should be re-read rather than trusted');
+
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(260);
+        if (Math.abs(tl.scrollTop - before) > 2) throw new Error('after clicking off, the timeline is at ' + tl.scrollTop + ' instead of ' + before + ' — "it should be putting me back in the position i was"');
+
+        /* …and it is a RESTORE, not a one-off. Doing it twice catches a capture that fires once and is
+           then never cleared, which would pin the timeline to the first position forever. */
+        tl.scrollTop = Math.round(room * 0.25);
+        const second = tl.scrollTop;
+        FM.selectLayer(FM.scene.layers[7].id); FM.refreshAll();
+        await sleep(220);
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(260);
+        if (Math.abs(tl.scrollTop - second) > 2) throw new Error('the second round came back to ' + tl.scrollTop + ' instead of ' + second + ' — the remembered position is stale, so it restores where you were LAST time');
+      } finally {
+        FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(120);
+      }
+    }, 390);
+  });
+
 })();

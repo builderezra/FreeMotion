@@ -5713,7 +5713,19 @@ better still, keep working inside the turn rather than parking work for a later 
       Check whether the audio browser (js/audio-fx-browser.js) can reuse that machinery rather than
       growing a second, slightly different favourites system.
 
-- [ ] **312 — Deselecting a layer scrolls the timeline instead of restoring where you were.** (17 Aug,
+- [x] **312 — Deselecting a layer scrolls the timeline instead of restoring where you were.**
+      ✅ **v9.59.** Measured at 390x800 with ten layers: you were at **76**, tapping a layer put it
+      at **0**, and clicking off left it at **0** — a drift of 76. It is 0 now.
+      **The cause was not where the note guessed.** The scroll-preserving line from v2.44 is fine.
+      The problem is that tapping a layer collapses the phone timeline to a SINGLE row, which
+      makes the content shorter than the view, and the BROWSER clamps the scroll to 0 by itself.
+      Nothing in the app moved anything — by the time the rebuild read the position it had already
+      been thrown away. So it is now taken on the way IN to the single-row view, which is the last
+      moment it still exists, and put back on the way out. The re-capture is guarded, because an
+      ordinary redraw while the single row is up (the playhead moving, a thumbnail arriving) would
+      otherwise save the 0 over the good number and the fix would erase itself — both halves
+      mutation-checked separately. The layer you had selected now comes back mid-view rather than
+      at the bottom. (17 Aug,
       two screenshots at v9.08 — the selected single-row view, then the full timeline scrolled so that
       layer sits at the very bottom above "Tap to add a layer".) His words, verbatim: *"For some reason
       every time I click off of a layer it moves my position in the timeline so the layer is at the
