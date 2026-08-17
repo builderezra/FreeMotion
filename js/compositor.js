@@ -334,7 +334,12 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 40, unit: '%' },
     ] },
-    { type: 'stroke', label: 'Stroke Colour', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
+    { type: 'stroke', label: 'Stroke Colour', color: true, defColor: '#ffffff', colorLabel: 'Stroke', params: [
+      { key: 'width', label: 'Width', min: 1, max: 60, step: 1, def: 4, unit: 'px' },
+      { key: 'position', label: 'Position', def: 0, options: [[0, 'Outside'], [1, 'Centre'], [2, 'Inside']] },
+      { key: 'shape', label: 'Corners', def: 0, options: [[0, 'Square'], [1, 'Round']] },
+      { key: 'softness', label: 'Softness', min: 0, max: 12, step: 0.5, def: 0, unit: 'px' },
+    ] },
     { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
     { type: 'liquidglass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -2386,6 +2391,71 @@ window.FM = window.FM || {};
   }
 
   // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.
+  /* ---- DISTANCE FIELDS, for Stroke (EFFECTS-PLAN's last high-impact row) -----------------------
+   * The shipped stroke is a separable BOX dilation, which is Chebyshev distance and therefore square
+   * by construction — an inside or centred outline and a round corner were both unreachable, not
+   * because nobody had wired a slider but because the shape of the maths does not admit them.
+   * All three controls fall out of one thing: the distance from every pixel to the nearest seed. With
+   * that, "outside" is a band in the background field, "inside" is a band in the complement's field,
+   * "centred" is half a band in each, and softness is just where you stop — no extra machinery.
+   * Both transforms below are EXACT and O(pixels). Approximations were not worth it: a chamfer
+   * approximation to Euclidean is visibly lumpy on a big circle, which is precisely the artwork a
+   * round stroke exists for. */
+
+  // Exact 1D squared Euclidean DT (Felzenszwalb & Huttenlocher) — the lower envelope of the parabolas
+  // f(q) + (x-q)^2. v/z are scratch (parabola vertices and their intersection bounds).
+  function edt1d(f, n, out, v, z) {
+    let k = 0; v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+    for (let q = 1; q < n; q++) {
+      let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+      k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+    }
+    k = 0;
+    for (let q = 0; q < n; q++) {
+      while (z[k + 1] < q) k++;
+      const dq = q - v[k]; out[q] = dq * dq + f[v[k]];
+    }
+  }
+  // Distance from every pixel to the nearest pixel where seed[i] is 1. euclid=false gives CHEBYSHEV,
+  // via the all-ones chamfer, whose forward+backward raster passes are exact for that metric (it is
+  // only the EUCLIDEAN chamfer that is an approximation). Returns a Float32Array of real distances.
+  function distanceField(seed, W, H, euclid) {
+    const N = W * H, INF = 1e12, out = new Float32Array(N);
+    if (!euclid) {
+      for (let i = 0; i < N; i++) out[i] = seed[i] ? 0 : INF;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (!out[i]) continue;
+        let m = out[i];
+        if (x > 0 && out[i - 1] + 1 < m) m = out[i - 1] + 1;
+        if (y > 0) { if (out[i - W] + 1 < m) m = out[i - W] + 1;
+          if (x > 0 && out[i - W - 1] + 1 < m) m = out[i - W - 1] + 1;
+          if (x < W - 1 && out[i - W + 1] + 1 < m) m = out[i - W + 1] + 1; }
+        out[i] = m; }
+      for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const i = y * W + x;
+        let m = out[i];
+        if (x < W - 1 && out[i + 1] + 1 < m) m = out[i + 1] + 1;
+        if (y < H - 1) { if (out[i + W] + 1 < m) m = out[i + W] + 1;
+          if (x < W - 1 && out[i + W + 1] + 1 < m) m = out[i + W + 1] + 1;
+          if (x > 0 && out[i + W - 1] + 1 < m) m = out[i + W - 1] + 1; }
+        out[i] = m; }
+      return out;
+    }
+    const maxD = Math.max(W, H), f = new Float64Array(maxD), r = new Float64Array(maxD);
+    const v = new Int32Array(maxD), z = new Float64Array(maxD + 1);
+    for (let x = 0; x < W; x++) {                      // columns first
+      for (let y = 0; y < H; y++) f[y] = seed[y * W + x] ? 0 : INF;
+      edt1d(f, H, r, v, z);
+      for (let y = 0; y < H; y++) out[y * W + x] = r[y];
+    }
+    for (let y = 0; y < H; y++) {                      // then rows, over the column result
+      const row = y * W;
+      for (let x = 0; x < W; x++) f[x] = out[row + x];
+      edt1d(f, W, r, v, z);
+      for (let x = 0; x < W; x++) out[row + x] = Math.sqrt(r[x]);   // squared -> real distance
+    }
+    return out;
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -3514,7 +3584,40 @@ window.FM = window.FM || {};
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
     darkglow: function(d,W,H,p,t){ var dgAmt=FM.evalProp(p.amount,t); if(dgAmt==null)dgAmt=0.6; dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
-    stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>16)st_w=16; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0; var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
+    stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>16)st_w=16; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
+      // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
+      // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
+      // else goes through a real distance field, because that is what the other three options need:
+      // a box dilation is Chebyshev distance and cannot produce a round corner at all.
+      var st_pos=p.position==null?0:(Math.round(FM.evalProp(p.position,t))|0);
+      var st_shp=p.shape==null?0:(Math.round(FM.evalProp(p.shape,t))|0);
+      var st_sft=p.softness==null?0:FM.evalProp(p.softness,t); if(st_sft<0)st_sft=0; if(st_sft>12)st_sft=12;
+      st_sft*=(ps||1);   // softness is in PROJECT px like the width, so it scales with the plate too
+      if(!(st_pos===0&&st_shp===0&&st_sft===0)){
+        var stRound=st_shp===1;
+        // Centre splits the width across the edge, which is what "centred" means in every other editor.
+        var stOutW=st_pos===2?0:(st_pos===1?st_w/2:st_w);
+        var stInW =st_pos===0?0:(st_pos===1?st_w/2:st_w);
+        var stInv=null, stFo=null, stFi=null;
+        if(stOutW>0) stFo=distanceField(st_src,W,H,stRound);          // background -> nearest shape px
+        if(stInW>0){ stInv=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)stInv[st_i]=st_src[st_i]?0:1;
+          stFi=distanceField(stInv,W,H,stRound); }                     // shape px -> nearest background
+        // Fully opaque out to (band - softness), fading to nothing at the band edge.
+        var stCov=function(dist,band){ if(dist>band)return 0; if(st_sft<=0)return 1;
+          var e=band-dist; if(e>=st_sft)return 1; return e/st_sft; };
+        for(st_i=0;st_i<st_N;st_i++){
+          var stA=0;
+          if(st_src[st_i]===0){ if(stOutW>0&&stFo[st_i]>0) stA=stCov(stFo[st_i],stOutW); }
+          else { if(stInW>0) stA=stCov(stFi[st_i],stInW); }
+          if(stA<=0)continue; if(stA>1)stA=1;
+          var stO=st_i*4;
+          if(st_src[st_i]===0){ d[stO]=st_col[0]; d[stO+1]=st_col[1]; d[stO+2]=st_col[2]; d[stO+3]=255*stA; }
+          else { // over the artwork: tint toward the stroke colour, never touch the shape's own alpha
+            d[stO]=d[stO]+(st_col[0]-d[stO])*stA; d[stO+1]=d[stO+1]+(st_col[1]-d[stO+1])*stA; d[stO+2]=d[stO+2]+(st_col[2]-d[stO+2])*stA; }
+        }
+        return;
+      }
+      var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
     smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } var seWin=seR*2+1,seInv=1/seWin; for(sey=0;sey<seH;sey++){ var seRow=sey*seW,seSum=0,sek; for(sek=-seR;sek<=seR;sek++){ var seXc=sek<0?0:(sek>=seW?seW-1:sek); seSum+=seA[seRow+seXc]; } for(sex=0;sex<seW;sex++){ seTmp[seRow+sex]=seSum*seInv; var seAddX=sex+seR+1; seAddX=seAddX>=seW?seW-1:seAddX; var seSubX=sex-seR; seSubX=seSubX<0?0:seSubX; seSum+=seA[seRow+seAddX]-seA[seRow+seSubX]; } } for(sex=0;sex<seW;sex++){ var seSumV=0,sekk; for(sekk=-seR;sekk<=seR;sekk++){ var seYc=sekk<0?0:(sekk>=seH?seH-1:sekk); seSumV+=seTmp[seYc*seW+sex]; } for(sey=0;sey<seH;sey++){ var seVal=seSumV*seInv; d[(sey*seW+sex)*4+3]=seVal<0?0:(seVal>255?255:seVal); var seAddY=sey+seR+1; seAddY=seAddY>=seH?seH-1:seAddY; var seSubY=sey-seR; seSubY=seSubY<0?0:seSubY; seSumV+=seTmp[seAddY*seW+sex]-seTmp[seSubY*seW+sex]; } } },
     blocknoise: function(d,W,H,p,t,ps){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;

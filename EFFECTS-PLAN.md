@@ -374,6 +374,28 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     has exactly one right value per channel, so the test asserts that value rather than "some pixels
     changed", which any fraction at all would satisfy.
 
+- v9.07 (round 21 — **Stroke: the last high-impact row, and the only one that was not a slider**) —
+  position (Outside / Centre / Inside), corners (Square / Round), softness. The shipped effect was a
+  separable box dilation, i.e. CHEBYSHEV distance, so a round corner was not missing — it was
+  unreachable by construction. Findings:
+  * **One exact distance field gives all three controls.** With distance-to-nearest-seed in hand,
+    "outside" is a band in the background's field, "inside" is a band in the complement's field,
+    "centred" is half a band in each, and softness is simply where you stop. No extra machinery, and
+    no per-control special cases — which is the argument for building the field rather than bolting
+    three behaviours onto the dilation.
+  * **Exact, not chamfered.** Euclidean is Felzenszwalb's O(n) lower-envelope transform; the all-ones
+    chamfer is used ONLY for Chebyshev, where its forward/backward raster passes happen to be exact.
+    A chamfer approximation to Euclidean is visibly lumpy on a large circle, which is precisely the
+    artwork a round stroke exists for.
+  * **The geometry makes "is the corner round" a NUMBER.** Dilating a disc by a square reaches w on
+    the axes and w*sqrt(2) on the diagonals; dilating by a disc reaches w everywhere. Measured on a
+    radius-50 disc with w=10: square 10.0 axis / 14.25 diagonal, round 10.0 / 10.0. The square case is
+    the control that stops the round measurement being vacuous.
+  * **Cost, measured at 1080x1920:** the default path is unchanged (22ms vs HEAD's 23.8 — it IS the
+    old code). Chebyshev field 34.6ms, Euclidean 64.3ms, and round+centre+soft 127.5ms because Centre
+    is the one case that needs BOTH fields. All opt-in, on an effect whose floor is already ~22ms.
+  **The `high` column of the proposal table is now empty.** What remains is ~33 medium/low rows.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

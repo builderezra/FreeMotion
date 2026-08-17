@@ -18195,6 +18195,68 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 21: Stroke gets a real distance field ---------------- */
+
+  /* The last `high` row in the plan, and the only one that was NOT a missing slider. The shipped
+   * stroke is a separable box dilation — Chebyshev distance — so an inside/centred outline and a ROUND
+   * corner were unreachable by construction, not by omission. All three now come off one exact
+   * distance field.
+   * The geometry is what makes this testable rather than a matter of opinion. Dilating a disc by a
+   * SQUARE reaches w along the axes but w*sqrt(2) along the diagonals; dilating by a disc reaches w
+   * everywhere. So "is the corner round" has an exact numeric answer, and the square case is the
+   * control that stops the round measurement being vacuous. */
+  test('effects: Stroke can be round, inside, centred and soft', { item: 'fx-stroke' }, function () {
+    var W = 200, H = 200, CX = 100, CY = 100, RAD = 50, w = 10, S = Math.SQRT1_2;
+    var run = function (p) { return fxRun('stroke', W, H, p, 'disc'); };
+    var reach = function (d, ux, uy) { var r = 0;
+      for (var t2 = 0; t2 < 95; t2 += 0.25) { var x = Math.round(CX + ux * t2), y = Math.round(CY + uy * t2);
+        if (x < 0 || y < 0 || x >= W || y >= H) break;
+        if (d[(y * W + x) * 4 + 3] > 0) r = t2; }
+      return r; };
+    var plain = fxPlate(W, H, 'disc');
+    if (Math.abs(reach(plain, 1, 0) - RAD) > 1) throw new Error('the disc fixture is not radius ' + RAD + ' (measured ' + reach(plain, 1, 0) + ') — every number below is calibrated to it');
+
+    var sq = run({ width: w, color: '#ffffff' }), rd = run({ width: w, color: '#ffffff', shape: 1 });
+    // both must extend by w along an axis; that is the shared baseline
+    if (Math.abs(reach(sq, 1, 0) - (RAD + w)) > 1.5) throw new Error('the square stroke reaches ' + reach(sq, 1, 0) + ' along the axis, not ' + (RAD + w));
+    if (Math.abs(reach(rd, 1, 0) - (RAD + w)) > 1.5) throw new Error('the round stroke reaches ' + reach(rd, 1, 0) + ' along the axis, not ' + (RAD + w));
+    // and they must DISAGREE on the diagonal, by exactly the sqrt(2) a square dilation overshoots by
+    var sqDiag = reach(sq, S, S) - RAD, rdDiag = reach(rd, S, S) - RAD;
+    if (Math.abs(sqDiag - w * Math.SQRT2) > 1.5) throw new Error('a SQUARE stroke should overshoot to ' + (w * Math.SQRT2).toFixed(1) + 'px on the diagonal and reached ' + sqDiag.toFixed(1) + ' — the control this is measured against has changed');
+    if (Math.abs(rdDiag - w) > 1.5) throw new Error('a ROUND stroke reached ' + rdDiag.toFixed(1) + 'px on the diagonal instead of a uniform ' + w + ' — the corner is not round');
+
+    // INSIDE must not grow the silhouette by a single pixel; that is the whole difference from Outside
+    var ins = run({ width: w, color: '#ffffff', position: 2 }), grew = 0, repainted = 0;
+    for (var i = 0; i < ins.length; i += 4) {
+      if (ins[i + 3] > 0 && plain[i + 3] === 0) grew++;
+      if (plain[i + 3] > 0 && ins[i] !== plain[i]) repainted++; }
+    if (grew) throw new Error('an INSIDE stroke painted ' + grew + ' pixels outside the shape — it is still dilating outward');
+    if (repainted < 500) throw new Error('an INSIDE stroke only repainted ' + repainted + ' pixels of the shape — it is barely drawing');
+    // CENTRE must straddle: it grows the silhouette, but by less than a full outside stroke
+    var ctr = run({ width: w, color: '#ffffff', position: 1 });
+    var grewC = 0; for (var j = 0; j < ctr.length; j += 4) if (ctr[j + 3] > 0 && plain[j + 3] === 0) grewC++;
+    var grewO = 0; for (var k = 0; k < sq.length; k += 4) if (sq[k + 3] > 0 && plain[k + 3] === 0) grewO++;
+    if (!(grewC > 0 && grewC < grewO)) throw new Error('a CENTRE stroke grew the silhouette by ' + grewC + ' against an outside stroke\'s ' + grewO + ' — it should straddle the edge, so strictly between 0 and that');
+
+    // SOFTNESS: a hard stroke has NO partial alpha at all, which makes this unambiguous
+    var partial = function (d) { var n = 0; for (var q = 3; q < d.length; q += 4) if (d[q] > 0 && d[q] < 255) n++; return n; };
+    if (partial(rd) !== 0) throw new Error('the hard round stroke already has ' + partial(rd) + ' part-transparent pixels, so softness cannot be shown to add any');
+    if (partial(run({ width: w, color: '#ffffff', shape: 1, softness: 6 })) < 200) throw new Error('softness produced almost no partial alpha — the edge is not feathering');
+  });
+
+  test('effects: an un-upgraded Stroke renders exactly as it did', { item: 'fx-stroke' }, function () {
+    var W = 160, H = 160;
+    var bare = fxRun('stroke', W, H, { width: 8, color: '#ffffff' }, 'disc');
+    if (!fxDiff(fxPlate(W, H, 'disc'), bare)) throw new Error('the default stroke draws nothing');
+    if (fxDiff(bare, fxRun('stroke', W, H, { width: 8, color: '#ffffff', position: 0, shape: 0, softness: 0 }, 'disc')))
+      throw new Error('spelling the new keys out at their fallbacks changed the render — an old project would not come back the same');
+    var inst = FM.fxRegistry.makeInstance('stroke');
+    var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+    stamped.width = 8;
+    if (fxDiff(bare, fxRun('stroke', W, H, stamped, 'disc')))
+      throw new Error('a NEW stroke instance renders differently from an old one — a schema default disagrees with the renderer fallback');
+  });
+
   /* ---------------- EFFECTS-PLAN round 20: the last of the high-impact singles ---------------- */
 
   test('effects: round 20 still maps and renders an un-upgraded instance exactly as it did', { item: 'fx-r20' }, function () {
@@ -19100,6 +19162,11 @@
     } else if (kind === 'dot') {                     // a single lit pixel: the splat IS the tap set
       for (i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
       var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255;
+    } else if (kind === 'disc') {                    // a circle: the only artwork where square vs round corners is visible
+      var cx = W / 2, cy = H / 2, rr = Math.min(W, H) * 0.25;
+      for (var dy2 = 0; dy2 < H; dy2++) for (var dx2 = 0; dx2 < W; dx2++) {
+        var di = (dy2 * W + dx2) * 4;
+        if (Math.hypot(dx2 - cx, dy2 - cy) <= rr) { d[di] = 40; d[di + 1] = 60; d[di + 2] = 90; d[di + 3] = 255; } }
     } else if (kind === 'gradient') {                // smooth ramp: contains no real edge to detect
       for (var gy = 0; gy < H; gy++) for (var gx = 0; gx < W; gx++) {
         var gi = (gy * W + gx) * 4, gv = Math.round(60 + 120 * gx / (W - 1));

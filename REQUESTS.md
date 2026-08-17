@@ -3795,10 +3795,11 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
-      **That clears every high-impact effect in the plan except ONE: Stroke.** It wants an inside or
-      centred outline and a round corner, and the current one is a square-by-construction box dilation
-      — a round stroke needs a real distance transform, which is a build rather than a slider, so I
-      have left it as its own job instead of half-doing it. ~33 medium/low effects also remain.
+      *Round 21, v9.07:* **Stroke — and that empties the high-impact column entirely.** It was the one
+      that was not a missing slider: the outline was drawn by growing the shape in a SQUARE, so inside,
+      centred and round corners were impossible with that method rather than merely unwired. It measures
+      real distance to the edge now. On a circle the old way bulges to 14.25px on the diagonal when you
+      ask for 10; round holds exactly 10 all the way round. ~33 medium/low effects remain.
       *Round 19, v9.04:* the atmosphere effects. Starfield's stars were single pixels of one flat
       colour (sensor dirt at 1080p, and gone entirely after export); Grunge was a single-pixel speckle
       that always dried to black; Light Leak always came from the top-right; Blink was one hard 50/50
