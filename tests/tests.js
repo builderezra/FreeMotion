@@ -27429,4 +27429,70 @@
     }
   });
 
+
+  /* ================= queue 322 clause 4: the eraser rubs out ======================================
+   * *"erase should work like an eraser not just delete the whole drawing"*.
+   * It found the nearest stroke and spliced the WHOLE subpath out, so touching the tail of a long line
+   * took the line. What an eraser does is remove the part under it and leave the rest — and leaving the
+   * rest means a stroke rubbed through the middle becomes TWO. */
+  test('the eraser takes the part under it, not the whole stroke (queue 322)', { item: 'draw-eraser' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const size0 = { w: P.width, h: P.height };
+    try {
+      P.width = 1080; P.height = 1920;
+      FM.scene.layers.length = 0;
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(120);
+      if (!FM.startDraw || !FM.drawTool || !FM.drawTool._commit) throw new Error('the drawing tool has no commit seam');
+      FM.startDraw('freehand');
+      await sleep(200);
+
+      /* One long horizontal stroke, drawn through the real commit path so it is stored exactly the way
+         a finger's would be. Deliberately many points: the eraser drops the ones within reach, and a
+         stroke of two points could only ever vanish or survive whole. */
+      const Y = 600, pts = [];
+      for (let x = 100; x <= 900; x += 10) pts.push([x, Y]);
+      FM.drawTool.points = pts.map(p => p.slice());
+      FM.drawTool._commit();
+      await sleep(160);
+      const layer = FM.scene.layers.filter(l => l.name === 'Sketch')[0];
+      if (!layer) throw new Error('the stroke did not commit');
+      /* A FIRST stroke is stored as `points`, not `subs`: addPathLayer writes a single path, and only
+         the re-fit that a SECOND stroke triggers moves the layer to the multi-subpath field. Asserting
+         subs.length === 1 here failed on correct code, and the number it reported — 0 — read exactly
+         like the stroke never landing. */
+      const held = (layer.subs && layer.subs.length) ? layer.subs.length : ((layer.points && layer.points.length) ? 1 : 0);
+      if (held !== 1) throw new Error('expected the stroke to be held as one path, got ' + held);
+
+      // Rub out the MIDDLE of it.
+      const erased = FM.drawTool._eraseAt([500, Y]);
+      await sleep(160);
+      if (!erased) throw new Error('the eraser did not find the stroke it was placed on top of');
+      const after = FM.scene.layers.filter(l => l.name === 'Sketch')[0];
+      if (!after) throw new Error('erasing the middle of one stroke deleted the whole drawing — "not just delete the whole drawing" is the request');
+      const subs = after.subs || [];
+      if (subs.length < 2) throw new Error('rubbing through the middle left ' + subs.length + ' subpath(s) — the stroke was removed or shortened rather than split, so the far half went with it');
+
+      /* BOTH ENDS SURVIVED. subs are normalised into the layer's box, so the check is that one run
+         starts at the left edge and another ends at the right — i.e. nothing beyond the eraser was
+         taken. */
+      const spanOf = s2 => { const xs = s2.map(q => q[0]); return [Math.min.apply(null, xs), Math.max.apply(null, xs)]; };
+      const spans = subs.map(spanOf).sort((a, b) => a[0] - b[0]);
+      if (!(spans[0][0] < 0.05)) throw new Error('the left end of the stroke is gone — the eraser took more than it was over');
+      if (!(spans[spans.length - 1][1] > 0.95)) throw new Error('the right end of the stroke is gone — the eraser took more than it was over');
+      // …and it took SOMETHING: there is a gap where the finger was.
+      const gap = spans[1][0] - spans[0][1];
+      if (!(gap > 0.02)) throw new Error('the two halves still meet (gap ' + gap.toFixed(3) + ') — nothing was actually rubbed out');
+    } finally {
+      if (FM.drawTool && FM.drawTool.stop) FM.drawTool.stop();
+      else if (FM.stopDraw) FM.stopDraw();
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null);
+      if (document.body) document.body.classList.remove('drawing');
+      FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();

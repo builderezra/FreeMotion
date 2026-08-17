@@ -411,11 +411,52 @@ window.FM = window.FM || {};
     }
     return best;
   }
+  /* A REAL ERASER (queue 322, clause 4). Ezra: *"erase should work like an eraser not just delete the
+   * whole drawing"*. It did exactly that — strokeIndexAt found the stroke nearest the finger and the
+   * whole subpath was spliced out, so touching the tail of a long line took the line.
+   * Now it takes the PART under the finger: points inside the reach are dropped and each surviving run
+   * of two or more becomes its own subpath, so rubbing through the middle of a stroke leaves two. The
+   * layer is already a multi-subpath field, so nothing downstream needed teaching.
+   *
+   * SUBPATHS THE ERASER DID NOT TOUCH ARE KEPT BY REFERENCE, not rebuilt. Undo here is snapshots of
+   * the subpath LIST (`snap()` is a shallow copy, on the stated grounds that strokes are never mutated
+   * in place), so handing back a fresh array for an untouched stroke would still be correct but would
+   * quietly make every snapshot a deep copy of the whole drawing. Rebuilding only what changed keeps
+   * that invariant true rather than merely satisfied.
+   *
+   * A run of ONE point is dropped rather than kept: a single point has no length, renders as nothing,
+   * and would sit in the list forever as an invisible stroke that the eraser could never find again. */
   function eraseAt(p) {
     var i = strokeIndexAt(p);
     if (i < 0) return false;
+    var reach = FM.drawTool.stroke / 2 + 14 / Math.max(1e-6, dispScale());
+    var sub = sessionSubs[i], runs = [], run = [], j, hit = false;
+    for (j = 0; j < sub.length; j++) {
+      var pt = sub[j];
+      if (Math.hypot(pt[0] - p[0], pt[1] - p[1]) <= reach) {
+        hit = true;
+        if (run.length >= 2) runs.push(run);
+        run = [];
+      } else run.push(pt);
+    }
+    if (run.length >= 2) runs.push(run);
+    /* NOTHING WITHIN REACH OF A VERTEX, but strokeIndexAt still matched — it measures to the SEGMENT,
+       so a finger over the middle of a long straight span is "on" the stroke while being far from
+       every point of it. Falling through to the old behaviour there would delete the whole line, which
+       is the bug. Splitting the nearest segment is what a rubber actually does. */
+    if (!hit) {
+      var bestJ = -1, bestD = Infinity;
+      for (j = 1; j < sub.length; j++) {
+        var d = segDist(p[0], p[1], sub[j - 1][0], sub[j - 1][1], sub[j][0], sub[j][1]);
+        if (d < bestD) { bestD = d; bestJ = j; }
+      }
+      if (bestJ < 0) return false;
+      runs = [];
+      if (bestJ >= 2) runs.push(sub.slice(0, bestJ));
+      if (sub.length - bestJ >= 2) runs.push(sub.slice(bestJ));
+    }
     pushHistory();
-    sessionSubs = sessionSubs.slice(0, i).concat(sessionSubs.slice(i + 1));
+    sessionSubs = sessionSubs.slice(0, i).concat(runs, sessionSubs.slice(i + 1));
     applySubs();
     return true;
   }

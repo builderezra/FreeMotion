@@ -5923,6 +5923,18 @@ better still, keep working inside the turn rather than parking work for a later 
          a genuinely strong feature and the reason to do the rest properly.)
       3. A button to RE-ENTER drawing mode on an existing drawing, to add more strokes.
       4. **A real eraser** — rubs out part of a stroke, rather than deleting the whole drawing.
+      ✅ **Clauses 1 and 4 done (v9.62, v9.69). Clauses 2 and 3 still open.**
+      · **1 — v9.62.** Your diagnosis was right. It was being simplified into far fewer points on
+        release: on a 121-point stroke, 13 survived. Nothing is deleted or moved now.
+      · **4 — v9.69.** The eraser took the whole subpath, so touching the tail of a long line took the
+        line. It now removes only what is under it and each surviving run becomes its own stroke —
+        rub through the middle and you get two.
+      · **2 (draw-on / trim path) — NOT DONE, and it is the one worth doing properly.** START and END
+        along the path, both keyframable, so animating END from 0 to 100% draws the line on live. It
+        needs the path renderer to draw a PORTION of a path rather than all of it, which is real work
+        in the compositor and not something to bolt on at the end of a session. Next up on this item.
+      · **3 (re-enter drawing mode on an existing drawing) — NOT DONE.** Smaller than 2, and it wants
+        the drawing session to adopt an existing layer's strokes rather than starting empty.
       Goes with 314 (rename to Sketching) and 315.
 
 - [ ] **323 — Squish should work in corners, and should react to effect-driven movement (Shake etc.),
