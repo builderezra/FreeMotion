@@ -24845,5 +24845,160 @@
     if (FM.rescaleProjectContents([L], 0, 100, 50, 50) !== null) throw new Error('a zero source dimension was accepted');
   });
 
+  /* The Presets card now shows each preset rendered ON THIS LAYER. The only thing that makes such a
+     preview worth having is that it cannot disagree with the button beside it, so the tile is produced
+     by running the REAL apply on a throwaway clone. These two tests hold that seam shut. */
+  test('a preset preview runs the same code the Apply button runs', { item: 'preset-preview' }, function () {
+    if (!FM.layerPresets.applyTo) throw new Error('FM.layerPresets.applyTo is missing — the preview would need its own copy of what applying does');
+    var saved = FM.layerPresets.list();
+    try {
+      var src = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 100, shapeH: 100, fill: '#123456' });
+      src.start = 0; src.duration = 4;
+      src.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }];
+      src.shadow = { enabled: true, blur: 12, dx: 3, dy: 4, alpha: 1, color: '#000' };
+      src.transform.rotation = { kf: [{ t: 0, v: 0 }, { t: 1, v: 90 }] };
+      FM.layerPresets.save('__test_preset', src);
+      var data = FM.layerPresets.list().find(function (x) { return x.name === '__test_preset'; }).data;
+
+      // Two identical targets: one through apply(), one through applyTo() the way a tile does.
+      var mk = function () { var L = FM.makeLayer('shape', { shape: 'rect', x: 500, y: 500, shapeW: 80, shapeH: 80, fill: '#fff' }); L.start = 0; L.duration = 4; return L; };
+      var viaButton = mk(), viaPreview = mk();
+      // Two fresh layers differ in the fields makeLayer assigns FOR them — the id, and the clip colour,
+      // which rotates per layer. Neither is something a preset touches, so level them before comparing
+      // or the test fails on the fixture rather than on the thing under test.
+      viaPreview.id = viaButton.id;                       // apply() also rebases x/y off the CURRENT value
+      viaPreview.clipColor = viaButton.clipColor;
+      var layers0 = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.push(viaButton); FM.selectLayer(viaButton.id);
+        FM.layerPresets.apply('__test_preset', viaButton);
+      } finally {
+        FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+        FM.selectLayer(null);
+      }
+      FM.layerPresets.applyTo(data, viaPreview);
+
+      var a = JSON.stringify(viaButton, FM.jsonReplacer), b = JSON.stringify(viaPreview, FM.jsonReplacer);
+      if (a !== b) throw new Error('the preview path and the Apply path produced DIFFERENT layers — a preview that can disagree with its own button is worse than no preview.\nApply:   ' + a.slice(0, 300) + '\nPreview: ' + b.slice(0, 300));
+      if (!(viaButton.effects && viaButton.effects.length === 1 && viaButton.effects[0].type === 'blur'))
+        throw new Error('the FIXTURE applied nothing (effects: ' + JSON.stringify(viaButton.effects) + ') — the comparison above would pass on two untouched layers');
+      if (viaButton.shadow.blur !== 12) throw new Error('the fixture did not carry the shadow, so this compares almost nothing');
+    } finally {
+      FM.layerPresets.remove('__test_preset');
+      try { localStorage.setItem('fm.layerpresets', JSON.stringify(saved)); } catch (e) {}
+    }
+  });
+
+  test('the Presets card renders a live tile per applicable preset, and none for a broken one', { item: 'preset-preview' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 120); }); };
+    var layers0 = FM.scene.layers.slice();
+    var fxSaved = null; try { fxSaved = localStorage.getItem('fm.fxpresets'); } catch (e) {}
+    try {
+      // One applicable preset and one whose effect this build does not have.
+      FM.fxPresets.save('__test_good', [{ type: 'blur', enabled: true, params: { radius: 8 } }]);
+      FM.fxPresets.save('__test_broken', [{ type: 'no_such_effect_type', enabled: true, params: {} }]);
+
+      var L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(FM.scene.project.width / 2), y: Math.round(FM.scene.project.height / 2), shapeW: 200, shapeH: 200, fill: '#4af' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.time = 1;
+      FM.inspector.openCategory('presets');
+      FM.inspector.refresh();
+      await frame();
+
+      var rows = [].slice.call(document.querySelectorAll('.insp-preset-row'));
+      if (!rows.length) throw new Error('the Presets card rendered no rows at all');
+      var find = function (nm) { return rows.find(function (r) { var b = r.querySelector('.fxp-name'); return b && b.textContent === nm; }); };
+      var good = find('__test_good'), bad = find('__test_broken');
+      if (!good) throw new Error('the applicable preset did not render a row (rows: ' + rows.map(function (r) { var b = r.querySelector('.fxp-name'); return b ? b.textContent : '?'; }).join(',') + ')');
+      if (!bad) throw new Error('the broken preset was hidden — a row you cannot see is a row you cannot delete');
+      if (!good.querySelector('canvas.fxb-thumb-cv'))
+        throw new Error('the applicable preset has no preview canvas — this card is still a list of names, which is the whole complaint');
+      if (bad.querySelector('canvas.fxb-thumb-cv'))
+        throw new Error('the broken preset got a preview tile — there is nothing it could honestly show, since applying it does nothing');
+      if (!/can’t be applied/.test(bad.querySelector('.fxp-name').title))
+        throw new Error('the broken row no longer explains itself');
+      // …and the tile must be sized for a layer preview rather than left at 0x0.
+      var cv = good.querySelector('canvas.fxb-thumb-cv');
+      if (!(cv.width > 8 && cv.height > 8)) throw new Error('the preview canvas is ' + cv.width + 'x' + cv.height + ' — it was never mounted');
+    } finally {
+      FM.fxPresets.remove('__test_good'); FM.fxPresets.remove('__test_broken');
+      try { if (fxSaved != null) localStorage.setItem('fm.fxpresets', fxSaved); } catch (e) {}
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.inspector.refresh();
+    }
+  });
+
+  /* t=0 MUST BE DRAWN UNDER THE PLAYHEAD LINE. The timeline's whole geometry rests on one number —
+     how wide the track-head column is — and the playhead is a fixed line at 50vw with the content
+     scrolled under it. If that number disagrees with the column that actually rendered, every clip is
+     drawn at the wrong time, in every project, and no refresh can help because nothing is wrong with
+     the saved file.
+
+     That is precisely what shipped in v8.55 and went unnoticed until he reported it: the narrow head is
+     declared as `#tl-tracks.tl-no-groups { --head-w: 72px }` and JS read `--head-w` off document.BODY,
+     where a property set on #tl-tracks never appears. A project without a group — most projects — drew
+     every clip 18px left of where the playhead said it was. The whole suite was green throughout,
+     because nothing asserted the one thing the geometry is for. */
+  test('a clip at t=0 is drawn under the playhead line, with a group and without', { item: 'tl-origin' }, async function () {
+    await atPhoneWidth(async function () {
+      var settle = function () { return new Promise(function (r) { setTimeout(r, 140); }); };
+      var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+      try {
+        var mkClip = function () { var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#d8e83d' }); L.start = 0; L.duration = 2; return L; };
+
+        async function measure(label) {
+          FM.time = 0;
+          FM.refreshAll(); FM.timeline.rebuild();
+          await settle();
+          var tracks = document.getElementById('tl-tracks');
+          var centre = document.getElementById('tl-centerline');
+          if (!centre) throw new Error('no #tl-centerline — the playhead line this geometry is built around is gone');
+          var clip = document.querySelector('#tl-tracks .clip');
+          if (!clip) throw new Error(label + ': no clip rendered');
+          var head = document.querySelector('#tl-tracks .tl-headspace') || document.querySelector('#tl-tracks .track-head');
+          if (!head) throw new Error(label + ': no track-head column to measure');
+          return {
+            label: label,
+            noGroups: tracks.classList.contains('tl-no-groups'),
+            clipLeft: clip.getBoundingClientRect().left,
+            centreLeft: centre.getBoundingClientRect().left,
+            renderedHead: Math.round(head.getBoundingClientRect().width),
+            usedHead: FM._tlHeadW ? FM._tlHeadW() : null
+          };
+        }
+
+        // 1. NO GROUP — the case that was broken, and the common one.
+        FM.scene.layers.length = 0;
+        FM.scene.layers.push(mkClip());
+        var a = await measure('no group');
+        if (!a.noGroups) throw new Error('the no-group class did not apply, so this test is not looking at the broken case');
+        if (a.usedHead !== a.renderedHead)
+          throw new Error('the timeline is doing its maths with a head width of ' + a.usedHead + ' while the column rendered ' + a.renderedHead + ' — read off the wrong element');
+        if (Math.abs(a.clipLeft - a.centreLeft) > 1.5)
+          throw new Error('a clip starting at t=0 is drawn at x=' + a.clipLeft.toFixed(1) + ' but the playhead line for t=0 is at x=' + a.centreLeft.toFixed(1) + ' — ' + Math.round(a.clipLeft - a.centreLeft) + 'px out, so every clip sits at the wrong time');
+
+        // 2. WITH A GROUP — the head widens to hold the chevron column, and it must still line up.
+        FM.scene.layers.length = 0;
+        var g = FM.makeLayer('group', { name: 'G' }); g.start = 0; g.duration = 2;
+        var kid = mkClip(); kid.parent = g.id;
+        FM.scene.layers.push(g, kid);
+        var b = await measure('with a group');
+        if (b.noGroups) throw new Error('the no-group class is still on with a group present');
+        if (b.usedHead !== b.renderedHead)
+          throw new Error('with a group: maths uses ' + b.usedHead + ', column rendered ' + b.renderedHead);
+        if (Math.abs(b.clipLeft - b.centreLeft) > 1.5)
+          throw new Error('with a group, t=0 is drawn ' + Math.round(b.clipLeft - b.centreLeft) + 'px from the playhead line');
+
+        // …and the two states really do differ, or neither case proved anything about the other.
+        if (a.renderedHead === b.renderedHead)
+          throw new Error('the head is ' + a.renderedHead + 'px either way — the two branches this test exists to separate are the same, so it can no longer catch a mismatch');
+      } finally {
+        FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+        FM.time = t0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      }
+    });
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

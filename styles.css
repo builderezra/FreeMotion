@@ -1135,6 +1135,14 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 }
 .prop-row input[type=color] { width: 36px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); cursor: pointer; }
 .preset-wrap { flex: 1; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+/* The Presets card is a COLUMN of preview rows now, not a wrapped row of name pills — every row shows
+   this layer with that preset on it (queue "Check I changed the right Presets"). */
+.preset-wrap.rows { flex-wrap: nowrap; flex-direction: column; align-items: stretch; gap: 8px; }
+.preset-wrap.rows .fxp-row { width: 100%; }
+.insp-preset-row .fxp-name { background: none; border: 0; padding: 0; color: var(--text); text-align: left; cursor: pointer; }
+.insp-preset-row.builtin { border-color: rgba(106,160,255,.38); }
+.insp-preset-row.broken { border-color: rgba(255,170,60,.42); background: rgba(255,170,60,.09); }
+.insp-preset-row.broken .fxp-name { color: #9aa3b4; cursor: help; }
 .preset-chip { display: inline-flex; align-items: center; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; overflow: hidden; }
 .preset-chip.builtin { border-color: rgba(106,160,255,.38); background: rgba(106,160,255,.1); }
 .preset-name { padding: 3px 7px; background: none; border: none; color: var(--ink, #cfd6e4); cursor: pointer; font-size: 11px; }

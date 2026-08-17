@@ -111,6 +111,31 @@ window.FM = window.FM || {};
     if (m2) return parseFloat(m2[1].split(',')[4]) || 0;
     return 0;
   }
+  /* HOW WIDE THE TRACK-HEAD COLUMN ACTUALLY IS.
+   *
+   * Every clip's x, the scrub mapping and PAD are all built on this number, and t=0 is supposed to land
+   * exactly under the fixed centre line. It was read as
+   *     getComputedStyle(document.body).getPropertyValue('--head-w')
+   * in three places — and since v8.55 that has been the WRONG ELEMENT. The narrow head is declared as
+   *     #tl-tracks.tl-no-groups { --head-w: 72px; }
+   * and a custom property cascades DOWN, never up, so body kept reporting the :root value of 90 while
+   * the column rendered at 72. A project with no groups — which is most projects — therefore drew every
+   * clip 18px to the LEFT of the time the playhead said it was at, in every project, in every session,
+   * and a refresh could not help because nothing was wrong with the saved file. That is exactly what he
+   * reported: "the timeline is actually broken and is starting early … every project is broken the same
+   * way … refreshing page didn't fix".
+   *
+   * So it MEASURES the column that really rendered rather than reading a constant off some element and
+   * hoping the two agree. A future rule can move the variable anywhere it likes; the geometry cannot
+   * drift from the layout again, because it is now taken FROM the layout. The variable is only the
+   * fallback for the first call, before any head exists to measure. */
+  function readHeadW() {
+    const hs = document.querySelector('#tl-tracks .tl-headspace') || document.querySelector('#tl-tracks .track-head');
+    if (hs) { const w = hs.getBoundingClientRect().width; if (w > 1) return Math.round(w); }
+    const src = document.getElementById('tl-tracks') || document.body;
+    return parseInt(getComputedStyle(src).getPropertyValue('--head-w'), 10) || HEAD_W;
+  }
+  FM._tlHeadW = readHeadW;   // suite seam: the measured column, to check against the clip geometry
   function recomputePad() {
     const L = panelLeft();
     document.documentElement.style.setProperty('--tl-panel-left', L + 'px');
@@ -600,7 +625,7 @@ window.FM = window.FM || {};
   function applyInnerWidth() {
     // re-read --head-w every rebuild so a state-driven head width (overview eye-only vs edit pill)
     // keeps PAD / clip-x / scrub math in sync (was only re-read on init + resize).
-    HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || HEAD_W;
+    HEAD_W = readHeadW();
     recomputePad();
     if (!innerEl) return;
     const content = viewDur() * pxPerSec();
@@ -2172,7 +2197,7 @@ window.FM = window.FM || {};
       playheadEl = document.getElementById('tl-playhead');
       innerEl = document.getElementById('tl-inner');
       timelineEl = document.getElementById('timeline');
-      HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172;
+      HEAD_W = readHeadW();
       const zo = document.getElementById('btn-zoomout'), zi = document.getElementById('btn-zoomin');
       if (zo) zo.addEventListener('click', () => this.zoomBy(1 / 1.5));
       if (zi) zi.addEventListener('click', () => this.zoomBy(1.5));
@@ -2675,7 +2700,7 @@ window.FM = window.FM || {};
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
       window.addEventListener('resize', () => {
-        HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172;   // cheap, keep synchronous so scrub math stays correct mid-resize
+        HEAD_W = readHeadW();   // cheap, keep synchronous so scrub math stays correct mid-resize
         // iOS fires a resize STORM as the address bar / keyboard slides (dozens of events/sec); each
         // rebuild() re-rasterizes up-to-8192px filmstrips. Collapse the storm to one trailing rebuild.
         clearTimeout(resizeRebuildTimer);

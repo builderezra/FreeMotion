@@ -1007,6 +1007,16 @@ window.FM = window.FM || {};
     doc.effects = (doc.effects || []).concat(inst ? [inst] : []);
     return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
   }
+  /* A scene in which the target layer has been put through whatever APPLYING a preset does. The
+   * caller hands in the mutation rather than a description of it, so the tile is rendered by the same
+   * code the Apply button runs — which is the only way a "what will this look like" preview can be
+   * trusted not to drift from what you actually get. The clone is what gets mutated; the rest of the
+   * scene is the live objects, because previewing in context is the point. */
+  function sceneApplied(target, applyFn) {
+    const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
+    try { applyFn(doc); } catch (e) { return null; }
+    return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
+  }
   function sceneWithout(target) {
     const drop = descendants(target.id);
     return { project: FM.scene.project, layers: FM.scene.layers.filter(function (l) { return !drop[l.id]; }) };
@@ -1100,13 +1110,20 @@ window.FM = window.FM || {};
       const layer = FM.scene.layers.find(function (l) { return l.id === m.layerId; });
       if (!layer) return syntheticFor(m);
       const w = windowFor(layer, m.preset);
-      let inst = null;
-      try {
-        inst = m.preset ? (FM.effectPresets ? FM.effectPresets.makeInstance(m.preset, w.anchor) : null)
-                        : FM.fxRegistry.makeInstance(m.fx);
-      } catch (e) { inst = null; }
-      if (!inst) return syntheticFor(m);
-      j = { scene: sceneWith(layer, inst), w: w, r: rasterFor(FM.scene.project), frames: [], i: 0, shown: 0 };
+      let scn = null;
+      if (m.apply) {
+        scn = sceneApplied(layer, m.apply);
+        if (!scn) return syntheticFor(m);
+      } else {
+        let inst = null;
+        try {
+          inst = m.preset ? (FM.effectPresets ? FM.effectPresets.makeInstance(m.preset, w.anchor) : null)
+                          : FM.fxRegistry.makeInstance(m.fx);
+        } catch (e) { inst = null; }
+        if (!inst) return syntheticFor(m);
+        scn = sceneWith(layer, inst);
+      }
+      j = { scene: scn, w: w, r: rasterFor(FM.scene.project), frames: [], i: 0, shown: 0 };
       jobs.set(key, j);
     }
     const t0 = now();
@@ -1306,6 +1323,19 @@ window.FM = window.FM || {};
       if (!type) return;
       const m = layerMeta(layer, type, null);
       mountKey(cv, m ? 'd:' + type + '@' + m.layerId + '#' + m.rev : type, m);
+    },
+    /* A tile of THIS LAYER with a saved preset applied to it — the inspector's Presets card. The
+     * caller passes the mutation (see sceneApplied), so the picture is produced by the same code the
+     * Apply button runs. `key` must change when the preset's CONTENTS change, or a re-saved preset of
+     * the same name would serve the old tile out of the cache.
+     * Returns false when this layer cannot honestly be previewed — nothing of it is on screen at the
+     * playhead, say — so the caller can fall back to a plain row instead of showing a sample tile of
+     * some unrelated subject, which would be worse than no picture at all. */
+    mountApplied: function (cv, key, layer, applyFn) {
+      if (!cv || !key || !layer || typeof applyFn !== 'function') return false;
+      if (!canPreview(layer, null)) return false;
+      mountKey(cv, 'a:' + key + '@' + layer.id + '#' + sceneRev(), { layerId: layer.id, rev: sceneRev(), apply: applyFn, fx: null });
+      return true;
     },
     /* Is a live preview of this layer meaningful (see canPreview)? Public so a sheet can say WHY it
      * is showing a sample instead of guessing, and so the suite can assert the fallback. */

@@ -3439,7 +3439,15 @@ better still, keep working inside the turn rather than parking work for a later 
       `kaleidoscope:centerx=max · centery=min · centery=max` — two different mechanisms, both caught
       without a bespoke test for either. That is the whole argument for keeping it.
 
-- [ ] **Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
+- [x] **Check I changed the right "Presets". ANSWERED by him 17 Aug, and BUILT in v9.29.** He meant
+      the inspector's Presets card, and he wants it to work the way the effects browser already does:
+      *"the preset menu I wanted to show what the layer would look like with that effect … when you
+      would tap on one thing it would show how the effects preset would make the layer look, this is
+      similar to how we have the effects menu as it is so it wouldn't be much work to get this
+      working."* He was right that the engine was already there. Every row in that card is now a live
+      tile of THIS layer with that preset on it, rendered by running the real apply on a throwaway
+      clone — so the picture cannot drift from what tapping the row gives you. Original note follows.
+- [x] **(original) Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
       in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,
       older system (saved effect stacks, no tiles, empty on a fresh install) and is untouched. If the
       menu you meant was that one, say so and I will move it — merging the two is queue 37's real job.
@@ -5635,6 +5643,55 @@ better still, keep working inside the turn rather than parking work for a later 
       · **"Just ship it as good as you can and remind me to test it."** Standing instruction on anything
         where the question was "is this what you want?" — build it, ship it, and TELL HIM to test it
         rather than holding the queue waiting for an answer.
+
+
+- [ ] **326 — The "Tap here to start creating" row should fill the WHOLE empty timeline, with a big
+      + in the middle.** (17 Aug, screenshot of an empty Project 24 on his phone.) His words, verbatim:
+      *"Make the tap to start creating button actually take up the whole timeline while the projects
+      empty and have it so the plus button is big and in the middle, this should make it very apparent
+      and obvious for beginners on how to start"*.
+      Three clauses: (1) while the project is EMPTY the row takes up the whole timeline area, not the
+      single ~60px strip it is now; (2) the + is big; (3) the + is in the MIDDLE, not tucked at the left.
+      Note this is the EMPTY state only — his second screenshot shows the same row reading "Tap to add a
+      layer" once a clip exists, and that one must stay the slim row it is.
+      Sits with 296 (+ not centred in its circle), 307 (four things about that row) and 324 (its
+      colours) — all the same control, worth one pass.
+
+- [x] **327 — The timeline is broken: it starts EARLY. FIXED v9.29 — it was 18px, in every project, since v8.55.** (17 Aug, two screenshots, one correction.)
+      His words, verbatim, in order:
+      > Glitch where the project doesn’t end where the last thing on the timeline ends
+
+      then, correcting himself:
+      > Wait the glitch I just said is not what I thought, the timeline is actually broken and is starting early
+
+      **His correction is the report — the first sentence is withdrawn and is kept here only so the
+      thread reads straight.** What the screenshots show: with one "Squircle" clip in the project and
+      the playhead at **00:00:00**, the clip's bar does not begin at the left edge of the track area —
+      it starts roughly two thirds of the way across, right about where the playhead is, while the
+      empty space to its left sits under ruler that should be BEFORE zero. The canvas is rendering the
+      squircle at that same moment, so the clip really is live at t=0; it is the timeline's picture of
+      where t=0 sits that disagrees.
+      **ESCALATED the same minute — this is not one project.** His words: *"Refreshing page didn't fix"*
+      and *"Every project is broken the same way"*. That makes it a live breakage on v9.28 rather than a
+      queue item, so it jumps the queue under the "genuine emergency" rule and is being diagnosed now.
+      **DIAGNOSED AND FIXED, v9.29 — and you were right that it was the timeline, not the project.**
+      The playhead is a fixed line down the middle of the screen and the timeline scrolls underneath it,
+      so the whole geometry rests on one number: how wide the track-head column (the eye + colour chip
+      strip on the left) is. JS read that number off `document.body`. Since **v8.55** the narrow head has
+      been declared on a different element — `#tl-tracks.tl-no-groups { --head-w: 72px }` — and a CSS
+      custom property cascades DOWN, never up, so body kept reporting 90 while the column rendered 72.
+      **Any project without a group, which is nearly all of them, drew t=0 eighteen pixels away from the
+      line that means t=0.** Measured at 375px before the fix: clip at x=169.5, playhead line at x=187.5.
+      Nothing was wrong with your files, which is why refreshing did nothing. It measures the column that
+      actually rendered now, so the maths cannot drift from the layout again, and there is a test
+      asserting a clip at t=0 lands on the line — in both the group and no-group layouts. The suite was
+      green for the whole ten months this was live, because nothing had ever asserted it.
+
+- [ ] **328 — Standing reminder from him, restated 17 Aug.** His words: *"Also remember to add stuff to
+      the list and keep going from oldest first"*. Nothing to build — kept as an entry because it is the
+      third time he has had to say it, and a repeated instruction that lives only in a chat log is one
+      more thing to forget. The structural version already exists (`tools/next.sh`, and the rules at the
+      top of CLAUDE.md); this is the receipt.
 
 
 ## Done

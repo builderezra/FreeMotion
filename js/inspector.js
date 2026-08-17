@@ -351,7 +351,16 @@ window.FM = window.FM || {};
     apply(name, layer) {
       const p = this.list().find(x => x.name === name);
       if (!p || !layer) return;
-      const d = p.data;
+      this.applyTo(p.data, layer);
+      afterFx();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+    },
+    /* WHAT APPLYING ACTUALLY DOES, with no side effects — split out of apply() so the PREVIEW can run
+     * the very same code on a throwaway clone. That is the whole point of the preview: it has to show
+     * the picture you are about to get, and a second implementation of "what a preset does" would
+     * drift from this one the first time either changed. Touches nothing but `layer`. */
+    applyTo(d, layer) {
+      if (!d || !layer) return;
       layer.effects = sanitizeFxList(clone(d.effects) || []);   // queue 218 — a saved preset is untrusted too
       if (d.fill != null && layer.type === 'shape') layer.fill = d.fill;
       if (d.fillMode != null && (layer.type === 'shape' || layer.type === 'text')) layer.fillMode = d.fillMode;
@@ -370,8 +379,6 @@ window.FM = window.FM || {};
       if (dt.opacity !== undefined && dt.opacity !== null) tr.opacity = shiftKf(dt.opacity, t0);
       if (dt.xDelta) tr.x = shiftKf(xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time)), t0);   // relative motion from HERE, timed from the clip's start
       if (dt.yDelta) tr.y = shiftKf(xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time)), t0);
-      afterFx();
-      if (FM.canvasEdit) FM.canvasEdit.update();
     },
     remove(name) { this._write(this.list().filter(p => p.name !== name)); },
   };
@@ -4085,21 +4092,58 @@ window.FM = window.FM || {};
         }
       }
     } else if (key === 'presets') {
-      body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
-      const pwrap = el('div', 'preset-wrap');
-      // LAYER presets first (look + animations — the AM-style ones saved via “Save Preset”)
+      body.appendChild(el('div', 'insp-hint', 'Each row shows this layer with that preset on it. Tap one to apply it, or save the current look as a preset.'));
+      const pwrap = el('div', 'preset-wrap rows');
+      /* EVERY ROW SHOWS THE LAYER WITH THE PRESET ON IT. Ezra: "the preset menu I wanted to show what
+       * the layer would look like with that effect … when you would tap on one thing it would show how
+       * the effects preset would make the layer look, this is similar to how we have the effects menu
+       * as it is". He is right that the engine was already there — the effects browser has had live
+       * per-layer previews since v6.30; this card was still a row of text pills.
+       * The tile is rendered by running the REAL apply on a throwaway clone (FM.fxThumbs.mountApplied),
+       * not by a second description of what a preset does. A preview that could disagree with the row
+       * you tap would be worse than no preview. */
+      const canThumb = !!(FM.fxThumbs && FM.fxThumbs.mountApplied);
+      let noPreview = false;
+      // Keyed on CONTENTS, not name: re-saving a preset under a name it already had must not serve
+      // the old picture out of the tile cache.
+      const stamp = o => { const t = JSON.stringify(o) || ''; let h = 5381; for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0; return t.length + '_' + h.toString(36); };
+      function presetRow(o) {
+        const row = el('div', 'fxp-row insp-preset-row' + (o.cls || ''));
+        if (canThumb && o.applyTo) {
+          const th = el('div', 'fxb-thumb fxp-thumb'); th.dataset.cat = o.cat || 'stylize';
+          const cv = el('canvas', 'fxb-thumb-cv');
+          th.appendChild(cv);
+          if (FM.fxThumbs.mountApplied(cv, o.key, layer, o.applyTo)) row.appendChild(th);
+          else noPreview = true;   // nothing of this layer is on screen; a sample of another subject would mislead
+        }
+        const txt = el('div', 'fxp-txt');
+        const nm = el('button', 'fxp-name insp-preset-name', o.name);
+        nm.type = 'button'; nm.title = o.title;
+        nm.addEventListener('click', o.onTap);
+        txt.appendChild(nm);
+        if (o.sub) txt.appendChild(el('div', 'fxp-desc', o.sub));
+        row.appendChild(txt);
+        if (o.onDelete) {
+          const d = el('button', 'fxp-del', '✕'); d.type = 'button'; d.title = 'Delete this preset';
+          d.addEventListener('click', e => { e.stopPropagation(); o.onDelete(); });
+          row.appendChild(d);
+        }
+        return row;
+      }
+
+      // LAYER presets first (look + animations — the AM-style ones saved via "Save Preset")
       const lps = FM.layerPresets.list();
       if (lps.length) pwrap.appendChild(el('div', 'preset-sec', 'My presets'));
       lps.forEach(p => {
-        const chip = el('div', 'preset-chip');
-        const nm = el('button', 'preset-name', p.name);
-        nm.title = 'Apply “' + p.name + '” — look + animations';
-        nm.addEventListener('click', () => { FM.layerPresets.apply(p.name, layer); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
-        chip.appendChild(nm);
-        const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset';
-        del.addEventListener('click', () => { FM.layerPresets.remove(p.name); FM.inspector.refresh(); });
-        chip.appendChild(del);
-        pwrap.appendChild(chip);
+        pwrap.appendChild(presetRow({
+          name: p.name,
+          key: 'lp:' + p.name + ':' + stamp(p.data),
+          title: 'Apply “' + p.name + '” — look + animations',
+          sub: 'Look + animations',
+          applyTo: doc => FM.layerPresets.applyTo(p.data, doc),
+          onTap: () => { FM.layerPresets.apply(p.name, layer); if (FM.toast) FM.toast('Applied “' + p.name + '”'); },
+          onDelete: () => { FM.layerPresets.remove(p.name); FM.inspector.refresh(); }
+        }));
       });
       const svL = el('button', 'fx-act', 'Save this layer as preset…');
       svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
@@ -4119,34 +4163,45 @@ window.FM = window.FM || {};
         const raw = Array.isArray(p.effects) ? p.effects : [];
         const fx = usableFx(p);
         const skipped = raw.length - fx.length;
-        const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : '') + (fx.length ? '' : ' broken'));
-        const nm = el('button', 'preset-name', p.name);
         if (!fx.length) {
-          // NOT hidden: a broken row you cannot see is a row you cannot delete. It stays visible,
-          // keeps its ×, and explains itself in a toast — a title tooltip alone is invisible on a phone.
+          // NOT hidden: a broken row you cannot see is a row you cannot delete. It stays visible, keeps
+          // its ✕, and explains itself — and gets NO thumbnail, because there is nothing it could
+          // honestly show. A tile here would be a picture of a look that will never be applied.
           const why = raw.length
             ? ('its ' + raw.length + ' effect' + (raw.length === 1 ? ' is' : 's are') + ' not in this build')
             : 'it was saved empty, or in a format this panel doesn’t read';
-          nm.title = '“' + p.name + '” can’t be applied — ' + why + '. Applying it would wipe this layer’s effects, so it does nothing. Remove it with ×.';
-          nm.addEventListener('click', () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); });
-        } else {
-          nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') +
-            (skipped ? ', ' + skipped + ' skipped — not in this build' : '') + ')';
-          // A preset is a saved LOOK → REPLACE the stack (not append), so re-tapping never stacks duplicates.
-          nm.addEventListener('click', () => {
+          const t0 = '“' + p.name + '” can’t be applied — ' + why + '. Applying it would wipe this layer’s effects, so it does nothing. Remove it with ✕.';
+          pwrap.appendChild(presetRow({
+            name: p.name, cls: ' broken', title: t0, sub: '⚠ ' + why,
+            onTap: () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); },
+            onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); })
+          }));
+          return;
+        }
+        const t1 = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') +
+          (skipped ? ', ' + skipped + ' skipped — not in this build' : '') + ')';
+        pwrap.appendChild(presetRow({
+          name: p.name,
+          key: 'fp:' + p.name + ':' + stamp(fx),
+          cls: p.builtin ? ' builtin' : '',
+          cat: (FM.fxRegistry.get(fx[0].type) || {}).category || 'stylize',
+          title: t1,
+          sub: fx.length + ' effect' + (fx.length === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : ''),
+          // A preset is a saved LOOK → it REPLACES the stack, and the preview has to show THAT, not the
+          // layer's current effects with these added on top.
+          applyTo: doc => { doc.effects = usableFx(p).map(e => JSON.parse(JSON.stringify(e))); },
+          onTap: () => {
             const use = usableFx(p);   // re-read at click time: never assign an empty/unusable stack
             if (!use.length) { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — your effect stack is untouched.', 3600); return; }
             layer.effects = use.map(e => JSON.parse(JSON.stringify(e)));
             FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit();
             if (FM.toast) FM.toast('Applied “' + p.name + '”' + (skipped ? ' (' + skipped + ' effect' + (skipped === 1 ? '' : 's') + ' skipped — not in this build)' : ''));
-          });
-        }
-        chip.appendChild(nm);
-        // The ⚠ sits OUTSIDE the name button so the button's text stays exactly the preset's name.
-        if (!fx.length) { const w = el('span', 'preset-warn', '⚠'); w.title = nm.title; chip.appendChild(w); }
-        if (!p.builtin) { const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset'; del.addEventListener('click', () => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); }); chip.appendChild(del); }
-        pwrap.appendChild(chip);
+          },
+          onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); })
+        }));
       });
+      // Say WHY there are no pictures rather than leaving a column of bare names looking half-built.
+      if (noPreview) pwrap.appendChild(el('div', 'insp-hint', 'No previews — nothing of this layer is on screen at the playhead.'));
       const sv = el('button', 'fx-act', 'Save current effects…'); sv.disabled = !(layer.effects && layer.effects.length);
       sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
       pwrap.appendChild(sv);
