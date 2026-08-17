@@ -291,7 +291,12 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Rect → Polar'], [1, 'Polar → Rect']] },
     ] },
     { type: 'bend', label: 'Bend', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
-    { type: 'glass', label: 'Glass', param: 'amount', min: 0, max: 40, step: 1, def: 12, unit: 'px' },
+    { type: 'glass', label: 'Glass', params: [
+      { key: 'amount', label: 'Distortion', min: 0, max: 40, step: 1, def: 12, unit: 'px' },
+      { key: 'scale', label: 'Facet size', min: 1, max: 40, step: 1, def: 1, unit: 'px' },
+      { key: 'axis', label: 'Distorts', def: 0, options: [[0, 'Both'], [1, 'Across'], [2, 'Down']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ] },
     // ---- batch 8 ----
     { type: 'lightglow', label: 'Light Glow', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -441,7 +446,12 @@ window.FM = window.FM || {};
       { key: 'motion', label: 'Motion', min: 0, max: 100, step: 1, def: 25, legacy: 0, unit: '%' },
       { key: 'speed', label: 'Drift', min: -4, max: 4, step: 0.1, def: 0 },
     ] },
-    { type: 'fractalwarp', label: 'Fractal Warp', param: 'amount', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
+    { type: 'fractalwarp', label: 'Fractal Warp', params: [
+      { key: 'amount', label: 'Strength', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
+      { key: 'evolve', label: 'Churn', min: 0, max: 5, step: 0.1, def: 0 },
+      { key: 'scale', label: 'Feature size', min: 20, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'detail', label: 'Octaves', min: 1, max: 3, step: 1, def: 3 },
+    ] },
     // ---- batch 11 (multi-param) ----
     // RENAMED, not re-implemented. This never read motion: it lays nine copies along an angle you
     // set by hand, identical on a whip-pan and on a still frame. The Angle slider is the proof —
@@ -507,7 +517,11 @@ window.FM = window.FM || {};
       { key: 'axis', label: 'Folds on', def: 0, options: [[0, 'Both'], [1, 'Across'], [2, 'Down']] },
     ] },
     // ---- batch 16: Other / Color / Procedural / Drawing ----
-    { type: 'channelremap', label: 'Channel Remap', param: 'mode', def: 1, options: [[0, 'RGB (identity)'], [1, 'Swap R/B'], [2, 'Swap R/G'], [3, 'Swap G/B'], [4, 'Rotate RGB→GBR'], [5, 'Rotate RGB→BRG'], [6, 'Hue Invert'], [7, 'Swap Sat/Val']] },
+    { type: 'channelremap', label: 'Channel Remap', params: [
+      { key: 'mode', label: 'Swap', def: 1, options: [[0, 'RGB (identity)'], [1, 'Swap R/B'], [2, 'Swap R/G'], [3, 'Swap G/B'], [4, 'Rotate RGB→GBR'], [5, 'Rotate RGB→BRG'], [6, 'Hue Invert'], [7, 'Swap Sat/Val']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'luma', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
     { type: 'gradientoverlay', label: 'Gradient Overlay', params: [{ key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
@@ -3838,11 +3852,23 @@ window.FM = window.FM || {};
     mattechoker: function(d,W,H,p,t){ var mc_choke=FM.evalProp(p.choke,t); if(mc_choke==null) mc_choke=-4; mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0) return; var mc_r=Math.abs(mc_choke); var mc_erode=mc_choke<0; var mc_N=W*H; var mc_a=new Float32Array(mc_N); var mc_b=new Float32Array(mc_N); var mc_i, mc_x, mc_y, mc_w4=W*4; for(mc_i=0; mc_i<mc_N; mc_i++){ mc_a[mc_i]=d[mc_i*4+3]; } var mc_win=mc_r*2+1; for(mc_y=0; mc_y<H; mc_y++){ var mc_row=mc_y*W; for(mc_x=0; mc_x<W; mc_x++){ var mc_lo=mc_x-mc_r; var mc_hi=mc_x+mc_r; if(mc_lo<0) mc_lo=0; if(mc_hi>W-1) mc_hi=W-1; var mc_acc=mc_a[mc_row+mc_lo]; var mc_k; if(mc_erode){ for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v=mc_a[mc_row+mc_k]; if(mc_v<mc_acc) mc_acc=mc_v; } } else { for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v2=mc_a[mc_row+mc_k]; if(mc_v2>mc_acc) mc_acc=mc_v2; } } mc_b[mc_row+mc_x]=mc_acc; } } for(mc_x=0; mc_x<W; mc_x++){ for(mc_y=0; mc_y<H; mc_y++){ var mc_lo2=mc_y-mc_r; var mc_hi2=mc_y+mc_r; if(mc_lo2<0) mc_lo2=0; if(mc_hi2>H-1) mc_hi2=H-1; var mc_acc2=mc_b[mc_lo2*W+mc_x]; var mc_j; if(mc_erode){ for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u=mc_b[mc_j*W+mc_x]; if(mc_u<mc_acc2) mc_acc2=mc_u; } } else { for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u2=mc_b[mc_j*W+mc_x]; if(mc_u2>mc_acc2) mc_acc2=mc_u2; } } var mc_av=mc_acc2; if(mc_av<0) mc_av=0; if(mc_av>255) mc_av=255; d[(mc_y*W+mc_x)*4+3]=mc_av; } } },
     mattefringe: function(d, W, H, p, t, ps){ var mfw = FM.evalProp(p.width, t); if(mfw==null) mfw=3; mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2]; for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]===1 && mfEro2[mfi]===0){ mfidx=mfi*4; d[mfidx]=mfr; d[mfidx+1]=mfg; d[mfidx+2]=mfb; } } },
     // ---- batch 16 (other / color / proc / drawing) ----
-    channelremap: function(d,W,H,p,t){ var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4; for(var crI=0;crI<crN;crI+=4){ var crR=d[crI], crG=d[crI+1], crB=d[crI+2]; var crNr, crNg, crNb; switch(crM){ case 1: crNr=crB; crNg=crG; crNb=crR; break; case 2: crNr=crG; crNg=crR; crNb=crB; break; case 3: crNr=crR; crNg=crB; crNb=crG; break; case 4: crNr=crG; crNg=crB; crNb=crR; break; case 5: crNr=crB; crNg=crR; crNb=crG; break;
+    channelremap: function(d,W,H,p,t){ var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
+      // Completely binary: 100% of a channel swap or nothing, so it could only ever be a novelty and
+      // never the 25% version that survives into a finished grade. MIX is the whole point of the row.
+      // LUMA keeps the original brightness through the swap, so it reads as a colour shift rather than
+      // a lighting change — swapping R and B on a blue sky otherwise darkens it as well as recolouring.
+      var crMix=p.mix==null?1:FM.evalProp(p.mix,t); if(crMix<0)crMix=0; if(crMix>1)crMix=1; if(crMix<=0)return;
+      var crFull=crMix===1;
+      var crLuma=(p.luma==null?0:(Math.round(FM.evalProp(p.luma,t))|0))===1; for(var crI=0;crI<crN;crI+=4){ var crR=d[crI], crG=d[crI+1], crB=d[crI+2]; var crNr, crNg, crNb; switch(crM){ case 1: crNr=crB; crNg=crG; crNb=crR; break; case 2: crNr=crG; crNg=crR; crNb=crB; break; case 3: crNr=crR; crNg=crB; crNb=crG; break; case 4: crNr=crG; crNg=crB; crNb=crR; break; case 5: crNr=crB; crNg=crR; crNb=crG; break;
       // HSV modes. 6 Hue Invert: complement the hue while keeping min/max (sat + val unchanged) — the classic mx+mn−c identity. 7 Swap Sat/Val: exchange saturation and value in HSV space.
       case 6: { var hiMx=Math.max(crR,crG,crB), hiMn=Math.min(crR,crG,crB), hiS=hiMx+hiMn; crNr=hiS-crR; crNg=hiS-crG; crNb=hiS-crB; break; }
       case 7: { var svMx=Math.max(crR,crG,crB), svMn=Math.min(crR,crG,crB), svDf=svMx-svMn; var svV=svMx/255, svS=svMx===0?0:svDf/svMx; var svH=0; if(svDf>0){ if(svMx===crR)svH=((crG-crB)/svDf)%6; else if(svMx===crG)svH=(crB-crR)/svDf+2; else svH=(crR-crG)/svDf+4; svH*=60; if(svH<0)svH+=360; } var svV2=svS, svS2=svV; var svC=svV2*svS2, svX=svC*(1-Math.abs((svH/60)%2-1)), svMm=svV2-svC, sr,sg,sb; if(svH<60){sr=svC;sg=svX;sb=0;} else if(svH<120){sr=svX;sg=svC;sb=0;} else if(svH<180){sr=0;sg=svC;sb=svX;} else if(svH<240){sr=0;sg=svX;sb=svC;} else if(svH<300){sr=svX;sg=0;sb=svC;} else {sr=svC;sg=0;sb=svX;} crNr=(sr+svMm)*255; crNg=(sg+svMm)*255; crNb=(sb+svMm)*255; break; }
-      default: crNr=crR; crNg=crG; crNb=crB; } d[crI]=crNr; d[crI+1]=crNg; d[crI+2]=crNb; } },
+      default: crNr=crR; crNg=crG; crNb=crB; }
+        if(crLuma){ var clOld=0.299*crR+0.587*crG+0.114*crB, clNew=0.299*crNr+0.587*crNg+0.114*crNb;
+          if(clNew>0.0001){ var clK=clOld/clNew; crNr*=clK; crNg*=clK; crNb*=clK;
+            if(crNr>255)crNr=255; if(crNg>255)crNg=255; if(crNb>255)crNb=255; } }
+        if(crFull){ d[crI]=crNr; d[crI+1]=crNg; d[crI+2]=crNb; }
+        else { d[crI]=crR+(crNr-crR)*crMix; d[crI+1]=crG+(crNg-crG)*crMix; d[crI+2]=crB+(crNb-crB)*crMix; } } },
     gradientoverlay: function(d, W, H, p, t){ var go_ang = FM.evalProp(p.angle, t); if(go_ang===null||go_ang===undefined) go_ang = 0; var go_amt = FM.evalProp(p.amount, t); if(go_amt===null||go_amt===undefined) go_amt = 0.8; if(go_amt<0) go_amt=0; if(go_amt>1) go_amt=1; var go_rad = go_ang * Math.PI / 180; var go_dx = Math.cos(go_rad), go_dy = Math.sin(go_rad); var go_c1 = hexToRGB(p.color); var go_c2 = hexToRGB(p.color2); if(!go_c1) go_c1 = [255,61,127]; if(!go_c2) go_c2 = [61,123,255]; var go_cx = W/2, go_cy = H/2; var go_half = (Math.abs(go_dx)*go_cx + Math.abs(go_dy)*go_cy); if(go_half < 1e-6) go_half = 1; for(var go_y=0; go_y<H; go_y++){ var go_ry = go_y - go_cy; for(var go_x=0; go_x<W; go_x++){ var go_i = (go_y*W + go_x)*4; var go_a = d[go_i+3]; if(go_a<=0) continue; var go_rx = go_x - go_cx; var go_proj = go_rx*go_dx + go_ry*go_dy; var go_g = (go_proj + go_half) / (2*go_half); if(go_g<0) go_g=0; if(go_g>1) go_g=1; var go_gr = go_c1[0] + (go_c2[0]-go_c1[0])*go_g; var go_gg = go_c1[1] + (go_c2[1]-go_c1[1])*go_g; var go_gb = go_c1[2] + (go_c2[2]-go_c1[2])*go_g; d[go_i]   = d[go_i]   + (go_gr - d[go_i])*go_amt; d[go_i+1] = d[go_i+1] + (go_gg - d[go_i+1])*go_amt; d[go_i+2] = d[go_i+2] + (go_gb - d[go_i+2])*go_amt; } } },
     lensflare: function(d,W,H,p,t){ var lfx=FM.evalProp(p.x,t); if(lfx==null)lfx=0.3; if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy=FM.evalProp(p.y,t); if(lfy==null)lfy=0.3; if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI=FM.evalProp(p.intensity,t); if(lfI==null)lfI=1; if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; var lfFR=255, lfFG=240, lfFB=210; var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); var lfBest=0; for(var lfk=0;lfk<lfNR;lfk++){ var lfdA=lfAng-lfRays[lfk]; while(lfdA>3.1415926536)lfdA-=6.2831853072; while(lfdA<-3.1415926536)lfdA+=6.2831853072; var lfAlign=Math.cos(lfdA); if(lfAlign>lfBest)lfBest=lfAlign; } if(lfBest>0){ var lfShape=Math.pow(lfBest,32); var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; var lfAddR=lfFR*lfAmt/255; var lfAddG=lfFG*lfAmt/255; var lfAddB=lfFB*lfAmt/255; var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t){ var re_amt=FM.evalProp(p.amount,t); if(re_amt==null)re_amt=6; re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl=FM.evalProp(p.scale,t); if(re_scl==null)re_scl=10; re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=d.slice(); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
@@ -5259,14 +5285,38 @@ window.FM = window.FM || {};
     // a wall). Half the effect had no way to be reached.
     polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
     bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
-    glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */ var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
+    glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */
+      // The jitter was regenerated per INDIVIDUAL PIXEL, which is the one setting at which this reads
+      // as TV static rather than as glass: real glass distorts in facets, and a facet is several pixels
+      // across. SCALE hashes on a cell so the displacement is shared across one. AXIS gives the
+      // rain-streak variant (displace along one axis only). SEED rerolls the pattern.
+      var gsc=p.scale==null?1:Math.round(FM.evalProp(p.scale,t)); if(gsc<1)gsc=1; if(gsc>40)gsc=40;
+      if(gsc>1){ gsc=Math.max(1,Math.round(gsc*(ps||1))); }
+      var gax=p.axis==null?0:(Math.round(FM.evalProp(p.axis,t))|0);
+      var gsd=p.seed==null?0:(Math.round(FM.evalProp(p.seed,t))|0);
+      var gcx=gsc===1?x:Math.floor(x/gsc), gcy=gsc===1?y:Math.floor(y/gsc);
+      var ghh=(gcx*374761393 + gcy*668265263 + gsd*2246822519)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16);
+      var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam;
+      if(gax===1) gdy=0; else if(gax===2) gdx=0;
+      return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
     curl: function(x,y,W,H,cx,cy,maxR,p,t,ps){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=Math.max(1,(p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)))*(ps||1)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
       // The frequency DIVISORS are wavelengths in px too, so they scale with the plate as well —
       // scaling only the amplitude would keep the displacement right and shrink the pattern.
-      var fwNx=Math.sin(x/(57*fwK)+y/(40*fwK))+Math.sin(x/(29*fwK)-y/(53*fwK))*0.6+Math.sin(x/(15*fwK)+y/(19*fwK))*0.35; var fwNy=Math.cos(x/(47*fwK)-y/(61*fwK))+Math.sin(x/(35*fwK)+y/(27*fwK))*0.6+Math.cos(x/(13*fwK)-y/(21*fwK))*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
+      // The field never MOVED, which is the one thing a fractal warp is for — organic boiling churn.
+      // EVOLVE puts time into the phase. SCALE resizes the features (the divisors are wavelengths in
+      // px, so they scale together). DETAIL drops octaves for a smooth swell instead of fine churn.
+      var fwEv=p.evolve==null?0:FM.evalProp(p.evolve,t); if(fwEv<0)fwEv=0; if(fwEv>5)fwEv=5;
+      var fwScP=p.scale==null?100:FM.evalProp(p.scale,t); if(fwScP<20)fwScP=20; if(fwScP>400)fwScP=400;
+      var fwDet=p.detail==null?3:Math.round(FM.evalProp(p.detail,t)); if(fwDet<1)fwDet=1; if(fwDet>3)fwDet=3;
+      var fwS=fwScP===100?fwK:fwK*(fwScP/100);
+      var fwPh=fwEv===0?0:t*fwEv;
+      var fwNx=Math.sin(x/(57*fwS)+y/(40*fwS)+fwPh), fwNy=Math.cos(x/(47*fwS)-y/(61*fwS)+fwPh);
+      if(fwDet>1){ fwNx+=Math.sin(x/(29*fwS)-y/(53*fwS)+fwPh*1.7)*0.6; fwNy+=Math.sin(x/(35*fwS)+y/(27*fwS)+fwPh*1.7)*0.6; }
+      if(fwDet>2){ fwNx+=Math.sin(x/(15*fwS)+y/(19*fwS)+fwPh*2.9)*0.35; fwNy+=Math.cos(x/(13*fwS)-y/(21*fwS)+fwPh*2.9)*0.35; }
+      return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
     // amount. At 1 the frame reads as an infinite tube; small amounts give a wormhole pucker.
     tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y]; var tnDx=x-cx, tnDy=y-cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y]; var tnInv=(maxR*0.30)*(maxR*0.30)/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA; return [cx+tnDx/tnR*tnRR, cy+tnDy/tnR*tnRR]; },

@@ -3792,12 +3792,19 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
+      never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
+      dialable now, and it can keep the original brightness).
+      **That clears every high-impact effect in the plan except ONE: Stroke.** It wants an inside or
+      centred outline and a round corner, and the current one is a square-by-construction box dilation
+      — a round stroke needs a real distance transform, which is a build rather than a slider, so I
+      have left it as its own job instead of half-doing it. ~33 medium/low effects also remain.
       *Round 19, v9.04:* the atmosphere effects. Starfield's stars were single pixels of one flat
       colour (sensor dirt at 1080p, and gone entirely after export); Grunge was a single-pixel speckle
       that always dried to black; Light Leak always came from the top-right; Blink was one hard 50/50
       square wave, so two blinking layers could never alternate. All four fixed.
-      *Note:* three of round 19's four new tests still want their mutation check — the starfield one is
-      done (and caught a real bug I had just written). Doing the other three next, because 306 jumped.
+      *All four of round 19's tests are mutation-checked* (done at v9.06; the starfield one caught a
+      real bug I had just written).
       *Round 18, v9.03:* the text-string effects. The typewriter could only reveal one LETTER at a
       time (half-words on screen every frame — wrong for captions); it does words and lines now, from
       either end or outward from the middle, with a caret. Timecode could only count UP from zero at

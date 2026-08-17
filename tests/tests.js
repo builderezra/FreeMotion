@@ -18195,6 +18195,108 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 20: the last of the high-impact singles ---------------- */
+
+  test('effects: round 20 still maps and renders an un-upgraded instance exactly as it did', { item: 'fx-r20' }, function () {
+    var fails = [];
+    // channelremap is a PIXEL effect; the other two are WARPS, so they are compared as coordinates.
+    var W = 96, H = 96;
+    var bare = fxRun('channelremap', W, H, { mode: 1 });
+    if (fxDiff(bare, fxRun('channelremap', W, H, { mode: 1, mix: 1, luma: 0 }))) fails.push('channelremap: spelling the new keys out at their fallbacks changed the render');
+    if (!fxDiff(fxPlate(W, H), bare)) fails.push('channelremap: renders nothing at its legacy settings');
+    if (!fxDiff(bare, fxRun('channelremap', W, H, { mode: 1, mix: 0.25 }))) fails.push('channelremap.mix moves no pixels');
+    if (!fxDiff(bare, fxRun('channelremap', W, H, { mode: 1, luma: 1 }))) fails.push('channelremap.luma moves no pixels');
+    [
+      { type: 'glass', old: { amount: 12 }, legacyKeys: { scale: 1, axis: 0, seed: 0 }, moved: { scale: 12, axis: 1, seed: 400 } },
+      { type: 'fractalwarp', old: { amount: 24 }, legacyKeys: { evolve: 0, scale: 100, detail: 3 }, moved: { evolve: 3, scale: 300, detail: 1 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var b = warpGrid(c.type, c.old);
+      if (warpDiff(b, warpGrid(c.type, withKeys))) fails.push(c.type + ': spelling the new keys out at their fallbacks moved points');
+      var identity = []; for (var y = 0; y < WRP.H; y += 7) for (var x = 0; x < WRP.W; x += 7) identity.push([x, y]);
+      if (!warpDiff(identity, b)) fails.push(c.type + ': maps every point to itself');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!warpDiff(b, warpGrid(c.type, m))) fails.push(c.type + '.' + k + ' moves no points');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (warpDiff(b, warpGrid(c.type, stamped))) fails.push(c.type + ': a NEW instance maps differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* Glass regenerated its jitter per INDIVIDUAL PIXEL, which is the one setting at which it reads as
+   * TV static rather than as glass — real glass distorts in facets several pixels across.
+   * A facet is measurable as neighbours SHARING a displacement, and the fraction that do is (N-1)/N
+   * for a facet of N. Comparing the outputs directly rather than recovering each offset as (out - in):
+   * that subtraction is lossy at large coordinates and reported 0 shared neighbours for a working
+   * facet, which is a broken-looking result from a correct effect. */
+  test('effects: Glass distorts in facets now, not per pixel', { item: 'fx-r20' }, function () {
+    var shared = function (p) { var same = 0, tot = 0;
+      for (var y = 20; y < 120; y++) for (var x = 20; x < 120; x++) { tot++;
+        var a = warpAt('glass', x, y, p), b = warpAt('glass', x + 1, y, p);
+        if (Math.abs((b[0] - a[0]) - 1) < 1e-9 && Math.abs(b[1] - a[1]) < 1e-9) same++; }
+      return same / tot; };
+    if (shared({ amount: 12 }) > 0.02) throw new Error('at facet size 1 neighbouring pixels already share a displacement — the per-pixel baseline this compares against is gone');
+    var f4 = shared({ amount: 12, scale: 4 }), f12 = shared({ amount: 12, scale: 12 });
+    if (Math.abs(f4 - 0.75) > 0.06) throw new Error('a 4px facet shares a displacement across ' + f4.toFixed(3) + ' of neighbours; (N-1)/N says 0.75');
+    if (Math.abs(f12 - (11 / 12)) > 0.06) throw new Error('a 12px facet shares ' + f12.toFixed(3) + '; (N-1)/N says 0.917');
+    // the rain-streak variant: displacing across must leave the vertical axis completely alone
+    var yMoved = 0, xMoved = 0;
+    for (var yy = 0; yy < WRP.H; yy += 9) for (var xx = 0; xx < WRP.W; xx += 9) {
+      var q = warpAt('glass', xx, yy, { amount: 12, scale: 8, axis: 1 });
+      if (q[1] !== yy) yMoved++; if (q[0] !== xx) xMoved++; }
+    if (yMoved) throw new Error('set to distort across only, ' + yMoved + ' samples still moved vertically');
+    if (!xMoved) throw new Error('set to distort across only, nothing moved horizontally either — the effect is simply off');
+  });
+
+  /* The noise field never MOVED, and organic boiling churn is the one thing a fractal warp is for.
+   * Asserted as the exact property: identical at two times without churn, different at two times with
+   * it. A "some points moved" check cannot tell an animating field from a merely different one. */
+  test('effects: Fractal Warp can churn over time, and drop octaves', { item: 'fx-r20' }, function () {
+    var atT = function (p, tAt) { var out = [];
+      for (var y = 0; y < WRP.H; y += 7) for (var x = 0; x < WRP.W; x += 7) {
+        out.push(warpFn('fractalwarp')(x, y, WRP.W, WRP.H, WRP.W / 2, WRP.H / 2, Math.hypot(WRP.W / 2, WRP.H / 2), p, tAt, 1)); }
+      return out; };
+    var still = warpDiff(atT({ amount: 24 }, 0.5), atT({ amount: 24 }, 2.5));
+    if (still !== 0) throw new Error('without churn the field already differs between t=0.5 and t=2.5 at ' + still + ' points — it is not the static field this control is meant to animate');
+    var moved = warpDiff(atT({ amount: 24, evolve: 3 }, 0.5), atT({ amount: 24, evolve: 3 }, 2.5));
+    if (moved < 1000) throw new Error('with churn only ' + moved + ' points differ between two times — the field is barely animating');
+    // octaves: one octave is a smooth swell, three is fine churn. Fewer octaves = a smoother field,
+    // measured as how much neighbouring samples differ from each other.
+    var rough = function (p) { var g = atT(p, 0.5), s = 0;
+      for (var i = 1; i < g.length; i++) s += Math.abs(g[i][0] - g[i - 1][0]); return s / g.length; };
+    var one = rough({ amount: 24, detail: 1 }), three = rough({ amount: 24, detail: 3 });
+    if (!(three > one)) throw new Error('three octaves (' + three.toFixed(2) + ') is no rougher than one (' + one.toFixed(2) + ') — detail is not adding octaves');
+  });
+
+  /* Channel Remap was completely binary — the whole swap or nothing — so it could only ever be a
+   * novelty rather than something that survives into a grade. Asserted as exact arithmetic on a flat
+   * plate, because "25%" has one right answer and a pixel count would accept any fraction. */
+  test('effects: Channel Remap can be dialled in, and can keep the original brightness', { item: 'fx-r20' }, function () {
+    var W = 64, H = 64, PIX = [30, 90, 220];
+    var run = function (p) {
+      var d = new Uint8ClampedArray(W * H * 4);
+      for (var i = 0; i < W * H; i++) { d[i * 4] = PIX[0]; d[i * 4 + 1] = PIX[1]; d[i * 4 + 2] = PIX[2]; d[i * 4 + 3] = 255; }
+      FM._FX_TABLES.PIXEL_FX.channelremap(d, W, H, p, 0.5, 1); return d; };
+    var full = run({ mode: 1 });
+    if (!(full[0] === PIX[2] && full[2] === PIX[0])) throw new Error('a full R/B swap no longer swaps R and B');
+    var q = run({ mode: 1, mix: 0.25 });
+    var wantR = Math.round(PIX[0] + (PIX[2] - PIX[0]) * 0.25), wantB = Math.round(PIX[2] + (PIX[0] - PIX[2]) * 0.25);
+    if (Math.abs(q[0] - wantR) > 1 || Math.abs(q[2] - wantB) > 1) {
+      throw new Error('at 25% the swap landed on [' + q[0] + ',' + q[1] + ',' + q[2] + '] instead of a quarter of the way to it ([' + wantR + ',' + PIX[1] + ',' + wantB + '])');
+    }
+    var lum = function (a) { return a[0] * 0.299 + a[1] * 0.587 + a[2] * 0.114; };
+    var src = lum(PIX), swapped = lum([full[0], full[1], full[2]]);
+    if (Math.abs(swapped - src) < 5) throw new Error('swapping R and B on this plate does not change its brightness, so the Keep-brightness control below cannot be shown to do anything');
+    var kept = run({ mode: 1, luma: 1 });
+    if (Math.abs(lum([kept[0], kept[1], kept[2]]) - src) > 1) {
+      throw new Error('with Keep brightness on, the swap still moved the luminance from ' + src.toFixed(1) + ' to ' + lum([kept[0], kept[1], kept[2]]).toFixed(1));
+    }
+  });
+
   /* ---------------- #306: a stale tab must not overwrite newer work ---------------- */
 
   /* HIS REPORT, and he had made it before: "an older version of our project shows up when you refresh".

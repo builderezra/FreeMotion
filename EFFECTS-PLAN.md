@@ -354,6 +354,26 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     glyph. Not changed, because unit=0 is the legacy path and every existing project depends on its
     exact output. Worth its own entry rather than a silent behaviour change.
 
+- v9.06 (round 20 — **the last of the high-impact singles, bar one**) — `channelremap` (mix, keep
+  brightness), `glass` (facet size, axis, seed) and `fractalwarp` (churn, feature size, octaves).
+  **`stroke` is the only `high` row left in the table and is deliberately NOT in this round.** Its
+  proposal wants an inside/centred position and a ROUND corner, and the current effect is a separable
+  box dilation — i.e. Chebyshev distance, which is square by construction. A round stroke needs a real
+  distance transform, not a parameter; that is a build, not a param round, and rushing it onto the end
+  of a long session is how you get a half-right outline on every shape in the app. Left as its own job.
+  Findings:
+  * **"Does it animate" is a property of TWO TIMES, and nothing else can show it.** fractalwarp's whole
+    complaint was that the field never moved; the assertion is identical-at-two-times without churn
+    (measured: 0 of 2030 sample points) and different-with (all 2030). Any per-control pixel or point
+    count would pass on a field that merely looked different.
+  * **A facet is neighbours SHARING a displacement, and the fraction that do is (N-1)/N.** Measured 0
+    at per-pixel, 0.75 at facet 4, 0.91 at facet 12 — which both proves the facets and pins their size.
+    Recovering each offset as `(out - in)` does NOT work: that subtraction is lossy at large
+    coordinates and reported zero shared neighbours for a perfectly good facet. Compare the outputs.
+  * **Exact arithmetic beats a pixel count wherever the answer is a number.** "25% of a channel swap"
+    has exactly one right value per channel, so the test asserts that value rather than "some pixels
+    changed", which any fraction at all would satisfy.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are
