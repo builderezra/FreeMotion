@@ -1967,23 +1967,50 @@ window.FM = window.FM || {};
    * reused the handler. Every other drag handler in the app also listens on window, so a replayed
    * event reached edit-points and the text editor too — two of the three unrelated tests that attempt
    * turned red. A direct call reaches the timeline and nothing else. */
+  /* The lowest start the PRIMARY may take so that no member of the selection goes under its own
+     floor. Pure, and exported, because the drag itself needs pointer events and a live DOM — this is
+     the whole of the logic that was wrong, so this is the part worth being able to test directly. */
+  function groupDragFloor(primaryDuration, primaryOrigStart, group) {
+    let minDelta = -(primaryDuration - 0.1) - primaryOrigStart;
+    (group || []).forEach(g => {
+      const d = -(g.duration - 0.1) - g.origStart;
+      if (d > minDelta) minDelta = d;
+    });
+    return primaryOrigStart + minDelta;
+  }
+  FM._groupDragFloor = groupDragFloor;
+
   function applyClipMoveAt(x, shiftKey, quiet) {
     if (!clipMove || !tracksEl) return;
     const pps = pxPerSec();
     const dx = x - clipMove.startX;
     // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
     // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
-    const floor = -(clipMove.layer.duration - 0.1);
+    /* ONE FLOOR FOR THE WHOLE SELECTION (BUG-HUNT). Each clip used to be floored against its OWN
+       duration — the primary here, every secondary below — so the moment a SHORT clip hit its floor it
+       stopped following the shared delta while the longer ones kept going. The offsets between the
+       selected clips silently changed, and pointerup committed it: shiftLayerKeyframes runs per layer
+       with each layer's own actual delta, autoFitDuration runs, history commits. The arrangement moved
+       by an amount nobody dragged, with no warning — each bar just stopped on its own.
+       The code a thousand lines up already states the invariant this broke: "a touch hold-move on one
+       selected clip must not silently break the others' relative sync".
+       So: find the smallest delta ANY member can take, and floor the primary by that. The selection
+       then stops as a unit the instant its most-constrained member would go under.
+       With nothing else selected this is exactly the old expression — origStart cancels — so a
+       single-clip drag is unchanged. */
+    const floor = groupDragFloor(clipMove.layer.duration, clipMove.origStart,
+      (clipMove.group || []).map(g => ({ duration: g.layer.duration, origStart: g.origStart })));
     const raw = Math.max(floor, clipMove.origStart + dx / pps);
     const sr = shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl, clipMove.sup);   // Shift bypasses snap; co-dragged clips excluded; just-snapped targets suppressed
     clipMove.layer.start = Math.max(floor, sr.v);
     if (sr.snapped) showSnap(sr.guide); else hideSnap();
     const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
     if (clipEl) clipEl.style.left = (PAD + clipMove.layer.start * pps) + 'px';
-    // group move: shift the other selected clips by the same delta (each floored to its own duration)
+    // group move: every selected clip takes the SAME delta, unclamped — the shared floor above has
+    // already guaranteed none of them can go under, so re-clamping here is what broke the sync.
     const delta = clipMove.layer.start - clipMove.origStart;
     (clipMove.group || []).forEach(g => {
-      g.layer.start = Math.max(-(g.layer.duration - 0.1), g.origStart + delta);
+      g.layer.start = g.origStart + delta;
       const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
       if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
     });

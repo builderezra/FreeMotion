@@ -3886,6 +3886,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **fourteenth** struck off — **dragging several clips at once silently
+      changing the gaps between them (v9.19)**. Each was stopped at its own left limit, so a short
+      clip froze while the longer ones kept moving, and releasing committed it. Your arrangement
+      changed by an amount you never dragged, with no warning.
       *Progress 17 Aug:* a **thirteenth** struck off — **a transparent export deleting your project's
       background colour (v9.18)**. It signalled transparency by blanking the background on the live,
       SAVED project object; switching apps mid-export triggers an autosave, which wrote that blank to

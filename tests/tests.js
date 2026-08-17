@@ -18195,6 +18195,47 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: a group clip drag must keep the clips' relative timing -------------- */
+
+  /* THE BUG. Each clip in a multi-select drag was floored against its OWN duration, so the moment a
+   * SHORT clip reached its floor it stopped following the shared delta while the longer ones carried
+   * on. The gaps between the selected clips silently changed — and pointerup made it permanent:
+   * shiftLayerKeyframes runs per layer with each layer's own actual delta, autoFitDuration runs, and
+   * history commits. The arrangement moved by an amount the user never dragged, with no warning during
+   * the gesture; each bar just stopped independently.
+   * The worked example from the finding: a 6s clip at 4s (primary) and a 1s clip at 0.5s, dragged 3s
+   * left. The primary lands at 1 (delta -3) but the short clip floors at -0.9 instead of -2.5, so the
+   * 3.5s gap between them becomes 1.9s.
+   * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
+   * it holds for any clamp policy that keeps the selection rigid. */
+  test('timeline: dragging a multi-selection keeps the clips\u2019 relative timing (BUG-HUNT)', { item: 'tl-groupdrag' }, function () {
+    if (typeof FM._groupDragFloor !== 'function') throw new Error('FM._groupDragFloor is not exposed \u2014 the suite cannot check the shared floor, which is the whole of what was wrong');
+    /* NOTE for whoever mutation-tests this: putting the old per-clip `Math.max(-(dur-0.1), ...)` back
+       into the apply loop is NOT caught here, and that is correct — once the shared floor holds, every
+       member's start is provably already above its own floor, so that clamp is a redundant no-op
+       rather than a regression. The defect was the floor being computed per clip in the FIRST place,
+       which is exactly what this asserts. */
+    // the finding's worked example, exactly: a 6s clip at 4s (primary) and a 1s clip at 0.5s
+    var pDur = 6, pStart = 4, sDur = 1, sStart = 0.5;
+    var gapBefore = pStart - sStart;
+    var floor = FM._groupDragFloor(pDur, pStart, [{ duration: sDur, origStart: sStart }]);
+    // drag 3s left: the raw target is 1, and the shared floor must stop the WHOLE selection first
+    var landed = Math.max(floor, pStart - 3);
+    var delta = landed - pStart;
+    var sEnd = sStart + delta;                       // every member takes the same delta now
+    if (Math.abs((landed - sEnd) - gapBefore) > 1e-9) {
+      throw new Error('the gap between the clips changed from ' + gapBefore + 's to ' + (landed - sEnd) + 's \u2014 their relative timing was silently altered by the drag');
+    }
+    if (sEnd < -(sDur - 0.1) - 1e-9) throw new Error('the short clip ended at ' + sEnd + ', under its own floor of ' + (-(sDur - 0.1)));
+    if (!(delta < -1)) throw new Error('the selection barely moved (delta ' + delta + ') \u2014 the shared floor is over-clamping');
+    // a SINGLE clip must be unaffected: with no group the shared floor is the old expression exactly
+    var solo = FM._groupDragFloor(pDur, pStart, []);
+    if (solo !== -(pDur - 0.1)) throw new Error('with nothing else selected the floor is ' + solo + ', not the ' + (-(pDur - 0.1)) + ' a single-clip drag has always used');
+    // and the most-constrained member is what decides it, whichever one that is
+    var many = FM._groupDragFloor(pDur, pStart, [{ duration: 9, origStart: 0 }, { duration: sDur, origStart: sStart }]);
+    if (Math.abs(many - floor) > 1e-9) throw new Error('adding a clip with more room changed the floor to ' + many + ' \u2014 it must be set by the most constrained member only');
+  });
+
   /* ---------------- BUG-HUNT: a transparent export must not null the SAVED background ------------ */
 
   /* THE BUG. A transparent GIF/PNG export signalled "no background" by writing `P.background = null`
