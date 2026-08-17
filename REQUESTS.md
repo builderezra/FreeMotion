@@ -5396,8 +5396,24 @@ better still, keep working inside the turn rather than parking work for a later 
       Empty filter heading, *"Start with nothing in it and add your own effects."* Both go; the Empty
       filter button becomes a compact row.
 
-- [ ] **302 — PC: the inspector's drag handle overlaps the project name; move it outside and hide it
-      until hover.** (17 Aug.) His words, verbatim: *"On PC the little drag bar for the inspector menu
+- [x] **302 — PC: the inspector's drag handle overlaps the project name; move it outside and hide it
+      until hover.** ✅ **v9.50.** All three clauses, measured at 1280x800 in the Studio layout:
+      (1) you were right about the overlap and here is the size of it — the panel began at y=560 and
+      the handle ran 561–571, eleven pixels INSIDE it, while the project-name field sat at 567–589,
+      so a click aimed at the top of the name started a resize drag; (2) it is at 552–561 now,
+      entirely above the panel's top edge, and a pointer on the name's top edge lands on the name;
+      (3) the grab bar is invisible at rest and fades in under the cursor, the same as the
+      timeline's own resizer.
+      **Two things were quietly eating the handle once it moved, and neither showed up in a
+      measurement.** The panel scrolls, and a box positioned outside a scroll container is CLIPPED —
+      and CSS will not let one axis stay visible while the other scrolls, so the obvious fix
+      silently did nothing; the handle reported its position perfectly the whole time it was
+      invisible and unclickable. Then, once genuinely out, it landed underneath the TIMELINE's
+      resizer, which deliberately reaches back across this whole column. A hit test at the handle's
+      own centre found both, and one is now in the test. Resolved by column: over the add menu's
+      own width the top edge raises the add menu; the timeline's column — the far larger half of
+      the band — still resizes the band exactly as before. Four separate mutation checks.
+      Original entry: (17 Aug.) His words, verbatim: *"On PC the little drag bar for the inspector menu
       to drag it up in that individually is hovering kind of over the project name this can be fixed by
       instead of it sitting inside. It can sit outside on the top. Just make it invisible until you
       hover over it"*.

@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#302 — the add-menu drag handle vs the project name</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #302 — "On PC the little drag bar for the inspector menu to drag it up in that individually is
+   hovering kind of over the project name this can be fixed by instead of it sitting inside. It can sit
+   outside on the top. Just make it invisible until you hover over it"
+   MEASURED, not eyeballed: the handle is a 10px transparent strip, so "overlaps the project name" is a
+   claim about two rectangles and nothing else will settle it. It is also only live while the ADD MENU
+   is what the band is showing, so the probe has to open that first or it photographs a hidden element.
+   Desktop width only — Studio is the one desktop layout since queue 293. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 1280;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  function box(e) { if (!e) return 'MISSING'; var r = e.getBoundingClientRect(); return 'y ' + Math.round(r.top) + '–' + Math.round(r.bottom) + '  x ' + Math.round(r.left) + '–' + Math.round(r.right); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.addMenu || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        // Nothing selected → the band shows the ADD MENU, which is the state the handle is live in.
+        FM.scene.layers = []; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+        FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var panel = d.getElementById('inspector-panel');
+        var grip = d.getElementById('am-resizer');
+        var title = panel && panel.querySelector('.panel-title');
+        var name = d.getElementById('proj-name-s');
+        if (!panel.querySelector('.addmenu--panel')) return fail('the band is not showing the add menu — the handle is CSS-gated off and nothing below means anything');
+        var g = grip.getBoundingClientRect(), p = panel.getBoundingClientRect();
+        var t = title ? title.getBoundingClientRect() : null;
+        var n = name ? name.getBoundingClientRect() : null;
+        var gs = w.getComputedStyle(grip), af = w.getComputedStyle(grip, '::after');
+        /* Does the handle actually take the pointer where the name is? elementFromPoint is the only
+           honest answer — z-index, pointer-events and the clip all fold into it.
+           THE SPLASH HAS TO GO FIRST or every hit test below returns it: it is a full-window overlay
+           and the first run of this probe reported "hits: splash" for both points, which says nothing
+           about either. */
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        var probeY = n ? Math.round(n.top + 1) : Math.round(p.top + 1);
+        var hit = d.elementFromPoint(Math.round(p.left + p.width / 2), probeY);
+        /* And the handle's own centre. This is the one that answers the question the rectangles cannot:
+           `.panel` sets `overflow-y: auto`, and a box positioned outside a scroll container is CLIPPED
+           — getBoundingClientRect would still report it at -9, cheerfully, from behind the clip. A hit
+           test does not lie about that, and it also proves the thing is grabbable. */
+        var gridHit = d.elementFromPoint(Math.round(p.left + p.width / 2), Math.round(g.top + g.height / 2));
+        out.textContent = [
+          'width ' + W,
+          'panel      ' + box(panel),
+          'handle     ' + box(grip) + '   display:' + gs.display + '  top:' + gs.top,
+          'title row  ' + box(title),
+          'proj name  ' + box(name),
+          'handle overlaps the panel interior by ' + Math.round(Math.max(0, g.bottom - p.top)) + 'px',
+          'handle sits above the panel top by    ' + Math.round(Math.max(0, p.top - g.top)) + 'px',
+          'overlaps the name box: ' + (n ? (g.bottom > n.top && g.top < n.bottom) : 'no name field'),
+          'pointer at the name’s top edge hits: ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing'),
+          'pointer at the handle’s centre hits: ' + (gridHit ? (gridHit.id || gridHit.className || gridHit.tagName) : 'nothing (CLIPPED — it is not grabbable)'),
+          'panel overflow: ' + w.getComputedStyle(panel).overflowX + ' / ' + w.getComputedStyle(panel).overflowY +
+            '   content ' + panel.scrollHeight + ' in ' + panel.clientHeight + (panel.scrollHeight > panel.clientHeight + 1 ? '  ← IT ACTUALLY SCROLLS' : '  (nothing to scroll)'),
+          'z: am-resizer ' + gs.zIndex + '  vs  tl-resizer ' + (function(){ var t = d.getElementById('tl-resizer'); if(!t) return 'MISSING'; var ts = w.getComputedStyle(t), tr = t.getBoundingClientRect(); return ts.zIndex + '  (y ' + Math.round(tr.top) + '–' + Math.round(tr.bottom) + '  x ' + Math.round(tr.left) + '–' + Math.round(tr.right) + ')'; })(),
+          'grab bar opacity at rest: ' + af.opacity + '   (queue 302 wants 0 until hover)'
+        ].join('\n');
+        window.__done = true;
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

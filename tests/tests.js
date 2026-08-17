@@ -21724,6 +21724,72 @@
    * preference: in Studio the band and the timeline are the same grid row, so a taller row can only
    * take its height out of the stage. Floating is the only way the gesture works at all. */
 
+  /* ---------------- queue 302: the handle moves outside the panel and hides until hovered ---------
+   * His words, verbatim: *"On PC the little drag bar for the inspector menu to drag it up in that
+   * individually is hovering kind of over the project name this can be fixed by instead of it sitting
+   * inside. It can sit outside on the top. Just make it invisible until you hover over it"*.
+   *
+   * THE THIRD ASSERTION IS THE ONE THAT EARNED ITS PLACE. Moving the strip out of the panel put it
+   * inside two other things at once: `.panel`'s `overflow-y: auto`, which CLIPS anything positioned
+   * outside it (and CSS refuses to let one axis stay `visible` while the other scrolls, so the obvious
+   * fix silently does nothing), and `#tl-resizer`, which is at z-index 30 and deliberately reaches
+   * back across this whole column. Both times the rectangle measured perfectly and the control was
+   * dead. Only a hit test says so — which is why one is here. */
+  test('the add-menu drag handle sits outside the panel, clear of the project name, and hides until hover (queue 302)', { item: 'am-drag' }, async function () {
+    if (!matchMedia('(min-width: 701px)').matches) return;      // desktop-only control
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    if (FM.selectLayer) FM.selectLayer(null);
+    if (FM.inspector) FM.inspector.refresh();
+    await frame();
+    const rez = document.getElementById('am-resizer');
+    const panel = document.getElementById('inspector-panel');
+    if (!rez || !panel) throw new Error('need #am-resizer and #inspector-panel');
+    if (!document.querySelector('#inspector-panel .addmenu--panel')) return;   // band is not showing the add menu here
+    if (getComputedStyle(rez).display === 'none') throw new Error('the drag handle is not shown with the add menu up');
+
+    const r = rez.getBoundingClientRect(), p = panel.getBoundingClientRect();
+    const name = document.getElementById('proj-name-s');
+
+    // 1. outside, above the panel's top edge — not inside it.
+    if (!(r.top < p.top - 4)) throw new Error('the handle starts at ' + Math.round(r.top) + ' and the panel at ' + Math.round(p.top) + ' — it is still sitting INSIDE the panel');
+    if (r.bottom > p.top + 2) throw new Error('the handle reaches ' + Math.round(r.bottom) + ' into a panel that starts at ' + Math.round(p.top) + ' — it is straddling, not sitting outside on the top');
+
+    // 2. clear of the project name, which is the damage he actually reported.
+    if (name) {
+      const n = name.getBoundingClientRect();
+      if (r.bottom > n.top && r.top < n.bottom) throw new Error('the handle (' + Math.round(r.top) + '–' + Math.round(r.bottom) + ') still overlaps the project name (' + Math.round(n.top) + '–' + Math.round(n.bottom) + ')');
+      const onName = document.elementFromPoint(Math.round(n.left + n.width / 2), Math.round(n.top + 2));
+      if (onName === rez) throw new Error('the top of the project-name field still hits the drag handle — clicking the name would start a resize');
+    }
+
+    /* 3. …and it is still grabbable. Two different things ate it during this change: the panel's own
+       overflow clipped it away, and #tl-resizer covered it. A rectangle proves neither. */
+    const hit = document.elementFromPoint(Math.round(p.left + p.width / 2), Math.round(r.top + r.height / 2));
+    if (hit !== rez) throw new Error('the pointer at the handle\'s own centre lands on ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ' — the handle is out there but cannot be grabbed');
+
+    // 4. invisible until you hover it.
+    const bar = getComputedStyle(rez, '::after');
+    if (!bar.content || bar.content === 'none') throw new Error('the handle has no grab bar at all — there would be nothing to reveal on hover');
+    if (Number(bar.opacity) !== 0) throw new Error('the grab bar is at opacity ' + bar.opacity + ' at rest — "make it invisible until you hover over it"');
+    /* The reveal, proven through the rule rather than by faking :hover, which is not scriptable.
+       body.am-resizing shares the selector, so if it lights the bar the hover half does too.
+       READ WITH THE TRANSITION OFF. The bar fades over 150ms, and the first version of this read the
+       opacity on the very next line — mid-fade, so it came back 0 and failed against correct CSS.
+       Sleeping is not the fix either: headless Chrome under --virtual-time-budget advances timers but
+       does not reliably tick the transition clock, so a property mid-fade can read as its FROM value
+       forever. Killing the transition asks the only question that matters — with the class on, what
+       does the rule resolve to? The 150ms of fade is taste and needs no proving. */
+    const killT = document.createElement('style');
+    killT.textContent = '*, *::before, *::after { transition: none !important; }';
+    document.head.appendChild(killT);
+    document.body.classList.add('am-resizing');
+    void document.body.offsetWidth;
+    const lit = Number(getComputedStyle(rez, '::after').opacity);
+    document.body.classList.remove('am-resizing');
+    killT.remove();
+    if (lit !== 1) throw new Error('the grab bar stays at opacity ' + lit + ' even while resizing — it is invisible always, not invisible until hover');
+  });
+
   test('the add menu drags up over the canvas without shrinking it', { item: 'am-drag' }, async function () {
     const frame = () => new Promise(r => setTimeout(r, 90));
     if (!matchMedia('(min-width: 701px)').matches) return;      // desktop-only gesture
@@ -21809,7 +21875,12 @@
       /* THE HANDLE, before anything is dragged. It has to be on the panel, not on the window: the
          reported symptom was a 10px strip across the top of the screen. */
       const p0 = box(panel), h0 = box(rez);
-      if (Math.abs(h0.t - p0.t) > 3) throw new Error('the drag handle sits at y=' + h0.t + ' while the add menu starts at y=' + p0.t + ' — it is not on the panel\'s top edge, which is what he found and called "the button to do it shouldnt be at the top of the screen"');
+      /* Its BOTTOM edge is what meets the panel now, not its top (queue 302 moved the strip outside the
+         panel so it stopped covering the project name). This is the tighter assertion of the two and
+         still catches the original fault exactly: a handle stranded at the top of the WINDOW would put
+         h0.b near 10 against a panel starting several hundred pixels down. */
+      if (Math.abs(h0.b - p0.t) > 3) throw new Error('the drag handle ends at y=' + h0.b + ' while the add menu starts at y=' + p0.t + ' — it is not riding the panel\'s top edge, which is what he found and called "the button to do it shouldnt be at the top of the screen"');
+      if (!(h0.t < p0.t)) throw new Error('the drag handle starts at y=' + h0.t + ', inside a panel that begins at y=' + p0.t + ' — queue 302 put it OUTSIDE, above the top edge');
       if (Math.abs(h0.w - p0.w) > 6) throw new Error('the drag handle is ' + h0.w + 'px wide against a ' + p0.w + 'px panel — it is spanning something other than the add menu');
 
       const t0 = tlp ? box(tlp) : null;
@@ -21824,7 +21895,7 @@
         if (p.r !== p0.r) throw new Error('dragged up ' + dy + 'px and the add menu\'s RIGHT edge moved ' + p0.r + ' → ' + p.r + ' — this is the "takes up the whole screen" fault: it grew sideways over the timeline');
         if (p.b !== p0.b) throw new Error('dragged up ' + dy + 'px and the add menu\'s BOTTOM edge moved ' + p0.b + ' → ' + p.b);
         if (!(p.t < p0.t)) throw new Error('dragged up ' + dy + 'px and the top edge did not rise (' + p0.t + ' → ' + p.t + ')');
-        if (Math.abs(h.t - p.t) > 3) throw new Error('the handle came off the panel\'s top edge mid-drag: handle ' + h.t + ' vs panel ' + p.t);
+        if (Math.abs(h.b - p.t) > 3) throw new Error('the handle came off the panel\'s top edge mid-drag: handle ends ' + h.b + ' vs panel top ' + p.t);
         if (t0) {
           const t = box(tlp);
           if (t.l !== t0.l || t.r !== t0.r || t.t !== t0.t || t.b !== t0.b) {

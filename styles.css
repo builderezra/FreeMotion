@@ -6260,16 +6260,58 @@ body.fm-pushing #toast { z-index: 213; }
      shouldnt be at the top of the screen"*. Scoped to the state the handle is live in, so the inspector's
      own absolutely-positioned children are not given a new containing block for the sake of this. */
   body #inspector-panel:has(.addmenu--panel) { position: relative; }
+  /* OUTSIDE THE PANEL, AND INVISIBLE UNTIL HOVERED (queue 302). His words: *"the little drag bar for
+     the inspector menu … is hovering kind of over the project name this can be fixed by instead of it
+     sitting inside. It can sit outside on the top. Just make it invisible until you hover over it"*.
+     He was right, and the measurement says by how much: at 1280x800 the panel began at y=560 and the
+     handle ran 561–571 — eleven pixels INSIDE it — while the project-name field sat at 567–589. The
+     strip and the field genuinely overlapped, so a click aimed at the top of the name started a
+     resize drag instead.
+     It sits at -9..0 now: entirely above the panel's top edge, ending exactly on it so there is no
+     dead pixel between the two.
+     IT STAYS A CHILD OF THE PANEL rather than becoming a sibling placed in the same grid cell, which
+     was the other way to get it outside. While it is being dragged the panel LEAVES the grid and
+     floats (`body.am-floating` makes it `position: fixed`), so a sibling pinned to the grid slot would
+     be left behind at the old top edge — the bar would detach mid-drag and, worse, end up nowhere near
+     the raised panel's edge afterwards, with no way to grab it again and pull it back down. A child
+     follows the panel wherever it goes, for free.
+     THE PANEL HAS TO STOP CLIPPING, and there is no half-measure available. `.panel` sets
+     `overflow-y: auto`, and CSS will not let one axis be `visible` while the other scrolls — the
+     `visible` computes to `auto`. `overflow-x: visible` was tried, silently became `auto`, and the
+     handle sat out there at -9 being clipped away. `getBoundingClientRect` reported it in exactly the
+     right place the whole time; a HIT TEST at its centre is what exposed it, and that is the lesson
+     worth keeping from this one — a rectangle in the right place is not the same as a control you can
+     grab.
+     So the scroller goes, in this state only. Safe rather than lucky: while the add menu is showing,
+     `planGrid()` sizes the tile area to the panel and `.addmenu--panel:not(.addmenu--fit)
+     .addmenu-body` gives it its own scroller when it cannot — measured at 1280 wide and window heights
+     of 560, 620 and 800, the panel's content exactly equalled its box every time, so its own scrollbar
+     was never doing anything here. */
+  body #inspector-panel:has(.addmenu--panel) { overflow: visible; }
+  /* z-index 31, and that number is load-bearing. Moving this strip outside the panel walked it
+     straight into `#tl-resizer`, which is at z-index 30 and — deliberately, see the rule below —
+     reaches back across the inspector AND the rail so the whole band's top edge resizes the timeline.
+     A hit test at the new handle's centre came back `tl-resizer`: the bar was out there, correctly
+     placed, and completely unusable. Found by hit-testing rather than by measuring rectangles, which
+     reported everything as fine.
+     Resolved by column rather than by moving anything: over the ADD MENU's own width the top edge now
+     raises the add menu, which is what the handle is for and the only reading of "sit outside on the
+     top" that leaves it grabbable; the timeline's own column (the far larger half of the band) still
+     resizes the band exactly as before. */
   body #inspector-panel:has(.addmenu--panel) > #am-resizer {
-    display: block; position: absolute; left: 0; right: 0; top: 0; height: 10px;
-    cursor: ns-resize; z-index: 6; touch-action: none;
+    display: block; position: absolute; left: 0; right: 0; top: -9px; height: 9px;
+    cursor: ns-resize; z-index: 31; touch-action: none;
   }
-  /* The grab affordance: a short bar, centred, the same language as the timeline's own resizer. */
+  /* The grab affordance: a short bar, centred, the same language as the timeline's own resizer —
+     including the part he asked for here, which #tl-resizer has always done: nothing at rest, the pill
+     fades in under the cursor. */
   body #inspector-panel:has(.addmenu--panel) > #am-resizer::after {
-    content: ''; position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
+    content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 46px; height: 4px; border-radius: 2px; background: var(--line);
+    opacity: 0; transition: opacity .15s ease, background .15s ease;
   }
-  body #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after { background: var(--accent); }
+  body #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after,
+  body.am-resizing #inspector-panel:has(.addmenu--panel) > #am-resizer::after { opacity: 1; background: var(--accent); }
 
   /* FLOATING. The panel leaves the grid and sits above the stage, so raising it cannot shrink the
      canvas — which is not a nicety here but the only way the gesture can work at all: the band and
