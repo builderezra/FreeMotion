@@ -6034,7 +6034,7 @@ better still, keep working inside the turn rather than parking work for a later 
       (the PC disappearing button, hover, and the drag animation), not the look, so they did not belong
       in this pass.
 
-- [ ] **325 — His answers to the open questions (17 Aug).** Logged VERBATIM first, mapped underneath,
+- [x] **325 — His answers to the open questions (17 Aug).** ✅ **Everything actionable in it is done.** Logged VERBATIM first, mapped underneath,
       because the mapping is mine and could be wrong — if any line below has been attached to the
       wrong item, the original is right here to check against.
 
@@ -6055,10 +6055,11 @@ better still, keep working inside the turn rather than parking work for a later 
       · **187 — the black bar: "I think black bar is gone".** Same treatment as 306 — WATCHING, not closed.
       · **229 — PC buttons: "pc buttons seem fine".** Closing this one; it was a taste call and he made it.
       · **98 — Add Text: "leave text default white".** That clause is settled; the rest of 98 stands.
-      · **223 — NOT answered.** *"idk im confused what ur talking about"* — that is on me, the question
-        was badly written. It needs re-asking in plain words: the app ships a 2.8 MB splash VIDEO, which
-        is about as big as all its code put together, and it plays before he can do anything. The
-        question is only whether to keep it, shrink it, or drop it. **Re-ask, do not guess.**
+      · **223 — NOT answered, and RE-ASKED on 18 Aug** in plain words: the app plays a video when it
+        opens, before you can do anything. That file is 2.8 MB — about as much as all the app's code put
+        together — so every fresh load pays for it. Keep it as is / make it smaller / drop it?
+        It stays open as **#223** in its own right; it is a question for him, not work, so it does not
+        hold the queue.
 
       **Still laggy — these stay OPEN and are now confirmed live, not suspected:**
       · **95 / 202 — still laggy on phone.** His words: *"no still laggy on phone"*.
