@@ -27729,4 +27729,66 @@
     }
   });
 
+
+  /* ================= queue 323 clause 2: Squish reacts to effect-driven movement ==================
+   * *"if you have a shake effect or any effect that makes the object move, the squish should apply,
+   * currently if a shake makes it move the squish doesn't do anything"*.
+   *
+   * A CIRCLE, and that is load-bearing: squashed against a wall a ball lands tangent and its coverage
+   * of that frame edge DROPS, while a square flattens and covers MORE. Measuring a square read as "the
+   * fix made it worse" earlier in this investigation and cost a wrong conclusion.
+   * DRIFT as the mover, because its displacement is arithmetic rather than noise — 140 px/s for half a
+   * second is 70px, so the fixture is checkable. Shake and Wiggle are the two he named and they take
+   * the identical path; this only makes the number knowable. */
+  test('Squish reacts to a layer moved by an EFFECT, not just by its transform (queue 323)', { item: 'squish-fx' }, function () {
+    const layers0 = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const size0 = { w: P.width, h: P.height };
+    try {
+      P.width = 400; P.height = 400;
+      const R = 80, AT = 0.5;
+      /* Parked CLEAR of the right wall — right edge at 380 against a wall at 400 — so its own transform
+         never reaches it and only the effect can take it there. That is the entire point: a version
+         reading the transform sees nothing. Drift then carries it 70px (140 px/s for half a second), so
+         the ball ends up 50px past the wall. The first version of this fixture started it further left
+         and the drift left it 10px SHORT of the wall, which reported as "nothing to react to" and looks
+         exactly like the bug. */
+      const build = (fx) => {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'ellipse', x: 300, y: 200, shapeW: R * 2, shapeH: R * 2, fill: '#ffffff' });
+        L.start = 0; L.duration = 5;
+        if (fx && fx.length) L.effects = fx;
+        FM.scene.layers.push(L);
+        const cv = document.createElement('canvas'); cv.width = 400; cv.height = 400;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, AT);
+        const d = ctx.getImageData(399, 0, 1, 400).data;
+        let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 170 && d[i + 1] > 170) n++;
+        return n;
+      };
+      const drift = () => { const m = FM.fxRegistry.makeInstance('drift'); if (!m) throw new Error('the Drift effect is missing'); m.params = m.params || {}; m.params.x = 140; m.params.y = 0; return m; };
+      const squish = () => { const q = FM.fxRegistry.makeInstance('squish'); if (!q) throw new Error('the Squish effect is missing'); return q; };
+
+      // 1. still, no effects: the ball is nowhere near the wall.
+      if (build([]) !== 0) throw new Error('the ball already touches the right wall before anything moves it — the fixture proves nothing');
+      // 2. driven over the wall by the EFFECT alone: it gets cut by the frame.
+      const moved = build([drift()]);
+      if (!(moved > 40)) throw new Error('Drift did not carry the ball over the right wall (' + moved + ' lit) — nothing for Squish to react to');
+      // 3. …and with Squish on, the wall pushes back.
+      const squished = build([drift(), squish()]);
+      if (!(squished < moved * 0.7)) {
+        throw new Error('with Squish on, the frame edge still carries ' + squished + ' lit pixels against ' + moved + ' without it — the ball is being clipped by the wall rather than squashed against it, which is "if a shake makes it move the squish doesn\'t do anything"');
+      }
+      /* …and the order in the stack does not matter, because the pin is a RENDER-order rule. Both
+         arrangements must behave the same, or adding Squish before vs after the shake would be two
+         different features. */
+      const other = build([squish(), drift()]);
+      if (Math.abs(other - squished) > 6) throw new Error('[squish, drift] gives ' + other + ' and [drift, squish] gives ' + squished + ' — the stack order is changing the result, so the pin is not holding');
+    } finally {
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
 })();

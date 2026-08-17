@@ -5944,7 +5944,7 @@ better still, keep working inside the turn rather than parking work for a later 
         impossible to edit as one thing, which is what the test counts.
       Goes with 314 (rename to Sketching) and 315.
 
-- [ ] **323 — Squish should work in corners, and should react to effect-driven movement (Shake etc.),
+- [x] **323 — Squish should work in corners, and should react to effect-driven movement (Shake etc.),
       not just to keyframed motion.** (17 Aug.) His words, verbatim: *"For the squish effect make it so
       it actually works in corners, and also make it so if you have a shake effect or any effect that
       makes the object move, the squish should apply, currently if a shake makes it move the squish
@@ -5960,7 +5960,22 @@ better still, keep working inside the turn rather than parking work for a later 
          measured on the bench, and the likeliest explanation for what you saw is clause 2 below (an
          effect moving the layer, which stops Squish reacting at all, corner or not) landing in the
          same message.
-      2. **Effect-driven motion.** This is the interesting one and it is the same shape as #31b
+      2. **Effect-driven motion.** ✅ **v9.74.** Measured: a ball parked clear of the right wall, carried
+         over it by Drift alone — frame edge **148 → 56**, squashed instead of clipped.
+         **THREE things had to be right and each one ALONE did nothing**, which is why two earlier
+         attempts ended in a revert:
+         · every effect plate was sized to the COMP, so each of the layer's other effects clipped away
+           the overhang inside Squish's own padded plate before it could be measured — **43 call sites
+           across 17 render paths**, migrated per-function because they do not share one convention;
+         · Squish was pinned to run FIRST, so it measured the layer before the shake had moved it;
+         · and the check deciding whether a wall is worth looking at reads the transform, which cannot
+           see an effect displacing pixels — so it gave up before either of the other two could help.
+         The padding allowance is for NAMED movers (shake, wiggle, drift, orbit, spin, swing, pulse).
+         Padding for any effect at all broke `[squish, bulge]` — a bulge does not move the layer, it
+         redistributes it, and a bigger plate changed the geometry it warps. All three mutation-checked
+         separately. **Original note kept below — its guess about the cause was wrong, and the record of
+         that is worth more than a tidy entry.**
+         (Original: this is the interesting one and it is the same shape as #31b
          (*"Transform blur can't smear effect- or camera-driven motion"*). Squish is deriving its
          movement from the layer's own keyframed transform, so anything that moves the layer at RENDER
          time — Shake, Wiggle, Drift, Orbit, a behaviour — is invisible to it. **Whatever fixes this
@@ -5981,7 +5996,7 @@ better still, keep working inside the turn rather than parking work for a later 
       the layer's half-extent whenever it carries another effect. **The number did not move — 160 both
       ways — so the reach box is not the cause, or not the only one.** Backed the change out rather than
       shipping an unproven cost.
-      🎯 **18 Aug — THE MECHANISM IS PINNED. Not fixed, but no longer a guess.**
+      🎯 **The investigation, kept because two of its conclusions were wrong and that is instructive.**
       The ordering lead was half right and led somewhere better. Squish IS pinned to composite
       innermost (`drawLayer`, the `pp` reorder), and the note there explains why: every other effect
       renders its copy of the layer into a **comp-sized** plate, so anything running before Squish has
