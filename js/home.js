@@ -7,6 +7,59 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
+  /* ---------- THE TRAVELLING EDGE-LIGHT, built and FITTED in one place -------------------------
+   * Ezra, originally: "make it so the project that's open, along the border of it has a moving glint
+   * that follows around it" (queue ~110), then the same light on the open add-menu tab (queue 155) and
+   * on the sound-effects and record-voice sheets (queue 291). Four hosts, one signature — the CSS has
+   * carried a note for three releases about what happens when surfaces meant to feel identical each get
+   * their own copy, and all four still hand-built the same two elements.
+   *
+   * QUEUE 304 IS WHAT "FITTED" MEANS, and it is why this is a function rather than four copies of two
+   * lines. His words: *"The circle that moves around the sound effects menu stops halfway and like
+   * glitches a little bit"*, and *"It also kind of glitches out on the record voice menu"*.
+   *
+   * The light is one bright wedge of a conic gradient painted on a box that SPINS behind a ring-shaped
+   * mask. For the light to reach every part of the ring, that box has to still cover the host at every
+   * angle — so it must be a SQUARE at least as big as the host's diagonal. It was sized at 140% of the
+   * host on each axis, which covers a card and stops covering anything tall the moment it turns.
+   * Measured on the sound-effects sheet at 390x800: card 354x688, comet box 496x963, and the ring needs
+   * 774 of diagonal — at 90° the box fell 96px short, so for a stretch of every single turn the light
+   * had nowhere to be at the top and bottom. That is the "stops halfway".
+   * There was a second fault stacked on it, from the same override: the box was centred with
+   * `margin-top: -70%`, and PERCENTAGE MARGINS ALL RESOLVE AGAINST WIDTH — top and bottom included. On
+   * a 354-wide, 963-tall box that is -248px where half the height is 481, so the comet was orbiting a
+   * point 233px above the middle of the card. Both are gone: the size is measured here, and the
+   * centring is a transform, which cannot be fooled by an aspect ratio.
+   *
+   * 1.5 rather than the exact diagonal because √2 ≈ 1.415 is the worst case and a little margin costs
+   * nothing — the box is masked down to a 1.5px ring either way.
+   * A ResizeObserver rather than a one-shot measurement because the host is usually NOT in the document
+   * yet when its ring is built (the sheets append the ring to a detached card), so the first read is
+   * 0x0; the observer is what makes the number arrive at all, and it keeps it right if the window is
+   * resized while the sheet is open. Where there is no observer the CSS falls back to what it did
+   * before, which is correct for the card-shaped hosts and no worse for the others.
+   */
+  FM.glintRing = function (host, cls) {
+    if (!host) return null;
+    const g = document.createElement('span');
+    g.className = cls;
+    g.setAttribute('aria-hidden', 'true');   // decoration: the OPEN badge / .active carry this for a reader
+    g.appendChild(document.createElement('i'));
+    host.appendChild(g);
+    const fit = () => {
+      const r = host.getBoundingClientRect();
+      const d = Math.ceil(Math.max(r.width, r.height) * 1.5);
+      if (d > 0) g.style.setProperty('--glint-d', d + 'px');
+    };
+    fit();
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(fit);
+      ro.observe(host);
+      g._fmGlintRO = ro;    // held on the ring, so it is collected with it when the host goes
+    }
+    return g;
+  };
+
   let root = null, grid = null, tab = 'projects';
   let selectMode = false;                 // multi-select for bulk delete / duplicate (projects tab only)
   const selected = new Set();             // ids ticked while in select mode
@@ -1039,12 +1092,7 @@ window.FM = window.FM || {};
     // Added last so it paints over the thumb and the ⋯, and marked aria-hidden — the OPEN badge on the
     // thumbnail is what carries this meaning for a screen reader; this is the same fact, in light.
     // The <i> is the part that spins; .hm-glint masks it down to a 1.5px ring (see styles.css).
-    if (isOpen) {
-      const glint = el('span', 'hm-glint');
-      glint.setAttribute('aria-hidden', 'true');
-      glint.appendChild(document.createElement('i'));
-      card.appendChild(glint);
-    }
+    if (isOpen) FM.glintRing(card, 'hm-glint');
     // Select, the ticks, the hold and the drag-paint all come from selectify now (v6.17) — this block
     // used to hold its own copy, which is exactly why the other two tabs never had any of it.
     // projectCard doesn't use the return value: its ⋯ is appended above, under its own `!selectMode`.

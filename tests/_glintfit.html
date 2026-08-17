@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#304 — why the comet stops halfway</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #304 — *"The circle that moves around the sound effects menu stops halfway and like glitches a
+   little bit"*, and *"It also kind of glitches out on the record voice menu"*. Two hosts, one shared
+   ring (.hm-glint / .am-glint / .sfx-glint / .vr-glint), so the cause should be shared too.
+   THE HYPOTHESIS TO KILL OR CONFIRM: the spinning element is sized 140% of the host on BOTH axes,
+   which covers the host at rest and stops covering it once it turns. A box 140%w x 140%h rotated 90°
+   presents 140%h across and 140%w down — and on a host twice as tall as it is wide, 140% of the WIDTH
+   is far less than the height, so the top and bottom of the ring have nothing lit over them for part
+   of every turn. That reads exactly as "stops halfway".
+   Measured rather than argued: the covering test is whether the rotated box's half-extent along each
+   axis still reaches the host's own half-extent, at every angle. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 390;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.sfx || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.sfx.open();
+      } catch (e) { return fail('sfx.open threw: ' + (e && e.message || e)); }
+      setTimeout(function () {
+        var card = d.querySelector('.sfx-card');
+        if (!card) return fail('the sound-effects card did not open');
+        var spinner = card.querySelector('.sfx-glint i');
+        if (!spinner) return fail('no comet element inside the ring');
+        var c = card.getBoundingClientRect(), s = spinner.getBoundingClientRect();
+        var cs = w.getComputedStyle(spinner);
+        /* getBoundingClientRect on a ROTATING element reports the axis-aligned box of the rotated
+           shape, which is not the size we want. Read the declared box instead. */
+        var sw = parseFloat(cs.width), sh = parseFloat(cs.height);
+        var lines = [
+          'window ' + W + 'x' + (+q.get('h') || 800),
+          'card     ' + Math.round(c.width) + ' x ' + Math.round(c.height) + '   (ratio ' + (c.height / c.width).toFixed(2) + ')',
+          'comet box ' + Math.round(sw) + ' x ' + Math.round(sh) + '   animation: ' + cs.animationName + ' ' + cs.animationDuration,
+          'diagonal the ring needs covering: ' + Math.round(Math.hypot(c.width, c.height)),
+          ''
+        ];
+        /* Half-extents of the rotated box along x and y, versus what the card needs. */
+        var worstA = null, worstGap = -Infinity;
+        for (var a = 0; a < 180; a += 5) {
+          var t = a * Math.PI / 180, ct = Math.abs(Math.cos(t)), st = Math.abs(Math.sin(t));
+          var exX = (sw * ct + sh * st) / 2, exY = (sw * st + sh * ct) / 2;
+          var gap = Math.max(c.width / 2 - exX, c.height / 2 - exY);
+          if (gap > worstGap) { worstGap = gap; worstA = a; }
+        }
+        lines.push(worstGap > 0
+          ? 'UNCOVERED: at ' + worstA + '° the comet box falls ' + Math.round(worstGap) + 'px short of the ring — the light has nowhere to be for part of every turn'
+          : 'covered at every angle; tightest point is ' + worstA + '° with ' + Math.round(-worstGap) + 'px to spare');
+        out.textContent = lines.join('\n');
+        window.__done = true;
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

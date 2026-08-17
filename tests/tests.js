@@ -14413,6 +14413,67 @@
 
   /* ---------------- queue 290: more sound effects, and a warm menu ---------------- */
 
+  /* ---------------- queue 304: the travelling ring stops halfway ----------------------------------
+   * His words: *"The circle that moves around the sound effects menu stops halfway and like glitches a
+   * little bit"*, and then *"It also kind of glitches out on the record voice menu"* — two hosts, which
+   * is what said the cause was in the shared ring rather than in either sheet.
+   *
+   * WHY THIS IS GEOMETRY AND NOT A SCREENSHOT. The light is one bright wedge of a conic gradient on a
+   * box that SPINS behind a ring-shaped mask, so it only reaches the whole ring if the box still covers
+   * the host at every angle — a square at least as wide as the host's diagonal. It was 140% of the host
+   * on each axis, which covers a card and stops covering anything tall the moment it turns: 96px short
+   * at 90° on the sound-effects sheet. A still frame of a rotating thing proves nothing about the
+   * frames either side of it, so what is checked is the invariant that has to hold at all of them.
+   *
+   * The centring is checked through the ROTATED box's centre, which is the one measurement rotation
+   * cannot disturb — and it is a real second bug: percentage margins resolve against WIDTH on every
+   * side, so `margin-top: -70%` had the comet orbiting a point 233px above the middle of the card. */
+  test('the travelling ring covers its host at every angle and orbits its centre (queue 304)', { item: 'sfx-glint' }, async function () {
+    const hosts = [
+      { name: 'sound effects', api: FM.sfx, sel: '.sfx-card', ring: '.sfx-glint i' },
+      { name: 'record voice', api: FM.voiceRec, sel: '.vr-card', ring: '.vr-glint i' },
+    ];
+    for (const h of hosts) {
+      if (!h.api || !h.api.open) throw new Error('FM.' + h.name + ' has no open() — cannot reach the sheet he reported');
+      const wasOpen = !!document.querySelector(h.sel);
+      try {
+        if (!wasOpen) h.api.open();
+        /* Long enough for the ResizeObserver to have run. The ring is appended to a DETACHED card, so
+           the first measurement is 0x0 and the observer is what delivers the real number — a test that
+           read immediately would see the fallback and pass on the strength of the old behaviour. */
+        await sleep(320);
+        const card = document.querySelector(h.sel);
+        if (!card) throw new Error('the ' + h.name + ' sheet did not open');
+        const i = card.querySelector(h.ring);
+        if (!i) throw new Error('the ' + h.name + ' sheet has no travelling ring — "our signature" light is missing from it');
+        const cs = getComputedStyle(i);
+        if (cs.animationName === 'none' && !matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('the ' + h.name + ' ring is not animating at all');
+        const c = card.getBoundingClientRect();
+        const sw = parseFloat(cs.width), sh = parseFloat(cs.height);
+        if (!(sw > 0 && sh > 0)) throw new Error('the ' + h.name + ' comet box measures ' + sw + 'x' + sh);
+
+        // COVERAGE, at every angle: the rotated box's half-extents must still reach the host's.
+        let worstA = null, worstGap = -Infinity;
+        for (let a = 0; a < 180; a += 5) {
+          const t = a * Math.PI / 180, ct = Math.abs(Math.cos(t)), st = Math.abs(Math.sin(t));
+          const gap = Math.max(c.width / 2 - (sw * ct + sh * st) / 2, c.height / 2 - (sw * st + sh * ct) / 2);
+          if (gap > worstGap) { worstGap = gap; worstA = a; }
+        }
+        if (worstGap > 0) throw new Error('on the ' + h.name + ' sheet the ' + Math.round(sw) + 'x' + Math.round(sh) + ' comet box falls ' + Math.round(worstGap) + 'px short of a ' + Math.round(c.width) + 'x' + Math.round(c.height) + ' host at ' + worstA + '° — the light has nowhere to be for part of every turn, which is "stops halfway"');
+
+        /* CENTRING. getBoundingClientRect on a rotating element gives the axis-aligned box of the
+           rotated shape — whose CENTRE is the orbit's centre whatever the angle. */
+        const r = i.getBoundingClientRect();
+        const dx = Math.abs((r.left + r.width / 2) - (c.left + c.width / 2));
+        const dy = Math.abs((r.top + r.height / 2) - (c.top + c.height / 2));
+        if (dx > 2 || dy > 2) throw new Error('the ' + h.name + ' comet orbits a point ' + Math.round(dx) + 'px across and ' + Math.round(dy) + 'px above/below the middle of the sheet — the light runs off-centre round the ring');
+      } finally {
+        if (!wasOpen && h.api && h.api.close) h.api.close();
+        await sleep(120);
+      }
+    }
+  });
+
   test('the sound-effects menu has grown, and its sheet is warm (queue 290)', { item: 'sfx-warm' }, async function () {
     /* "give the sound effects menu more sound effects and also give the menu some nice warm background
      * colours, Specifcally warm."
@@ -17982,31 +18043,43 @@
     if (!supported) return;
     /* TWO sizes, and the tall one is the point. The recorder's own sheet is wider than it is tall, so a
        square spinner sized off width covers it either way — a test at that size passes with the tall-host
-       sizing rule deleted, which is what the mutation check reported. 344x700 stands in for the
-       sound-effects sheet's real proportions and cannot pass without it. Measured here rather than on
-       the live sheet because the live one's height follows the window, so on a short suite viewport it
-       proves nothing. */
+       rule deleted, which is what the mutation check reported. 344x700 stands in for the sound-effects
+       sheet's real proportions and cannot pass without it. Measured here rather than on the live sheet
+       because the live one's height follows the window, so on a short suite viewport it proves nothing.
+
+       TWO THINGS CHANGED HERE AT QUEUE 304, and both are the same mistake in different clothes.
+       · It used to hand-build the ring's markup. That was deliberate — "checks the STYLESHEET answers"
+         — and it stopped being honest the moment the SIZE started coming from FM.glintRing: a probe
+         that skips the builder measures the CSS fallback and reports on code the app does not run.
+         It goes through the real builder now, which is also one fewer copy of that markup.
+       · The assertion used to be "the spinner is at least as big as the host". That is the box AT REST,
+         and this box SPINS — 496x963 covers a 354x688 sheet standing still and is 96px short of it at
+         90°, which is exactly the bug he reported. What has to hold is the covering invariant at every
+         angle, so that is what is asked. */
     const sizes = [[344, 284, "the recorder's own shape"], [344, 700, 'a tall sheet like the sound-effects one']];
-    sizes.forEach(function (sz) {
+    for (const sz of sizes) {
       const probe = document.createElement('div');
       probe.className = 'vr-card';
       probe.style.cssText = 'position:absolute;left:-10000px;top:0;width:' + sz[0] + 'px;height:' + sz[1] + 'px';
-      const ring = document.createElement('span');
-      ring.className = 'vr-glint';
-      ring.appendChild(document.createElement('i'));
-      probe.appendChild(ring);
       document.body.appendChild(probe);
+      const ring = FM.glintRing(probe, 'vr-glint');
+      await sleep(120);              // the fit arrives via a ResizeObserver, not synchronously
       try {
+        if (!ring) throw new Error('FM.glintRing built nothing — the recorder sheet would show no edge-light');
         if (getComputedStyle(ring).display !== 'block') throw new Error('.vr-glint is not displayed — the recorder sheet would show no edge-light');
         const spinner = ring.querySelector('i');
         const cs = getComputedStyle(spinner);
         if (cs.animationName !== 'hm-glint') throw new Error('the recorder sheet would animate "' + cs.animationName + '" instead of the signature');
-        const cr = probe.getBoundingClientRect(), ir = spinner.getBoundingClientRect();
-        if (ir.height < cr.height - 1 || ir.width < cr.width - 1) {
-          throw new Error('on ' + sz[2] + ' (' + sz[0] + 'x' + sz[1] + ') the spinner is only ' + Math.round(ir.width) + 'x' + Math.round(ir.height) + ' — the light would run along the sides and vanish at the ends');
+        const sw = parseFloat(cs.width), sh = parseFloat(cs.height);
+        let worstA = null, worstGap = -Infinity;
+        for (let a = 0; a < 180; a += 5) {
+          const t = a * Math.PI / 180, ct = Math.abs(Math.cos(t)), st = Math.abs(Math.sin(t));
+          const gap = Math.max(sz[0] / 2 - (sw * ct + sh * st) / 2, sz[1] / 2 - (sw * st + sh * ct) / 2);
+          if (gap > worstGap) { worstGap = gap; worstA = a; }
         }
+        if (worstGap > 0) throw new Error('on ' + sz[2] + ' (' + sz[0] + 'x' + sz[1] + ') the ' + Math.round(sw) + 'x' + Math.round(sh) + ' spinner falls ' + Math.round(worstGap) + 'px short at ' + worstA + '° — the light vanishes from part of the ring on every turn');
       } finally { probe.remove(); }
-    });
+    }
   });
 
   /* ---------------- queue 289: the "Other" catch-all is gone ---------------- */

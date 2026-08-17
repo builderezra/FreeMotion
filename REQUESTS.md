@@ -5453,7 +5453,26 @@ better still, keep working inside the turn rather than parking work for a later 
       the result play back on the layer you have selected. Same shape as queue 277's phone work, ported
       to desktop. Related to 300 (the audio browser still being full screen).
 
-- [ ] **304 — The circle animation in the sound-effects menu stops halfway and glitches.** (17 Aug.)
+- [x] **304 — The circle animation in the sound-effects menu stops halfway and glitches.** ✅ **v9.52.**
+      Both halves — the sound-effects sheet and the record-voice one — from one fix, because you
+      were right that it is one animation.
+      **What it was:** the light is a single bright wedge of a colour wheel painted on a box that
+      SPINS behind a ring-shaped mask. For the light to reach the whole ring, that box has to keep
+      covering the sheet as it turns — so it has to be a square at least as big as the sheet's
+      diagonal. It was sized at 140% of the sheet on each axis, which covers a card and stops
+      covering anything tall the moment it rotates. Measured at 390x800: sheet 354x688, box
+      496x963, ring needs 774 — **96px short at 90°**, so on every single turn the light had
+      nowhere to be at the top and bottom. That is the stop.
+      **A second bug was sitting on top of it:** percentage margins in CSS resolve against WIDTH
+      on every side, top included, so the box was orbiting a point 233px ABOVE the middle of the
+      sheet. That is the glitch. Size is measured from the sheet now and centring is a transform,
+      which an aspect ratio cannot fool.
+      **And the four copies are one function.** The project card, the add-menu tab and both sheets
+      each hand-built the same ring beside a CSS comment warning about exactly that; they all call
+      `FM.glintRing` now, which builds it AND fits it. The test asserts the covering rule at every
+      angle rather than photographing one frame — a still picture of a spinning thing says nothing
+      about the frames either side of it, which is how the old note came to be confidently wrong.
+      Two mutation checks, one per bug. Original entry: (17 Aug.)
       His words, verbatim: *"The circle that moves around the sound effects menu stops halfway and like
       glitches a little bit"*. (Sent twice, the first cut off mid-sentence.)
       Then, in a follow-up: *"It also kind of glitches out on the record voice menu"* — so the SAME

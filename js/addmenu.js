@@ -1208,11 +1208,7 @@ window.FM = window.FM || {};
           var old = all[i].querySelector('.am-glint');
           if (old && old.parentNode) old.parentNode.removeChild(old);
           if (!all[i].classList.contains('active')) continue;
-          var g = document.createElement('span');
-          g.className = 'am-glint';
-          g.setAttribute('aria-hidden', 'true');   // decoration: .active already says this for a reader
-          g.appendChild(document.createElement('i'));
-          all[i].appendChild(g);
+          FM.glintRing(all[i], 'am-glint');   // built AND fitted in one place — see FM.glintRing (queue 304)
         }
       }
 

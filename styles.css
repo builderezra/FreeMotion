@@ -3648,7 +3648,21 @@ body.hm-selecting .hm-pin { display: none; }
   .am-glint { --glint-r: calc(var(--radius-sm) + 1px); }
   .hm-glint i, .am-glint i, .sfx-glint i, .vr-glint i {
     position: absolute; left: 50%; top: 50%; display: block;
-    width: 140%; aspect-ratio: 1 / 1; margin-left: -70%; margin-top: -70%;
+    /* SIZED BY THE HOST, MEASURED (queue 304). --glint-d is written by FM.glintRing as 1.5x the host's
+       LONGER side, which is always more than its diagonal — the box spins, so anything less stops
+       covering the ring partway round and the light simply disappears. On the sound-effects sheet it
+       was 96px short at 90°, which is what he saw as "stops halfway".
+       The fallback keeps the old behaviour exactly where it was right: with the property unset, height
+       falls back to auto and the aspect ratio squares the box off 140% of the host's WIDTH, which is
+       what every card-shaped host had. */
+    width: var(--glint-d, 140%); height: var(--glint-d, auto); aspect-ratio: 1 / 1;
+    /* CENTRED BY TRANSFORM, NOT BY MARGINS. Percentage margins — top and bottom included — resolve
+       against the containing block's WIDTH, so `margin-top: -70%` centred the box correctly only while
+       it was as tall as it was wide. On the 354x963 case it pulled up 248px where half the height is
+       481, orbiting the comet around a point 233px above the middle of the card. A transform percentage
+       is of the element's own box on its own axis, so it cannot be wrong. The animation below repeats
+       it, because a transform animation replaces the property outright. */
+    margin: 0; transform: translate(-50%, -50%);
     /* One comet, not a spinning barber pole: ~40% of the turn carries any light at all, and the white
        core is a tenth of that. A gradient lit all the way round would just be a static bright border. */
     background: conic-gradient(from 0deg,
@@ -3663,23 +3677,22 @@ body.hm-selecting .hm-pin { display: none; }
   }
   /* THE SAME COMET ON TWO TALL HOSTS (queue 291). Ezra: "put the our signature white line glow that
      move around the edges in the menu for sound effects and the menu for recording ur voice."
-     "Our signature" is the point, so this extends the selectors above rather than starting a second
-     implementation — the note on this block records what happened last time two surfaces meant to feel
-     identical each got their own copy.
-     The one thing that had to change is the SIZE of the spinning square. The hosts above are cards, so
-     a square 140% of their WIDTH covers them; the sound-effects sheet is 344x688, twice as tall as it
-     is wide, and that square would have stopped 200px short of its top and bottom edges — the comet
-     would have run along the sides and vanished at the ends. Sized on both axes instead: the light band
-     is slightly elliptical as it turns, which is invisible, and it reaches every edge, which is the
-     whole request. */
-  .sfx-glint i, .vr-glint i { width: 140%; height: 140%; aspect-ratio: auto; margin-left: -70%; margin-top: -70%; }
+     THE OVERRIDE THAT USED TO LIVE HERE IS GONE (queue 304), and it is worth recording what it got
+     wrong, because the reasoning read as sound. It said: a square 140% of the WIDTH covers a card but
+     "would have stopped 200px short" on a sheet twice as tall as it is wide, so it sized both axes at
+     140% instead. That fixes the box AT REST and breaks it in motion — the box turns, and a 496x963
+     rectangle rotated 90° presents 963 across and 496 down against a host 688 tall. Measured: 96px
+     short at 90°. The lesson is the one this file keeps re-learning — a decoration that MOVES has to be
+     checked while it is moving, not in the frame you happen to be looking at.
+     Nothing replaces it: the shared rule above is now sized off the host's longer side by JS, which is
+     right for a card, a tab and a tall sheet alike, so there is one rule again instead of two. */
   /* Both hosts are 16px-cornered panels, so the shared 17px default already lands the ring on the
      border rather than inside it. Declared anyway, because a dialog that later takes a different
      corner should change this number and not discover the default by accident. */
   .sfx-glint, .vr-glint { --glint-r: 17px; }
 }
 .sfx-card, .vr-card { position: relative; }   /* the ring is absolute; without this it escapes to the page */
-@keyframes hm-glint { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes hm-glint { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
 /* Reduced motion still gets the marker, just standing still — the point of the ring is "this is the
    open one", and that fact shouldn't need movement to be legible. */
 @media (prefers-reduced-motion: reduce) {
