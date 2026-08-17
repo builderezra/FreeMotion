@@ -6185,7 +6185,13 @@ better still, keep working inside the turn rather than parking work for a later 
       top of CLAUDE.md); this is the receipt.
 
 
-- [ ] **329 — Two save buttons in the Presets card: what is the difference?** (17 Aug.) His words,
+- [x] **329 — Two save buttons in the Presets card: what is the difference?** ✅ **v9.75.** Not the
+      merge — there IS a difference, so the condition you set was not met — but you were right that
+      something was wrong: neither the buttons nor the headings said which was which.
+      They now read **Save look + animations…** and **Save effects only…**, under **Look +
+      animations** and **Effects only**. "Look + animations" is the phrase the saved rows already
+      use for themselves, so the words on the button match the thing it makes. No explanation text
+      under either — the contrast carries it, and you have asked twice to stop adding those. (17 Aug.) His words,
       verbatim: *"In the presets presets menu what is the difference between pressing save this layer as
       preset and save current effects? If none then just make one button not two"*.
       **ANSWERED: there IS a difference, so the condition he set is not met — but the naming is the real
@@ -9096,3 +9102,35 @@ wait for them to report back."*
          treatment scaled up (a blue glass gradient, #9beeff → #5cc6ee → #35a7dd). At 64px that reads as
          flat blue. Worth looking at what he has said before about colour here — the add-menu tiles and
          the custom-elements ring are both multi-colour, and he has asked for that idea twice.
+
+- [ ] **355 — Exiting (and sometimes entering) a project makes the UI glitch and move all over the
+      place.** (18 Aug.) His words, verbatim: *"There's a glitch at the moment where when I exit out of
+      a project the ui glitches and moves all over the place. Sometimes when entering a project as well.
+      It just makes the app feel slow and buggy and not smooth"*.
+      Arrived in one message with **356** and **357**.
+      The home↔project transition is the `fm-push` animation (see js/home.js) — a swipe-left/swipe-in
+      pair. "Moves all over the place" on the way OUT, and only sometimes on the way IN, points at
+      layout being measured or re-measured mid-transition rather than at the animation itself: the
+      editor is still mounted underneath, and anything that resizes the stage while home is sliding
+      would shove it around. Measure a real open→close cycle before touching the animation.
+
+- [ ] **356 — Get rid of the lines around the big add button, and centre the small one properly on its
+      layer.** (18 Aug, two phone screenshots at v9.74: the empty project with the big + inside a dashed
+      box, and a 2-layer project with the slim "Tap to add a layer" row between them.) His words,
+      verbatim: *"Also when the add button is big and there's nothing on the project get rid of the
+      lines around it, then also when it's small make sure it's centred on its layer a bit better, if
+      you look closely the lines and stuff are just off, going slightly lower than high,"*.
+      Two clauses:
+      1. **The dashed border goes** while the row is in its big empty state (`.tl-addrow--empty`).
+      2. **The slim row is off-centre vertically** — he says the lines sit slightly low. Measure the
+         row's contents against its own box before changing anything; "slightly lower than high" is a
+         couple of pixels and is exactly the sort of thing that gets nudged the wrong way by eye.
+      Goes with **354**, which is the same control.
+
+- [ ] **357 — A layer cannot be dragged onto the add-layer row.** (18 Aug.) His words, verbatim: *"Also
+      currently you can't drag a layer on top of the add layer, it's like they don't think it's there or
+      something"*.
+      Reading it: dragging a layer to reorder it will not drop it at the add row's position — the
+      reorder maths walks `.track-row` elements, and the add row is deliberately NOT one of them (it has
+      no layer, no index; see the note in js/timeline.js). So the marker is invisible to the drop
+      resolver and there is no slot where it sits. That is the likely cause and it is checkable.

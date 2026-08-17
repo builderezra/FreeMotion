@@ -27791,4 +27791,50 @@
     }
   });
 
+
+  /* ================= queue 329: the two save buttons say which is which ===========================
+   * *"In the presets presets menu what is the difference between pressing save this layer as preset and
+   * save current effects? If none then just make one button not two"*.
+   * There IS a difference — one saves the whole layer including its transform and animation, the other
+   * saves the effect stack alone — so the merge he offered is not the answer. That he could not tell
+   * from the buttons is the defect.
+   *
+   * WHAT IS ASSERTED IS THE DISTINCTION, NOT THE WORDING. A test pinned to exact strings would fail the
+   * next time either label is nudged and would say nothing about whether they can be told apart. So:
+   * the two must not read the same, and each must name what it keeps. */
+  test('the two preset save buttons say what each one keeps (queue 329)', { item: 'preset-labels' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      L.effects = [FM.fxRegistry.makeInstance('blur')].filter(Boolean);
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(140);
+      FM.inspector.openCategory('presets');
+      await sleep(220);
+      const acts = [].slice.call(document.querySelectorAll('#inspector .fx-act'))
+        .map(b => (b.textContent || '').trim()).filter(t => /save/i.test(t));
+      if (acts.length < 2) throw new Error('expected two save buttons in the Presets card, found ' + acts.length + ': ' + acts.join(' | '));
+
+      // 1. They must not read the same, which is the whole complaint.
+      if (acts[0] === acts[1]) throw new Error('both save buttons read "' + acts[0] + '"');
+
+      /* 2. One names the WHOLE layer (its motion included) and the other names the effects ALONE. The
+         old pair — "Save this layer as preset" and "Save current effects" — both passed a naive
+         "they differ" check while telling you nothing, which is exactly how the question got asked. */
+      const whole = acts.filter(t => /animat|motion/i.test(t));
+      const only = acts.filter(t => /\bonly\b|\bjust\b/i.test(t) && /effect/i.test(t));
+      if (!whole.length) throw new Error('neither save button says it keeps the layer\'s animation: ' + acts.join(' | '));
+      if (!only.length) throw new Error('neither save button says it keeps ONLY the effects: ' + acts.join(' | '));
+      if (whole[0] === only[0]) throw new Error('one button is claiming to be both: ' + whole[0]);
+
+      // 3. …and the headings above them are not interchangeable either.
+      const secs = [].slice.call(document.querySelectorAll('#inspector .preset-sec')).map(n => (n.textContent || '').trim());
+      if (secs.length >= 2 && secs[0] === secs[1]) throw new Error('the two preset sections carry the same heading: ' + secs.join(' | '));
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.inspector.openCategory('home'); FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();
