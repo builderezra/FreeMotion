@@ -9170,3 +9170,28 @@ wait for them to report back."*
       size and a read-only seam) and touched `FM.FX_FEATURED` at v9.64.
       The second half — **the "tuff" filters on his car photos — is already #349**, and the car art for
       the shake section is **#332**. Both still open and still wanted; he is restating them, not adding.
+
+- [ ] **360 — Mask does not behave like an effect; the Done button in an effect group throws away your
+      picks; and adding an effect often does not take you to it.** (18 Aug.) His words, verbatim:
+      *"The mask effect because I'm sure you didn't originally design it as an effect. It doesn't work
+      like an effect. I can't swipe it away to delete it or minimise it and then also in the effects menu
+      for some reason when you go into one of the groups and there's a done button when you press the
+      dumb button it just kicks you out and doesn't actually add any of the effects or do anything. It's
+      just there to fuck you over and then also for some reason what I do I had an effect. Normally it
+      doesn't even take me to the effect sometimes it just kicks me out of the wire and then I have to go
+      back into the land and go to effect and find it so you need to fix all those things up when it's
+      time to do it."*
+      (Dictation: "the dumb button" = the Done button; "kicks me out of the wire … back into the land" =
+      out of the layer, back into the layer.)
+      Three clauses:
+      1. **Mask is not an effect and does not behave like one.** He is right about the history — a mask is
+         layer state (`layer.masks`), not a registry effect, which is why its row cannot be swiped away or
+         collapsed like every other row in the stack. Same root as **335** (Motion Blur), which is the
+         other non-effect wearing an effect's clothes.
+      2. **Done inside a category discards your selection.** Queue 297 added Done to every sub-view so you
+         could leave without going backwards first — but with the queue-277 multi-select, Done CLOSES and
+         the picks go with it. He expects Done to mean "add what I picked". **This is my design mistake,
+         not a misunderstanding on his part:** a button called Done, next to numbered picks, that throws
+         the picks away is a trap.
+      3. **After adding an effect it often does not open that effect.** It should land on the new effect's
+         controls; he says it frequently drops him out of the layer entirely.
