@@ -4450,6 +4450,14 @@ window.FM = window.FM || {};
            kfNumRow rather than rangeRow, because keyframing is the entire feature — a static trim is a
            way to hide half your drawing. */
         if (layer.shape === 'path' && !layer.closed) {
+          /* DRAW MORE (queue 322, clause 3). Ezra: *"there should be a button to re edit the drawing so
+             you can draw more or erase"*. It re-opens the sketching tool ON this drawing rather than
+             starting an empty one — new strokes join it, and the eraser can reach what is already
+             there, which is the "or erase" half. */
+          const more = el('button', 'btn', '✎  Draw more');
+          more.style.cssText = 'width:100%;margin:2px 0 8px;';
+          more.addEventListener('click', () => { if (FM.startDraw) FM.startDraw('freehand', { layerId: layer.id }); });
+          body.appendChild(more);
           body.appendChild(el('div', 'insp-sub-label', 'Draw-on'));
           body.appendChild(kfNumRow(layer, 'trimStart', 'Draw from', 0, 100, 1, 0, '%'));
           body.appendChild(kfNumRow(layer, 'trimEnd', 'Draw to', 0, 100, 1, 100, '%'));

@@ -27560,4 +27560,71 @@
     if (!(len(late) > len(early) + 1)) throw new Error('a keyframed Draw to does not grow over time (' + len(early).toFixed(2) + ' → ' + len(late).toFixed(2) + ') — the line cannot be drawn on live');
   });
 
+
+  /* ================= queue 322 clause 3: re-entering a drawing ====================================
+   * *"there should be a button to re edit the drawing so you can draw more or erase"*.
+   *
+   * THE FAILURE THIS GUARDS IS A SECOND LAYER. A session that starts empty and then commits a stroke
+   * BUILDS a drawing — that is what the first stroke of any session does — so re-opening the tool
+   * without adopting the existing one leaves you with two sketches stacked on the canvas, looking
+   * almost right and impossible to edit as one thing. Counting layers is therefore the assertion, not
+   * "did a stroke get added". */
+  test('a drawing can be re-opened and drawn on, without becoming a second layer (queue 322)', { item: 'draw-more' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const size0 = { w: P.width, h: P.height };
+    try {
+      P.width = 1080; P.height = 1920;
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll();
+      await sleep(120);
+      if (!FM.startDraw || !FM.drawTool || !FM.drawTool._commit) throw new Error('the drawing tool has no commit seam');
+
+      // A drawing of one stroke, made the ordinary way.
+      FM.startDraw('freehand');
+      await sleep(180);
+      FM.drawTool.points = [[200, 400], [400, 420], [600, 380]];
+      FM.drawTool._commit();
+      await sleep(140);
+      if (FM.drawTool.stop) FM.drawTool.stop(); else if (FM.stopDraw) FM.stopDraw();
+      await sleep(160);
+      const sketches = () => FM.scene.layers.filter(l => l.name === 'Sketch');
+      if (sketches().length !== 1) throw new Error('expected one drawing after the first session, got ' + sketches().length);
+      const id = sketches()[0].id;
+      const spanOf = l => {
+        const subs = FM.evalShapeSubs(l, 0);
+        let n = 0; subs.forEach(s2 => { n += s2.length; });
+        return { subs: subs.length, pts: n, w: l.shapeW, h: l.shapeH };
+      };
+      const before = spanOf(sketches()[0]);
+
+      // Re-open it and add a stroke somewhere clearly outside the first one's box.
+      FM.startDraw('freehand', { layerId: id });
+      await sleep(200);
+      if (!FM.drawTool.active) throw new Error('re-opening did not start the drawing tool');
+      FM.drawTool.points = [[300, 900], [500, 950], [700, 1000]];
+      FM.drawTool._commit();
+      await sleep(160);
+      if (FM.drawTool.stop) FM.drawTool.stop(); else if (FM.stopDraw) FM.stopDraw();
+      await sleep(180);
+
+      // 1. ONE drawing, not two.
+      if (sketches().length !== 1) throw new Error('drawing again made ' + sketches().length + ' sketch layers — the session did not adopt the one you re-opened, so you get a second drawing stacked on the first');
+      const after = spanOf(sketches()[0]);
+      // 2. …and it has BOTH strokes.
+      if (!(after.subs >= 2)) throw new Error('the re-opened drawing holds ' + after.subs + ' stroke(s) — the new one replaced the old rather than joining it');
+      if (!(after.pts > before.pts)) throw new Error('the drawing has no more points than before (' + before.pts + ' → ' + after.pts + ')');
+      // 3. …and its box grew to cover the new stroke, which is what "one drawing" has to mean.
+      if (!(after.h > before.h)) throw new Error('the drawing\'s box did not grow (' + Math.round(before.h) + ' → ' + Math.round(after.h) + ') — the second stroke is outside it and would render clipped or misplaced');
+      if (sketches()[0].id !== id) throw new Error('the layer was replaced rather than added to — anything referring to it (a keyframe, a parent) would be pointing at nothing');
+    } finally {
+      if (FM.drawTool && FM.drawTool.stop) FM.drawTool.stop();
+      else if (FM.stopDraw) FM.stopDraw();
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null);
+      if (document.body) document.body.classList.remove('drawing');
+      FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();

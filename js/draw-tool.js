@@ -652,7 +652,7 @@ window.FM = window.FM || {};
   // body.drawing on for the rest of the run, and the collapsed layout it causes fails eight unrelated
   // tests downstream — which is how this hook came to exist.
   FM.drawTool._stop = stop;
-  FM.startDraw = function (mode) {
+  FM.startDraw = function (mode, opts) {
     /* THE RESET IS GONE (v8.01, queue 165.3). Ezra: "another option that lets you grab the screen and
      * zoom in or out so you can do more detailed drawing."
      * This line used to throw your zoom away the moment you picked up the pencil, and it was RIGHT to
@@ -672,6 +672,39 @@ window.FM = window.FM || {};
        through it — and without the reset here a second drawing would silently append its strokes to
        the layer the FIRST one built, which is a worse bug than the one being fixed. */
     sessionLayerId = null; sessionSubs = []; histPast = []; histFuture = [];
+    /* RE-ENTERING AN EXISTING DRAWING (queue 322, clause 3). Ezra: *"there should be a button to re edit
+       the drawing so you can draw more or erase"*.
+       The session is ADOPTED rather than restarted: its layer id and its strokes are seeded from the
+       layer, so a new stroke re-fits that drawing instead of building a second one beside it, the
+       eraser can reach what is already there, and the existing strokes show under your finger because
+       redraw() paints sessionSubs.
+       THE SUBS COME BACK THROUGH evalShapeSubs, not straight off the layer. They are stored normalised
+       to the layer's box, they may be keyframed, and a single-stroke drawing keeps them in `points`
+       rather than `subs` — three ways to get this wrong, all of which that one function already knows
+       about. They are then put back into PROJECT pixels, which is what a session works in and what the
+       re-fit on the way out expects. */
+    if (opts && opts.layerId) {
+      var adopt = FM.layerById(FM.scene, opts.layerId);
+      if (adopt && adopt.type === 'shape' && adopt.shape === 'path' && !adopt.closed) {
+        var norm = FM.evalShapeSubs ? FM.evalShapeSubs(adopt, FM.time || 0) : (adopt.subs || (adopt.points ? [adopt.points] : []));
+        var ev = function (v) { return (FM.evalProp ? FM.evalProp(v, FM.time || 0) : v) || 0; };
+        var bw = adopt.shapeW || 1, bh = adopt.shapeH || 1;
+        var ox = ev(adopt.transform && adopt.transform.x) - bw / 2;
+        var oy = ev(adopt.transform && adopt.transform.y) - bh / 2;
+        sessionSubs = norm.map(function (sub) {
+          return sub.map(function (q) {
+            return q.length > 2 ? [ox + q[0] * bw, oy + q[1] * bh, q[2]] : [ox + q[0] * bw, oy + q[1] * bh];
+          });
+        });
+        if (sessionSubs.length) {
+          sessionLayerId = adopt.id;
+          strokes.length = 0; strokes.push(adopt.id);
+          FM.drawTool.color = adopt.fill || FM.drawTool.color;
+          // The brush width lives on the (disabled) border, which is where addPathLayer parks it.
+          if (adopt.stroke && adopt.stroke.width) FM.drawTool.stroke = adopt.stroke.width;
+        }
+      }
+    }
     // Vector starts with the cursor parked in the middle of the frame, so the pad has something to
     // move from the moment the tool opens rather than only after a first tap.
     FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;

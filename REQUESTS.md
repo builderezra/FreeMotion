@@ -5904,7 +5904,7 @@ better still, keep working inside the turn rather than parking work for a later 
         glide and the sliders. The test checks the SENSITIVITY rather than just that the point
         moved: a pad running one-for-one with your finger would look right, work, and be useless.
 
-- [ ] **322 — Freehand drawing: stop converting it to points, add draw-on (start/end), and a real
+- [x] **322 — Freehand drawing: stop converting it to points, add draw-on (start/end), and a real
       re-edit with a proper eraser.** (17 Aug.) His words, verbatim: *"Also I just realised why I think
       free hand drawing changes what it looks like when you let go, I think it's because you're turning
       it into a bunch of points, it doesn't need to do that, but what would be good is if you press edit
@@ -5923,7 +5923,7 @@ better still, keep working inside the turn rather than parking work for a later 
          a genuinely strong feature and the reason to do the rest properly.)
       3. A button to RE-ENTER drawing mode on an existing drawing, to add more strokes.
       4. **A real eraser** — rubs out part of a stroke, rather than deleting the whole drawing.
-      ✅ **Clauses 1, 2 and 4 done (v9.62, v9.70, v9.69). Only clause 3 is still open.**
+      ✅ **All four clauses done — v9.62, v9.70, v9.71, v9.69.**
       · **1 — v9.62.** Your diagnosis was right. It was being simplified into far fewer points on
         release: on a 121-point stroke, 13 survived. Nothing is deleted or moved now.
       · **4 — v9.69.** The eraser took the whole subpath, so touching the tail of a long line took the
@@ -5937,8 +5937,11 @@ better still, keep working inside the turn rather than parking work for a later 
         like. And it cuts by LENGTH, not by point number: points are not evenly spaced (a fast
         flick spreads them out), so cutting by point number would draw the line on at a speed that
         depended on how fast you drew it.
-      · **3 (re-enter drawing mode on an existing drawing) — NOT DONE.** Smaller than 2, and it wants
-        the drawing session to adopt an existing layer's strokes rather than starting empty.
+      · **3 — v9.71.** Edit Points on a drawing now has **✎ Draw more**. It re-opens the sketching
+        tool ON that drawing, so new strokes join it and the eraser can reach what is already there
+        (the "or erase" half). The session ADOPTS the layer rather than starting empty — without
+        that you would get a second sketch stacked on the first, looking almost right and
+        impossible to edit as one thing, which is what the test counts.
       Goes with 314 (rename to Sketching) and 315.
 
 - [ ] **323 — Squish should work in corners, and should react to effect-driven movement (Shake etc.),
