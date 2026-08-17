@@ -5668,16 +5668,26 @@ better still, keep working inside the turn rather than parking work for a later 
         index still uncommitted while the finger was down. Mutation-checked by putting the
         per-move rebuild back — which reproduces your exact symptom.
 
-- [ ] **308 — Remove the "Trim to last clip" button from the settings menu; it happens automatically
-      now.** (17 Aug.) His words, verbatim: *"In the settings menu, you get rid of the trim to last clip
+- [x] **308 — Remove the "Trim to last clip" button from the settings menu; it happens automatically
+      now.** ✅ **v9.57.** Gone — and you were right that it is automatic: `autoFitDuration` runs inside
+      every refresh, so the button was re-doing on demand what already happens by itself. That is now
+      held by a test (a 3s clip in a 30s project must trim to 3s), because a control removed on a
+      promise, where the promise later stops being true, is a feature deleted in silence. It is the one
+      of the four with no other door, so #btn-fit is left in the markup unreachable — noted, not hidden. (17 Aug.) His words, verbatim: *"In the settings menu, you get rid of the trim to last clip
       button because it automatically does that now we don't need that any more"*.
 
-- [ ] **309 — Remove "Show guides" from the App settings menu; it already lives somewhere else.**
+- [x] **309 — Remove "Show guides" from the App settings menu; it already lives somewhere else.**
+      ✅ **v9.57.** You were right about where: the ⛶ view bar's guides button, driving the same state.
+      Checked by CLICKING it and watching the state move, not by seeing that it exists.
       (17 Aug.) His words, verbatim: *"Also in the settings menu like the app settings menu, it has the
       show guide button but we don't need that there because it's already got a place"*.
       Check where the other one is before deleting, so the surviving control is the one that works.
 
-- [ ] **310 — Remove the snapping-magnet button and the Canvas settings button.** (17 Aug.) His words,
+- [x] **310 — Remove the snapping-magnet button and the Canvas settings button.** ✅ **v9.57.**
+      Both gone from the settings panel. Magnet survives on the ⛶ view bar; Canvas survives on BOTH
+      bars (the desktop rail and the phone's cog). Each survivor was pressed for real in the test —
+      asserting only that the rows are gone would have passed just as happily if the twin had been
+      deleted in the same sweep or had never been wired, which is the half you cannot check. (17 Aug.) His words,
       verbatim: *"Also snapping magnet, we don't need the snapping magnet button and also we don't need
       the Canva settings button"* ("Canva" is dictation for Canvas).
       Arrived directly after 308 and 309, so read as the same clear-out of that menu.

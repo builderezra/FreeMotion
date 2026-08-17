@@ -8254,27 +8254,24 @@
          by 'onion skin has exactly one door'. */
       // 'Loop playback' is NOT in this list any more (queue 175), for the same reason onion skin left
       // in queue 122 — Ezra: "it should only be in view options". One control, one home.
-      const lead = ['Canvas', 'Snapping (magnet)', 'Guides'];
-      if (labels.slice(0, 3).join('|') !== lead.join('|')) {
+      /* THE THREE SWITCHES THIS TEST WAS BUILT AROUND ARE GONE (queue 308-310), at his request and
+         with his own answer to the obvious worry: *"They all have homes and don't need to be repeated
+         there"*. So the question it asks has changed, and pretending otherwise would either fail on
+         correct code or be loosened into meaninglessness.
+         What it asked before: does the cog lead with the project rather than with app-wide preferences,
+         and do its project switches drive the real controls instead of a second copy of the state?
+         What it asks now: inside a project the cog still leads with THE PROJECT — there is exactly one
+         project row left and it is the one with nowhere else to be — and the three that left have not
+         been replaced by a second copy of themselves anywhere in this panel. The "drives the real
+         control" half moved to the surviving buttons, and is pressed for real in
+         'the settings panel no longer repeats controls that live elsewhere'. */
+      if (labels[0] !== 'Save a project file') {
         throw new Error('the cog opens a panel that leads with [' + labels.slice(0, 3).join(', ') +
-          '] — inside a project it must lead with the project: ' + lead.join(', '));
+          '] — inside a project it must still lead with the project, and Save a project file is the one project row left');
       }
-      // Each switch must READ its owner and WRITE through it — not carry a second copy of the state.
-      const cases = [
-        ['Snapping (magnet)', () => !!(FM.timeline.isSnapping && FM.timeline.isSnapping())],
-      ];
-      for (const [label, get] of cases) {
-        const row = rows.find(r => (r.querySelector('.set-label') || {}).textContent === label);
-        const sw = row && row.querySelector('.set-switch');
-        if (!sw) throw new Error('no switch for "' + label + '" in the cog');
-        if (sw.classList.contains('on') !== get()) throw new Error('"' + label + '" shows ' + sw.classList.contains('on') + ' while the app says ' + get() + ' — the panel is holding its own copy of the state');
-        const was = get();
-        sw.click(); await sleep(0);
-        if (get() === was) throw new Error('pressing "' + label + '" in the cog changed nothing — the row is not wired to the control that owns it');
-        if (sw.classList.contains('on') !== get()) throw new Error('"' + label + '" did not read back after its own press');
-        sw.click(); await sleep(0);
-        if (get() !== was) throw new Error('"' + label + '" would not go back to ' + was);
-      }
+      ['Canvas', 'Snapping', 'Guides', 'Trim to last clip'].forEach(function (gone) {
+        if (labels.some(l => l.indexOf(gone) >= 0)) throw new Error('"' + gone + '" came back into the settings panel — it has a home of its own and must not be repeated here');
+      });
       // …and there is no SECOND door to them anywhere (queue 35, finished at v6.13). Both ⋯ menus are
       // gone now — the PC top bar's #btn-more first, then the phone's #m-proj-more — so the assertion
       // flipped: it used to check the phone menu still CONTAINED these three, because that menu was
@@ -8402,6 +8399,10 @@
       .map(n => n.classList.contains('ctx-sep') ? '—' : (n.textContent || '').trim()).join('|');
   }
 
+  /* NOTE (queue 308-310): four rows this helper used to be pointed at are deliberately gone — Canvas,
+     Snapping, Guides and Trim to last clip. Three moved to a door of their own and one became
+     automatic; see 'the settings panel no longer repeats controls that live elsewhere'. The helper
+     still guards everything that IS in the panel, and its message stays accurate for those. */
   function cogRow(label) {
     const rows = [].slice.call(document.querySelectorAll('.set-panel .set-row'));
     const row = rows.find(r => ((r.querySelector('.set-label') || {}).textContent || '') === label);
@@ -8450,16 +8451,15 @@
       window.confirm = (m) => { spy.confirms.push(m); return true; };
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
 
-      // ---- 1. the three that had NO other door on PC, now rows in the cog -----------------------
-      // Trim: the project must actually shorten to the last clip. (Mutation-checked: the same wait
-      // with no press leaves it at 9, so a green here cannot come from the number drifting.)
-      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
-      const idleFrom = FM.scene.project.duration;
-      await sleep(60);
-      if (FM.scene.project.duration !== idleFrom) throw new Error('project duration moves on its own — the Trim assertion below would prove nothing');
-      cogRow('Trim to last clip').click(); await sleep(60);
-      if (Math.abs(FM.scene.project.duration - 2) > 1e-6) {
-        throw new Error('cog ▸ Trim to last clip left the project at ' + FM.scene.project.duration + 's, not 2s — FM.fitToContent has no other call site, so this is its last door');
+      // ---- 1. the ones that had NO other door on PC ---------------------------------------------
+      /* TRIM IS NO LONGER A ROW (queue 308), and the reason is his: *"you get rid of the trim to last
+         clip button because it automatically does that now"*. So the guarantee this used to hold — the
+         project actually shortens to the last clip — did not go with the button; it moved to the thing
+         that does it by itself. Asserted here rather than deleted, because a removed control whose
+         behaviour also quietly stopped is exactly the failure the row was protecting against. */
+      FM.refreshAll(); await sleep(80);
+      if (Math.abs(FM.scene.project.duration - 2) > 0.2) {
+        throw new Error('the project did not trim itself to the last clip (' + FM.scene.project.duration + 's, expected 2s) — the Trim row was deleted on the promise that this happens automatically');
       }
       // Save: the ONE that loses real work if it goes. It must reach FM.storage.exportFile.
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
@@ -8496,10 +8496,16 @@
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Import a project file').click(); await sleep(60);
       if (spy.open !== 1) throw new Error('cog ▸ Import a project file no longer reaches FM.storage.importFile — that is where "Open project…" went');
-      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
-      cogRow('Canvas').click(); await sleep(80);
+      /* CANVAS IS NO LONGER A ROW EITHER (queue 310) — *"we don't need the Canva settings button"*, and
+         it has a door on both bars. The check that matters is unchanged in substance: pressing the
+         surviving control must open the canvas dialog. */
+      if (FM.settings.isOpen()) FM.settings.close();
+      await sleep(120);
+      const canvasBtn = document.getElementById('btn-canvas');
+      if (!canvasBtn) throw new Error('#btn-canvas is gone as well as its settings row — Canvas would have no door on a desktop');
+      canvasBtn.click(); await sleep(80);
       const dlg = document.getElementById('canvas-dialog');
-      if (!(dlg && getComputedStyle(dlg).display !== 'none')) throw new Error('cog ▸ Canvas ▸ Open… did not open the canvas dialog');
+      if (!(dlg && getComputedStyle(dlg).display !== 'none')) throw new Error('the canvas button did not open the canvas dialog');
       if (dlg) dlg.style.display = 'none';
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Keyboard shortcuts').click(); await sleep(80);
@@ -8741,11 +8747,18 @@
       // 'Onion skin' deliberately absent — moved to the layer ⋯ menu in queue 122 at Ezra's request.
       // 'Loop playback' left in queue 175 (its door is #vb-loop, asserted further down) and
       // 'Reset project' was deleted outright in queue 177.
-      ['Canvas', 'Snapping', 'Guides', 'Trim to last clip',
-       'Save a project file', 'Import a project file'].forEach(n => {
+      /* FOUR NAMES CAME OUT OF THIS LIST AT QUEUE 308-310, at his request — Canvas, Snapping, Guides
+         and Trim to last clip — and the reason they can leave is precisely the reason they were listed
+         here: this was checking that nothing the ⋯ menu held became unreachable. Three of them have a
+         door of their own now (asserted just below, by pressing them), and the fourth happens by
+         itself. Deleting the names without moving that check would have thrown away the guarantee. */
+      ['Save a project file', 'Import a project file'].forEach(n => {
         if (!rowLabels.some(l => l.indexOf(n) >= 0)) {
           throw new Error('the settings panel has no "' + n + '" row — the phone ⋯ used to be its only door. Have: ' + rowLabels.join(' | '));
         }
+      });
+      ['m-settings', 'vb-snap', 'vb-guides'].forEach(id => {
+        if (!document.getElementById(id)) throw new Error('#' + id + ' is missing — one of the controls taken out of the settings panel at queue 308-310 now has no door at all on a phone');
       });
 
       // Save, specifically: the entry whose loss would cost real work, pressed for real through the
@@ -26732,6 +26745,85 @@
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(null); FM.timeline.rebuild();
       await sleep(80);
+    }
+  });
+
+
+  /* ================= queue 308 / 309 / 310: clearing out the settings panel ======================
+   * *"you get rid of the trim to last clip button because it automatically does that now"*, *"it has
+   * the show guide button but we don't need that there because it's already got a place"*, *"we don't
+   * need the snapping magnet button and also we don't need the Canva settings button"* — and then, on
+   * the obvious worry, *"They all have homes and don't need to be repeated there"*.
+   *
+   * SO THE TEST IS TWO-SIDED, and the second side is the one that matters. Asserting only that four
+   * rows are gone would pass just as happily if the surviving control had been deleted in the same
+   * sweep, or had never been wired — and "verify each survivor actually works" is the one part he
+   * cannot check from his side. Each removal is therefore paired with a live check of its twin. */
+  test('the settings panel no longer repeats controls that live elsewhere (queue 308-310)', { item: 'set-clearout' }, async function () {
+    if (!(FM.settings && FM.settings.open)) return;
+    try {
+      FM.settings.open();
+      await sleep(220);
+      const body = document.querySelector('.set-body');
+      if (!body) throw new Error('the settings panel did not open');
+      const text = body.textContent || '';
+      [['Trim to last clip', 308], ['Guides', 309], ['Snapping', 310], ['Canvas', 310]].forEach(function (p) {
+        if (text.indexOf(p[0]) >= 0) throw new Error('"' + p[0] + '" is still in the settings panel (queue ' + p[1] + ')');
+      });
+      // …and the panel is not now empty of the one thing that genuinely has nowhere else on a desktop.
+      if (text.indexOf('Save a project file') < 0) throw new Error('Save a project file went with them — on an app with no cloud copy that file IS the backup, and this panel is its only door on a desktop');
+    } finally {
+      /* CLOSE IT WHATEVER HAPPENED. The first run of this left the scrim up on a throw and the failure
+         surfaced three tests later, in a caption-cue drag reporting "got set-scrim open" — a leaked
+         overlay does not fail the test that leaked it. */
+      if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+      await sleep(140);
+    }
+
+    /* THE SURVIVORS. Present, reachable, and actually driving the state — a button that exists and is
+       not wired would leave him with no working control at all, which is worse than the duplicate. */
+    const snapBtn = document.getElementById('vb-snap');
+    if (!snapBtn) throw new Error('#vb-snap is gone — snapping now has NO control anywhere');
+    const snap0 = FM.timeline.isSnapping();
+    snapBtn.click(); await sleep(60);
+    const snapped = FM.timeline.isSnapping();
+    snapBtn.click(); await sleep(60);
+    if (snapped === snap0) throw new Error('the view-bar magnet does not actually toggle snapping — removing the settings row would leave it uncontrollable');
+    if (FM.timeline.isSnapping() !== snap0) throw new Error('the magnet did not toggle back, so the suite is leaving snapping in the wrong state');
+
+    const guideBtn = document.getElementById('vb-guides');
+    if (!guideBtn) throw new Error('#vb-guides is gone — guides now have NO control anywhere');
+    const g0 = !!FM.showGuides;
+    guideBtn.click(); await sleep(60);
+    const g1 = !!FM.showGuides;
+    guideBtn.click(); await sleep(60);
+    if (g1 === g0) throw new Error('the view-bar guides button does not actually toggle FM.showGuides');
+    if (!!FM.showGuides !== g0) throw new Error('guides did not toggle back');
+
+    // Canvas keeps a door on BOTH bars — the desktop rail and the phone's — so neither width loses it.
+    ['btn-canvas', 'm-settings'].forEach(function (id) {
+      const b = document.getElementById(id);
+      if (!b) throw new Error('#' + id + ' is gone — Canvas settings would have no door on that bar');
+    });
+
+    /* TRIM IS THE ONE WITH NO SURVIVOR, and that is only acceptable because his reason for it is true:
+       the project length already tracks the clips on every refresh. Asserted, rather than believed —
+       if this ever stops happening, removing the button will have silently removed the feature. */
+    const layers0 = FM.scene.layers.slice();
+    const dur0 = FM.scene.project.duration;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      FM.scene.layers.push(L);
+      FM.scene.project.duration = 30;            // a project running on into empty time
+      FM.refreshAll();
+      await sleep(120);
+      if (Math.abs(FM.scene.project.duration - 3) > 0.2) throw new Error('the project length did not trim itself to the last clip (' + FM.scene.project.duration + 's for a 3s clip) — "it automatically does that now" is no longer true, so deleting the Trim button removed a real feature');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.duration = dur0;
+      FM.refreshAll(); await sleep(80);
     }
   });
 

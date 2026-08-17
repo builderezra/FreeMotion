@@ -297,49 +297,28 @@ window.FM = window.FM || {};
     const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (inProject) {
       const press = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+      /* THE PROJECT SWITCHES ARE GONE FROM THIS PANEL (queue 308, 309, 310), and he closed the obvious
+         worry himself before it could be raised: *"They all have homes and don't need to be repeated
+         there"*. Each one was checked against its survivor before its row was deleted, because that is
+         the half he cannot verify from his side:
+         · **Canvas** — *"we don't need the Canva settings button"*. Lives on both bars: #btn-canvas on
+           the desktop rail and #m-settings on the phone's, both visible, both opening the same dialog.
+         · **Snapping (magnet)** — *"we don't need the snapping magnet button"*. Lives on the ⛶ view bar
+           as #vb-snap, which presses #btn-snap and reads its state back, so the two cannot disagree.
+         · **Guides** — *"it has the show guide button but we don't need that there because it's already
+           got a place"*. He is right: #vb-guides, on the same view bar, driving the same FM.showGuides.
+         · **Trim to last clip** — *"it automatically does that now we don't need that any more"*. Also
+           right, and worth recording because it is the one with no survivor: FM.autoFitDuration runs
+           inside refreshAll and the comment on it says the timeline length always tracks the clips, so
+           the button was re-doing on demand what already happens on every change. Removing this row
+           leaves #btn-fit with no door at all, which is deliberate rather than an oversight — the
+           button and its handler are left in place rather than ripped out mid-session, and that is
+           noted here so the next pass knows it is dead weight and not a control someone lost.
+         What is left in this panel for a project is the one thing that genuinely has nowhere else on a
+         desktop: saving a .fmotion.json. On an app with no cloud copy, that file IS the backup. */
       body.appendChild(group(
-        actionRow('Canvas', 'Size, aspect, frame rate and background — this project only.', 'Open…',
-          () => press('btn-canvas')),
-        /* (Loop playback is NOT here any more — queue 175. Ezra: "Get rid of loop play back out of the
-           settings menu, it should only be in view options." Same rule that moved onion skin out in
-           queue 122: one control, one home. Its door is the ⛶ view bar's loop button, #vb-loop, which
-           is where the other watching-rather-than-editing toggles already live.) */
-        /* (Onion skin is NOT here any more — queue 122. Ezra: "shouldn't onion skin not be in the view
-           options and app settings? … it should just be in the three dots when you have a layer
-           selected." It ghosts the SELECTED layer and drawOnionSkin() returns immediately without one,
-           so a switch in a panel you can open with nothing selected was a control that could not act.
-           Its one door is the layer ⋯ menu now — see FM.layerMenuItems.) */
-        switchRow('Snapping (magnet)', 'Clips and keyframes stick to the playhead and to each other’s edges while you drag them.',
-          () => FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping(), () => press('btn-snap')),
-        // The last thing the phone's project ⋯ held that had nowhere else to be (v6.13). It sits with
-        // the other three view toggles because that is what it is — none of them change the project,
-        // they change what you can SEE while you work on it. Read through FM.showGuides, never copied.
-        switchRow('Guides', 'Draws safe margins and a rule-of-thirds grid over the canvas. They are for lining things up — they never appear in an export.',
-          () => FM.showGuides, () => press('btn-guides')),
-      ));
-      // ---- and the three project ACTIONS the PC ⋯ menu was the only door to -------------------
-      // Removing #btn-more finished queue 35. Most of what it held was a second copy of a control
-      // already on screen (guides / export marks / preview speed / timeline zoom on the ⛶ view bar,
-      // split on S and the clip's own trim handles, canvas + import + shortcuts right here) and was
-      // simply deleted. These three had nowhere else on a desktop: Trim and Reset had no other call
-      // site at all, and Save meant leaving the project for the home screen — on an app with no cloud
-      // copy, where a .fmotion.json IS the backup. They are ACTIONS, not preferences, so they get
-      // their own group rather than sitting among the switches. actionRow shuts the panel before it
-      // runs the action, so each one's result (a re-drawn timeline, the browser's save sheet, the
-      // reset confirm) lands on the project rather than behind this scrim.
-      body.appendChild(group(
-        /* (Project notes is NOT here any more — queue 198. Ezra: "Get project notes out of the app
-           settings menu." It only lived here because the notepad's phone button had been reverted once;
-           since queue 171 there is a real notes button on BOTH bars, so this was a second door to it.
-           Same rule as loop playback in queue 175 and onion skin in queue 122: one control, one home.) */
-        actionRow('Trim to last clip', 'Ends the project exactly where the last clip does, instead of running on into empty time.', 'Trim',
-          () => press('btn-fit')),
         actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',
           () => press('btn-save-proj')),
-        /* (Reset project is gone — queue 177. Ezra: "Completely remove the reset project button, it
-           doesn't need to exist anymore, someone can just delete it and make a new project." It was the
-           only caller of FM.resetProject, so that function went with it rather than being left as an
-           orphan nothing can reach.) */
       ));
     }
 
