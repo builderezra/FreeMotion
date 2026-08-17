@@ -3886,6 +3886,17 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **twentieth** struck off — **the X and Y boxes in Move & Transform
+      going dead the moment they touched a snap line (v9.24)**. Drag the X number and, as soon as it
+      reached the middle of your frame (or either edge, or any X the layer sits at on one of its own
+      keyframes), the number just stopped — measured on his phone: X walked 600 down to 552, hit 540,
+      and sat on 540 for the remaining 190 pixels of the drag. The box was asking "what does it say
+      now?" before every step, and the snap had already changed the answer, so each tiny movement was
+      rubbed out before the next arrived. It now remembers where the drag started and how far it has
+      come, which is what the Move trackpad beside it always did — so the snap grabs on the way in and
+      lets go on the way out. Two things the bug note had not spotted: the same fault made Motion Blur
+      **Samples** completely immovable, and Crop Width dead on any project narrower than about 1400
+      wide. 16 left.
       *Progress 17 Aug:* a **nineteenth** struck off — **trim-path, repeater, dash, mask and
       audio-effect keyframes being uncopyable (v9.23)**. The timeline drew their diamonds but copy
       kept a separate, shorter list of what it knew about, so Copy returned nothing and the Paste

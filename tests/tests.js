@@ -24375,5 +24375,96 @@
     };
   }
 
+  /* A scrub gesture must accumulate, so a setter that rewrites the value cannot eat the drag.
+     Both number scrubbers used to do setVal(getVal() + dx*scrub), which only works if the setter
+     stores what it was given. mtSetXY snaps within 8 units of an align target and Samples rounds to a
+     whole count, so every sub-step of a real drag was undone before the next event arrived.
+
+     THE STEP SIZE IS THE TEST. A pointer emits roughly 1-6px per move event, and the existing volume
+     test drags 1600px in ONE event — which escapes a snap and hides this completely. Everything below
+     moves in 4px steps for that reason. */
+  test('a number scrub accumulates, so a snapping or rounding setter cannot eat the drag', { item: 'scrub-accum' }, function () {
+    if (!FM._scrubGesture) throw new Error('FM._scrubGesture is not exposed — nothing to check');
+
+    // 1. ROUNDING (Motion Blur "Samples": 0.08 per px into a Math.round). Read-back gives 8 + 0.08 =
+    //    8.08 -> 8 forever, so the control never moves at all.
+    var samples = 8;
+    var g = FM._scrubGesture(function () { return Math.round(samples); },
+                             function (v) { samples = Math.max(2, Math.min(24, Math.round(v))); },
+                             null);
+    g.begin();
+    for (var i = 0; i < 30; i++) g.apply(4 * 0.08);        // 30 events x 4px = 120px of drag
+    if (samples < 17) throw new Error('120px of drag moved Samples 8 -> ' + samples + '; 0.08/px is 9.6 counts, so it should reach ~17. The gesture is being rounded away every event.');
+
+    // 2. SNAPPING, in the arithmetic. 8-unit snap at 540, dragging left from 600.
+    var x = 600;
+    var snap = function (v) { return Math.abs(v - 540) <= 8 ? 540 : v; };
+    var g2 = FM._scrubGesture(function () { return x; }, function (v) { x = Math.round(snap(v)); }, null);
+    g2.begin();
+    for (var j = 0; j < 60; j++) g2.apply(-4);             // 240px left: 600 -> 360
+    if (x > 380) throw new Error('240px of drag left X at ' + x + ' — it stuck on the 540 snap target and never escaped');
+    if (Math.abs(x - 360) > 12) throw new Error('X landed at ' + x + ', expected ~360 — the snap should cost a few units on the way past, not redirect the whole drag');
+
+    // 3. A HARD LIMIT still pins the gesture, and reversing moves immediately — otherwise dragging
+    //    200px past the end would need 200px back before anything happened.
+    var v3 = 50;
+    var g3 = FM._scrubGesture(function () { return v3; }, function (v) { v3 = v; },
+                              function (v) { return Math.max(0, Math.min(100, v)); });
+    g3.begin();
+    var alive = true;
+    for (var k = 0; k < 50; k++) alive = g3.apply(4);      // 200px right, straight through the 100 cap
+    if (v3 !== 100) throw new Error('clamped scrub reached ' + v3 + ', expected 100');
+    if (alive) throw new Error('apply() still reported alive while pinned at the maximum — a glide would spin against the wall instead of dying there');
+    g3.apply(-4);
+    if (Math.abs(v3 - 96) > 1e-9) throw new Error('reversing off the cap gave ' + v3 + ', expected 96 — travel past the limit was banked and has to be un-dragged');
+  });
+
+  /* …and the same thing through the REAL control, because the arithmetic being right is not the
+     claim — the claim is that Ezra can drag the X box past the centre of his frame. */
+  test('the Move & Transform X box can be dragged off an align snap', { item: 'scrub-accum' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var layers0 = FM.scene.layers.slice();
+    try {
+      var P = FM.scene.project, mid = Math.round(P.width / 2);
+      var L = FM.makeLayer('shape', { shape: 'rect', x: mid + 60, y: Math.round(P.height / 2), shapeW: 120, shapeH: 120, fill: '#4af' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('transform');
+      FM._mtAxis = 'xy'; FM._mtMode = 'move';        // a previous test may have left another mode up
+      FM.inspector.refresh();
+      await frame();
+      var boxes = [].slice.call(document.querySelectorAll('.mt-vbox'));
+      var xbox = null;
+      boxes.forEach(function (b) { var lab = b.querySelector('.mt-vbox-lab'); if (!xbox && lab && lab.textContent.trim() === 'X') xbox = b; });
+      if (!xbox) throw new Error('no X value box in Move & Transform — found labels: ' + boxes.map(function (b) { var l = b.querySelector('.mt-vbox-lab'); return l ? l.textContent : '?'; }).join(','));
+      var val = xbox.querySelector('.mt-vbox-val');
+      if (!val) throw new Error('the X box has no number to drag');
+
+      // The frame centre is an align target, so a drag from mid+60 leftwards runs straight into it.
+      if (FM.alignTargets(L, 'x').indexOf(P.width / 2) < 0) throw new Error('the frame centre is no longer an align target — this test is aimed at nothing');
+      var ev = function (t, x) { val.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: 0, button: 0, buttons: 1 })); };
+      ev('pointerdown', 500);
+      for (var i = 1; i <= 60; i++) ev('pointermove', 500 - i * 4);     // 240px left, 4px at a time
+      /* END ON pointercancel, NOT pointerup. A release with speed behind it starts the flick glide,
+         which is a real feature and keeps moving the value for up to a second afterwards — so the
+         first version of this test read the number mid-flight and measured 210 units of momentum as
+         if the drag had produced them. pointercancel settles exactly where the finger stopped, which
+         is the only thing being measured here. */
+      ev('pointercancel', 500 - 240);
+      await frame();
+
+      var got = FM.evalProp ? FM.evalProp(L.transform.x, FM.time) : L.transform.x;
+      if (typeof got !== 'number') got = L.transform.x;
+      var want = mid + 60 - 240;
+      if (Math.abs(got - mid) <= 8) throw new Error('X is stuck on the frame centre (' + got + ') after 240px of dragging past it — the box cannot be dragged off a snap target');
+      if (Math.abs(got - want) > 14) throw new Error('X ended at ' + got + ', expected about ' + want + ' (started ' + (mid + 60) + ', dragged 240 left on a ' + P.width + '-wide project) — the drag lost ' + Math.round(Math.abs(got - want)) + ' units on the way');
+    } finally {
+      FM.scene.layers.length = 0;
+      Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM._mtMode = 'move';
+      FM.inspector.refresh();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

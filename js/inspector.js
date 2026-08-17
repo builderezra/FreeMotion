@@ -502,6 +502,51 @@ window.FM = window.FM || {};
     return { stop: stop, cancelDrag: () => { drag = null; } };
   }
 
+  /* A scrub gesture, held in its OWN coordinate instead of read back off the value it wrote.
+   *
+   * WHY THIS EXISTS. Both scrubbers used to do `setVal(getVal() + dx * scrub)`, which quietly assumes
+   * the setter stores exactly what it was handed. Hardly any of them do — mtSetXY snaps to any align
+   * target within 8 units, resizeCrop rounds to whole pixels, Samples rounds to a whole count — and a
+   * read-modify-write against a setter that rewrites the value throws away every sub-step of movement,
+   * because the next event starts from the rewritten number again. Two measured consequences:
+   *   · X/Y STUCK ON A SNAP and could not be dragged off it. A pointer produces roughly 1-6px per move
+   *     event and the snap radius is 8, so every event was undone as fast as it arrived. Live on a
+   *     1080-wide project: X walked 700 → 549, snapped to 540, then sat at 540 for the remaining ~210px
+   *     of the drag. Only a single jump of more than 8px in ONE event escaped.
+   *   · Motion Blur SAMPLES never moved at all: 0.08 per pixel into a Math.round is always the number
+   *     it started from. Crop Width dies the same way on any project narrower than ~1400.
+   * Holding `base + acc` fixes both — the raw value genuinely travels, so a snap grabs on the way in
+   * and lets go on the way out, and small steps add up instead of being rounded away each time. It is
+   * what the Move trackpad has always done, which is why only the number boxes were stuck.
+   *
+   * The accumulator is clamped back to what the LIMITS allowed (`g.acc = v - g.base`), so dragging far
+   * past an end does not bank travel that has to be un-dragged before the value moves again. Snapping
+   * happens inside setVal and is invisible here, which is exactly the difference we want: a wall pins
+   * the gesture, a snap does not.
+   */
+  // One clamp, so a scrubber's limits and its gesture's limits can never be written differently.
+  function mkClamp(min, max) {
+    return v => { if (min != null) v = Math.max(min, v); if (max != null) v = Math.min(max, v); return v; };
+  }
+  function scrubGesture(getVal, setVal, clamp) {
+    let g = null;
+    return {
+      begin: () => { g = { base: getVal(), acc: 0 }; },
+      end: () => { g = null; },
+      // Returns false ONLY when a hard limit refused the movement, so a glide dies at the wall instead
+      // of spinning against it. A snapped value is still alive and must keep gliding until it escapes.
+      apply: (step) => {
+        if (!g) g = { base: getVal(), acc: 0 };
+        g.acc += step;
+        const raw = g.base + g.acc, v = clamp ? clamp(raw) : raw;
+        g.acc = v - g.base;
+        setVal(v);
+        return Math.abs(v - raw) < 1e-9;
+      }
+    };
+  }
+  FM._scrubGesture = scrubGesture;
+
   // re-scrolls the ruler (call after a typed value).
   function tickStrip(o) {
     const strip = el('div', 'fx-scrub');
@@ -2678,16 +2723,19 @@ window.FM = window.FM || {};
       });
       box.appendChild(kf);
     }
-    const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
+    const clamp = mkClamp(opts.min, opts.max);
     let drag = null;
-    // Dragging the number is a scrub too, so it flicks like every other one.
+    // Dragging the number is a scrub too, so it flicks like every other one. It accumulates the
+    // gesture rather than re-reading what it wrote — see scrubGesture for why the old way froze X/Y
+    // on every snap target and made Samples immovable.
+    const gest = scrubGesture(getVal, setVal, clamp);
     const applyDx = (dx) => {
-      const before = getVal(), v = clamp(before + dx * (opts.scrub || 1));
-      setVal(v); refresh(); if (opts.onScrub) opts.onScrub();
-      return Math.abs(getVal() - before) > 1e-9;
+      const alive = gest.apply(dx * (opts.scrub || 1));
+      refresh(); if (opts.onScrub) opts.onScrub();
+      return alive;
     };
-    const glide = attachGlide(val, applyDx, () => { commitH(); FM.inspector.refresh(); });
-    val.addEventListener('pointerdown', e => { if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    const glide = attachGlide(val, applyDx, () => { gest.end(); commitH(); FM.inspector.refresh(); });
+    val.addEventListener('pointerdown', e => { if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false }; gest.begin(); try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     val.addEventListener('pointermove', e => {
       if (!drag) return;
       if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; glide.cancelDrag(); if (moved) { commitH(); FM.inspector.refresh(); } return; }
@@ -2730,7 +2778,9 @@ window.FM = window.FM || {};
   // slightly, like how the timeline does when you do a hard swipe"). The strip used to be a static
   // texture: only the number above it changed, so the control gave no sense of having moved at all,
   // and a big change meant many short drags because a fast one was worth no more than a slow one.
-  function mtScrub(getVal, setVal, scrub, onChange) {
+  // `lim` are the setter's OWN limits, restated so the gesture stops accumulating where the value
+  // stops moving. Without them a drag far past an end banks travel that has to be un-dragged first.
+  function mtScrub(getVal, setVal, scrub, onChange, lim) {
     const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
     let drag = null, offset = 0;
     // Both background layers (coarse + fine ruling) scroll together. Only the X longhand is set, so
@@ -2738,17 +2788,17 @@ window.FM = window.FM || {};
     const paint = () => { strip.style.backgroundPositionX = offset + 'px, ' + offset + 'px'; };
     // Apply dx SCREEN pixels of scrub. Returns false when the value refused to move (clamped at its
     // end) so the glide can die there instead of spinning against a wall.
+    const gest = scrubGesture(getVal, setVal, lim ? mkClamp(lim.min, lim.max) : null);
     const applyDx = (dx) => {
-      const before = getVal(), raw = before + dx * scrub;
-      setVal(raw);
+      const alive = gest.apply(dx * scrub);
       offset += dx; paint();
       if (onChange) onChange();
-      return Math.abs(getVal() - before) > 1e-9;
+      return alive;
     };
     // Same momentum as every other scrubber — one implementation, so they cannot drift apart in feel.
-    const glide = attachGlide(strip, applyDx, () => { commitH(); if (onChange) onChange(); });
+    const glide = attachGlide(strip, applyDx, () => { gest.end(); commitH(); if (onChange) onChange(); });
     strip.addEventListener('pointerdown', e => {
-      drag = { x: e.clientX };
+      drag = { x: e.clientX }; gest.begin();
       try { strip.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault();
     });
@@ -2872,11 +2922,11 @@ window.FM = window.FM || {};
     const control = el('div', 'mt-control');
     const rateW = Math.max(0.25, MW / 1400), rateH = Math.max(0.25, MH / 1400);
     if (_szLock) {
-      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll));
+      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll, { min: 1, max: MW }));
     } else {
       control.classList.add('mt-control-dual');
-      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll));
-      control.appendChild(mtScrub(getH, v => resizeCrop('h', v), rateH, syncAll));
+      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll, { min: 1, max: MW }));
+      control.appendChild(mtScrub(getH, v => resizeCrop('h', v), rateH, syncAll, { min: 1, max: MH }));
     }
     center.appendChild(control);
 
@@ -3264,20 +3314,20 @@ window.FM = window.FM || {};
       refreshables.push(bw, bh); values.append(bw, linkBtn, bh);
       if (link) {
         // linked: ONE strip driving the uniform scale, as before (0.004/px — was 0.01, i.e. 2.5x finer)
-        control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.004, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+        control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.004, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }, { min: 0.01 }));
       } else {
         // UNLINKED: a SECOND strip appears below the first, and the two drive width and height
         // separately (Ezra: "in alight motion it opens up a second slider below the first one and the
         // two sliders will separately effect the width and height"). Before this, unlinking only
         // changed what the two number boxes wrote — the single slider still moved both axes together,
         // which is the "confusing and janky" part. Both strips work in EFFECTIVE factor units so
-        // mtScrub's re-anchor check sees the same units it writes.
+        // mtScrub's gesture accumulates in the same units it writes.
         control.classList.add('mt-control-dual');
         const base = () => Math.max(1e-4, mtEval(layer, 'scale'));
         control.appendChild(mtScrub(effX, v => mtSet(layer, 'scaleX', Math.max(0.01, v) / base()), 0.004,
-          () => { bw._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+          () => { bw._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }, { min: 0.01 }));
         control.appendChild(mtScrub(effY, v => mtSet(layer, 'scaleY', Math.max(0.01, v) / base()), 0.004,
-          () => { bh._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+          () => { bh._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }, { min: 0.01 }));
       }
     } else if (mode === 'anchor') {
       // THE ANCHOR PLACER. The anchor is the point a layer scales and rotates AROUND, stored 0..1
@@ -3340,8 +3390,8 @@ window.FM = window.FM || {};
       const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 , kfKey: 'skewY', layer: layer});
       refreshables.push(bsx, bsy); values.append(bsx, bsy);
       control.classList.add('mt-control-dual');
-      control.appendChild(mtScrub(() => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', Math.max(-80, Math.min(80, v))), 0.2, () => bsx._refresh()));
-      control.appendChild(mtScrub(() => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', Math.max(-80, Math.min(80, v))), 0.2, () => bsy._refresh()));
+      control.appendChild(mtScrub(() => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', Math.max(-80, Math.min(80, v))), 0.2, () => bsx._refresh(), { min: -80, max: 80 }));
+      control.appendChild(mtScrub(() => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', Math.max(-80, Math.min(80, v))), 0.2, () => bsy._refresh(), { min: -80, max: 80 }));
     }
 
     // right rail: mode buttons
