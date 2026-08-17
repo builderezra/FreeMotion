@@ -4953,6 +4953,16 @@ window.FM = window.FM || {};
     let q = ((v % m) + m) % m;
     return q > last ? m - q : q;
   }
+  /* THE PROJECT BACKGROUND AS THE RENDERER SHOULD SEE IT (BUG-HUNT).
+   * A transparent GIF/PNG export used to signal "no background" by writing `P.background = null` onto
+   * FM.scene.project — the live, PERSISTED object that sceneDoc() serialises. Any autosave landing
+   * inside the export window wrote that null to disk, and the restore in the exporter's `finally` was
+   * in memory only, so localStorage kept it. Lock the phone mid-export and the project reopens with no
+   * background at all. A render option must never be expressed by mutating saved state; it is a
+   * transient flag the renderer reads, exactly like FM._exporting beside it. */
+  function sceneBg(P) { return FM._exportTransparent ? null : (P && P.background); }
+  FM._sceneBg = sceneBg;   // suite hook
+
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
@@ -11183,10 +11193,10 @@ window.FM = window.FM || {};
     target.save();
     baseT(target);
     target.clearRect(0, 0, P.width, P.height);
-    if (!cam && P.background) {   // no camera: the plate IS the frame, so a plain fill is the background
-      target.fillStyle = P.background;
+    if (!cam && sceneBg(P)) {   // no camera: the plate IS the frame, so a plain fill is the background
+      target.fillStyle = sceneBg(P);
       target.fillRect(0, 0, P.width, P.height);
-    } else if (cam && P.background) {
+    } else if (cam && sceneBg(P)) {
       /* WITH a camera the background must stay FIXED on screen — Ezra: "the background is usually one
          solid colour so would you even notice the panning? Keep the background unaffected." It is
          painted on the real canvas below for exactly that reason. But painting it ONLY there meant
@@ -11203,7 +11213,7 @@ window.FM = window.FM || {};
         target.save();
         target.setTransform(1, 0, 0, 1, 0, 0);
         baseT(target);
-        target.fillStyle = P.background;
+        target.fillStyle = sceneBg(P);
         target.beginPath();
         target.moveTo(_bc[0][0], _bc[0][1]);
         for (let qi = 1; qi < _bc.length; qi++) target.lineTo(_bc[qi][0], _bc[qi][1]);
@@ -11301,7 +11311,7 @@ window.FM = window.FM || {};
       ctx.save();
       baseT(ctx);
       ctx.clearRect(0, 0, P.width, P.height);
-      if (P.background) { ctx.fillStyle = P.background; ctx.fillRect(0, 0, P.width, P.height); }
+      if (sceneBg(P)) { ctx.fillStyle = sceneBg(P); ctx.fillRect(0, 0, P.width, P.height); }
       ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.rotate(rot); ctx.translate(-camX, -camY);
       // The plate is in its own device pixels now, so it is blitted back at PROJECT size — the
       // surrounding baseT + camera transform then map that to the screen exactly as before.

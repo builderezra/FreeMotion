@@ -3886,6 +3886,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **thirteenth** struck off — **a transparent export deleting your project's
+      background colour (v9.18)**. It signalled transparency by blanking the background on the live,
+      SAVED project object; switching apps mid-export triggers an autosave, which wrote that blank to
+      disk. Force-quit before a later save and the project reopened with no background permanently.
       *Progress 17 Aug:* a **twelfth** struck off — **the AI writing NaN into every tick-box and
       layer-picker parameter (v9.17)**. It clamped each value against that parameter's min and max,
       but those two kinds have neither, and clamping against nothing gives NaN — so the default was

@@ -518,11 +518,17 @@ window.FM = window.FM || {};
        * away part of the frame, and a video editor must never quietly delete what you made. The bars
        * take the project's own background colour so they read as the frame, not as damage. */
       const fit = FM.exportFitRect(P.width, P.height, outW, outH);
-      const barFill = (P.background == null) ? null : P.background;
+      /* READ AT DRAW TIME, not here. This used to be computed once at setup, which worked only because
+         a transparent export blanked P.background before rendering — the very mutation that could be
+         autosaved and lose your background for good. With that gone, a setup-time read would give
+         transparent GIFs COLOURED letterbox bars. `blit` is shared by the MP4, GIF and frame paths and
+         all three set the flag after this line, so the fill has to be asked for per frame. */
+      const barFillNow = () => (FM._exportTransparent || P.background == null) ? null : P.background;
       const blit = (ctx) => {
         ctx.save();
         if (fit.letterboxed) {
           ctx.globalCompositeOperation = 'source-over';
+          const barFill = barFillNow();
           if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
           else ctx.clearRect(0, 0, outW, outH);   // transparent export keeps the bars transparent
         }
@@ -813,10 +819,9 @@ window.FM = window.FM || {};
       try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
-      const savedBg = P.background;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
       try {
-        if (transparent) P.background = null;   // covers both normal + camera paths (both guard on P.background)
+        if (transparent) FM._exportTransparent = true;   // a FLAG, not a write to the saved project (BUG-HUNT)
         const gif = FM.gifEncoder.create(outW, outH, { transparent, dither: !!opts.dither, loop: true });
         const delayMs = 1000 / fps;
         for (let f = 0; f < totalFrames; f++) {
@@ -834,7 +839,7 @@ window.FM = window.FM || {};
         const blob = gif.finish();
         download(blob, (opts.name || 'freemotion-export') + '.gif');
       } finally {
-        if (transparent) P.background = savedBg;
+        FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
       }
@@ -871,10 +876,9 @@ window.FM = window.FM || {};
       try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
-      const savedBg = P.background;
       FM._exporting = true;
       try {
-        if (transparent) P.background = null;   // so exported PNGs carry alpha
+        if (transparent) FM._exportTransparent = true;   // so exported PNGs carry alpha, without touching saved state
         const zip = FM.zipWrite.create();
         const base = opts.name || 'freemotion-export';
         for (let f = 0; f < totalFrames; f++) {
@@ -893,7 +897,7 @@ window.FM = window.FM || {};
         const zipBlob = zip.finish();
         download(zipBlob, base + '_frames.zip');
       } finally {
-        if (transparent) P.background = savedBg;
+        FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
       }

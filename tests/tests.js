@@ -18195,6 +18195,74 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: a transparent export must not null the SAVED background ------------ */
+
+  /* THE BUG. A transparent GIF/PNG export signalled "no background" by writing `P.background = null`
+   * onto FM.scene.project for the whole render — the live, PERSISTED object that sceneDoc() serialises.
+   * `visibilitychange` and `pagehide` both flushSync() that object, so switching apps or locking the
+   * phone mid-export wrote the null straight to disk. The exporter's `finally` restored it in MEMORY
+   * only and nothing re-saved, so localStorage kept the null until some later save happened to run —
+   * and if the PWA was force-quit first (most likely right after an export, the app's most
+   * memory-hungry operation) the project reopened with no background at all.
+   * The fix is the general rule, not the special case: a RENDER OPTION must never be expressed by
+   * mutating SAVED state. It is a transient flag the renderer reads. */
+  test('export: a transparent export never writes a null background into the saved project', { item: 'export-bg' }, async function () {
+    if (typeof FM._sceneBg !== 'function') throw new Error('FM._sceneBg is not exposed — the suite cannot see how the renderer reads the background');
+    var P = FM.scene.project, bg0 = P.background;
+    var key = 'fm.proj.' + localStorage.getItem('fm.currentProject');
+    var before = localStorage.getItem(key);
+    try {
+      if (!bg0) { P.background = '#123456'; bg0 = P.background; }   // the test needs one to lose
+
+      // the renderer must stop seeing it, while the PROJECT keeps it
+      if (FM._sceneBg(P) !== bg0) throw new Error('the renderer does not see the background normally (' + FM._sceneBg(P) + ')');
+      FM._exportTransparent = true;
+      if (FM._sceneBg(P) !== null) throw new Error('during a transparent export the renderer still sees a background (' + FM._sceneBg(P) + ')');
+      if (P.background !== bg0) throw new Error('the transparent flag MUTATED the project background to ' + P.background + ' — that is the defect itself');
+
+      // THE ACTUAL FAILURE: an autosave landing inside the export window
+      FM.storage.flushSync();                    // precisely what visibilitychange does on an app switch
+      var onDisk = null;
+      try { onDisk = JSON.parse(localStorage.getItem(key)).project.background; } catch (e) { onDisk = '(unparsable)'; }
+      if (onDisk !== bg0) throw new Error('a save during a transparent export wrote background ' + JSON.stringify(onDisk) + ' instead of ' + JSON.stringify(bg0) + ' — locking the phone mid-export would lose it');
+
+      // and the option must still WORK: the render genuinely drops the background
+      var c = offscreen ? offscreen(60, 60) : (function () { var q = document.createElement('canvas'); q.width = 60; q.height = 60; return q; })();
+      var ctx = c.getContext('2d');
+      var opaque = function () { ctx.clearRect(0, 0, 60, 60); FM.renderScene(ctx, FM.scene, 0.2);
+        var d = ctx.getImageData(0, 0, 60, 60).data, n = 0;
+        for (var i = 3; i < d.length; i += 4) if (d[i] > 200) n++; return n; };
+      var without = opaque();
+      FM._exportTransparent = false;
+      var withBg = opaque();
+      if (!(withBg > 0)) throw new Error('the normal render has no opaque pixels at all, so "transparent" cannot be shown to differ from it');
+      if (!(without < withBg)) throw new Error('a transparent export rendered ' + without + ' opaque pixels against the normal ' + withBg + ' — the background is not actually being dropped');
+
+      /* AND THAT THE EXPORTER ACTUALLY USES IT. Everything above drives the flag directly, so it shows
+         the MECHANISM is safe — but reverting the exporter to `P.background = null` still passed all of
+         it, because no test here runs a real export. The mutation check said so out loud. Reading the
+         shipped source is the honest way to close that: the exporter must not assign to the persisted
+         background at all. */
+      var ex = await fetch('js/exporter.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).catch(function () { return ''; });
+      if (!ex) throw new Error('could not read js/exporter.js to check it');
+      // `=` not `==` — the first version of this matched the comparison at exporter.js:521 and
+      // reported a read as though it were a write.
+      var writes = ex.match(/\bP\.background\s*=(?!=)/g) || [];
+      if (writes.length) throw new Error(writes.length + ' assignment(s) to P.background remain in the exporter — a render option is being signalled by mutating the SAVED project again, which is the whole defect');
+      if (!/_exportTransparent\s*=\s*true/.test(ex)) throw new Error('the exporter no longer sets FM._exportTransparent, so transparent exports are not requesting transparency at all');
+      /* The letterbox bars used to take their colour from P.background, and were only transparent
+         because the export had blanked it. Removing that mutation would have handed transparent GIFs
+         COLOURED bars, so the fill must consult the flag — and must do so per frame, since it is
+         computed before the flag is set. */
+      if (!/barFillNow|_exportTransparent[^\n]*background|background[^\n]*_exportTransparent/.test(ex))
+        throw new Error('the letterbox bar fill does not consult the transparent flag — a transparent export would come back with solid coloured bars');
+    } finally {
+      FM._exportTransparent = false;
+      P.background = bg0;
+      if (before != null) localStorage.setItem(key, before);
+    }
+  });
+
   /* ---------------- BUG-HUNT: addEffect stored NaN for every bound-less param ---------------- */
 
   /* THE BUG. ai-ops' addEffect special-cased `segment` and `color` and sent everything else through
