@@ -5235,7 +5235,26 @@ better still, keep working inside the turn rather than parking work for a later 
       So: treat #292 as possibly-misread, and investigate the DATA path — autosave timing, what
       `projects.open()` restores, and whether a reload can serve a snapshot older than the last edit.
       Losing work is the worst class of bug in this app and it jumps the queue on his say-so.
-      **JUMPED THE QUEUE — being worked immediately after v9.04 ships.**
+      **JUMPED THE QUEUE. A CAUSE IS FIXED IN v9.05 — but this stays OPEN until you confirm.**
+      What I found: two tabs on the SAME project were unguarded. Tab A holds an old scene, you work in
+      tab B, you switch back to tab A — and tab A's hidden-tab handler flushes its stale scene over the
+      good one. Refresh and you get the old version. On a phone, backgrounding the browser fires that
+      handler in EVERY open tab, so it needs no unusual behaviour from you at all. The existing guard
+      (`boundId`) only ever covered a second tab on a DIFFERENT project.
+      Every save now carries a version number that only goes up, and a save that would move it backwards
+      is refused: the tab tells you it is behind and stops writing until you reload, instead of silently
+      destroying the newer file. Same change closes a second route — a save that failed silently (a full
+      store, far easier to hit on an iPhone) was indistinguishable from one that worked, so the app
+      carried on as if saved and the next reload served the last write that landed. Writes are read back
+      and verified now.
+      **Why it is not ticked:** I could not reproduce YOUR instance. This machine's browser took 15MB of
+      localStorage without complaining where an iPhone caps near 5, so I could not make a save fail here
+      to watch it happen. I fixed the mechanisms that produce exactly your symptom and put a test on the
+      two-tab sequence. **If it happens again after v9.05, that is a third cause and I need to know.**
+      Also worth saying plainly: you were right that this was reported before. #292 used almost the same
+      words and I read it as APPEARANCE (an old-looking layout flashing on refresh) and fixed that. If
+      you meant the project's CONTENT even then, I closed it on the wrong reading and this went
+      unaddressed for weeks as a result.
 
 - [ ] **307 — Four things about the Add-layer row (PC and mobile).** (17 Aug.) His words, verbatim:
       *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
@@ -5257,6 +5276,24 @@ better still, keep working inside the turn rather than parking work for a later 
       4. **PC and mobile:** dragging the Add-layer marker must move SMOOTHLY with the same animation
          a layer drag has. It currently jumps between positions, which looks bad.
       Related to 298 (the marker not actually placing layers where it points) — same control.
+
+- [ ] **308 — Remove the "Trim to last clip" button from the settings menu; it happens automatically
+      now.** (17 Aug.) His words, verbatim: *"In the settings menu, you get rid of the trim to last clip
+      button because it automatically does that now we don't need that any more"*.
+
+- [ ] **309 — Remove "Show guides" from the App settings menu; it already lives somewhere else.**
+      (17 Aug.) His words, verbatim: *"Also in the settings menu like the app settings menu, it has the
+      show guide button but we don't need that there because it's already got a place"*.
+      Check where the other one is before deleting, so the surviving control is the one that works.
+
+- [ ] **310 — Remove the snapping-magnet button and the Canvas settings button.** (17 Aug.) His words,
+      verbatim: *"Also snapping magnet, we don't need the snapping magnet button and also we don't need
+      the Canva settings button"* ("Canva" is dictation for Canvas).
+      Arrived directly after 308 and 309, so read as the same clear-out of that menu.
+      **He then answered the obvious worry himself, verbatim:** *"They all have homes and don't need to
+      be repeated there"* — i.e. every one of 308/309/310 is a DUPLICATE of a control that already
+      exists elsewhere, so removing it from this menu takes nothing away. Still verify each survivor
+      actually works before deleting its twin; that is the only part he cannot check from his side.
 
 ## Done
 

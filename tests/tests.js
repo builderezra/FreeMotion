@@ -18195,6 +18195,66 @@
     }
   });
 
+  /* ---------------- #306: a stale tab must not overwrite newer work ---------------- */
+
+  /* HIS REPORT, and he had made it before: "an older version of our project shows up when you refresh".
+   * The mechanism: two tabs on the SAME project. Tab A holds an old scene; you work in tab B; you
+   * switch back to tab A, whose `visibilitychange` handler immediately flushSync()s its stale scene
+   * straight over the good one. On a phone this is not exotic — backgrounding the browser fires
+   * visibilitychange in every open tab. `boundId` only ever guarded the cross-PROJECT case.
+   * Nothing could DETECT it either: a scene doc carried no notion of which of two versions was newer,
+   * so the app could not tell "this is your project" from "this is an old copy of it".
+   * The doc carries a monotonic `rev` now and a write refuses to run backwards. This test drives the
+   * exact sequence and asserts the thing that actually matters — the OTHER tab's work is still there. */
+  test('storage: a tab holding an older scene cannot overwrite newer work (#306)', { item: 'storage-rev' }, async function () {
+    if (!FM.storage || !FM._sceneRevState) throw new Error('FM._sceneRevState is not exposed — the suite cannot see the revision guard');
+    const key = 'fm.proj.' + localStorage.getItem('fm.currentProject');
+    const original = localStorage.getItem(key);
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, selIds0 = (FM.scene.selectedIds || []).slice();
+    try {
+      // level with disk, then make a real edit and persist it
+      const mk = (name) => Object.assign(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 20, shapeH: 20, fill: '#0a0' }), { start: 0, duration: 2, name });
+      FM.scene.layers.push(mk('REVTEST_MINE'));
+      const wroteOwn = FM.storage.flushSync();
+      if (!wroteOwn) throw new Error('a normal save was refused before the test even began — the guard is rejecting writes it should allow');
+      const mine = FM._sceneRevState().lastRev;
+      if (!(mine > 0)) throw new Error('the revision did not advance on a successful save (' + mine + ')');
+      if ((localStorage.getItem(key) || '').indexOf('REVTEST_MINE') < 0) throw new Error('a normal save did not reach disk');
+
+      // ANOTHER TAB writes a newer document, exactly as a second tab on this project would
+      const disk = JSON.parse(localStorage.getItem(key));
+      const other = Object.assign({}, disk, { rev: disk.rev + 5 });
+      other.layers = disk.layers.concat([{ id: 'revtest_other', type: 'shape', shape: 'rect', name: 'REVTEST_OTHER_TAB', start: 0, duration: 2, transform: {} }]);
+      localStorage.setItem(key, JSON.stringify(other));
+
+      // this tab, now behind, tries to save. It must refuse — via BOTH writers.
+      FM.scene.layers.push(mk('REVTEST_CLOBBER'));
+      const refused = FM.storage.flushSync();
+      if (refused !== false) throw new Error('flushSync from a tab that is behind disk returned ' + refused + ' — it wrote anyway');
+      await FM.storage.save();
+      const after = localStorage.getItem(key) || '';
+      if (after.indexOf('REVTEST_OTHER_TAB') < 0) {
+        throw new Error('the other tab\'s work was destroyed — this is exactly the reported bug: an older version of the project overwrote a newer one');
+      }
+      if (after.indexOf('REVTEST_CLOBBER') >= 0) throw new Error('the stale scene was written over the newer document');
+      if (!FM._sceneRevState().stale) throw new Error('the tab did not mark itself stale, so it will try again on the next edit');
+
+      // and reloading the newer doc must clear the flag — a stale tab has to be able to recover
+      await FM.storage.load();
+      if (FM._sceneRevState().stale) throw new Error('after reloading the newer document the tab is still marked stale, so it can never save again');
+      if (FM._sceneRevState().lastRev !== other.rev) throw new Error('reloading did not adopt the document\'s revision (' + FM._sceneRevState().lastRev + ' vs ' + other.rev + ')');
+    } finally {
+      /* ORDER MATTERS, and getting it wrong broke an unrelated test. load() is needed to clear the
+       * stale flag and re-adopt the real document's revision — but it REPLACES FM.scene.layers from
+       * disk, so restoring the suite's scene before calling it just throws that restore away and the
+       * next test starts on an empty stage. Reload first, put the scene back second. */
+      if (original != null) localStorage.setItem(key, original); else localStorage.removeItem(key);
+      await FM.storage.load();
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = selIds0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- EFFECTS-PLAN round 19: the atmosphere effects ---------------- */
 
   test('effects: the atmosphere effects still render an un-upgraded instance exactly as they did', { item: 'fx-atmos' }, function () {

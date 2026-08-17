@@ -28,6 +28,53 @@ window.FM = window.FM || {};
   let boundId = null;
   function curKey() { return 'fm.proj.' + (boundId || curId() || 'default'); }
 
+  /* ---- THE STALE-TAB GUARD (#306) -------------------------------------------------------------
+   * boundId above stops a second tab writing THIS tab's scene into ANOTHER project's doc. It does
+   * nothing about the worse case, which is two tabs on the SAME project: tab A holds an old scene,
+   * you do real work in tab B, then you switch back to tab A — whose `visibilitychange` handler
+   * immediately flushSync()s its stale scene straight over the good one. Refresh and your work is
+   * gone, replaced by an older version of the same project. On a phone that is not an edge case:
+   * backgrounding the browser fires visibilitychange in EVERY open tab.
+   * Nothing detected it either, because a scene doc carried no notion of which of two versions was
+   * newer — the app genuinely could not tell "this is your project" from "this is an old copy".
+   * So the doc now carries a monotonic `rev`. A write reads the rev already on disk first: if disk is
+   * AHEAD of what this tab last wrote or loaded, some other context has moved on and this tab must
+   * not clobber it — it goes stale, says so, and stops writing. Reloading picks up the newer doc.
+   * The read-back after the write is the second half: a write that throws is caught below, but a
+   * write that silently does nothing (a full or restricted store) is otherwise indistinguishable
+   * from success, and that is the OTHER way a reload serves an older version. */
+  let lastRev = 0, _stale = false, _staleWarned = false;
+  function diskRev() {
+    try {
+      const raw = localStorage.getItem(curKey());
+      if (!raw) return 0;
+      const m = /^\{"rev":(\d+)/.exec(raw);   // rev is written first, so this never parses the whole doc
+      return m ? +m[1] : 0;
+    } catch (e) { return 0; }
+  }
+  function warnStale() {
+    if (_staleWarned) return; _staleWarned = true;
+    if (FM.toast) FM.toast('This tab is showing an older copy of the project — newer changes were saved elsewhere. Reload to catch up; nothing here has been saved over them.', 9000);
+  }
+  // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
+  function writeScene() {
+    if (_stale) return false;
+    const dr = diskRev();
+    if (dr > lastRev) { _stale = true; warnStale(); return false; }
+    const rev = dr + 1;
+    const doc = sceneDoc(); doc.rev = rev;
+    // rev FIRST in the serialised object, so diskRev()'s anchored regex can find it without a parse
+    const ordered = { rev: rev }; for (const k in doc) if (k !== 'rev') ordered[k] = doc[k];
+    try { localStorage.setItem(curKey(), JSON.stringify(ordered, FM.jsonReplacer)); }
+    catch (e) { warnQuota(e); return false; }
+    if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); return false; }   // the write silently did nothing
+    lastRev = rev;
+    return true;
+  }
+  // load()/open() call this so a fresh document resets the guard for the new project.
+  function adoptRev(r) { lastRev = (typeof r === 'number' && isFinite(r)) ? r : 0; _stale = false; _staleWarned = false; }
+  FM._sceneRevState = function () { return { lastRev, stale: _stale, disk: diskRev() }; };   // suite hook
+
   // The autosaved scene document. selectedIds is persisted too so a multi-layer selection survives a
   // reload/undo instead of silently collapsing to one layer (align/distribute act on the whole set). (#20)
   function sceneDoc() {
@@ -114,9 +161,7 @@ window.FM = window.FM || {};
 
   FM.storage = {
     async save() {
-      let sceneOk = false;
-      try { localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); sceneOk = true; }
-      catch (e) { warnQuota(e); }   // a quota failure shouldn't block the IDB media save below
+      let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
       if (FM.projects) FM.projects.touchCurrent();
       // reset the once-flag only when EVERYTHING wrote — resetting after the scene write alone made
@@ -140,7 +185,7 @@ window.FM = window.FM || {};
     },
 
     // Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
-    flushSync() { try { clearTimeout(saveTimer); localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); } catch (e) { warnQuota(e); } },
+    flushSync() { clearTimeout(saveTimer); return writeScene(); },
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -169,9 +214,11 @@ window.FM = window.FM || {};
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
       boundId = curId();                        // pin every future save in this tab to the project being loaded
+      adoptRev(0);                              // a project with no doc yet must not inherit the previous one's rev (#306)
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       let scene = readJSON(curKey(), null);
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
+      adoptRev(scene.rev);        // this tab is now level with what is on disk (#306)
       FM.scene.project = scene.project;
       FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
       // The AUTOSAVE path sanitises nothing — applyScene (the .fmproj import) is the only caller of
