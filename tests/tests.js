@@ -18195,6 +18195,104 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 26: the remaining colour effects ---------------- */
+
+  /* spotcolor needs the hue it KEEPS to be present in the fixture, or every reading is of an empty
+     set — the same mistake that made replacecolor look dead in round 13. Half red, half blue. */
+  function twoHuePlate(W, H) {
+    var d = new Uint8ClampedArray(W * H * 4);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4, k = 0.4 + 0.6 * (y / H);
+      if (x < W / 2) { d[i] = 224 * k; d[i + 1] = 49 * k; d[i + 2] = 49 * k; }
+      else { d[i] = 49 * k; d[i + 1] = 120 * k; d[i + 2] = 224 * k; }
+      d[i + 3] = 255; }
+    return d;
+  }
+  function huePlateRun(type, W, H, params) {
+    var d = twoHuePlate(W, H); FM._FX_TABLES.PIXEL_FX[type](d, W, H, params, 0.5, 1); return d;
+  }
+
+  test('effects: the remaining colour effects still render an un-upgraded instance exactly as they did', { item: 'fx-colour2' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      { type: 'solarize',    old: { threshold: 0.5 }, legacyKeys: { softness: 0, mix: 1, mode: 0 },      moved: { softness: 0.5, mix: 0.4, mode: 1 } },
+      { type: 'nightvision', old: { amount: 0.85 },   legacyKeys: { color: 0, noise: 60, gain: 1.3 },    moved: { color: 1, noise: 0, gain: 2.5 } },
+      { type: 'fourcolor',   old: { amount: 0.85, color: '#ff3d7f', color2: '#ffb86c', color3: '#29d9bb', color4: '#3d7bff' },
+        legacyKeys: { blend: 0, spread: 100 }, moved: { blend: 1, spread: 250 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    // spotcolor on its own plate, for the reason above
+    var sBare = huePlateRun('spotcolor', W, H, { tolerance: 0.2, color: '#e03131' });
+    if (fxDiff(sBare, huePlateRun('spotcolor', W, H, { tolerance: 0.2, color: '#e03131', desat: 100, boost: 100, invert: 0 })))
+      fails.push('spotcolor: spelling the new keys out at their fallbacks changed the render');
+    if (!fxDiff(twoHuePlate(W, H), sBare)) fails.push('spotcolor: renders nothing at its legacy settings');
+    [['desat', 40], ['boost', 250], ['invert', 1]].forEach(function (kv) {
+      var m = { tolerance: 0.2, color: '#e03131' }; m[kv[0]] = kv[1];
+      if (!fxDiff(sBare, huePlateRun('spotcolor', W, H, m))) fails.push('spotcolor.' + kv[0] + ' moves no pixels');
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* The four specific complaints, each asserted as the property it is about rather than as a diff. */
+  test('effects: the colour effects do the specific things they could not', { item: 'fx-colour2' }, function () {
+    var W = 96, H = 96;
+    var sat = function (d, i) { var mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); return mx === 0 ? 0 : (mx - mn) / mx; };
+    var redPx = 4, bluePx = ((H / 2) * W + W - 4) * 4;   // one pixel from each half
+
+    // SPOT COLOUR: normally the kept red stays saturated and the blue is drained. Inverted, exactly
+    // the opposite — which is a swap, not merely "different pixels".
+    var keep = huePlateRun('spotcolor', W, H, { tolerance: 0.2, color: '#e03131' });
+    if (!(sat(keep, redPx) > 0.5)) throw new Error('the kept red came back desaturated (' + sat(keep, redPx).toFixed(2) + ')');
+    if (!(sat(keep, bluePx) < 0.1)) throw new Error('the surrounding blue was not drained (' + sat(keep, bluePx).toFixed(2) + ')');
+    var inv = huePlateRun('spotcolor', W, H, { tolerance: 0.2, color: '#e03131', invert: 1 });
+    if (!(sat(inv, redPx) < 0.1)) throw new Error('inverted, the CHOSEN red should be the one drained; it is at ' + sat(inv, redPx).toFixed(2));
+    if (!(sat(inv, bluePx) > 0.5)) throw new Error('inverted, the blue should keep its colour; it is at ' + sat(inv, bluePx).toFixed(2));
+    // a partial drain must sit strictly between full-keep and full-drain
+    var partial = huePlateRun('spotcolor', W, H, { tolerance: 0.2, color: '#e03131', desat: 40 });
+    var pv = sat(partial, bluePx);
+    if (!(pv > sat(keep, bluePx) + 0.02 && pv < sat(twoHuePlate(W, H), bluePx) - 0.02))
+      throw new Error('a 40% drain gave saturation ' + pv.toFixed(2) + ', which is not between fully drained and untouched');
+
+    // FOUR-COLOUR: Screen can only ever brighten. That is the whole point of not painting over.
+    var lum = function (d) { var s = 0, n = 0; for (var i = 0; i < d.length; i += 4) { s += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; n++; } return s / n; };
+    var src = fxPlate(W, H), G = { amount: 1, color: '#ff3d7f', color2: '#ffb86c', color3: '#29d9bb', color4: '#3d7bff' };
+    var repl = fxRun('fourcolor', W, H, G);
+    var scr = fxRun('fourcolor', W, H, Object.assign({}, G, { blend: 1 }));
+    var mul = fxRun('fourcolor', W, H, Object.assign({}, G, { blend: 2 }));
+    if (!(lum(scr) > lum(src))) throw new Error('Screen darkened the picture (' + lum(scr).toFixed(1) + ' from ' + lum(src).toFixed(1) + ') — screen can only brighten');
+    if (!(lum(mul) < lum(src))) throw new Error('Multiply brightened the picture — multiply can only darken');
+    if (!fxDiff(repl, scr)) throw new Error('Screen rendered identically to Replace');
+
+    // SOLARIZE mix: half way must land between the untouched picture and the full flip, per channel.
+    var full = fxRun('solarize', W, H, { threshold: 0.5 });
+    var half = fxRun('solarize', W, H, { threshold: 0.5, mix: 0.5 });
+    var between = 0, checked = 0;
+    for (var i = 0; i < src.length; i += 4) { if (src[i] === full[i]) continue; checked++;
+      var lo = Math.min(src[i], full[i]), hi = Math.max(src[i], full[i]);
+      if (half[i] >= lo - 1 && half[i] <= hi + 1) between++; }
+    if (!checked) throw new Error('solarize flipped nothing on this plate');
+    if (between < checked * 0.99) throw new Error((checked - between) + ' of ' + checked + ' flipped pixels are not between the original and the full flip at mix 0.5');
+
+    // NIGHT VISION: green means green, amber means amber. Read as which channel leads.
+    var lead = function (p) { var d = fxRun('nightvision', W, H, Object.assign({ amount: 1 }, p)), r = 0, g = 0;
+      for (var j = 0; j < d.length; j += 4) { r += d[j]; g += d[j + 1]; } return r / g; };
+    if (!(lead({}) < 0.6)) throw new Error('the default scope is no longer green-dominant (red/green = ' + lead({}).toFixed(2) + ')');
+    if (!(lead({ color: 1 }) > 1.1)) throw new Error('the amber scope is not red-dominant (red/green = ' + lead({ color: 1 }).toFixed(2) + ')');
+    if (Math.abs(lead({ color: 2 }) - 1) > 0.05) throw new Error('white hot is not neutral (red/green = ' + lead({ color: 2 }).toFixed(2) + ')');
+  });
+
   /* ---------------- EFFECTS-PLAN round 25: the matte cleanup tools ---------------- */
 
   /* A hard-edged disc on transparency: the artwork all three of these exist to clean up, and the only

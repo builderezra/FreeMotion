@@ -470,6 +470,20 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     segments, so the mean second difference reads identically for one box pass and two. The ramp WIDTH
     shows it plainly instead (7496 part-transparent pixels against 11564).
 
+- v9.13 (round 26 — **the remaining colour effects**) — `solarize` (softness, mix, flip-on-brightness),
+  `spotcolor` (partial drain, boost, invert), `fourcolor` (blend mode, spread) and `nightvision`
+  (scope colour, grain, intensifier). `contrast`, `grayscale`, `invert` and `hextiles` are the four
+  this file already says to SKIP, so what remains after this round is the pattern/line group.
+  Findings:
+  * **spotcolor needed its own fixture, for the third-and-a-half time.** The effect keeps one HUE, so
+    the plate has to contain that hue — the generic noise plate is blue-ish and every reading would
+    have been of an empty set. There is a two-hue plate now (half red, half blue), which also makes
+    the invert claim measurable as a SWAP rather than as a difference.
+  * **The strongest assertions in this round are all "can only ever go one way".** Screen can only
+    brighten and Multiply can only darken, so a blend mode is testable against the source's mean luma
+    without knowing anything else about the gradient. Likewise solarize's mix must land BETWEEN the
+    original and the full flip on every flipped pixel (99%+ of 8000-odd), which no diff could show.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

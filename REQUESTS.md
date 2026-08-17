@@ -3795,6 +3795,9 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 26, v9.13:* Solarize, Spot Colour, Four-Colour Gradient and Night Vision. Spot Colour
+      could only do the one hard sin-city look; the gradient painted over your footage instead of
+      washing over it; Night Vision was always the same green.
       *Round 25, v9.12:* the three matte cleanup tools (Matte Choker, Matte Fringe, Smooth Edges).
       Each one made you stack a second effect to finish the job it exists for — choke without feather,
       a flat opaque fringe band, and a soften that could only eat into your artwork.

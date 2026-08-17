@@ -109,7 +109,12 @@ window.FM = window.FM || {};
       { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
     ] },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
-    { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'solarize', label: 'Solarize', params: [
+      { key: 'threshold', label: 'Flips above', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'mode', label: 'Flips on', def: 0, options: [[0, 'Each colour'], [1, 'Brightness']] },
+    ] },
     { type: 'gamma', label: 'Gamma', params: [
       { key: 'gamma', label: 'Gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
       { key: 'red', label: 'Red', min: 0.3, max: 3, step: 0.02, def: 1 },
@@ -689,7 +694,12 @@ window.FM = window.FM || {};
       { key: 'desat', label: 'Colour loss', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'tone', label: 'Warm / cool', min: -200, max: 200, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'nightvision', label: 'Night Vision', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+    { type: 'nightvision', label: 'Night Vision', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'color', label: 'Scope', def: 0, options: [[0, 'Green'], [1, 'Amber'], [2, 'White hot'], [3, 'Blue']] },
+      { key: 'noise', label: 'Sensor grain', min: 0, max: 150, step: 5, def: 60 },
+      { key: 'gain', label: 'Intensifier', min: 0.5, max: 3, step: 0.05, def: 1.3, unit: '×' },
+    ] },
     { type: 'sketch', label: 'Pencil Sketch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'darkness', label: 'Stroke darkness', min: 100, max: 1200, step: 10, def: 510 },
@@ -778,8 +788,17 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Replaces', def: 0, options: [[0, 'Hue only'], [1, 'Hue + saturation'], [2, 'Full colour']] },
       { key: 'softness', label: 'Match width', min: 10, max: 300, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'spotcolor', label: 'Spot Colour', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.2, color: true, defColor: '#e03131', colorLabel: 'Keep' },
-    { type: 'fourcolor', label: 'Four-Colour Gradient', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85, color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right' },
+    { type: 'spotcolor', label: 'Spot Colour', color: true, defColor: '#e03131', colorLabel: 'Keep', params: [
+      { key: 'tolerance', label: 'Hue range', min: 0.02, max: 1, step: 0.02, def: 0.2 },
+      { key: 'desat', label: 'Drain the rest', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'boost', label: 'Boost the kept', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'invert', label: 'Acts on', def: 0, options: [[0, 'Everything else'], [1, 'The chosen hue']] },
+    ] },
+    { type: 'fourcolor', label: 'Four-Colour Gradient', color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Screen'], [2, 'Multiply'], [3, 'Overlay'], [4, 'Soft light']] },
+      { key: 'spread', label: 'Spread', min: 20, max: 300, step: 5, def: 100, unit: '%' },
+    ] },
     { type: 'spectralmap', label: 'Spectral Map', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'span', label: 'Spectrum span', min: 0, max: 360, step: 1, def: 260, unit: '\u00b0' },
@@ -3006,10 +3025,36 @@ window.FM = window.FM || {};
       // evalProp returns 0 (never null) for a missing prop, so branch on the raw param to actually
       // reach the 0.5 default when an instance has no threshold key (older/imported/AI nodes). (#19)
       const thr = clamp01(p.threshold == null ? 0.5 : FM.evalProp(p.threshold, t)) * 255;
+      /* A hard per-channel step at full strength: no way to soften the flip or dial it back, so it was
+         always a 100% harsh colour break. SOFTNESS ramps the inversion across a band instead of
+         flipping on one value. MIX dials the whole thing back against the original. MODE Luma decides
+         the flip from BRIGHTNESS and applies it to all three channels together, which inverts tone
+         without tearing the colour apart. */
+      let sfSoft = p.softness == null ? 0 : FM.evalProp(p.softness, t);
+      if (sfSoft < 0) sfSoft = 0; if (sfSoft > 1) sfSoft = 1;
+      let sfMix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
+      if (sfMix < 0) sfMix = 0; if (sfMix > 1) sfMix = 1; if (sfMix <= 0) return;
+      const sfLuma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      if (sfSoft === 0 && sfMix === 1 && !sfLuma) {
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i] > thr) d[i] = 255 - d[i];
+          if (d[i + 1] > thr) d[i + 1] = 255 - d[i + 1];
+          if (d[i + 2] > thr) d[i + 2] = 255 - d[i + 2];
+        }
+        return;
+      }
+      const band = sfSoft * 255;
+      // how far through the flip a value is: 0 = untouched, 1 = fully inverted
+      const w = (v) => (band <= 0 ? (v > thr ? 1 : 0) : (v <= thr ? 0 : (v >= thr + band ? 1 : (v - thr) / band)));
       for (let i = 0; i < d.length; i += 4) {
-        if (d[i] > thr) d[i] = 255 - d[i];
-        if (d[i + 1] > thr) d[i + 1] = 255 - d[i + 1];
-        if (d[i + 2] > thr) d[i + 2] = 255 - d[i + 2];
+        if (sfLuma) {
+          const L = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114, k = w(L) * sfMix;
+          if (k <= 0) continue;
+          for (let c = 0; c < 3; c++) { const j = i + c; d[j] = d[j] + ((255 - d[j]) - d[j]) * k; }
+          continue;
+        }
+        for (let c = 0; c < 3; c++) { const j = i + c, k = w(d[j]) * sfMix;
+          if (k > 0) d[j] = d[j] + ((255 - d[j]) - d[j]) * k; }
       }
     },
     gamma: function (d, W, H, p, t) {
@@ -4536,10 +4581,45 @@ window.FM = window.FM || {};
       var rcFV=Math.max(rcF[0],rcF[1],rcF[2])/255; if(rcFV<=0)rcFV=1; for(var rci=0;rci<d.length;rci+=4){ if(d[rci+3]===0)continue; var rcR=d[rci], rcG=d[rci+1], rcB=d[rci+2]; var rcMx=Math.max(rcR,rcG,rcB), rcMn=Math.min(rcR,rcG,rcB), rcDf=rcMx-rcMn; if(rcDf<8)continue; var rcH; if(rcMx===rcR)rcH=((rcG-rcB)/rcDf)%6; else if(rcMx===rcG)rcH=(rcB-rcR)/rcDf+2; else rcH=(rcR-rcG)/rcDf+4; rcH*=60; if(rcH<0)rcH+=360; var rcD=Math.abs(rcH-rcFH); if(rcD>180)rcD=360-rcD; if(rcD>rcWin)continue; var rcW2=1-rcD/rcWin; var rcNH=(rcH+rcSh)%360; if(rcNH<0)rcNH+=360; var rcV=rcMx/255, rcS=rcMx===0?0:rcDf/rcMx; if(rcMode>0){ rcS=rcTS; if(rcMode>1){ rcV=rcTV*(rcV/rcFV); if(rcV>1)rcV=1; } } var rcC=rcV*rcS, rcX=rcC*(1-Math.abs((rcNH/60)%2-1)), rcM=rcV-rcC, rcNr, rcNg, rcNb; if(rcNH<60){rcNr=rcC;rcNg=rcX;rcNb=0;} else if(rcNH<120){rcNr=rcX;rcNg=rcC;rcNb=0;} else if(rcNH<180){rcNr=0;rcNg=rcC;rcNb=rcX;} else if(rcNH<240){rcNr=0;rcNg=rcX;rcNb=rcC;} else if(rcNH<300){rcNr=rcX;rcNg=0;rcNb=rcC;} else {rcNr=rcC;rcNg=0;rcNb=rcX;} rcNr=(rcNr+rcM)*255; rcNg=(rcNg+rcM)*255; rcNb=(rcNb+rcM)*255; d[rci]=rcR+(rcNr-rcR)*rcW2; d[rci+1]=rcG+(rcNg-rcG)*rcW2; d[rci+2]=rcB+(rcNb-rcB)*rcW2; } },
     // Spot Color: keep the chosen hue, desaturate everything else (sin-city look). Soft quadratic edge
     // inside the tolerance window so the kept colour doesn't cut out harshly.
-    spotcolor: function(d,W,H,p,t){ var scTol=FM.evalProp(p.tolerance,t); if(scTol==null)scTol=0.2; scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB, scDs=1-scKeep; d[sci]=scR+(scL-scR)*scDs; d[sci+1]=scG+(scL-scG)*scDs; d[sci+2]=scB+(scL-scB)*scDs; } },
+    spotcolor: function(d,W,H,p,t){
+      /* Everything outside the kept hue snapped to 100% grey with no partial option, and the kept
+         colour was never boosted — so the one hard sin-city look was all it could do. DESAT makes the
+         surround a partial desaturate; BOOST lifts the kept hue so it actually pops rather than merely
+         surviving; INVERT greys the chosen colour instead, which is the other half people want. */
+      var scDesat=p.desat==null?100:FM.evalProp(p.desat,t); if(scDesat<0)scDesat=0; if(scDesat>100)scDesat=100; scDesat=scDesat===100?1:scDesat/100;
+      var scBoost=p.boost==null?100:FM.evalProp(p.boost,t); if(scBoost<0)scBoost=0; if(scBoost>300)scBoost=300; scBoost=scBoost===100?1:scBoost/100;
+      var scInv=(p.invert==null?0:(Math.round(FM.evalProp(p.invert,t))|0))===1;
+      var scTol=FM.evalProp(p.tolerance,t); if(scTol==null)scTol=0.2; scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB;
+        if(scInv) scKeep=1-scKeep;                       // Remove: grey the CHOSEN hue, keep the rest
+        var scDs=(1-scKeep)*scDesat;
+        var scNr=scR+(scL-scR)*scDs, scNg=scG+(scL-scG)*scDs, scNb=scB+(scL-scB)*scDs;
+        if(scBoost!==1 && scKeep>0){                     // lift the kept colour away from its own grey
+          var scBk=1+(scBoost-1)*scKeep;
+          scNr=scL+(scNr-scL)*scBk; scNg=scL+(scNg-scL)*scBk; scNb=scL+(scNb-scL)*scBk;
+          if(scNr<0)scNr=0; else if(scNr>255)scNr=255;
+          if(scNg<0)scNg=0; else if(scNg>255)scNg=255;
+          if(scNb<0)scNb=0; else if(scNb>255)scNb=255; }
+        d[sci]=scNr; d[sci+1]=scNg; d[sci+2]=scNb; } },
     // Four-Color Gradient: bilinear blend of the four corner colours across the frame, mixed over the
     // layer's opaque pixels by amount (transparent px untouched, same contract as gradientoverlay).
-    fourcolor: function(d,W,H,p,t){ var fcA=FM.evalProp(p.amount,t); if(fcA==null)fcA=0.85; fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH, fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu; d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
+    fourcolor: function(d,W,H,p,t){
+      /* It lerped the frame straight toward the gradient, so at any usable amount it PAINTED OVER the
+         footage — and a four-colour gradient is for washing colour across an image, not replacing it.
+         BLEND composites the gradient against the picture instead. SPREAD pushes the corner colours
+         further apart or pulls them toward the middle. */
+      var fcBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
+      var fcSp=p.spread==null?100:FM.evalProp(p.spread,t); if(fcSp<20)fcSp=20; if(fcSp>300)fcSp=300;
+      var fcK=fcSp===100?1:fcSp/100;
+      var fcA=FM.evalProp(p.amount,t); if(fcA==null)fcA=0.85; fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH; if(fcK!==1){ fcv=0.5+(fcv-0.5)*fcK; if(fcv<0)fcv=0; else if(fcv>1)fcv=1; } var fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; if(fcK!==1){ fcu=0.5+(fcu-0.5)*fcK; if(fcu<0)fcu=0; else if(fcu>1)fcu=1; } var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu;
+        if(fcBl){ var br=d[fci], bg=d[fci+1], bb=d[fci+2];
+          if(fcBl===1){ fcr=255-(255-br)*(255-fcr)/255; fcg=255-(255-bg)*(255-fcg)/255; fcb=255-(255-bb)*(255-fcb)/255; }
+          else if(fcBl===2){ fcr=br*fcr/255; fcg=bg*fcg/255; fcb=bb*fcb/255; }
+          else if(fcBl===3){ fcr=br<128?(2*br*fcr/255):(255-2*(255-br)*(255-fcr)/255);
+                             fcg=bg<128?(2*bg*fcg/255):(255-2*(255-bg)*(255-fcg)/255);
+                             fcb=bb<128?(2*bb*fcb/255):(255-2*(255-bb)*(255-fcb)/255); }
+          else { var sl=function(b,o){ b/=255; o/=255; return 255*(o<=0.5 ? b-(1-2*o)*b*(1-b) : b+(2*o-1)*((b<=0.25?((16*b-12)*b+4)*b:Math.sqrt(b))-b)); };
+                 fcr=sl(br,fcr); fcg=sl(bg,fcg); fcb=sl(bb,fcb); } }
+        d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
     // Spectral Map: luminance → spectrum sweep (violet 260° for shadows through to red 0° for
     // highlights), full saturation, value lifted so shadows stay readable. False-colour look.
     spectralmap: function(d,W,H,p,t){ var smA=FM.evalProp(p.amount,t); if(smA==null)smA=1; smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
@@ -4641,7 +4721,17 @@ window.FM = window.FM || {};
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b);
         var nr=cr+(L-cr)*ds*a+8*a*tk, ng=cg+(L-cg)*ds*a+2*a*tk, nb=cb+(L-cb)*ds*a-6*a*tk;
         d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
-    nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
+    nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
+      /* The tint was hardcoded green and the sensor noise a fixed +-30, so every night-vision shot was
+         the same green with the same grain — amber, white-hot and thermal-scope looks were all out of
+         reach. GAIN is the intensifier's brightness, which is the other half of the look. */
+      var nvC=p.color==null?0:(Math.round(FM.evalProp(p.color,t))|0);
+      var nvT0=0.2, nvT1=1, nvT2=0.2;                                   // 0 = the legacy green
+      if(nvC===1){ nvT0=1; nvT1=0.72; nvT2=0.25; }                      // amber
+      else if(nvC===2){ nvT0=1; nvT1=1; nvT2=1; }                       // white hot
+      else if(nvC===3){ nvT0=0.35; nvT1=0.75; nvT2=1; }                 // blue scope
+      var nvNoise=p.noise==null?60:FM.evalProp(p.noise,t); if(nvNoise<0)nvNoise=0; if(nvNoise>150)nvNoise=150;
+      var nvGain=p.gain==null?1.3:FM.evalProp(p.gain,t); if(nvGain<0.5)nvGain=0.5; if(nvGain>3)nvGain=3; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
     sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
       // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a
