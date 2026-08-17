@@ -9134,3 +9134,16 @@ wait for them to report back."*
       reorder maths walks `.track-row` elements, and the add row is deliberately NOT one of them (it has
       no layer, no index; see the note in js/timeline.js). So the marker is invisible to the drop
       resolver and there is no slot where it sits. That is the likely cause and it is checkable.
+
+- [ ] **358 — The two-row Media/Audio cap was implemented WRONG: he wants two rows locked with
+      HORIZONTAL paging, not a two-row window you scroll down inside.** (18 Aug, phone screenshot at
+      v9.74 showing the Media tab with a row cut off at the top and more below.) His words, verbatim:
+      *"When I said I wanted the media and audio rows to be only two rows instead of three I didn't mean
+      two rows fitting on screen then you have to scroll down, I just meant two rows solid locked in then
+      you scroll left and right to go to the other rows where the spill over will be"*.
+      **This corrects #299 / v9.47, which is mine to fix rather than a new feature.** I capped the body's
+      height and left it scrolling vertically; he wants the grid to hold exactly two rows and PAGE
+      sideways, with the overflow on the next page.
+      The machinery already exists and is right there — the Shape tab is a `.addmenu-pager` with
+      `.addmenu-page` children and page dots, which is exactly this. So the fix is to give the library
+      grid the same paging rather than a max-height, and the v9.47 height cap comes out.
