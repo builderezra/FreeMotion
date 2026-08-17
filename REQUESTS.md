@@ -3696,6 +3696,13 @@ better still, keep working inside the turn rather than parking work for a later 
          file you would have had no way of knowing was different from an uninterrupted one. A resume now
          re-renders the 25 frames before the join without encoding them, purely to rebuild that history
          — and only when the project actually carries one of those four effects.
+      **SKIPPED IN THE QUEUE, 17 Aug — deliberately, and here is the reasoning so it is not re-litigated
+      every session.** Half (a), crash-resume, is DONE and this entry's own text says so. What is left is
+      half (b), and it is the one thing in this file explicitly marked as needing his decision: days of
+      work, on the 11,000-line compositor, for a benefit he has not asked for in any of the reports he has
+      actually filed. The loop's rule is that an item whose only remaining work is blocked on a decision
+      does not hold the queue — so it is noted and passed, not forgotten. **One word from him moves it.**
+
       **STILL OPEN (b): the second half — off the main thread.** Much larger again: a worker means the
       whole compositor (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Not started, and unlike
       the resume half there is no shortcut hiding in it — **this one is a genuine decision for you**,
@@ -6282,6 +6289,26 @@ better still, keep working inside the turn rather than parking work for a later 
       | no toast, still silent | none of the three — and that would be genuinely new information |
       This entry had no evidence attached for five rounds of asking precisely because every one of these
       was a bare `console.warn`. **The next occurrence answers itself.**
+
+      **THE THIRD PATH NO LONGER SHIPS A BROKEN FILE — v9.43.** Reporting it was only half the job: the
+      file was still going out with a header advertising an audio track that was never fed, which plays
+      silently in one player and is **refused outright** by another. That is the worst of the three,
+      because it is the one that produces a file which looks fine. The cause was ordering — the track was
+      DECLARED when the muxer was built and ENCODED at the very end, so a failure arrived after the
+      promise had already been made and could not be taken back.
+      **The soundtrack is encoded BEFORE the muxer exists now.** If it fails, the mix is dropped before
+      any track is declared and the result is an ordinary, honest, silent video instead of a broken one.
+      The cost is holding the encoded audio for the render — AAC at 160kbps is about 1.2MB a minute,
+      nothing beside the video, freed as soon as it is muxed.
+      **And a second bug fell out of building it, which is why the third path could go unnoticed at all:**
+      an encoder error arrives on the AudioEncoder's `error` CALLBACK on some browsers rather than as a
+      rejection from `flush()` — so `encodeAudio` resolved normally on a soundtrack that had died, and
+      nothing upstream had any way to know. It rethrows now, and that is the assertion a mutation check
+      turns red.
+      *Still not covered, stated rather than papered over: the full `run()` rig with a stubbed encoder.
+      What IS tested is the contract the ordering rests on — that a sink can be a function, and that an
+      encoder error surfaces. The end-to-end "muxer is built with no audio track" step is still only
+      argued, not measured.*
 
       **CHECKED END TO END, 16 Aug — the toast really does reach the screen**, which was worth proving
       rather than assuming: a diagnostic that only exists in a unit test is no use at the moment you

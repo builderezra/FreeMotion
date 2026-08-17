@@ -25792,5 +25792,56 @@
       throw new Error('slices were produced with motion blur switched off');
   });
 
+  /* THE WORST OF THE THREE WAYS A SOUNDTRACK WAS LOST (queue 215). The audio track used to be DECLARED
+     when the muxer was built and ENCODED at the very end. If that encode threw, the swallow that caught
+     it shipped a file whose header advertises an audio track that was never fed — which plays silently
+     in one player and is refused outright by another. It is the worst of the three because it is the one
+     that produces a file that looks fine.
+     The soundtrack is encoded BEFORE the muxer exists now, so a failure drops the mix before any track
+     is declared and the result is an ordinary, honest, silent video. That reordering only works because
+     a failed encode actually THROWS — which it did not, on browsers that report encoder errors through
+     the error callback rather than by rejecting flush(). That contract is what these assertions hold. */
+  test('a soundtrack that fails to encode is reported, not swallowed', { item: 'export-audio' }, async function () {
+    if (!FM._encodeAudio) throw new Error('FM._encodeAudio is not exposed');
+    var realEnc = window.AudioEncoder, realAD = window.AudioData;
+    try {
+      var mode = 'ok', flushed = 0;
+      window.AudioData = function (o) { Object.assign(this, o); this.close = function () {}; };
+      window.AudioEncoder = function (opts) {
+        this._o = opts;
+        this.configure = function () {};
+        this.encode = function () {
+          if (mode === 'callback-error') opts.error(new Error('encoder died'));
+          else opts.output({ byteLength: 4 }, { decoderConfig: {} });
+        };
+        this.flush = function () { flushed++; return Promise.resolve(); };   // resolves even on failure — the case that used to slip through
+        this.close = function () {};
+      };
+      var mix = { sampleRate: 48000, channels: 1,
+        audioBuffer: { length: 4096, numberOfChannels: 1, getChannelData: function () { return new Float32Array(4096); } } };
+
+      // 1. It feeds a FUNCTION sink — which is what lets the encode happen before the muxer exists.
+      var got = [];
+      await FM._encodeAudio(function (c, m) { got.push({ c: c, m: m }); }, mix);
+      if (!got.length) throw new Error('nothing reached the sink — the encode cannot be done ahead of the muxer');
+
+      // 2. …and it still feeds a muxer-shaped object, so the old call style is unbroken.
+      var mux = { n: 0, addAudioChunk: function () { this.n++; } };
+      await FM._encodeAudio(mux, mix);
+      if (!mux.n) throw new Error('a muxer-style sink received nothing');
+
+      /* 3. AN ENCODER ERROR MUST SURFACE. Delivered on the error callback while flush() resolves
+            normally — the shape that let a dead soundtrack look like a successful one, and the reason
+            the file ended up promising a track it never got. */
+      mode = 'callback-error';
+      var threw = null;
+      try { await FM._encodeAudio(function () {}, mix); } catch (e) { threw = e; }
+      if (!threw) throw new Error('the encoder reported an error and encodeAudio resolved anyway — the export would declare an audio track it never filled, and that file is rejected by strict players');
+      if (!/encoder died/.test(String(threw && threw.message))) throw new Error('something else threw: ' + threw);
+    } finally {
+      window.AudioEncoder = realEnc; window.AudioData = realAD;
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

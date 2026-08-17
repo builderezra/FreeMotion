@@ -395,11 +395,19 @@ window.FM = window.FM || {};
     return { audioBuffer: rendered, sampleRate, channels };
   }
 
-  async function encodeAudio(muxer, mix) {
+  /* `out` is where the encoded chunks go — the muxer, or an array. Taking a sink instead of the muxer
+     is what lets the soundtrack be encoded BEFORE the muxer exists; see the call site for why that
+     matters. */
+  async function encodeAudio(out, mix) {
     const { audioBuffer, sampleRate, channels } = mix;
+    const push = (chunk, meta) => { if (typeof out === 'function') out(chunk, meta); else out.addAudioChunk(chunk, meta); };
+    let encErr = null;
     const enc = new AudioEncoder({
-      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-      error: e => console.error('audio encode', e),
+      output: (chunk, meta) => push(chunk, meta),
+      /* An encoder error arrives on this callback, NOT as a rejection from flush() on every browser —
+         so a soundtrack could fail here and the export carry on believing it had succeeded. Held and
+         rethrown after the flush, where the caller can see it. */
+      error: e => { encErr = e; console.error('audio encode', e); },
     });
     enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
     const chData = [];
@@ -418,7 +426,10 @@ window.FM = window.FM || {};
     }
     await enc.flush();
     enc.close();
+    if (encErr) throw encErr;
   }
+
+  FM._encodeAudio = encodeAudio;   // suite seam: the contract the muxer-ordering fix rests on
 
   async function pickVideoCodec(w, h, fps, bitrate) {
     const candidates = ['avc1.640034', 'avc1.640028', 'avc1.4d0028', 'avc1.42e01e'];
@@ -611,6 +622,33 @@ window.FM = window.FM || {};
         } catch (e) { console.warn('resume lookup failed', e); sig = sig || null; saved = null; }
       }
 
+      /* ENCODE THE SOUNDTRACK BEFORE THE MUXER EXISTS — so the file can never promise a track it does
+       * not have (queue 215).
+       *
+       * The audio track used to be DECLARED at muxer construction and encoded at the very end. If that
+       * encode threw, the swallow that caught it shipped a file whose moov advertises an audio track
+       * that was never fed — the exact "broken/silent track that strict players reject" the AAC probe
+       * upstream exists to prevent, arriving by a route the probe cannot see: the probe answers "can
+       * this browser encode AAC at all", not "did THIS encode survive". Such a file plays silently in
+       * one player and is refused outright by another, which is the worst of the three ways a
+       * soundtrack was being lost, because it is the one that produces a file that looks fine.
+       * Encoding first turns that into an ordinary, honest, silent video: if it throws, `mix` is
+       * dropped BEFORE the muxer is built, so no audio track is declared at all.
+       * The cost is holding the encoded audio in memory for the render — AAC at 160kbps is about
+       * 1.2MB a minute, which is nothing beside the video, and it is freed as soon as it is muxed. */
+      let audioChunks = null;
+      if (mix) {
+        audioChunks = [];
+        try {
+          await encodeAudio((chunk, meta) => audioChunks.push({ chunk: chunk, meta: meta }), mix);
+        } catch (e) {
+          console.warn('[export] the soundtrack failed to encode — exporting video only', e);
+          FM._audioTrackDropped = 'encode-failed';
+          if (FM.toast) FM.toast('The soundtrack failed to encode — exporting WITHOUT SOUND', 6000);
+          mix = null; audioChunks = null;
+        }
+      }
+
       // Stream the file out to disk-backed blob storage instead of holding it whole on the JS heap.
       // fastStart:false is what makes that possible — see createMp4Sink for the mechanism and the
       // one cost (the output is no longer progressive-play). (#47)
@@ -742,14 +780,9 @@ window.FM = window.FM || {};
        * Kept as a swallow on purpose — a failed soundtrack must not throw away a render that may have
        * taken minutes — but it says so now, and it distinguishes itself from the other two paths so the
        * toast alone tells you which half of the pipeline broke. */
-      if (mix) {
-        try { await encodeAudio(muxer, mix); }
-        catch (e) {
-          console.warn('[export] audio encode failed after the track was declared — the file will have a silent audio track', e);
-          FM._audioTrackDropped = 'encode-failed';
-          if (FM.toast) FM.toast('The soundtrack failed to encode — the video is saved but SILENT', 6000);
-        }
-      }
+      /* Nothing can fail here any more: these chunks were produced before the muxer was built, and the
+         muxer only declared an audio track BECAUSE they exist. Adding a chunk is a byte copy. */
+      if (audioChunks) { for (const a of audioChunks) muxer.addAudioChunk(a.chunk, a.meta); audioChunks = null; }
       muxer.finalize();
       /* HAND THE FILE OVER, or hand it to whoever asked to present it (queue 141 part 4).
        * `onReady` lets the caller put its own card in front of the OS save sheet — which is the whole
