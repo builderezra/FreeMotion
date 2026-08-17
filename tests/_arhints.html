@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#325 — the three audio sliders</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #325 — *"I'm confused by the three audio sliders so explain better"*. The suite checks each one has
+   a real explanation; this is here to see them at the width he reads them at, because three stacked
+   hints can be individually fine and collectively a wall of text. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 820) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.audioReact || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        var L = FM.makeLayer('video', { name: 'clip', duration: 5 });
+        FM.scene.layers = [L];
+        FM.media.set(L.id, { kind: 'video', el: d.createElement('video'), width: 640, height: 360, duration: 5 });
+        FM.selectLayer(L.id); FM.refreshAll();
+        FM.audioReact.openSheet(L);
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var sheet = d.getElementById('ar-sheet');
+        if (!sheet) return fail('the Audio React sheet did not open');
+        var hints = [].slice.call(sheet.querySelectorAll('.ar-hint'));
+        out.textContent = ['width ' + W, 'hints on the sheet: ' + hints.length]
+          .concat(hints.map(function (h) { return '  ' + Math.round(h.getBoundingClientRect().height) + 'px  ' + h.textContent.slice(0, 60) + '…'; })).join('\n');
+        window.__done = true;
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body>
+</html>

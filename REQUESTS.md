@@ -6047,9 +6047,15 @@ better still, keep working inside the turn rather than parking work for a later 
       the opposite of fixed, so they are live work again with no ambiguity.
 
       **New work this message creates:**
-      · **The three audio sliders need explaining better.** His words: *"I'm confused by the three audio
-        sliders so explain better"*. ⚠️ Which three is not yet certain — most likely the Motion Blur
-        trio or the audio-react Sensitivity/Smoothing/Threshold set. Identify them before writing a word.
+      · **The three audio sliders need explaining better.** ✅ **v9.72.** They are Audio React's
+        **Sensitivity / Smoothing / Threshold** — the only set of exactly three audio sliders in the
+        app, and each was a bare word over a track with no explanation anywhere on that sheet. Each now
+        says what it does TO THE PICTURE rather than to the signal, and names the symptom you would be
+        trying to fix when you reach for it:
+        *Sensitivity* — how hard the sound pushes; turn it up if the movement is too small to notice.
+        *Smoothing* — how quickly it settles back; low is twitchy, high glides.
+        *Threshold* — how loud a sound has to be before anything moves.
+        Verified at 380px: two lines each, and the sheet still reads.
       · **The preset menu should PREVIEW the layer.** His words, in full: *"the preset menu I wanted to
         show what the layer would look like with that effect and I sent an image of alight motion showing
         a menu that you could scroll through and when you would tap on one thing it would show how the
@@ -6059,6 +6065,10 @@ better still, keep working inside the turn rather than parking work for a later 
         to work the way the effects browser already does — scroll a list, tap one, see his own layer
         rendered with it. He has explicitly said the engine is already there, which is correct: the
         effects browser's live per-layer preview is exactly the machinery this needs.
+        ✅ **Already done — v9.29.** The Presets card renders each preset on YOUR layer, by running
+        the real apply on a throwaway clone. So this needed confirming rather than building. Worth
+        a look next time you are in there — if it is not what you meant, say so and I will rework
+        the presentation rather than the engine.
       · **"Just ship it as good as you can and remind me to test it."** Standing instruction on anything
         where the question was "is this what you want?" — build it, ship it, and TELL HIM to test it
         rather than holding the queue waiting for an answer.

@@ -27627,4 +27627,50 @@
     }
   });
 
+
+  /* ================= queue 325: the three audio sliders are explained =============================
+   * *"I'm confused by the three audio sliders so explain better"*. The entry did not know WHICH three;
+   * they are Audio React's Sensitivity / Smoothing / Threshold — the only set of exactly three audio
+   * sliders in the app — and each was a bare word over a track with no explanation anywhere on the
+   * sheet. Three pieces of jargon and no way in.
+   * ASSERTED AS "EVERY ONE OF THEM, AND IN PLAIN WORDS", because the failure worth guarding is not a
+   * missing hint — it is explaining two of the three and leaving the confusing one bare, or writing a
+   * description that restates the label. */
+  test('the three Audio React sliders each explain themselves (queue 325)', { item: 'ar-hints' }, async function () {
+    if (!FM.audioReact || !FM.audioReact.openSheet) throw new Error('FM.audioReact.openSheet is missing');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      /* The sheet is opened on a VIDEO layer: it is about making something react to a clip's sound,
+         and openSheet takes the layer whose audio drives it. */
+      const L = FM.makeLayer('video', { name: 'q325 clip', duration: 5 });
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(140);
+      FM.audioReact.openSheet(L);
+      await sleep(320);
+      const sheet = document.getElementById('ar-sheet') || document.querySelector('.ar-sheet');
+      if (!sheet) throw new Error('the Audio React sheet did not open');
+      const rows = [].slice.call(sheet.querySelectorAll('input[type="range"]')).map(i => i.parentElement);
+      if (rows.length < 3) throw new Error('expected at least three sliders on the sheet, found ' + rows.length);
+
+      ['Sensitivity', 'Smoothing', 'Threshold'].forEach(function (name) {
+        const row = rows.filter(r => (r.textContent || '').indexOf(name) >= 0)[0];
+        if (!row) throw new Error('no "' + name + '" slider on the sheet');
+        const hint = row.querySelector('.ar-hint');
+        if (!hint) throw new Error('"' + name + '" has no explanation under it — that is the one he is confused by');
+        const txt = (hint.textContent || '').trim();
+        if (txt.length < 40) throw new Error('"' + name + '" is explained in ' + txt.length + ' characters ("' + txt + '") — that is a label, not an explanation');
+        /* IT MUST NOT JUST RESTATE THE LABEL. "Smoothing: how much smoothing" is the failure mode of
+           every hurried hint, and it reads as an explanation until you need one. */
+        if (new RegExp('^' + name, 'i').test(txt)) throw new Error('"' + name + '" is explained by repeating its own name: ' + txt);
+      });
+    } finally {
+      const sh = document.getElementById('ar-sheet'); if (sh && sh.parentElement) sh.parentElement.removeChild(sh);
+      FM.scene.layers.forEach(l => { if (l.name === 'q325 clip') FM.media.remove(l.id); });
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();

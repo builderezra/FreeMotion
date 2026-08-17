@@ -533,9 +533,16 @@ window.FM = window.FM || {};
     sheet.appendChild(preWrap);
 
     // sliders
-    const gainRow = slider('Sensitivity', 0.5, 4, 0.1, st.gain, v => '×' + v.toFixed(1), v => { st.gain = v; recompute(); });
-    const smoothRow = slider('Smoothing', 0, 1, 0.01, st.smoothing, v => Math.round(v * 100) + '%', v => { st.smoothing = v; recompute(); });
-    const floorRow = slider('Threshold', 0, 0.8, 0.01, st.floor, v => v <= 0 ? 'off' : Math.round(v * 100) + '%', v => { st.floor = v; recompute(); });
+    /* THE EXPLANATIONS (queue 325). Written as what the slider DOES to the picture, not as what it does
+       to the signal — "attack and release envelope" is true and useless. Each one names the symptom you
+       would be trying to fix when you reach for it, because that is how anyone actually finds the right
+       slider. */
+    const gainRow = slider('Sensitivity', 0.5, 4, 0.1, st.gain, v => '×' + v.toFixed(1), v => { st.gain = v; recompute(); },
+      'How hard the sound pushes. Turn it up if the movement is too small to notice, down if it slams to the limit and stays there.');
+    const smoothRow = slider('Smoothing', 0, 1, 0.01, st.smoothing, v => Math.round(v * 100) + '%', v => { st.smoothing = v; recompute(); },
+      'How quickly it settles back. Low is twitchy and snaps on every beat; high glides and rides the overall loudness.');
+    const floorRow = slider('Threshold', 0, 0.8, 0.01, st.floor, v => v <= 0 ? 'off' : Math.round(v * 100) + '%', v => { st.floor = v; recompute(); },
+      'How loud a sound has to be before anything moves. Raise it so only the beats count and quiet parts sit still.');
     sheet.appendChild(gainRow.row); sheet.appendChild(smoothRow.row); sheet.appendChild(floorRow.row);
 
     // target + property selects
@@ -704,7 +711,13 @@ window.FM = window.FM || {};
     inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (!isNaN(v)) onInput(v); });
     return inp;
   }
-  function slider(label, min, max, step, val, fmt, onInput) {
+  /* `hint` is the last argument and it is the whole of queue 325's remaining work (his words: *"I'm
+     confused by the three audio sliders so explain better"*). These three were a bare word each —
+     Sensitivity, Smoothing, Threshold — over a track with no explanation anywhere on the sheet, which
+     is three pieces of audio jargon and no way in.
+     Under the label rather than beside it: the value readout already owns the right-hand end of that
+     row, and a description squeezed between them is the thing nobody reads. */
+  function slider(label, min, max, step, val, fmt, onInput, hint) {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom:12px;';
     const top = document.createElement('div');
@@ -712,11 +725,19 @@ window.FM = window.FM || {};
     const lb = document.createElement('span'); lb.textContent = label; lb.style.cssText = 'font-size:12.5px;color:var(--text);';
     const vb = document.createElement('span'); vb.textContent = fmt(val); vb.style.cssText = 'font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;';
     top.appendChild(lb); top.appendChild(vb);
+    row.appendChild(top);
+    if (hint) {
+      const hn = document.createElement('div');
+      hn.className = 'ar-hint';
+      hn.textContent = hint;
+      hn.style.cssText = 'font-size:11px;line-height:1.35;color:var(--text-faint);margin:-1px 0 5px;';
+      row.appendChild(hn);
+    }
     const inp = document.createElement('input');
     inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
     inp.style.cssText = 'width:100%;height:40px;accent-color:var(--accent);';
     inp.addEventListener('input', () => { const v = parseFloat(inp.value); vb.textContent = fmt(v); onInput(v); });
-    row.appendChild(top); row.appendChild(inp);
+    row.appendChild(inp);
     return { row: row, input: inp };
   }
 })(window.FM);
