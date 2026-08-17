@@ -503,6 +503,25 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     briefly put a gradient2d comment on the halftone test. Anchor an edit on the line that FOLLOWS the
     target when a helper name repeats.
 
+- v9.15 (round 28 — **the last of the pixel rows**) — `border` (inset, corner radius, strength),
+  `contourlines` (smooth-first, line weight, lines-only paper) and `contourstrips` (strength, weak-strip
+  level, band offset).
+  **WHAT IS LEFT OF THE PROPOSAL TABLE, in full, so nobody has to re-derive it:**
+  * `spin` and `fliplayer` — the only two rows still outstanding. They are CANVAS_FX with the signature
+    `(A, B, W, H, bb, p, t, tl)`, i.e. they transform whole canvases rather than pixel buffers, so they
+    need a different harness from every round above. `fliplayer`'s `keep` option in particular means
+    drawing the original AND the reflection, which is a compositing change rather than a parameter.
+  * `blur` — deferred with a reason: it is a CSS filter, so its proposed mix/blend needs a plate and a
+    composite, not a slider.
+  * `contrast`, `grayscale`, `invert`, `hextiles` — the four this file already says to SKIP, and
+    `longshadow`, which it says is a rewrite rather than a parameterisation.
+  Everything else in the table is built.
+  Finding worth keeping: **`contourlines` needed smoothing to be applied BEFORE the banding, not after**
+  — the row says real footage "shreds into confetti", and that is because the bands were traced off raw
+  luminance. Blurring the luminance first and banding the result is what turns noise into contours
+  (measured: 30%+ fewer inked pixels on a noise plate), and no amount of post-processing the traced
+  lines would have done it.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

@@ -18195,6 +18195,79 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 28: the last of the proposal table ---------------- */
+
+  test('effects: border and the contour effects still render an un-upgraded instance exactly as they did', { item: 'fx-last' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      { type: 'border',        old: { width: 10, color: '#ffffff' }, legacyKeys: { inset: 0, radius: 0, opacity: 100 }, moved: { inset: 12, radius: 20, opacity: 40 } },
+      { type: 'contourlines',  old: { levels: 8 },                   legacyKeys: { smooth: 0, thickness: 1, paper: 0 }, moved: { smooth: 4, thickness: 3, paper: 1 } },
+      { type: 'contourstrips', old: { levels: 5, color: '#2b2d42', color2: '#ef476f' }, legacyKeys: { mix: 1, alternate: 0.4, offset: 0 }, moved: { mix: 0.4, alternate: 1, offset: 0.3 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* Border was welded flush to the edge with hard square corners at full opacity. All three claims are
+   * about SPECIFIC PIXELS — the very corner, and the pixels just inside it — rather than about counts. */
+  test('effects: Border can inset, round its corners and let the picture through', { item: 'fx-last' }, function () {
+    var W = 96, H = 96, white = 255;
+    var at = function (d, x, y) { return [d[(y * W + x) * 4], d[(y * W + x) * 4 + 1], d[(y * W + x) * 4 + 2]]; };
+    var isBorder = function (d, x, y) { var p = at(d, x, y); return p[0] === white && p[1] === white && p[2] === white; };
+    var flush = fxRun('border', W, H, { width: 10, color: '#ffffff' });
+    if (!isBorder(flush, 0, 0)) throw new Error('the default border no longer reaches the very corner, so inset cannot be shown to pull it in');
+    var inset = fxRun('border', W, H, { width: 10, color: '#ffffff', inset: 12 });
+    if (isBorder(inset, 0, 0)) throw new Error('with a 12px inset the frame is still painted at the very corner');
+    if (!isBorder(inset, 14, 14)) throw new Error('the inset frame is not being drawn at 14,14 where it should now sit');
+    // ROUNDED: the corner of the inset rectangle must be cut away while its mid-edge stays
+    var round = fxRun('border', W, H, { width: 10, color: '#ffffff', radius: 24 });
+    if (isBorder(round, 0, 0)) throw new Error('with a 24px corner radius the square corner is still painted');
+    if (!isBorder(round, Math.round(W / 2), 0)) throw new Error('rounding the corners also removed the middle of the top edge');
+    // OPACITY: the frame must blend rather than replace
+    var soft = fxRun('border', W, H, { width: 10, color: '#ffffff', opacity: 40 });
+    var sp = at(soft, 0, 0);
+    if (sp[0] === white && sp[1] === white && sp[2] === white) throw new Error('at 40% strength the border is still fully opaque white');
+    var src = fxPlate(W, H);
+    if (sp[0] === src[0] && sp[1] === src[1]) throw new Error('at 40% strength the border did not draw at all');
+  });
+
+  /* "Any real footage shreds into confetti instead of forming contours", and "a clean topographic map
+   * on white is impossible". Smoothing first is what turns noise into contours, so the assertion is
+   * that it produces FEWER contour pixels on a noisy plate — and Lines-only must leave everything that
+   * is not a line pure white, which is the difference between a map and a scribbled-on photo. */
+  test('effects: Contour Lines can smooth first and draw on clean paper', { item: 'fx-last' }, function () {
+    var W = 96, H = 96;
+    var inked = function (p) { var d = fxRun('contourlines', W, H, p), n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0) n++; return n; };
+    var raw = inked({ levels: 8 });
+    if (raw < 200) throw new Error('the raw trace only inked ' + raw + ' pixels on the noise plate — there is no confetti here for smoothing to fix');
+    var smoothed = inked({ levels: 8, smooth: 4 });
+    if (!(smoothed < raw * 0.7)) throw new Error('smoothing first inked ' + smoothed + ' against ' + raw + ' — it is not reducing the noise into contours');
+    if (!(inked({ levels: 8, thickness: 3 }) > raw)) throw new Error('a 3px line weight did not ink more than a hairline');
+    // LINES ONLY: everything that is not a line must be pure white
+    var d2 = fxRun('contourlines', W, H, { levels: 8, smooth: 4, paper: 1 }), nonWhite = 0, black = 0;
+    for (var j = 0; j < d2.length; j += 4) {
+      var isW = d2[j] === 255 && d2[j + 1] === 255 && d2[j + 2] === 255;
+      var isB = d2[j] === 0 && d2[j + 1] === 0 && d2[j + 2] === 0;
+      if (isB) black++; else if (!isW) nonWhite++;
+    }
+    if (nonWhite) throw new Error(nonWhite + ' pixels are neither line-black nor paper-white in Lines-only mode — the image is still showing through');
+    if (!black) throw new Error('Lines-only produced no lines at all');
+  });
+
   /* ---------------- EFFECTS-PLAN round 27: the pattern effects ---------------- */
 
   test('effects: the pattern effects still render an un-upgraded instance exactly as they did', { item: 'fx-pattern2' }, function () {

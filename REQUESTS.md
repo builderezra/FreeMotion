@@ -3795,6 +3795,11 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 28, v9.15:* Border Frame, Contour Lines and Contour Strips. **This clears the whole
+      proposal table except THREE things:** Spin and Flip Layer (they transform whole canvases rather
+      than pixels, so they need a different approach — Flip's "keep the original" is a compositing
+      change, not a parameter) and Gaussian Blur (a CSS filter; mixing softness over a sharp image
+      needs a plate and a composite). Five others the plan itself says to skip. Everything else is done.
       *Round 27, v9.14:* Dots, Hexagon Array, Mosaic and Dissolve. Dissolve was one static pattern
       that never moved and ate the frame evenly; it sweeps, softens and boils now. Mosaic could only
       make square averaged gapless blocks.
