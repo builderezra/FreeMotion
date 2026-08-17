@@ -123,18 +123,38 @@ window.FM = window.FM || {};
     const existing = FM.karaokeTwinOf(layer);
     if (existing) return restore(layer.id, existing.id);                    // pressed on the source, karaoke is on
 
-    // OFF → ON
+    /* OFF → ON — RE-ENTRANT UNTIL NOW, AND THE UI ENCOURAGED IT.
+     *
+     * Everything below awaits: decode the whole file, render it offline, load the result as a clip. The
+     * decision to proceed is the `existing` check above, and nothing marked the job in flight — so a
+     * second tap re-ran that check against a scene that still had no twin, agreed, and proceeded too.
+     * Two layers then play the identical instrumental phase-locked: the backing track at roughly double
+     * amplitude, clipping on loud material, plus a stray hidden layer in the timeline. It also runs two
+     * full offline renders and holds two ~46MB WAVs and two <video> elements at once, which is an
+     * out-of-memory risk on a phone.
+     *
+     * AND THE SECOND TAP WAS THE REASONABLE THING TO DO. The only feedback used to be a toast fired
+     * AFTER the decode — so for the first several seconds of a multi-minute track the button did
+     * nothing observable, and it auto-hid after two seconds while the render carried on. So the message
+     * moves ahead of the work and stays up until the work is finished; a second tap now says so rather
+     * than starting a duplicate.
+     * The flag lives on the MEDIA record because that is what the work is about, and it is cleared in a
+     * `finally` so a decode that throws cannot wedge the feature off for the session. */
+    const km = FM.media && FM.media.get(layer.id);
+    if (km && km._karaokeBusy) { if (FM.toast) FM.toast('Still removing the vocals…', 1800); return; }
+    if (km) km._karaokeBusy = 1;
+    try {
+    if (FM.toast) FM.toast('Removing vocals…', 0);
     const ab = await layerAudioBuffer(layer);
-    if (!ab) { if (FM.toast) FM.toast('This clip has no audio'); return; }
-    if (ab.numberOfChannels < 2) { if (FM.toast) FM.toast('Vocal removal needs a STEREO track — this one is mono'); return; }
-    if (FM.toast) FM.toast('Removing vocals…', 2000);
+    if (!ab) { if (FM.hideToast) FM.hideToast(); if (FM.toast) FM.toast('This clip has no audio'); return; }
+    if (ab.numberOfChannels < 2) { if (FM.hideToast) FM.hideToast(); if (FM.toast) FM.toast('Vocal removal needs a STEREO track — this one is mono'); return; }
     let processed = null;
     try { processed = await vocalRemovedBuffer(ab); } catch (e) { processed = null; }
-    if (!processed) { if (FM.toast) FM.toast('Could not process this audio'); return; }
+    if (!processed) { if (FM.hideToast) FM.hideToast(); if (FM.toast) FM.toast('Could not process this audio'); return; }
     const file = new File([FM.audioBufferToWav(processed)], safeName(layer.name) + ' (no vocals).wav', { type: 'audio/wav' });
     let rec = null;
     try { rec = await FM.loadVideoFile(file); } catch (e) { rec = null; }
-    if (!rec) { if (FM.toast) FM.toast('Could not add the karaoke track'); return; }
+    if (!rec) { if (FM.hideToast) FM.hideToast(); if (FM.toast) FM.toast('Could not add the karaoke track'); return; }
     FM.addMediaLayer(rec);   // selects the new layer + commits
     const nl = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (nl) {
@@ -159,7 +179,9 @@ window.FM = window.FM || {};
     layer.muted = true;   // hear the karaoke, not the original
     if (FM.refreshAll) FM.refreshAll();
     if (FM.history) FM.history.commit();
+    if (FM.hideToast) FM.hideToast();
     if (FM.toast) FM.toast('Vocals removed — press again to restore');
+    } finally { if (km) km._karaokeBusy = 0; }   // cleared on THROW too — a failed decode must not wedge the feature off
   };
   FM.removeVocals = FM.toggleKaraoke;   // back-compat alias
 })(window.FM);

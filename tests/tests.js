@@ -25574,5 +25574,57 @@
     }
   });
 
+  /* "Remove vocals" awaits a decode, an offline render and a file load before it creates the twin that
+     tells it the job is done — and nothing marked the job in flight. A second tap re-ran the same check
+     against a scene that still had no twin, agreed, and made a SECOND instrumental: both play
+     phase-locked at roughly double amplitude, plus a stray hidden layer, two ~46MB WAVs and two video
+     elements at once. And the second tap was the reasonable thing to do, because the only feedback
+     arrived after the decode. */
+  test('a second tap during a vocal removal does not make a second instrumental', { item: 'karaoke-busy' }, async function () {
+    var layers0 = FM.scene.layers.slice();
+    var realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
+    try {
+      var toasts = [];
+      FM.toast = function (m) { toasts.push(String(m)); };
+
+      var L = FM.makeLayer('video', { name: 'Song' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+
+      // A stereo buffer that takes a beat to decode — the window the second tap lands in.
+      var decodes = 0, release = null;
+      var gate = new Promise(function (r) { release = r; });
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 8, height: 8, duration: 4, file: new File([new Uint8Array(8)], 's.wav', { type: 'audio/wav' }) });
+      FM.decodeAudio = async function () {
+        decodes++;
+        await gate;
+        var ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100);
+        return ac.createBuffer(2, 4410, 44100);
+      };
+      var loads = 0;
+      FM.loadVideoFile = async function () { loads++; return null; };   // fail at the end: we only care how MANY got that far
+
+      var first = FM.toggleKaraoke(L);
+      await new Promise(function (r) { setTimeout(r, 30); });
+      var second = FM.toggleKaraoke(L);                 // the impatient second tap, mid-decode
+      release();
+      await Promise.all([first, second]);
+
+      if (decodes > 1) throw new Error('the file was decoded ' + decodes + ' times — both taps ran the whole job, which is two offline renders and two ~46MB WAVs at once');
+      if (loads > 1) throw new Error(loads + ' karaoke tracks were built — two instrumentals play phase-locked at double amplitude');
+      if (!toasts.some(function (t) { return /Still removing/.test(t); })) throw new Error('the second tap said nothing (toasts: ' + JSON.stringify(toasts) + ') — silence is what makes people tap again');
+      // …and the feedback has to come BEFORE the decode, or the first tap looks dead for the whole wait.
+      if (!/Removing vocals/.test(toasts[0] || '')) throw new Error('the first message was ' + JSON.stringify(toasts[0]) + ' — nothing was said until after the decode, which is why a second tap felt necessary');
+
+      // The guard must not wedge the feature off after a failure.
+      var m = FM.media.get(L.id);
+      if (m && m._karaokeBusy) throw new Error('the in-flight flag survived a failed run — karaoke would be dead for the rest of the session');
+    } finally {
+      FM.decodeAudio = realDecode; FM.loadVideoFile = realLoad; FM.toast = realToast;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

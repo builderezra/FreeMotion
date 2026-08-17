@@ -3700,7 +3700,15 @@ window.FM = window.FM || {};
       kState === 'off' ? 'Remove vocals (karaoke)' : 'Restore vocals');
     karBtn.title = kState === 'twin' ? 'This is the karaoke track — restore the original vocals'
       : kState === 'on' ? 'Vocals are removed — press to restore' : 'Mute the vocals and add an instrumental track (stereo only)';
-    karBtn.addEventListener('click', async () => { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); if (FM.inspector) FM.inspector.refresh(); });
+    /* The button goes dead while the work runs, as well as the guard inside toggleKaraoke. Belt and
+       braces on purpose: the guard is the correctness (any caller, any route), this is the honesty —
+       a button that still looks pressable during a multi-second render is what invited the second tap. */
+    karBtn.addEventListener('click', async () => {
+      if (karBtn.disabled) return;
+      karBtn.disabled = true;
+      try { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); }
+      finally { karBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
+    });
     const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
     afxBtn.title = 'Reverb, EQ, delay and more for this clip';
     afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
