@@ -5497,6 +5497,21 @@ better still, keep working inside the turn rather than parking work for a later 
       4. **A real eraser** — rubs out part of a stroke, rather than deleting the whole drawing.
       Goes with 314 (rename to Sketching) and 315.
 
+- [ ] **323 — Squish should work in corners, and should react to effect-driven movement (Shake etc.),
+      not just to keyframed motion.** (17 Aug.) His words, verbatim: *"For the squish effect make it so
+      it actually works in corners, and also make it so if you have a shake effect or any effect that
+      makes the object move, the squish should apply, currently if a shake makes it move the squish
+      doesn't do anything"*.
+      Two clauses:
+      1. **Corners.** Squish presumably reads an axis-aligned velocity or a wall contact and misses the
+         diagonal case, so hitting a corner does nothing.
+      2. **Effect-driven motion.** This is the interesting one and it is the same shape as #31b
+         (*"Transform blur can't smear effect- or camera-driven motion"*). Squish is deriving its
+         movement from the layer's own keyframed transform, so anything that moves the layer at RENDER
+         time — Shake, Wiggle, Drift, Orbit, a behaviour — is invisible to it. **Whatever fixes this
+         probably fixes 31b too: both need the ACTUAL frame-to-frame position after every effect has
+         had its say, not the authored transform.** Worth solving once, properly, for both.
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
