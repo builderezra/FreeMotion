@@ -18,15 +18,55 @@ window.FM = window.FM || {};
    * park a record here will not know about the habit. */
   const pinned = new Set();
 
+  /* GIVE BACK WHAT A RECORD IS HOLDING.
+   *
+   * `set()` used to be a bare assignment, and ALL the teardown lived in `remove()` — which
+   * "Replace media…" never calls. It captures the outgoing record, clears its frame cache and audio
+   * graph, then assigns the new one straight over the top and drops the old on the floor with its blob
+   * URL still valid. The old <video> still has that URL as its src, so the browser keeps the entire
+   * source file resident; if the timeline had ever drawn a waveform for that clip, its decoded audio is
+   * still there too — roughly 46MB per stereo minute. Nothing ever frees any of it: not deleting the
+   * layer, not switching projects, not closing it. Audition four takes for one slot on a phone and that
+   * is hundreds of megabytes of unreleasable memory, which is what kills mobile Safari mid-edit.
+   *
+   * Revoking the URL is not enough on its own — an element still pointing at a blob keeps its decode
+   * buffers, which is the same lesson the v8.44 media-release work recorded. So the element is detached
+   * as well, and `remove()` now goes through here too rather than doing half of it.
+   *
+   * NEVER FREE A RECORD SOMETHING ELSE IS STILL USING. Records are keyed by layer id and today every
+   * path stores a fresh one, but that is a property of the callers, not a guarantee — and a wrongly
+   * freed record is a clip that silently goes blank. So a record still reachable under another id is
+   * left completely alone. */
+  function sharedElsewhere(rec, exceptId) {
+    if (!rec) return false;
+    for (const k in store) { if (k !== exceptId && store[k] === rec) return true; }
+    return false;
+  }
+  function release(rec, id) {
+    if (!rec || sharedElsewhere(rec, id)) return false;
+    if (rec.url) { try { URL.revokeObjectURL(rec.url); } catch (e) {} }
+    if (rec.el) {
+      try { rec.el.pause(); } catch (e) {}
+      try { rec.el.removeAttribute('src'); rec.el.load(); } catch (e) {}
+    }
+    if (rec.frameCache && FM.clearFrameCache) { try { FM.clearFrameCache(rec); } catch (e) {} }
+    rec.audioBuffer = null;
+    return true;
+  }
+  FM._releaseMediaRecord = release;   // suite seam
+
   FM.media = {
-    set(id, rec) { store[id] = rec; },
+    set(id, rec) {
+      const prev = store[id];
+      if (prev && prev !== rec) release(prev, id);   // whatever this displaces is freed, not orphaned
+      store[id] = rec;
+    },
     get(id) { return store[id]; },
     // Mark a record as owned by something other than the live scene, so the media GC leaves it alone.
     pin(id) { pinned.add(id); },
     isPinned(id) { return pinned.has(id); },
     remove(id) {
-      const r = store[id];
-      if (r && r.url) { try { URL.revokeObjectURL(r.url); } catch (e) {} }
+      release(store[id], id);   // was revoking the URL only, and leaving the element holding the blob
       delete store[id];
       pinned.delete(id);
     },

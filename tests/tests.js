@@ -25680,5 +25680,55 @@
     }
   });
 
+  /* "Replace media…" pinned the previous file for the life of the page. The media store's set() was a
+     bare assignment and all the teardown lived in remove(), which replace never calls — so the outgoing
+     record kept its blob URL valid and its <video> still pointing at it, which keeps the whole source
+     file resident, plus any decoded audio (~46MB per stereo minute). Audition four takes for one slot on
+     a phone and that is hundreds of megabytes nothing can free — not deleting the layer, not switching
+     projects, not closing it. */
+  test('replacing a clip’s media releases the file it displaces', { item: 'media-release' }, function () {
+    var revoked = [], realRevoke = URL.revokeObjectURL;
+    var ids = ['__mr_a', '__mr_b', '__mr_c'];
+    try {
+      URL.revokeObjectURL = function (u) { revoked.push(u); try { realRevoke.call(URL, u); } catch (e) {} };
+      var mkEl = function () { var e = document.createElement('video'); e.__removed = 0; var ra = e.removeAttribute.bind(e); e.removeAttribute = function (n) { if (n === 'src') e.__removed++; return ra(n); }; return e; };
+
+      var oldEl = mkEl();
+      var oldRec = { kind: 'video', el: oldEl, url: 'blob:__old__', width: 8, height: 8, duration: 1, audioBuffer: { fake: 1 } };
+      FM.media.set(ids[0], oldRec);
+
+      var newRec = { kind: 'video', el: mkEl(), url: 'blob:__new__', width: 8, height: 8, duration: 1 };
+      FM.media.set(ids[0], newRec);          // this is what Replace media does
+
+      if (revoked.indexOf('blob:__old__') < 0) throw new Error('the displaced file’s blob URL was never revoked — the browser keeps the whole source file resident for the life of the page');
+      if (!oldEl.__removed) throw new Error('the old <video> still points at the blob — revoking the URL alone does not free its decode buffers');
+      if (oldRec.audioBuffer) throw new Error('the decoded audio of the replaced clip was kept (~46MB per stereo minute)');
+      if (revoked.indexOf('blob:__new__') >= 0) throw new Error('the INCOMING file was revoked — the clip you just picked would be dead');
+      if (FM.media.get(ids[0]) !== newRec) throw new Error('the store does not hold the new record');
+
+      // Setting the SAME record again must not free it out from under itself.
+      revoked.length = 0;
+      FM.media.set(ids[0], newRec);
+      if (revoked.length) throw new Error('re-setting the identical record revoked its own url');
+
+      /* A record reachable under ANOTHER id must be left completely alone — freeing a shared one is a
+         clip that silently goes blank, which is worse than the leak. */
+      var shared = { kind: 'video', el: mkEl(), url: 'blob:__shared__', width: 8, height: 8, duration: 1 };
+      FM.media.set(ids[1], shared);
+      FM.media.set(ids[2], shared);
+      revoked.length = 0;
+      FM.media.set(ids[1], { kind: 'video', el: mkEl(), url: 'blob:__other__', width: 8, height: 8, duration: 1 });
+      if (revoked.indexOf('blob:__shared__') >= 0) throw new Error('a record still in use under another id was freed — that clip is now blank');
+
+      // …and once the last id lets go of it, it IS freed.
+      revoked.length = 0;
+      FM.media.remove(ids[2]);
+      if (revoked.indexOf('blob:__shared__') < 0) throw new Error('the last reference was dropped but the file was still not released');
+    } finally {
+      URL.revokeObjectURL = realRevoke;
+      ids.forEach(function (i) { try { FM.media.remove(i); } catch (e) {} });
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

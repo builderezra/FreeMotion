@@ -804,7 +804,7 @@ still correct, and the row handles still sit at the right edge where it used to 
 - **Costs:** The preset instance freezes on its last keyframe value instead of cycling. Measured live: the source param (keys at t=1..4, loopMode 'cycle') evaluates to 40 at t=5; the preset instance evaluates to 20 — the clamped last value.
 - **Fix:** Carry the field through with a whitelist, e.g. `const o = { kf: kf }; if (v.loopMode === 'cycle' || v.loopMode === 'pingpong') o.loopMode = v.loopMode; params[key] = o;`
 
-### FM.media.set() overwrites a live record without revoking it — every "Replace media…" pins the old file's object URL, <video> element and decoded AudioBuffer for the page lifetime
+### ~~FM.media.set() overwrites a live record without revoking it — every "Replace media…" pins the old file's object URL, <video> element and decoded AudioBuffer for the page lifetime~~ — FIXED v9.41
 `js/media.js:13`  · found by `home-media`
 
 - **What:** `set()` is a bare assignment: `store[id] = rec`. All the teardown (revoking `rec.url`) lives in `remove()`, which `FM.replaceMediaWith` never calls. That function explicitly captures the outgoing record (`const old = FM.media.get(id)` at js/app.js:1518) and uses it for `FM.clearFrameCache(old)` and `dropAudioGraph(old)` — but then does `FM.media.set(id, nrec)` at js/app.js:1521 and drops `old` on the floor with its blob URL still valid. The old `<video>` element still has that URL as its `src`, so the browser keeps the whole source file resident, and if the timeline had drawn a waveform for that clip `old.audioBuffer` holds a full decoded PCM buffer (js/media.js:100, never cleared) — ~46 MB per stereo minute at 48 kHz.
