@@ -38,7 +38,15 @@ window.FM = window.FM || {};
     if (!animated(sel) && !chain.some(animated)) return;  // nothing moving (self or rig) → skip
     const P = FM.scene.project;
     if (!ghostC) ghostC = document.createElement('canvas');
-    ghostC.width = P.width; ghostC.height = P.height;
+    /* The ghost plate belongs on the TARGET's pixel grid, like every plate in the compositor (v9.26).
+     * It was project-sized AND reassigned every frame — and assigning width/height reallocates the
+     * backing store, which the compositor's own guards exist to avoid. On the 12.2-megapixel project
+     * from queue 202 that is a 48 MB allocation thrown away twice per frame while onion skin is on.
+     * renderScene derives __fmRS from the canvas it is handed, so sizing it here is all that is
+     * needed for the ghost render itself to follow. */
+    const gps = Math.min(1, ctx.canvas.__fmRS || 1);
+    const gw = Math.max(1, Math.round(P.width * gps)), gh = Math.max(1, Math.round(P.height * gps));
+    if (ghostC.width !== gw || ghostC.height !== gh) { ghostC.width = gw; ghostC.height = gh; }
     const gctx = ghostC.getContext('2d');
     // Parents included as invisible clones: resolvable by applyParentChain but never drawn; only `sel` renders.
     const mini = { project: Object.assign({}, P, { background: null }), layers: chain.map(pl => Object.assign({}, pl, { visible: false })).concat([sel]) };
@@ -61,10 +69,11 @@ window.FM = window.FM || {};
       gctx.restore();
       // project coords → preview pixels (zoomed previews are supersampled and cropped)
       ctx.save(); if (FM.applyPreviewTransform) FM.applyPreviewTransform(ctx);
-      ctx.globalAlpha = 0.4; ctx.drawImage(ghostC, 0, 0); ctx.restore();
+      ctx.globalAlpha = 0.4; ctx.drawImage(ghostC, 0, 0, P.width, P.height); ctx.restore();   // plate is target px, ctx is project units
     });
     } finally { FM._mfGhost = 0; }
   }
+  FM._onionGhostSize = () => (ghostC ? [ghostC.width, ghostC.height] : null);   // suite seam: the plate is a SIZE claim
   // Rule-of-thirds grid + title-safe margin guides (preview only, never exported).
   function drawGuides() {
     const P = FM.scene.project, w = P.width, h = P.height, lw = Math.max(1, w / 960);
@@ -1622,6 +1631,30 @@ window.FM = window.FM || {};
     return layer;
   };
 
+  /* THE BIGGEST PROJECT THE APP MAY CHOOSE FOR YOU.
+   *
+   * Its own Canvas settings picker tops out at 2160p — for a portrait comp that is 2160x3840 — and
+   * nothing should be able to silently create a project bigger than the largest size the UI offers.
+   * Until now the first import did exactly that: addMediaLayer took the file's pixel dimensions
+   * verbatim, so dropping a photo straight off a phone (3024x4032 is a stock iPhone still) into an
+   * empty project produced a **12.2-MEGAPIXEL** composition. That is the project in his own
+   * measurement in queue 202 — 8 layers, 2 effects, 4 cores, half-second frame stalls — and it is a
+   * photograph's shape, not a video's. No export target is a 12 MP still-shaped video.
+   *
+   * The cap is on the SHORT side because that is what the picker's "2160p" means for a portrait comp.
+   * Aspect is preserved and both sides come out even, which H.264 requires. Anyone who genuinely wants
+   * bigger can still type it into Canvas settings — this governs only the size the app picks unasked.
+   */
+  const MAX_AUTO_SHORT = 2160;
+  const evenDim = v => Math.max(2, Math.round(v / 2) * 2);
+  FM.fitProjectSize = function (w, h) {
+    w = Math.max(2, Math.round(w || 0)); h = Math.max(2, Math.round(h || 0));
+    const short = Math.min(w, h);
+    if (!isFinite(short) || short <= MAX_AUTO_SHORT) return { w: evenDim(w), h: evenDim(h), capped: false };
+    const k = MAX_AUTO_SHORT / short;
+    return { w: evenDim(w * k), h: evenDim(h * k), capped: true };
+  };
+
   FM.addMediaLayer = function (rec) {
     // A just-added clip cannot draw until its decoder produces a frame — measured at ~0.5s here and far
     // longer on a phone — so say so rather than showing an empty canvas (queue 201).
@@ -1629,7 +1662,11 @@ window.FM = window.FM || {};
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
     if (first && rec.width && rec.height) {
-      P.width = rec.width; P.height = rec.height;
+      const fit = FM.fitProjectSize(rec.width, rec.height);
+      P.width = fit.w; P.height = fit.h;
+      // Say so rather than quietly disagreeing with the file — a capped project is a real choice the
+      // app made on his behalf, and Canvas settings is where to undo it.
+      if (fit.capped && FM.toast) FM.toast('Project set to ' + fit.w + '\u00d7' + fit.h + ' — ' + rec.width + '\u00d7' + rec.height + ' is bigger than any preset. Change it in Canvas settings.', 4600);
       resizeCanvas();
     }
     // Use the clip's FULL length — never cap it to the existing composition. A still has no length

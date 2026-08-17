@@ -24658,5 +24658,94 @@
     });
   });
 
+  /* The app must never CHOOSE a project bigger than the largest size its own picker offers.
+     Its Canvas settings resolution list tops out at 2160p, and until v9.27 the first import set the
+     project to the file's pixel dimensions verbatim — so a phone photo (3024x4032 is a stock iPhone
+     still) made a 12.2-MEGAPIXEL composition. That is the project in his measurement in queue 202. */
+  test('the first import cannot create a project bigger than the biggest preset', { item: 'proj-cap' }, function () {
+    if (!FM.fitProjectSize) throw new Error('FM.fitProjectSize is missing');
+    var f = FM.fitProjectSize;
+
+    // The reported case: a portrait iPhone still.
+    var r = f(3024, 4032);
+    if (!r.capped) throw new Error('3024x4032 (12.2 MP) was not capped');
+    if (Math.min(r.w, r.h) !== 2160) throw new Error('capped to ' + r.w + 'x' + r.h + ' — the short side should land on 2160, the top preset');
+    if (Math.abs((r.w / r.h) - (3024 / 4032)) > 0.002) throw new Error('the cap changed the aspect ratio: ' + r.w + 'x' + r.h);
+    if ((r.w * r.h) / 1e6 > 6.3) throw new Error('still ' + ((r.w * r.h) / 1e6).toFixed(1) + ' MP after capping');
+
+    // Landscape works off the short side too, which is what "2160p" means.
+    var l = f(4032, 3024);
+    if (l.h !== 2160) throw new Error('landscape capped to ' + l.w + 'x' + l.h + ' — short side should be 2160');
+
+    // Anything at or under the top preset is left exactly alone — this must not touch normal imports.
+    [[1080, 1920], [1920, 1080], [2160, 3840], [720, 1280]].forEach(function (d) {
+      var k = f(d[0], d[1]);
+      if (k.capped) throw new Error(d[0] + 'x' + d[1] + ' was capped — it is within the picker range');
+      if (k.w !== d[0] || k.h !== d[1]) throw new Error(d[0] + 'x' + d[1] + ' came back as ' + k.w + 'x' + k.h);
+    });
+
+    // Both sides even, always — H.264 refuses an odd dimension, and an import must not produce a
+    // project that cannot be exported.
+    [[3025, 4033], [999, 777], [4001, 6001]].forEach(function (d) {
+      var k = f(d[0], d[1]);
+      if (k.w % 2 || k.h % 2) throw new Error(d[0] + 'x' + d[1] + ' produced odd dimensions ' + k.w + 'x' + k.h);
+    });
+    if (f(0, 0).w < 2 || f(NaN, NaN).h < 2) throw new Error('a junk size produced a degenerate project');
+  });
+
+  test('importing a phone photo into an empty project goes through the cap', { item: 'proj-cap' }, function () {
+    /* The unit test above proves the arithmetic; this proves addMediaLayer actually calls it. Without
+       this, moving the cap behind a helper nobody invokes would leave every test green. */
+    var layers0 = FM.scene.layers.slice(), P = FM.scene.project;
+    var w0 = P.width, h0 = P.height;
+    try {
+      FM.scene.layers.length = 0;                       // "first import" is the branch that sets the size
+      FM.addMediaLayer({ kind: 'image', width: 3024, height: 4032, id: 'test_photo_' + 1, file: { name: 'IMG_0001.jpg' } });
+      var mp = (FM.scene.project.width * FM.scene.project.height) / 1e6;
+      if (FM.scene.project.width === 3024 && FM.scene.project.height === 4032)
+        throw new Error('the import set the project to the photo’s full 3024x4032 — 12.2 megapixels, on a phone');
+      if (mp > 6.3) throw new Error('the import produced a ' + mp.toFixed(1) + ' MP project');
+      if (Math.min(FM.scene.project.width, FM.scene.project.height) !== 2160)
+        throw new Error('capped to ' + FM.scene.project.width + 'x' + FM.scene.project.height + ', expected a 2160 short side');
+    } finally {
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.scene.project.width = w0; FM.scene.project.height = h0;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  test('the onion-skin ghost plate is target-sized and is not reallocated every frame', { item: 'proj-cap' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var layers0 = FM.scene.layers.slice(), onion0 = FM.onionSkin;
+    var P = FM.scene.project, w0 = P.width, h0 = P.height;
+    try {
+      P.width = 2048; P.height = 1536;                  // comfortably above whatever the preview renders at
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 1024, y: 768, shapeW: 300, shapeH: 300, fill: '#0f0' });
+      L.start = 0; L.duration = 4;
+      L.transform.x = { kf: [{ t: 0, v: 400 }, { t: 2, v: 1600 }] };   // onion skin skips a layer that isn't moving
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.time = 1;
+      FM.onionSkin = true;
+      FM.requestRender();
+      await frame();
+      var g = FM._onionGhostSize && FM._onionGhostSize();
+      if (!g) throw new Error('no ghost plate was allocated — onion skin did not draw, so this test proves nothing');
+      var cv = document.getElementById('preview');
+      var ps = Math.min(1, cv.__fmRS || 1);
+      var want = [Math.max(1, Math.round(P.width * ps)), Math.max(1, Math.round(P.height * ps))];
+      if (g[0] !== want[0] || g[1] !== want[1])
+        throw new Error('ghost plate is ' + g[0] + 'x' + g[1] + ' but the preview renders at ' + want[0] + 'x' + want[1] + ' — it is still project-sized, which is ' + ((g[0] * g[1]) / (want[0] * want[1])).toFixed(1) + 'x the pixels, reallocated twice a frame');
+    } finally {
+      FM.onionSkin = onion0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      P.width = w0; P.height = h0;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

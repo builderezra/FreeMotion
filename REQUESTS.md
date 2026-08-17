@@ -6801,6 +6801,19 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       gone. Finding 1 itself — the 12.2 MP project — is still unanswered and is still the biggest number
       in that report.
 
+      **FINDING 1 IS ANSWERED AT THE SOURCE, v9.27 — and the source was one uncapped line.**
+      `FM.addMediaLayer` sets the project's size from the FIRST file you import, and it took that
+      file's pixel dimensions verbatim with no limit. A stock iPhone still is 3024x4032, so importing
+      one into an empty project built a **12.2-megapixel** composition — larger than anything the app's
+      own Canvas picker offers, which tops out at 2160p. That is precisely the project in his report,
+      and it explains why it looked like a *project setup* problem: it was, and the app set it up.
+      Capped now to the short side the top preset means (3024x4032 → 2160x2880), aspect kept, both
+      sides even so it can still be exported, and it says so rather than doing it silently. Sizes at or
+      under the preset range are untouched. **It cannot repair the project he already has** — Canvas
+      settings does not rescale existing layer geometry, which is a separate job and is noted as one.
+      A second allocation of the same kind went with it: the onion-skin ghost plate was project-sized
+      and REALLOCATED every frame (48 MB thrown away twice a frame on his project).
+
       **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
       Verbatim:
       ```
