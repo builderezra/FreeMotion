@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#322 — draw-on</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:900px;height:520px}
+#zoom{display:flex;gap:14px;padding:14px;flex-wrap:wrap}
+#zoom figure{margin:0;text-align:center}
+#zoom canvas{background:#0b1017;border:1px solid #22303c;border-radius:8px}
+#zoom figcaption{padding-top:6px;color:#8fa}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="zoom"></div><div id="out">…</div>
+<script>
+/* #322 clause 2 — *"a cool effect with key frames to make it look like it's being drawn live"*.
+   The suite proves the maths; this is the thing itself, sampled at four points along a keyframed
+   Draw to, so the frames read as a line being drawn rather than as four unrelated pictures. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), zoom = document.getElementById('zoom');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.trimSubs || !w.FM.buildSubPath) return setTimeout(wait, 50);
+      var FM = w.FM;
+      // A hand-drawn-looking squiggle in [0,1] space, as a path layer's subs would hold it.
+      var pts = [], i;
+      for (i = 0; i <= 90; i++) {
+        var u = i / 90;
+        pts.push([0.06 + u * 0.88, 0.5 + Math.sin(u * 7.5) * 0.28 * (1 - u * 0.35), 1]);
+      }
+      var subs = [pts];
+      [0, 33, 66, 100].forEach(function (pct) {
+        var cv = d.createElement('canvas'); cv.width = 300; cv.height = 190;
+        var g = cv.getContext('2d');
+        g.fillStyle = '#0b1017'; g.fillRect(0, 0, 300, 190);
+        var kept = FM.trimSubs(subs, { closed: false, trimStart: 0, trimEnd: pct }, 0);
+        g.strokeStyle = '#9beeff'; g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round';
+        g.shadowColor = 'rgba(90,199,237,.6)'; g.shadowBlur = 10;
+        g.beginPath();
+        kept.forEach(function (sp) { FM.buildSubPath(g, sp, false, function (p) { return [p[0] * 300, p[1] * 190]; }); });
+        g.stroke();
+        var fig = d.createElement('figure'); fig.appendChild(cv);
+        fig.appendChild(d.createElement('figcaption')).textContent = 'Draw to ' + pct + '%';
+        zoom.appendChild(fig);
+      });
+      out.textContent = 'one stroke, 91 points, trimmed by length at four points along a keyframed Draw to';
+      window.__done = true;
+    })();
+  });
+})();
+</script>
+</body>
+</html>

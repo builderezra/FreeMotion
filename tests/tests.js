@@ -27495,4 +27495,69 @@
     }
   });
 
+
+  /* ================= queue 322 clause 2: draw-on (trim path) ======================================
+   * *"it has an option to change the start and end point, so you could do a cool effect with key
+   * frames to make it look like it's being drawn live"*.
+   *
+   * MEASURED AS LENGTH, which is the only way to tell this from a version that trims by point index.
+   * Points are not evenly spaced — the freehand sampler drops one every 2.5 device px along the
+   * FINGER's path, so a fast flick spreads them further apart in project space than a slow curve. An
+   * index-based trim would draw the line on at a speed that depended on how fast it was drawn, and
+   * would still pass any test that only asked "is it shorter". */
+  test('a drawing can be trimmed by length, across all its strokes, and it keyframes (queue 322)', { item: 'draw-on' }, function () {
+    if (!FM.trimSubs) throw new Error('FM.trimSubs is missing — there is no draw-on');
+    const len = subs => {
+      let L = 0;
+      subs.forEach(pts => { for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); });
+      return L;
+    };
+    /* TWO strokes, and the second is deliberately far denser than the first. Trimming per-stroke, or
+       by index, gives a different answer from trimming by total length — which is the point. */
+    const a = [[0, 0], [1, 0]];                       // 2 points, length 1
+    const b = []; for (let i = 0; i <= 50; i++) b.push([0, i / 50]);   // 51 points, length 1
+    const subs = [a, b];
+    const full = len(subs);
+    if (Math.abs(full - 2) > 1e-6) throw new Error('the fixture is not 2 units long, it is ' + full);
+
+    const at = (start, end) => FM.trimSubs(subs, { closed: false, trimStart: start, trimEnd: end }, 0);
+
+    // Untouched range returns the original array untouched — the ordinary case must cost nothing.
+    if (at(0, 100) !== subs) throw new Error('a full 0-100 trim rebuilt the path instead of returning it as-is');
+
+    // Half the DRAWING is the whole of the first stroke — not half of each.
+    const half = at(0, 50);
+    if (Math.abs(len(half) - 1) > 0.02) throw new Error('trimming to 50% left ' + len(half).toFixed(3) + ' of 2 units — it is not measuring the whole drawing');
+
+    /* A quarter falls well INSIDE the first stroke, and it does two jobs.
+       · The second stroke must not appear AT ALL. Trimming each stroke to 25% of itself would leave a
+         run in both, so the count is what separates per-stroke from whole-drawing.
+       · The cut lands inside a stroke that has only TWO points, so an index-based trim cannot land
+         there — it would round to a whole point and give 0 or 1 unit, not 0.5.
+       Deliberately not tested at exactly 50%: that is the join, and whether a hairline run opens in the
+       second stroke there comes down to the last bit of a float. A test that turns on that is a test
+       that fails one day for no reason anyone can act on. */
+    const q = at(0, 25);
+    if (q.length !== 1) throw new Error('trimming to 25% left ' + q.length + ' strokes — the second stroke should not have started yet, so each one is being trimmed separately');
+    if (Math.abs(len(q) - 0.5) > 0.02) throw new Error('trimming to 25% left ' + len(q).toFixed(3) + ' of 2 units — a cut inside a two-point stroke is being rounded to a whole point, i.e. trimmed by index');
+
+    // …and from the other end.
+    const back = at(75, 100);
+    if (Math.abs(len(back) - 0.5) > 0.02) throw new Error('trimming from 75% left ' + len(back).toFixed(3) + ', expected 0.5');
+    // An empty range draws nothing, rather than everything.
+    if (len(at(40, 40)) > 0.02) throw new Error('a zero-width range still drew ' + len(at(40, 40)).toFixed(3) + ' units');
+    // Start past End reads as the range between them, not as inside-out.
+    if (Math.abs(len(at(75, 25)) - len(at(25, 75))) > 1e-6) throw new Error('dragging Start past End gives a different result from the same range the other way round');
+
+    // A CLOSED path is left alone: trimming one makes a filled crescent, which is not what this says.
+    const closed = FM.trimSubs(subs, { closed: true, trimStart: 0, trimEnd: 50 }, 0);
+    if (closed !== subs) throw new Error('a closed path was trimmed — that turns a filled shape into a crescent');
+
+    // …and both controls are keyframable, because animating them IS the feature.
+    if (!FM.isAnimated) throw new Error('FM.isAnimated is missing');
+    const animated = { closed: false, trimStart: 0, trimEnd: { kf: [{ t: 0, v: 0 }, { t: 1, v: 100 }] } };
+    const early = FM.trimSubs(subs, animated, 0.0), late = FM.trimSubs(subs, animated, 0.99);
+    if (!(len(late) > len(early) + 1)) throw new Error('a keyframed Draw to does not grow over time (' + len(early).toFixed(2) + ' → ' + len(late).toFixed(2) + ') — the line cannot be drawn on live');
+  });
+
 })();

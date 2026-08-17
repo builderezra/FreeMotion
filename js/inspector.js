@@ -4442,6 +4442,18 @@ window.FM = window.FM || {};
         // Auto-enter point editing: overlay on the canvas + this panel edits the selected point.
         if (FM.pointEdit && (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.start(layer.id, { embedded: true });
         editPointsTools(layer, body);
+        /* DRAW-ON (queue 322, clause 2). Ezra: *"it has an option to change the start and end point, so
+           you could do a cool effect with key frames to make it look like it's being drawn live"*.
+           Keyframe Draw to from 0 to 100 and the line draws itself on.
+           Open paths only. Trimming a CLOSED path turns a filled shape into a filled crescent, which is
+           not what "start and end point" describes and is not what anyone reaching for this wants.
+           kfNumRow rather than rangeRow, because keyframing is the entire feature — a static trim is a
+           way to hide half your drawing. */
+        if (layer.shape === 'path' && !layer.closed) {
+          body.appendChild(el('div', 'insp-sub-label', 'Draw-on'));
+          body.appendChild(kfNumRow(layer, 'trimStart', 'Draw from', 0, 100, 1, 0, '%'));
+          body.appendChild(kfNumRow(layer, 'trimEnd', 'Draw to', 0, 100, 1, 100, '%'));
+        }
       } else if (layer.type === 'shape') {
         // ===== Edit Shape — parametric kinds (rect/ellipse/polygon/…): sliders, no point sets =====
         const P = FM.scene.project;

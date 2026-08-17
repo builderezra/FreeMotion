@@ -9500,6 +9500,77 @@ window.FM = window.FM || {};
     const tx = (b[0] - a[0]) / 6, ty = (b[1] - a[1]) / 6;
     return { out: [p[0] + tx, p[1] + ty], in: [p[0] - tx, p[1] - ty] };
   };
+  /* ---- DRAW-ON: showing only part of a path (queue 322, clause 2) --------------------------------
+   * Ezra: *"it has an option to change the start and end point, so you could do a cool effect with key
+   * frames to make it look like it's being drawn live"*. That is trim path, and animating End from 0 to
+   * 1 is the whole feature.
+   *
+   * MEASURED ACROSS THE WHOLE DRAWING, NOT PER STROKE. A sketch is several subpaths, and trimming each
+   * one to the same fraction would draw all of them on at once — every stroke growing together, which
+   * is not what being drawn looks like. One cumulative length over every subpath in order means End
+   * sweeps through stroke one, then stroke two, the way a hand would.
+   *
+   * BY CHORD LENGTH, not by point index. Points are not evenly spaced — a freehand sampler drops one
+   * every 2.5 device px along the FINGER's path, so a fast flick leaves them further apart in project
+   * space than a slow curve does. Trimming by index would make the line draw on at a speed that
+   * depended on how fast it was drawn, which is a strange thing to animate.
+   * The curve flags survive on interior points, so a trimmed stroke is as smooth as an untrimmed one;
+   * the two cut ENDS are marked hard, because an interpolated point is not one he placed and rounding
+   * through it would bend the line somewhere he never drew.
+   *
+   * Closed paths are left alone. Trimming one turns a filled shape into a filled crescent, which is not
+   * what the control says it does, and every user of this is an open stroke. */
+  FM.trimSubs = function (subs, layer, t) {
+    if (!layer || layer.closed) return subs;
+    /* Held in PERCENT, because that is what the control reads and what a keyframe on it will say. A
+       0..1 model with a 0..100 label is two units for one number and the sort of thing that gets
+       halved or doubled by whoever touches it next. */
+    let a = layer.trimStart == null ? 0 : FM.evalProp(layer.trimStart, t);
+    let b = layer.trimEnd == null ? 100 : FM.evalProp(layer.trimEnd, t);
+    if (a == null) a = 0; if (b == null) b = 100;
+    a = Math.max(0, Math.min(100, a)) / 100; b = Math.max(0, Math.min(100, b)) / 100;
+    if (a > b) { const tmp = a; a = b; b = tmp; }      // dragging Start past End reads as an empty range, not an inside-out one
+    if (a <= 0 && b >= 1) return subs;                 // the ordinary case pays nothing
+
+    // Total chord length over every subpath, in the order they are drawn.
+    let total = 0;
+    const lens = subs.map(pts => {
+      const seg = [];
+      for (let i = 1; i < pts.length; i++) {
+        const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        seg.push(L); total += L;
+      }
+      return seg;
+    });
+    if (total <= 0) return subs;
+    const from = a * total, to = b * total;
+    const lerp = (p1, p2, f) => [p1[0] + (p2[0] - p1[0]) * f, p1[1] + (p2[1] - p1[1]) * f];
+
+    const out = [];
+    let walked = 0;
+    for (let s = 0; s < subs.length; s++) {
+      const pts = subs[s], seg = lens[s];
+      let run = [];
+      for (let i = 0; i < seg.length; i++) {
+        const segStart = walked, segEnd = walked + seg[i];
+        walked = segEnd;
+        if (seg[i] <= 0) continue;
+        if (segEnd <= from || segStart >= to) continue;     // wholly outside the kept range
+        const f0 = Math.max(0, (from - segStart) / seg[i]);
+        const f1 = Math.min(1, (to - segStart) / seg[i]);
+        const p1 = pts[i], p2 = pts[i + 1];
+        // Start of this kept run: the real point if we are past the cut, otherwise the cut itself.
+        if (!run.length) run.push(f0 <= 0 ? [p1[0], p1[1], p1[2]] : lerp(p1, p2, f0));
+        run.push(f1 >= 1 ? [p2[0], p2[1], p2[2]] : lerp(p1, p2, f1));
+        if (f1 < 1) { if (run.length >= 2) out.push(run); run = []; }
+      }
+      if (run.length >= 2) out.push(run);
+    }
+    // Hard ends on the cuts — see the note above.
+    out.forEach(run => { if (run[0]) run[0] = [run[0][0], run[0][1]]; const e = run[run.length - 1]; if (e) run[run.length - 1] = [e[0], e[1]]; });
+    return out;
+  };
+
   FM.buildSubPath = function (ctx, pts, closed, map) {
     const n = pts.length; if (!n) return;
     const M = map || (p => p);
@@ -9616,7 +9687,9 @@ window.FM = window.FM || {};
       // Freehand / vector / converted-shape path. layer.subs = multi-subpath (array of point
       // arrays); layer.points = single path. All [0,1]-normalized within the box; points may
       // carry a smooth flag ([u,v,1]) which renders as a curve through the point.
-      const subs = FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t);
+      let subs = FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t);
+      if (!subs.length) return layer.closed ? 'fill' : 'stroke';
+      subs = FM.trimSubs(subs, layer, t == null ? (FM.time || 0) : t);
       if (!subs.length) return layer.closed ? 'fill' : 'stroke';
       subs.forEach(pts => FM.buildSubPath(ctx, pts, !!layer.closed, p => P(p[0], p[1])));
       return layer.closed ? 'fill' : 'stroke';   // open path (freehand brush) is stroked, never filled
