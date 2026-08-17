@@ -24586,5 +24586,77 @@
     }
   });
 
+  /* The group plate and the blend-mask plate must live on the TARGET's pixel grid, not the project's.
+     Both were allocated at exactly project size and never stamped with __fmRS, so baseT drew into them
+     at 1:1 whatever the preview was rendering at, and the whole plate was then thrown away down to the
+     canvas size in the blit. On the phone report in queue 202 — a 3024x4032 project previewing into a
+     762k-pixel canvas — that is 16x the pixels needed, per group, every frame.
+
+     THIS IS ASSERTED AS A SIZE, NOT A TIMING. Queue 125 records four separate passes that measured this
+     area on a fast Mac, found acceptable milliseconds and moved on. A pixel count is the same number on
+     his phone as it is here, so it is the only kind of evidence this area should accept. */
+  function groupUnitScene(P) {
+    var g = FM.makeLayer('group', { name: 'G' });
+    g.transform.opacity = 0.5;                       // …which is what makes it flatten as a unit
+    var kid = FM.makeLayer('shape', { shape: 'rect', name: 'Kid', x: Math.round(P.width / 2), y: Math.round(P.height / 2), shapeW: Math.round(P.width / 2), shapeH: Math.round(P.height / 2), fill: '#ff0000' });
+    kid.parent = g.id;
+    return scene([g, kid], { project: P });
+  }
+
+  test('a flattened group is rasterised at the size the target is, not the size the project is', { item: 'plate-scale' }, function () {
+    if (!FM._platePixels) throw new Error('FM._platePixels is not exposed — the plate size cannot be seen');
+    var P = { width: 1024, height: 768, fps: 30, duration: 5, background: '#000000' };
+
+    // Quarter scale — what a big project previewing onto a phone actually asks for.
+    var quarter = offscreen(P.width / 4, P.height / 4);
+    FM.renderScene(quarter.getContext('2d'), groupUnitScene(P), 0);
+    var q = FM._platePixels().group.filter(Boolean)[0];
+    if (!q) throw new Error('no group plate was allocated — the scene did not flatten a unit, so this test proves nothing');
+    if (q[0] !== 256 || q[1] !== 192)
+      throw new Error('the group plate came out ' + q[0] + 'x' + q[1] + ' for a 256x192 target — it is still being rasterised at project size, which is ' + Math.round((q[0] * q[1]) / (256 * 192)) + 'x the pixels needed, per group, per frame');
+
+    // …and a 1:1 target (every export canvas) must be completely unchanged.
+    var full = offscreen(P.width, P.height);
+    FM.renderScene(full.getContext('2d'), groupUnitScene(P), 0);
+    var f = FM._platePixels().group.filter(Boolean)[0];
+    if (f[0] !== P.width || f[1] !== P.height)
+      throw new Error('an export-sized target got a ' + f[0] + 'x' + f[1] + ' group plate — export must render at project resolution');
+  });
+
+  test('a mask blend mode rasterises its plate at target size too', { item: 'plate-scale' }, function () {
+    var P = { width: 1024, height: 768, fps: 30, duration: 5, background: '#000000' };
+    var under = FM.makeLayer('shape', { shape: 'rect', x: 512, y: 384, shapeW: 800, shapeH: 600, fill: '#00ff00' });
+    var cut = FM.makeLayer('shape', { shape: 'rect', x: 512, y: 384, shapeW: 300, shapeH: 300, fill: '#ffffff' });
+    cut.blendMode = 'mask-include';                  // the BLEND entry that maps to destination-in
+    var sc = scene([cut, under], { project: P });
+    var quarter = offscreen(P.width / 4, P.height / 4);
+    FM.renderScene(quarter.getContext('2d'), sc, 0);
+    var m = FM._platePixels().blendMask;
+    if (!m) throw new Error('no blend-mask plate was allocated — this scene does not use one, so the test proves nothing');
+    if (m[0] !== 256 || m[1] !== 192)
+      throw new Error('the blend-mask plate came out ' + m[0] + 'x' + m[1] + ' for a 256x192 target — still project-sized (' + Math.round((m[0] * m[1]) / (256 * 192)) + 'x the pixels needed)');
+  });
+
+  test('shrinking the group plate does not move or lose what the group draws', { item: 'plate-scale' }, function () {
+    /* The saving is worthless if the picture changes. A quarter-scale render must put the group's
+       content in the same PLACE and the same COLOUR as a full-scale one — a plate whose size stopped
+       matching its blit would land the group at a quarter of the frame, or four times it. */
+    var P = { width: 1024, height: 768, fps: 30, duration: 5, background: '#000000' };
+    var full = offscreen(P.width, P.height), quarter = offscreen(P.width / 4, P.height / 4);
+    FM.renderScene(full.getContext('2d'), groupUnitScene(P), 0);
+    FM.renderScene(quarter.getContext('2d'), groupUnitScene(P), 0);
+    var fc = full.getContext('2d'), qc = quarter.getContext('2d');
+    // The red kid covers the middle half of the frame at 50% group opacity over black → ~128 red.
+    var probes = [[0.5, 0.5, true], [0.32, 0.5, true], [0.68, 0.5, true], [0.1, 0.1, false], [0.9, 0.9, false]];
+    probes.forEach(function (pr) {
+      var a = px(fc, Math.round(P.width * pr[0]), Math.round(P.height * pr[1]));
+      var b = px(qc, Math.round(P.width / 4 * pr[0]), Math.round(P.height / 4 * pr[1]));
+      var where = '(' + pr[0] + ',' + pr[1] + ')';
+      if (pr[2] && !(a[0] > 90 && a[0] < 170)) throw new Error('the full-size render is not showing the half-opacity group at ' + where + ' (red ' + a[0] + ') — the fixture is wrong, not the code');
+      if (Math.abs(a[0] - b[0]) > 12 || Math.abs(a[1] - b[1]) > 12 || Math.abs(a[2] - b[2]) > 12)
+        throw new Error('quarter-scale render differs at ' + where + ': full ' + [a[0], a[1], a[2]] + ' vs quarter ' + [b[0], b[1], b[2]] + ' — the group plate and its blit no longer agree on size');
+    });
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

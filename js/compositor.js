@@ -10246,7 +10246,11 @@ window.FM = window.FM || {};
     if ((_bop === 'destination-in' || _bop === 'destination-out') && scene && (!_blendMaskCv || ctx.canvas !== _blendMaskCv)) {
       const P = scene.project;
       if (!_blendMaskCv) _blendMaskCv = document.createElement('canvas');
-      if (_blendMaskCv.width !== P.width || _blendMaskCv.height !== P.height) { _blendMaskCv.width = P.width; _blendMaskCv.height = P.height; }
+      // Target's pixel grid, not the project's — see buildGroupUnit for the measurement behind this.
+      const _bps = plateScale(ctx);
+      const _bw = Math.max(1, Math.round(P.width * _bps)), _bh = Math.max(1, Math.round(P.height * _bps));
+      if (_blendMaskCv.width !== _bw || _blendMaskCv.height !== _bh) { _blendMaskCv.width = _bw; _blendMaskCv.height = _bh; }
+      _blendMaskCv.__fmRS = _bps; _blendMaskCv.__fmOX = 0; _blendMaskCv.__fmOY = 0;
       const mc = _blendMaskCv.getContext('2d');
       baseT(mc); mc.clearRect(0, 0, P.width, P.height);
       mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
@@ -10254,7 +10258,7 @@ window.FM = window.FM || {};
       try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }
       ctx.save();
       ctx.globalCompositeOperation = _bop; ctx.globalAlpha = 1; ctx.filter = 'none';
-      ctx.drawImage(_blendMaskCv, 0, 0);
+      ctx.drawImage(_blendMaskCv, 0, 0, P.width, P.height);
       ctx.restore();
       return;
     }
@@ -10352,7 +10356,7 @@ window.FM = window.FM || {};
       if (cg && ((cg.lift || 0) !== 0 || (cg.gamma != null && cg.gamma !== 1) || (cg.gain != null && cg.gain !== 1))) {
         src = gradeCanvas(src, src.width, src.height, cg.lift || 0, cg.gamma || 1, cg.gain != null ? cg.gain : 1);   // hue/sat apply via effectFilter above
       }
-      try { ctx.drawImage(src, 0, 0); } catch (e) {}
+      try { ctx.drawImage(src, 0, 0, layer._canvasW || src.width, layer._canvasH || src.height); } catch (e) {}
     } else if (layer.type === 'text') {
       /* HONOUR THE ANCHOR. Every other layer type offsets its content by it — shapes use
        * `-sw * anchorX(tr)`, media `-w * anchorX(tr)` — but text drew at x=0 governed by textAlign
@@ -11046,15 +11050,29 @@ window.FM = window.FM || {};
    * fill is built from the flattened pixels, so there has to be something to flatten before the
    * layer loop gets here. Groups that do not carry Fill Behind are flattened exactly once, as
    * before; one that does is flattened twice per frame, which is the price of an opt-in effect. */
-  function buildGroupUnit(u, t, scene) {
+  function buildGroupUnit(ctx, u, t, scene) {
     const P = scene.project;
     const _d = u.depth || 0;
     if (!_mgPool[_d]) _mgPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
     const _mgA = _mgPool[_d].A, _mgB = _mgPool[_d].B;
-    // Skip the full-frame realloc when comp dims are unchanged — this fires per group, per frame. _mgA is
+    /* THE PLATE LIVES ON THE TARGET'S PIXEL GRID, not the project's — the same rule the camera plate
+     * follows a few lines into renderScene, and for the identical reason. These two were allocated at
+     * exactly P.width x P.height and never stamped with __fmRS, so baseT() drew into them at 1:1 and
+     * plateScale() read 1 for anything nested inside: a group was rasterised at FULL project
+     * resolution and then thrown away down to the preview's size in the blit.
+     * On the phone report in queue 202 — a 3024x4032 project (12.2 MEGAPIXELS, inherited from an
+     * imported photo) previewing into a 762k-pixel canvas — that is SIXTEEN TIMES the pixels needed,
+     * allocated, cleared and drawn every frame, per group. Even an ordinary 1080x1920 comp on a phone
+     * previews at about 0.6, so it was ~3x there. Export is unaffected: an export canvas is exactly
+     * project-sized, so ps is 1 and every number below is what it always was. */
+    const ps = plateScale(ctx);
+    const GW = Math.max(1, Math.round(P.width * ps)), GH = Math.max(1, Math.round(P.height * ps));
+    // Skip the full-frame realloc when the dims are unchanged — this fires per group, per frame. _mgA is
     // cleared just below; _mgB is cleared before its only use (mask branch), so the buffers stay correct.
-    if (_mgA.width !== P.width || _mgA.height !== P.height) { _mgA.width = P.width; _mgA.height = P.height; }
-    if (_mgB.width !== P.width || _mgB.height !== P.height) { _mgB.width = P.width; _mgB.height = P.height; }
+    if (_mgA.width !== GW || _mgA.height !== GH) { _mgA.width = GW; _mgA.height = GH; }
+    if (_mgB.width !== GW || _mgB.height !== GH) { _mgB.width = GW; _mgB.height = GH; }
+    _mgA.__fmRS = ps; _mgA.__fmOX = 0; _mgA.__fmOY = 0;
+    _mgB.__fmRS = ps; _mgB.__fmOX = 0; _mgB.__fmOY = 0;
     const a = _mgA.getContext('2d');
     baseT(a); a.clearRect(0, 0, P.width, P.height);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
@@ -11093,7 +11111,7 @@ window.FM = window.FM || {};
       b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
       drawLayer(b, maskLayer, t, scene);
       a.globalCompositeOperation = 'destination-in';
-      a.drawImage(_mgB, 0, 0);
+      a.drawImage(_mgB, 0, 0, P.width, P.height);   // `a` is in PROJECT units (baseT), the plate is in target px
       a.globalCompositeOperation = 'source-over';
     }
     // Hand the flattened unit back through drawLayer as a '_flat' proxy carrying the GROUP's own
@@ -11114,6 +11132,7 @@ window.FM = window.FM || {};
     const tmp = FM.makeLayer('_flat', { name: g.name, x: 0, y: 0 });
     tmp.id = g.id + ':flat';   // STABLE id per group — temporal effects (motionflow) key their cache on it
     tmp._canvas = _mgA;
+    tmp._canvasW = P.width; tmp._canvasH = P.height;   // the plate is target-scaled; this is the box it stands for
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp._clipStart = g.start || 0;   // real clip start for effect clocks — tl from tmp.start would be a CONSTANT 1, freezing every time-driven effect (spin/wiggle/particles…) on a group
     tmp.effects = g.effects || [];
@@ -11129,8 +11148,17 @@ window.FM = window.FM || {};
     tmp.transform.opacity = (g.transform && g.transform.opacity != null) ? g.transform.opacity : 1;
     return tmp;
   }
+  /* Suite seam: what the two target-scaled plates actually got allocated at. There is no other way to
+     see it — the pools are private — and the whole point of the change is a SIZE, not a timing, so it
+     has to be assertable without a stopwatch. */
+  FM._platePixels = function () {
+    return {
+      group: _mgPool.map(function (p) { return (p && p.A) ? [p.A.width, p.A.height] : null; }),
+      blendMask: _blendMaskCv ? [_blendMaskCv.width, _blendMaskCv.height] : null
+    };
+  };
   function drawGroupUnit(ctx, u, t, scene) {
-    drawLayer(ctx, buildGroupUnit(u, t, scene), t, scene);
+    drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
   }
 
   FM.renderScene = function (ctx, scene, t) {
@@ -11261,7 +11289,7 @@ window.FM = window.FM || {};
         const out = [];
         if (!_fbUnits.has(unit.group.id)) {
           _fbUnits.add(unit.group.id);
-          if (FM.fillBehindFx(unit.group) && FM.isLayerVisibleAt(unit.group, t)) out.push(buildGroupUnit(unit, t, scene));
+          if (FM.fillBehindFx(unit.group) && FM.isLayerVisibleAt(unit.group, t)) out.push(buildGroupUnit(target, unit, t, scene));
         }
         if (L.id !== unit.maskId && L.type !== 'group' && FM.isLayerVisibleAt(L, t)) out.push(L);
         return out;

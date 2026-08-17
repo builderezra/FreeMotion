@@ -797,6 +797,12 @@ better still, keep working inside the turn rather than parking work for a later 
       measured under CPU throttle on this Mac. Four real costs have been found and removed and the app's
       own regulator can now see what it was blind to. **If it is still laggy, say so and the next step is
       reading the numbers off your actual device instead of a stand-in.**
+      **17 Aug — HE HAS CONFIRMED IT IS STILL BAD**, which un-blocks the "one sentence from you" half:
+      *"no still laggy on phone"* and *"yes still laggy scrolling"* (see 325). A first real cost came out
+      of it the same day — see #202's v9.26 note, the group/mask-blend plates being rasterised at full
+      project size and thrown away — but the readout measurement from his device is still the thing that
+      would settle this, and Finding 1 there (a 12.2-megapixel project) is still unanswered.
+
       **BLOCKED, and named properly on 16 Aug so it stops looking actionable.** Its only remaining work
       is *"reading the numbers off your actual device"* — and there is currently no way for you to read
       them, which is exactly what **#202 (the "what is slow" readout)** is for. So #125 is blocked on
@@ -6778,6 +6784,22 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       slow" readout in Settings rather than more guessing from here.
       Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
       still decoding, the app is competing with the decoder for the same device.
+
+      **FINDING 1's FIRST REAL FIX, v9.26 — and it is a pixel count, not a stopwatch.** Chasing the
+      12.2-megapixel project led somewhere concrete on the way: every buffer in the compositor is
+      allocated on the TARGET's pixel grid — effect plates, the camera plate, the manual-blend plate —
+      except **two**, which were built at full project size and never stamped with the render scale, so
+      the drawing inside them ran at 1:1 however small the preview was. They are the plate a GROUP is
+      flattened onto and the plate a MASK BLEND MODE rasterises through. On his 3024x4032 project
+      previewing into the 762k-pixel canvas his own report shows, that is **16.0x the pixels needed**,
+      allocated, cleared and drawn per group per frame. On an ordinary 1080x1920 comp on a phone it was
+      **4.3x**, measured live in the app. Export is unaffected — an export canvas is project-sized, so
+      the scale is 1 — and that is a test, not a claim. **Deliberately measured as a SIZE:** this entry
+      records four passes that measured this area on a fast Mac, found fine milliseconds and moved on,
+      and a pixel count reads the same on his phone as it does here. **What it is NOT:** the scene in
+      his measurement had no group in it, so this is a real cost removed rather than proof his lag is
+      gone. Finding 1 itself — the 12.2 MP project — is still unanswered and is still the biggest number
+      in that report.
 
       **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
       Verbatim:

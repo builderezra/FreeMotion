@@ -35,7 +35,11 @@ LOGLINE="$(grep -n '^- v[0-9]' POLISH-LOG.md | tail -1 | cut -d: -f2-)"
 # A release often ADVANCES an entry without closing it. That is legitimate and must not be silently
 # waved through either, so it has to be declared: write "queue 202 (partial)" and the gate skips that
 # number. Anything written as a plain "queue N" is a claim that N is finished, and is checked.
-PARTIALS="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+ (partial)' | grep -o '[0-9]\+' | sort -u)"
+# tr, because the membership test below is ` $PARTIALS ` against `*" $q "*` — a SPACE-separated
+# match. sort -u emits NEWLINES, so " 125\n202\n95 " contained " 95 " and nothing else: every declared
+# partial except the last one in sort order was ignored and the gate blocked a correctly-declared
+# release. Found by it refusing v9.26 three times over an entry that had declared all three properly.
+PARTIALS="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+ (partial)' | grep -o '[0-9]\+' | sort -u | tr '\n' ' ')"
 for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u); do
   case " $PARTIALS " in *" $q "*) continue;; esac
   if grep -q "^- \[ \] \*\*$q " REQUESTS.md || grep -q "^- \[ \] \*\*$q —" REQUESTS.md; then
