@@ -338,6 +338,10 @@ window.FM = window.FM || {};
        which is right for one tap and wrong nine times in a row. */
     let added = 0;
     list.forEach((id, i) => {
+      /* A pseudo-tile is not an effect instance, so it cannot go through addEffect — it changes the
+         LAYER (a mask, or the object motion-blur flag). Routed by the same table the tiles are built
+         from, so adding a third pseudo entry cannot leave the commit path behind. */
+      if (PSEUDO[id]) { if (PSEUDO_ACTION[id] && PSEUDO_ACTION[id](true)) added++; return; }
       const seed = (keep && shown[i] && (shown[i].type === id || shown[i].id === id)) ? shown[i] : null;
       if (addEffect(id, null, true, seed)) added++;
     });
@@ -362,9 +366,12 @@ window.FM = window.FM || {};
   // ---- "Mask" as an addable entry (Ezra: pressing + Add Effect should offer Mask) ----
   // Not a real effect instance: tapping it ADDS A PEN MASK to the layer and opens the mask editor.
   // Injected into the Matte category grid + search results; pure UI, the effect registry stays clean.
-  function addMaskFromBrowser() {
+  /* `quiet` is the batch path (queue 321). commitPicks runs several of these in a row and closes ONCE
+     at the end, so a pseudo-tile that closed the browser itself would tear it down under the second
+     item in its own list — the same reason addEffect grew this parameter at queue 277. */
+  function addMaskFromBrowser(quiet) {
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
-    if (!layer) { FM.fxBrowser.close(); return; }
+    if (!layer) { if (!quiet) FM.fxBrowser.close(); return; }
     if (['shape', 'text', 'image', 'video', 'adjustment'].indexOf(layer.type) < 0) {
       if (FM.toast) FM.toast('Masks need a layer with pixels — camera/null/group can’t be masked', 1900);
       return;
@@ -373,11 +380,14 @@ window.FM = window.FM || {};
     const m = (FM.masks && FM.masks.make) ? FM.masks.make('add')
       : { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
     layer.masks.push(m);
-    FM.fxBrowser.close();
+    if (!quiet) FM.fxBrowser.close();
     if (FM.inspector) FM.inspector.refresh();
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
-    if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
+    /* The mask EDITOR only opens on the single-tap path. In a batch it would land on top of whatever
+       else was picked, and you would be drawing a mask before seeing the rest of what you added. */
+    if (!quiet && FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
+    return true;
   }
   function maskTile(onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = 'Mask — draw a shape that reveals part of this layer';
@@ -397,7 +407,17 @@ window.FM = window.FM || {};
     wrap.appendChild(t);
     wrap.appendChild(el('span', 'fxb-tile-name', 'Mask'));
     wrap.appendChild(starFor('_mask', onStarChange));
-    wrap.addEventListener('click', addMaskFromBrowser);
+    /* PICK, DON'T COMMIT (queue 321). Ezra: *"With the mask effect when you press on it it instantly
+       adds instead of previewing"*. Queue 277 made every ordinary tile select-then-Add, and these two
+       PSEUDO tiles — Mask and Motion Blur (Object) — were left calling their action straight from the
+       click, because they are layer state rather than registry effects and the multi-select was built
+       around effect instances. From the outside that distinction is invisible: one tile in the grid
+       behaves differently from all the others and shuts the browser on you.
+       They badge and wait for Add now, like everything else. What they still cannot do is show a live
+       PREVIEW of themselves — a mask has no result to preview until you have drawn one, which is what
+       the editor that opens on Add is for. */
+    wrap.dataset.fxid = '_mask';
+    wrap.addEventListener('click', () => { if (sheetMode()) togglePick('_mask'); else addMaskFromBrowser(); });
     return wrap;
   }
 
@@ -408,18 +428,19 @@ window.FM = window.FM || {};
   // which blurs movement INSIDE the clip, and Directional Blur, which ignores movement entirely.
   // Same pseudo-entry trick as Mask: this drives layer.motionBlur rather than pushing an effect
   // instance, so every existing project keeps rendering and exporting exactly as before.
-  function enableObjectBlur() {
+  function enableObjectBlur(quiet) {
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
-    if (!layer) { FM.fxBrowser.close(); return; }
+    if (!layer) { if (!quiet) FM.fxBrowser.close(); return; }
     if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
     const already = !!layer.motionBlur.enabled;
     layer.motionBlur.enabled = true;
-    FM.fxBrowser.close();
+    if (!quiet) FM.fxBrowser.close();
     if (FM.inspector) FM.inspector.refresh();
     if (FM.requestRender) FM.requestRender();
     if (!already && FM.history) FM.history.commit();
-    if (FM.toast) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Position / Scale'
-                                   : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
+    if (FM.toast && !quiet) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Position / Scale'
+                                              : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
+    return true;
   }
   function objectBlurTile(onStarChange) {
     const wrap = el('button', 'fxb-tile');
@@ -443,13 +464,18 @@ window.FM = window.FM || {};
     wrap.appendChild(t);
     wrap.appendChild(el('span', 'fxb-tile-name', 'Motion Blur (Object)'));
     wrap.appendChild(starFor('_objblur', onStarChange));
-    wrap.addEventListener('click', enableObjectBlur);
+    wrap.dataset.fxid = '_objblur';
+    wrap.addEventListener('click', () => { if (sheetMode()) togglePick('_objblur'); else enableObjectBlur(); });
     return wrap;
   }
 
   // Build whatever tile an id names — a registry effect or one of the two pseudo-entries. This is what
   // lets the Favourites page hold a favourited Mask / Motion Blur (Object) instead of dropping it. (#62)
   const PSEUDO_TILES = { _mask: maskTile, _objblur: objectBlurTile };
+  // What each pseudo tile DOES, keyed the same way its tile is — so the commit path and the grid can
+  // never disagree about which entries exist (queue 321).
+  const PSEUDO_ACTION = { _mask: addMaskFromBrowser, _objblur: enableObjectBlur };
+  Object.setPrototypeOf(PSEUDO_ACTION, null);
   Object.setPrototypeOf(PSEUDO_TILES, null);   // own keys only — see PSEUDO. This table gets CALLED.
   function tileForId(id, onStarChange) {
     if (PSEUDO_TILES[id]) return PSEUDO_TILES[id](onStarChange);

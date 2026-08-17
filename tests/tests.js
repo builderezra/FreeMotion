@@ -27304,4 +27304,59 @@
     if (diff < 100) throw new Error('the bolt is identical half a second later — it does not flicker at all');
   });
 
+
+  /* ================= queue 321 clause 1: Mask picks instead of committing ==========================
+   * *"With the mask effect when you press on it it instantly adds instead of previewing"*.
+   * Queue 277 made every ordinary tile select-then-Add. Mask and Motion Blur (Object) are PSEUDO tiles
+   * — they change the layer rather than adding an effect instance — and the multi-select was built
+   * around instances, so both were left calling their action straight from the click. From the outside
+   * that distinction does not exist: one tile in the grid behaves unlike all the others and shuts the
+   * browser on you. */
+  test('the Mask tile selects like every other tile instead of committing on tap (queue 321)', { item: 'mask-pick' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 90, shapeH: 90, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+      FM.fxBrowser.open(L);
+      await sleep(320);
+      const root = document.getElementById('fx-browser');
+      if (!root.classList.contains('fxb-sheet')) throw new Error('the browser is not in sheet mode, so the select-then-Add flow is not the one under test');
+
+      // Reach the Mask tile: it lives in the Matte category and in search.
+      const search = root.querySelector('.fxb-search-input');
+      root.querySelector('.fxb-search-btn').click();
+      search.value = 'mask';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(260);
+      const tile = [].slice.call(root.querySelectorAll('[data-fxid="_mask"]'))[0];
+      if (!tile) throw new Error('the Mask tile is not reachable by searching for it');
+
+      tile.click();
+      await sleep(200);
+      // 1. it did NOT commit and it did NOT close.
+      const live = FM.layerById(FM.scene, L.id);
+      if ((live.masks || []).length) throw new Error('tapping Mask added a mask straight away — "it instantly adds instead of previewing"');
+      if (root.classList.contains('hidden')) throw new Error('tapping Mask closed the browser on the spot');
+      // 2. it looks picked, like every other tile.
+      if (!tile.querySelector('.fxb-pick')) throw new Error('tapping Mask left no order badge — from the outside the tap did nothing at all');
+      if ((FM._fxPicks() || []).indexOf('_mask') < 0) throw new Error('Mask is not in the pick list');
+
+      // 3. …and Add applies it.
+      const bar = root.querySelector('.fxb-commit');
+      if (!bar || bar.classList.contains('hidden')) throw new Error('nothing offers to add the picked Mask');
+      bar.querySelector('.fxb-commit-go').click();
+      await sleep(320);
+      const after = FM.layerById(FM.scene, L.id);
+      if (!(after.masks || []).length) throw new Error('committing a picked Mask did not add one — it now selects and then never lands, which is worse than before');
+      if (!root.classList.contains('hidden')) throw new Error('the browser stayed open after committing');
+    } finally {
+      if (FM.maskTool && FM.maskTool.close) FM.maskTool.close();
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+    }
+  });
+
 })();

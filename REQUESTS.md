@@ -5885,6 +5885,19 @@ better still, keep working inside the turn rather than parking work for a later 
       it masks — offer the same on-screen trackpad that point editing has, so a fingertip can nudge
       precisely instead of dragging the point directly. `js/point-edit.js` is the existing pattern and
       `js/mask-tool.js` is the thing to add it to.
+      ✅ **v9.67 — clause 1 done. Clause 2 still open, which is why this is not ticked.**
+      · **1 (it adds instead of previewing).** Mask and Motion Blur (Object) are the only two tiles in
+        that grid that are not really effects — they change the LAYER — and the select-then-Add flow
+        was built around effects, so both were left committing straight from the tap. That difference
+        is invisible from the outside: one tile behaved unlike all the others and shut the browser on
+        you. They badge and wait for Add now, and the commit path is driven by the same table the
+        tiles are built from, so a third one cannot be added to the grid and forgotten in Add.
+        One honest limit: these two cannot show a live preview of themselves, because a mask has no
+        result until you have drawn one — that is what the editor opening on Add is for.
+      · **2 (the trackpad while editing a mask) — next up on this item.** The pad you are describing
+        is the one on the drawing bar and it is bespoke to that bar, so doing this properly means
+        lifting it out into something both tools use rather than writing a second one — two copies of
+        a feel is the thing that has bitten this project repeatedly.
 
 - [ ] **322 — Freehand drawing: stop converting it to points, add draw-on (start/end), and a real
       re-edit with a proper eraser.** (17 Aug.) His words, verbatim: *"Also I just realised why I think
