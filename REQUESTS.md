@@ -5993,8 +5993,28 @@ better still, keep working inside the turn rather than parking work for a later 
       onto the target's pixel grid); this extends it from scale to extent. **That is very likely the
       same fix #31b needs** — "Transform blur can't smear effect- or camera-driven motion" is the same
       shape: a pass that cannot see outside the comp.
-      ⚠️ Deliberately NOT started at the end of a long session: it is a change to how every effect
-      allocates its buffer, and getting it wrong is visible on every layer in the app.
+      🔨 **18 Aug — BUILT IT, PROVED IT WORKS, AND BACKED IT OUT HALF-DONE. Four findings, all useful.**
+      1. **The plate fix is right and it is bigger than two functions.** Making a plate inherit the
+         TARGET's extent and origin (`ctx.canvas.__fmOX/__fmOY` + its width/height) instead of the
+         comp's is a two-line change per call site and is **byte-identical when nothing is nested**,
+         which is what makes it safe. But `Math.round(PW * ps)` appears at **19 call sites** — every
+         post-effect draws its own plate. I did `drawWarpEffect` and `drawCanvasEffect`; 17 remain.
+      2. **The innermost pin has to invert, and only AFTER all 19 are done.** Squish is pinned to
+         composite innermost, which means it measures the layer BEFORE a shake has moved it — sitting
+         mid-frame, no penetration, so it correctly does nothing, and the shake then pushes it over a
+         wall nobody is enforcing. Inverting it (Squish outermost) makes its padded plate hold the
+         layer as it actually ENDS UP. **With the two paths fixed and the pin inverted, Squish visibly
+         started deforming** — the frame edge went from 160 to 268 lit pixels.
+      3. **…but inverting it early breaks what already works.** With 17 paths still comp-sized, an
+         effect like Pixelate nested inside Squish's padded plate still clips, so `[squish, pixelate]`
+         went back to doing nothing — caught by the existing test that guards exactly that. The order
+         is only safe to flip once every path stops clipping.
+      4. ⚠️ **THE TEST METRIC WAS WRONG, and this cost a wrong conclusion.** Counting lit pixels in the
+         frame's last column works for a CIRCLE — squashed, it lands tangent and the count drops — and
+         is backwards for a SQUARE, which flattens against the wall and covers MORE of that column. The
+         effect's own notes use a circle for exactly this reason. My 268-vs-160 read as "worse" for
+         half an hour when it was the fix working. **Use a circle.**
+      Reverted to the shipped state rather than leaving a half-migrated render path in the app.
       Clause 1 (corners) is untouched and still unmeasured.
 
 - [x] **324 — DONE v9.44. Give the Add-layer row's + button its old colours back, and make the whole bar stand
