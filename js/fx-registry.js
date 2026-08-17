@@ -156,7 +156,18 @@ window.FM = window.FM || {};
   // here. The carousel does not filter by appliesTo — it offers every card and `guardedAdd`
   // refuses with a toast — so a media-only effect at the head of the row is two cards that a
   // shape or text layer can only answer with 'That effect needs a video or image layer'.
-  FM.FX_FEATURED = ['tunnel', 'bend', 'squeeze', 'innerpinch', 'tealorange', 'faded', 'bleachbypass', 'crossprocess', 'sharpen', 'boxblur', 'innerblur', 'stroke'];
+  /* FEATURED CARRIES NO NAME THAT IS ALSO A FILTER (queue 318). Ezra: *"in the effects menu filters
+   * are showing up in the featured menu"*. Strictly they were not — `tealorange`, `faded`,
+   * `bleachbypass` and `crossprocess` are single colour EFFECTS here — but each of them is ALSO the id
+   * of a ready-made filter that leads with the same name, so the carousel was showing four tiles called
+   * Teal & Orange, Faded Film, Bleach Bypass and Cross Process on a tab whose whole job is to not be
+   * the Filters tab. From the outside that is filters in the featured row, and he is right that it is
+   * wrong. Replaced with visual effects that have no filter twin; all four are still one search or one
+   * category away, and still inside the filters that use them.
+   * The browser ALSO refuses any featured id that names a filter — see fx-browser.js — because this
+   * list is the kind that gets appended to, and the collision is invisible until someone reads both
+   * files at once. */
+  FM.FX_FEATURED = ['tunnel', 'bend', 'squeeze', 'innerpinch', 'glow', 'chromaticaberration', 'vignette', 'filmgrain', 'sharpen', 'boxblur', 'innerblur', 'stroke'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

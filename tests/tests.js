@@ -27122,4 +27122,54 @@
     }
   });
 
+
+  /* ================= queue 318: no filters in the Featured row ====================================
+   * *"Also in the effects menu filters are showing up in the featured menu"*.
+   * Strictly they were single colour EFFECTS — but four of them shared an id, and therefore a name,
+   * with a ready-made filter built from that same effect, so the carousel showed tiles called Teal &
+   * Orange, Faded Film, Bleach Bypass and Cross Process on the tab whose whole job is to not be the
+   * Filters tab. From the outside that is filters in the featured row.
+   *
+   * TWO ASSERTIONS, AND THE SECOND IS WHY THIS IS NOT JUST A LIST EDIT. Cleaning the list fixes today;
+   * the browser refusing any featured id that names a filter is what stops it returning, because the
+   * list gets appended to and the collision lives in a different file. */
+  test('nothing in the Featured row shares its name with a filter (queue 318)', { item: 'fx-featured' }, async function () {
+    if (!FM.FX_FEATURED || !FM.filters) throw new Error('FM.FX_FEATURED or FM.filters is missing');
+
+    // 1. the list itself
+    const clash = FM.FX_FEATURED.filter(id => !!FM.filters.get(id));
+    if (clash.length) throw new Error('FM.FX_FEATURED still names ' + clash.join(', ') + ' — each of those is also a ready-made filter, so the carousel shows the filter\'s name on the Visual tab');
+
+    /* 2. …and every id in it resolves to a real effect. The builder does `.filter(Boolean)`, so a typo
+       does not throw — it silently shortens the row, which is how a "fix" that swaps four ids could
+       leave the carousel four tiles emptier than before and look fine. */
+    const missing = FM.FX_FEATURED.filter(id => !FM.fxRegistry.get(id));
+    if (missing.length) throw new Error('FM.FX_FEATURED names effects that do not exist: ' + missing.join(', ') + ' — they drop out silently and the row just gets shorter');
+
+    // 3. the guard in the browser, driven for real: plant a filter id in the list and it must not render.
+    const layers0 = FM.scene.layers.slice();
+    const feat0 = FM.FX_FEATURED.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(160);
+      const aFilter = FM.filters.all()[0];
+      if (!aFilter) throw new Error('there are no ready-made filters to test the guard with');
+      FM.FX_FEATURED.push(aFilter.id);
+      FM.fxBrowser.open(L);
+      await sleep(300);
+      const row = document.querySelector('#fx-browser .fxb-featured');
+      if (!row) throw new Error('the featured row did not render');
+      const ids = [].slice.call(row.querySelectorAll('[data-fxid]')).map(n => n.dataset.fxid);
+      if (ids.indexOf(aFilter.id) >= 0) throw new Error('a filter id added to FM.FX_FEATURED rendered a tile in the carousel — cleaning the list fixed today but nothing stops it coming back');
+      if (!ids.length) throw new Error('the featured row rendered no tiles at all, so the check above proves nothing');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.FX_FEATURED.length = 0; feat0.forEach(id => FM.FX_FEATURED.push(id));
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+    }
+  });
+
 })();

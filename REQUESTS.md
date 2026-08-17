@@ -5825,7 +5825,18 @@ better still, keep working inside the turn rather than parking work for a later 
       **Fix:** switch on the key — 'audio' opens the audio browser, 'filters' shows the filters view.
       Check `js/audio-fx-browser.js:254` for the same shape of mistake while there.
 
-- [ ] **318 — Filters are appearing in the Featured row of the effects menu.** (17 Aug.) His words,
+- [x] **318 — Filters are appearing in the Featured row of the effects menu.** ✅ **v9.64.**
+      You were right about what you were seeing, though not quite in the way the note guessed —
+      it was NOT the same bug as 317. Four of the featured entries are single colour EFFECTS that
+      happen to share an id, and therefore a name, with a ready-made filter built out of that same
+      effect. So the carousel showed Teal & Orange, Faded Film, Bleach Bypass and Cross Process on
+      the tab whose whole job is to not be the Filters tab. Replaced with effects that have no
+      filter twin; all four are still one search or one category away, and still inside the
+      filters that use them.
+      **The browser now also refuses any featured entry that names a filter**, which is the part
+      that stops it coming back — that list gets appended to and the clash lives in a different
+      file, so it is invisible unless someone reads both at once. Mutation-checked by planting a
+      real filter id in the list. (17 Aug.) His words,
       verbatim: *"Also in the effects menu filters are showing up in the featured menu"*.
       ⚠️ Same suspicion as 317, and the two are almost certainly one bug: if the Featured row is being
       fed filter entries, the tab it belongs to and the thing it adds will both be wrong.

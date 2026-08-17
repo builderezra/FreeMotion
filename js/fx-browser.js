@@ -603,7 +603,14 @@ window.FM = window.FM || {};
     const sec = el('div', 'fxb-section');
     sec.appendChild(el('div', 'fxb-sec-title', 'Featured'));
     const row = el('div', 'fxb-featured');
-    (FM.FX_FEATURED || []).map(id => FM.fxRegistry.get(id)).filter(Boolean).forEach(reg => {
+    /* …and nothing whose id is also a FILTER's (queue 318). Cleaning FM.FX_FEATURED fixes today; this
+       is what stops it coming back, because that list is appended to and the collision lives in a
+       different file — an effect and a ready-made filter can share an id (the filter is built FROM the
+       effect), and the carousel then shows a tile wearing the filter's name on the tab whose whole job
+       is to not be the Filters tab. */
+    (FM.FX_FEATURED || []).map(id => FM.fxRegistry.get(id)).filter(Boolean)
+      .filter(reg => !(FM.filters && FM.filters.get && FM.filters.get(reg.id)))
+      .forEach(reg => {
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
