@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- data-theme IS IN THE MARKUP, and it has to be (queue 306). theme-glass.css gates 75 rules on
-     html[data-theme="glass"], and until v9.22 that attribute was set by js/settings.js — which loads
+     html[data-theme="glass"], and until v9.23 that attribute was set by js/settings.js — which loads
      at the BOTTOM of the body, after ~1.5MB of scripts. So every load painted the bare styles.css
      first and only snapped to the real appearance once settings.js ran. settings.js's own comment
      spelled the consequence out: "with it absent the app falls back to the bare stylesheet, which is
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.22</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.23</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -830,7 +830,7 @@
   <script src="js/filters.js?v=2"></script>
   <script src="js/fx-presets.js?v=5"></script>
   <script src="js/fx-thumbs.js?v=30"></script>
-  <script src="js/timeline.js?v=152"></script>
+  <script src="js/timeline.js?v=153"></script>
   <script src="js/addmenu.js?v=50"></script>
   <script src="js/inspector.js?v=263"></script>
   <script src="js/fx-browser.js?v=44"></script>

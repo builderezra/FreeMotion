@@ -18195,6 +18195,64 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: every diamond drawn must be deletable and copyable ---------------- */
+
+  /* THE BUG, and the reason this test is written as a PROPERTY rather than as five cases.
+   * The timeline draws a diamond for every container FM.animatedProps returns — which includes
+   * trim-path, the repeater, the dash offset, mask paths and audio-effect params. Delete and copy each
+   * kept their OWN, shorter, hand-written list of containers. So those diamonds could be neither
+   * removed nor copied: double-clicking one did nothing at all and pushed an empty undo step, and Copy
+   * returned zero entries so "Paste keyframe at playhead" never even appeared. On a phone the
+   * long-press menu is the only delete route for them, and it was equally dead.
+   * Delete had been patched by hand; copy had not — which is precisely what a second list guarantees
+   * over time. There is one table now, and this asserts the invariant that makes a second one
+   * impossible to get away with: EVERY prop that draws a diamond must be addressable. Add a new
+   * animated container to the scene and forget the table, and this fails. */
+  test('timeline: every keyframe the timeline draws can be addressed by copy and delete (BUG-HUNT)', { item: 'kf-slots' }, function () {
+    if (typeof FM._keyframeSlots !== 'function') throw new Error('FM._keyframeSlots is not exposed — the suite cannot check the two lists against each other');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, clip0 = FM.kfClipboard;
+    try {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#88ccff' });
+      L.start = 0; L.duration = 5; L.name = 'KFSLOT_PROBE';
+      var kf2 = function (a, b) { return { kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] }; };
+      // the five containers the finding names, all of which drew diamonds and none of which copied
+      L.trimPath = { start: kf2(0, 1), end: 1, offset: 0 };
+      L.repeater = { copies: kf2(1, 5), offsetX: 10, offsetY: 0, rotation: 0, scale: 100, opacity: 1 };
+      L.stroke = { width: 4, color: '#ffffff', dash: { offset: kf2(0, 20) } };
+      L.masks = [{ path: kf2([[0, 0], [10, 10]], [[5, 5], [20, 20]]) }];
+      L.audioFx = [{ type: 'reverb', params: { mix: kf2(0.2, 0.8) } }];
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+
+      // THE INVARIANT: everything that draws a diamond must be in the table
+      var props = FM.animatedProps(L), slots = FM._keyframeSlots(L);
+      var orphans = props.filter(function (p) { return !slots.some(function (sl) { return sl.c[sl.k] === p; }); });
+      if (orphans.length) {
+        throw new Error(orphans.length + ' of ' + props.length + ' animated properties draw a diamond the timeline cannot address — they can be neither deleted nor copied, and double-clicking them does nothing while pushing an empty undo step');
+      }
+      if (props.length < 5) throw new Error('the fixture only produced ' + props.length + ' animated properties — it is no longer exercising the containers this is about');
+
+      // and copy must actually pick them all up, with distinct addresses
+      var n = FM.copyKfAt(L, 0);
+      if (n !== props.length) throw new Error('Copy picked up ' + n + ' of ' + props.length + ' keyframes at t=0');
+      var keys = (FM.kfClipboard || []).map(function (e) { return e.key; });
+      ['trimPath.start', 'dash.offset', 'repeater.copies', 'mask.0.path', 'audiofx.0.mix'].forEach(function (want) {
+        if (keys.indexOf(want) < 0) throw new Error('Copy produced no address for ' + want + ' (got: ' + keys.join(', ') + ')');
+      });
+      if (new Set(keys).size !== keys.length) throw new Error('two slots share an address, so a paste would land in the wrong one: ' + keys.join(', '));
+
+      // every address must resolve back to the very container it came from — an address that resolves
+      // somewhere ELSE is the v9.20 defect in a new place
+      keys.forEach(function (k, i) {
+        var back = FM._keyframeSlots(L).filter(function (sl) { return sl.addr === k; })[0];
+        if (!back) throw new Error('the address ' + k + ' does not resolve back to any slot');
+        if (back.c[back.k] !== props[i]) throw new Error('the address ' + k + ' resolves to a different property than it was taken from');
+      });
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.kfClipboard = clip0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- BUG-HUNT: the timeline eye was a 15px tap target ---------------- */
 
   /* THE BUG. `.th-eye` was a bare 15x15 icon — about 4mm, against a 44px touch minimum — sitting

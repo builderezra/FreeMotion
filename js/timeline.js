@@ -216,26 +216,40 @@ window.FM = window.FM || {};
   // keyframe at `tt` across the whole layer — which was right when diamonds were merged, but wrong
   // now that each property owns its own: deleting a visible keyframe also silently destroyed the
   // dimmed ones sitting behind it at the same time, on properties you weren't even looking at.
+  /* EVERY keyframable slot on a layer, as (container, key) with a stable string ADDRESS.
+     ONE list, because there used to be TWO and they drifted. The timeline draws a diamond for every
+     container FM.animatedProps knows — which includes trim-path, the repeater, the dash offset, mask
+     paths and audio-effect params — while delete and copy each kept their own, shorter, hand-written
+     list. Those diamonds could therefore be neither deleted nor copied: double-clicking one did
+     nothing at all and pushed an empty undo step, and Copy returned zero entries so the Paste item
+     never even appeared. Delete was patched by hand at some point; copy never was, which is exactly
+     the drift a second list guarantees. Both read this now, so a slot that can draw a diamond can
+     always be deleted and copied.
+     It lists every slot whether animated or not, deliberately: paste has to resolve an address on a
+     TARGET layer where the property is still static. */
+  function keyframeSlots(layer) {
+    const out = [];
+    const add = (c, k, addr, fx) => { if (c) out.push({ c: c, k: k, addr: addr, fx: fx || null }); };
+    Object.keys(layer.transform).forEach(k => add(layer.transform, k, 'transform.' + k));
+    add(layer, 'volume', 'volume'); add(layer, 'speed', 'speed');
+    add(layer, 'fill', 'fill'); add(layer, 'color', 'color');
+    if (layer.fillGradient) ['ox', 'oy'].forEach(k => add(layer.fillGradient, k, 'fillGradient.' + k));
+    ['fillImgX', 'fillImgY'].forEach(k => add(layer, k, k));
+    if (layer.stroke) ['width', 'color'].forEach(k => add(layer.stroke, k, 'stroke.' + k));
+    if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => add(layer.crop, k, 'crop.' + k));
+    if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => add(layer.shadow, k, 'shadow.' + k));
+    if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => add(layer.trimPath, k, 'trimPath.' + k));
+    if (layer.stroke && layer.stroke.dash) add(layer.stroke.dash, 'offset', 'dash.offset');
+    if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => add(layer.repeater, k, 'repeater.' + k));
+    (layer.masks || []).forEach((m, i) => { if (m) add(m, 'path', 'mask.' + i + '.path'); });
+    FM.eachFx(layer, (fx, path) => { if (fx.params) Object.keys(fx.params).forEach(k => add(fx.params, k, FM.fxAddr(path, k, 'effect', '.'), fx)); });
+    (layer.audioFx || []).forEach((fx, i) => { if (fx && fx.params) Object.keys(fx.params).forEach(k => add(fx.params, k, 'audiofx.' + i + '.' + k, fx)); });
+    return out;
+  }
+  FM._keyframeSlots = keyframeSlots;   // suite hook: the two lists must not drift again
+
   function deleteKeyframesAt(layer, tt, only) {
-    const slots = [];
-    Object.keys(layer.transform).forEach(k => slots.push({ c: layer.transform, k: k }));
-    if (FM.isAnimated(layer.volume)) slots.push({ c: layer, k: 'volume' });   // keyframed audio level draws diamonds too
-    if (FM.isAnimated(layer.speed)) slots.push({ c: layer, k: 'speed' });     // speed-ramp keyframes delete like any other
-    if (FM.isAnimated(layer.fill)) slots.push({ c: layer, k: 'fill' });       // colour keyframes delete like any other
-    if (FM.isAnimated(layer.color)) slots.push({ c: layer, k: 'color' });
-    if (layer.stroke) ['width', 'color'].forEach(k => slots.push({ c: layer.stroke, k: k }));     // border keyframes
-    if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => slots.push({ c: layer.crop, k: k }));       // crop keyframes (they draw diamonds via animatedProps — must be deletable too)
-    if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => slots.push({ c: layer.shadow, k: k }));   // shadow keyframes
-    FM.eachFx(layer, fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
-    // Everything below draws a diamond via FM.animatedProps (js/scene.js) but used to be missing here,
-    // so those keyframes were UNDELETABLE — you could see them on the clip and nothing would remove
-    // them. Confirmed in BUG-HUNT. The two lists have to cover the same containers, and that matters
-    // more now every slider owns its own track: a track you can create must be a track you can clear.
-    if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => slots.push({ c: layer.trimPath, k: k }));            // stroke draw-on
-    if (layer.stroke && layer.stroke.dash) slots.push({ c: layer.stroke.dash, k: 'offset' });                         // marching ants
-    if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => slots.push({ c: layer.repeater, k: k }));   // shape repeater
-    (layer.masks || []).forEach(m => { if (m) slots.push({ c: m, k: 'path' }); });                                    // pen-mask path (moving reveal / roto)
-    (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
+    const slots = keyframeSlots(layer);
     slots.forEach(({ c, k }) => {
       const p = c[k];
       if (!FM.isAnimated(p)) return;
@@ -253,38 +267,19 @@ window.FM = window.FM || {};
   // you copy on one layer and paste onto another.
   function propKey(layer, p) {
     foundType = null;
-    // Must cover EVERY slot FM.animatedProps exposes (i.e. everything that draws a diamond), or Copy
-    // keyframe silently drops it — delete already handles all of these, so copy/paste must too.
-    if (layer.volume === p) return 'volume';
-    if (layer.fill === p) return 'fill';
-    if (layer.color === p) return 'color';
-    if (layer.speed === p) return 'speed';
-    for (const k of Object.keys(layer.transform)) if (layer.transform[k] === p) return 'transform.' + k;
-    if (layer.crop) for (const k of ['x', 'y', 'w', 'h']) if (layer.crop[k] === p) return 'crop.' + k;
-    if (layer.stroke) { if (layer.stroke.width === p) return 'stroke.width'; if (layer.stroke.color === p) return 'stroke.color'; }
-    if (layer.shadow) for (const k of ['blur', 'dx', 'dy', 'alpha', 'color']) if (layer.shadow[k] === p) return 'shadow.' + k;
-    let found = null;
-    FM.eachFx(layer, (fx, path) => {
-      if (found) return;
-      const params = fx.params || {};
-      for (const k of Object.keys(params)) if (params[k] === p) { found = FM.fxAddr(path, k, 'effect', '.'); foundType = fx.type; return; }
-    });
-    return found;
+    const hit = keyframeSlots(layer).filter(sl => sl.c[sl.k] === p)[0];
+    if (!hit) return null;
+    if (hit.fx && hit.fx.type) foundType = hit.fx.type;   // so paste can refuse a different effect
+    return hit.addr;
   }
   /* The TYPE of the effect the last propKey() resolved into, or null. An effect keyframe's address is
-     positional — "the Nth effect's `amount`" — and that is fine within one layer and meaningless
-     across two. Copy is an advertised cross-layer feature, so the type has to travel with the key. */
+     positional — "the Nth effect's `amount`" — which is fine within one layer and meaningless across
+     two. Copy is an advertised cross-layer feature, so the type has to travel with the key. */
   let foundType = null;
   function lastFxType() { const v = foundType; foundType = null; return v; }
   function resolveSlot(layer, key) {
-    if (key === 'volume' || key === 'fill' || key === 'color' || key === 'speed') return { c: layer, k: key };
-    if (key.indexOf('transform.') === 0) return { c: layer.transform, k: key.slice(10) };
-    if (key.indexOf('crop.') === 0) return layer.crop ? { c: layer.crop, k: key.slice(5) } : null;   // null-guard: pasting onto a layer lacking this container must skip, not crash
-    if (key.indexOf('stroke.') === 0) return layer.stroke ? { c: layer.stroke, k: key.slice(7) } : null;
-    if (key.indexOf('shadow.') === 0) return layer.shadow ? { c: layer.shadow, k: key.slice(7) } : null;
-    const a = FM.fxAddrParse(key, 'effect', '.');
-    if (a) { const fx = FM.fxAt(layer, a.path); if (fx && fx.params) return { c: fx.params, k: a.key, fx: fx }; }
-    return null;
+    const hit = keyframeSlots(layer).filter(sl => sl.addr === key)[0];
+    return hit ? { c: hit.c, k: hit.k, fx: hit.fx } : null;   // null: the target lacks this slot → paste skips it
   }
   function copyKfAt(layer, tt) {
     FM.kfClipboard = [];
