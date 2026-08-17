@@ -5641,6 +5641,24 @@ better still, keep working inside the turn rather than parking work for a later 
       4. **PC and mobile:** dragging the Add-layer marker must move SMOOTHLY with the same animation
          a layer drag has. It currently jumps between positions, which looks bad.
       Related to 298 (the marker not actually placing layers where it points) — same control.
+      ✅ **v9.55 — clauses 1, 2 and 3 done. Clause 4 is still open, which is why this is not ticked.**
+      · **1 (the vanishing).** Found a real cause that matches "and had to refresh" exactly:
+        `FM.groupContext` is a bare layer id, everything that draws the timeline gates on it, and
+        nothing checked the group still existed. An id that outlives its group — deleted, undone,
+        project swapped — hides the marker until a reload puts it back to null. It is worse than
+        you reported, in fact: with a stale id the whole track list draws empty too. It heals
+        itself now, one checked read per build. **I cannot prove this was YOUR case** (I did not
+        reproduce the disappearance itself), but it is the only route I can find that ends in
+        "only a refresh brings it back", and it was a real bug either way.
+      · **2 and 3 (the hint).** Three lines on the right, invisible until you hover, extending
+        further out than the phone's grip and fading off along their length instead of ending.
+        Deliberately NOT a handle — it carries no listeners and no pointer events, because
+        dragging from anywhere already worked on PC and an element that caught the pointer would
+        have made itself the only place the drag started, which is your request upside down. The
+        test hit-tests it rather than taking that on trust.
+      · **4 (smooth dragging) is next up on this item.** The design is settled: follow the pointer
+        with a transform and glide the rows apart the way a layer reorder does, instead of
+        rebuilding the whole track list on every move — that rebuild IS the jump.
 
 - [ ] **308 — Remove the "Trim to last clip" button from the settings menu; it happens automatically
       now.** (17 Aug.) His words, verbatim: *"In the settings menu, you get rid of the trim to last clip

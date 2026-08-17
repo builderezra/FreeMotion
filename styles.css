@@ -6176,6 +6176,36 @@ body.fm-pushing #toast { z-index: 213; }
 @media (prefers-reduced-motion: no-preference) {
   .tl-addrow--line { transition: height .12s ease-out, background .12s, box-shadow .12s; }
 }
+/* THE HOVER HINT ON PC (queue 307, clauses 2 and 3). *"when you're hovering over it the three lines of
+   the right sho[w] up but you don't need to grab it from the three lines. It's just there to demonstrate
+   that you can move it and also maybe just make it through the three lines extend out a bit longer and
+   then like slowly fade out so it's like the whole thing is like you can drag it from anywhere"*.
+   Two things follow from "you don't need to grab it from the three lines", and both are in this block:
+   · `pointer-events: none`. The whole row is already the handle — `attachLineDrag` is on the row — so a
+     hint that swallowed the pointer would make itself the ONLY place the drag started, which is the
+     bug he is asking not to have.
+   · The lines FADE OUT along their length rather than ending. A hard-ended bar reads as "grab here";
+     a bar that dissolves into the row reads as the row continuing, which is the thing he described
+     wanting it to say. Hence the gradient and the extra width — 74px against the phone grip's 34.
+   Sticky to the right for the same reason the phone's grip is: the row spans the whole scrollable
+   width, and anything parked at the far end of it is unreachable. */
+.tl-addrow-hint {
+  position: sticky; right: 8px; margin-left: auto; flex: 0 0 auto;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  width: 74px; padding: 0 9px; box-sizing: border-box;
+  pointer-events: none;
+  opacity: 0; transition: opacity .12s ease-out;
+}
+.tl-addrow-hint span {
+  display: block; height: 1.5px; border-radius: 1px;
+  background: linear-gradient(to left, rgba(150, 232, 255, .85), rgba(150, 232, 255, 0));
+}
+.tl-addrow--line:hover .tl-addrow-hint,
+.tl-addrow--line:focus-visible .tl-addrow-hint,
+.tl-addrow--line.tl-addrow-dragging .tl-addrow-hint { opacity: 1; }
+.tl-addrow--line.tl-addrow-dragging .tl-addrow-hint span {
+  background: linear-gradient(to left, rgba(150, 232, 255, 1), rgba(150, 232, 255, 0));
+}
 .tl-addrow:hover .tl-addrow-label, .tl-addrow:focus-visible .tl-addrow-label { color: var(--text); }
 @media (prefers-reduced-motion: no-preference) {
   .tl-addrow { transition: border-color .15s, box-shadow .15s; }

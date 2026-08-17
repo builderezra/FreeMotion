@@ -1716,6 +1716,21 @@ window.FM = window.FM || {};
       row.appendChild(buildAddGrip(row));      // ≡ on the right, like every other row
     } else {
       attachLineDrag(row, open);               // the line is both the button and the handle
+      /* THE THREE LINES AS A HINT, NOT A HANDLE (queue 307, clauses 2 and 3). His words: *"when you're
+         hovering over it the three lines of the right sho[w] up but you don't need to grab it from the
+         three lines. It's just there to demonstrate that you can move it and also maybe just make it
+         through the three lines extend out a bit longer and then like slowly fade out so it's like the
+         whole thing is like you can drag it from anywhere"*.
+         So this is deliberately NOT `buildAddGrip`, which is the phone's real handle and owns its own
+         pointer listeners. Dragging from anywhere already worked on PC — `attachLineDrag` is on the row
+         — and what was missing was any sign of it. A second element that also captured the pointer
+         would take the gesture away from the row and make the hint the only place that worked, which is
+         the opposite of what he asked for. It carries no listeners and no pointer events at all. */
+      const hint = document.createElement('div');
+      hint.className = 'tl-addrow-hint';
+      hint.setAttribute('aria-hidden', 'true');
+      hint.innerHTML = '<span></span><span></span><span></span>';
+      row.appendChild(hint);
     }
     return row;
   }
@@ -1827,11 +1842,33 @@ window.FM = window.FM || {};
   /* PHONE ONLY so far. His PC half is a different shape — "instead of being like an actual full layer…
      it could just be a line between layers" — and is not built yet; on a desktop the add menu is
      already a permanent panel rather than a button, so nothing there is replaced by this. */
+  /* A GROUP CONTEXT WHOSE GROUP IS GONE IS NOT A GROUP CONTEXT (queue 307, clause 1). His report:
+     *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my page
+     for it's like a little plus button to come back"*.
+     `FM.groupContext` is a bare id held in app.js, and everything that draws the timeline gates on it:
+     the Add-layer marker is hidden inside a group (see below), and `inSubtree` decides which rows are
+     drawn at all. If that id ever outlives its group — the group deleted while its owner did not clear
+     the context, an undo that rebuilt the layer objects, a project swapped underneath it — then
+     `inSubtree` matches nothing, `addRowWanted` is false, and the marker is gone until a reload puts
+     the id back to null. Which is exactly the shape of what he saw.
+     So it heals rather than being trusted: one read, checked against the live scene, clearing itself if
+     the group has gone. Cheap (a `some` over the layer list, once per build) and it cannot be forgotten
+     by a future caller the way a note asking people to clear it could be. */
+  function liveGroupCtx() {
+    const id = FM.groupContext;
+    if (!id) return null;
+    if (FM.scene.layers.some(l => l.id === id && l.type === 'group')) return id;
+    FM.groupContext = null;
+    if (document.body) document.body.classList.remove('group-editing');
+    return null;
+  }
+  FM._liveGroupCtx = liveGroupCtx;    // seam: the suite drives the stale case through the real function
+
   function addRowWanted() {
     /* Both platforms now — the phone as a layer, the desktop as a line (clause 7).
        NOT inside Edit Group: `FM.insertLayer` deliberately ignores the index there (a flat index means
        nothing in a subtree), so showing a marker that promises to place things would be a lie. */
-    return !FM.groupContext;
+    return !liveGroupCtx();
   }
 
   function buildTracks() {
@@ -1873,7 +1910,7 @@ window.FM = window.FM || {};
     const multiSel = FM.selectMode || (FM.scene.selectedIds && FM.scene.selectedIds.length > 1);
     const soloId = (!multiSel && FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
       && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
-    const gctx = FM.groupContext;
+    const gctx = liveGroupCtx();
     FM.scene.layers.forEach((layer, index) => {
       if (soloId && layer.id !== soloId) return;
       if (gctx) { if (!inSubtree(layer, gctx)) return; }   // Edit Group: only the group's members, fully expanded

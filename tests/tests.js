@@ -26543,4 +26543,115 @@
     if (!q || q.indexOf('?') >= 0) throw new Error('an unrecognised stamp leaks into the message: ' + q);
   });
 
+
+  /* ================= queue 307: the Add-layer row, clauses 1-3 ===================================
+   * *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
+   * page for it's like a little plus button to come back… and also on PC just make it so when you're
+   * hovering over it the three lines of the right sho[w] up but you don't need to grab it from the
+   * three lines. It's just there to demonstrate that you can move it and also maybe just make it
+   * through the three lines extend out a bit longer and then like slowly fade out so it's like the
+   * whole thing is like you can drag it from anywhere"*.
+   * (Clause 4 — the drag itself moving smoothly — is a separate release; this covers 1 to 3.) */
+
+  test('a group context whose group is gone cannot hide the Add-layer row (queue 307 clause 1)', { item: 'addrow-307' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const ctx0 = FM.groupContext;
+    const DEAD = 'group_that_no_longer_exists';
+    try {
+      /* THE TWO GATES ARE CHECKED SEPARATELY, AND SYNCHRONOUSLY, and both parts of that were learned
+         the hard way. `FM.groupContext` is read in two places per build — once to decide which rows
+         belong to the open group, once to decide whether the marker is drawn — and because the fix
+         HEALS the id, whichever runs first clears it for the other. So a test that set a dead context,
+         rebuilt, waited, and looked at the finished timeline could not tell the two apart: both
+         mutation checks survived against it, on code that was genuinely broken. Read immediately after
+         the one rebuild, with no sleep, and put each gate in the state where it is the only one that
+         runs. */
+
+      // GATE 1 — rows. With layers present, the row loop is what consults the context.
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      FM.groupContext = DEAD;
+      FM.timeline.rebuild();
+      if (!document.querySelector('#tl-tracks .track-row')) throw new Error('with a dead group context the timeline drew NO layer rows — the stale id makes inSubtree match nothing, and it stays that way until a reload');
+      if (!document.querySelector('#tl-tracks .tl-addrow')) throw new Error('the Add-layer row is gone while a dead group context is set — that is "the plus button disappeared and I had to refresh"');
+      if (FM.groupContext !== null) throw new Error('the dead context survived the build (' + FM.groupContext + '), so everything else gated on it is still broken too');
+
+      // GATE 2 — the marker, on an EMPTY project, where the early return means addRowWanted is the
+      // only thing that reads the context all build.
+      FM.scene.layers.length = 0;
+      FM.groupContext = DEAD;
+      FM.timeline.rebuild();
+      if (!document.querySelector('#tl-tracks .tl-addrow')) throw new Error('on an empty project a dead group context still hides the Add-layer row — and an empty project is exactly where that row is the only way to start');
+      if (FM.groupContext !== null) throw new Error('the dead context survived the empty-project build');
+
+      // …and a LIVE context must still hide it: the marker promises an index that means nothing in a
+      // subtree, so this is the half that must NOT be healed away.
+      const g = FM.makeLayer('group', {});
+      FM.scene.layers.push(g);
+      FM.groupContext = g.id;
+      FM.timeline.rebuild();
+      if (document.querySelector('#tl-tracks .tl-addrow')) throw new Error('the Add-layer row shows inside a real Edit Group — it would promise a placement it cannot honour');
+      if (FM.groupContext !== g.id) throw new Error('a LIVE group context was cleared — Edit Group would exit itself');
+    } finally {
+      FM.groupContext = ctx0;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.timeline.rebuild();
+      await sleep(80);
+    }
+  });
+
+  test('the PC Add-layer row shows a hint on hover that you cannot grab (queue 307 clauses 2-3)', { item: 'addrow-307' }, async function () {
+    if (!matchMedia('(min-width: 701px)').matches) return;      // the line rendering is desktop-only
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(null); FM.timeline.rebuild();
+      await sleep(140);
+      const row = document.querySelector('#tl-tracks .tl-addrow');
+      if (!row) throw new Error('no Add-layer row on screen');
+      if (!row.classList.contains('tl-addrow--line')) throw new Error('the desktop row is not the line rendering, so this measures the wrong thing');
+      const hint = row.querySelector('.tl-addrow-hint');
+      if (!hint) throw new Error('the three-line hint is missing from the PC row entirely');
+      if (hint.querySelectorAll('span').length !== 3) throw new Error('the hint is not three lines');
+
+      /* NOT A HANDLE. This is the clause that could silently invert his request: an element that takes
+         the pointer would become the ONLY place the drag starts, which is precisely "you don't need to
+         grab it from the three lines" turned upside down. A hit test is the only honest check. */
+      if (getComputedStyle(hint).pointerEvents !== 'none') throw new Error('the hint captures the pointer — it would steal the drag from the rest of the row, which is the opposite of what he asked for');
+      const hr = hint.getBoundingClientRect();
+      if (hr.width > 2) {
+        const on = document.elementFromPoint(Math.round(hr.left + hr.width / 2), Math.round(hr.top + hr.height / 2));
+        if (on === hint || (on && hint.contains(on))) throw new Error('a press on the three lines lands on the hint rather than the row');
+      }
+
+      // Hidden at rest, shown while dragging (the same rule the :hover half uses, and the only half
+      // that can be driven without a real cursor).
+      const rest = Number(getComputedStyle(hint).opacity);
+      if (rest !== 0) throw new Error('the hint is at opacity ' + rest + ' at rest — it is supposed to appear on hover');
+      const kill = document.createElement('style');
+      kill.textContent = '*, *::before, *::after { transition: none !important; }';
+      document.head.appendChild(kill);
+      row.classList.add('tl-addrow-dragging');
+      void document.body.offsetWidth;
+      const lit = Number(getComputedStyle(hint).opacity);
+      row.classList.remove('tl-addrow-dragging');
+      kill.remove();
+      if (lit !== 1) throw new Error('the hint stays at opacity ' + lit + ' even while the row is being dragged — it never appears at all');
+
+      /* IT FADES OUT ALONG ITS LENGTH rather than ending in a hard edge — "extend out a bit longer and
+         then like slowly fade out so it's like the whole thing is like you can drag it from anywhere". */
+      const bg = getComputedStyle(hint.querySelector('span')).backgroundImage;
+      if (!/gradient/.test(bg)) throw new Error('the hint lines are a solid bar (' + bg + ') — a hard-ended bar reads as "grab here", which is the thing he does not want');
+      if (!/rgba\([^)]*,\s*0\)/.test(bg)) throw new Error('the hint lines do not fade to transparent: ' + bg);
+      const phoneGrip = 34;
+      if (!(hr.width > phoneGrip)) throw new Error('the hint is ' + Math.round(hr.width) + 'px, no longer than the phone grip it is meant to extend past');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.timeline.rebuild();
+      await sleep(80);
+    }
+  });
+
 })();
