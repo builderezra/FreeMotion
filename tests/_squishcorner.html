@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#323 clause 1 — Squish in a corner</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:700px;height:420px}
+#zoom{display:flex;gap:16px;padding:14px;flex-wrap:wrap}
+#zoom figure{margin:0;text-align:center}
+#zoom canvas{background:#0b1017;border:1px solid #22303c;border-radius:8px}
+#zoom figcaption{padding-top:6px;color:#8fa}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="zoom"></div><div id="out">…</div>
+<script>
+/* #323 clause 1 — *"For the squish effect make it so it actually works in corners"*.
+   A CIRCLE, not a square: squashing a circle against a wall makes it land tangent, so its overhang
+   past that wall drops. A square flattens and covers MORE of the edge, which read as "worse" once
+   already and cost a wrong conclusion.
+   Three placements, all overlapping by the same amount: hard against the right wall, hard against the
+   bottom, and into the bottom-right CORNER where both bind at once. If the corner case works, the
+   overhang past BOTH walls comes down the way each single wall does on its own. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), zoom = document.getElementById('zoom');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.renderScene || !w.FM.fxRegistry) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      var P = FM.scene.project; P.width = 400; P.height = 400;
+      var R = 80, OVER = 40;   // 40px of the ball past each wall it touches
+      function run(label, cx, cy, withSquish) {
+        FM.scene.layers.length = 0;
+        var L = FM.makeLayer('shape', { shape: 'ellipse', x: cx, y: cy, shapeW: R * 2, shapeH: R * 2, fill: '#ffffff' });
+        L.start = 0; L.duration = 5;
+        if (withSquish) { var sq = FM.fxRegistry.makeInstance('squish'); if (sq) L.effects = [sq]; }
+        FM.scene.layers.push(L);
+        var cv = d.createElement('canvas'); cv.width = 400; cv.height = 400;
+        var ctx = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 0);
+        var img = ctx.getImageData(0, 0, 400, 400).data;
+        var lit = function (x, y) { var i = (y * 400 + x) * 4; return img[i] > 170 && img[i + 1] > 170; };
+        var right = 0, bottom = 0;
+        for (var y = 0; y < 400; y++) if (lit(399, y)) right++;
+        for (var x = 0; x < 400; x++) if (lit(x, 399)) bottom++;
+        return { right: right, bottom: bottom, cv: cv, label: label };
+      }
+      var cases = [
+        ['right wall', 400 - R + OVER, 200],
+        ['bottom wall', 200, 400 - R + OVER],
+        ['bottom-right CORNER', 400 - R + OVER, 400 - R + OVER],
+      ];
+      var lines = ['a ' + (R * 2) + 'px ball, ' + OVER + 'px past each wall it touches', ''];
+      cases.forEach(function (c) {
+        var off = run(c[0], c[1], c[2], false);
+        var on = run(c[0], c[1], c[2], true);
+        lines.push(c[0] + ':');
+        lines.push('   right edge  ' + off.right + ' → ' + on.right + (on.right < off.right ? '   squashed' : '   NO CHANGE'));
+        lines.push('   bottom edge ' + off.bottom + ' → ' + on.bottom + (on.bottom < off.bottom ? '   squashed' : '   NO CHANGE'));
+        [['off', off], ['on', on]].forEach(function (pair) {
+          var fig = d.createElement('figure');
+          pair[1].cv.style.width = '190px'; pair[1].cv.style.height = '190px';
+          fig.appendChild(pair[1].cv);
+          fig.appendChild(d.createElement('figcaption')).textContent = c[0] + ' · squish ' + pair[0];
+          zoom.appendChild(fig);
+        });
+      });
+      out.textContent = lines.join('\n');
+      window.__done = true;
+    })();
+  });
+})();
+</script>
+</body>
+</html>

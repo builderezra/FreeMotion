@@ -27673,4 +27673,60 @@
     }
   });
 
+
+  /* ================= queue 323 clause 1: Squish binds on BOTH walls in a corner ===================
+   * *"For the squish effect make it so it actually works in corners"*.
+   * Measured on the current build and it already does — this test exists to keep it that way, and to
+   * record the numbers, because the report said otherwise and a claim of "works fine" with nothing
+   * behind it is worth very little.
+   *
+   * A CIRCLE, NOT A SQUARE, and that is not a detail. Squashed against a wall a circle lands tangent
+   * and its coverage of that frame edge DROPS; a square flattens and covers MORE. Measuring a square
+   * read as "the fix made it worse" once already and cost a wrong conclusion. The effect's own notes
+   * use a circle for the same reason. */
+  test('Squish binds on both walls at once in a corner (queue 323 clause 1)', { item: 'squish-corner' }, function () {
+    const layers0 = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const size0 = { w: P.width, h: P.height };
+    try {
+      P.width = 400; P.height = 400;
+      const R = 80, OVER = 40;   // a 160px ball, 40px past each wall it touches
+      const run = (cx, cy, withSquish) => {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'ellipse', x: cx, y: cy, shapeW: R * 2, shapeH: R * 2, fill: '#ffffff' });
+        L.start = 0; L.duration = 5;
+        if (withSquish) { const sq = FM.fxRegistry.makeInstance('squish'); if (!sq) throw new Error('the Squish effect is missing'); L.effects = [sq]; }
+        FM.scene.layers.push(L);
+        const cv = document.createElement('canvas'); cv.width = 400; cv.height = 400;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 0);
+        const img = ctx.getImageData(0, 0, 400, 400).data;
+        const lit = (x, y) => { const i = (y * 400 + x) * 4; return img[i] > 170 && img[i + 1] > 170; };
+        let right = 0, bottom = 0;
+        for (let y = 0; y < 400; y++) if (lit(399, y)) right++;
+        for (let x = 0; x < 400; x++) if (lit(x, 399)) bottom++;
+        return { right, bottom };
+      };
+
+      // Each wall on its own, so a corner failure cannot hide behind a wall that never worked either.
+      const rOff = run(400 - R + OVER, 200, false), rOn = run(400 - R + OVER, 200, true);
+      if (!(rOff.right > 60)) throw new Error('the ball is not overhanging the right wall to begin with (' + rOff.right + ' lit) — nothing below would mean anything');
+      if (!(rOn.right < rOff.right * 0.7)) throw new Error('against the RIGHT wall alone, the frame edge went ' + rOff.right + ' → ' + rOn.right + ' — Squish is not pulling it in');
+
+      const bOff = run(200, 400 - R + OVER, false), bOn = run(200, 400 - R + OVER, true);
+      if (!(bOn.bottom < bOff.bottom * 0.7)) throw new Error('against the BOTTOM wall alone, the frame edge went ' + bOff.bottom + ' → ' + bOn.bottom + ' — Squish is not pulling it in');
+
+      /* THE CORNER. Both walls bind at once, and each must pull the ball in — a version that handled
+         only the axis-aligned case would squash on one and leave the other cutting through. */
+      const cOff = run(400 - R + OVER, 400 - R + OVER, false), cOn = run(400 - R + OVER, 400 - R + OVER, true);
+      if (!(cOff.right > 40 && cOff.bottom > 40)) throw new Error('the corner fixture is not overhanging both walls (' + cOff.right + '/' + cOff.bottom + ')');
+      if (!(cOn.right < cOff.right * 0.7)) throw new Error('in a CORNER the right wall does nothing: ' + cOff.right + ' → ' + cOn.right + ' — only one axis is binding');
+      if (!(cOn.bottom < cOff.bottom * 0.7)) throw new Error('in a CORNER the bottom wall does nothing: ' + cOff.bottom + ' → ' + cOn.bottom + ' — only one axis is binding');
+    } finally {
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
 })();

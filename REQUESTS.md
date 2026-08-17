@@ -5950,8 +5950,16 @@ better still, keep working inside the turn rather than parking work for a later 
       makes the object move, the squish should apply, currently if a shake makes it move the squish
       doesn't do anything"*.
       Two clauses:
-      1. **Corners.** Squish presumably reads an axis-aligned velocity or a wall contact and misses the
-         diagonal case, so hitting a corner does nothing.
+      1. **Corners.** ✅ **v9.73 — measured, and it already worked.** The guess in this note was wrong:
+         Squish is separable per axis by construction, so a corner binds on both. A 160px ball hung
+         40px past each wall it touches, in a 400x400 comp, counting lit pixels along the frame edges:
+         right wall alone **138 → 51**, bottom wall alone **138 → 54**, and the bottom-right corner
+         **109 → 16** across and **109 → 18** down — it squashes HARDER in a corner than against either
+         wall on its own. Now covered by a test so it cannot quietly stop.
+         ⚠️ **If you are still seeing corners not work, tell me and I will look again** — this is
+         measured on the bench, and the likeliest explanation for what you saw is clause 2 below (an
+         effect moving the layer, which stops Squish reacting at all, corner or not) landing in the
+         same message.
       2. **Effect-driven motion.** This is the interesting one and it is the same shape as #31b
          (*"Transform blur can't smear effect- or camera-driven motion"*). Squish is deriving its
          movement from the layer's own keyframed transform, so anything that moves the layer at RENDER
