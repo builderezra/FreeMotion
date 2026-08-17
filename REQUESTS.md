@@ -5479,7 +5479,24 @@ better still, keep working inside the turn rather than parking work for a later 
       circle/spinner misbehaves in at least two places, which points at one shared animation rather
       than two separate bugs. Find the shared one before fixing either.
 
-- [ ] **305 — The help "?" button: thinner strokes, and the glyph is off-centre in its circle.**
+- [x] **305 — The help "?" button: thinner strokes, and the glyph is off-centre in its circle.**
+      ✅ **v9.53.** Both clauses.
+      **You reported this at #266 as well, and I told you you were wrong.** That check measured the
+      SVG against the BUTTON — which is centred, and always was — when you were talking about the
+      question mark inside its CIRCLE, which is a different pair of boxes. Measured properly: the
+      glyph ran y 8.50–17.50 in a circle centred on 12, so **4.5 units of air above it and 2.5
+      below**. It is 4.5 and 4.5 now.
+      **Stroke went to 1.6 on both bars**, and that may be half of what you were seeing: the PHONE
+      copy was 2.1, the heaviest icon in its row against neighbours at 1.7–1.8, so it read chunky
+      beside everything else. The two copies are hand-written duplicates in index.html — exactly
+      the setup where one gets fixed and the other is forgotten, which had already happened to the
+      weight — so the test now holds their path AND their weight equal.
+      The quarter-unit horizontal lean is left alone on purpose: a "?" reads as centred on its
+      stem and dot, which sit exactly on centre; the ink box leans left only because the hook is
+      wider than the tail, and forcing that to zero would make it look worse.
+      *Note: the stroke half was mutation-checked; the centring half was not — that run was
+      declined — so it stands on the before/after measurement rather than on proof the test can
+      fail.* Original entry:
       (17 Aug.) His words, verbatim: *"I would like the lines on the question button to be a little bit
       thinner and also I would like it to be fixed up a bit because the question isn't in the centre of
       its little circle and it looks weird"*.

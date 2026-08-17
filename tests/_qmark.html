@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#305 — the ? inside its circle</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:1280px;height:800px}
+#out{padding:6px;white-space:pre;color:#8fa}
+#zoom{display:flex;gap:20px;padding:14px;align-items:flex-start}
+#zoom svg{width:180px;height:180px;background:#0d141b;border:1px solid #22303c;border-radius:10px;color:#dfe8f3}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="zoom"></div><div id="out">…</div>
+<script>
+/* #305 — *"I would like the lines on the question button to be a little bit thinner and also I would
+   like it to be fixed up a bit because the question isn't in the centre of its little circle and it
+   looks weird"*.
+   "Not in the centre" is a claim about two boxes, so it gets measured: getBBox() on the glyph path
+   gives its geometric ink box in the SVG's own 24x24 coordinates, and the circle's centre is (12,12)
+   by construction. The offset between them IS the complaint, in units.
+   Both copies are read — the PC button and the phone one carry the same hand-written path at different
+   stroke weights, which is the arrangement that lets one get fixed and the other not.
+   The glyphs are also blown up to 180px beside the readout, because "looks weird" is finally a
+   judgement about how it looks. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), zoom = document.getElementById('zoom');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      try { if (w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close(); } catch (e) {}
+      setTimeout(function () {
+        var lines = [];
+        ['btn-help', 'm-help'].forEach(function (id) {
+          var b = d.getElementById(id);
+          if (!b) { lines.push(id + ': MISSING'); return; }
+          var svg = b.querySelector('svg');
+          /* MEASURE A RENDERED CLONE. #m-help is display:none at this width and getBBox on an
+             unrendered element returns 0,0,0,0 — the first run of this probe dutifully reported the
+             phone glyph as "off by -12.00 across, -12.00 down", which is not a measurement of anything.
+             The clone below is in the document and visible, so its box is real. */
+          var big = svg.cloneNode(true);
+          big.removeAttribute('class'); big.setAttribute('width', '180'); big.setAttribute('height', '180');
+          zoom.appendChild(big);
+          var circle = big.querySelector('circle'), path = big.querySelector('path');
+          var bb = path.getBBox();
+          var cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+          var gx = bb.x + bb.width / 2, gy = bb.y + bb.height / 2;
+          lines.push(id + '  stroke ' + svg.getAttribute('stroke-width'));
+          lines.push('   circle centre ' + cx + ',' + cy + '  r ' + r);
+          lines.push('   glyph ink box x ' + bb.x.toFixed(2) + '–' + (bb.x + bb.width).toFixed(2) +
+                     '   y ' + bb.y.toFixed(2) + '–' + (bb.y + bb.height).toFixed(2));
+          lines.push('   glyph centre ' + gx.toFixed(2) + ',' + gy.toFixed(2) +
+                     '   OFF BY ' + (gx - cx).toFixed(2) + ' across, ' + (gy - cy).toFixed(2) + ' down');
+          lines.push('   clearance to the circle: left ' + (bb.x - (cx - r)).toFixed(2) +
+                     '  right ' + ((cx + r) - (bb.x + bb.width)).toFixed(2) +
+                     '  top ' + (bb.y - (cy - r)).toFixed(2) +
+                     '  bottom ' + ((cy + r) - (bb.y + bb.height)).toFixed(2));
+          lines.push('');
+          // a crosshair on the true centre, so "is it centred" is visible and not just arithmetic
+          var g = d.createElementNS('http://www.w3.org/2000/svg', 'path');
+          g.setAttribute('d', 'M12 3v18M3 12h18');
+          g.setAttribute('stroke', '#ff5d5d'); g.setAttribute('stroke-width', '0.25'); g.setAttribute('opacity', '.85');
+          big.appendChild(g);
+        });
+        out.textContent = lines.join('\n');
+        window.__done = true;
+      }, 700);
+    })();
+  });
+})();
+</script>
+</body></html>

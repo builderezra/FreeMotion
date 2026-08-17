@@ -17158,9 +17158,63 @@
     }, 375);
   });
 
+  /* ---------------- queue 305: the ? inside its own circle ---------------------------------------
+   * *"I would like the lines on the question button to be a little bit thinner and also I would like it
+   * to be fixed up a bit because the question isn't in the centre of its little circle and it looks
+   * weird"*.
+   *
+   * HE REPORTED THIS AT QUEUE 266 AND WAS TOLD HE WAS WRONG. The test directly below is the result of
+   * that investigation, and its note says "the honest finding was that it was not" off centre. It was
+   * measuring the SVG ELEMENT against the BUTTON — which is centred, and always was. He was talking
+   * about the QUESTION MARK inside its CIRCLE, which is a different pair of boxes entirely, and that
+   * one was off: ink box y 8.50–17.50 in a circle centred at 12, so 4.5 units of air above it and 2.5
+   * below. Both tests stay. The old one still guards the thing it actually measures; this one asks his
+   * question. */
+  test('the "?" is centred in its own circle, at the same weight on both bars (queue 305)', { item: 'help-pos' }, function () {
+    const seen = [];
+    ['btn-help', 'm-help'].forEach(function (id) {
+      const b = document.getElementById(id);
+      if (!b) throw new Error('#' + id + ' is missing');
+      const svg = b.querySelector('svg');
+      if (!svg) throw new Error('#' + id + ' has no icon');
+      /* A RENDERED CLONE. #m-help is display:none at a desktop width and getBBox on an unrendered
+         element returns 0,0,0,0 — which reads as "off by 12 units" and would fail on correct markup,
+         or pass on broken markup at the other width. The clone is in the document, so its box is real. */
+      const holder = document.createElement('div');
+      holder.style.cssText = 'position:absolute;left:-10000px;top:0;width:120px;height:120px';
+      const big = svg.cloneNode(true);
+      big.setAttribute('width', '120'); big.setAttribute('height', '120');
+      holder.appendChild(big); document.body.appendChild(holder);
+      try {
+        const circle = big.querySelector('circle'), path = big.querySelector('path');
+        if (!circle || !path) throw new Error('#' + id + ' is not a ring-plus-glyph icon any more');
+        const bb = path.getBBox();
+        if (!(bb.width > 0 && bb.height > 0)) throw new Error('#' + id + ' glyph measured ' + bb.width + 'x' + bb.height + ' — nothing was rendered, so this proves nothing');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy');
+        const gy = bb.y + bb.height / 2, gx = bb.x + bb.width / 2;
+        /* VERTICAL IS THE COMPLAINT and is asserted tightly. Horizontal is looser on purpose: a "?" is
+           read as centred on its STEM AND DOT, which sit exactly on cx, and its ink box leans a
+           quarter-unit left of that because the hook is wider than the tail. Demanding 0 there would be
+           demanding a worse-looking glyph. */
+        if (Math.abs(gy - cy) > 0.2) throw new Error('#' + id + ': the "?" sits ' + (gy - cy).toFixed(2) + ' units below the middle of its circle (' + (bb.y - (cy - 9)).toFixed(1) + ' of air above it, ' + ((cy + 9) - (bb.y + bb.height)).toFixed(1) + ' below) — that is what "isn\'t in the centre of its little circle" is');
+        if (Math.abs(gx - cx) > 0.4) throw new Error('#' + id + ': the "?" sits ' + (gx - cx).toFixed(2) + ' units off the vertical centre of its circle');
+        const sw = parseFloat(svg.getAttribute('stroke-width'));
+        if (!(sw <= 1.7)) throw new Error('#' + id + ' draws at stroke-width ' + sw + ' — he asked for "a little bit thinner", and the phone copy used to be 2.1, the heaviest icon in its own row');
+        seen.push({ id: id, d: path.getAttribute('d'), sw: sw });
+      } finally { holder.remove(); }
+    });
+    /* ONE GLYPH, TWO PLACES. They are two hand-written copies of the same path in index.html, which is
+       exactly the arrangement where one gets fixed and the other does not — and the phone one had
+       already drifted to a different stroke weight. Held equal so that cannot happen quietly. */
+    if (seen[0].d !== seen[1].d) throw new Error('the PC and phone "?" are drawn from different paths now — one of them has been fixed and the other left behind');
+    if (seen[0].sw !== seen[1].sw) throw new Error('the PC "?" is stroke ' + seen[0].sw + ' and the phone one ' + seen[1].sw + ' — the same glyph at two weights is how this drifted in the first place');
+  });
+
   test('the "?" glyph is centred in its button (queue 266)', { item: 'help-pos' }, function () {
-    /* He said "off centred", and the honest finding was that it was not — so this pins that down, both
-       so the claim is checkable and so a future change cannot quietly make it true. */
+    /* NOTE (queue 305): this measures the SVG ELEMENT against the BUTTON, and that was never what he
+       was reporting — see the test above, which measures the question mark against its circle and
+       found the 1-unit drop he had been describing since 266. Kept, because the thing it does measure
+       is still worth holding. */
     return atPhoneWidth(async function () {
       await new Promise(r => setTimeout(r, 60));
       const btn = document.getElementById('m-help');
