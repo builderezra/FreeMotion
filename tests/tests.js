@@ -18195,6 +18195,100 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 24: the transform warps ---------------- */
+
+  test('effects: the transform warps still map an un-upgraded instance to exactly the same points', { item: 'fx-warp2' }, function () {
+    var fails = [];
+    [
+      { type: 'bend',       old: { amount: 0.5 }, legacyKeys: { axis: 0, position: 50 },                moved: { axis: 1, position: 20 } },
+      { type: 'squeeze',    old: { amount: 0.5 }, legacyKeys: { axis: 0, position: 50 },                moved: { axis: 1, position: 20 } },
+      { type: 'innerpinch', old: { amount: 0.5 }, legacyKeys: { radius: 60, centerx: 50, centery: 50 }, moved: { radius: 120, centerx: 20, centery: 80 } },
+      { type: 'tunnel',     old: { amount: 0.5 }, legacyKeys: { radius: 30, centerx: 50, centery: 50 }, moved: { radius: 70, centerx: 20, centery: 80 } },
+    ].forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var b = warpGrid(c.type, c.old);
+      /* THIS ONE CAUGHT A REAL BUG. squeeze's legacy line reads `Math.PI*y/H`, which JS evaluates as
+       * (Math.PI*y)/H — NOT Math.PI*(y/H). Routing the same value through the second form changed 357
+       * of 2030 sampled points at the DEFAULT settings, i.e. every existing squeeze in every project.
+       * Nothing visible, nothing that throws: just a silently different render. */
+      if (warpDiff(b, warpGrid(c.type, withKeys))) fails.push(c.type + ': spelling the new keys out at their fallbacks moved points');
+      var identity = []; for (var y = 0; y < WRP.H; y += 7) for (var x = 0; x < WRP.W; x += 7) identity.push([x, y]);
+      if (!warpDiff(identity, b)) fails.push(c.type + ': maps every point to itself');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!warpDiff(b, warpGrid(c.type, m))) fails.push(c.type + '.' + k + ' moves no points');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (warpDiff(b, warpGrid(c.type, st))) fails.push(c.type + ': a NEW instance maps differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+
+    /* AND THE SELF-COMPARISON TRAP, MET IN THE WILD. Everything above compares the new code against
+     * ITSELF — an old instance against one holding the new keys at their fallbacks — and EFFECTS-PLAN
+     * says in as many words that such a test passes when both sides are equally wrong. Proof, not
+     * theory: `squeeze`'s legacy line is `Math.PI*y/H`, which JS groups as (Math.PI*y)/H. Routing the
+     * same value through Math.PI*(y/H) instead changed 357 of 2030 sampled points at the DEFAULT
+     * settings — every existing squeeze in every project — and every assertion above still passed,
+     * because both sides moved together.
+     * The only thing that catches it is an INDEPENDENT copy of the legacy arithmetic, written out here
+     * and compared exactly. Keep the grouping below character-for-character identical to the renderer's. */
+    /* A GRID, not a handful of points. The two groupings agree on about 82% of pixels, so four
+     * hand-picked samples all landed in the agreeing majority and the mutation survived twice. Scan
+     * enough of the frame that the disagreeing ~18% cannot be missed. */
+    var Wg = WRP.W, Hg = WRP.H, cxg = Wg / 2, bad = 0, firstBad = null;
+    for (var gy = 0; gy < Hg; gy += 3) for (var gx = 0; gx < Wg; gx += 3) {
+      var f = 1 - 0.5 * Math.sin(Math.PI * gy / Hg);      // NOT Math.PI * (gy / Hg) — see above
+      if (f < 0.05) f = 0.05;
+      var want = cxg + (gx - cxg) / f;
+      var got = warpAt('squeeze', gx, gy, { amount: 0.5 })[0];
+      if (got !== want) { bad++; if (!firstBad) firstBad = gx + ',' + gy + ' gave ' + got + ' want ' + want; }
+    }
+    if (bad) throw new Error(bad + ' sampled points disagree with the legacy arithmetic (first: ' + firstBad + ') — the default squeeze mapping has changed, which silently re-renders every existing squeeze in every project');
+  });
+
+  /* Where the bow PEAKS and where the tunnel's mouth SITS are the actual complaints, and both have
+   * exact numeric answers — so neither is asserted as "the output changed". */
+  test('effects: Bend peaks where you put it, and can bow the other way', { item: 'fx-warp2' }, function () {
+    var W = WRP.W, H = WRP.H, cx = W / 2;
+    var peakAt = function (p) { var best = 0, bi = 0;
+      for (var y = 0; y < H; y++) { var dx = Math.abs(warpAt('bend', cx, y, p)[0] - cx); if (dx > best) { best = dx; bi = y; } }
+      if (best < 1) throw new Error('the bend displaced nothing at all, so its peak cannot be located');
+      return bi / H * 100; };
+    if (Math.abs(peakAt({ amount: 0.5 }) - 50) > 3) throw new Error('the default bow no longer peaks at the middle (' + peakAt({ amount: 0.5 }).toFixed(1) + '%)');
+    if (Math.abs(peakAt({ amount: 0.5, position: 20 }) - 20) > 3) throw new Error('asked to peak at 20% it peaked at ' + peakAt({ amount: 0.5, position: 20 }).toFixed(1) + '%');
+    if (Math.abs(peakAt({ amount: 0.5, position: 80 }) - 80) > 3) throw new Error('asked to peak at 80% it peaked at ' + peakAt({ amount: 0.5, position: 80 }).toFixed(1) + '%');
+    var v = warpAt('bend', 60, 120, { amount: 0.5, axis: 1 });
+    if (v[0] !== 60) throw new Error('bowing up/down still displaced the horizontal axis');
+    if (v[1] === 120) throw new Error('bowing up/down did not displace the vertical axis at all');
+    var h = warpAt('bend', 60, 120, { amount: 0.5 });
+    if (h[1] !== 120) throw new Error('the default bow is displacing vertically, which it never did');
+  });
+
+  /* The tunnel's mouth is the radius that maps to ITSELF — the fixed point of the inversion. That is a
+   * single number, and it must track the control as a percentage of the frame radius. */
+  test('effects: the Tunnel mouth can be resized and aimed', { item: 'fx-warp2' }, function () {
+    var W = WRP.W, H = WRP.H, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    var mouth = function (p) { var best = -1, bd = 1e9;
+      for (var r = 2; r < maxR; r += 0.5) { var q = warpAt('tunnel', cx + r, cy, p), rr = q[0] - cx, e = Math.abs(rr - r);
+        if (e < bd) { bd = e; best = r; } }
+      return best; };
+    var m30 = mouth({ amount: 1 }), m70 = mouth({ amount: 1, radius: 70 });
+    if (Math.abs(m30 - maxR * 0.30) > 3) throw new Error('the default mouth sits at ' + m30.toFixed(1) + 'px, not 30% of the frame radius (' + (maxR * 0.3).toFixed(1) + ')');
+    if (Math.abs(m70 - maxR * 0.70) > 4) throw new Error('at radius 70 the mouth sits at ' + m70.toFixed(1) + 'px, not ' + (maxR * 0.7).toFixed(1));
+    // aiming it: the point that stays put is the CENTRE, so moving the centre must move that point
+    var still = function (p) { var best = null, bd = 1e9;
+      for (var x = 10; x < W - 10; x += 2) for (var y = 10; y < H - 10; y += 20) {
+        var q = warpAt('tunnel', x, y, p), e = Math.hypot(q[0] - x, q[1] - y);
+        if (e < bd) { bd = e; best = [x, y]; } }
+      return best; };
+    var a = still({ amount: 0.5 }), b = still({ amount: 0.5, centerx: 20, centery: 80 });
+    if (Math.abs(a[0] - cx) > 6) throw new Error('the default tunnel is not centred on the frame (fixed point at x=' + a[0] + ')');
+    if (Math.abs(b[0] - W * 0.2) > 8) throw new Error('aimed at 20% the tunnel still pivots at x=' + b[0] + ' instead of ' + (W * 0.2));
+  });
+
   /* ---------------- EFFECTS-PLAN round 23: the colour grades ---------------- */
 
   test('effects: the colour grades still render an un-upgraded instance exactly as they did', { item: 'fx-grade' }, function () {

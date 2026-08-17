@@ -435,6 +435,24 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   * **A sign change is a stronger claim than a magnitude.** Faded's cool look is asserted as red-minus-
     blue crossing from +14 to -21, with 0 at tone 0 — not as "the cast changed".
 
+- v9.10 (round 24 — **the transform warps**) — `bend` and `squeeze` (axis + where the bow/waist sits),
+  `innerpinch` and `tunnel` (size + centre). Findings, and the first one is the important one:
+  * **THE SELF-COMPARISON TRAP, CAUGHT IN THE ACT.** This file warns that legacy-vs-explicit-defaults
+    compares the new code against ITSELF and passes when both sides are equally wrong. Here is the
+    proof. `squeeze`'s legacy line is `Math.PI*y/H`, which JS groups as `(Math.PI*y)/H`. Feeding the
+    remapped fraction through `Math.PI*(y/H)` instead changed **357 of 2030 sampled points at the
+    DEFAULT settings** — every existing squeeze in every project — and every same-code assertion in the
+    round still passed. Only the diff against the previous commit saw it.
+  * **So the suite now carries an INDEPENDENT copy of the legacy arithmetic** for squeeze, written out
+    in the test and compared exactly. The one-off harness cannot be kept; a transcribed formula can.
+  * **Four hand-picked sample points were not enough, twice.** The two groupings agree on ~82% of the
+    frame, so the first version of that assertion sampled four points, landed entirely in the agreeing
+    majority, and the mutation SURVIVED — twice — before the check was widened to a grid (1476 of the
+    sampled points disagree once it scans properly). If an assertion is about float grouping, scan.
+  * A useful pattern for warps generally: **the fixed point IS the control.** The tunnel's mouth is the
+    radius that maps to itself and its centre is the pixel that does not move, so both controls are
+    asserted as exact locations (mouth at 30%/70% of the frame radius; centre following to 20%).
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

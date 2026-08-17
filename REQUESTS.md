@@ -3795,6 +3795,9 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 24, v9.10:* Bend, Squeeze, Inner Pinch and Tunnel — all four had a hardcoded centre,
+      axis or size. It also caught a real bug in my own change: a floating-point grouping difference in
+      Squeeze that would have silently altered every existing squeeze, invisibly.
       *Round 23, v9.09:* the four film-look grades (Bleach Bypass, Teal & Orange, Faded Film, Cross
       Process). Each had its look welded into a constant, so one Amount slider dragged several
       unrelated things together — you could not get bleached contrast while keeping colour, could not
@@ -5252,7 +5255,21 @@ better still, keep working inside the turn rather than parking work for a later 
       So: treat #292 as possibly-misread, and investigate the DATA path — autosave timing, what
       `projects.open()` restores, and whether a reload can serve a snapshot older than the last edit.
       Losing work is the worst class of bug in this app and it jumps the queue on his say-so.
-      **JUMPED THE QUEUE. A CAUSE IS FIXED IN v9.05 — but this stays OPEN until you confirm.**
+      🚨 **17 Aug, AFTER v9.05 — HE SAYS IT IS STILL HAPPENING, AND IT IS THE APPEARANCE ONE.** His
+      words, verbatim: *"The glitch that shows the old version of FreeMotion that has a more alight
+      motion look STILL shows up when I press refresh, you need to have this ur main focus when u
+      finish what ur doing and solve this, it's such a big issue, PLEASE"*. And then, on ordering:
+      *"Make sure you're logging my new requests and continuing with the list oldest first. Except for
+      the issue with the old version showing. That needs to be next in line"*.
+      **So: this is NEXT, ahead of everything else, and it is the OLD ALIGHT-MOTION-LOOKING LAYOUT —
+      not the project data.** That means #292's reading was right after all and my v8.51 fix (putting
+      `layout-studio` on the body tag in the markup) does not cover the real cause. The v9.05 stale-tab
+      work is still worth having but it is not this.
+      **Prime suspect, not yet tested: the SERVICE WORKER serving a stale `index.html`.** The `?v=`
+      cache-busters only version the SCRIPTS — if the cached shell itself is old, he gets an old app
+      wholesale, which is exactly "an old version of FreeMotion". Check the SW's fetch strategy for
+      the navigation request before anything else.
+      **A CAUSE WAS FIXED IN v9.05 — a different one — and that stays true:**
       What I found: two tabs on the SAME project were unguarded. Tab A holds an old scene, you work in
       tab B, you switch back to tab A — and tab A's hidden-tab handler flushes its stale scene over the
       good one. Refresh and you get the old version. On a phone, backgrounding the browser fires that
@@ -5311,6 +5328,36 @@ better still, keep working inside the turn rather than parking work for a later 
       be repeated there"* — i.e. every one of 308/309/310 is a DUPLICATE of a control that already
       exists elsewhere, so removing it from this menu takes nothing away. Still verify each survivor
       actually works before deleting its twin; that is the only part he cannot check from his side.
+
+- [ ] **311 — Let sound effects be starred, and show the starred ones at the top of the list.**
+      (17 Aug.) His words, verbatim: *"Make it so you can star sound effects and they show up at the
+      top of the sound effect list"*.
+      The visual effects browser already has stars/favourites (`starFor` in js/fx-browser.js, and the
+      FEATURED / RECENTS-FAVES rows) — so this is the same treatment for the SOUND EFFECTS list.
+      Check whether the audio browser (js/audio-fx-browser.js) can reuse that machinery rather than
+      growing a second, slightly different favourites system.
+
+- [ ] **312 — Deselecting a layer scrolls the timeline instead of restoring where you were.** (17 Aug,
+      two screenshots at v9.08 — the selected single-row view, then the full timeline scrolled so that
+      layer sits at the very bottom above "Tap to add a layer".) His words, verbatim: *"For some reason
+      every time I click off of a layer it moves my position in the timeline so the layer is at the
+      bottom, when realistically it should be putting me back in the position i was"*.
+      Reading it: selecting a layer collapses the timeline to that one row; deselecting expands it
+      again and scrolls so the previously-selected layer is at the BOTTOM of the view. It should
+      restore the scroll position the timeline had before you selected. Note v2.44 already fixed a
+      "tapping a layer scrolls the timeline back to the top" bug by preserving vertical scroll across
+      a rebuild — so the machinery exists; this is the DESELECT direction of the same thing.
+
+- [ ] **313 — The shading on the notepad icon looks bad.** (17 Aug, screenshot of the top bar showing
+      the "?" and the yellow notepad icon.) His words, verbatim: *"The “shading” you added to the note
+      pad looks so bad, you barely did anything and what you did do is complete ass"*.
+      Fair. Redo it properly rather than nudging it — and it sits beside 305 (the "?" glyph is
+      off-centre and its strokes are too thick), which is the same icon row, so do them together.
+
+- [ ] **314 — Rename "Freehand Drawing" to "Sketching".** (17 Aug.) His words, verbatim: *"Change the
+      name of free hand drawing to Sketching"*.
+      It appears in the add menu (js/addmenu.js) and on the instant rail beside Text and Vector
+      Drawing — check for every label, not just the first one found.
 
 ## Done
 

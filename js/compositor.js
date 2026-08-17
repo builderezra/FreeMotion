@@ -299,7 +299,11 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Rect → Polar'], [1, 'Polar → Rect']] },
     ] },
-    { type: 'bend', label: 'Bend', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'bend', label: 'Bend', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+      { key: 'axis', label: 'Bows', def: 0, options: [[0, 'Left / right'], [1, 'Up / down']] },
+      { key: 'position', label: 'Peak at', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'glass', label: 'Glass', params: [
       { key: 'amount', label: 'Distortion', min: 0, max: 40, step: 1, def: 12, unit: 'px' },
       { key: 'scale', label: 'Facet size', min: 1, max: 40, step: 1, def: 1, unit: 'px' },
@@ -596,7 +600,12 @@ window.FM = window.FM || {};
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
     ] },
     { type: 'contourstrips', label: 'Contour Strips', param: 'levels', min: 2, max: 12, step: 1, def: 5, color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High' },
-    { type: 'innerpinch', label: 'Inner Pinch', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'innerpinch', label: 'Inner Pinch', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+      { key: 'radius', label: 'Size', min: 10, max: 150, step: 5, def: 60, unit: '%' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'crosshatch', label: 'Crosshatch', color: true, defColor: '#101014', colorLabel: 'Ink', params: [
       { key: 'spacing', label: 'Spacing', min: 3, max: 30, step: 1, def: 7, unit: 'px' },
       { key: 'density', label: 'Ink density', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -718,7 +727,11 @@ window.FM = window.FM || {};
     { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' }] },
     { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
-    { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'squeeze', label: 'Squeeze', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+      { key: 'axis', label: 'Pinches', def: 0, options: [[0, 'Horizontally'], [1, 'Vertically']] },
+      { key: 'position', label: 'Waist at', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'tiles', label: 'Tiles', params: [
       // legacy = what an instance saved BEFORE this param existed still renders as, so the panel
       // highlights the button that is actually drawing rather than the new default.
@@ -770,7 +783,12 @@ window.FM = window.FM || {};
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
     ] },
-    { type: 'tunnel', label: 'Tunnel', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'tunnel', label: 'Tunnel', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'radius', label: 'Mouth size', min: 5, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     // ---- batch 28 (more AM Distortion/Warp + Procedural + Color parity) ----
     { type: 'turbulentdisplace', label: 'Turbulent Displace', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 80, step: 1, def: 30, unit: 'px' },
@@ -5557,7 +5575,19 @@ window.FM = window.FM || {};
     // it unwraps a circular image into a straight strip (a clock face into a timeline, a tunnel into
     // a wall). Half the effect had no way to be reached.
     polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
-    bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
+    bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1;
+      // It only bowed left/right, and the arc always peaked at the vertical midpoint — so bending a
+      // banner up or down, or moving where the bow happens, were both impossible. POSITION remaps the
+      // sine's input so the peak lands where asked: below the peak the input is stretched to reach 0.5
+      // there, above it the remainder is stretched to reach 1 at the far edge.
+      var bdAx=p.axis==null?0:(Math.round(FM.evalProp(p.axis,t))|0);
+      var bdPs=p.position==null?50:FM.evalProp(p.position,t); if(bdPs<0)bdPs=0; if(bdPs>100)bdPs=100;
+      var bdU=bdAx===1?(x/W):(y/H);
+      var bdF=bdU;
+      if(bdPs!==50){ var bp=bdPs/100; if(bp<=0)bp=0.0001; if(bp>=1)bp=0.9999;
+        bdF=bdU<bp?(bdU/bp)*0.5:0.5+((bdU-bp)/(1-bp))*0.5; }
+      var bdShift=bdAmt*(bdAx===1?cy:cx)*Math.sin(bdF*Math.PI);
+      return bdAx===1?[x,y-bdShift]:[x-bdShift,y]; },
     glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */
       // The jitter was regenerated per INDIVIDUAL PIXEL, which is the one setting at which this reads
       // as TV static rather than as glass: real glass distorts in facets, and a facet is several pixels
@@ -5592,7 +5622,15 @@ window.FM = window.FM || {};
       return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
     // amount. At 1 the frame reads as an infinite tube; small amounts give a wormhole pucker.
-    tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y]; var tnDx=x-cx, tnDy=y-cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y]; var tnInv=(maxR*0.30)*(maxR*0.30)/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA; return [cx+tnDx/tnR*tnRR, cy+tnDy/tnR*tnRR]; },
+    tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y];
+      // The inversion radius was hardcoded at 30% of the frame and the mouth locked to frame centre,
+      // so the tunnel could be neither resized nor aimed at anything in the shot.
+      var tnCx=wCx(p,t,W,cx), tnCy=wCy(p,t,H,cy);
+      var tnRp=p.radius==null?30:FM.evalProp(p.radius,t); if(tnRp<5)tnRp=5; if(tnRp>100)tnRp=100;
+      var tnRad=tnRp===30?maxR*0.30:maxR*(tnRp/100);
+      var tnDx=x-tnCx, tnDy=y-tnCy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y];
+      var tnInv=tnRad*tnRad/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA;
+      return [tnCx+tnDx/tnR*tnRR, tnCy+tnDy/tnR*tnRR]; },
     // ---- batch 15 (repeat / tiling) ----
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10;
       // Rows were welded to columns and every tile was a byte-identical copy butt-joined to the next,
@@ -5649,9 +5687,32 @@ window.FM = window.FM || {};
       var mt_ciy=Math.floor(mt_y/mt_size); var mt_ly=mt_y-mt_ciy*mt_size; if((mt_ax===0||mt_ax===2)&&(mt_ciy&1)) mt_ly=mt_size-mt_ly;
       var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
-    innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; var ip_dx=x-cx, ip_dy=y-cy; var ip_r=Math.hypot(ip_dx,ip_dy); var ip_rad=maxR*0.6; if(ip_rad<=0)return [x,y]; var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8; return [cx+ip_dx*ip_k, cy+ip_dy*ip_k]; },
+    innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; 
+      // The pinch disc was hardcoded at 60% of the frame radius, dead centre — and its size and where
+      // it sits are the only two things that matter for a LOCALISED pinch.
+      var ipCx=wCx(p,t,W,cx), ipCy=wCy(p,t,H,cy);
+      var ipRp=p.radius==null?60:FM.evalProp(p.radius,t); if(ipRp<10)ipRp=10; if(ipRp>150)ipRp=150;
+      var ip_dx=x-ipCx, ip_dy=y-ipCy; var ip_r=Math.hypot(ip_dx,ip_dy);
+      var ip_rad=ipRp===60?maxR*0.6:maxR*(ipRp/100); if(ip_rad<=0)return [x,y];
+      var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8;
+      return [ipCx+ip_dx*ip_k, ipCy+ip_dy*ip_k]; },
     // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----
-    squeeze: function(x,y,W,H,cx,cy,maxR,p,t){ var sq_k=p.amount==null?0.5:FM.evalProp(p.amount,t); if(sq_k<-1)sq_k=-1; if(sq_k>1)sq_k=1; var sq_f=1-sq_k*Math.sin(Math.PI*y/H); if(sq_f<0.05)sq_f=0.05; return [cx+(x-cx)/sq_f, y]; },
+    squeeze: function(x,y,W,H,cx,cy,maxR,p,t){ var sq_k=p.amount==null?0.5:FM.evalProp(p.amount,t); if(sq_k<-1)sq_k=-1; if(sq_k>1)sq_k=1;
+      // The waist was always at the vertical midpoint and always pinched horizontally. Same remap as
+      // Bend for where the waist sits, and the axis switch pinches the other way instead.
+      var sqAx=p.axis==null?0:(Math.round(FM.evalProp(p.axis,t))|0);
+      var sqPs=p.position==null?50:FM.evalProp(p.position,t); if(sqPs<0)sqPs=0; if(sqPs>100)sqPs=100;
+      var sqU=sqAx===1?(x/W):(y/H);
+      var sqF2=sqU;
+      if(sqPs!==50){ var sp=sqPs/100; if(sp<=0)sp=0.0001; if(sp>=1)sp=0.9999;
+        sqF2=sqU<sp?(sqU/sp)*0.5:0.5+((sqU-sp)/(1-sp))*0.5; }
+      // `Math.PI*y/H` is (Math.PI*y)/H, NOT Math.PI*(y/H) — JS evaluates left to right, and the two
+      // differ in the last bits. Feeding the remapped fraction through the second form silently broke
+      // byte-identity on 357 of 2030 sampled points at the DEFAULT settings. Keep the legacy
+      // expression verbatim when nothing has been changed.
+      var sqArg=(sqAx===0&&sqPs===50)?(Math.PI*y/H):(Math.PI*sqF2);
+      var sq_f=1-sq_k*Math.sin(sqArg); if(sq_f<0.05)sq_f=0.05;
+      return sqAx===1?[x, cy+(y-cy)/sq_f]:[cx+(x-cx)/sq_f, y]; },
     // ---- batch 28 (AM Distortion/Warp fill-ins) ----
     // Turbulent Displace: domain-warped value-noise field pushes each pixel — organic churn, distinct
     // from fractalwarp's plain sum-of-sines (this warps the noise input by more noise → curlier). t
