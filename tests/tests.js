@@ -18195,6 +18195,67 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 29: spin + fliplayer, and the table is done -------------- */
+
+  /* A CANVAS_FX is the fourth kind of effect in this file: it takes (A, B, W, H, bb, p, t, tl) — a
+   * SOURCE canvas and a DESTINATION context — and transforms whole canvases rather than pixel buffers.
+   * So it needs real canvases, and the fixture must be ASYMMETRIC or a flip is invisible. */
+  var CFX = { W: 120, H: 120, bb: { x: 20, y: 30, w: 50, h: 25 } };
+  function cfxSource() {
+    var c = document.createElement('canvas'); c.width = CFX.W; c.height = CFX.H;
+    var x = c.getContext('2d');
+    x.fillStyle = '#e8a33d'; x.fillRect(20, 30, 50, 25);
+    x.fillStyle = '#3aa0ff'; x.fillRect(20, 30, 12, 12);   // the corner mark: without it a flip is unreadable
+    return c;
+  }
+  function cfxRun(type, params, tl) {
+    var f = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (!f) throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable — the suite cannot test the real effect');
+    var A = cfxSource(), C = document.createElement('canvas'); C.width = CFX.W; C.height = CFX.H;
+    var B = C.getContext('2d');
+    f(A, B, CFX.W, CFX.H, CFX.bb, params, 0.5, tl == null ? 1 : tl);
+    return B.getImageData(0, 0, CFX.W, CFX.H).data;
+  }
+  function cfxLit(d) { var n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }
+
+  test('effects: Spin can start at an angle and turn about an off-centre pivot', { item: 'fx-canvas' }, function () {
+    var base = cfxRun('spin', { speed: 90 });
+    if (fxDiff(base, cfxRun('spin', { speed: 90, offset: 0, pivotx: 50, pivoty: 50 })))
+      throw new Error('spelling the new keys out at their fallbacks changed the render');
+    // OFFSET: at zero speed the layer sits at exactly the start angle, so 0 and 180 must differ
+    if (fxDiff(cfxRun('spin', { speed: 0 }), cfxRun('spin', { speed: 0, offset: 0 })))
+      throw new Error('an explicit offset of 0 is not the same as no offset at all');
+    if (!fxDiff(cfxRun('spin', { speed: 0 }), cfxRun('spin', { speed: 0, offset: 180 })))
+      throw new Error('a 180 degree start angle rendered identically to none — two spinning layers still cannot be offset from each other');
+    ['pivotx', 'pivoty'].forEach(function (k) {
+      var m = { speed: 90 }; m[k] = 10;
+      if (!fxDiff(base, cfxRun('spin', m))) throw new Error('spin.' + k + ' moves nothing — it is still turning about the bounds centre');
+    });
+  });
+
+  /* "It flips in place about the bounds centre and throws the original away, so it can only ever
+   * produce the same layer backwards." Both halves of the fix need care to TEST, because each is a
+   * no-op in the obvious case and that is correct rather than broken:
+   *   - flipping about the mark's OWN centre maps it onto itself, so Keep adds nothing there;
+   *   - a HORIZONTAL flip does not use the vertical pivot at all.
+   * Test each where it can actually show. */
+  test('effects: Flip Layer can hinge off-centre and keep the original', { item: 'fx-canvas' }, function () {
+    var base = cfxRun('fliplayer', { mode: 0 });
+    if (fxDiff(base, cfxRun('fliplayer', { mode: 0, keep: 0, pivotx: 50, pivoty: 50 })))
+      throw new Error('spelling the new keys out at their fallbacks changed the render');
+    // centred: keep is legitimately a no-op, because the reflection lands exactly on the original
+    if (cfxLit(cfxRun('fliplayer', { mode: 0, keep: 1 })) !== cfxLit(base))
+      throw new Error('about its own centre the reflection should land on the original, so Keep cannot add coverage there');
+    // off-centre: the reflection hinges away, and Keep must then show BOTH
+    var offOnly = cfxLit(cfxRun('fliplayer', { mode: 0, pivotx: 10 }));
+    var offBoth = cfxLit(cfxRun('fliplayer', { mode: 0, pivotx: 10, keep: 1 }));
+    if (!(offBoth > offOnly * 1.8)) throw new Error('hinged off-centre, Keep covered ' + offBoth + ' against the reflection\'s own ' + offOnly + ' — the original is not being kept, so a symmetry composite is still impossible');
+    // the pivots, each on a flip that actually uses it
+    if (!fxDiff(base, cfxRun('fliplayer', { mode: 0, pivotx: 10 }))) throw new Error('the horizontal hinge does not move');
+    if (fxDiff(base, cfxRun('fliplayer', { mode: 0, pivoty: 90 }))) throw new Error('the VERTICAL pivot changed a HORIZONTAL flip — it should be irrelevant to it');
+    if (!fxDiff(cfxRun('fliplayer', { mode: 1 }), cfxRun('fliplayer', { mode: 1, pivoty: 90 }))) throw new Error('the vertical hinge does not move on a vertical flip');
+  });
+
   /* ---------------- EFFECTS-PLAN round 28: the last of the proposal table ---------------- */
 
   test('effects: border and the contour effects still render an un-upgraded instance exactly as they did', { item: 'fx-last' }, function () {

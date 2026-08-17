@@ -522,6 +522,21 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   (measured: 30%+ fewer inked pixels on a noise plate), and no amount of post-processing the traced
   lines would have done it.
 
+- v9.16 (round 29 — **`spin` + `fliplayer`: THE PROPOSAL TABLE IS COMPLETE**) — spin gains a start
+  angle and an off-centre pivot; fliplayer gains a hinge position and "keep the original".
+  **STATE OF THIS FILE NOW.** Every row of the 105-item proposal table is built EXCEPT:
+  * `blur` — a CSS filter. Its mix/blend needs a plate and a composite, not a parameter. Deferred with
+    that reason, not forgotten.
+  * `contrast`, `grayscale`, `invert`, `hextiles`, `longshadow` — the five this file itself says to
+    SKIP (unsound dual-pipeline proposals, a low-impact restructure, and a from-scratch rewrite).
+  The WORTH DOING LATER list is also empty: Corner Pin, LUT and Curves were never started and remain
+  the only genuinely unbuilt features named anywhere here — each needs a new param TYPE (on-canvas
+  handles, a file input, a curve editor), which is why they were always the tail.
+  Finding: **a CANVAS_FX no-op can be correct.** Flipping about a mark's own centre maps it onto
+  itself, so "keep the original" adds nothing there — and a horizontal flip does not read the vertical
+  pivot at all. Both look like dead controls in the obvious test and are right; each has to be tested
+  where it can actually show. The fixture must also be ASYMMETRIC or a flip is invisible full stop.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

@@ -759,7 +759,12 @@ window.FM = window.FM || {};
     { type: 'hollowbox3d', label: 'Hollow Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'axiscross3d', label: 'Three-axis Cross', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'pagecurl', label: 'Page Curl', params: [{ key: 'amount', label: 'Curl', min: 0, max: 1, step: 0.01, def: 0.45 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }, { key: 'radius', label: 'Radius', min: 5, max: 60, step: 1, def: 20, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.5 }] },
-    { type: 'fliplayer', label: 'Flip Layer', param: 'mode', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
+    { type: 'fliplayer', label: 'Flip Layer', params: [
+      { key: 'mode', label: 'Flips', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
+      { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'rasterextrude', label: 'Raster Extrude', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
     { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
@@ -778,7 +783,12 @@ window.FM = window.FM || {};
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
     ] },
     { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
-    { type: 'spin', label: 'Spin', param: 'speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
+    { type: 'spin', label: 'Spin', params: [
+      { key: 'speed', label: 'Speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
+      { key: 'offset', label: 'Start angle', min: -360, max: 360, step: 5, def: 0, unit: '°' },
+      { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }] },
     { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' }] },
     { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
@@ -7415,7 +7425,17 @@ window.FM = window.FM || {};
       renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: 0, ry: 0, rz: 0, shading });
     },
     fliplayer: function (A, B, W, H, bb, p, t) {
-      const m = (p.mode | 0), px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      const m = (p.mode | 0);
+      /* It flipped in place about the bounds centre and threw the original away, so all it could ever
+         make was "the same layer, backwards". KEEP draws the original first and the reflection over
+         it, which is what hinges a mirror out to one side and builds a symmetry composite; moving the
+         PIVOT is what decides where that hinge is. */
+      const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t);
+      const fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
+      const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
+      const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
+      const keep = (p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0)) === 1;
+      if (keep) B.drawImage(A, 0, 0);            // the original stays, the reflection joins it
       B.save();
       B.translate(px, py);
       B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);
@@ -7794,10 +7814,17 @@ window.FM = window.FM || {};
     },
     spin: function (A, B, W, H, bb, p, t, tl) {
       const spd = fparam(p, 'speed', 90, t);
-      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      /* Speed was the only handle. Every spin started at exactly 0 degrees at the clip's start, so two
+         spinning layers could never be offset from each other, and it always turned about the bounds
+         centre, so it could not swing a layer around an off-centre pivot. */
+      const off = p.offset == null ? 0 : FM.evalProp(p.offset, t);
+      const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t);
+      const fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
+      const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
+      const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
       B.save();
       B.translate(px, py);
-      B.rotate(spd * tl * Math.PI / 180);
+      B.rotate((off === 0 ? spd * tl : spd * tl + off) * Math.PI / 180);
       B.translate(-px, -py);
       B.drawImage(A, 0, 0); B.restore();
     },

@@ -3791,7 +3791,13 @@ better still, keep working inside the turn rather than parking work for a later 
       rather than leaving it to be re-read forever. **If you remember what it did, say so and it gets
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
-- [ ] **Continue the EFFECTS-PLAN build rounds.**
+- [ ] **Continue the EFFECTS-PLAN build rounds.** ⚠️ **THE PROPOSAL TABLE IS NOW COMPLETE (v9.16).**
+      All 105 proposed effect upgrades are built except Gaussian Blur (needs a compositing path, not a
+      slider) and five the plan itself says to skip. **What is genuinely left in that file is three
+      NEW FEATURES — Corner Pin, LUT import and Curves — each needing a new kind of control (on-canvas
+      drag handles, a file picker, a curve editor) rather than a parameter.** Those are proper builds,
+      not rounds. **Unless you want them now, this item no longer holds the queue** — which means the
+      next thing is the BUG-HUNT backlog and then your own list from 296 onward.
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
@@ -5511,6 +5517,17 @@ better still, keep working inside the turn rather than parking work for a later 
          time — Shake, Wiggle, Drift, Orbit, a behaviour — is invisible to it. **Whatever fixes this
          probably fixes 31b too: both need the ACTUAL frame-to-frame position after every effect has
          had its say, not the authored transform.** Worth solving once, properly, for both.
+
+- [ ] **324 — Give the Add-layer row's + button its old colours back, and make the whole bar stand
+      out.** (17 Aug.) His words, verbatim: *"Make the tiny plus button that's on the tap to create
+      layer have some nice colours to it like the old plus button did, and also just make that whole
+      bar stand out with some nice colours like the background menu does"*.
+      Two clauses: (1) the small + on the Add-layer row is plain now — the + button it REPLACED (see
+      294) had colour, and he wants that back; (2) the whole "Tap to add a layer" bar should be styled
+      to stand out, in the manner of the background menu. Look at what the old + and the background
+      menu actually use before inventing something.
+      Sits with 296 (the + not centred in its circle) and 307 (four other things about that same row) —
+      worth doing all of them in one pass, since they are the same control.
 
 ## Done
 
