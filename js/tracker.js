@@ -143,6 +143,21 @@ window.FM = window.FM || {};
   }
   FM._trkMap = trkMap;
 
+  /* Yield the main thread WITHOUT being background-throttled.
+   *
+   * requestAnimationFrame would be the obvious choice and is the wrong one: a hidden tab stops firing
+   * it, so switching apps mid-track would park the tracker indefinitely. setTimeout(0) is floored to a
+   * second or more in a backgrounded tab. exporter.js learned both of these the hard way (its own note
+   * records a 2-second GIF export turning into minutes) and settled on MessageChannel, which is not
+   * timer-throttled. Same trick, same reason. */
+  const _tickCh = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+  let _tickQ = [];
+  if (_tickCh) _tickCh.port1.onmessage = () => { const q = _tickQ; _tickQ = []; q.forEach(r => r()); };
+  function nextTick() {
+    if (!_tickCh) return new Promise(r => setTimeout(r, 0));
+    return new Promise(r => { _tickQ.push(r); _tickCh.port2.postMessage(0); });
+  }
+
   FM.tracker = {
     isPicking() { return !!picking; },
 
@@ -272,7 +287,13 @@ window.FM = window.FM || {};
       // walk outward from the seed in both directions
       const pos = new Array(frames.length);   // {cx,cy} content px per frame
       pos[seedIdxInList] = { cx: seed.x, cy: seed.y };
-      const walk = (dir) => {
+      /* ASYNC, and it yields. Everything after buildFrameCache used to run as one uninterrupted
+       * synchronous block — both match passes, the template adaptation, the simplification and the
+       * keyframe write. So the browser could not repaint until the whole thing returned: the app froze
+       * solid, and the "Tracking… 40%" toast the code goes to the trouble of computing was written to
+       * the DOM and never once appeared on screen. On a phone a multi-second main-thread block also
+       * risks the OS killing the tab. Every 8th frame it stands aside and lets the page draw. */
+      const walk = async (dir) => {
         let last = { x: scx, y: scy }, vel = { x: 0, y: 0 }, tpl = seedTemplate.slice();
         for (let k = seedIdxInList + dir; k >= 0 && k < frames.length; k += dir) {
           const gray = grayAt(idxForTime(frames[k]));
@@ -293,9 +314,17 @@ window.FM = window.FM || {};
             }
           }
           if (onProgress) onProgress();
+          if (((k - seedIdxInList) & 7) === 0) {
+            await nextTick();
+            // Yielding is what makes the editor live again, and a live editor can delete this clip or
+            // undo it out from under us. Stop the moment that happens rather than spending the rest of
+            // the clip matching frames for a layer nobody can see. (See the liveness check at the write.)
+            if (!FM.layerById || FM.layerById(FM.scene, layer.id) !== layer) return false;
+          }
         }
+        return true;
       };
-      walk(1); walk(-1);
+      if (!(await walk(1)) || !(await walk(-1))) return false;
       for (let k = 0; k < frames.length; k++) if (!pos[k]) pos[k] = pos[seedIdxInList];
 
       // convert tracked content points → layer x/y so the seed point stays pinned where it started
@@ -318,6 +347,16 @@ window.FM = window.FM || {};
         kfY.push({ t: times[k], v: ys[k], e: 'easeInOut' });
       }
       if (kfX.length < 2) return false;
+      /* THE LAYER MUST STILL BE THE ONE IN THE SCENE. This function captures `layer` before awaiting
+       * buildFrameCache — tens of seconds on a normal clip — and now yields all the way through the
+       * match as well, so the editor is live for the whole of it. FM.history.restore replaces
+       * FM.scene.layers wholesale with freshly parsed objects, so one undo during a track detaches the
+       * object we are holding; deleting the clip removes it outright. Writing to that orphan threw the
+       * keyframes away silently and STILL reported "Tracked — 47 keyframes added", so the user was told
+       * a minute of work had succeeded and found nothing on the clip and nothing to undo. Returning
+       * false puts the caller on its existing "could not track" branch, which is the truth.
+       * FM.splitLayer has carried exactly this guard since it hit the same race. */
+      if (!FM.layerById || FM.layerById(FM.scene, layer.id) !== layer) return false;
       layer.transform.x = { kf: kfX };
       layer.transform.y = { kf: kfY };
       /* GIVE THE CACHE BACK. Nothing cleared it, so a track left its frames resident for the rest of

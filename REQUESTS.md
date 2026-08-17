@@ -5694,6 +5694,60 @@ better still, keep working inside the turn rather than parking work for a later 
       top of CLAUDE.md); this is the receipt.
 
 
+- [ ] **329 — Two save buttons in the Presets card: what is the difference?** (17 Aug.) His words,
+      verbatim: *"In the presets presets menu what is the difference between pressing save this layer as
+      preset and save current effects? If none then just make one button not two"*.
+      **ANSWERED: there IS a difference, so the condition he set is not met — but the naming is the real
+      problem and that is worth fixing.** They write to two different stores:
+      · **"Save this layer as preset"** → `FM.layerPresets`. Saves the whole LOOK **plus its animation**:
+        effects, fill, stroke, shadow, blend mode, colour grade, corner radius, AND the transform —
+        rotation, scale, opacity and the x/y motion as a relative delta so it replays from wherever the
+        next layer happens to sit.
+      · **"Save current effects"** → `FM.fxPresets`. Saves the **effect stack only**, nothing else.
+      So one is "everything about how this layer looks and moves" and the other is "just this stack of
+      effects". Both are useful; the labels simply do not say which is which, and they sit one above the
+      other under two headings ("My presets" / "Effect looks") that do not say it either.
+      **Not doing the merge he offered**, because the condition was "if none" and there is one. Doing the
+      rename instead, when this comes up in the queue: say what each one keeps, on the button.
+      ⚠️ Related: **queue 37 already plans to replace both preset systems with one namespace + a
+      migration.** If that lands first this entry becomes part of it rather than a separate rename.
+
+- [ ] **330 — Saving a preset does not refresh the Presets menu.** (17 Aug.) His words, verbatim:
+      *"Also when you save a preset you have to exit and go back into the menu, make it auto update the
+      menu"*. Straightforward: the save handlers write to localStorage and toast, but nothing rebuilds
+      the panel, so the new row only appears after the card is closed and reopened. Both buttons need it
+      (the "Save this layer as preset…" path goes through `FM.savePresetPrompt`, which is in app.js and
+      does not know about the inspector). Worth checking the same gap does not exist on DELETE — those
+      handlers do call `FM.inspector.refresh()`.
+
+
+- [ ] **331 — Organise the Presets card: tags, rename, search, and tidy the top of it.** (17 Aug,
+      screenshot of the new v9.29 Presets card on his phone.) His words, verbatim, in full:
+
+      > Get rid of explanation and put the save current effects as preset at the top. Also the X isn’t centred in this screenshot for each preset and there’s no way to search presets or organise, make it so if you hold on a preset you can re name it and also tag it and when you put on a tag that tag is now a new group that you can go through, so the preset section can be organised, each tag menu will appear at the top and each time you create a new tag a new option will appear at the top, and loose ones that aren’t tagged will appear at the bottom like they do now
+
+      **His clauses, to be ticked one at a time — this entry cannot be marked DONE while any is unticked:**
+      1. [ ] Get rid of the explanation text at the top of the card. (That is the `insp-hint` line added
+             in v9.29 — "Each row shows this layer with that preset on it…". It is visible in his shot.)
+      2. [ ] Move **"Save current effects as preset"** to the TOP of the card.
+      3. [ ] The **✕ is not centred** inside its button on each preset row. (Same class as queue 188/209 —
+             measure the INK, not the button box, and it is a text glyph again, so use an SVG cross.)
+      4. [ ] A way to **search** presets.
+      5. [ ] **Hold** a preset → **rename** it.
+      6. [ ] **Hold** a preset → **tag** it.
+      7. [ ] A tag becomes a **group you can go through**.
+      8. [ ] Each tag appears as an option at the **top**; creating a new tag adds a new option there.
+      9. [ ] **Untagged** presets stay at the **bottom**, as they are now.
+
+      Notes before starting: this needs a place to STORE tags and renames, and today the two preset
+      stores are keyed by NAME (`fm.layerpresets` / `fm.fxpresets`), so a rename is a re-key and would
+      orphan anything referring to the old name. ⚠️ **Queue 37 already plans to replace both stores with
+      one namespace + a migration** — clauses 5-9 are much cheaper after that lands, and doing them
+      first means writing the tag/rename storage twice. Clauses 1-3 are independent and cheap.
+      Sits with 329 (the two save buttons, and their naming) and 330 (the menu not refreshing after a
+      save) — all three are the same card and should go in one pass.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.

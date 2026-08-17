@@ -25000,5 +25000,132 @@
     });
   });
 
+  /* The tracker used to run as ONE uninterrupted synchronous block after its frame cache was built —
+     both match passes, the template adaptation, the simplification and the keyframe write. The app
+     froze solid for the duration, and the "Tracking… 40%" toast the code computes was written to the
+     DOM and never once appeared, because the browser could not repaint until the whole call returned.
+     Making it yield then WIDENS a second hole: the editor is live for the whole track, so the clip can
+     be undone or deleted out from under a captured layer reference. Both are fixed here, because
+     fixing only the first would have made the second easier to hit. */
+  function trackerFixture(opts) {
+    opts = opts || {};
+    var W = 128, H = 96, N = (opts.frames || 120), FPS = 30;   // long enough that the walk yields many times either side of the probe
+    var frames = [];
+    for (var k = 0; k < N; k++) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d');
+      g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#fff'; g.fillRect(20 + Math.round(k * 0.8), 38, 20, 20);   // one bright square drifting right, staying in frame
+      frames.push(c);
+    }
+    var L = FM.makeLayer('video', { name: 'Tracked', x: 0, y: 0 });
+    L.start = 0; L.duration = N / FPS;
+    FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: W, height: H, duration: L.duration,
+      frameCache: { count: N, w: W, h: H, fps: FPS, effFps: FPS, frames: frames } });
+    var mid = Math.floor(N / 2);
+    return { layer: L, W: W, H: H, N: N, FPS: FPS, seed: { x: 20 + mid * 0.8 + 10, y: 48 }, seedT: mid / FPS, box: 24 };
+  }
+
+  test('tracking yields to the browser instead of freezing the app for its whole run', { item: 'tracker-yield' }, async function () {
+    var layers0 = FM.scene.layers.slice();
+    var realBuild = FM.buildFrameCache;
+    try {
+      FM.buildFrameCache = async function () { return true; };   // the fixture supplies the cache
+      var f = trackerFixture();
+      FM.scene.layers.push(f.layer);
+
+      /* THE PROBE IS ARMED FROM INSIDE THE WALK, deliberately. track() has always awaited
+         buildFrameCache once at the top, so anything armed before calling it would run during THAT
+         await and prove nothing about the match loop. Arming it on the first progress callback puts it
+         squarely inside the walk: if the walk never hands control back, nothing else can run until the
+         whole track has returned and this flag is still false when we check it.
+
+         AND IT IS A MESSAGE, NOT A TIMER. The first version used setTimeout(0) and failed against
+         correct code: this whole fixture matches in well under a millisecond, so a 0ms timer has simply
+         not come due yet — that measures the timer's minimum delay, not whether the loop yielded. A
+         message post is delivered as soon as the event loop is free, which is exactly the question. */
+      var armed = false, tickedDuringWalk = false, calls = 0;
+      var probe = new MessageChannel();
+      probe.port1.onmessage = function () { tickedDuringWalk = true; };
+      var n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box, function () {
+        calls++;
+        if (!armed) { armed = true; probe.port2.postMessage(0); }
+      });
+      if (!armed) throw new Error('the tracker never reported progress (' + calls + ' calls) — it did not run, so this proves nothing');
+      if (!tickedDuringWalk)
+        throw new Error('the match loop ran to completion without ever letting the browser in — the app is frozen for the whole track and the "Tracking… %" toast can never repaint');
+      if (!n) throw new Error('the track produced no keyframes, so the fixture is not actually tracking anything');
+      if (!(f.layer.transform.x && f.layer.transform.x.kf && f.layer.transform.x.kf.length >= 2))
+        throw new Error('no x keyframes were written');
+    } finally {
+      FM.buildFrameCache = realBuild;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  test('a track whose clip is deleted mid-run reports failure instead of claiming success', { item: 'tracker-yield' }, async function () {
+    var layers0 = FM.scene.layers.slice();
+    var realBuild = FM.buildFrameCache;
+    try {
+      FM.buildFrameCache = async function () { return true; };
+      var f = trackerFixture();
+      FM.scene.layers.push(f.layer);
+      var before = JSON.stringify(f.layer.transform.x);
+
+      // Pull the clip out of the scene part-way through — what an undo or a delete does while
+      // "Tracking… 40%" is on screen. The editor is live precisely because the tracker now yields.
+      var fired = 0;
+      var n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box, function () {
+        if (++fired === 3) { var i = FM.scene.layers.indexOf(f.layer); if (i >= 0) FM.scene.layers.splice(i, 1); }
+      });
+      if (fired < 3) throw new Error('the track ended before the clip could be removed (' + fired + ' progress calls) — the race this test is about never happened');
+      /* AND IT STOPS, rather than grinding through the rest of the clip for a layer nobody can see.
+         The guard at the write would catch this on its own, so correctness is not what the in-walk
+         check buys — it buys not spending the remaining seconds of a phone's CPU on a dead result.
+         120 frames, removed on the 3rd; the walk checks every 8th, so it should give up around 12-16
+         rather than running to ~120. Without this line that guard has no test of its own at all. */
+      if (fired > 40) throw new Error('the walk kept matching for ' + fired + ' frames after the clip left the scene — it should notice at its next checkpoint and stop');
+      if (n) throw new Error('the tracker reported ' + n + ' keyframes for a clip that is no longer in the scene — the caller then tells the user a minute of tracking succeeded, and there is nothing on the clip and nothing to undo');
+      if (JSON.stringify(f.layer.transform.x) !== before)
+        throw new Error('keyframes were written to the orphaned layer object anyway');
+    } finally {
+      FM.buildFrameCache = realBuild;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  test('a clip that vanishes during the DECODE is caught at the write, not just mid-walk', { item: 'tracker-yield' }, async function () {
+    /* WHY A SEPARATE TEST, AND WHY A SHORT CLIP. There are two guards and only one of them is reachable
+       on a long clip: the walk bails at its first yield, so execution never gets near the write and a
+       mutation deleting the write-site check survived every test — the assertion was dead.
+       The walk only checks every 8th frame. A ten-frame clip seeded in the middle walks four frames
+       each way and so never reaches a checkpoint at all, which is exactly the shape where the write is
+       the last line of defence. The clip is pulled during buildFrameCache here, which is the window the
+       original report describes: that await is tens of seconds on a real clip. */
+    var layers0 = FM.scene.layers.slice();
+    var realBuild = FM.buildFrameCache;
+    try {
+      var f = trackerFixture({ frames: 10 });
+      FM.scene.layers.push(f.layer);
+      var before = JSON.stringify(f.layer.transform.x);
+      FM.buildFrameCache = async function () {
+        var i = FM.scene.layers.indexOf(f.layer);
+        if (i >= 0) FM.scene.layers.splice(i, 1);      // undone / deleted while the decode was running
+        return true;
+      };
+      var yielded = 0;
+      var n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box, function () { yielded++; });
+      if (yielded < 2) throw new Error('the walk barely ran (' + yielded + ' frames) — it needs to reach the write for this test to mean anything');
+      if (n) throw new Error('the tracker reported ' + n + ' keyframes for a clip that left the scene during the decode — the user is told it worked and finds nothing on the clip');
+      if (JSON.stringify(f.layer.transform.x) !== before) throw new Error('keyframes were written to the orphaned layer object');
+    } finally {
+      FM.buildFrameCache = realBuild;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();
