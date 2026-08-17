@@ -18195,6 +18195,56 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: the timeline eye was a 15px tap target ---------------- */
+
+  /* THE BUG. `.th-eye` was a bare 15x15 icon — about 4mm, against a 44px touch minimum — sitting
+   * inside `.track-head`, whose own pointer handler SELECTS the layer. So a tap 8px off centre did not
+   * miss harmlessly: it selected the layer, set body.m-editing and slid the inspector sheet up over the
+   * timeline. Every other small control in the stylesheet had already been enlarged this exact way
+   * (.sb-handle::before, .kf-dot::after, .fxb-star); the eye was the one that got missed.
+   * Asserted with elementFromPoint at real offsets, because the thing that matters is what a finger
+   * LANDS ON — a rectangle measurement would not notice that the miss is swallowed by select. */
+  test('mobile: the timeline visibility eye is not a 15px tap target (BUG-HUNT)', { item: 'tap-eye' }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(300);
+      if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) return;
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#66ccff' });
+        L.start = 0; L.duration = 3; L.name = 'EYEHIT_' + i;
+        FM.scene.layers.push(L);
+      }
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(420);
+      const eye = document.querySelector('.th-eye');
+      if (!eye) return;                                   // no track heads in this layout
+      const b = eye.getBoundingClientRect();
+      if (!(b.width > 0)) return;
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const at = (dx, dy) => { const e = document.elementFromPoint(cx + dx, cy + dy);
+        return e && e.closest('.th-eye') ? 'eye' : (e && e.closest('.track-head') ? 'select' : 'other'); };
+      if (at(0, 0) !== 'eye') throw new Error('the centre of the eye does not even hit the eye');
+      const misses = [];
+      [[8, 0], [-8, 0], [0, 8], [0, -8], [0, -10]].forEach(o => { if (at(o[0], o[1]) !== 'eye') misses.push(o.join(',')); });
+      if (misses.length) {
+        throw new Error('a tap ' + misses.join(' / ') + ' px from the eye lands on the track head instead — which SELECTS the layer and slides the inspector over the timeline, rather than toggling visibility');
+      }
+      // and the enlargement must not eat the whole head: the thumbnail has to stay selectable
+      if (at(40, 0) === 'eye') throw new Error('the eye is swallowing taps 40px away — it has been grown so far that the track head can no longer be tapped to select');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0;
+      if (FM.refreshAll) FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+    }
+  });
+
   /* ---------------- BUG-HUNT: "saved" must mean saved ---------------- */
 
   /* THE BUG. templates.save wrote the heavy pack (layer JSON + full copies of the project's media

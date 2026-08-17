@@ -716,7 +716,15 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Fix:** Hide the FAB whenever a modal is up — add `body.modal-open #add-fab, body.modal-open #insp-toggle { display: none; }` next to the existing `body.add-open #add-fab` rule (styles.css:1602) and toggle `modal-open` in showExportDialog/hideExportDialog and the canvas-dialog open/close in js/app.js. (Raising the dialogs above 63 per the previous finding also resolves the stacking half.)
 - **Measured:** Measured: #add-fab is z-index 61, position fixed; the modal is z-index 50 (styles.css:1166). The FAB outranks an open modal.
 
-### The + FAB covers the ≡ row-reorder handle of whichever timeline row lands in the bottom ~75px, so dragging it opens the Add sheet
+### ~~The + FAB covers the ≡ row-reorder handle of whichever timeline row lands in the bottom ~75px, so dragging it opens the Add sheet~~ — NO LONGER REPRODUCIBLE, re-measured at v9.22
+**Struck as STALE, not fixed, and the difference matters.** Queue 294 replaced the floating + button
+with the "Tap to add a layer" row that lives IN the timeline. `#add-fab` is still in the markup and the
+stylesheet, but re-measured live at 380x820 with 11 layers and nothing selected — precisely the state
+this entry specifies — it does not render at all (`display:none`, zero box), so it covers nothing and
+no `.row-drag` handle resolves to it. The fix this entry proposes (padding-bottom on the scroller)
+would now be padding reserved for a button that is not there.
+**If the FAB is ever brought back, this entry becomes live again** — the z-index reasoning in it is
+still correct, and the row handles still sit at the right edge where it used to be.
 `styles.css:1768`  · found by `css-mobile`
 
 - **What:** .row-drag is position:sticky right:5px, 30x30, pinned to the right edge of the timeline scrollport. #add-fab is position:fixed right:16px bottom:20px, 54x54, z-index 61 — it overlaps the right 19px of every handle in the bottom 74px band. .row-drag's z-index:6 lives inside #timeline-panel and cannot beat a fixed element in the root stacking context.
@@ -725,7 +733,7 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Fix:** Reserve the FAB's corner in the timeline scroller: inside the @media (max-width:700px) block add `#tl-tracks { padding-bottom: 84px; }` so every row can be scrolled clear of the FAB before it is grabbed.
 - **Measured:** Measured: the FAB is 54x54 at 16px/20px bottom-right insets; .row-drag is 30x30 at right:5px, z-index 6. They overlap in x (16-35px from the right edge) and the FAB wins on z.
 
-### The per-layer visibility eye in the timeline track head is a 15x15px tap target; a near-miss selects the layer instead
+### ~~The per-layer visibility eye in the timeline track head is a 15x15px tap target; a near-miss selects the layer instead~~ — FIXED v9.22
 `styles.css:1036`  · found by `css-mobile`
 
 - **What:** .th-eye is a bare flex box around a 15x15 svg with no padding and no enlarged hit pseudo-element, so its hit rect is exactly 15x15 CSS px. It sits inside .track-head, whose own pointer handler selects the layer, so anything outside those 15px is swallowed by select.

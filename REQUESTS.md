@@ -3886,6 +3886,11 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **seventeenth** struck off — **the layer-visibility eye being a 15px tap
+      target (v9.22)**, where missing it by 8px selected the layer and threw the inspector over the
+      timeline. Grown without moving the icon. An **eighteenth** entry was struck as STALE rather
+      than fixed: the floating + button covering the row-reorder handles — that button no longer
+      renders since the Add-layer row replaced it, re-measured to be sure.
       *Progress 17 Aug:* a **sixteenth** struck off — **"Template saved" being a lie when storage is
       full (v9.21)**. It wrote your media into the big store, failed to write the small index entry,
       and reported success anyway — so the template vanished AND its copy of all your media was
