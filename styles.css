@@ -6145,6 +6145,15 @@ body.fm-pushing #toast { z-index: 213; }
 .tl-addrow-grip span { display: block; height: 1.5px; border-radius: 1px; background: rgba(150, 232, 255, .55); }
 .tl-addrow-grip:hover span { background: rgba(150, 232, 255, .9); }
 .tl-addrow-dragging { cursor: grabbing; border-style: solid; border-color: rgba(150, 232, 255, .9); box-shadow: 0 0 16px rgba(90, 199, 237, .38); }
+/* THE GLIDE HOME (queue 307, clause 4). While the finger is down the marker's transform must be
+   INSTANT — it is following the pointer, and a transition on it would put the marker permanently
+   behind the finger, which is its own kind of wrong. `transform` is deliberately absent from
+   .tl-addrow--line's transition list for exactly that reason, so nothing needs disabling here.
+   This class is added for the last 165ms only: the drop, where the marker eases into the gap the rows
+   have opened for it before the timeline is rebuilt underneath. Same curve and same duration as
+   .track-row.row-part, because that IS the animation he is pointing at — "like when I'm dragging
+   layers" — and two copies of a feel are two things to retune separately. */
+.tl-addrow-settling { transition: transform 150ms cubic-bezier(.2, .7, .3, 1) !important; }
 .tl-addrow-dragging .tl-addrow-grip { cursor: grabbing; }
 
 /* ---- the PC rendering: a LINE between layers, not a row (queue 294, clauses 7 and 8) ------------

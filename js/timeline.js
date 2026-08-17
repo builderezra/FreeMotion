@@ -1742,14 +1742,23 @@ window.FM = window.FM || {};
    * and the click is swallowed, or every reposition would also open the menu. */
   function attachLineDrag(row, open) {
     const SLOP = 4;
-    let down = false, moved = false, y0 = 0;
+    let down = false, moved = false, y0 = 0, motion = null, wantAt = 0;
     const move = (e) => {
       if (!down) return;
       if (!moved && Math.abs(e.clientY - y0) < SLOP) return;
-      if (!moved) { moved = true; addDragging = true; row.classList.add('tl-addrow-dragging'); }
+      if (!moved) {
+        moved = true; addDragging = true; row.classList.add('tl-addrow-dragging');
+        motion = addDragMotion(row); motion.begin();     // snapshot BEFORE anything moves
+      }
       e.preventDefault();
-      const at = boundaryFor(e.clientY);
-      if (at !== FM.addAt) { FM.addAt = at; buildTracks(); }
+      wantAt = motion.boundaryAt(e.clientY);
+      motion.to(wantAt, e.clientY - y0);
+    };
+    const finish = () => {
+      addDragging = false;
+      row.classList.remove('tl-addrow-dragging');
+      FM.addAt = wantAt;
+      buildTracks();          // the ONE rebuild of the whole gesture, after the marker has landed
     };
     const end = (e) => {
       if (!down) return;
@@ -1757,13 +1766,8 @@ window.FM = window.FM || {};
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
-      if (moved) {
-        addDragging = false;
-        const live = tracksEl.querySelector('.tl-addrow');
-        if (live) live.classList.remove('tl-addrow-dragging');
-      } else {
-        open(e);
-      }
+      if (moved && motion) { motion.settle(wantAt, finish); motion = null; }
+      else if (!moved) open(e);
       moved = false;
     };
     row.addEventListener('pointerdown', (e) => {
@@ -1805,33 +1809,113 @@ window.FM = window.FM || {};
    * scene.layers and is keyed by a layer index; this row is not a layer and moves nothing — it only
    * changes a number. Borrowing it would have meant teaching it about a row that has no layer, which
    * is how the two would drift. */
+
+  /* ---- DRAGGING THE MARKER SMOOTHLY (queue 307, clause 4) ---------------------------------------
+   * His words: *"make it so on PC and on mobile that when you're actually dragging the new layers go
+   * here or add new layer thing… it should drag smoothly and like show the cool animation like when
+   * I'm dragging layers because currently it kind of just jumps and it's a bit shitty looking"*.
+   *
+   * THE JUMP WAS THE REBUILD. Both drags did `FM.addAt = at; buildTracks()` on every pointermove —
+   * so the marker did not move at all, the entire track list was thrown away and re-laid with the
+   * marker in a different slot. That is a teleport by construction, and no amount of easing on the row
+   * could have smoothed it, because the row you were looking at no longer existed a frame later.
+   *
+   * So nothing is rebuilt until the finger lifts. The marker follows the pointer on a transform, the
+   * rows it passes glide aside to open a gap, and on release the marker glides into that gap before the
+   * single real rebuild happens underneath it. That is the same three-part shape the layer reorder uses
+   * — which is what he means by "the cool animation like when I'm dragging layers" — and it reuses that
+   * feature's `.row-part` transition rather than declaring a second one that could be retuned alone.
+   *
+   * GEOMETRY IS SNAPSHOTTED AT THE START and never re-read, because every row is under a transform for
+   * the rest of the gesture and `getBoundingClientRect` reports the TRANSFORMED box. Asking the live
+   * DOM where the boundaries are, mid-drag, would be asking about positions the rows only hold because
+   * of the drag itself — the answer would chase its own tail. `boundaryAt` is therefore the snapshot's
+   * own copy of `boundaryFor`, and takes the same rule.
+   * The marker's height is re-read each move rather than captured: on PC the line GROWS from 7px to
+   * 24px when the dragging class lands, on a transition, so a height read at the start of the gesture
+   * is the wrong one for every frame after it, and the gap would be a third of the marker.
+   */
+  function addDragMotion(rowEl) {
+    const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).map(r => {
+      const hd = r.querySelector('.track-head');
+      const i = hd ? parseInt(hd.dataset.idx, 10) : NaN;
+      const b = r.getBoundingClientRect();
+      return { el: r, idx: isFinite(i) ? i : FM.scene.layers.length, top: b.top, bottom: b.bottom };
+    });
+    const markerTop = rowEl.getBoundingClientRect().top;
+    const slot0 = FM.clampAddAt ? FM.clampAddAt() : (FM.addAt || 0);
+    const markerH = () => rowEl.getBoundingClientRect().height;
+    const shiftFor = (at, idx, h) => {
+      if (at > slot0 && idx >= slot0 && idx < at) return -h;   // it was below the marker, now it is above
+      if (at < slot0 && idx >= at && idx < slot0) return h;    // …and the other way
+      return 0;
+    };
+    const gapTop = (at, h) => {
+      const below = rows.filter(r => r.idx >= at)[0];
+      if (below) return below.top + shiftFor(at, below.idx, h);
+      const last = rows[rows.length - 1];
+      return last ? last.bottom + shiftFor(at, last.idx, h) : markerTop;
+    };
+    const clear = () => { rows.forEach(r => { r.el.classList.remove('row-part'); r.el.style.transform = ''; }); rowEl.style.transform = ''; };
+    return {
+      any: rows.length > 0,
+      boundaryAt(y) {
+        if (!rows.length) return 0;
+        for (let k = 0; k < rows.length; k++) {
+          if (y < rows[k].top + (rows[k].bottom - rows[k].top) / 2) return rows[k].idx;
+          if (y < rows[k].bottom) return rows[k].idx + 1;
+        }
+        return FM.scene.layers.length;
+      },
+      begin() { rows.forEach(r => r.el.classList.add('row-part')); },
+      to(at, dy) {
+        const h = markerH();
+        rowEl.style.transform = 'translateY(' + Math.round(dy) + 'px)';
+        rows.forEach(r => { r.el.style.transform = 'translateY(' + shiftFor(at, r.idx, h) + 'px)'; });
+      },
+      settle(at, done) {
+        rowEl.classList.add('tl-addrow-settling');
+        rowEl.style.transform = 'translateY(' + Math.round(gapTop(at, markerH()) - markerTop) + 'px)';
+        setTimeout(() => { clear(); rowEl.classList.remove('tl-addrow-settling'); done(); }, 165);
+      },
+      abort() { clear(); },
+    };
+  }
+
   function buildAddGrip(row) {
     const grip = document.createElement('div');
     grip.className = 'tl-addrow-grip';
     grip.setAttribute('aria-label', 'Drag to choose where new layers go');
     grip.innerHTML = '<span></span><span></span><span></span>';
-    let dragging = false;
+    let dragging = false, motion = null, wantAt = 0, y0 = 0;
     const move = (e) => {
       if (!dragging) return;
       e.preventDefault();
-      const at = boundaryFor(e.clientY);
-      if (at !== FM.addAt) { FM.addAt = at; buildTracks(); }
+      wantAt = motion ? motion.boundaryAt(e.clientY) : boundaryFor(e.clientY);
+      if (motion) motion.to(wantAt, e.clientY - y0);
+    };
+    const finish = () => {
+      addDragging = false;
+      row.classList.remove('tl-addrow-dragging');
+      FM.addAt = wantAt;
+      buildTracks();          // the ONE rebuild of the whole gesture (queue 307 clause 4)
     };
     const end = () => {
       if (!dragging) return;
-      dragging = false; addDragging = false;
-      const live = tracksEl.querySelector('.tl-addrow');
-      if (live) live.classList.remove('tl-addrow-dragging');
-      row.classList.remove('tl-addrow-dragging');
+      dragging = false;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
+      if (motion) { const m = motion; motion = null; m.settle(wantAt, finish); }
+      else { addDragging = false; row.classList.remove('tl-addrow-dragging'); }
     };
     grip.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();      // never let the grip's press also open the add menu
-      dragging = true; addDragging = true;
+      dragging = true; addDragging = true; y0 = e.clientY;
+      wantAt = FM.clampAddAt ? FM.clampAddAt() : (FM.addAt || 0);
       row.classList.add('tl-addrow-dragging');
+      motion = addDragMotion(row); motion.begin();
       window.addEventListener('pointermove', move, { passive: false });
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);

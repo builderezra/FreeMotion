@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#307 clause 4 — the marker mid-drag</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #307 clause 4 — *"it should drag smoothly and like show the cool animation like when I'm dragging
+   layers because currently it kind of just jumps"*.
+   The suite proves the cause (no rebuild mid-drag, the rows part, the index waits for the drop). This
+   page is here to LOOK at the frame in the middle of the gesture, which is the thing he is judging: the
+   marker lifted and travelling, and a gap open under it where it will land. The pointer is left DOWN
+   when the frame is taken — releasing it would land everything and photograph the ordinary timeline. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 390;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.timeline || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.scene.layers.length = 0; FM.addAt = 0;
+        ['One', 'Two', 'Three', 'Four'].forEach(function (n, i) {
+          var L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 200 + i * 40, y: 300, shapeW: 180, shapeH: 180, fill: ['#c04070', '#3a7bd5', '#e0a030', '#40b070'][i] });
+          L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        });
+        FM.selectLayer(null); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var row = d.querySelector('#tl-tracks .tl-addrow');
+        var rows = [].slice.call(d.querySelectorAll('#tl-tracks .track-row'));
+        if (!row || rows.length < 3) return fail('need the marker and at least 3 rows; got ' + rows.length);
+        var r0 = row.getBoundingClientRect();
+        var y0 = Math.round(r0.top + r0.height / 2);
+        var tgt = rows[rows.length - 1].getBoundingClientRect();
+        var y1 = Math.round(tgt.top + tgt.height * 0.7);
+        var grip = row.querySelector('.tl-addrow-grip');
+        var src = grip || row;
+        var mk = function (t, y, b) { return new w.PointerEvent(t, { bubbles: true, clientX: Math.round(r0.left + 60), clientY: y, pointerId: 1, pointerType: grip ? 'touch' : 'mouse', buttons: b }); };
+        src.dispatchEvent(mk('pointerdown', y0, 1));
+        w.dispatchEvent(mk('pointermove', y0 + 14, 1));
+        w.dispatchEvent(mk('pointermove', Math.round((y0 + y1) / 2), 1));
+        w.dispatchEvent(mk('pointermove', y1, 1));
+        setTimeout(function () {
+          var m = row.getBoundingClientRect();
+          var shifted = rows.filter(function (r) { return /translate/.test(r.style.transform || ''); });
+          out.textContent = [
+            'width ' + W + '   grabbed by: ' + (grip ? 'the ≡ grip (phone)' : 'the line itself (PC)'),
+            'marker still the same node: ' + (d.querySelector('#tl-tracks .tl-addrow') === row),
+            'marker travelled ' + Math.round(m.top - r0.top) + 'px   transform ' + (row.style.transform || 'none'),
+            'rows parted: ' + shifted.length + ' of ' + rows.length + '   e.g. ' + (shifted[0] ? shifted[0].style.transform : '—'),
+            'FM.addAt while the finger is still down: ' + FM.addAt + '   (0 = nothing committed yet)'
+          ].join('\n');
+          window.__done = true;      // pointer left DOWN on purpose — this is the mid-drag frame
+        }, 260);
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

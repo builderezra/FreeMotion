@@ -18023,10 +18023,16 @@
       const target = rows[1].getBoundingClientRect();
       at('pointermove', Math.round(target.top + target.height * 0.8));
       await sleep(160);
-      if (FM.addAt === 0) throw new Error('dragging the grip down did not move the Add row (index still 0)');
-      if (!document.querySelector('.tl-addrow-dragging')) throw new Error('the row does not look grabbed while it is being dragged — it is rebuilt on every boundary it crosses, so the state has to survive that');
+      /* THE INDEX IS NO LONGER COMMITTED MID-DRAG (queue 307, clause 4), and that is the fix rather
+         than a regression: writing FM.addAt on every pointermove is what forced a full rebuild of the
+         track list on every move, which is the "it kind of just jumps" he reported. What the drag shows
+         NOW is the marker travelling and the rows parting; the index lands once, on release. So this
+         asserts the movement here and the index after the drop. */
+      const moved = [].slice.call(document.querySelectorAll('.track-row')).some(r => /translate/.test(r.style.transform || ''));
+      if (!moved) throw new Error('dragging the grip down opened no gap — nothing on screen followed the finger');
+      if (!document.querySelector('.tl-addrow-dragging')) throw new Error('the row does not look grabbed while it is being dragged');
       at('pointerup', Math.round(target.top + target.height * 0.8));
-      await sleep(120);
+      await sleep(320);          // the 165ms glide home, then the single rebuild
       const landed = FM.addAt;
       if (!landed) throw new Error('the row snapped back to the top when the finger came off');
 
@@ -26648,6 +26654,81 @@
       const phoneGrip = 34;
       if (!(hr.width > phoneGrip)) throw new Error('the hint is ' + Math.round(hr.width) + 'px, no longer than the phone grip it is meant to extend past');
     } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.timeline.rebuild();
+      await sleep(80);
+    }
+  });
+
+
+  /* ---- queue 307 clause 4: the marker DRAGS instead of teleporting -------------------------------
+   * *"when you're actually dragging the new layers go here or add new layer thing… it should drag
+   * smoothly and like show the cool animation like when I'm dragging layers because currently it kind
+   * of just jumps and it's a bit shitty looking"*.
+   *
+   * WHAT IS ASSERTED IS THE CAUSE, NOT THE LOOK. The jump was not a missing easing — both drags ran
+   * `FM.addAt = at; buildTracks()` on every pointermove, so the element under the finger was destroyed
+   * and re-created in a new slot several times a second. No transition can smooth a row that no longer
+   * exists. So: the row the gesture started on must still be the SAME NODE at the end of it, it must
+   * have travelled with the pointer, the rows around it must have parted, and the committed index must
+   * only land once the finger is up. Those four are the defect; "it looks nice" is not testable. */
+  test('dragging the Add-layer marker moves it instead of rebuilding the timeline (queue 307 clause 4)', { item: 'addrow-307' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const at0 = FM.addAt;
+    try {
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L);
+      }
+      FM.addAt = 0;
+      FM.selectLayer(null);
+      FM.timeline.rebuild();
+      await sleep(160);
+      const row = document.querySelector('#tl-tracks .tl-addrow');
+      const rows = [].slice.call(document.querySelectorAll('#tl-tracks .track-row'));
+      if (!row) throw new Error('no Add-layer marker to drag');
+      if (rows.length < 3) throw new Error('only ' + rows.length + ' layer rows — not enough to drag across');
+
+      const r0 = row.getBoundingClientRect();
+      const startY = Math.round(r0.top + r0.height / 2);
+      const target = rows[rows.length - 1].getBoundingClientRect();
+      const endY = Math.round(target.top + target.height * 0.75);   // past the middle of the last row
+      const send = (t, y) => window.dispatchEvent(new PointerEvent(t, { bubbles: true, clientY: y, clientX: 120, pointerId: 1, buttons: t === 'pointerup' ? 0 : 1 }));
+
+      row.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: startY, clientX: 120, pointerId: 1, buttons: 1 }));
+      send('pointermove', startY + 12);
+      send('pointermove', Math.round((startY + endY) / 2));
+      await sleep(40);
+
+      /* 1. IT IS STILL THE SAME ELEMENT. This is the whole bug: a rebuild replaces it, and the node you
+         grabbed is gone by the second move. */
+      if (!row.isConnected) throw new Error('the marker was removed from the document mid-drag — the timeline is being rebuilt under the finger, which IS the jump');
+      if (document.querySelector('#tl-tracks .tl-addrow') !== row) throw new Error('the marker on screen is a different node from the one the drag started on — it was rebuilt, not moved');
+
+      // 2. …and it TRAVELLED, rather than sitting still while the list re-laid around it.
+      const mid = row.getBoundingClientRect();
+      if (!(mid.top > r0.top + 8)) throw new Error('the marker has not moved with the pointer (' + Math.round(r0.top) + ' → ' + Math.round(mid.top) + ')');
+
+      // 3. The rows PARTED to show where it will land — the "cool animation like when I'm dragging
+      //    layers", which is literally that feature's own .row-part transition.
+      const parted = rows.filter(r => /translate/.test(r.style.transform || ''));
+      if (!parted.length) throw new Error('no row moved aside to open a gap — nothing shows where the marker is going to land');
+      if (!rows.every(r => r.classList.contains('row-part'))) throw new Error('the rows are not carrying .row-part, so they would snap rather than glide');
+
+      // 4. NOTHING IS COMMITTED UNTIL THE FINGER LIFTS.
+      if (FM.addAt !== 0) throw new Error('FM.addAt changed to ' + FM.addAt + ' mid-drag — committing per move is what forced the rebuild per move');
+
+      send('pointermove', endY);
+      send('pointerup', endY);
+      await sleep(320);          // the 165ms glide, then the single rebuild
+      if (FM.addAt === 0) throw new Error('the drop did not move the marker at all (still at 0)');
+      const after = document.querySelector('#tl-tracks .tl-addrow');
+      if (!after) throw new Error('the marker did not survive the drop');
+      if (after.style.transform) throw new Error('the marker kept its drag transform after landing (' + after.style.transform + ') — it would sit offset from its own row');
+      if ([].slice.call(document.querySelectorAll('#tl-tracks .track-row')).some(r => r.style.transform)) throw new Error('the layer rows kept the gap transform after the drop — the list would stay pushed apart');
+    } finally {
+      FM.addAt = at0;
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(null); FM.timeline.rebuild();
       await sleep(80);

@@ -5621,7 +5621,7 @@ better still, keep working inside the turn rather than parking work for a later 
       you meant the project's CONTENT even then, I closed it on the wrong reading and this went
       unaddressed for weeks as a result.
 
-- [ ] **307 — Four things about the Add-layer row (PC and mobile).** (17 Aug.) His words, verbatim:
+- [x] **307 — Four things about the Add-layer row (PC and mobile).** ✅ **v9.55 + v9.56 — all four.** (17 Aug.) His words, verbatim:
       *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
       page for it's like a little plus button to come back like it's a small non-issue really but
       should still fix it and also on PC just make it so when you're hovering over it the three lines
@@ -5656,9 +5656,17 @@ better still, keep working inside the turn rather than parking work for a later 
         dragging from anywhere already worked on PC and an element that caught the pointer would
         have made itself the only place the drag started, which is your request upside down. The
         test hit-tests it rather than taking that on trust.
-      · **4 (smooth dragging) is next up on this item.** The design is settled: follow the pointer
-        with a transform and glide the rows apart the way a layer reorder does, instead of
-        rebuilding the whole track list on every move — that rebuild IS the jump.
+      · **4 (smooth dragging) — v9.56.** **The jump was not a missing easing, it was a rebuild.**
+        Both drags ran `FM.addAt = at; buildTracks()` on every pointermove, so the thing under
+        your finger was destroyed and re-created in a new slot several times a second — no
+        transition could ever have smoothed a row that did not survive to the next frame.
+        Nothing rebuilds until you let go now: the marker follows your finger, the rows glide
+        aside to open a gap under it, and on release it eases into that gap before the one real
+        rebuild happens underneath. It reuses the LAYER reorder's own transition rather than a
+        second copy of the feel, because that is literally the animation you pointed at.
+        Photographed mid-drag at 380px: marker travelled 178px, all four rows parted by 38px,
+        index still uncommitted while the finger was down. Mutation-checked by putting the
+        per-move rebuild back — which reproduces your exact symptom.
 
 - [ ] **308 — Remove the "Trim to last clip" button from the settings menu; it happens automatically
       now.** (17 Aug.) His words, verbatim: *"In the settings menu, you get rid of the trim to last clip
