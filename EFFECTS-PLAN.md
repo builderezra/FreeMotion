@@ -453,6 +453,23 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     radius that maps to itself and its centre is the pixel that does not move, so both controls are
     asserted as exact locations (mouth at 30%/70% of the frame radius; centre following to 20%).
 
+- v9.12 (round 25 — **the matte cleanup tools**) — `mattechoker` (feather, edge contrast),
+  `mattefringe` (strength, softness) and `smoothedges` (choke, falloff quality). All three exist to
+  clean up a key, and all three forced you to stack a second effect to finish the job. Findings:
+  * **A `//` COMMENT INSIDE A ONE-LINE FUNCTION COMMENTS OUT THE REST OF IT.** Most of the kernels in
+    this file are a single very long line, and dropping an explanatory `//` line in the middle silently
+    killed everything after it in `smoothedges`. Caught immediately, reverted with `git checkout`, and
+    redone with the function expanded. Use a block comment or split the line FIRST.
+  * **The fixture problem for a THIRD time, and it is always the same shape.** `mattechoker`'s edge
+    contrast remaps alpha around its midpoint — and the hard-edged disc plate has no midpoint values at
+    all, only 0 and 255. So a working control reported "moves no pixels". A `softdisc` plate (3px
+    antialiased edge) exists now, and the plate is chosen per effect. Previous instances: the empty
+    element library, the red-less plate for replacecolor, the fully-opaque plate for innerblur's edge.
+    **If a control acts on a property, the fixture must contain a range of that property.**
+  * **Curvature cannot tell a triangle falloff from a linear one** — both are straight within their
+    segments, so the mean second difference reads identically for one box pass and two. The ramp WIDTH
+    shows it plainly instead (7496 part-transparent pixels against 11564).
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

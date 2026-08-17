@@ -353,7 +353,11 @@ window.FM = window.FM || {};
       { key: 'shape', label: 'Corners', def: 0, options: [[0, 'Square'], [1, 'Round']] },
       { key: 'softness', label: 'Softness', min: 0, max: 12, step: 0.5, def: 0, unit: 'px' },
     ] },
-    { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
+    { type: 'smoothedges', label: 'Smooth Edges', params: [
+      { key: 'radius', label: 'Softness', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
+      { key: 'choke', label: 'Choke', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'quality', label: 'Falloff', def: 0, options: [[0, 'Linear'], [1, 'Smooth']] },
+    ] },
     { type: 'liquidglass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'frost', label: 'Frost', min: 0, max: 40, step: 0.5, def: 8, unit: 'px' },
@@ -502,8 +506,16 @@ window.FM = window.FM || {};
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'solidmatte', label: 'Solid Matte', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
-    { type: 'mattechoker', label: 'Matte Choker', param: 'choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
-    { type: 'mattefringe', label: 'Matte Fringe', param: 'width', min: 1, max: 12, step: 1, def: 3, unit: 'px', color: true, defColor: '#00e0ff', colorLabel: 'Fringe' },
+    { type: 'mattechoker', label: 'Matte Choker', params: [
+      { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
+      { key: 'feather', label: 'Feather', min: 0, max: 20, step: 1, def: 0, unit: 'px' },
+      { key: 'contrast', label: 'Edge contrast', min: -1, max: 1, step: 0.05, def: 0 },
+    ] },
+    { type: 'mattefringe', label: 'Matte Fringe', color: true, defColor: '#00e0ff', colorLabel: 'Fringe', params: [
+      { key: 'width', label: 'Width', min: 1, max: 12, step: 1, def: 3, unit: 'px' },
+      { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'feather', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0 },
+    ] },
     // ---- batch 15: Repeat (tiled-coordinate warps) ----
     { type: 'gridrepeat', label: 'Grid Repeat', params: [
       { key: 'count', label: 'Columns', min: 1, max: 10, step: 1, def: 3 },
@@ -3727,7 +3739,29 @@ window.FM = window.FM || {};
         return;
       }
       var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
-    smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } var seWin=seR*2+1,seInv=1/seWin; for(sey=0;sey<seH;sey++){ var seRow=sey*seW,seSum=0,sek; for(sek=-seR;sek<=seR;sek++){ var seXc=sek<0?0:(sek>=seW?seW-1:sek); seSum+=seA[seRow+seXc]; } for(sex=0;sex<seW;sex++){ seTmp[seRow+sex]=seSum*seInv; var seAddX=sex+seR+1; seAddX=seAddX>=seW?seW-1:seAddX; var seSubX=sex-seR; seSubX=seSubX<0?0:seSubX; seSum+=seA[seRow+seAddX]-seA[seRow+seSubX]; } } for(sex=0;sex<seW;sex++){ var seSumV=0,sekk; for(sekk=-seR;sekk<=seR;sekk++){ var seYc=sekk<0?0:(sekk>=seH?seH-1:sekk); seSumV+=seTmp[seYc*seW+sex]; } for(sey=0;sey<seH;sey++){ var seVal=seSumV*seInv; d[(sey*seW+sex)*4+3]=seVal<0?0:(seVal>255?255:seVal); var seAddY=sey+seR+1; seAddY=seAddY>=seH?seH-1:seAddY; var seSubY=sey-seR; seSubY=seSubY<0?0:seSubY; seSumV+=seTmp[seAddY*seW+sex]-seTmp[seSubY*seW+sex]; } } },
+    smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } 
+      /* Feathering ran as ONE symmetric box blur on alpha, so the matte always shrank INTO the artwork
+         as you softened it, and a single box is a straight ramp — visibly banded on a big soft edge.
+         CHOKE pushes the edge back out (or further in) by remapping alpha around the halfway point
+         after the blur, so softening no longer costs coverage. QUALITY Smooth runs the box a second
+         time: two boxes are a triangle falloff instead of a linear one, which is what kills the bands. */
+      var seCh=p.choke==null?0:FM.evalProp(p.choke,t); if(seCh<-100)seCh=-100; if(seCh>100)seCh=100;
+      var seQ=(p.quality==null?0:(Math.round(FM.evalProp(p.quality,t))|0))===1;
+      var seWin=seR*2+1,seInv=1/seWin; for(sey=0;sey<seH;sey++){ var seRow=sey*seW,seSum=0,sek; for(sek=-seR;sek<=seR;sek++){ var seXc=sek<0?0:(sek>=seW?seW-1:sek); seSum+=seA[seRow+seXc]; } for(sex=0;sex<seW;sex++){ seTmp[seRow+sex]=seSum*seInv; var seAddX=sex+seR+1; seAddX=seAddX>=seW?seW-1:seAddX; var seSubX=sex-seR; seSubX=seSubX<0?0:seSubX; seSum+=seA[seRow+seAddX]-seA[seRow+seSubX]; } } for(sex=0;sex<seW;sex++){ var seSumV=0,sekk; for(sekk=-seR;sekk<=seR;sekk++){ var seYc=sekk<0?0:(sekk>=seH?seH-1:sekk); seSumV+=seTmp[seYc*seW+sex]; } for(sey=0;sey<seH;sey++){ var seVal=seSumV*seInv; seA[sey*seW+sex]=seVal<0?0:(seVal>255?255:seVal); var seAddY=sey+seR+1; seAddY=seAddY>=seH?seH-1:seAddY; var seSubY=sey-seR; seSubY=seSubY<0?0:seSubY; seSumV+=seTmp[seAddY*seW+sex]-seTmp[seSubY*seW+sex]; } }
+      if(seQ){                                     // second box pass -> triangle falloff
+        for(sey=0;sey<seH;sey++){ var qRow=sey*seW, qS=0, qk;
+          for(qk=-seR;qk<=seR;qk++){ var qX=qk<0?0:(qk>=seW?seW-1:qk); qS+=seA[qRow+qX]; }
+          for(sex=0;sex<seW;sex++){ seTmp[qRow+sex]=qS*seInv; var qA=sex+seR+1; qA=qA>=seW?seW-1:qA; var qB=sex-seR; qB=qB<0?0:qB; qS+=seA[qRow+qA]-seA[qRow+qB]; } }
+        for(sex=0;sex<seW;sex++){ var qSv=0, qkk;
+          for(qkk=-seR;qkk<=seR;qkk++){ var qY=qkk<0?0:(qkk>=seH?seH-1:qkk); qSv+=seTmp[qY*seW+sex]; }
+          for(sey=0;sey<seH;sey++){ seA[sey*seW+sex]=qSv*seInv; var qAy=sey+seR+1; qAy=qAy>=seH?seH-1:qAy; var qBy=sey-seR; qBy=qBy<0?0:qBy; qSv+=seTmp[qAy*seW+sex]-seTmp[qBy*seW+sex]; } }
+      }
+      /* CHOKE as a threshold shift around the half-alpha point: k>0 pushes the edge outward (a pixel
+         needs less blurred alpha to count as inside), k<0 pulls it in. Zero leaves every value alone. */
+      var seK=seCh/100;
+      for(sei=0;sei<seN;sei++){ var v=seA[sei];
+        if(seK!==0){ v=(v-127.5)*(1+Math.abs(seK)*3)+127.5+seK*127.5; if(v<0)v=0; else if(v>255)v=255; }
+        d[sei*4+3]=v; } },
     blocknoise: function(d,W,H,p,t,ps){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
       // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
@@ -4061,8 +4095,66 @@ window.FM = window.FM || {};
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den; for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
     radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = W/2, rw_cy = H/2; for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
     solidmatte: function(d,W,H,p,t){ var sm_amt=FM.evalProp(p.amount,t); if(sm_amt==null) sm_amt=1; if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
-    mattechoker: function(d,W,H,p,t){ var mc_choke=FM.evalProp(p.choke,t); if(mc_choke==null) mc_choke=-4; mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0) return; var mc_r=Math.abs(mc_choke); var mc_erode=mc_choke<0; var mc_N=W*H; var mc_a=new Float32Array(mc_N); var mc_b=new Float32Array(mc_N); var mc_i, mc_x, mc_y, mc_w4=W*4; for(mc_i=0; mc_i<mc_N; mc_i++){ mc_a[mc_i]=d[mc_i*4+3]; } var mc_win=mc_r*2+1; for(mc_y=0; mc_y<H; mc_y++){ var mc_row=mc_y*W; for(mc_x=0; mc_x<W; mc_x++){ var mc_lo=mc_x-mc_r; var mc_hi=mc_x+mc_r; if(mc_lo<0) mc_lo=0; if(mc_hi>W-1) mc_hi=W-1; var mc_acc=mc_a[mc_row+mc_lo]; var mc_k; if(mc_erode){ for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v=mc_a[mc_row+mc_k]; if(mc_v<mc_acc) mc_acc=mc_v; } } else { for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v2=mc_a[mc_row+mc_k]; if(mc_v2>mc_acc) mc_acc=mc_v2; } } mc_b[mc_row+mc_x]=mc_acc; } } for(mc_x=0; mc_x<W; mc_x++){ for(mc_y=0; mc_y<H; mc_y++){ var mc_lo2=mc_y-mc_r; var mc_hi2=mc_y+mc_r; if(mc_lo2<0) mc_lo2=0; if(mc_hi2>H-1) mc_hi2=H-1; var mc_acc2=mc_b[mc_lo2*W+mc_x]; var mc_j; if(mc_erode){ for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u=mc_b[mc_j*W+mc_x]; if(mc_u<mc_acc2) mc_acc2=mc_u; } } else { for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u2=mc_b[mc_j*W+mc_x]; if(mc_u2>mc_acc2) mc_acc2=mc_u2; } } var mc_av=mc_acc2; if(mc_av<0) mc_av=0; if(mc_av>255) mc_av=255; d[(mc_y*W+mc_x)*4+3]=mc_av; } } },
-    mattefringe: function(d, W, H, p, t, ps){ var mfw = FM.evalProp(p.width, t); if(mfw==null) mfw=3; mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2]; for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]===1 && mfEro2[mfi]===0){ mfidx=mfi*4; d[mfidx]=mfr; d[mfidx+1]=mfg; d[mfidx+2]=mfb; } } },
+    mattechoker: function(d,W,H,p,t){
+      /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
+         matte kept stair-stepped edges and the standard choke-THEN-feather workflow needed a second
+         effect stacked on top. FEATHER does the softening here; CONTRAST re-hardens the alpha ramp
+         afterwards, which is what stops a feathered matte going milky. */
+      var mk_fe=p.feather==null?0:FM.evalProp(p.feather,t); if(mk_fe<0)mk_fe=0; if(mk_fe>20)mk_fe=20;
+      var mk_ct=p.contrast==null?0:FM.evalProp(p.contrast,t); if(mk_ct<-1)mk_ct=-1; if(mk_ct>1)mk_ct=1;
+      var mc_choke=FM.evalProp(p.choke,t); if(mc_choke==null) mc_choke=-4; mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0 && mk_fe===0 && mk_ct===0) return;   // nothing asked for at all
+      if(mc_choke===0){ mc_choke=0; } var mc_r=Math.abs(mc_choke); var mc_erode=mc_choke<0; var mc_N=W*H; var mc_a=new Float32Array(mc_N); var mc_b=new Float32Array(mc_N); var mc_i, mc_x, mc_y, mc_w4=W*4; for(mc_i=0; mc_i<mc_N; mc_i++){ mc_a[mc_i]=d[mc_i*4+3]; } var mc_win=mc_r*2+1; for(mc_y=0; mc_y<H; mc_y++){ var mc_row=mc_y*W; for(mc_x=0; mc_x<W; mc_x++){ var mc_lo=mc_x-mc_r; var mc_hi=mc_x+mc_r; if(mc_lo<0) mc_lo=0; if(mc_hi>W-1) mc_hi=W-1; var mc_acc=mc_a[mc_row+mc_lo]; var mc_k; if(mc_erode){ for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v=mc_a[mc_row+mc_k]; if(mc_v<mc_acc) mc_acc=mc_v; } } else { for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v2=mc_a[mc_row+mc_k]; if(mc_v2>mc_acc) mc_acc=mc_v2; } } mc_b[mc_row+mc_x]=mc_acc; } } for(mc_x=0; mc_x<W; mc_x++){ for(mc_y=0; mc_y<H; mc_y++){ var mc_lo2=mc_y-mc_r; var mc_hi2=mc_y+mc_r; if(mc_lo2<0) mc_lo2=0; if(mc_hi2>H-1) mc_hi2=H-1; var mc_acc2=mc_b[mc_lo2*W+mc_x]; var mc_j; if(mc_erode){ for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u=mc_b[mc_j*W+mc_x]; if(mc_u<mc_acc2) mc_acc2=mc_u; } } else { for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u2=mc_b[mc_j*W+mc_x]; if(mc_u2>mc_acc2) mc_acc2=mc_u2; } } var mc_av=mc_acc2; if(mc_av<0) mc_av=0; if(mc_av>255) mc_av=255; mc_a[mc_y*W+mc_x]=mc_av; } }
+      if(mk_fe>0){                                  // choke THEN feather, in one effect
+        var kR=Math.round(mk_fe), kW=kR*2+1, kI=1/kW, kT=new Float32Array(mc_N), kx, ky, kq, ks, kidx;
+        for(ky=0; ky<H; ky++){ var kRow=ky*W; ks=0;
+          for(kq=-kR; kq<=kR; kq++){ kidx=kq<0?0:(kq>=W?W-1:kq); ks+=mc_a[kRow+kidx]; }
+          for(kx=0; kx<W; kx++){ kT[kRow+kx]=ks*kI;
+            var kA=kx+kR+1; kA=kA>=W?W-1:kA; var kB=kx-kR; kB=kB<0?0:kB; ks+=mc_a[kRow+kA]-mc_a[kRow+kB]; } }
+        for(kx=0; kx<W; kx++){ ks=0;
+          for(kq=-kR; kq<=kR; kq++){ kidx=kq<0?0:(kq>=H?H-1:kq); ks+=kT[kidx*W+kx]; }
+          for(ky=0; ky<H; ky++){ mc_a[ky*W+kx]=ks*kI;
+            var kAy=ky+kR+1; kAy=kAy>=H?H-1:kAy; var kBy=ky-kR; kBy=kBy<0?0:kBy; ks+=kT[kAy*W+kx]-kT[kBy*W+kx]; } }
+      }
+      /* CONTRAST re-hardens the ramp about the half-alpha point, which is what recovers a crisp edge
+         after feathering; negative softens it further. Zero leaves every value untouched. */
+      var mcK=mk_ct===0?0:(mk_ct>0?1+mk_ct*6:1+mk_ct*0.9);
+      for(mc_i=0; mc_i<mc_N; mc_i++){ var mv=mc_a[mc_i];
+        if(mcK){ mv=(mv-127.5)*mcK+127.5; if(mv<0)mv=0; else if(mv>255)mv=255; }
+        d[mc_i*4+3]=mv; } },
+    mattefringe: function(d, W, H, p, t, ps){
+      /* The fringe was painted as an OPAQUE flat band with a hard inner and outer edge, so it always
+         read as a pasted-on sticker rather than a rim light. OPACITY lets it sit under the artwork's
+         own edge; FEATHER softens both boundaries so it falls off the way light does. */
+      var mfOp = p.opacity == null ? 1 : FM.evalProp(p.opacity, t); if (mfOp < 0) mfOp = 0; if (mfOp > 1) mfOp = 1;
+      var mfFe = p.feather == null ? 0 : FM.evalProp(p.feather, t); if (mfFe < 0) mfFe = 0; if (mfFe > 1) mfFe = 1;
+      var mfw = FM.evalProp(p.width, t); if(mfw==null) mfw=3; mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2];
+      if(mfOp===1 && mfFe===0){
+        for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]===1 && mfEro2[mfi]===0){ mfidx=mfi*4; d[mfidx]=mfr; d[mfidx+1]=mfg; d[mfidx+2]=mfb; } }
+        return;
+      }
+      /* FEATHER: blur the band's own coverage so both its edges fall off, instead of the flat slab
+         with two hard boundaries that made it read as a sticker. The blur runs on a 0..1 coverage
+         mask, then OPACITY scales the whole thing, so the two controls compose rather than fight. */
+      var mfCov=new Float32Array(mfN);
+      for(mfi=0; mfi<mfN; mfi++) mfCov[mfi]=(mfMask[mfi]===1 && mfEro2[mfi]===0)?1:0;
+      var mfFr=Math.round(mfFe*mfw); 
+      if(mfFr>0){
+        var mfT=new Float32Array(mfN), mfWin=mfFr*2+1, mfInv=1/mfWin, mfa, mfb2, mfsum, mfq, mfidx2;
+        for(mfa=0; mfa<H; mfa++){ var mfR2=mfa*W; mfsum=0;
+          for(mfq=-mfFr; mfq<=mfFr; mfq++){ mfidx2=mfq<0?0:(mfq>=W?W-1:mfq); mfsum+=mfCov[mfR2+mfidx2]; }
+          for(mfb2=0; mfb2<W; mfb2++){ mfT[mfR2+mfb2]=mfsum*mfInv;
+            var mfAd=mfb2+mfFr+1; mfAd=mfAd>=W?W-1:mfAd; var mfSu=mfb2-mfFr; mfSu=mfSu<0?0:mfSu;
+            mfsum+=mfCov[mfR2+mfAd]-mfCov[mfR2+mfSu]; } }
+        for(mfb2=0; mfb2<W; mfb2++){ mfsum=0;
+          for(mfq=-mfFr; mfq<=mfFr; mfq++){ mfidx2=mfq<0?0:(mfq>=H?H-1:mfq); mfsum+=mfT[mfidx2*W+mfb2]; }
+          for(mfa=0; mfa<H; mfa++){ mfCov[mfa*W+mfb2]=mfsum*mfInv;
+            var mfAy=mfa+mfFr+1; mfAy=mfAy>=H?H-1:mfAy; var mfSy=mfa-mfFr; mfSy=mfSy<0?0:mfSy;
+            mfsum+=mfT[mfAy*W+mfb2]-mfT[mfSy*W+mfb2]; } }
+      }
+      for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]!==1) continue;      // never paint outside the artwork
+        var mfC=mfCov[mfi]*mfOp; if(mfC<=0.002) continue; if(mfC>1) mfC=1;
+        mfidx=mfi*4;
+        d[mfidx]=d[mfidx]+(mfr-d[mfidx])*mfC; d[mfidx+1]=d[mfidx+1]+(mfg-d[mfidx+1])*mfC; d[mfidx+2]=d[mfidx+2]+(mfb-d[mfidx+2])*mfC; } },
     // ---- batch 16 (other / color / proc / drawing) ----
     channelremap: function(d,W,H,p,t){ var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
       // Completely binary: 100% of a channel swap or nothing, so it could only ever be a novelty and

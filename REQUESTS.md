@@ -3795,6 +3795,9 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 25, v9.12:* the three matte cleanup tools (Matte Choker, Matte Fringe, Smooth Edges).
+      Each one made you stack a second effect to finish the job it exists for — choke without feather,
+      a flat opaque fringe band, and a soften that could only eat into your artwork.
       *Round 24, v9.10:* Bend, Squeeze, Inner Pinch and Tunnel — all four had a hardcoded centre,
       axis or size. It also caught a real bug in my own change: a floating-point grouping difference in
       Squeeze that would have silently altered every existing squeeze, invisibly.
@@ -5461,6 +5464,27 @@ better still, keep working inside the turn rather than parking work for a later 
       it masks — offer the same on-screen trackpad that point editing has, so a fingertip can nudge
       precisely instead of dragging the point directly. `js/point-edit.js` is the existing pattern and
       `js/mask-tool.js` is the thing to add it to.
+
+- [ ] **322 — Freehand drawing: stop converting it to points, add draw-on (start/end), and a real
+      re-edit with a proper eraser.** (17 Aug.) His words, verbatim: *"Also I just realised why I think
+      free hand drawing changes what it looks like when you let go, I think it's because you're turning
+      it into a bunch of points, it doesn't need to do that, but what would be good is if you press edit
+      shape or whatever for the freehand drawing, it has an option to change the start and end point, so
+      you could do a cool effect with key frames to make it look like it's being drawn live. And also
+      there should be a button to re edit the drawing so you can draw more or erase, also erase should
+      work like an eraser not just delete the whole drawing."*
+      **His diagnosis is almost certainly right and it explains 315's second half** — the stroke is
+      being converted into a point list (the same editable-path representation shapes use), and the
+      simplification that happens on the way is what changes how it looks. It does not need to be a
+      point path at all; keep the raw stroke.
+      Four clauses to tick separately:
+      1. Stop reshaping the stroke on release — keep what he actually drew.
+      2. **Draw-on animation:** in Edit Shape for a drawing, START and END controls along the path, both
+         keyframable, so animating END from 0 to 100% draws the line on live. (This is "trim path" —
+         a genuinely strong feature and the reason to do the rest properly.)
+      3. A button to RE-ENTER drawing mode on an existing drawing, to add more strokes.
+      4. **A real eraser** — rubs out part of a stroke, rather than deleting the whole drawing.
+      Goes with 314 (rename to Sketching) and 315.
 
 ## Done
 

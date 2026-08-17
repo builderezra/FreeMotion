@@ -18195,6 +18195,103 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 25: the matte cleanup tools ---------------- */
+
+  /* A hard-edged disc on transparency: the artwork all three of these exist to clean up, and the only
+   * fixture where "did the matte shrink" and "is the edge stepped" are single readable numbers. */
+  function matteDisc(W, H, R) {
+    var d = new Uint8ClampedArray(W * H * 4);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4;
+      d[i] = 200; d[i + 1] = 140; d[i + 2] = 90; d[i + 3] = Math.hypot(x - W / 2, y - H / 2) <= R ? 255 : 0; }
+    return d;
+  }
+  function matteRun(type, W, H, R, params) {
+    var d = matteDisc(W, H, R); FM._FX_TABLES.PIXEL_FX[type](d, W, H, params, 0.5, 1); return d;
+  }
+  function mattePartial(d) { var n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 4 && d[i] < 251) n++; return n; }
+
+  test('effects: the matte tools still render an un-upgraded instance exactly as they did', { item: 'fx-matte' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      /* SOFTDISC, not disc. These remap alpha around its midpoint, and a hard-edged disc has no
+         midpoint values at all — mattechoker.contrast correctly did nothing on it and reported as a
+         dead control. Third time a fixture that cannot express the thing under test has cost a cycle
+         in these rounds, so the plate is chosen per effect. */
+      { type: 'smoothedges', old: { radius: 4 }, kind: 'softdisc', legacyKeys: { choke: 0, quality: 0 },    moved: { choke: 60, quality: 1 } },
+      { type: 'mattechoker', old: { choke: -4 }, kind: 'softdisc', legacyKeys: { feather: 0, contrast: 0 }, moved: { feather: 6, contrast: 0.8 } },
+      { type: 'mattefringe', old: { width: 3, color: '#00e0ff' }, kind: 'disc', legacyKeys: { opacity: 1, feather: 0 }, moved: { opacity: 0.4, feather: 0.8 } },
+    ].forEach(function (c) {
+      var kind = c.kind || 'disc';
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old, kind);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys, kind))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H, kind), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m, kind))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st, kind))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* "A choked matte keeps stair-stepped edges — the standard choke-then-feather workflow needs a
+   * second effect stacked on top." A hard erode produces NO partial alpha at all, which makes that
+   * exactly measurable: zero versus some. */
+  test('effects: Matte Choker can feather in the same pass, and re-harden after', { item: 'fx-matte' }, function () {
+    var W = 140, H = 140, R = 45;
+    var hard = mattePartial(matteRun('mattechoker', W, H, R, { choke: -6 }));
+    if (hard !== 0) throw new Error('a plain choke already produces ' + hard + ' part-transparent pixels — it is supposed to be the hard-stepped erode this control softens');
+    var soft = mattePartial(matteRun('mattechoker', W, H, R, { choke: -6, feather: 6 }));
+    if (soft < 500) throw new Error('feathering the choke produced only ' + soft + ' part-transparent pixels — it is not softening the step');
+    // contrast pulls the ramp back towards hard, which is what stops a feathered matte going milky
+    var crisp = mattePartial(matteRun('mattechoker', W, H, R, { choke: -6, feather: 6, contrast: 0.9 }));
+    if (!(crisp < soft * 0.8)) throw new Error('edge contrast left ' + crisp + ' soft pixels against ' + soft + ' — it is not re-hardening the ramp');
+  });
+
+  /* "The fringe is painted as an opaque flat band of colour with a hard inner and outer edge, so it
+   * always reads as a pasted-on sticker." A flat band has exactly ONE colour in it; a rim light has
+   * many. Counting distinct colours says which it is, where a pixel count could not. */
+  test('effects: the Matte Fringe stops being a flat pasted-on band', { item: 'fx-matte' }, function () {
+    var W = 140, H = 140, R = 45;
+    var shades = function (p) { var d = matteRun('mattefringe', W, H, R, p), set = {};
+      for (var i = 0; i < d.length; i += 4) if (d[i + 3] > 0) set[d[i] + ',' + d[i + 1] + ',' + d[i + 2]] = 1;
+      return Object.keys(set).length; };
+    var flat = shades({ width: 4, color: '#00e0ff' });
+    if (flat > 4) throw new Error('the default fringe already has ' + flat + ' distinct colours — it is no longer the flat band this softens, so the comparison below is meaningless');
+    var soft = shades({ width: 4, color: '#00e0ff', feather: 0.9 });
+    if (soft < 20) throw new Error('softening produced only ' + soft + ' distinct colours — the band still has hard inner and outer edges');
+    // and strength must mix it toward the artwork rather than paint over it
+    var half = matteRun('mattefringe', W, H, R, { width: 4, color: '#00e0ff', opacity: 0.4 });
+    var full = matteRun('mattefringe', W, H, R, { width: 4, color: '#00e0ff' });
+    if (!fxDiff(half, full)) throw new Error('strength 0.4 rendered identically to full strength');
+  });
+
+  /* "The matte always shrinks into the artwork as you soften it and the falloff is a visibly banded
+   * linear ramp." Two separate claims, two separate measurements — and note the second one is asserted
+   * on the RAMP WIDTH, not on curvature: a triangle falloff is straight within each of its segments,
+   * so a curvature metric reads identically for a box and a double box and proves nothing. */
+  test('effects: Smooth Edges can push the edge back out and soften its falloff', { item: 'fx-matte' }, function () {
+    var W = 140, H = 140, R = 45;
+    var edge = function (p) { var d = matteRun('smoothedges', W, H, R, p), y = H / 2, last = 0;
+      for (var x = W / 2; x < W; x++) if (d[(y * W + x) * 4 + 3] >= 128) last = x - W / 2;
+      return last; };
+    var plain = edge({ radius: 0 });
+    if (plain < 1) { var dd = matteDisc(W, H, R); var yy = H / 2, l = 0;
+      for (var x2 = W / 2; x2 < W; x2++) if (dd[(yy * W + x2) * 4 + 3] >= 128) l = x2 - W / 2; plain = l; }
+    var softened = edge({ radius: 12 });
+    if (!(softened <= plain)) throw new Error('softening did not shrink the matte at all (' + softened + ' vs ' + plain + '), so choke has nothing to give back');
+    var choked = edge({ radius: 12, choke: 60 });
+    if (!(choked > softened)) throw new Error('choke did not push the softened edge back out (' + choked + ' vs ' + softened + ')');
+    var width = function (p) { return mattePartial(matteRun('smoothedges', W, H, R, p)); };
+    var lin = width({ radius: 12 }), sm = width({ radius: 12, quality: 1 });
+    if (!(sm > lin * 1.2)) throw new Error('the Smooth falloff ramps over ' + sm + ' part-transparent pixels against Linear\'s ' + lin + ' — a second box pass should widen and gentle the ramp noticeably');
+  });
+
   /* ---------------- EFFECTS-PLAN round 24: the transform warps ---------------- */
 
   test('effects: the transform warps still map an un-upgraded instance to exactly the same points', { item: 'fx-warp2' }, function () {
@@ -19509,6 +19606,16 @@
     } else if (kind === 'dot') {                     // a single lit pixel: the splat IS the tap set
       for (i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
       var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255;
+    } else if (kind === 'softdisc') {
+      /* A circle with an ANTIALIASED edge. The matte tools that remap alpha around its midpoint —
+         Matte Choker's edge contrast especially — have literally nothing to act on when every pixel is
+         either 0 or 255, so on the hard 'disc' plate a working control reads as dead. Real artwork has
+         a soft edge; the fixture should too. */
+      var scx = W / 2, scy = H / 2, scr = Math.min(W, H) * 0.25;
+      for (var sy = 0; sy < H; sy++) for (var sx = 0; sx < W; sx++) {
+        var si = (sy * W + sx) * 4, sd = Math.hypot(sx - scx, sy - scy);
+        var sa = sd <= scr ? 255 : (sd <= scr + 3 ? Math.round(255 * (1 - (sd - scr) / 3)) : 0);
+        d[si] = 200; d[si + 1] = 140; d[si + 2] = 90; d[si + 3] = sa; }
     } else if (kind === 'disc') {                    // a circle: the only artwork where square vs round corners is visible
       var cx = W / 2, cy = H / 2, rr = Math.min(W, H) * 0.25;
       for (var dy2 = 0; dy2 < H; dy2++) for (var dx2 = 0; dx2 < W; dx2++) {
