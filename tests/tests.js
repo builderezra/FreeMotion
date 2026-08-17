@@ -25519,5 +25519,60 @@
     }
   });
 
+  /* The crop easing button set a flag the view could only honour once a crop existed — and this panel
+     deliberately does not create a crop just to display one. So the first tap was silently dead, the
+     flag stayed armed, and the NEXT refresh after a crop appeared swapped the panel out: you pressed
+     the keyframe diamond and the crop editor you were working in vanished into an easing graph. */
+  test('the crop easing button cannot latch and hijack a later refresh', { item: 'crop-ease' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 110); }); };
+    var layers0 = FM.scene.layers.slice(), ce0 = FM._cropEasing;
+    try {
+      var L = FM.makeLayer('image', { name: 'Uncropped' });
+      L.start = 0; L.duration = 4;
+      FM.media.set(L.id, { kind: 'image', el: document.createElement('canvas'), width: 200, height: 200, duration: 0 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      if (L.crop) throw new Error('the fixture layer already has a crop, so the case under test cannot happen');
+
+      FM.inspector.openCategory('element');
+      FM.inspector.refresh();
+      await frame();
+
+      // 1. The button says why instead of doing nothing, and does not arm anything.
+      var btn = document.querySelector('.mt-ease');
+      if (!btn) throw new Error('no easing button in the crop panel');
+      if (!/Keyframe the crop first/.test(btn.title || '')) throw new Error('the button does not explain itself on an un-cropped layer (title: ' + btn.title + ')');
+      /* ASSERT THE MESSAGE, not just the flag. Mutating the click guard away SURVIVED the first
+         version of this test: the pre-refresh clear below already drops a stale flag, so removing the
+         guard changed nothing observable there. That makes the guard's real contribution the
+         EXPLANATION — without it the button is silently dead, which is the half he would actually
+         notice. A guard whose only assertion is covered by a different guard is an untested guard. */
+      var toasted = null, realToast = FM.toast;
+      FM.toast = function (m) { toasted = m; };
+      try { btn.click(); } finally { FM.toast = realToast; }
+      await frame();
+      if (FM._cropEasing) throw new Error('tapping it with no crop armed FM._cropEasing — that flag then hijacks the next refresh once a crop exists');
+      if (!toasted || !/Keyframe the crop first/.test(toasted)) throw new Error('tapping the easing button with no crop said nothing (toast: ' + JSON.stringify(toasted) + ') — the button is silently dead, which is what he reported');
+
+      /* 2. THE GUARANTEE, independent of the button: arm the flag by hand (any route could), give the
+            layer a crop, refresh — and the panel must NOT jump into the easing graph. This is the half
+            that actually bit him, because the flag was set on a tap he had forgotten about. */
+      FM._cropEasing = true;
+      FM.inspector.refresh();
+      await frame();
+      if (FM._cropEasing) throw new Error('a _cropEasing armed with no crop survived a refresh — it is still waiting to hijack the next one');
+
+      L.crop = { x: 0, y: 0, w: 100, h: 100 };
+      FM.inspector.refresh();
+      await frame();
+      var jumped = !!document.querySelector('.cat-back') && /Animate this property|easing/i.test(document.body.textContent || '');
+      if (FM._cropEasing) throw new Error('the stale flag re-armed itself once a crop appeared');
+      if (jumped && FM._cropEasing) throw new Error('the panel jumped into the easing editor off a stale flag');
+    } finally {
+      FM._cropEasing = ce0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.inspector.refresh();
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

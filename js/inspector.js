@@ -2879,8 +2879,24 @@ window.FM = window.FM || {};
       FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH();
     });
     left.appendChild(kfBtn);
-    const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
-    easeBtn.addEventListener('click', () => { FM._cropEasing = true; FM.inspector.refresh(); });
+    /* THE EASING BUTTON EXPLAINS ITSELF INSTEAD OF LATCHING A FLAG NOTHING CAN HONOUR.
+     * This panel deliberately does not stamp a crop onto the layer just to display one, so layer.crop
+     * is undefined until you keyframe or resize. The sub-view that draws the easing graph is gated on
+     * layer.crop existing — but the click set FM._cropEasing unconditionally, and nothing cleared it.
+     * So the first tap was silently dead, the flag stayed true, and the NEXT refresh that happened
+     * once a crop existed swapped the panel out: you pressed the keyframe diamond and the crop editor
+     * you were working in vanished into an easing graph you never asked for. Same jump after dragging
+     * Width or Height, which also creates the crop and refreshes.
+     * Dimmed-and-explains-itself is the convention already used by the motion-path button a few
+     * hundred lines down, for the same "not ready yet" reason. */
+    const cropReady = !!layer.crop;
+    const easeBtn = el('button', 'mt-ease' + (cropReady ? '' : ' mt-dim')); easeBtn.innerHTML = MT_ICONS.ease;
+    easeBtn.title = cropReady ? 'Easing curve' : 'Keyframe the crop first (tap ◆), then shape its easing here';
+    if (!cropReady) easeBtn.style.opacity = '0.38';
+    easeBtn.addEventListener('click', () => {
+      if (!layer.crop) { if (FM.toast) FM.toast('Keyframe the crop first (tap ◆), then shape its easing here', 2400); return; }
+      FM._cropEasing = true; FM.inspector.refresh();
+    });
     left.appendChild(easeBtn);
     row.appendChild(left);
 
@@ -4683,6 +4699,13 @@ window.FM = window.FM || {};
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
       // selecting more drops straight back to the multi actions.
       if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      /* A FLAG THE VIEW CANNOT HONOUR MUST NOT SURVIVE A REFRESH. The crop easing sub-view is gated on
+       * layer.crop existing, and this panel deliberately does not create a crop just to show one — so a
+       * _cropEasing left armed with no crop sat waiting and hijacked whatever refresh came next, the
+       * moment a crop appeared. That is how tapping ◆ threw you out of the crop editor into an easing
+       * graph. Cleared here, before the view is chosen, so it is dropped whatever route set it: the
+       * button's own guard below is the message, this is the guarantee. */
+      if (FM._cropEasing && !(layer && layer.crop)) FM._cropEasing = false;
       // "Edit Text" IS the focused editor: opening the text element category launches the full-screen
       // text-edit mode OVER the grid, then leaves the inspector on the grid so ✓/Esc lands back on the
       // category list (Color & Fill, Border & Shadow, Effects, …) — not a one-off popup. Adding text
