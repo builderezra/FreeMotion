@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#319 — square vs round grain, and the tile</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:1000px;height:600px}
+#zoom{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
+#zoom figure{margin:0;text-align:center}
+#zoom canvas{background:#000;border:1px solid #22303c;border-radius:8px;image-rendering:pixelated}
+#zoom figcaption{padding-top:6px;color:#8fa}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="zoom"></div><div id="out">…</div>
+<script>
+/* #319 — *"For the noise preview make the noise smaller so it doesn't look shit, and also give the
+   noise effect a toggle to circle noise or square noise"*.
+   The suite proves round covers ~pi/4 of square, which is the arithmetic. This is here to LOOK at it,
+   because "circle noise" is a thing you recognise: at grain size 8, blown up with pixelated scaling,
+   round grain should read as scattered discs with bare grid corners between them, and square as a
+   solid tiling. The real browser tile is shown beside them at its true size, since the complaint
+   started there and a grain that reads well at 8x can still be mush at 77px. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), zoom = document.getElementById('zoom');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM._FX_TABLES || !w.FM.fxThumbs) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      var fn = FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
+      if (!fn) return fail('no noise renderer');
+      var lines = [];
+      [[0, 'Square'], [1, 'Round']].forEach(function (m) {
+        var W = 60, H = 60, SIZE = 8;
+        var img = new w.ImageData(W, H);
+        for (var i = 0; i < img.data.length; i += 4) { img.data[i] = img.data[i+1] = img.data[i+2] = 128; img.data[i+3] = 255; }
+        fn(img.data, W, H, { amount: 100, speed: 0, size: SIZE, color: 0, grain: m[0] }, 0);
+        var moved = 0;
+        for (var k = 0; k < img.data.length; k += 4) if (img.data[k] !== 128) moved++;
+        var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+        cv.style.width = '260px'; cv.style.height = '260px';
+        cv.getContext('2d').putImageData(img, 0, 0);
+        var fig = d.createElement('figure'); fig.appendChild(cv);
+        fig.appendChild(d.createElement('figcaption')).textContent = m[1] + ' grain @ size 8';
+        zoom.appendChild(fig);
+        lines.push(m[1] + ': ' + moved + ' of ' + (W * H) + ' pixels touched (' + Math.round(moved / (W * H) * 100) + '%)');
+      });
+      // …and the real browser tile, at the size it is actually used.
+      var tile = d.createElement('canvas');
+      tile.style.width = '77px'; tile.style.height = '77px';
+      var fig2 = d.createElement('figure'); fig2.appendChild(tile);
+      fig2.appendChild(d.createElement('figcaption')).textContent = 'the Noise tile, real size';
+      zoom.appendChild(fig2);
+      try { FM.fxThumbs.mount(tile, 'noise'); } catch (e) { lines.push('tile mount threw: ' + e.message); }
+      var ov = FM.fxThumbs._override && FM.fxThumbs._override('noise');
+      if (ov) { var L = [{ effects: [{ type: 'noise', params: {} }] }]; ov(L, L[0]); lines.push('tile grain size: ' + L[0].effects[0].params.size + '   (was 4)'); }
+      setTimeout(function () { out.textContent = lines.join('\n'); window.__done = true; }, 1200);
+    })();
+  });
+})();
+</script>
+</body></html>

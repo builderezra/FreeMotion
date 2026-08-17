@@ -5841,7 +5841,18 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Same suspicion as 317, and the two are almost certainly one bug: if the Featured row is being
       fed filter entries, the tab it belongs to and the thing it adds will both be wrong.
 
-- [ ] **319 — Noise: make the preview grain smaller, and add a round / square grain toggle.**
+- [x] **319 — Noise: make the preview grain smaller, and add a round / square grain toggle.**
+      ✅ **v9.65.** Both.
+      · **Round grain** punches each cell down to the circle inside it, so the corners of the grid
+        take no noise — specks scattered on the frame instead of a solid tiling. Measured at 80%
+        of the pixels square grain touches, against the 79% a circle in a square has to give.
+        Square stays the default so nothing you have already made changes.
+      · **The preview grain was 4, and it is 2 now** — and the rule saying it should be is written
+        three paragraphs above it in the same file, about dither: two plate-pixels survives the
+        scale-up-and-back-down, and past that the cell reads as mosaic rather than as the effect.
+        Noise was set to 4 in the same pass that reasoned dither down to 2, and nobody applied the
+        second half of that sentence to it. So the tile was advertising Noise as chunky mosaic
+        while the effect's own default is fine speckle. Loudness untouched — you said the size.
       (17 Aug.) His words, verbatim: *"For the noise preview make the noise smaller so it doesn't look
       shit, and also give the noise effect a toggle to circle noise or square noise"*.
       Two clauses: (1) the grain in the effect BROWSER'S preview tile is too coarse — that is the

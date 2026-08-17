@@ -27172,4 +27172,58 @@
     }
   });
 
+
+  /* ================= queue 319: noise grain — smaller preview, round or square ====================
+   * *"For the noise preview make the noise smaller so it doesn't look shit, and also give the noise
+   * effect a toggle to circle noise or square noise"*.
+   *
+   * ROUND IS MEASURED AS COVERAGE, not photographed. A disc inscribed in a square covers pi/4 of it —
+   * about 79% — so switching the toggle must leave roughly a fifth of the pixels untouched that square
+   * grain would have hit. That is a number the renderer either produces or does not, and it cannot be
+   * satisfied by a toggle that is wired to nothing, which is the way this could quietly half-ship. */
+  test('noise grain can be round instead of square, and the preview grain is finer (queue 319)', { item: 'noise-grain' }, function () {
+    const def = (FM.EFFECTS || []).filter(e => e.type === 'noise')[0];
+    if (!def) throw new Error('the Noise effect is gone');
+    const grain = def.params.filter(p => p.key === 'grain')[0];
+    if (!grain) throw new Error('Noise has no grain-shape control');
+    if (!grain.options || grain.options.length !== 2) throw new Error('the grain control is not a two-way toggle');
+    const labels = grain.options.map(o => String(o[1]).toLowerCase());
+    if (labels.indexOf('square') < 0 || labels.indexOf('round') < 0) throw new Error('the toggle is not Square/Round: ' + labels.join('/'));
+    if (grain.def !== 0) throw new Error('the default is not Square — that would change what every existing project renders as');
+
+    /* Run the real renderer over a flat grey field, twice, and count how many pixels it MOVED. */
+    const W = 64, H = 64, SIZE = 4;
+    const run = (shape) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 128; d[i + 3] = 255; }
+      const T = FM._FX_TABLES || {};
+      const fn = T.PIXEL_FX && T.PIXEL_FX.noise;
+      if (!fn) throw new Error('the noise renderer is not reachable through FM._FX_TABLES');
+      fn(d, W, H, { amount: 100, speed: 0, size: SIZE, color: 0, grain: shape }, 0);
+      let moved = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] !== 128) moved++;
+      return moved;
+    };
+    const sq = run(0), rd = run(1);
+    if (sq < W * H * 0.8) throw new Error('square grain only moved ' + sq + ' of ' + (W * H) + ' pixels — the baseline is wrong, so the comparison below means nothing');
+    if (rd >= sq) throw new Error('round grain moved ' + rd + ' pixels against square\'s ' + sq + ' — the toggle changes nothing, so it is wired to nothing');
+    const ratio = rd / sq;
+    // pi/4 = 0.785. Allow for the half-pixel centring and for hash values that land on no change.
+    if (ratio < 0.6 || ratio > 0.92) throw new Error('round grain covers ' + (ratio * 100).toFixed(0) + '% of what square does — a disc inscribed in a square is 79%, so this is not a circle');
+
+    /* …and the PREVIEW grain. The thumbnail deliberately coarsens some effects to survive being scaled
+       down; this one was at 4, twice what the same note in that file argues for. */
+    if (FM.fxThumbs && FM.fxThumbs._override) {
+      const layers = [{ effects: [{ type: 'noise', params: { amount: 35, size: 1, color: 0 } }] }];
+      const hero = layers[0];
+      const ov = FM.fxThumbs._override('noise');
+      if (ov) {
+        ov(layers, hero);
+        const sz = hero.effects[0].params.size;
+        if (!(sz <= 2)) throw new Error('the noise thumbnail still boosts grain size to ' + sz + ' — that is the chunky preview he reported');
+        if (!(sz > 1)) throw new Error('the thumbnail grain is ' + sz + ' — below two plate-pixels the pattern averages flat when the tile is drawn down, which is the opposite failure');
+      }
+    }
+  });
+
 })();

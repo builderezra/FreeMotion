@@ -130,6 +130,13 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'speed', label: 'Speed', min: 0, max: 60, step: 1, def: 24, unit: 'Hz' },
       { key: 'size', label: 'Grain size', min: 1, max: 8, step: 0.5, def: 1 },
+      /* Queue 319: *"give the noise effect a toggle to circle noise or square noise"*. Square is the
+         default because it is what the effect has always done — a grain is a whole cell of the grid —
+         and changing what an existing project renders as is not a rename. Round punches the cell down
+         to the disc inscribed in it, so the corners of the grid take no noise at all: specks scattered
+         on the frame rather than a solid tiling. It therefore only means anything above Grain size 1,
+         where the cell IS one pixel and a circle in it is the same pixel. */
+      { key: 'grain', label: 'Grain', def: 0, options: [[0, 'Square'], [1, 'Round']] },
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'scanlines', label: 'Scanlines', params: [
@@ -3152,9 +3159,22 @@ window.FM = window.FM || {};
       const chroma = (p.color == null ? 0 : FM.evalProp(p.color, t)) / 100;
       const one = size === 1;   // at size 1 the cell IS the pixel — keep the old index exactly
       const inv = 1 / size;
+      /* ROUND GRAIN (queue 319). The cell stays exactly where it was — same grid, same hash, same
+         value — and the pixels outside the disc inscribed in it are simply left alone, so the corners
+         of the grid take no noise. That reads as specks scattered over the frame instead of a solid
+         tiling, which is what "circle noise" means.
+         Meaningless at size 1, and skipped there rather than computed: the cell is one pixel, and the
+         circle inscribed in one pixel is that pixel. Doing the arithmetic anyway would cost a square
+         root's worth of work per pixel on the default settings to produce no difference at all. */
+      const round = one ? 0 : ((p.grain == null ? 0 : FM.evalProp(p.grain, t)) | 0);
+      const half = size / 2, rad2 = half * half;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
         const px = (i >> 2);
+        if (round) {
+          const gx = (px % W) % size - half + 0.5, gy = (((px / W) | 0) % size) - half + 0.5;
+          if (gx * gx + gy * gy > rad2) continue;
+        }
         const cell = one ? px : ((((px / W) | 0) * inv | 0) * W + ((px % W) * inv | 0));
         let h = (cell * 374761393 + frame * 668265263) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));

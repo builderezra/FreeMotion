@@ -824,7 +824,15 @@ window.FM = window.FM || {};
      * plate-pixels the cell stops reading as error diffusion and starts reading as mosaic, and a
      * thumbnail that overstates the effect is the same failure as one that understates it. */
     dither: function (l, h) { h.effects[0].params.scale = 2; },
-    noise: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 4; p.color = 45; },
+    /* SIZE 2, NOT 4 (queue 319). Ezra: *"For the noise preview make the noise smaller so it doesn't
+       look shit"*. He is right, and the rule that says so is already written three paragraphs up, about
+       DITHER: two plate-pixels is what survives the up-then-down trip, and "past two plate-pixels the
+       cell stops reading as error diffusion and starts reading as mosaic, and a thumbnail that
+       overstates the effect is the same failure as one that understates it." Noise was set to 4 in the
+       same pass that reasoned dither down to 2, and nobody applied the second half of the sentence to
+       it — so the tile advertised Noise as chunky mosaic when the effect's own default is fine speckle.
+       Amount and colour stay where they are: the complaint was the size of the grain, not its loudness. */
+    noise: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 2; p.color = 45; },
     posterize: function (l, h) { h.effects[0].params.levels = 3; },
     // Vibrance protects already-saturated pixels, so at its default it moved this photo by ~6%.
     // Top of its range is all the headroom there is (Protect-highlights measured WORSE, 12.98 vs
@@ -1298,6 +1306,11 @@ window.FM = window.FM || {};
   }
 
   FM.fxThumbs = {
+    /* Seam for the suite (queue 319). The demo-only tuning in OVERRIDES is the thing he judges a tile
+       by — it is what makes Noise look chunky or fine — and it is unreachable from outside, so nothing
+       could hold it to the rule the file states for itself. Read-only: it hands back the function, and
+       the caller supplies its own throwaway layer to run it on. */
+    _override: function (type) { return OVERRIDES[type] || null; },
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },
