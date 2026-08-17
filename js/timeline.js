@@ -252,6 +252,7 @@ window.FM = window.FM || {};
   // CURRENTLY SELECTED layer. Path-keying survives the source prop reverting to static and lets
   // you copy on one layer and paste onto another.
   function propKey(layer, p) {
+    foundType = null;
     // Must cover EVERY slot FM.animatedProps exposes (i.e. everything that draws a diamond), or Copy
     // keyframe silently drops it — delete already handles all of these, so copy/paste must too.
     if (layer.volume === p) return 'volume';
@@ -266,10 +267,15 @@ window.FM = window.FM || {};
     FM.eachFx(layer, (fx, path) => {
       if (found) return;
       const params = fx.params || {};
-      for (const k of Object.keys(params)) if (params[k] === p) { found = FM.fxAddr(path, k, 'effect', '.'); return; }
+      for (const k of Object.keys(params)) if (params[k] === p) { found = FM.fxAddr(path, k, 'effect', '.'); foundType = fx.type; return; }
     });
     return found;
   }
+  /* The TYPE of the effect the last propKey() resolved into, or null. An effect keyframe's address is
+     positional — "the Nth effect's `amount`" — and that is fine within one layer and meaningless
+     across two. Copy is an advertised cross-layer feature, so the type has to travel with the key. */
+  let foundType = null;
+  function lastFxType() { const v = foundType; foundType = null; return v; }
   function resolveSlot(layer, key) {
     if (key === 'volume' || key === 'fill' || key === 'color' || key === 'speed') return { c: layer, k: key };
     if (key.indexOf('transform.') === 0) return { c: layer.transform, k: key.slice(10) };
@@ -277,7 +283,7 @@ window.FM = window.FM || {};
     if (key.indexOf('stroke.') === 0) return layer.stroke ? { c: layer.stroke, k: key.slice(7) } : null;
     if (key.indexOf('shadow.') === 0) return layer.shadow ? { c: layer.shadow, k: key.slice(7) } : null;
     const a = FM.fxAddrParse(key, 'effect', '.');
-    if (a) { const fx = FM.fxAt(layer, a.path); if (fx && fx.params) return { c: fx.params, k: a.key }; }
+    if (a) { const fx = FM.fxAt(layer, a.path); if (fx && fx.params) return { c: fx.params, k: a.key, fx: fx }; }
     return null;
   }
   function copyKfAt(layer, tt) {
@@ -288,6 +294,7 @@ window.FM = window.FM || {};
         const key = propKey(layer, p);
         if (key) {
           const en = { key: key, v: Array.isArray(k.v) ? JSON.parse(JSON.stringify(k.v)) : k.v, e: k.e, bez: k.bez ? k.bez.slice() : null };
+          const ft = lastFxType(); if (ft) en.fxType = ft;   // so paste can refuse a different effect
           // spatial motion-path tangents ride along — dropping them turned a smoothed keyframe into a kink on paste
           if (typeof k.ti === 'number' && isFinite(k.ti)) en.ti = k.ti;
           if (typeof k.to === 'number' && isFinite(k.to)) en.to = k.to;
@@ -305,6 +312,14 @@ window.FM = window.FM || {};
     FM.kfClipboard.forEach(en => {
       const slot = resolveSlot(layer, en.key);
       if (!slot) return;                                  // target lacks this effect/param → skip
+      /* AN EFFECT ADDRESS IS POSITIONAL, so "the 1st effect's amount" copied from a Twirl lands on
+         whatever the target's 1st effect happens to be. Dozens of effects share the name `amount` with
+         wildly different ranges — Twirl is -360..360, Grayscale is 0..1 — so pasting a Twirl keyframe
+         of 140 onto a Grayscale silently drove it to fully desaturated and committed it. Worse, if the
+         target effect had no such parameter at all, the line below INVENTED one and serialised the
+         junk into the project, while the user saw no keyframe appear and no error. */
+      if (en.fxType && (!slot.fx || slot.fx.type !== en.fxType)) return;   // a different effect entirely
+      if (slot.fx && !(slot.k in slot.c)) return;         // this effect does not have that parameter
       let p = slot.c[slot.k];
       if (!FM.isAnimated(p)) { p = { kf: [] }; slot.c[slot.k] = p; }   // create container if static/missing
       const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);

@@ -18195,6 +18195,60 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: a keyframe must not paste into an unrelated effect ---------------- */
+
+  /* THE BUG. An effect keyframe's address is POSITIONAL — "the 1st effect's `amount`" — which is fine
+   * within one layer and meaningless across two. Copying onto another layer is an advertised feature,
+   * and dozens of effects share the name `amount` with wildly different ranges (Twirl -360..360,
+   * Grayscale 0..1, Temperature -100..100). So copying a Twirl keyframe of 140 and pasting it onto a
+   * layer whose first effect is Grayscale drove that 0..1 parameter to 140 — fully desaturated from
+   * the paste point on — and committed it to history and the autosave.
+   * Worse: when the target effect had no such parameter at all, the paste INVENTED one and serialised
+   * the junk into the project file, while the user saw no keyframe appear and no error.
+   * The finding's exact scenario is what this drives. */
+  test('timeline: a keyframe copied from one effect never pastes into a different one (BUG-HUNT)', { item: 'kf-paste' }, function () {
+    if (!FM.copyKfAt || !FM.pasteKfAtPlayhead) throw new Error('FM.copyKfAt / FM.pasteKfAtPlayhead are not exposed — the suite cannot drive copy/paste');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time, clip0 = FM.kfClipboard;
+    try {
+      var mk = function (name, fxType) {
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#ffffff' });
+        L.start = 0; L.duration = 5; L.name = name;
+        L.effects = [FM.fxRegistry.makeInstance(fxType)];
+        FM.scene.layers.push(L); return L;
+      };
+      var A = mk('KFP_TWIRL', 'twirl');
+      A.effects[0].params.amount = { kf: [{ t: 1, v: 140, e: 'linear' }] };
+      var B = mk('KFP_GRAY', 'grayscale');
+      var grayBefore = JSON.stringify(B.effects[0].params.amount);
+      var grayKeysBefore = Object.keys(B.effects[0].params).sort().join(',');
+
+      if (FM.copyKfAt(A, 1) !== 1) throw new Error('copying the Twirl keyframe did not put exactly one entry on the clipboard');
+      var en = FM.kfClipboard[0];
+      if (en.fxType !== 'twirl') throw new Error('the clipboard entry does not record which effect it came from (fxType = ' + en.fxType + '), so paste cannot tell one effect from another');
+
+      FM.selectLayer(B.id); FM.time = 2;
+      FM.pasteKfAtPlayhead();
+      if (JSON.stringify(B.effects[0].params.amount) !== grayBefore) {
+        throw new Error('pasting a Twirl keyframe onto a Grayscale changed its amount from ' + grayBefore + ' to ' + JSON.stringify(B.effects[0].params.amount) + ' — a 0..1 parameter driven by a -360..360 one');
+      }
+      if (Object.keys(B.effects[0].params).sort().join(',') !== grayKeysBefore) {
+        throw new Error('the paste invented a parameter on the target effect: ' + Object.keys(B.effects[0].params).join(',') + ' (was ' + grayKeysBefore + ')');
+      }
+
+      // THE CONTROL. Cross-layer paste is a real feature and must still work when the effect matches —
+      // a fix that simply refused every cross-layer paste would satisfy everything above.
+      var C = mk('KFP_TWIRL2', 'twirl');
+      FM.selectLayer(C.id); FM.time = 2;
+      FM.pasteKfAtPlayhead();
+      var ca = C.effects[0].params.amount;
+      if (!(ca && ca.kf && ca.kf.length)) throw new Error('pasting onto another layer with the SAME effect did not create a keyframe — the fix has broken the feature it was protecting');
+      if (ca.kf[0].v !== 140) throw new Error('the pasted value is ' + ca.kf[0].v + ', not the 140 that was copied');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.time = t0; FM.kfClipboard = clip0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- BUG-HUNT: a group clip drag must keep the clips' relative timing -------------- */
 
   /* THE BUG. Each clip in a multi-select drag was floored against its OWN duration, so the moment a
