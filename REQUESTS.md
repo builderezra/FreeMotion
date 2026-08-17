@@ -5958,6 +5958,27 @@ better still, keep working inside the turn rather than parking work for a later 
          time — Shake, Wiggle, Drift, Orbit, a behaviour — is invisible to it. **Whatever fixes this
          probably fixes 31b too: both need the ACTUAL frame-to-frame position after every effect has
          had its say, not the authored transform.** Worth solving once, properly, for both.
+      🔎 **18 Aug — REPRODUCED clause 2, and ruled out the obvious cause. Read this before starting.**
+      **The reproduction, which is the useful part:** a 400x400 comp, a 160px white square at x=300
+      (clear of the right wall), a **Drift** effect at 140 px/s, rendered at t=0.5 so it has moved 70px.
+      Count pixels in the frame's LAST COLUMN — measure by COLOUR, not alpha: `renderScene` paints the
+      project background, so every pixel comes back opaque and an alpha count returns the frame height
+      whatever is on screen. Drift alone lights 160; **adding Squish still lights 160**, i.e. the layer
+      is being CUT by the wall instead of squashed against it. That is his bug, on the bench.
+      **What I tried and it did NOT fix it.** The plate Squish measures is rendered with every other
+      effect already applied, so the shaken pixels really are in it — that part is fine. My theory was
+      the step before: the reach box that decides whether a wall is worth looking at (and how much to
+      pad the plate) is built from the transform MATRIX, which knows about parenting, behaviours and
+      the camera but nothing about an effect displacing pixels at render time. I widened that box by
+      the layer's half-extent whenever it carries another effect. **The number did not move — 160 both
+      ways — so the reach box is not the cause, or not the only one.** Backed the change out rather than
+      shipping an unproven cost.
+      **Where to look next:** the effect chain's ORDER. The notes on drawSquish say "Squish composites
+      innermost now — see the pin in drawLayer", which would mean it runs BEFORE the other effects
+      rather than after them — in which case Drift displaces pixels that Squish has already finished
+      with, and no amount of padding will help. If that is it, the fix is about where Squish sits in
+      the chain, not about what it can see.
+      Clause 1 (corners) is untouched and still unmeasured.
 
 - [x] **324 — DONE v9.44. Give the Add-layer row's + button its old colours back, and make the whole bar stand
       out.** (17 Aug.) His words, verbatim: *"Make the tiny plus button that's on the tap to create
