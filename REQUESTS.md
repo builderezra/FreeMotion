@@ -5770,6 +5770,27 @@ better still, keep working inside the turn rather than parking work for a later 
       still being smoothed/simplified into something that is not what he drew. He has asked for (2)
       before — "which I don't want" — so whatever simplification runs on commit needs to be off, or
       at least off by default. Goes with 314 (renaming it to Sketching).
+      ✅ **v9.62 — CLAUSE 2 DONE. Clause 1 not fixed, so this stays open.**
+      · **2 (it changes what you drew) — fixed, and here is the size of it.** Two of the three passes
+        on a finished stroke were moving your points: one slid every sample toward its neighbours,
+        the other deleted samples outright and drew straight lines between whatever survived. On a
+        121-point stroke, **13 points survived** — an 89% rewrite. Both are gone. What is kept is the
+        one pass that fixed your OTHER complaint about this tool ("looks like shit", when strokes came
+        out faceted) without moving anything: each point is marked "curve through here", so the line
+        renders round instead of cornered and every point stays exactly where you put it. Those two
+        complaints only looked contradictory because the first fix reached for simplification when the
+        real fault was the corners.
+        ⚠️ **Shaky lines will now look shaky, because that is what you drew.** If that turns out not to
+        be what you meant, say so and the middle ground is a light smoothing that still never deletes
+        a point.
+      · **1 (stops after the first line) — NOT REPRODUCED, and I am not going to claim it is fixed.**
+        Two full strokes were driven through the real overlay at 390px: both presses were accepted,
+        both were recorded, and the layer ended with two subpaths. So the path from finger to data
+        works under test, and whatever stops it on your phone is something this could not reach —
+        most likely touch-specific (pointer capture, or the commit's repaint landing under a real
+        finger). **What would settle it in one go: when it happens, does the stroke you already drew
+        stay on screen, or does everything vanish?** Staying = the second press is being swallowed;
+        vanishing = the layer is being broken by the commit. Those are different bugs.
 
 - [x] **316 — Rename "Vector Drawing" to "Custom shape".** ✅ **v9.61.** Same sweep, same release.
       **The one that makes this worth a test rather than a find-and-replace:** the tile colours are

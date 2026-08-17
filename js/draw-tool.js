@@ -279,12 +279,31 @@ window.FM = window.FM || {};
      Filter FIRST, then simplify. Two low-pass passes remove the tremor, RDP then reduces what is
      left to a manageable number of anchors, and the survivors are marked [u,v,1] so the renderer
      curves through them instead of joining them with straight segments. */
+  /* IT DOES NOT RESHAPE WHAT YOU DREW ANY MORE (queue 315, clause 2). Ezra, for at least the second
+   * time: *"it still has the issue where it will change what you drew to look different, which I don't
+   * want"*.
+   *
+   * TWO OF THE THREE PASSES HERE MOVED HIS POINTS, and that is the whole complaint. `lowpass` slid
+   * every sample toward its neighbours' average, and `rdp` deleted samples outright and drew straight
+   * lines between the survivors — at eps 1.6 a deliberate small kink is inside the tolerance and simply
+   * disappears. Between them, what came back was a tidier line than the one he made, which is exactly
+   * what he keeps saying he does not want.
+   *
+   * THE THIRD PASS IS THE ONE WORTH KEEPING, and it is the answer to his OTHER complaint about this
+   * tool ("looks like shit", when strokes rendered as faceted polylines). Marking a point [u,v,1] means
+   * "curve through this point" — the renderer runs a smooth curve THROUGH the sample rather than a
+   * corner AT it. It does not move anything. So the stroke reads as drawn rather than plotted, and
+   * every point is still where he put it. Those two complaints only looked contradictory because the
+   * first fix reached for simplification when the fault was the corners.
+   * The ends stay hard so a stroke starts and stops crisply instead of hooking.
+   *
+   * COST: the sampler already enforces 2.5 device px between samples (see onMove), so a stroke across a
+   * whole phone screen is a few hundred points rather than thousands — kept deliberately rather than
+   * discovered, because "keep every point" without that floor would be a different decision. */
   function smoothFreehand(src) {
-    var filtered = lowpass(src, 2);
-    var pts = rdp(filtered, 1.6);   // lower epsilon is safe now: there is no jitter left to preserve
-    if (pts.length < 3) return pts;
-    return pts.map(function (p, i) {
-      return (i === 0 || i === pts.length - 1) ? [p[0], p[1]] : [p[0], p[1], 1];
+    if (src.length < 3) return src.slice();
+    return src.map(function (p, i) {
+      return (i === 0 || i === src.length - 1) ? [p[0], p[1]] : [p[0], p[1], 1];
     });
   }
 

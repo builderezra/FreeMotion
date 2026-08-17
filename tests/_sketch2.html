@@ -1,0 +1,85 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#315 — why the second sketch stroke does not start</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #315 — *"free hand drawing stops working after ur first line, like when you let go it doesn't let
+   you draw more, and also it still has the issue where it will change what you drew to look different,
+   which I don't want"*.
+   The first half was supposedly fixed once already (onUp used to call finish(), which tore the tool
+   down) and he is reporting it again, so the second cause is somewhere else and guessing has already
+   failed once. This drives two real strokes through the overlay and reports, for each, whether the
+   press was even accepted — onDown bails unless `e.target` is the overlay or the preview, so the most
+   likely second cause is that something is in front of the overlay by then, and that is checkable.
+   It also measures what the commit does to the shape: how many points went in and how many came out. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 390;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.startDraw || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll();
+        FM.startDraw('freehand');
+      } catch (e) { return fail('startDraw threw: ' + (e && e.message || e)); }
+      setTimeout(function () {
+        var ov = d.getElementById('draw-overlay');
+        if (!ov) return fail('no #draw-overlay');
+        var lines = ['width ' + W, 'overlay display ' + w.getComputedStyle(ov).display + '  active ' + FM.drawTool.active];
+        var r = ov.getBoundingClientRect();
+        function stroke(n, y) {
+          var x0 = Math.round(r.left + r.width * 0.25), x1 = Math.round(r.left + r.width * 0.75);
+          var yy = Math.round(r.top + r.height * y);
+          /* WHAT IS ACTUALLY UNDER THE PRESS. onDown returns early unless e.target is the overlay or
+             the preview canvas, and dispatching straight AT the overlay would set e.target to the
+             overlay by construction — hiding the very thing being looked for. So the point is hit
+             tested first, and the event is sent to whatever is really there. */
+          var hit = d.elementFromPoint(x0, yy);
+          var mk = function (t, x, b) { return new w.PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: yy, pointerId: 1, pointerType: 'mouse', buttons: b }); };
+          (hit || ov).dispatchEvent(mk('pointerdown', x0, 1));
+          var began = FM.drawTool.points.length;
+          for (var k = 1; k <= 8; k++) (hit || ov).dispatchEvent(mk('pointermove', Math.round(x0 + (x1 - x0) * k / 8), 1));
+          var sampled = FM.drawTool.points.length;
+          (hit || ov).dispatchEvent(mk('pointerup', x1, 0));
+          var L = FM.scene.layers.filter(function (l) { return l.name === 'Sketch'; })[0];
+          lines.push('stroke ' + n + ': on=' + (hit ? (hit.id || hit.tagName) : 'nothing') + ' ok=' + (began > 0) +
+                     ' sampled=' + sampled + ' kept=' + (L && L.subs && L.subs[L.subs.length - 1] ? L.subs[L.subs.length - 1].length : 0) +
+                     ' subs=' + (L && L.subs ? L.subs.length : 0));
+        }
+        stroke(1, 0.35);
+        setTimeout(function () {
+          stroke(2, 0.62);
+          var L = FM.scene.layers.filter(function (l) { return l.name === 'Sketch'; })[0];
+          lines.push('');
+          lines.push('layers named Sketch: ' + FM.scene.layers.filter(function (l) { return l.name === 'Sketch'; }).length);
+          lines.push('subpaths on it: ' + (L && L.subs ? L.subs.length : 0) + '   (2 = the second stroke was recorded)');
+          /* THE DATA SAYING "TWO SUBPATHS" AND THE CANVAS SHOWING ONE LINE IS THE ACTUAL REPORT. From
+             the outside "it doesn't let you draw more" is what a second stroke that never APPEARS looks
+             like, so where the two subs sit relative to the layer's own box is the thing to look at. */
+          if (L) {
+            lines.push('layer box x=' + Math.round(L.x) + ' y=' + Math.round(L.y) + ' w=' + Math.round(L.shapeW || 0) + ' h=' + Math.round(L.shapeH || 0) + ' scale=' + JSON.stringify(L.transform && L.transform.scale && L.transform.scale.v));
+            (L.subs || []).forEach(function (sub, i) {
+              var xs = sub.map(function (p) { return p[0]; }), ys = sub.map(function (p) { return p[1]; });
+              lines.push('  sub ' + i + ': ' + sub.length + ' pts  x ' + Math.round(Math.min.apply(null, xs)) + '–' + Math.round(Math.max.apply(null, xs)) +
+                         '  y ' + Math.round(Math.min.apply(null, ys)) + '–' + Math.round(Math.max.apply(null, ys)));
+            });
+          }
+          out.textContent = lines.join('\n');
+          window.__done = true;
+        }, 400);
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

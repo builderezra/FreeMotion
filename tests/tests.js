@@ -5080,7 +5080,7 @@
     }
   });
 
-  test('freehand: hand tremor is smoothed out of a stroke', { item: 'freehand-smooth' }, function () {
+  test('freehand: a stroke is rendered smooth WITHOUT moving what you drew (queue 315)', { item: 'freehand-smooth' }, function () {
     // v5.53, and Ezra's FOURTH report on this: "free hand drawing is still fucked… make sure this
     // gets solved and it works fine and looks good."
     //
@@ -5113,15 +5113,31 @@
       }
       return total;
     };
+    /* ⚠️ THIS TEST HAS BEEN TURNED AROUND, DELIBERATELY (queue 315). It used to assert that hand
+       tremor was REMOVED — that a shaky arc came back carrying no more turning than a clean one. That
+       was written for his complaint that strokes "look like shit", and the fix reached for
+       simplification: a low-pass that slid every sample toward its neighbours, then Ramer-Douglas-
+       Peucker deleting samples and drawing straight lines between the survivors.
+       He has now said the opposite, twice: *"it still has the issue where it will change what you drew
+       to look different, which I don't want"*. Both passes moved his points, so both are gone, and the
+       assertion that protected them has to go with them rather than be quietly relaxed.
+       WHAT SURVIVES IS THE PART THAT FIXED THE ORIGINAL COMPLAINT WITHOUT MOVING ANYTHING: marking
+       interior points [u,v,1] so the renderer curves THROUGH each sample instead of putting a corner
+       AT it. That is asserted below, and it is why the two complaints were never actually in conflict.
+       The new contract is the strongest form of what he asked for: every point comes back exactly where
+       he put it, and none are dropped. */
+    const src = arc(5.5);
+    const shaky = FM._smoothFreehand(src);
     const clean = FM._smoothFreehand(arc(0));
-    const shaky = FM._smoothFreehand(arc(5.5));
-    if (clean.length < 3 || shaky.length < 3) throw new Error('the smoother returned ' + clean.length + '/' + shaky.length + ' points — nothing to measure');
-    const tc = turning(clean), ts = turning(shaky);
-    const excess = ts - tc;
-    // RDP alone measured ~65 rad of excess here. Anything in that neighbourhood is a visibly shaky line.
-    if (excess > 6) throw new Error('a stroke with hand tremor carries ' + excess.toFixed(1) + ' rad of turning beyond the same arc drawn cleanly (' + ts.toFixed(1) + ' vs ' + tc.toFixed(1) + ') — the wobble is still in the path');
-    // …and the smoothing must not have flattened the arc itself into a straight line.
-    if (tc < 1.5) throw new Error('a clean arc only turns ' + tc.toFixed(2) + ' rad after smoothing — the curve has been flattened away');
+    if (shaky.length !== src.length) throw new Error('the smoother returned ' + shaky.length + ' points for ' + src.length + ' drawn — points are still being deleted, which changes the shape');
+    for (let i = 0; i < src.length; i++) {
+      if (shaky[i][0] !== src[i][0] || shaky[i][1] !== src[i][1]) {
+        throw new Error('point ' + i + ' moved from ' + src[i].map(n => n.toFixed(2)) + ' to ' + shaky[i].slice(0, 2).map(n => n.toFixed(2)) + ' — "it will change what you drew to look different, which I don\'t want"');
+      }
+    }
+    // …and the curvature he DID draw is still all there, rather than having been averaged flat.
+    const tc = turning(clean);
+    if (tc < 1.5) throw new Error('a clean arc only turns ' + tc.toFixed(2) + ' rad — the curve has been flattened away');
     // Curve flags: the renderer only rounds a point marked [u,v,1]; without them this is a polyline.
     const mid = shaky.slice(1, -1);
     if (!mid.length || !mid.every(p => p[2] === 1)) throw new Error('interior points are not marked smooth, so the stroke renders as straight segments');
