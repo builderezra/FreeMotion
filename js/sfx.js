@@ -595,6 +595,34 @@ window.FM = window.FM || {};
 
   function close() { stopPreview(); document.querySelectorAll('.sfx-scrim').forEach(n => n.remove()); }
 
+  /* ---------- STARRING (queue 311) ---------------------------------------------------------------
+   * His words: *"Make it so you can star sound effects and they show up at the top of the sound effect
+   * list"*. The visual effects browser has had this for ages (js/fx-browser.js), so this is the same
+   * idea in the one place that lacked it rather than a new invention — same star, same "favourites
+   * first" reading, its own key because the two lists share no ids.
+   *
+   * IDS FROM STORAGE ARE FILTERED THROUGH byId, NOT TRUSTED. That is not caution for its own sake: the
+   * visual browser was taken down on open by exactly this, when a stored id of `toString` survived a
+   * naive lookup and handed a FUNCTION to the tile builder. `byId` is a find over a real array, so an
+   * id that is not a sound effect returns null and drops out here.
+   */
+  const FAV_KEY = 'fm.sfx.fav';
+  function readFavs() {
+    try {
+      const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      return Array.isArray(a) ? a.filter(id => !!byId(id)) : [];
+    } catch (e) { return []; }
+  }
+  function writeFavs(a) { try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) {} }
+  function isFav(id) { return readFavs().indexOf(id) >= 0; }
+  function toggleFav(id) {
+    if (!byId(id)) return false;
+    const a = readFavs(), i = a.indexOf(id);
+    if (i >= 0) a.splice(i, 1); else a.push(id);
+    writeFavs(a);
+    return i < 0;
+  }
+
   function open() {
     close();
     const scrim = el('div', 'sfx-scrim');
@@ -612,32 +640,69 @@ window.FM = window.FM || {};
     card.appendChild(el('div', 'sfx-hint', 'Tap a name to hear it. These are generated in the app, so they cost nothing to download.'));
 
     const body = el('div', 'sfx-list');
-    categoriesOf().forEach(cat => {
-      body.appendChild(el('div', 'sfx-cat', cat));
-      SFX.filter(s => s.cat === cat).forEach(def => {
-        const row = el('div', 'sfx-row');
-        const play = el('button', 'sfx-play');
-        play.type = 'button';
-        play.title = 'Hear ' + def.name;
-        play.setAttribute('aria-label', 'Hear ' + def.name);
-        play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-        const name = el('button', 'sfx-name', def.name);
-        name.type = 'button';
-        const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
-        const hear = () => { preview(def); row.classList.add('playing'); setTimeout(() => row.classList.remove('playing'), Math.round(def.dur * 1000) + 60); };
-        play.addEventListener('click', hear);
-        name.addEventListener('click', hear);
-        const addBtn = el('button', 'btn sfx-add', 'Add');
-        addBtn.type = 'button';
-        addBtn.addEventListener('click', async () => {
-          addBtn.disabled = true; addBtn.textContent = '…';
-          try { await add(def); close(); }
-          catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
-        });
-        row.append(play, name, secs, addBtn);
-        body.appendChild(row);
+    /* ONE ROW BUILDER for both the favourites block and the categories. The obvious way to add a
+       "starred at the top" section is to copy the row-building loop, and this file already carries a
+       note about what happens when two things meant to be identical each get their own copy — the
+       ★ would be wired in one of them and dead in the other the first time either changed. */
+    function rowFor(def) {
+      const row = el('div', 'sfx-row');
+      const play = el('button', 'sfx-play');
+      play.type = 'button';
+      play.title = 'Hear ' + def.name;
+      play.setAttribute('aria-label', 'Hear ' + def.name);
+      play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      const name = el('button', 'sfx-name', def.name);
+      name.type = 'button';
+      const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
+      const hear = () => { preview(def); row.classList.add('playing'); setTimeout(() => row.classList.remove('playing'), Math.round(def.dur * 1000) + 60); };
+      play.addEventListener('click', hear);
+      name.addEventListener('click', hear);
+      const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
+      star.type = 'button';
+      star.dataset.sfxid = def.id;
+      star.title = isFav(def.id) ? 'Remove from favourites' : 'Favourite — starred sounds sit at the top';
+      star.setAttribute('aria-pressed', isFav(def.id) ? 'true' : 'false');
+      star.addEventListener('click', (e) => {
+        e.stopPropagation();          // starring is not hearing
+        toggleFav(def.id);
+        /* REDRAWN IMMEDIATELY, not on the next open. He has already reported the other half of this
+           once — *"when you save a preset you have to exit and go back into the menu, make it auto
+           update the menu"* — and a star whose whole visible effect is a reordering that only happens
+           later is the same complaint waiting to be made. The scroll position is carried across so the
+           list does not jump out from under the finger that pressed it. */
+        const top = body.scrollTop;
+        fillList();
+        body.scrollTop = top;
       });
-    });
+      const addBtn = el('button', 'btn sfx-add', 'Add');
+      addBtn.type = 'button';
+      addBtn.addEventListener('click', async () => {
+        addBtn.disabled = true; addBtn.textContent = '…';
+        try { await add(def); close(); }
+        catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
+      });
+      row.append(play, name, secs, star, addBtn);
+      return row;
+    }
+    function fillList() {
+      body.innerHTML = '';
+      /* FAVOURITES FIRST — *"they show up at the top of the sound effect list"*. In the order they were
+         starred, which is the order the stored list already holds; re-sorting them by name or category
+         would make a list he built himself come back arranged by something else.
+         The section only exists when something is in it: an empty "Favourites" heading above the real
+         list is a row of nothing that pushes every actual sound down, which is the thing queue 301 was
+         about. */
+      const favs = readFavs().map(byId).filter(Boolean);
+      if (favs.length) {
+        body.appendChild(el('div', 'sfx-cat', '★ Favourites'));
+        favs.forEach(def => body.appendChild(rowFor(def)));
+      }
+      categoriesOf().forEach(cat => {
+        body.appendChild(el('div', 'sfx-cat', cat));
+        SFX.filter(s => s.cat === cat).forEach(def => body.appendChild(rowFor(def)));
+      });
+    }
+    fillList();
     card.appendChild(body);
 
     const actions = el('div', 'sfx-actions');
@@ -656,6 +721,7 @@ window.FM = window.FM || {};
     open: open,
     close: close,
     list: () => SFX.slice(),
+    isFav: isFav, toggleFav: toggleFav, favs: readFavs,   // seams: the suite drives the real store
     categories: categoriesOf,
     byId: byId,
     renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes

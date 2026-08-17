@@ -5696,7 +5696,16 @@ better still, keep working inside the turn rather than parking work for a later 
       exists elsewhere, so removing it from this menu takes nothing away. Still verify each survivor
       actually works before deleting its twin; that is the only part he cannot check from his side.
 
-- [ ] **311 — Let sound effects be starred, and show the starred ones at the top of the list.**
+- [x] **311 — Let sound effects be starred, and show the starred ones at the top of the list.**
+      ✅ **v9.58.** A ★ on every row, and a **★ FAVOURITES** block at the top of the list holding
+      the starred ones in the order you starred them — not re-sorted by name or category, because
+      a list you built yourself coming back arranged by something else is not your list.
+      The menu redraws the moment you star something rather than next time you open it — you have
+      already reported that exact thing about saving a preset (#330), so it was not worth waiting
+      to be told twice. The heading only appears when something is in it. Same row builder for the
+      favourites block and the categories, so the star cannot end up working in one and dead in
+      the other. Both halves mutation-checked, and the test stars a sound from the BOTTOM of the
+      list on purpose — starring the top row would pass whether the reordering worked or not.
       (17 Aug.) His words, verbatim: *"Make it so you can star sound effects and they show up at the
       top of the sound effect list"*.
       The visual effects browser already has stars/favourites (`starFor` in js/fx-browser.js, and the

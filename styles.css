@@ -5502,6 +5502,18 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-name { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: 0; color: var(--text);
   font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 6px 0; }
 .sfx-dur { flex: none; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* The ★ (queue 311). Sits between the duration and Add, so the two things you press by accident —
+   hearing it and adding it — stay where they were and the star is the new thing in the gap. Quiet
+   until it is on, because most rows are not favourites and thirty lit stars would be noise. */
+.sfx-star {
+  flex: none; width: 30px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--text-faint);
+  border-radius: 50%; transition: color .12s, transform .09s;
+}
+.sfx-star:hover { color: var(--text-dim); }
+.sfx-star:active { transform: scale(.88); }
+.sfx-star.on { color: #ffd08a; text-shadow: 0 0 8px rgba(255, 190, 110, .5); }
+@media (prefers-reduced-motion: reduce) { .sfx-star { transition: none; } }
 .sfx-add { flex: none; padding: 6px 12px; }
 .sfx-actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { .sfx-row { transition: none; } }

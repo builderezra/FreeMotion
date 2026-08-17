@@ -26827,4 +26827,76 @@
     }
   });
 
+
+  /* ================= queue 311: starred sound effects sit at the top ==============================
+   * *"Make it so you can star sound effects and they show up at the top of the sound effect list"*.
+   * Two clauses, and the second is the one that a "the star lights up" test would miss entirely. */
+  test('sound effects can be starred, and the starred ones sit at the top (queue 311)', { item: 'sfx-star' }, async function () {
+    const KEY = 'fm.sfx.fav';
+    const saved = localStorage.getItem(KEY);
+    const wasOpen = !!document.querySelector('.sfx-card');
+    try {
+      localStorage.removeItem(KEY);
+      if (!wasOpen) FM.sfx.open();
+      await sleep(260);
+      const card = document.querySelector('.sfx-card');
+      if (!card) throw new Error('the sound-effects sheet did not open');
+      const heads = () => [].slice.call(card.querySelectorAll('.sfx-cat')).map(n => n.textContent);
+      const names = () => [].slice.call(card.querySelectorAll('.sfx-name')).map(n => n.textContent);
+
+      // With nothing starred there must be no empty Favourites heading pushing the real list down.
+      if (heads().some(h => /favourite/i.test(h))) throw new Error('an empty "Favourites" heading is shown with nothing in it — a row of nothing above every real sound');
+
+      const stars = [].slice.call(card.querySelectorAll('.sfx-star'));
+      if (stars.length !== names().length) throw new Error('only ' + stars.length + ' of ' + names().length + ' rows have a star');
+      if (stars.some(s => s.classList.contains('on'))) throw new Error('something is already starred with the store cleared — the star is not reading the store');
+
+      /* Star one from the BOTTOM of the list, deliberately. Starring the first row would leave it at
+         the top whether the reordering works or not, and the test would pass on a star that does
+         nothing but light up. */
+      const lastStar = stars[stars.length - 1];
+      const target = lastStar.dataset.sfxid;
+      const targetName = (FM.sfx.byId(target) || {}).name;
+      if (!targetName) throw new Error('the star carries no usable sound id');
+      const before = names();
+      if (before[0] === targetName) throw new Error('the sound picked for this test is already first — it cannot show a move to the top');
+
+      lastStar.click();
+      await sleep(160);
+
+      // 1. it stuck, in the real store.
+      if (!FM.sfx.isFav(target)) throw new Error('pressing the star did not favourite "' + targetName + '"');
+      if (JSON.parse(localStorage.getItem(KEY) || '[]').indexOf(target) < 0) throw new Error('the favourite was not written to localStorage, so it dies with the dialog');
+
+      // 2. the list REDREW ON THE SPOT — not on the next open, which is the complaint he has already
+      //    made once about saving a preset.
+      const after = names();
+      if (after[0] !== targetName) throw new Error('after starring "' + targetName + '" the list still starts with "' + after[0] + '" — either it did not move to the top, or it only will next time the menu is opened');
+      if (!heads().some(h => /favourite/i.test(h))) throw new Error('no Favourites heading appeared above the starred sound');
+      if (after.length !== before.length + 1) throw new Error('the list went from ' + before.length + ' rows to ' + after.length + ' — a favourite should be shown as well as, not instead of, its place in its category');
+      const lit = [].slice.call(card.querySelectorAll('.sfx-star')).filter(s => s.dataset.sfxid === target);
+      if (!lit.length || !lit.every(s => s.classList.contains('on'))) throw new Error('the star did not light up in every place that sound appears');
+
+      // 3. …and it comes back off.
+      lit[0].click();
+      await sleep(160);
+      if (FM.sfx.isFav(target)) throw new Error('pressing a lit star did not unfavourite it');
+      if (heads().some(h => /favourite/i.test(h))) throw new Error('the Favourites heading survived the last favourite being removed');
+      if (names().join('|') !== before.join('|')) throw new Error('un-starring did not put the list back the way it was');
+
+      // A junk id in the store must not reach the row builder — the visual browser was taken down on
+      // open by exactly this, when a stored 'toString' survived a naive lookup.
+      localStorage.setItem(KEY, JSON.stringify(['toString', 'constructor', 'not_a_sound']));
+      FM.sfx.close(); await sleep(80);
+      FM.sfx.open(); await sleep(260);
+      const card2 = document.querySelector('.sfx-card');
+      if (!card2) throw new Error('the sheet failed to open with junk in the favourites store');
+      if ([].slice.call(card2.querySelectorAll('.sfx-cat')).some(n => /favourite/i.test(n.textContent))) throw new Error('junk ids were rendered as favourites');
+    } finally {
+      if (saved === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved);
+      if (!wasOpen && FM.sfx.close) FM.sfx.close();
+      await sleep(100);
+    }
+  });
+
 })();
