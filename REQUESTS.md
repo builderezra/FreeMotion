@@ -6801,6 +6801,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       gone. Finding 1 itself — the 12.2 MP project — is still unanswered and is still the biggest number
       in that report.
 
+      **AND THE PROJECT HE ALREADY HAS CAN NOW BE REPAIRED, v9.28.** v9.27 could only stop it happening
+      again, because Canvas settings changed the width and height and nothing else — every layer kept
+      coordinates that meant something in the old frame, so shrinking a finished project scattered it.
+      That was a silent bug in its own right for anyone who ever resized. There is a **Scale the layers
+      to fit** switch under Size now (on by default, shown only when there is something to move), so a
+      12.2-megapixel project can be brought down to a sane size with the work intact. Undo restores the
+      size and the geometry together. **For Ezra: open the big project, Canvas settings, pick a smaller
+      resolution, Apply — and tell me whether it still feels slow afterwards.** That is the measurement
+      that would close 125, 202 and 95 together.
+
       **FINDING 1 IS ANSWERED AT THE SOURCE, v9.27 — and the source was one uncapped line.**
       `FM.addMediaLayer` sets the project's size from the FIRST file you import, and it took that
       file's pixel dimensions verbatim with no limit. A stock iPhone still is 3024x4032, so importing

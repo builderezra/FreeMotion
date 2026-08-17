@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.27</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v9.28</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -794,6 +794,10 @@
         </span>
       </div>
       <div class="field"><span>Size</span><span id="cv-size" class="cv-size" role="status" aria-live="polite">1080 × 1920</span></div>
+      <!-- Changing the size used to move the FRAME and leave the work behind: every layer kept the
+           pixel coordinates it had, so resizing scattered a finished composition with no warning. This
+           row is shown only when there is actually something to move (see cvUpdate). -->
+      <label class="field hidden" id="cv-scale-row"><span>Scale the layers to fit</span><input id="cv-scale" type="checkbox" checked aria-label="Move and resize the existing layers to match the new canvas size"></label>
       <!-- Save project as preset (queue 183). A row of its own under Size, because it acts on
            everything above it rather than being another setting. The saved list appears here only
            when there IS one — an empty "Presets" heading on a first run is noise. -->
@@ -819,7 +823,7 @@
   <script src="js/perf-probe.js?v=4"></script>
   <script src="js/settings.js?v=20"></script>
   <script src="js/screen.js?v=1"></script>
-  <script src="js/scene.js?v=95"></script>
+  <script src="js/scene.js?v=96"></script>
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=3"></script>
   <script src="js/behaviors.js?v=3"></script>
@@ -867,7 +871,7 @@
   <script src="js/shortcuts.js?v=76"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=302"></script>
+  <script src="js/app.js?v=303"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=4"></script>

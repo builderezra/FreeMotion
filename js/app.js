@@ -4524,6 +4524,10 @@ window.FM = window.FM || {};
     }
     function cvUpdate() {
       const custom = cvAspect === 'custom';
+      // Only offer to move the work when there IS work — on a new project the row is just a question
+      // about nothing, and the dialog is already long on a phone.
+      const scaleRow = document.getElementById('cv-scale-row');
+      if (scaleRow) scaleRow.classList.toggle('hidden', !(FM.scene && FM.scene.layers && FM.scene.layers.length));
       const resRow = document.getElementById('cv-res-row'); if (resRow) resRow.classList.toggle('hidden', custom);
       const csRow = document.getElementById('cv-custom-size'); if (csRow) csRow.classList.toggle('hidden', !custom);
       const s = cvCompute();
@@ -4711,6 +4715,19 @@ window.FM = window.FM || {};
       document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored', 'cv-up'), cvDialog.classList.add('hidden')));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();
+        /* MOVE THE WORK WITH THE FRAME. Changing the size here used to change two numbers and nothing
+           else, so every layer kept coordinates that meant something in the OLD frame — resize a
+           finished composition and it scattered, silently. It is also what made the v9.27 import cap
+           unable to repair an already-oversized project: shrinking it would have wrecked the layout. */
+        const P0w = FM.scene.project.width, P0h = FM.scene.project.height;
+        const scaleBox = document.getElementById('cv-scale');
+        const wantScale = !scaleBox || scaleBox.checked;
+        if (wantScale && FM.scene.layers.length && (s.w !== P0w || s.h !== P0h)) {
+          const r = FM.rescaleProjectContents(FM.scene.layers, P0w, P0h, s.w, s.h);
+          if (r && FM.toast && Math.abs(r.k - 1) > 1e-6) {
+            FM.toast('Canvas ' + s.w + '\u00d7' + s.h + ' — ' + r.layers + ' layer' + (r.layers === 1 ? '' : 's') + ' scaled to match. Undo puts it back.', 3600);
+          }
+        }
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
         const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
         FM.scene.project.fps = Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30));

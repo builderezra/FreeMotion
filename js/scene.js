@@ -731,4 +731,103 @@ window.FM = window.FM || {};
     for (const c of layer.captions) { if (lt >= c.start && lt < c.end && (!hit || c.start > hit.start)) hit = c; }
     return hit ? hit.text : null;
   };
+
+  /* ---------- resizing a project without wrecking what is in it ---------- */
+  /* Canvas settings has always let you change a project's width and height, and it has always done
+   * ONLY that: every layer kept the pixel coordinates it had, so changing 1080x1920 to 1080x1080 left
+   * the work sitting wherever those old numbers happened to land. That silence is also why the cap
+   * added in v9.27 could not repair the 12.2-megapixel project in queue 202 — shrinking it would have
+   * scattered the layers.
+   *
+   * WHAT MOVES, AND WHY THE LIST IS SHORT. Almost nothing needs touching, because almost everything is
+   * expressed INSIDE a layer's own transform and therefore follows its scale for free — a shape's
+   * width, a font size, a stroke, the legacy vector mask, a repeater's offsets. Only three kinds of
+   * value live in absolute PROJECT pixels and so have to be mapped by hand:
+   *   1. A ROOT layer's position and scale. Root only: applyParentChain translates and scales by each
+   *      parent before the child's own transform, so a child's numbers are already parent-local, and
+   *      scaling both ends would apply the factor twice.
+   *   2. Pen-mask paths (layer.masks[].path). Those are canvas-space points with no layer transform
+   *      applied at all — mask-tool.js says so in its opening comment — so they must move with the
+   *      frame or the mask lands somewhere else entirely.
+   *   3. Drop-shadow blur and offset. ctx.shadowBlur is device pixels on the target by specification;
+   *      the current transform does not touch it, which is the same rule the compositor's "uncapped
+   *      companion" note is about. So a shadow does NOT follow its layer's scale and has to be mapped.
+   * Effect parameters measured in pixels are mapped too, from the registry's own `unit: 'px'` rather
+   * than a hand-written list, and clamped back into each parameter's declared range.
+   *
+   * Non-uniform changes (a different aspect ratio) use the SMALLER factor and re-centre, so the work
+   * stays whole and centred instead of being stretched.
+   */
+  FM.rescaleProjectContents = function (layers, fromW, fromH, toW, toH) {
+    fromW = +fromW; fromH = +fromH; toW = +toW; toH = +toH;
+    if (!(fromW > 0 && fromH > 0 && toW > 0 && toH > 0)) return null;
+    const k = Math.min(toW / fromW, toH / fromH);
+    if (!isFinite(k) || k <= 0) return null;
+    const mapX = v => (v - fromW / 2) * k + toW / 2;
+    const mapY = v => (v - fromH / 2) * k + toH / 2;
+    const stat = { k: k, layers: 0, masks: 0, points: 0, shadows: 0, params: 0, clamped: 0 };
+
+    // Every value of a property, animated or not — a keyframed position has to move at every key or
+    // the animation walks off the frame partway through.
+    const each = (o, key, fn) => {
+      if (!o) return;
+      const v = o[key];
+      if (v && Array.isArray(v.kf)) { let n = 0; v.kf.forEach(p => { if (typeof p.v === 'number') { p.v = fn(p.v); n++; } }); return n > 0; }
+      if (typeof v === 'number') { o[key] = fn(v); return true; }
+      return false;
+    };
+    const mapPts = arr => {
+      if (!Array.isArray(arr)) return 0;
+      let n = 0;
+      arr.forEach(pt => { if (Array.isArray(pt) && typeof pt[0] === 'number' && typeof pt[1] === 'number') { pt[0] = mapX(pt[0]); pt[1] = mapY(pt[1]); n++; } });
+      return n;
+    };
+
+    const byId = Object.create(null);
+    (layers || []).forEach(l => { if (l && l.id) byId[l.id] = l; });
+
+    (layers || []).forEach(L => {
+      if (!L) return;
+      const parented = !!(L.parent && byId[L.parent]);
+      if (L.transform && !parented) {
+        each(L.transform, 'x', mapX);
+        each(L.transform, 'y', mapY);
+        each(L.transform, 'z', v => v * k);
+        each(L.transform, 'scale', v => v * k);
+        stat.layers++;
+      }
+      // Pen masks are canvas-space for EVERY layer, parented or not.
+      (L.masks || []).forEach(m => {
+        if (!m) return;
+        let moved = 0;
+        if (Array.isArray(m.path)) moved += mapPts(m.path);
+        else if (m.path && Array.isArray(m.path.kf)) m.path.kf.forEach(kf => { moved += mapPts(kf.v); });
+        if (moved) { stat.masks++; stat.points += moved; }
+      });
+      if (L.shadow) {
+        let t = false;
+        t = each(L.shadow, 'blur', v => v * k) || t;
+        t = each(L.shadow, 'dx', v => v * k) || t;
+        t = each(L.shadow, 'dy', v => v * k) || t;
+        if (t) stat.shadows++;
+      }
+      if (FM.eachFx && FM.fxRegistry) {
+        FM.eachFx(L, fx => {
+          if (!fx || !fx.params) return;
+          FM.fxRegistry.paramsOf(fx.type).forEach(spec => {
+            if (!spec || spec.unit !== 'px') return;
+            const lo = (typeof spec.min === 'number') ? spec.min : -Infinity;
+            const hi = (typeof spec.max === 'number') ? spec.max : Infinity;
+            const done = each(fx.params, spec.key, v => {
+              const want = v * k, got = Math.max(lo, Math.min(hi, want));
+              if (Math.abs(got - want) > 1e-9) stat.clamped++;
+              return got;
+            });
+            if (done) stat.params++;
+          });
+        });
+      }
+    });
+    return stat;
+  };
 })(window.FM);

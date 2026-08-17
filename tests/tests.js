@@ -24747,5 +24747,103 @@
     }
   });
 
+  /* Changing a project's size used to change two numbers and leave every layer sitting on coordinates
+     that meant something in the OLD frame — resize a finished composition and it scattered, with
+     nothing said. It is also what stopped v9.27's import cap from being able to repair an
+     already-oversized project. The claim is "the layout survives", so the test RENDERS both sizes and
+     compares where the pixels actually land, rather than checking arithmetic on transforms. */
+  function rescaleFixture() {
+    var root = FM.makeLayer('shape', { shape: 'rect', name: 'Root', x: 300, y: 250, shapeW: 160, shapeH: 160, fill: '#ff0000' });
+    var kid = FM.makeLayer('shape', { shape: 'rect', name: 'Kid', x: 250, y: 150, shapeW: 100, shapeH: 100, fill: '#00ff00' });
+    kid.parent = root.id;                               // parent-local coords — must NOT be scaled twice
+    var solo = FM.makeLayer('shape', { shape: 'rect', name: 'Solo', x: 700, y: 700, shapeW: 120, shapeH: 120, fill: '#0000ff' });
+    return [root, kid, solo];
+  }
+
+  test('resizing a project moves the work with the frame instead of scattering it', { item: 'proj-rescale' }, function () {
+    if (!FM.rescaleProjectContents) throw new Error('FM.rescaleProjectContents is missing');
+    var P0 = { width: 1000, height: 1000, fps: 30, duration: 5, background: '#000000' };
+    var before = rescaleFixture(), after = rescaleFixture();
+
+    var cBig = offscreen(1000, 1000);
+    FM.renderScene(cBig.getContext('2d'), scene(before, { project: P0 }), 0);
+
+    var r = FM.rescaleProjectContents(after, 1000, 1000, 500, 500);
+    if (!r) throw new Error('the rescale refused a straightforward 2:1 shrink');
+    if (Math.abs(r.k - 0.5) > 1e-9) throw new Error('factor came out ' + r.k + ', expected 0.5');
+
+    var P1 = Object.assign({}, P0, { width: 500, height: 500 });
+    var cSm = offscreen(500, 500);
+    FM.renderScene(cSm.getContext('2d'), scene(after, { project: P1 }), 0);
+
+    /* Same fractional positions in both frames. The green kid is the one that matters most: it is
+       parented, so scaling it as well as its parent would put it at a quarter scale and the wrong
+       place — and that error is invisible to any test that only looks at the root. */
+    var probes = [
+      { at: [0.30, 0.25], want: 'red' },
+      { at: [0.55, 0.40], want: 'green' },
+      { at: [0.70, 0.70], want: 'blue' },
+      { at: [0.05, 0.95], want: 'black' }
+    ];
+    var name = function (p) {
+      if (p[0] > 140 && p[1] < 90 && p[2] < 90) return 'red';
+      if (p[1] > 140 && p[0] < 90 && p[2] < 90) return 'green';
+      if (p[2] > 140 && p[0] < 90 && p[1] < 90) return 'blue';
+      if (p[0] < 40 && p[1] < 40 && p[2] < 40) return 'black';
+      return '(' + p[0] + ',' + p[1] + ',' + p[2] + ')';
+    };
+    probes.forEach(function (pr) {
+      var a = name(px(cBig.getContext('2d'), Math.round(1000 * pr.at[0]), Math.round(1000 * pr.at[1])));
+      var b = name(px(cSm.getContext('2d'), Math.round(500 * pr.at[0]), Math.round(500 * pr.at[1])));
+      if (a !== pr.want) throw new Error('the FIXTURE is wrong: at ' + pr.at + ' the 1000x1000 frame shows ' + a + ', not ' + pr.want);
+      if (b !== a) throw new Error('at ' + pr.at + ' of the frame: 1000x1000 shows ' + a + ' but the resized 500x500 shows ' + b + ' — the layout did not come with the frame');
+    });
+    /* AFTER the pixels, deliberately. This assertion is cheap to satisfy and the render is not, so if
+       it ran first it would short-circuit every mutation and the probes above would never be tested. */
+    if (r.layers !== 2) throw new Error('scaled ' + r.layers + ' layers — expected 2 roots (the child rides its parent)');
+  });
+
+  test('a resize maps keyframes, pen-mask points, shadows and pixel effect params', { item: 'proj-rescale' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 100, shapeH: 100, fill: '#fff' });
+    L.transform.x = { kf: [{ t: 0, v: 100 }, { t: 1, v: 900 }] };     // animated position: EVERY key moves
+    L.masks = [{ id: 'm', enabled: true, mode: 'add', closed: true, path: [[0, 0], [1000, 0], [1000, 1000]] }];
+    L.shadow = { enabled: true, blur: 40, dx: 20, dy: -10, alpha: 1, color: '#000' };
+    L.effects = [{ type: 'blur', enabled: true, params: { radius: 40 } }];   // unit px, max 50
+    var r = FM.rescaleProjectContents([L], 1000, 1000, 500, 500);
+
+    var kf = L.transform.x.kf;
+    // For a UNIFORM change the centre map reduces to plain v*k — (v-500)*0.5+250 is 0.5v — so these
+    // are the same numbers a naive scale would give. The centring only shows up when the aspect changes,
+    // which the last assertion in this test covers.
+    if (kf[0].v !== 50 || kf[1].v !== 450) throw new Error('keyframed x came out ' + kf[0].v + '/' + kf[1].v + ', expected 50/450 — every key has to move, not just the first');
+    if (typeof L.transform.y !== 'number' || L.transform.y !== 100) throw new Error('static y came out ' + L.transform.y + ', expected 100');
+    var pth = L.masks[0].path;
+    if (pth[0][0] !== 0 || pth[1][0] !== 500 || pth[2][1] !== 500)
+      throw new Error('mask points came out ' + JSON.stringify(pth) + ' — a canvas-space path has to move with the frame or the mask lands somewhere else');
+    if (r.points !== 3) throw new Error('reported ' + r.points + ' mask points moved, expected 3');
+    if (L.shadow.blur !== 20 || L.shadow.dx !== 10 || L.shadow.dy !== -5)
+      throw new Error('shadow came out blur ' + L.shadow.blur + ' dx ' + L.shadow.dx + ' dy ' + L.shadow.dy + ' — shadowBlur is device px and does not follow a layer transform, so it must be mapped');
+    if (L.effects[0].params.radius !== 20) throw new Error('blur radius came out ' + L.effects[0].params.radius + ', expected 20');
+
+    // …and a px param is clamped back into its own declared range rather than written out of bounds.
+    var B = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#fff' });
+    B.effects = [{ type: 'blur', enabled: true, params: { radius: 40 } }];
+    var r2 = FM.rescaleProjectContents([B], 500, 500, 1000, 1000);      // k = 2 → 80, over the 50 max
+    if (B.effects[0].params.radius !== 50) throw new Error('radius went to ' + B.effects[0].params.radius + ' — past the 50 the slider allows');
+    if (!r2.clamped) throw new Error('a value was clamped but the report did not say so');
+
+    /* AN ASPECT CHANGE uses the smaller factor and RE-CENTRES, so the work stays whole and centred
+       instead of being stretched or shoved into a corner. 1000x1000 -> 500x1000 is k=0.5 vertically
+       unused: k is 0.5, and the frame centre 500,500 must land on the new centre 250,500. */
+    var C = FM.makeLayer('shape', { shape: 'rect', x: 500, y: 500, shapeW: 50, shapeH: 50, fill: '#fff' });
+    var rc = FM.rescaleProjectContents([C], 1000, 1000, 500, 1000);
+    if (Math.abs(rc.k - 0.5) > 1e-9) throw new Error('aspect change picked k=' + rc.k + ', expected the smaller factor 0.5');
+    if (C.transform.x !== 250 || C.transform.y !== 500)
+      throw new Error('a layer dead centre came out at ' + C.transform.x + ',' + C.transform.y + ' — it should land on the NEW centre 250,500');
+
+    // Junk in, nothing out — never a half-applied rescale.
+    if (FM.rescaleProjectContents([L], 0, 100, 50, 50) !== null) throw new Error('a zero source dimension was accepted');
+  });
+
   window.FMTests = { tests: T, run: run };
 })();
