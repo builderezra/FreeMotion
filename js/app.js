@@ -818,6 +818,7 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m) return;
+      if (FM.seekBusy && FM.seekBusy(m)) return;   // a frame-cache build owns this element's seeks (see FM.seekBusy)
       if (layer.reversed && m.frameCache) return; // the cache renders this synchronously
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) return;
@@ -1198,7 +1199,7 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id); if (!m) return;
       const local = FM.layerLocalTime(layer, t);
-      if (!layer.reversed && local != null) { try { m.el.currentTime = local; m._syncAt = now; } catch (e) {} }
+      if (!layer.reversed && local != null && !(FM.seekBusy && FM.seekBusy(m))) { try { m.el.currentTime = local; m._syncAt = now; } catch (e) {} }
     });
     clockAnchor(t);                            // the wrap is a real discontinuity — re-origin the clock…
     if (FM.audioPlay) FM.audioPlay.start();
@@ -1223,6 +1224,12 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
+      /* STAND DOWN WHILE A BUILD OWNS THE ELEMENT. This runs every animation frame and writes
+         currentTime on three paths below (the reversed seek, the forward resume that also calls
+         play(), and the drift correction) — all of them on the very element buildFrameCache is
+         stepping. Pausing and muting matches what the builder itself does, so nothing is left
+         audible; the picture holds on the build's frames for the second or two it takes. */
+      if (FM.seekBusy && FM.seekBusy(m)) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
       if (layer.reversed) {
         /* Silence the element HERE, every tick, instead of trusting that it was never started. That
          * invariant is set at FM.play() time and neither reverse toggle re-established it, so ticking

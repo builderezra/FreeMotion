@@ -6420,6 +6420,131 @@ better still, keep working inside the turn rather than parking work for a later 
       I should quietly optimise away. Say which and it is quick.
 
 
+- [ ] **345 — The anchor point should be placeable ANYWHERE, not just inside the layer.** (17 Aug.)
+      His words, verbatim: *"The anchor currently has a limit on where you can place it but you should
+      be able to put it anywhere"*.
+      **Found the limit already:** the Anchor X and Anchor Y boxes are built with `min: 0, max: 100`
+      (js/inspector.js, the `bax`/`bay` rows), i.e. the anchor is clamped to 0-100% of the layer's own
+      box. Put it outside and it stops at the edge.
+      **Good news for the size of this job:** the COMPOSITOR does not appear to clamp —
+      `anchorX(tr)` only defaults a missing value to 0.5 and passes anything finite straight through —
+      so an anchor outside the box may already render correctly and the limit may be purely the two
+      inspector controls. ⚠️ Verify that before widening anything, and check the on-canvas anchor
+      DRAG (canvas-edit) and the AI op path for their own clamps; a control that lets you type 250%
+      while the drag still stops at 100 would be worse than today.
+      Sensible range once unclamped: something like -200% to 300% rather than literally unbounded, so
+      the scrub still has usable resolution — worth confirming with him if the number matters.
+
+- [ ] **346 — Get rid of two more explanation blocks in Move & Transform.** (17 Aug, screenshot.) His
+      words, verbatim: *"Get rid of these two explanations"*.
+      The two in his shot, both in the Move & Transform card below the pad:
+      1. [ ] *"Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move
+             with parallax."*
+      2. [ ] *"Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from
+             audio."* (the BEHAVIORS hint, directly above "+ Add behavior")
+      Same instruction as **queue 301** (drop the two explanation blocks in the Filters tab) and **331
+      clause 1** (drop the Presets card's explanation). **That is now three separate times he has asked
+      for an explanatory paragraph to be removed, which is a pattern worth acting on rather than
+      three one-off deletions:** he does not want prose in the panels. Worth sweeping for the rest of
+      them in the same pass and asking him which, if any, earn their place.
+
+
+- [ ] **347 — Sliders should STOP at their limit; the strip keeps scrolling past it.** (17 Aug,
+      screenshot: X Skew and Y Skew both pinned at 80.00° — their maximum — with both ruler strips
+      still able to scroll.) His words, verbatim: *"Make it so the sliders here and everywhere actually
+      stop when you reach the limit, currently it keeps letting you swipe"*.
+      **DIAGNOSED, and it is a one-line job — written down so it is quick when it comes up.**
+      `mtScrub`'s applyDx does `offset += dx; paint();` **unconditionally**, so the tick strip travels
+      even when the value refused to move. The value itself is correct — it pins at 80 — but the ruler
+      under your finger keeps sliding, which reads as "the control is still responding" when it is not.
+      The gesture already knows: `gest.apply()` returns false exactly when a hard limit refused the
+      movement (that is what v9.24 added). So the fix is to advance `offset` only when it returns true.
+      **CHECKED WHETHER I CAUSED IT — I did not.** `offset += dx; paint();` was unconditional before
+      v9.24 as well (verified against the commit before it), so this is long-standing rather than new
+      damage. v9.24 is only why it is now cleanly visible: the value pins properly, so the strip running
+      on is the one thing left that disagrees.
+      **"and everywhere"** — do the same for `tickStrip` (the effects-panel ruler) in the same pass, and
+      check the volume strip. Verify at 380px that the strip visibly stops dead at the wall rather than
+      easing to a halt.
+
+
+- [ ] **348 — The benchmark line is drawn OVER the left-hand layer-preview column.** (17 Aug,
+      screenshot.) His words, verbatim: *"You shouldn't be able to see the bookmarks over the top of the
+      far left layer preview section"*.
+      In his shot the yellow benchmark line runs from the ruler all the way down the timeline and
+      straight THROUGH the sticky track-head column on the left — over the eye icons and the layer
+      thumbnails — instead of stopping where the lanes begin.
+      **What to look at:** the track-head column is `position: sticky; left: 0` with its own z-index, so
+      this is a stacking/clipping question, not a positioning one. Either the benchmark line needs to sit
+      BELOW the heads in the stack, or the lane area needs to clip it. Check what the PLAYHEAD does — in
+      the same screenshot the white playhead line stops correctly and does not cross the heads, so there
+      is already a working answer in this codebase to copy rather than invent.
+      ⚠️ Do not fix it by shortening the line to a guessed offset: that is the head-width constant
+      problem from 327/334 all over again, and it would come apart the moment the head changes size.
+      Whatever the playhead does is the thing to match.
+
+
+- [ ] **349 — A new filter section called "tuff", in the TikTok rage-edit style, previewed on his car
+      photos.** (17 Aug.) His words, verbatim:
+
+      > Make a filter section called “tuff” and use the car images for the filters you make.
+
+      > These filters will be good for people who make edits on TikTok that are a tuff style where they use rage rap music etc, kinda dark, just reference TikTok styles on what people do
+
+      **Clauses:**
+      1. [ ] A new SECTION in the filter library, key `tuff`, label "Tuff" (js/filters.js `SECTIONS`).
+      2. [ ] A set of filters in it, authored for that look: dark, hard, high-contrast.
+      3. [ ] The **car photos** are the preview art for them. ⚠️ **Blocked on the same files as 332** —
+             a photo pasted into chat is not a file I can write; they need saving into `fx-art/`. The
+             filters themselves are NOT blocked and can ship first on the existing art.
+
+      **The brief, written down while it is fresh, as a starting point rather than a decision.** What
+      that style actually is, visually: crushed blacks, contrast well up, saturation pulled back but not
+      dead, a cold blue-green or a hard red-orange cast, heavy vignette, visible grain, a little
+      chromatic aberration, and bloom on the highlights so the bright bits smear. Proposed set — names
+      and looks to be checked against the real effect registry before authoring, and against the file's
+      own two rules (CSS-filter effects listed FIRST, and nothing authored at an extreme, because
+      Strength fades the whole filter toward the untouched picture):
+      · **Blackout** — crushed shadows, contrast up hard, saturation down, strong vignette.
+      · **Cold Steel** — blue/cyan bias, desaturated, sharpened; the cold night look.
+      · **Bloodline** — deep red-orange bias into crushed shadows, with a glow on the highlights.
+      · **Static** — grain + chromatic aberration + contrast; dark, not retro-VHS-cheerful.
+      · **Nightdrive** — teal shadows, warm highlights, bloom, vignette.
+      · **Overdrive** — heavy sharpen and bloom; the over-clarified "edit" look.
+      · **Ash** — near-monochrome with a faint warm tint and hard contrast.
+      Every one of these has to be built from effects that actually exist — the library validates against
+      the registry on read, so a typo costs a dropped control rather than a broken render, but a filter
+      whose effects all get dropped is an empty row.
+      ⚠️ Worth asking him once it exists: whether "tuff" should also appear as a FEATURED row, since the
+      whole point is discoverability for people who do not want to build a look themselves — which is
+      the reason the filter library exists at all (his words at the top of js/filters.js).
+
+      **EXTENDED, same conversation — the flicker, and it needs a NEW EFFECT.** His words, verbatim:
+
+      > They should also come with flicker or flash, not in a way that makes the effect flicker on and off but so there’s like a black layer on top with not full opacity and has flickering, this is a popular thing to have, idk how you’ll make it work coz usually what I do is get a black shape that covers the screen, make opacity like 30% and put a flash or flicker filter on, but I’m sure there’s a way to do it just in the effects menu
+
+      **He is right that it cannot be done from the effects menu today, and the reason is exact.** The
+      `flicker` effect writes the **ALPHA** channel (`for (i = 3; i < len; i += 4) d[i] = a * k`), so it
+      makes the layer itself come and go — which is precisely the "flicker on and off" he is ruling out.
+      `pulseopacity` and `blink` are the same family (all three are listed in the opacity group at
+      compositor.js:2133). Checked all ~200 effect types: **nothing modulates BRIGHTNESS over time**.
+      `brightness`, `exposure` and `gamma` are static grades; the only time-varying darkeners flicker the
+      alpha. So his black-shape-at-30%-with-a-flicker workaround exists because there genuinely is no
+      one-effect way to do it.
+      **What his workaround actually is, in maths:** a black wash over the picture whose strength varies
+      with time — i.e. multiply RGB by k while leaving ALPHA untouched. That is a small pixel effect in
+      exactly the shape of the ones already here, and it is the missing piece:
+      · [ ] **New effect, working name "Flicker (darken)" / "Flash"** — multiplies RGB, never alpha, so
+            the layer never disappears; params along the lines of Depth (how black it gets at its
+            darkest), Speed, and a Smoothness or shape control so it can be a hard strobe or a soft
+            pulse. A `hold`/floor so it never reaches pure black unless asked.
+      · [ ] Once it exists, the Tuff filters carry it — that is his "they should also come with flicker".
+      ⚠️ Two things to get right when building it: it must be **alpha-preserving** (that is the entire
+      distinction he drew), and it must be **deterministic on t** like `flicker` already is (hashed off a
+      stepped time index), or preview and export will disagree — which is a bug class this codebase has
+      hit before.
+
+
 ## Done
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.

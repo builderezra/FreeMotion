@@ -25323,5 +25323,73 @@
     } finally { FM.time = t0; }
   });
 
+  /* A frame-cache build steps the clip's OWN <video>, capturing whatever frame it is sitting on. The
+     preview writes currentTime on that same element from three places, every animation frame. Nothing
+     connected the two — so scrubbing while a reversed or frame-blended clip built its cache baked the
+     PLAYHEAD's frames into it instead of the grid's, and the clip then plays back showing the wrong
+     pictures for the rest of the session with nothing to say so.
+     This measures the thing that actually matters: WHICH FRAME ENDED UP IN THE CACHE. */
+  test('a frame-cache build captures the grid’s frames, not whatever the preview is seeking to', { item: 'seek-busy' }, async function () {
+    var realBitmap = window.createImageBitmap;
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time, playing0 = FM.playing;
+    try {
+      var captured = [];
+      var el = {
+        readyState: 2, muted: false, paused: true, videoWidth: 64, videoHeight: 48, _t: 0, _h: [],
+        pause: function () { this.paused = true; }, play: function () { this.paused = false; return Promise.resolve(); },
+        addEventListener: function (t, fn) { if (t === 'seeked') { var self = this; Promise.resolve().then(function () { fn(); }); } },
+        removeEventListener: function () {}
+      };
+      Object.defineProperty(el, 'currentTime', { get: function () { return this._t; }, set: function (v) { this._t = v; } });
+      window.createImageBitmap = function () { captured.push(el.currentTime); return Promise.resolve({ width: 8, height: 8, close: function () {} }); };
+
+      var L = FM.makeLayer('video', { name: 'Rev' });
+      L.start = 0; L.duration = 2; L.reversed = true;
+      var rec = { kind: 'video', el: el, width: 64, height: 48, duration: 2 };
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, rec);
+
+      // The preview fights for the element for the whole build, exactly as a scrub does.
+      FM.playing = true;
+      var stop = false;
+      (function pester() {
+        if (stop) return;
+        FM.time = 1.7;                       // a playhead far from most of the grid
+        try { FM.seekVideosToTime(); } catch (e) {}
+        try { if (FM._syncMediaToClock) FM._syncMediaToClock(); } catch (e) {}
+        Promise.resolve().then(pester);
+      })();
+
+      await FM.buildFrameCache(rec, 15, null, { maxDim: 64 });
+      stop = true;
+
+      var fc = rec.frameCache;
+      if (!fc || !fc.count) throw new Error('no cache was built, so this test measures nothing');
+      if (captured.length < 4) throw new Error('only ' + captured.length + ' frames were captured — too few to judge');
+      var dur = 2, bad = [];
+      captured.forEach(function (got, i) {
+        var want = Math.min((i * dur) / fc.count, dur - 0.001);
+        if (Math.abs(got - want) > (1 / 15)) bad.push('frame ' + i + ': captured at t=' + got.toFixed(3) + ', grid wanted ' + want.toFixed(3));
+      });
+      if (bad.length)
+        throw new Error(bad.length + ' of ' + captured.length + ' cached frames came from the playhead instead of the grid — the clip will play back showing the wrong pictures. ' + bad.slice(0, 3).join(' ;; '));
+
+      /* …and the guard must be a PAUSE, not a permanent mute: seeking works again afterwards.
+         `reversed` is cleared first — a reversed clip WITH a cache stops seeking for its own
+         long-standing reason ("the cache renders this synchronously"), which is not this guard, and
+         the first version of this assertion caught that instead and failed against correct code. */
+      L.reversed = false;
+      FM.time = 0.5; el._t = 0;
+      FM.seekVideosToTime();
+      if (el.currentTime === 0) throw new Error('the preview never seeks this element again after the build finished — the guard latched on');
+      if (FM.seekBusy(rec)) throw new Error('seekBusy is still true after the build settled — it would silence this clip forever');
+    } finally {
+      window.createImageBitmap = realBitmap;
+      FM.playing = playing0; FM.time = t0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

@@ -143,6 +143,20 @@ window.FM = window.FM || {};
     return rec._building;
   };
 
+  /* IS A BUILD CURRENTLY DRIVING THIS ELEMENT'S SEEKS?
+   *
+   * buildFrameCache and the filmstrip builder both step the clip's OWN <video> — not a clone — capturing
+   * whatever frame it happens to be sitting on. Meanwhile the PREVIEW writes `el.currentTime` on that
+   * same element from three places, every animation frame. Nothing connected the two, so scrubbing (or
+   * simply leaving playback running) while a reversed or frame-blended clip built its cache baked the
+   * PLAYHEAD's frames into the cache instead of the grid's: the clip then plays back showing the wrong
+   * pictures, permanently, with nothing to say so. seekAndPaint only tolerates 0.2s of disagreement and
+   * retries twice, so a 60Hz stream of competing seeks burns both retries and resolves anyway.
+   * Exported so the preview can stand down for the second or two a build takes. Both flags are cleared
+   * in `finally` blocks (below, and in the strip builder), so a throwing build cannot wedge the preview
+   * into never seeking again — which is the one way this guard could do harm. */
+  FM.seekBusy = function (rec) { return !!(rec && (rec._building || rec._stripBuilding)); };
+
   FM.clearFrameCache = function (rec) {
     if (rec && rec.frameCache) {
       rec.frameCache.frames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} });
