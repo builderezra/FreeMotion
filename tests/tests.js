@@ -25204,5 +25204,52 @@
     }
   });
 
+  /* Cancel during "Decoding frames… N%" was a dead button. The decode is up to 900 sequential
+     seek-and-capture operations with no cancellation hook at all, and the exporter only checked its
+     flag BETWEEN layers — so the app went on seeking for the whole remaining clip (minutes at 4K, since
+     each frame waits up to 500ms) while allocating up to 1.5GB of bitmaps the user had just refused. */
+  function fakeDecodeEl(N) {
+    // Enough of a <video> for buildFrameCache: it seeks, it decodes (which fails harmlessly here, so
+    // every frame is null), and it counts how far it got.
+    var el = {
+      readyState: 2, muted: false, videoWidth: 64, videoHeight: 48,
+      seeks: 0, _t: 0, _h: [],   // _t starts DEFINED, or the restore-to-0 on the way out reads as a move
+      pause: function () {},
+      addEventListener: function (t, fn) { if (t === 'seeked') { this._h.push(fn); var self = this; Promise.resolve().then(function () { var h = self._h.shift(); if (h) h(); }); } },
+      removeEventListener: function () {}
+    };
+    Object.defineProperty(el, 'currentTime', {
+      get: function () { return this._t || 0; },
+      // Only a real MOVE counts. buildFrameCache restores the original position on the way out, and
+      // counting that as a seek made the first version of this test fail against correct code.
+      set: function (v) { if (v !== this._t) { this._t = v; this.seeks++; } }
+    });
+    return el;
+  }
+
+  test('cancelling an export stops the frame decode instead of running it to the end', { item: 'export-cancel' }, async function () {
+    var rec = { kind: 'video', el: fakeDecodeEl(), width: 64, height: 48, duration: 6 };
+
+    // 1. Aborted from the very first frame: nothing is seeked, nothing is cached.
+    var out = await FM.buildFrameCache(rec, 30, null, { shouldAbort: function () { return true; } });
+    if (out) throw new Error('an aborted decode returned a frame cache — a half-length cache is worse than none, the compositor would play the clip from it as if it were whole');
+    if (rec.frameCache) throw new Error('an aborted decode still stored rec.frameCache');
+    if (rec.el.seeks !== 0) throw new Error('the decode seeked ' + rec.el.seeks + ' times after being told to stop before it started');
+
+    // 2. Aborted PART WAY: it stops near where it was told to, not at the end of the clip.
+    var rec2 = { kind: 'video', el: fakeDecodeEl(), width: 64, height: 48, duration: 6 };
+    var seen = 0;
+    var out2 = await FM.buildFrameCache(rec2, 30, null, { shouldAbort: function () { return ++seen > 10; } });
+    if (out2 || rec2.frameCache) throw new Error('a part-way abort still produced a cache');
+    if (rec2.el.seeks > 14) throw new Error('it kept seeking to frame ' + rec2.el.seeks + ' after the abort — 180 frames were requested, so Cancel is still not being read per frame');
+    if (rec2.el.seeks < 5) throw new Error('it stopped at ' + rec2.el.seeks + ' seeks, before the abort was even asked for — the fixture is wrong');
+
+    // 3. WITHOUT a signal nothing changes: every other caller of this function must be untouched.
+    var rec3 = { kind: 'video', el: fakeDecodeEl(), width: 64, height: 48, duration: 0.2 };
+    var out3 = await FM.buildFrameCache(rec3, 30, null, {});
+    if (!out3 || !rec3.frameCache) throw new Error('a decode with no abort signal did not produce a cache — the opt-in guard is firing when it should not');
+    if (rec3.el.seeks < 5) throw new Error('an unaborted decode only seeked ' + rec3.el.seeks + ' times for a 6-frame clip');
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

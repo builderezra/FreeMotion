@@ -105,7 +105,26 @@ window.FM = window.FM || {};
       const wasMuted = el.muted, wasTime = el.currentTime;
       el.muted = true; try { el.pause(); } catch (e) {}
       let ok = 0;
+      /* ABORTABLE, PER FRAME — opt-in, so nothing that does not pass a signal changes behaviour.
+       *
+       * This loop is up to 900 sequential seek-and-capture operations and it had no cancellation hook
+       * of any kind. The exporter checked its cancel flag only BETWEEN layers, so Cancel pressed during
+       * "Decoding frames… 12%" set a flag nothing read: the app went on seeking and decoding for the
+       * whole remaining clip — tens of seconds at 1080p, minutes at 4K, since seekAndPaint waits up to
+       * 500ms a frame — while allocating up to 1.5GB of ImageBitmaps the user had just said they did
+       * not want. On a phone that is an unresponsive app and a real out-of-memory risk, and Cancel was
+       * simply a dead button for that whole stretch.
+       * On abort the partial frames are CLOSED and no cache is stored: a half-length cache is worse
+       * than none, because the compositor would then play the clip from it as though it were complete. */
+      const shouldAbort = (opts && typeof opts.shouldAbort === 'function') ? opts.shouldAbort : null;
+      const giveUp = () => {
+        for (let j = 0; j < count; j++) { const b = frames[j]; if (b && b.close) { try { b.close(); } catch (e) {} } }
+        el.muted = wasMuted;
+        try { el.currentTime = wasTime; } catch (e) {}
+        return null;
+      };
       for (let i = 0; i < count; i++) {
+        if (shouldAbort && shouldAbort()) return giveUp();
         await seekAndPaint(el, Math.min((i * dur) / count, Math.max(0, dur - 0.001)));
         try {
           frames[i] = useResize

@@ -465,7 +465,12 @@ window.FM = window.FM || {};
       // (frames spread across the clip via effFps) instead of crashing; resolution stays full. (#13)
       if (!m.frameCache) {
         if (onStatus) onStatus('Decoding frames…');
-        await FM.buildFrameCache(m, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); }, { maxBytes: 1610612736 });
+        await FM.buildFrameCache(m, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); },
+          { maxBytes: 1610612736, shouldAbort: () => FM._exportCancel });
+        // …and stop HERE. Without this the decode gives up but the export carries on into the audio
+        // mix, the AAC probe, the muxer and the codec pick before the frame loop's first cancel check
+        // finally throws — so Cancel still looked ignored for seconds after the decode had stopped.
+        if (FM._exportCancel) break;
       }
       built.push(m);
     }

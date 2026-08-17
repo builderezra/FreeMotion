@@ -5749,7 +5749,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 - [ ] **332 — Use his own car photos as the effect preview art, and rename the Move/Transform effect
-      group to "Shakes / Movement".** (17 Aug, two photos sent in chat.) His words, verbatim:
+      group to "Shakes / Movement".** (17 Aug, FOUR photos sent in chat.) His words, verbatim:
 
       > Use this as the photo for all the stuff in the move / transform section and change its name to shakes / movement
 
@@ -5767,11 +5767,27 @@ better still, keep working inside the turn rather than parking work for a later 
 
       > All just for the shake section
 
+      then a fourth:
+
+      > And this
+
+      *(photo 4: a yellow Lamborghini Huracan shot from above in a paved square, a child visible in the
+      background)*
+
+      > Same story as the others, just shake section
+
+      ⚠️ **One thing to raise about photo 4 before it ships, not after:** there is a stranger's child in
+      the frame. It does not matter at all while this is a local-only app on his own phone, but this art
+      is BUNDLED — it would ship inside the app to anyone who ever installs it, and that is a different
+      thing to publishing a photo of your own car. Worth thirty seconds of his time to decide: crop the
+      child out, or use one of the other three there. Not blocking anything; just not something to
+      quietly ship past him. (Belongs with BEFORE-PUBLISHING.md as well.)
+
       **Clauses:**
-      1. [ ] **All three photos** become the sample art for the **Move / Transform (shake) category** —
+      1. [ ] **All four photos** become the sample art for the **Move / Transform (shake) category** —
              his last message resolves the earlier ambiguity: none of them go anywhere else.
       2. [ ] That category is **renamed to "Shakes / Movement"**.
-      Three photos across one category means the tiles in it can differ from each other, which is
+      Four photos across one category means the tiles in it can differ from each other, which is
       probably the point — a row of identical cars would read as one repeated tile.
 
       ⚠️ **BLOCKED ON THE FILES, and this one is genuinely blocked.** The art is loaded from
@@ -5779,10 +5795,120 @@ better still, keep working inside the turn rather than parking work for a later 
       bay, run, clouds, figures, cat, pair). **A photo pasted into chat is not a file I can write to
       disk** — I can see it, but I cannot reproduce its bytes. So this needs him to save the two images
       into `~/Claude/FreeMotion/fx-art/` (any names; I will wire them up and add them to `ALL_PHOTOS`).
-      Three files now, not two.
+      FOUR files now.
       Told him so in the reply rather than leaving it silently un-started.
       Everything else about the entry is ready: the category rename is independent of the photos and can
       ship on its own.
+
+
+- [ ] **333 — Selected effects do nothing, and some effects add themselves instead of previewing —
+      SWEEP EVERY EFFECT.** (17 Aug, two screenshots, v9.31.) His words, verbatim:
+
+      > All the effects I have selected do nothing im pretty sure, we talked about this ages ago but I guess you never fixed
+
+      *(screenshot: the Colouring page of the effects browser with EIGHT effects multi-selected and
+      numbered 1-8 — Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert, Glow — while
+      the canvas behind shows the green shape completely unchanged.)*
+
+      > I just tapped on motion blur and instead of previewing it added it then broke my timeline lmao. Make sure you go through all the effects and see which ones don’t select, because this isn’t the first one I’ve seen
+
+      *(screenshot: two clips, "Ellipse" and "Rect", and the canvas showing the green shape blown up far
+      past the frame.)*
+
+      **Three separate things in here, and the third is the instruction:**
+      1. [ ] **Multi-selecting effects does nothing.** Eight are selected and numbered in his shot and
+             the picture has not changed. Either the selection never applies, or it applies and the
+             preview does not show it. ⚠️ Find out WHICH before touching anything — those are opposite
+             fixes. His "we talked about this ages ago" is fair: the multi-select browser is **queue 277**,
+             which is still open.
+      2. [ ] **Motion Blur adds itself on tap instead of previewing**, and doing so "broke my timeline".
+             Same shape as **queue 321** (the Mask tile, which he reported doing exactly this) — so this
+             is a CLASS of bug, not one tile. The timeline damage needs its own look: Motion Blur (Object)
+             is not an ordinary stack entry, it has its own block in the inspector.
+      3. [ ] **Go through EVERY effect and find the ones that do not select.** His words. This is a sweep,
+             and it should be a TEST rather than a one-off pass — the honest version is a suite test that
+             taps every tile in the browser and asserts each one previews rather than applies, so the
+             answer stays true after the next change. That is the only version of "go through all of
+             them" that does not rot the day after it is done.
+
+      Related and already open: **277** (rework the effects menu into a multi-select browser with a live
+      preview — his original ask), **321** (mask adds instead of previewing + trackpad editing).
+      This entry is the evidence that 277's multi-select is shipped but not working, which 277 does not say.
+
+
+- [ ] **334 — Benchmarks do not land on the playhead.** (17 Aug, screenshot, v9.31.) His words:
+      *"When I add benchmarks they don't add where my playhead is"*.
+      The shot shows the playhead (white) at **00:00:00** and the benchmark line (yellow) clearly to its
+      RIGHT, by roughly 16 CSS pixels, with "Benchmark added" still on screen.
+      **STRONG LEAD, and it is the same family as 327 which was just fixed.** The timeline's whole
+      geometry is "t=0 sits under the fixed centre line". A clip's x is `PAD + t*pps` inside a lane that
+      already starts after the track-head column; a MARKER is placed with the same `PAD + mk.t*pps`
+      (js/timeline.js, the marker loop) — so if markers live in a container that is NOT offset by the
+      head column the way the lanes are, they land exactly one head-width-related offset out. The snap
+      line at js/timeline.js:122 uses `HEAD_W + PAD + t*pps`, a THIRD spelling of the same origin, which
+      is the shape of a bug that has already bitten once.
+      ⚠️ Verify by measuring, not by reading: put a benchmark at t=0 and compare its rect against
+      `#tl-centerline`, exactly as the v9.29 test does for clips. If it is the same cause, the fix is to
+      make markers, clips, the snap line and the playhead read ONE origin — and the test should cover all
+      four, not just clips, which is the gap that let this survive 327.
+
+- [ ] **335 — Motion Blur is not really an effect, and is badly designed.** (17 Aug.) His words:
+      *"Motion blur doesn't even act as an effect and is pretty poorly designed"*.
+      He is factually right about the first half: Motion Blur (Object) is NOT a stack entry — it has its
+      own block in the inspector (`motionBlurBlock`) and its own tile behaviour in the browser, which is
+      why tapping it in the effects list adds it instead of previewing (see 333 clause 2). So it looks
+      like an effect, sits among effects, and behaves like a setting.
+      ⚠️ **"Poorly designed" is not yet actionable** — that is a judgement, not a spec, and I am not
+      going to redesign it on a guess. What to ask when this reaches the top: does he want it to become
+      an ORDINARY effect in the stack (addable, removable, stackable, keyframable like everything else),
+      or to stay a setting but look like one? Those are different builds. Note there are two of them —
+      Motion Blur (Object) and Motion Blur (Footage) — and the distinction is itself part of the
+      confusion.
+
+
+- [ ] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.**
+      (17 Aug.) His words, verbatim: *"To extend out a clip you should have to hold down on the arrows
+      first because currently accidentally touching for a second moves it but you should have to hold
+      down for a second and to signify it can move now the colour of the arrow should change to the
+      signature blue or sum, make it look good"*.
+      **Clauses:**
+      1. [ ] A trim grip must be **held for about a second** before it will drag. A brief accidental
+             touch currently retimes the clip.
+      2. [ ] Once armed, the arrow **changes colour** — he suggests the app's signature blue — so you can
+             see it is now live.
+      3. [ ] *"make it look good"* — the arm should read as deliberate, not as a flicker.
+      Worth knowing before building: the app already has a long-press arming pattern elsewhere (the
+      timeline's clip long-press), so match its timing rather than inventing a second feel. Also check
+      what this does to the DESKTOP path, where a mouse-down-drag is precise and a forced hold would be
+      an annoyance rather than a protection — the guard is for touch. Same lesson as the v7.79 note:
+      measure the layout you ship to.
+
+
+- [ ] **337 — Remove the long-press-on-the-timeline option to add a benchmark.** (17 Aug.) His words,
+      verbatim: *"Get rid of the feature where holding down somewhere on the timeline gives you the
+      option to add a benchmark"*.
+      Straightforward removal, but check TWO things first: (a) that a benchmark can still be added by
+      another route before taking this one away — one control, one home, the same rule as 122 and 175 —
+      and (b) whether that long-press menu carries anything ELSE, since removing the whole gesture would
+      take those with it. Sits with **336** (hold-to-arm on the trim grips): both are about what a long
+      press on the timeline should mean, and they should be decided together rather than one at a time.
+      Note **334** is also about benchmarks (they do not land on the playhead) — if benchmarks are being
+      pruned rather than fixed, check with him whether 334 is still worth doing.
+
+
+- [ ] **338 — The two "extend" buttons are still too alike ON MOBILE.** (17 Aug, screenshot with both
+      circled in red, v9.31.) His words, verbatim: *"The two extend icons are too similar, you fixed on
+      of now fix on mobile"*.
+      The shot is the phone inspector: the two full-width buttons directly above the Colouring /
+      Border / Blending grid, drawn as `□→|` and `⊏→|`. At a glance they are the same icon twice — the
+      only difference is whether the left edge is a closed box or an open bracket, which is a couple of
+      pixels of ink at that size.
+      **His "you fixed one of" is the key part:** the same complaint was raised and fixed for the DESKTOP
+      pair, so there is already an answer in this codebase to copy — find what desktop does to tell them
+      apart and apply the same idea here, rather than inventing a third pair of glyphs. Do not just
+      recolour them; at that size the SHAPE has to differ.
+      ⚠️ Verify at 380px in the Studio layout, not just at desktop width — that is the exact mistake the
+      v7.79 note is about, and it is how one of these got fixed on one layout and not the other.
 
 
 ## Done
