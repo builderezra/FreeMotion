@@ -959,6 +959,12 @@ window.FM = window.FM || {};
           pinnedOpts = opts.filter(function (o) { return !o.mid; });
           opts = opts.filter(function (o) { return o.mid; });
         }
+        /* THE RECENT-CLIPS GRID GETS A CEILING (queue 299). See the entry for the measurement: this
+           body is CONTENT-SIZED, so Media and Audio — the only two tabs whose body is a growing library
+           — gained a row of height per couple of imports while every other tab stayed put.
+           Capped, never truncated: showing only the newest four would satisfy "two rows" and quietly
+           make every older import unreachable, and one-tap re-adding is the whole point of the list. */
+        bodyEl.classList.toggle('addmenu-body--lib', splitTab && pinnedOpts.length > 0);
         var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
            button keeps its colour when the pager moves and two pages never open with the same run of

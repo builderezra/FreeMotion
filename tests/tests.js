@@ -25988,5 +25988,65 @@
     }
   });
 
+  /* "The media and audio screens open taller than the others… instead of three rows just two"
+     (queue 299). Those two tabs are the only ones whose body is a GROWING library of past imports, and
+     that body is content-sized — so it gained height a row at a time while every other tab stayed put.
+     Capped, NOT truncated: showing only the newest four would satisfy "two rows" and quietly make every
+     older import unreachable, and one-tap re-adding is the entire point of that list. */
+  test('the recent-clips grid opens at two rows and every import is still reachable', { item: 'addmenu-rows' }, async function () {
+    await atPhoneWidth(async function () {
+      var settle = function () { return new Promise(function (r) { setTimeout(r, 250); }); };
+      var realList = FM.mediaLib.list, realThumb = FM.mediaLib.getThumb;
+      try {
+        /* `audio: false` and real w/h ON PURPOSE. mediaLib.isAudio GUESSES from shape when the flag is
+           absent, so a dimensionless fixture is filed as a song and lands in the Audio tab — leaving
+           Media empty and this test measuring nothing. That cost a whole diagnosis pass. */
+        var fake = [];
+        for (var i = 0; i < 9; i++) fake.push({ mid: 'f' + i, name: 'Clip ' + i, kind: 'video', audio: false, w: 640, h: 360, dur: 3 });
+        FM.mediaLib.list = function () { return fake; };
+        FM.mediaLib.getThumb = function () { return Promise.resolve(null); };
+
+        FM.mobile.openAdd();
+        await settle();
+        /* SCOPED TO THE SHEET. Both add-menus are in the page at once — the PC panel and the phone
+           sheet — and an unscoped querySelector finds the PANEL's, so a phone assertion can be
+           measuring the desktop layout while believing otherwise. */
+        var sheet = function () { var el = document.querySelector('.addmenu--sheet'); if (!el) throw new Error('the phone add SHEET is not open'); return el; };
+        var tab = function (k) {
+          var b = [].slice.call(sheet().querySelectorAll('.addmenu-tab')).find(function (x) { return (x.textContent || '').trim().toLowerCase().indexOf(k) === 0; });
+          if (!b) throw new Error('no "' + k + '" tab in the sheet'); b.click();
+        };
+
+        tab('media'); await settle();
+        var body = sheet().querySelector('.addmenu-body');
+        if (!body.classList.contains('addmenu-body--lib')) throw new Error('the Media tab did not get the capped-library body, so its height is still unbounded');
+        var h = body.getBoundingClientRect().height;
+        if (h > 2 * 64 + 12) throw new Error('the recent-clips area is ' + Math.round(h) + 'px — taller than the two rows he asked for');
+
+        /* NOTHING IS LOST — asserted as REACHABILITY rather than against a particular element. The
+           first version of this checked whether the BODY scrolled and failed against working code: the
+           scroller is the pager inside it, which is an implementation detail the user never sees. What
+           matters is that the ninth clip can be got to. */
+        var cards = body.querySelectorAll('.addmenu-card');
+        if (cards.length < fake.length) throw new Error('only ' + cards.length + ' of ' + fake.length + ' imports are in the list — older clips became unreachable');
+        var last = cards[cards.length - 1];
+        last.scrollIntoView({ block: 'nearest' });
+        await settle();
+        var lb = last.getBoundingClientRect(), bb = body.getBoundingClientRect();
+        if (!(lb.top >= bb.top - 3 && lb.bottom <= bb.bottom + 3))
+          throw new Error('the last import cannot be scrolled into view — the cap has become a truncation by another route');
+
+        // Shape is untouched: it is a pager with page dots and was never the complaint.
+        tab('shape'); await settle();
+        var sb = sheet().querySelector('.addmenu-body');
+        if (sb.classList.contains('addmenu-body--lib')) throw new Error('the Shape tab was capped too — it has no library and was not what he reported');
+        if (sb.getBoundingClientRect().height < 200) throw new Error('the Shape tab shrank to ' + Math.round(sb.getBoundingClientRect().height) + 'px — this must only touch Media and Audio');
+      } finally {
+        FM.mediaLib.list = realList; FM.mediaLib.getThumb = realThumb;
+        try { FM.mobile.closeAdd && FM.mobile.closeAdd(); } catch (e) {}
+      }
+    });
+  });
+
   window.FMTests = { tests: T, run: run };
 })();

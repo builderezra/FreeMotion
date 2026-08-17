@@ -5323,12 +5323,14 @@ better still, keep working inside the turn rather than parking work for a later 
       what let one sit unrouted while a comment claimed otherwise. It also holds the marker-at-0 case, so
       the fix cannot simply move the bug.
 
-- [ ] **299 — The Media and Audio sheets open taller than the other tabs.** (17 Aug, two screenshots
+- [x] **299 — The Media and Audio sheets open taller than the other tabs. DONE v9.47 — two rows, and it scrolls for the rest.** (17 Aug, two screenshots
       at v9.02 — Shape tab vs Media tab, the Media sheet clearly starting higher up the screen.) His
       words, verbatim: *"The media and audio screens open taller than the others, this can be fixed by
       removing one layer of recent clips added, instead of three rows just two"*.
       He has given the fix as well as the report: show TWO rows of recent clips, not three.
 
+      **SHIPPED v9.47 on the second attempt: 260px → 138px on Media, Shape untouched, all nine clips still
+      reachable.** The first attempt's notes are kept below because the traps in them are real.
       **ATTEMPTED 17 Aug AND BACKED OUT — not shipped. Everything learned is here so the next attempt
       starts from it rather than re-deriving it.**
       **His diagnosis is confirmed.** Measured at 375px: the Media/Audio body is CONTENT-SIZED, so it

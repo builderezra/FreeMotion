@@ -3226,6 +3226,27 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 }
 .addmenu--sheet .addmenu-body > .addmenu-pager { height: auto; flex: 1 1 auto; min-height: 0; }
 .addmenu--sheet .addmenu-body > .addmenu-dots { flex: 0 0 auto; }
+/* TWO ROWS OF RECENT CLIPS, NOT THREE (queue 299) — and it SCROLLS past them, so nothing is lost.
+   Media and Audio only: they are the two tabs whose body is a growing library of past imports, which
+   is why they were the two that opened taller than everything else.
+   Every one of these four declarations is load-bearing, and each was found by measuring the chain:
+   `height:auto` to beat the stated height above; `max-height` for the cap; and then the grid has to be
+   allowed to EXCEED that cap, which it could not, because `minmax(…,1fr)` rows share the container's
+   height (the queue 208 fix for the dead band under the last row) and `min-height:100%` pins the page
+   and grid to it. With those in force five rows simply squashed into the cap and nothing scrolled —
+   the cap became a truncation by another route, which is the one outcome this must not be. */
+.addmenu--sheet .addmenu-body--lib {
+  height: auto;
+  max-height: calc(2 * clamp(50px, 8.5vh, 64px) + 10px);
+  overflow-y: auto;
+}
+.addmenu--sheet .addmenu-body--lib .addmenu-pager,
+.addmenu--sheet .addmenu-body--lib .addmenu-page,
+.addmenu--sheet .addmenu-body--lib .addmenu-grid {
+  min-height: 0;
+  height: auto;
+}
+.addmenu--sheet .addmenu-body--lib .addmenu-grid { grid-auto-rows: clamp(50px, 8.5vh, 64px); }
 /* …EXCEPT the Elements tab, which is a searchable list rather than a sideways pager: your own
    elements are an open-ended pile, and a page you have to know to swipe to is the same as not
    having them. This one scrolls. */
