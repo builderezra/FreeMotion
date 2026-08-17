@@ -18195,6 +18195,127 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 22: the blur / sharpen family ---------------- */
+
+  test('effects: the blur family still renders an un-upgraded instance exactly as it did', { item: 'fx-blur' }, function () {
+    var W = 96, H = 96, fails = [];
+    [
+      { type: 'sharpen',   old: { amount: 1.5 }, legacyKeys: { radius: 1, threshold: 0, mode: 0 }, moved: { radius: 5, threshold: 30, mode: 1 } },
+      { type: 'boxblur',   old: { radius: 8 },   legacyKeys: { aspect: 100, passes: 1 },           moved: { aspect: 0, passes: 3 } },
+      /* innerblur needs the DISC plate, not the default noise one. The noise plate is fully opaque,
+         and `edge` exists purely to stop transparent neighbours being averaged in — so on a plate with
+         no transparency it correctly does nothing, and a working control reads as dead. Choosing a
+         fixture that cannot express the thing under test is the commonest way these rounds go wrong. */
+      { type: 'innerblur', old: { radius: 8 }, kind: 'disc', legacyKeys: { edge: 0, aspect: 100, passes: 1 }, moved: { edge: 1, aspect: 0, passes: 3 } },
+    ].forEach(function (c) {
+      var kind = c.kind || null;
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old, kind);
+      if (fxDiff(bare, fxRun(c.type, W, H, withKeys, kind))) fails.push(c.type + ': spelling the new keys out at their fallbacks changed the render');
+      if (!fxDiff(fxPlate(W, H, kind), bare)) fails.push(c.type + ': renders nothing at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m, kind))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) { var st = {}; Object.keys(inst.params).forEach(function (k) { st[k] = inst.params[k]; });
+        Object.keys(c.old).forEach(function (k) { st[k] = c.old[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, st, kind))) fails.push(c.type + ': a NEW instance renders differently from an old one'); }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* Inner Blur's "Ignore outside" is a BUG FIX wearing a control. The blur averages RGB and ignores
+   * alpha, so near the edge of a shape it averages in the transparent-BLACK pixels outside it and
+   * leaves a dark rim that has nothing to do with the artwork. Measured on a flat disc, where any
+   * change at the rim can only be that: the interior is one colour, so a correct blur cannot alter it. */
+  test('effects: Inner Blur can stop dragging transparent black in from outside the shape', { item: 'fx-blur' }, function () {
+    var D = 120, RAD = 40, ib = FM._FX_TABLES.PIXEL_FX.innerblur;
+    var disc = function () { var d = new Uint8ClampedArray(D * D * 4);
+      for (var y = 0; y < D; y++) for (var x = 0; x < D; x++) { var i = (y * D + x) * 4;
+        if (Math.hypot(x - D / 2, y - D / 2) <= RAD) { d[i] = 230; d[i + 1] = 230; d[i + 2] = 230; d[i + 3] = 255; } }
+      return d; };
+    var shot = function (p) { var d = disc(); ib(d, D, D, p, 0.5, 1); return d; };
+    var rim = function (d) { return d[((D / 2) * D + Math.round(D / 2 + RAD - 4)) * 4]; };
+    var core = function (d) { return d[((D / 2) * D + D / 2) * 4]; };
+    if (rim(disc()) !== 230 || core(disc()) !== 230) throw new Error('the disc fixture is not flat, so a change at the rim would not prove anything');
+    var off = shot({ radius: 10 });
+    if (!(rim(off) < 200)) throw new Error('the default inner blur no longer darkens the rim (' + rim(off) + ') — the defect this control fixes is gone, so the check below is vacuous');
+    if (core(off) !== 230) throw new Error('the blur altered the flat interior (' + core(off) + '), so the rim reading is not isolating the edge');
+    var on = shot({ radius: 10, edge: 1 });
+    if (Math.abs(rim(on) - 230) > 3) throw new Error('with Ignore-outside on, the rim still came back at ' + rim(on) + ' instead of the artwork\'s own 230 — transparent black is still being averaged in');
+  });
+
+  /* Box Blur was locked to a square kernel and one pass. Both claims are measured on a STEP EDGE, and
+   * that choice is the point: a single bright DOT loses all its energy to 8-bit rounding after three
+   * box passes, so its profile comes back as noise and a working control reads as dead. A step keeps
+   * its amplitude, and its RAMP is what differs — one box gives a straight ramp, three give an S. */
+  test('effects: Box Blur can smear on one axis and soften its boxy falloff', { item: 'fx-blur' }, function () {
+    var W = 161, H = 41, box = FM._FX_TABLES.PIXEL_FX.boxblur;
+    var step = function () { var d = new Uint8ClampedArray(W * H * 4);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4, v = x < W / 2 ? 0 : 255;
+        d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; };
+    var prof = function (p) { var d = step(); box(d, W, H, p, 0.5, 1); var y = H >> 1, o = [];
+      for (var x = 0; x < W; x++) o.push(d[(y * W + x) * 4]); return o; };
+    var rampW = function (a) { return a.filter(function (v) { return v > 4 && v < 251; }).length; };
+    var quarter = function (a) { var idx = []; a.forEach(function (v, i) { if (v > 4 && v < 251) idx.push(i); });
+      return a[idx[Math.floor(idx.length * 0.25)]] / 255; };
+    var one = prof({ radius: 10 }), three = prof({ radius: 10, passes: 3 });
+    if (!(rampW(three) > rampW(one) * 1.5)) throw new Error('three passes ramp over ' + rampW(three) + 'px against one pass\'s ' + rampW(one) + ' — the extra passes are not running');
+    if (!(quarter(one) > 0.2)) throw new Error('a single box no longer produces a straight ramp (quarter point at ' + quarter(one).toFixed(3) + ', linear is 0.25) — the baseline has moved');
+    if (!(quarter(three) < 0.2)) throw new Error('three passes gave a quarter point of ' + quarter(three).toFixed(3) + '; an S-curve must sit well below the straight ramp\'s 0.25, so the falloff is still boxy');
+    // aspect 0 must smear across and NOT down
+    var dot = function () { var d = new Uint8ClampedArray(W * H * 4);
+      for (var i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
+      var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255; return d; };
+    var spread = function (p, vertical) { var d = dot(); box(d, W, H, p, 0.5, 1); var n = 0;
+      if (vertical) { for (var y = 0; y < H; y++) if (d[(y * W + (W >> 1)) * 4] > 0) n++; }
+      else { for (var x = 0; x < W; x++) if (d[((H >> 1) * W + x) * 4] > 0) n++; }
+      return n; };
+    if (!(spread({ radius: 8 }, true) > 5)) throw new Error('the normal blur is not spreading vertically at all');
+    if (spread({ radius: 8, aspect: 0 }, true) !== 1) throw new Error('at aspect 0 the blur still spread over ' + spread({ radius: 8, aspect: 0 }, true) + ' rows — it is not a pure horizontal smear');
+    if (!(spread({ radius: 8, aspect: 0 }, false) > 5)) throw new Error('at aspect 0 nothing smeared horizontally either — the effect is simply off');
+  });
+
+  /* Sharpen crunched a 1px halo at full strength EVERYWHERE, so flat sky and skin had their grain
+   * amplified exactly as hard as a real edge. Threshold is measured on a noisy flat field beside a
+   * real edge, so "stopped amplifying grain" and "still sharpens" are one test rather than two.
+   * The luma plate deliberately uses mid-range values: at 200/40 the sharpened result clamps at both
+   * ends and half the pixels stop being comparable, which made a working control read as half-working. */
+  test('effects: Sharpen can skip flat areas and sharpen brightness only', { item: 'fx-blur' }, function () {
+    var W = 101, H = 101, sh = FM._FX_TABLES.PIXEL_FX.sharpen;
+    var noisy = function () { var d = new Uint8ClampedArray(W * H * 4), s = 99;
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4, v = x < W / 2 ? 60 : 200;
+        s = (s * 1103515245 + 12345) & 0x7fffffff; var n = ((s >> 9) & 3) - 1;
+        d[i] = v + n; d[i + 1] = v + n; d[i + 2] = v + n; d[i + 3] = 255; } return d; };
+    var run = function (p) { var d = noisy(); sh(d, W, H, p, 0.5, 1); return d; };
+    var flatMoved = function (d) { var src = noisy(), n = 0;
+      for (var y = 2; y < H - 2; y++) for (var x = 2; x < W / 2 - 6; x++) { var i = (y * W + x) * 4; if (Math.abs(d[i] - src[i]) > 1) n++; }
+      return n; };
+    var edgeMoved = function (d) { var src = noisy(), n = 0;
+      for (var y = 2; y < H - 2; y++) for (var x = Math.floor(W / 2) - 2; x < Math.floor(W / 2) + 2; x++) { var i = (y * W + x) * 4; if (d[i] !== src[i]) n++; }
+      return n; };
+    if (!(flatMoved(run({ amount: 1.5 })) > 500)) throw new Error('the un-thresholded sharpen is not amplifying the grain in the flat half, so the gate below cannot be shown to stop it');
+    if (flatMoved(run({ amount: 1.5, threshold: 30 })) !== 0) throw new Error('with a threshold of 30 the flat half still moved on ' + flatMoved(run({ amount: 1.5, threshold: 30 })) + ' pixels');
+    if (!(edgeMoved(run({ amount: 1.5, threshold: 30 })) > 50)) throw new Error('the threshold also stopped the real edge being sharpened — it is gating everything, not just the flat areas');
+    // Brightness-only: every channel must move by the SAME delta, which is what stops chroma noise
+    // being multiplied. Mid-range values only, so nothing clamps and every pixel stays comparable.
+    var W2 = 81, H2 = 81;
+    var chroma = function () { var d = new Uint8ClampedArray(W2 * H2 * 4);
+      for (var y = 0; y < H2; y++) for (var x = 0; x < W2; x++) { var i = (y * W2 + x) * 4;
+        d[i] = x < W2 / 2 ? 150 : 110; d[i + 1] = 130; d[i + 2] = x < W2 / 2 ? 110 : 150; d[i + 3] = 255; } return d; };
+    var eq = function (p) { var d = chroma(); sh(d, W2, H2, p, 0.5, 1); var src = chroma(), same = 0, tot = 0;
+      for (var y = 3; y < H2 - 3; y++) for (var x = 3; x < W2 - 3; x++) { var i = (y * W2 + x) * 4;
+        var dr = d[i] - src[i], dg = d[i + 1] - src[i + 1], db = d[i + 2] - src[i + 2];
+        if (dr || dg || db) { tot++; if (Math.abs(dr - dg) <= 1 && Math.abs(dg - db) <= 1) same++; } }
+      return { tot: tot, same: same }; };
+    var col = eq({ amount: 1 }), lum = eq({ amount: 1, mode: 1 });
+    if (!col.tot || !lum.tot) throw new Error('the chroma fixture produced no sharpening at all');
+    if (col.same > col.tot * 0.1) throw new Error('colour mode already moves every channel equally, so brightness-only cannot be distinguished from it');
+    if (lum.same < lum.tot) throw new Error('in brightness-only mode ' + (lum.tot - lum.same) + ' of ' + lum.tot + ' pixels still had their channels moved by different amounts — chroma is still being amplified');
+  });
+
   /* ---------------- EFFECTS-PLAN round 21: Stroke gets a real distance field ---------------- */
 
   /* The last `high` row in the plan, and the only one that was NOT a missing slider. The shipped

@@ -396,6 +396,27 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     is the one case that needs BOTH fields. All opt-in, on an effect whose floor is already ~22ms.
   **The `high` column of the proposal table is now empty.** What remains is ~33 medium/low rows.
 
+- v9.08 (round 22 — **the blur / sharpen family**) — `sharpen` (radius, threshold, brightness-only),
+  `boxblur` (aspect, passes) and `innerblur` (ignore-outside, aspect, passes). `blur` is in this family
+  on the table but is NOT here: it is a CSS filter, so its proposed mix/blend needs a plate and a
+  composite rather than a param — a canvas-path change, logged rather than smuggled in. Findings:
+  * **innerblur's `edge` is a BUG FIX wearing a control.** The blur averages RGB and ignores alpha, so
+    it averages transparent BLACK in from outside the shape and leaves a dark rim just inside every
+    edge. Measured on a flat 230 disc: rim 230 -> 152 with it off, 230 -> 230 with it on. Off stays the
+    default because that rim is what every existing project renders today.
+  * **A fixture that cannot express the thing under test reads as a dead control.** The generic noise
+    plate is fully OPAQUE, and `edge` only acts on transparency — so the legacy-identity test reported
+    "innerblur.edge moves no pixels" for a control that demonstrably works. The per-case fixture is a
+    parameter of that test now. This is the same failure as the empty element library and the
+    red-less plate for replacecolor; it is the single most repeated mistake in these rounds.
+  * **A single DOT cannot measure a repeated box blur.** Its energy quantises away to nothing on an
+    8-bit buffer after three passes, so the profile that comes back is noise. Use a STEP EDGE: it
+    keeps its amplitude and its RAMP is the thing that differs — measured 20px straight ramp at one
+    pass (quarter-point 0.286, linear is 0.25) against 44px and 0.165 at three, i.e. an S-curve.
+  * **Clamping silently halves a channel-equality measurement.** Sharpen's brightness-only mode was
+    read as working on only half its pixels because the 200/40 test plate clamps at both ends once
+    sharpened. On a mid-range plate it is 150 of 150.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

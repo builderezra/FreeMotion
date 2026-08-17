@@ -3795,6 +3795,11 @@ better still, keep working inside the turn rather than parking work for a later 
       *Round 20, v9.06:* Glass (was per-pixel TV static, now real facets), Fractal Warp (the field
       never moved — churn, feature size and octaves now) and Channel Remap (all-or-nothing before,
       dialable now, and it can keep the original brightness).
+      *Round 22, v9.08:* the blur/sharpen family. Sharpen amplified grain in flat sky and skin as hard
+      as a real edge (threshold + brightness-only mode now); Box Blur was stuck square and single-pass;
+      and Inner Blur had a real bug — it mixed the transparent black outside a shape into the blur and
+      left a dark rim just inside every edge. Gaussian Blur is left: it is a CSS filter, so its
+      mix/blend needs a compositing path, not a slider.
       *Round 21, v9.07:* **Stroke — and that empties the high-impact column entirely.** It was the one
       that was not a missing slider: the outline was drawn by growing the shape in a SQUARE, so inside,
       centred and round corners were impossible with that method rather than merely unwired. It measures

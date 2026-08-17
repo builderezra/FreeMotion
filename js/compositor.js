@@ -139,7 +139,12 @@ window.FM = window.FM || {};
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
+    { type: 'sharpen', label: 'Sharpen', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.5 },
+      { key: 'radius', label: 'Radius', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
+      { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 },
+      { key: 'mode', label: 'Sharpens', def: 0, options: [[0, 'Colour'], [1, 'Brightness only']] },
+    ] },
     { type: 'thermal', label: 'Hot Colour', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'palette', label: 'Palette', def: 0, options: [[0, 'Iron'], [1, 'White hot'], [2, 'Black hot'], [3, 'Arctic'], [4, 'Magma'], [5, 'Spectrum']] },
@@ -248,7 +253,11 @@ window.FM = window.FM || {};
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
     ] },
     // ---- batch 6 ----
-    { type: 'boxblur', label: 'Box Blur', param: 'radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
+    { type: 'boxblur', label: 'Box Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
+      { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
+    ] },
     { type: 'spinblur', label: 'Spin Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -580,7 +589,12 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'innerblur', label: 'Inner Blur', param: 'radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
+    { type: 'innerblur', label: 'Inner Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
+      { key: 'edge', label: 'Ignore outside', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
+    ] },
     { type: 'contourstrips', label: 'Contour Strips', param: 'levels', min: 2, max: 12, step: 1, def: 5, color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High' },
     { type: 'innerpinch', label: 'Inner Pinch', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
     { type: 'crosshatch', label: 'Crosshatch', color: true, defColor: '#101014', colorLabel: 'Ink', params: [
@@ -3129,12 +3143,52 @@ window.FM = window.FM || {};
       const a = FM.evalProp(p.amount, t), amt = (a == null ? 1.5 : a);
       if (amt <= 0) return;
       const s = d.slice();
-      for (let y = 1; y < H - 1; y++) {
-        for (let x = 1; x < W - 1; x++) {
+      // It only ever crunched a ONE-PIXEL halo, at full strength, everywhere.
+      // RADIUS widens the halo, which is the difference between edge sharpening and local-contrast
+      // "clarity". THRESHOLD is the one that matters on real footage: without it, flat sky and skin
+      // get their grain amplified exactly as hard as a genuine edge does. MODE Luma sharpens on
+      // brightness only, so chroma noise is not multiplied along with the detail.
+      const rP = p.radius == null ? 1 : Math.round(FM.evalProp(p.radius, t));
+      const r = rP < 1 ? 1 : (rP > 8 ? 8 : rP);
+      let thr = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
+      if (thr < 0) thr = 0; if (thr > 64) thr = 64;
+      const luma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      if (r === 1 && thr === 0 && !luma) {
+        for (let y = 1; y < H - 1; y++) {
+          for (let x = 1; x < W - 1; x++) {
+            const i = (y * W + x) * 4;
+            for (let c = 0; c < 3; c++) {
+              const j = i + c;
+              d[j] = s[j] * (1 + 4 * amt) - (s[j - W * 4] + s[j + W * 4] + s[j - 4] + s[j + 4]) * amt;
+            }
+          }
+        }
+        return;
+      }
+      const w4 = W * 4, off = r * 4, offV = r * w4;
+      for (let y = r; y < H - r; y++) {
+        for (let x = r; x < W - r; x++) {
           const i = (y * W + x) * 4;
+          if (luma) {
+            const lu = (k) => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+            const c0 = lu(i), nb = lu(i - offV) + lu(i + offV) + lu(i - off) + lu(i + off);
+            const delta = c0 * 4 - nb;
+            if (thr > 0 && Math.abs(delta) < thr * 4) continue;
+            const add = delta * amt;
+            d[i] = s[i] + add; d[i + 1] = s[i + 1] + add; d[i + 2] = s[i + 2] + add;
+            continue;
+          }
+          if (thr > 0) {
+            const c0 = s[i] * 0.299 + s[i + 1] * 0.587 + s[i + 2] * 0.114;
+            const n1 = s[i - offV] * 0.299 + s[i - offV + 1] * 0.587 + s[i - offV + 2] * 0.114;
+            const n2 = s[i + offV] * 0.299 + s[i + offV + 1] * 0.587 + s[i + offV + 2] * 0.114;
+            const n3 = s[i - off] * 0.299 + s[i - off + 1] * 0.587 + s[i - off + 2] * 0.114;
+            const n4 = s[i + off] * 0.299 + s[i + off + 1] * 0.587 + s[i + off + 2] * 0.114;
+            if (Math.abs(c0 * 4 - (n1 + n2 + n3 + n4)) < thr * 4) continue;
+          }
           for (let c = 0; c < 3; c++) {
             const j = i + c;
-            d[j] = s[j] * (1 + 4 * amt) - (s[j - W * 4] + s[j + W * 4] + s[j - 4] + s[j + 4]) * amt;
+            d[j] = s[j] * (1 + 4 * amt) - (s[j - offV] + s[j + offV] + s[j - off] + s[j + off]) * amt;
           }
         }
       }
@@ -3431,7 +3485,27 @@ window.FM = window.FM || {};
       }
     },
     // ---- batch 6 ----
-    boxblur: function(d,W,H,p,t){ var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40; var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4; for(bbY=0;bbY<H;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=0;bbX<W;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
+    boxblur: function(d,W,H,p,t){ var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
+      // Locked to a perfectly square kernel and a single pass: no horizontal-only smear, no
+      // vertical-only, and no way off its hard boxy falloff. ASPECT scales the VERTICAL radius against
+      // the horizontal (0 = a pure horizontal smear). PASSES repeats the whole thing — a box blur run
+      // three times is very close to a Gaussian, which is the cheapest way to lose the boxiness.
+      var bbAsp=p.aspect==null?100:FM.evalProp(p.aspect,t); if(bbAsp<0)bbAsp=0; if(bbAsp>200)bbAsp=200;
+      var bbPass=p.passes==null?1:Math.round(FM.evalProp(p.passes,t)); if(bbPass<1)bbPass=1; if(bbPass>4)bbPass=4;
+      if(!(bbAsp===100&&bbPass===1)){
+        var bbRy=bbAsp===100?bbr:Math.round(bbr*(bbAsp/100));
+        // One separable box pass, written once and reused — same running-sum arithmetic as below.
+        var bbBoxH=function(arr,rad){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=arr.slice(), yy,ch,base,sum,idx,n,xx, w4=W*4;
+          for(yy=0;yy<H;yy++){ base=yy*w4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
+            for(n=1;n<=rad;n++){ xx=n<W?n:W-1; sum+=src[base+xx*4+ch]; }
+            for(xx=0;xx<W;xx++){ arr[base+xx*4+ch]=sum*inv; n=xx+rad+1; idx=n<W?n:W-1; sum+=src[base+idx*4+ch]; n=xx-rad; idx=n>0?n:0; sum-=src[base+idx*4+ch]; } } } };
+        var bbBoxV=function(arr,rad){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=arr.slice(), xx,ch,base,sum,idx,n,yy, w4=W*4;
+          for(xx=0;xx<W;xx++){ base=xx*4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
+            for(n=1;n<=rad;n++){ yy=n<H?n:H-1; sum+=src[base+yy*w4+ch]; }
+            for(yy=0;yy<H;yy++){ arr[base+yy*w4+ch]=sum*inv; n=yy+rad+1; idx=n<H?n:H-1; sum+=src[base+idx*w4+ch]; n=yy-rad; idx=n>0?n:0; sum-=src[base+idx*w4+ch]; } } } };
+        for(var bbP=0;bbP<bbPass;bbP++){ bbBoxH(d,bbr); bbBoxV(d,bbRy); }
+        return;
+      } var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4; for(bbY=0;bbY<H;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=0;bbX<W;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
     spinblur: function(d,W,H,p,t){ var sbAmt=FM.evalProp(p.amount,t); if(sbAmt==null)sbAmt=0.5; if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=d.slice();
       // CENTRE was W/2, H/2, so the blur could only ever spin around the middle of the frame — never
       // around the wheel, the face or the logo that is actually turning.
@@ -4181,7 +4255,42 @@ window.FM = window.FM || {};
       var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=10; var zs_strength=0.16+0.74*zs_amt;
       var zs_thrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(zs_thrP<0)zs_thrP=0; if(zs_thrP>100)zs_thrP=100;
       var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1; for(var zs_y=0; zs_y<H; zs_y++){ for(var zs_x=0; zs_x<W; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
-    innerblur: function(d,W,H,p,t){ var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return; var ib_w4=W*4; var ib_n=W*H; var ib_div=ib_r*2+1; var ib_tmp=new Float32Array(ib_n*3); var x,y,ch,acc,xx,yy,si,di; var ib_src=d; for(y=0;y<H;y++){ var ib_row=y*W; for(ch=0;ch<3;ch++){ acc=0; for(xx=-ib_r;xx<=ib_r;xx++){ var cx0=xx<0?0:(xx>=W?W-1:xx); acc+=ib_src[((ib_row+cx0)*4)+ch]; } for(x=0;x<W;x++){ ib_tmp[(ib_row+x)*3+ch]=acc/ib_div; var ib_xout=x-ib_r; var ib_xin=x+ib_r+1; var ib_co=ib_xout<0?0:(ib_xout>=W?W-1:ib_xout); var ib_ci=ib_xin<0?0:(ib_xin>=W?W-1:ib_xin); acc+=ib_src[((ib_row+ib_ci)*4)+ch]-ib_src[((ib_row+ib_co)*4)+ch]; } } } for(x=0;x<W;x++){ for(ch=0;ch<3;ch++){ acc=0; for(yy=-ib_r;yy<=ib_r;yy++){ var cy0=yy<0?0:(yy>=H?H-1:yy); acc+=ib_tmp[(cy0*W+x)*3+ch]; } for(y=0;y<H;y++){ di=((y*W+x)*4)+ch; d[di]=acc/ib_div; var ib_yout=y-ib_r; var ib_yin=y+ib_r+1; var ib_ro=ib_yout<0?0:(ib_yout>=H?H-1:ib_yout); var ib_ri=ib_yin<0?0:(ib_yin>=H?H-1:ib_yin); acc+=ib_tmp[(ib_ri*W+x)*3+ch]-ib_tmp[(ib_ro*W+x)*3+ch]; } } } },
+    innerblur: function(d,W,H,p,t){ var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return;
+      // EDGE is a bug fix wearing a control. The blur below averages RGB and IGNORES alpha, so near
+      // the edge of a shape it happily averages in the transparent-black pixels outside it — leaving a
+      // dark rim just inside every edge that has nothing to do with the artwork. Turning EDGE on
+      // weights the average by alpha, so a transparent neighbour contributes nothing instead of
+      // contributing black. Off is the default, because that dark rim is what every existing project
+      // currently renders and some of them will have been composed around it.
+      // ASPECT and PASSES are the same two knobs Box Blur just got, for the same reasons.
+      var ibEdge=(p.edge==null?0:(Math.round(FM.evalProp(p.edge,t))|0))===1;
+      var ibAsp=p.aspect==null?100:FM.evalProp(p.aspect,t); if(ibAsp<0)ibAsp=0; if(ibAsp>200)ibAsp=200;
+      var ibPass=p.passes==null?1:Math.round(FM.evalProp(p.passes,t)); if(ibPass<1)ibPass=1; if(ibPass>4)ibPass=4;
+      if(ibEdge||ibAsp!==100||ibPass!==1){
+        var ibRy=ibAsp===100?ib_r:Math.round(ib_r*(ibAsp/100));
+        var ibN=W*H;
+        // Premultiply once: averaging colour*alpha and alpha with the SAME kernel and dividing at the
+        // end is what makes a transparent neighbour weigh nothing rather than weigh black.
+        var pr=new Float32Array(ibN), pg=new Float32Array(ibN), pb=new Float32Array(ibN), pa=new Float32Array(ibN);
+        var q,ii;
+        for(q=0;q<ibN;q++){ ii=q*4; var av=ibEdge?(d[ii+3]/255):1;
+          pr[q]=d[ii]*av; pg[q]=d[ii+1]*av; pb[q]=d[ii+2]*av; pa[q]=av; }
+        var boxRun=function(buf,rad,horiz){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=buf.slice(), a,b,base,sum,idx,n,k;
+          if(horiz){ for(a=0;a<H;a++){ base=a*W; sum=src[base]*(rad+1);
+              for(n=1;n<=rad;n++){ k=n<W?n:W-1; sum+=src[base+k]; }
+              for(b=0;b<W;b++){ buf[base+b]=sum*inv; n=b+rad+1; idx=n<W?n:W-1; sum+=src[base+idx]; n=b-rad; idx=n>0?n:0; sum-=src[base+idx]; } } }
+          else { for(b=0;b<W;b++){ sum=src[b]*(rad+1);
+              for(n=1;n<=rad;n++){ k=n<H?n:H-1; sum+=src[k*W+b]; }
+              for(a=0;a<H;a++){ buf[a*W+b]=sum*inv; n=a+rad+1; idx=n<H?n:H-1; sum+=src[idx*W+b]; n=a-rad; idx=n>0?n:0; sum-=src[idx*W+b]; } } } };
+        for(var pn=0;pn<ibPass;pn++){
+          boxRun(pr,ib_r,true); boxRun(pg,ib_r,true); boxRun(pb,ib_r,true); if(ibEdge)boxRun(pa,ib_r,true);
+          boxRun(pr,ibRy,false); boxRun(pg,ibRy,false); boxRun(pb,ibRy,false); if(ibEdge)boxRun(pa,ibRy,false);
+        }
+        for(q=0;q<ibN;q++){ ii=q*4; var wv=ibEdge?pa[q]:1;
+          if(wv>0.0001){ d[ii]=pr[q]/wv; d[ii+1]=pg[q]/wv; d[ii+2]=pb[q]/wv; } }
+        return;
+      }
+      var ib_w4=W*4; var ib_n=W*H; var ib_div=ib_r*2+1; var ib_tmp=new Float32Array(ib_n*3); var x,y,ch,acc,xx,yy,si,di; var ib_src=d; for(y=0;y<H;y++){ var ib_row=y*W; for(ch=0;ch<3;ch++){ acc=0; for(xx=-ib_r;xx<=ib_r;xx++){ var cx0=xx<0?0:(xx>=W?W-1:xx); acc+=ib_src[((ib_row+cx0)*4)+ch]; } for(x=0;x<W;x++){ ib_tmp[(ib_row+x)*3+ch]=acc/ib_div; var ib_xout=x-ib_r; var ib_xin=x+ib_r+1; var ib_co=ib_xout<0?0:(ib_xout>=W?W-1:ib_xout); var ib_ci=ib_xin<0?0:(ib_xin>=W?W-1:ib_xin); acc+=ib_src[((ib_row+ib_ci)*4)+ch]-ib_src[((ib_row+ib_co)*4)+ch]; } } } for(x=0;x<W;x++){ for(ch=0;ch<3;ch++){ acc=0; for(yy=-ib_r;yy<=ib_r;yy++){ var cy0=yy<0?0:(yy>=H?H-1:yy); acc+=ib_tmp[(cy0*W+x)*3+ch]; } for(y=0;y<H;y++){ di=((y*W+x)*4)+ch; d[di]=acc/ib_div; var ib_yout=y-ib_r; var ib_yin=y+ib_r+1; var ib_ro=ib_yout<0?0:(ib_yout>=H?H-1:ib_yout); var ib_ri=ib_yin<0?0:(ib_yin>=H?H-1:ib_yin); acc+=ib_tmp[(ib_ri*W+x)*3+ch]-ib_tmp[(ib_ro*W+x)*3+ch]; } } } },
     contourstrips: function(d,W,H,p,t){ var cs_levels=FM.evalProp(p.levels,t); if(cs_levels==null)cs_levels=5; cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor(cs_l*cs_levels); if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=(cs_band&1)?1.0:0.4; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
     crosshatch: function(d,W,H,p,t,ps){ var sp=FM.evalProp(p.spacing,t); if(sp==null)sp=7; sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
       // The three hatch tiers fired at hardcoded luminances of 0.75/0.5/0.25 with 1px strokes on fixed
