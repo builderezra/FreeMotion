@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#303 — the effects browser as a sheet on PC</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:6px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #303 — *"on PC I want to make it so when you add an effect … the same sort of thing happens on
+   mobile that happens on PC … basically it'll cover everything on the bottom except for the canvas so
+   you can still see it and you can tap to selecting all that stuff and it will just playback basically
+   just the layout that you have selected"*.
+   Three things to see and not just measure: the sheet's edge against the canvas, whether the inner
+   parts still carry the desktop card styling (they did on the first run — a 680px scroller with its own
+   border and shadow floating inside a full-width sheet), and the order badges once tiles are tapped.
+   ?tap=1 picks three tiles so the badges and the commit bar are in the frame. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 1280, TAP = q.get('tap') === '1';
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (+q.get('h') || 800) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  function box(e) { if (!e) return 'MISSING'; var r = e.getBoundingClientRect(); return 'y ' + Math.round(r.top) + '–' + Math.round(r.bottom) + '  x ' + Math.round(r.left) + '–' + Math.round(r.right); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.fxBrowser || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      /* STOP THE TICKER BEFORE THE FRAME IS TAKEN. The sheet runs a 24fps preview loop (queue 277's
+         "it will just playback… the layout that you have selected"), and a repeating timer means the
+         page is never idle — headless Chrome sat there for minutes and never wrote a PNG. Recording
+         the interval ids and clearing them at the end lets the frame be taken of a still sheet, which
+         is what a screenshot is for anyway. */
+      var timers = [], _si = w.setInterval;
+      w.setInterval = function () { var id = _si.apply(w, arguments); timers.push(id); return id; };
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        var P = FM.scene.project;
+        var L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 320, shapeH: 320, fill: '#c04070' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers = [L]; FM.selectLayer(L.id); FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        try { FM.fxBrowser.open(FM.scene.layers[0]); } catch (e) { return fail('open threw: ' + (e && e.message || e)); }
+        setTimeout(function () {
+          var root = d.getElementById('fx-browser'), cv = d.getElementById('preview');
+          if (!root || root.classList.contains('hidden')) return fail('the effects browser did not open');
+          if (TAP) {
+            var seen = {}, picks = [];
+            [].slice.call(root.querySelectorAll('[data-fxid]')).forEach(function (t) {
+              var id = t.dataset.fxid; if (!seen[id]) { seen[id] = 1; picks.push(t); }
+            });
+            picks.slice(0, 3).forEach(function (t) { t.click(); });
+          }
+          setTimeout(function () {
+            var r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
+            var sc = root.querySelector('.fxb-scroll'), s = sc.getBoundingClientRect();
+            var bar = root.querySelector('.fxb-commit');
+            out.textContent = [
+              'width ' + W + '   sheet: ' + root.classList.contains('fxb-sheet'),
+              'browser  ' + box(root) + '   viewport ' + d.documentElement.clientWidth + 'x' + d.documentElement.clientHeight,
+              'canvas   ' + box(cv),
+              'scroller ' + box(sc) + '   (full-bleed if it matches the browser box)',
+              'scroller still a card? border-radius ' + w.getComputedStyle(sc).borderRadius + '  margin-bottom ' + w.getComputedStyle(sc).marginBottom,
+              'commit bar: ' + (bar ? (bar.classList.contains('hidden') ? 'hidden' : box(bar)) : 'MISSING'),
+              'picked: ' + JSON.stringify(FM._fxPicks ? FM._fxPicks() : null),
+              'isolated to the selected layer: ' + JSON.stringify(FM.isolate || null)
+            ].join('\n');
+            timers.forEach(function (id) { w.clearInterval(id); });
+            window.__done = true;
+          }, 400);
+        }, 700);
+      }, 700);
+    })();
+  });
+})();
+</script>
+</body></html>

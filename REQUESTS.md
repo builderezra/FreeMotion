@@ -5421,7 +5421,28 @@ better still, keep working inside the turn rather than parking work for a later 
       name; (2) move it OUTSIDE, above the panel's top edge; (3) invisible until hovered.
       ⚠️ Verify at a DESKTOP width in the STUDIO layout, not Classic — that is the #241 lesson.
 
-- [ ] **303 — PC should get the phone's effects layout: a panel over everything except the canvas.**
+- [x] **303 — PC should get the phone's effects layout: a panel over everything except the canvas.**
+      ✅ **v9.51.** Measured at 1280x800: the sheet runs 538–800 across the full width, starting
+      exactly where the canvas ends, so the canvas stays visible above it and everything else —
+      transport, inspector band, timeline — is covered. **The tapping and the playback came with
+      it**, not as a rebuild: the multi-select, the order badges and the isolate-and-loop preview
+      were all gated on the same one width test the geometry was, so removing it hands PC the real
+      behaviour rather than a look-alike. The Elements browser keeps its centred dialog — you have
+      not asked about that one, say the word if you want it too.
+      **What would have shipped broken:** turning the sheet on moves the outer box and nothing
+      else, and the PC dialog rules style everything INSIDE it — the first build was a full-width
+      sheet with a 680px bordered, rounded, shadowed card floating in the middle, and the sheet
+      itself measured perfectly. A category view was worse: it is `fixed; inset: 0` on PC, so it
+      would have escaped the sheet and covered the very canvas the sheet exists to keep visible.
+      **And it turned up a real crash that was already there:** the seek pass read a video
+      element's time while only checking that the media RECORD existed, and a record outlives its
+      element. It threw inside a loop, so it did not skip one layer — it killed the whole pass and
+      the repaint after it, freezing the canvas. Fixed and mutation-checked.
+      ⚠️ **One thing to look at and tell me about:** on an 800px-tall window the sheet is only
+      262px, because a tall canvas leaves that little underneath. It is roomier on a bigger
+      screen, and it is exactly the phone's proportions, but if it feels cramped on yours the fix
+      is to let the sheet overlap the bottom of the canvas a little — say the word.
+      Original entry:
       (17 Aug.) His words, verbatim: *"Also on PC I want to make it so when you add an effect like when
       you press out effect the same sort of thing happens on mobile that happens on PC like I want the
       same thing from mobile on PC with basically it'll cover everything on the bottom except for the

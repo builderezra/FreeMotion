@@ -21135,6 +21135,74 @@
     }
   });
 
+  /* ---------------- queue 303: PC gets the phone's sheet, not a centred dialog --------------------
+   * His words, verbatim: *"on PC I want to make it so when you add an effect like when you press out
+   * effect the same sort of thing happens on mobile that happens on PC like I want the same thing from
+   * mobile on PC with basically it'll cover everything on the bottom except for the canvas so you can
+   * still see it and you can tap to selecting all that stuff and it will just playback basically just
+   * the layout that you have selected"*.
+   *
+   * THE THIRD ASSERTION IS THE ONE THAT WOULD HAVE SHIPPED BROKEN. Turning the class on at desktop
+   * width moves the ROOT's box and nothing else, and the PC dialog rules style the parts INSIDE it —
+   * so the first build produced a full-width sheet with a 680px-wide bordered, rounded, shadowed card
+   * floating in the middle of it. The sheet measured perfectly. Hence a check on the scroller's own
+   * width, not just the browser's. */
+  test('on PC the effects browser is the same sheet as the phone: full-bleed, under the canvas, taps SELECT (queue 303)', { item: 'fx-sheet' }, async function () {
+    if (!matchMedia('(min-width: 701px)').matches) return;      // this one is about the DESKTOP path
+    const layers0 = FM.scene.layers.slice();
+    const iso0 = FM.isolate || null;
+    try {
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: Math.round(P.width * 0.3), shapeH: Math.round(P.height * 0.3), fill: '#e33' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(200);
+      FM.fxBrowser.open(L);
+      await sleep(320);
+      const root = document.getElementById('fx-browser'), cv = document.getElementById('preview');
+      if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
+      if (!root.classList.contains('fxb-sheet')) throw new Error('at desktop width the browser is still the centred dialog — he asked for "the same thing from mobile on PC"');
+
+      const r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
+      const vpH = document.documentElement.clientHeight, vpW = document.documentElement.clientWidth;
+      if (Math.abs(r.top - c.bottom) > 2) throw new Error('the sheet starts at y=' + Math.round(r.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — "cover everything on the bottom except for the canvas"');
+      if (Math.abs(r.bottom - vpH) > 2) throw new Error('the sheet stops at ' + Math.round(r.bottom) + ' in a ' + vpH + 'px viewport — it should take everything below the canvas');
+      if (Math.abs(r.width - vpW) > 2) throw new Error('the sheet is ' + Math.round(r.width) + 'px wide in a ' + vpW + 'px window — a sheet covers the bottom, it is not a column');
+      if (r.top < 40) throw new Error('the sheet covers the canvas (top ' + Math.round(r.top) + ') — the canvas is the thing he wants to keep watching');
+
+      /* Full-bleed INSIDE, not a desktop card sitting in a sheet. */
+      const sc = root.querySelector('.fxb-scroll');
+      const s = sc.getBoundingClientRect();
+      if (Math.abs(s.width - r.width) > 2) throw new Error('the sheet is ' + Math.round(r.width) + 'px wide but its scroller is ' + Math.round(s.width) + 'px — the PC dialog styling is still on the inside of the sheet');
+      const scs = getComputedStyle(sc);
+      if (parseFloat(scs.marginBottom) > 2) throw new Error('the scroller keeps the dialog\'s ' + scs.marginBottom + ' bottom margin, so there is a gap above the bottom of the screen');
+
+      /* …and the phone BEHAVIOUR came with the layout: a tap picks rather than adds, and the layer is
+         isolated and looping so you can see what you are choosing. */
+      const tiles = [].slice.call(root.querySelectorAll('[data-fxid]'));
+      const seen = {}, pick = [];
+      tiles.forEach(function (t) { const id = t.dataset.fxid; if (!seen[id]) { seen[id] = 1; pick.push(t); } });
+      if (pick.length < 2) throw new Error('fewer than 2 distinct effects on screen — cannot prove ordering');
+      pick[0].click(); await sleep(60);
+      pick[1].click(); await sleep(90);
+      const live = FM.layerById(FM.scene, L.id);
+      if ((live.effects || []).length !== 0) throw new Error('tapping added ' + live.effects.length + ' effect(s) on PC — a tap is supposed to SELECT');
+      const badge = t => { const b = t.querySelector('.fxb-pick'); return b ? b.textContent : null; };
+      if (badge(pick[0]) !== '1' || badge(pick[1]) !== '2') throw new Error('the order badges read ' + [badge(pick[0]), badge(pick[1])].join('/') + ' on PC');
+      if (!FM.isolate || FM.isolate.id !== L.id) throw new Error('the sheet is not showing only the selected layer — "just playback basically just the layout that you have selected"');
+      if (!FM._fxPreview || FM._fxPreview.id !== L.id || FM._fxPreview.list.length !== 2) throw new Error('the two picked effects are not being previewed on the layer');
+      const bar = root.querySelector('.fxb-commit');
+      if (!bar || bar.classList.contains('hidden')) throw new Error('no commit bar on PC, so there is no way to add what you picked');
+      if (bar.getBoundingClientRect().bottom > r.bottom + 2) throw new Error('the commit bar hangs below the sheet');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.isolate = iso0;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null);
+      await sleep(120);
+    }
+  });
+
   test('the phone effects browser is a sheet under the canvas and taps SELECT, in order (queue 277)', { item: 'fx-sheet' }, async function () {
     const frame = window.frameElement;
     if (!frame) throw new Error('this test owns its viewport and has no frameElement');
@@ -21390,11 +21458,17 @@
     }
   });
 
-  test('on a desktop width the effects browser still adds on one tap (queue 277 is phone-only)', { item: 'fx-sheet' }, async function () {
-    /* "all just for mobile btw". A multi-select that leaked onto the desktop would mean every PC user's
-       first tap silently did nothing, which is a worse bug than the one this feature fixes. */
+  /* THIS TEST USED TO ASSERT THE OPPOSITE, and that is worth keeping visible rather than deleting.
+     Queue 277 was "all just for mobile btw", so this held the line that a desktop tap adds one effect
+     immediately and that a leaked multi-select would mean "every PC user's first tap silently did
+     nothing". Queue 303 is him reversing it in his own words — *"I want the same thing from mobile on
+     PC"* — so the guarantee it was protecting has changed shape rather than disappeared: a tap must
+     still not silently do nothing, which now means the pick has to be visible AND the commit has to
+     actually land what was picked. That is what it checks instead. */
+  test('on a desktop width, picking effects and committing adds them all (queue 303 reversed 277\'s phone-only rule)', { item: 'fx-sheet' }, async function () {
     if (!matchMedia('(min-width: 701px)').matches) return;
     const layers0 = FM.scene.layers.slice();
+    const iso0 = FM.isolate || null;
     try {
       const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 400, shapeW: 200, shapeH: 200, fill: '#e33' });
       L.start = 0; L.duration = 5;
@@ -21403,16 +21477,25 @@
       FM.fxBrowser.open(L);
       await sleep(300);
       const root = document.getElementById('fx-browser');
-      if (root.classList.contains('fxb-sheet')) throw new Error('the desktop browser came up in phone sheet mode');
+      if (!root.classList.contains('fxb-sheet')) throw new Error('the desktop browser is still the one-tap dialog — he asked for the phone behaviour here');
       const tile = root.querySelector('[data-fxid]');
       if (!tile) throw new Error('no effect tiles');
       tile.click();
       await sleep(220);
+      const mid = FM.layerById(FM.scene, L.id);
+      if ((mid.effects || []).length !== 0) throw new Error('the tap ADDED on the desktop instead of selecting');
+      if (!tile.querySelector('.fxb-pick')) throw new Error('the tap left no order badge — from the outside it did nothing at all, which is the failure this test has always existed to catch');
+      const bar = root.querySelector('.fxb-commit');
+      if (!bar || bar.classList.contains('hidden')) throw new Error('nothing offers to add the picked effect');
+      bar.querySelector('.fxb-commit-go').click();
+      await sleep(260);
       const after = FM.layerById(FM.scene, L.id);
-      if ((after.effects || []).length !== 1) throw new Error('one tap on the desktop added ' + (after.effects || []).length + ' effects — it must still add exactly one');
-      if (!root.classList.contains('hidden')) throw new Error('the desktop browser stayed open after adding');
+      if ((after.effects || []).length !== 1) throw new Error('committing one pick added ' + (after.effects || []).length + ' effects');
+      if ((after.effects[0].type || after.effects[0].id) !== tile.dataset.fxid) throw new Error('committed ' + (after.effects[0].type || after.effects[0].id) + ' but ' + tile.dataset.fxid + ' was picked');
+      if (!root.classList.contains('hidden')) throw new Error('the browser stayed open after committing');
     } finally {
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.isolate = iso0;
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null);
     }
@@ -22972,7 +23055,18 @@
       await sleep(120);
       var tile = document.querySelector('#fx-browser .fxb-card');   // .fxb-card is the tile class — .fxb-tile never existed
       if (!tile) { if (FM.fxBrowser) FM.fxBrowser.close(); throw new Error('the browser opened with no effect tiles to pick'); }
+      /* PICK, THEN COMMIT (queue 303). The browser is a multi-select sheet at every width now, so a tap
+         selects and the commit bar is what lands it — and the destination has to survive that trip:
+         `_into` is module state read by addEffect, and the batch path calls the same function, so a
+         filter you opened the browser from still receives the whole batch. That is the thing worth
+         asserting here, not the number of clicks. */
       tile.click(); await sleep(120);
+      var go = document.querySelector('#fx-browser .fxb-commit-go');
+      if (!go || document.querySelector('#fx-browser .fxb-commit').classList.contains('hidden')) {
+        if (FM.fxBrowser) FM.fxBrowser.close();
+        throw new Error('picking an effect for a filter offered no way to add it');
+      }
+      go.click(); await sleep(220);
       if (FM.fxBrowser) FM.fxBrowser.close();
       if (L.effects.length !== 1) throw new Error('the effect landed on the LAYER stack instead of inside the filter (' + L.effects.length + ' entries)');
       if (!box.effects.length) throw new Error('the effect did not land inside the filter at all');

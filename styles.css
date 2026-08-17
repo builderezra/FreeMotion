@@ -3184,16 +3184,27 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .fxb-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
   .fxb-banner { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; min-height: 64px; padding: 12px 13px; font-size: 14px; }
 }
-/* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet */
+/* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet.
+   …EXCEPT WHEN IT IS A SHEET (queue 303). Every rule here is now `:not(.fxb-sheet)`, and that is not
+   tidiness — the sheet block below only overrides the ROOT's box, so without this the desktop card
+   styling stayed on the parts inside it: a 680px-wide scroller with its own border, radius, shadow and
+   an 18px bottom margin, floating in the middle of a full-width sheet. Same for the header, and for a
+   category view, which is `position: fixed; inset: 0` here and would have escaped the sheet entirely
+   and covered the canvas the sheet exists to keep visible.
+   `#el-browser` keeps the dialog unconditionally: it never gets the class, and he asked about the
+   EFFECTS browser. */
 @media (min-width: 701px) {
-  #fx-browser, #el-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
-  #fx-browser .fxb-top, #fx-browser .fxb-search-input,
+  #fx-browser:not(.fxb-sheet), #el-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
+  #fx-browser:not(.fxb-sheet) .fxb-top, #fx-browser:not(.fxb-sheet) .fxb-search-input,
   #el-browser .fxb-top, #el-browser .fxb-search-input { width: min(680px, 94vw); }
-  #fx-browser .fxb-top, #el-browser .fxb-top { border-bottom: none; }
-  #fx-browser .fxb-scroll, #el-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
-  .fxb-catview { position: fixed; inset: 0; background: rgba(6, 8, 12, .72); align-items: center; }
-  .fxb-catview-top, .fxb-catview-scroll { width: min(680px, 94vw); }
-  .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
+  #fx-browser:not(.fxb-sheet) .fxb-top, #el-browser .fxb-top { border-bottom: none; }
+  #fx-browser:not(.fxb-sheet) .fxb-scroll, #el-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
+  #fx-browser:not(.fxb-sheet) .fxb-catview, #afx-browser:not(.fxb-sheet) .fxb-catview, #el-browser .fxb-catview { position: fixed; inset: 0; background: rgba(6, 8, 12, .72); align-items: center; }
+  #fx-browser:not(.fxb-sheet) .fxb-catview-top, #fx-browser:not(.fxb-sheet) .fxb-catview-scroll,
+  #afx-browser:not(.fxb-sheet) .fxb-catview-top, #afx-browser:not(.fxb-sheet) .fxb-catview-scroll,
+  #el-browser .fxb-catview-top, #el-browser .fxb-catview-scroll { width: min(680px, 94vw); }
+  #fx-browser:not(.fxb-sheet) .fxb-catview-scroll, #afx-browser:not(.fxb-sheet) .fxb-catview-scroll,
+  #el-browser .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
 }
 /* Add-menu on the phone sheet (v5.46). Ezra: "I want every tab in the add section on mobile to be
    the same height, currently some are lower than others and it makes going between them all feel
@@ -4065,40 +4076,43 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .fxb-thumb-cv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; opacity: 0; transition: opacity .18s; pointer-events: none; }
 .fxb-thumb-cv.ready { opacity: 1; }
 
-/* ---- The effects browser as a PHONE SHEET, with multi-select (queue 277) -----------------------
+/* ---- The effects browser as a SHEET, with multi-select (queue 277; PC too, queue 303) -----------
    Ezra: "the menu won't cover the whole screen the menu will only go up until where the canvas is",
    then, correcting himself in the same message, "it covers the play buttons and all of that so it goes
    right up to the canvas". So it starts at the canvas's bottom edge — measured on open, because that
    edge moves with the project's aspect ratio — and takes everything below it.
-   Phone only: he said "all just for mobile btw", and on a desktop there is no timeline-sized band for
-   it to become, so that path keeps the centred dialog it already had. */
-@media (max-width: 700px) {
-  /* Both browsers (queue 300 added the audio one). The selector is deliberately not `.fxb-sheet` on
-     its own: these are `position: fixed; inset: 0` overlays and the class only ever means anything on
-     one of those two roots, so a bare class would invite it onto something that has no inset to
-     override. */
-  #fx-browser.fxb-sheet, #afx-browser.fxb-sheet {
-    top: var(--fxb-top, 0); bottom: 0; left: 0; right: 0;
-    border-top: 1px solid var(--line);
-    border-radius: 14px 14px 0 0;
-    box-shadow: 0 -18px 44px rgba(0, 0, 0, .5);
-  }
-  /* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
-     canvas above it already say what this is, so the row keeps only the close and search controls. */
-  #fx-browser.fxb-sheet .fxb-title, #afx-browser.fxb-sheet .fxb-title { display: none; }
-  /* With the title gone the row's two buttons huddled together at the left with a hand's width of
-     nothing beside them. Pushed apart instead: close on the left, search on the right, which is where
-     both already are on every other sheet in the app.
-     The shorthand also RESETS .fxb-top's `padding-top: max(14px, env(safe-area-inset-top))`, which
-     matters: that inset exists because the header normally touches the physical top of the screen, and
-     in a sheet it does not — left in, it would open a notch-sized hole above the close button. */
-  #fx-browser.fxb-sheet .fxb-top, #afx-browser.fxb-sheet .fxb-top { padding: 7px 10px; justify-content: space-between; }
-  #fx-browser.fxb-sheet .fxb-scroll { padding-bottom: 74px; }   /* clear of the commit bar — visual browser only, the audio one has no multi-select */
-  /* Same reasoning one level in: a category view is `position:absolute; inset:0` INSIDE the sheet, so
-     its header does not touch the top of the screen either, and the status-bar inset it inherits would
-     open an empty notch-high band above the back arrow. */
-  #fx-browser.fxb-sheet .fxb-catview-top, #afx-browser.fxb-sheet .fxb-catview-top { padding-top: 14px; }
+   NO LONGER PHONE-ONLY (queue 303). He said "all just for mobile btw" at the time, and then came back
+   with the opposite: *"on PC I want to make it so when you add an effect … the same sort of thing
+   happens on mobile that happens on PC … basically it'll cover everything on the bottom except for the
+   canvas so you can still see it"*. The old note here claimed a desktop had "no timeline-sized band for
+   it to become", which was never the constraint — the geometry is measured from the canvas, and a
+   desktop canvas has a bottom edge like any other. So the media query is gone and these rules apply at
+   every width; the ELEMENTS browser keeps the centred dialog, since he has not asked about that one. */
+/* Both browsers (queue 300 added the audio one). The selector is deliberately not `.fxb-sheet` on
+   its own: these are `position: fixed; inset: 0` overlays and the class only ever means anything on
+   one of those two roots, so a bare class would invite it onto something that has no inset to
+   override. */
+#fx-browser.fxb-sheet, #afx-browser.fxb-sheet {
+  top: var(--fxb-top, 0); bottom: 0; left: 0; right: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -18px 44px rgba(0, 0, 0, .5);
 }
+/* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
+   canvas above it already say what this is, so the row keeps only the close and search controls. */
+#fx-browser.fxb-sheet .fxb-title, #afx-browser.fxb-sheet .fxb-title { display: none; }
+/* With the title gone the row's two buttons huddled together at the left with a hand's width of
+   nothing beside them. Pushed apart instead: close on the left, search on the right, which is where
+   both already are on every other sheet in the app.
+   The shorthand also RESETS .fxb-top's `padding-top: max(14px, env(safe-area-inset-top))`, which
+   matters: that inset exists because the header normally touches the physical top of the screen, and
+   in a sheet it does not — left in, it would open a notch-sized hole above the close button. */
+#fx-browser.fxb-sheet .fxb-top, #afx-browser.fxb-sheet .fxb-top { padding: 7px 10px; justify-content: space-between; }
+#fx-browser.fxb-sheet .fxb-scroll { padding-bottom: 74px; }   /* clear of the commit bar — visual browser only, the audio one has no multi-select */
+/* Same reasoning one level in: a category view is `position:absolute; inset:0` INSIDE the sheet, so
+   its header does not touch the top of the screen either, and the status-bar inset it inherits would
+   open an empty notch-high band above the back arrow. */
+#fx-browser.fxb-sheet .fxb-catview-top, #afx-browser.fxb-sheet .fxb-catview-top { padding-top: 14px; }
 /* The order badge — "every time you select one it'll put a one or two on it so you know what order
    they are being added in". Numbers, not ticks, because the order IS the information. */
 .fxb-pick {
@@ -4156,14 +4170,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .afxb-catnav { display: flex; align-items: center; gap: 8px; padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel-2, rgba(16,20,28,.96)); }
 .afxb-catnav-btn { flex: 1; min-height: 40px; padding: 0 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .afxb-catnav-pos { color: var(--text-dim); font-size: 11px; flex: none; }
+/* …and the audio browser's own PC dialog, `:not(.fxb-sheet)` for the same reason (queue 303). */
 @media (min-width: 701px) {
-  #afx-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
-  #afx-browser .fxb-top, #afx-browser .fxb-search-input { width: min(680px, 94vw); }
-  #afx-browser .fxb-top { border-bottom: none; }
-  #afx-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
+  #afx-browser:not(.fxb-sheet) { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
+  #afx-browser:not(.fxb-sheet) .fxb-top, #afx-browser:not(.fxb-sheet) .fxb-search-input { width: min(680px, 94vw); }
+  #afx-browser:not(.fxb-sheet) .fxb-top { border-bottom: none; }
+  #afx-browser:not(.fxb-sheet) .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
   /* Panel + nav are one card here: the panel's own 18px gap would split them apart. */
-  #afx-browser .fxb-catview-scroll { margin-bottom: 0; border-bottom: none; border-radius: 16px 16px 0 0; }
-  #afx-browser .afxb-catnav { width: min(680px, 94vw); border: 1px solid var(--line); border-radius: 0 0 16px 16px; margin-bottom: 18px; }
+  #afx-browser:not(.fxb-sheet) .fxb-catview-scroll { margin-bottom: 0; border-bottom: none; border-radius: 16px 16px 0 0; }
+  #afx-browser:not(.fxb-sheet) .afxb-catnav { width: min(680px, 94vw); border: 1px solid var(--line); border-radius: 0 0 16px 16px; margin-bottom: 18px; }
 }
 
 /* Audio React sheet (#ar-sheet, built in js/audio-react.js). That file inline-styles the sheet and reuses

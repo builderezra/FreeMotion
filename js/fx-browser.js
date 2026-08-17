@@ -21,20 +21,29 @@ window.FM = window.FM || {};
    * (there is a third overlay, #el-browser, built the same way); one function that every browser calls
    * cannot drift. FM.fxSheet is the seam the suite holds both browsers against.
    *
+   * AND ON PC TOO, SINCE QUEUE 303. His words: *"on PC I want to make it so when you add an effect …
+   * the same sort of thing happens on mobile that happens on PC … basically it'll cover everything on
+   * the bottom except for the canvas so you can still see it and you can tap to selecting all that
+   * stuff and it will just playback basically just the layout that you have selected"*. That is this
+   * function's geometry plus the multi-select and the preview loop, all three of which were gated on
+   * one `max-width: 700px` test — the class is what every one of them keys off, so removing the width
+   * check hands PC the whole phone behaviour rather than a look-alike. The desktop dialog it replaces
+   * is still there for the ELEMENTS browser, which he has not asked about.
+   *
    * Returns whether the sheet is on, because both callers branch on it.
    */
   FM.fxSheet = function (root, on) {
     if (!root) return false;
-    const phone = on !== false && window.matchMedia('(max-width: 700px)').matches;
-    root.classList.toggle('fxb-sheet', phone);
-    if (phone) {
+    const sheet = on !== false;
+    root.classList.toggle('fxb-sheet', sheet);
+    if (sheet) {
       const cv = document.getElementById('preview');
       const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
       root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
     } else {
       root.style.removeProperty('--fxb-top');
     }
-    return phone;
+    return sheet;
   };
 
   const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8;   // PAGE_SIZE went with the sideways pager (queue 92); js/audio-fx-browser.js keeps its own
@@ -1170,11 +1179,11 @@ window.FM = window.FM || {};
       if (!_layer) { if (FM.toast) FM.toast('Select a layer first', 1400); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
       _picked = [];
-      const phone = FM.fxSheet(root);      // the sheet (queue 277) — geometry defined once, up top
+      const sheet = FM.fxSheet(root);      // the sheet (queue 277, and PC too since 303) — geometry defined once, up top
       root.classList.remove('hidden');
       rebuild();
       paintPicks();
-      if (phone) restartPreview();     // isolate + loop the layer straight away, with an empty stack
+      if (sheet) restartPreview();     // isolate + loop the layer straight away, with an empty stack
       // one-time discoverability nudge for the hidden gesture (AM users know it; new users don't)
       if (FM.toast && !localStorage.getItem('fm.fx.presetHint')) {
         try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (_) {}

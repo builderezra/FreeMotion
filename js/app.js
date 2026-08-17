@@ -840,7 +840,14 @@ window.FM = window.FM || {};
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
-      if (!m) return;
+      /* `m.el`, NOT JUST `m`. A record can outlive its element — js/media.js's release() drops the
+         element while another layer still shares the record, and an import has a record before it has
+         a decoded video — and `m.el.currentTime` below then throws. It threw INSIDE a forEach, so it
+         did not just skip one layer: it took the whole seek pass down and the `render()` after it never
+         ran, freezing the canvas. Found when queue 303 turned the effects sheet's 24fps preview loop on
+         at desktop widths and every setTime went through here; the same crash was reachable before that
+         and stopPreview already carries a comment about it happening. */
+      if (!m || !m.el) return;
       if (FM.seekBusy && FM.seekBusy(m)) return;   // a frame-cache build owns this element's seeks (see FM.seekBusy)
       if (layer.reversed && m.frameCache) return; // the cache renders this synchronously
       const local = FM.layerLocalTime(layer, FM.time);
