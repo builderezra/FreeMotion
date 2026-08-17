@@ -3886,6 +3886,11 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* a **sixteenth** struck off — **"Template saved" being a lie when storage is
+      full (v9.21)**. It wrote your media into the big store, failed to write the small index entry,
+      and reported success anyway — so the template vanished AND its copy of all your media was
+      stranded where the boot cleanup was coded never to look. Same in Save as element and Import
+      font. All four tell the truth now, and the cleanup can reclaim what was stranded.
       *Progress 17 Aug:* a **fifteenth** struck off — **a copied keyframe pasting into a completely
       different effect (v9.20)**. Effect keyframes were addressed by POSITION, so a Twirl value of 140
       pasted onto a layer whose first effect was Grayscale drove that 0-to-1 control to 140 and saved

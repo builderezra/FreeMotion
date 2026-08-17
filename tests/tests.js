@@ -18195,6 +18195,69 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: "saved" must mean saved ---------------- */
+
+  /* THE BUG. templates.save wrote the heavy pack (layer JSON + full copies of the project's media
+   * Files) to IndexedDB, then wrote the index entry to localStorage — and returned an unconditional
+   * `true`. writeJSON SWALLOWS a quota failure: it returns false and calls warnQuota, which only
+   * toasts the first time in a session, so once autosave has hit quota nothing is said at all. The
+   * return value was discarded, so home.js toasted "Template saved" for a template that never appeared
+   * and could never be recovered — while the pack sat in IndexedDB with nothing pointing at it, and
+   * the boot sweep was coded to skip that key prefix outright so the space never came back.
+   * elements.save, elements.saveFromProject and fonts.import all had the identical shape.
+   * The quota failure is SIMULATED by making one key throw, rather than by filling the disk: it is the
+   * behaviour on failure that is under test, and a real 5MB fill is slow and hostile to the machine. */
+  test('storage: a template that could not be indexed reports failure and strands nothing', { item: 'save-truth' }, async function () {
+    if (!FM.templates || !FM.templates.save) throw new Error('FM.templates.save is not exposed');
+    var id = localStorage.getItem('fm.currentProject');
+    if (!id) throw new Error('no current project to save from');
+    var idxBefore = localStorage.getItem('fm.templates');
+    var packs = async function () {
+      var ks = await FM.storage.listMediaKeys('tpl:');
+      return ks || [];
+    };
+    var made = null;
+    try {
+      // 1. a NORMAL save must report true, appear in the list, and write its pack.
+      //    NOTE THE ARGUMENT ORDER — save(name, projectId). Getting it backwards makes every save
+      //    return false, which reads exactly like the bug and cost a diagnosis cycle.
+      var n0 = FM.templates.list().length, p0 = (await packs()).length;
+      var ok = await FM.templates.save('TPLTRUTH_GOOD', id);
+      if (ok !== true) throw new Error('a normal template save reported ' + ok);
+      if (FM.templates.list().length !== n0 + 1) throw new Error('a normal save did not add an index entry');
+      if ((await packs()).length !== p0 + 1) throw new Error('a normal save did not write its pack');
+      made = FM.templates.list().filter(function (t) { return t.name === 'TPLTRUTH_GOOD'; })[0];
+
+      // 2. the index write FAILS. It must say so, and leave nothing behind.
+      var realSet = localStorage.setItem.bind(localStorage);
+      var n1 = FM.templates.list().length, p1 = (await packs()).length;
+      var ok2;
+      localStorage.setItem = function (k, v) {
+        if (k === 'fm.templates') { var e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        return realSet(k, v);
+      };
+      try { ok2 = await FM.templates.save('TPLTRUTH_QUOTA', id); } finally { localStorage.setItem = realSet; }
+      if (ok2 !== false) throw new Error('a template whose index write failed reported ' + ok2 + ' — the caller toasts "Template saved" on a truthy result, for a template that does not exist');
+      if (FM.templates.list().length !== n1) throw new Error('the failed save left an index entry behind');
+      var stranded = (await packs()).length - p1;
+      if (stranded !== 0) throw new Error(stranded + ' pack(s) left in IndexedDB by a save that failed — full copies of the project media, with nothing pointing at them');
+
+      // 3. and a pack that IS orphaned must now be collectable, which it never was before
+      if (made) {
+        realSet('fm.templates', JSON.stringify(FM.templates.list().filter(function (t) { return t.id !== made.id; })));
+        var key = 'tpl:' + made.id;
+        if ((await packs()).indexOf(key) < 0) throw new Error('the fixture pack is not in IndexedDB, so the sweep cannot be shown to collect it');
+        await FM.projects.pruneOrphans();
+        if ((await packs()).indexOf(key) >= 0) throw new Error('the boot sweep left an unreferenced template pack in IndexedDB — that prefix used to be skipped outright, which is why a failed save leaked forever');
+        made = null;
+      }
+    } finally {
+      if (made) { try { await FM.templates.remove(made.id); } catch (e) {} }
+      if (idxBefore != null) localStorage.setItem('fm.templates', idxBefore); else localStorage.removeItem('fm.templates');
+      try { await FM.projects.pruneOrphans(); } catch (e) {}
+    }
+  });
+
   /* ---------------- BUG-HUNT: a keyframe must not paste into an unrelated effect ---------------- */
 
   /* THE BUG. An effect keyframe's address is POSITIONAL — "the 1st effect's `amount`" — which is fine

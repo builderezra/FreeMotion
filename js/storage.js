@@ -1188,10 +1188,22 @@ window.FM = window.FM || {};
           return keep;
         };
         const keep = collectKeep();
+        // the three index-backed prefixes, so an unreferenced pack can finally be collected
+        const tplIds = new Set((FM.templates.list() || []).map(t => t.id));
+        const elemIds = new Set((FM.elements.list() || []).map(e => e.id));
+        const fontIds = new Set((FM.fonts && FM.fonts.list ? FM.fonts.list() : []).map(f => f.id));
         const db = await openDB();
         const candidates = [];
         for (const k of await idbKeys(db)) {
-          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb2:') === 0 || k.indexOf('xr:') === 0)) continue;
+          /* These prefixes used to be skipped OUTRIGHT, which is why a pack whose index write failed
+             could never be reclaimed. Cross-check them against their index instead: a 'tpl:'/'elem:'/
+             'font:' pack that nothing references is exactly the orphan this sweep is for. The other
+             two prefixes stay unconditional — libthumb2 is the media library's own cache and xr is the
+             export-resume scratch, and neither has an index here to check against. */
+          if (typeof k === 'string' && (k.indexOf('libthumb2:') === 0 || k.indexOf('xr:') === 0)) continue;
+          if (typeof k === 'string' && k.indexOf('tpl:') === 0) { if (tplIds.has(k.slice(4))) continue; candidates.push(k); continue; }
+          if (typeof k === 'string' && k.indexOf('elem:') === 0) { if (elemIds.has(k.slice(5))) continue; candidates.push(k); continue; }
+          if (typeof k === 'string' && k.indexOf('font:') === 0) { if (fontIds.has(k.slice(5))) continue; candidates.push(k); continue; }
           // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
           // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
           if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }
@@ -1246,7 +1258,15 @@ window.FM = window.FM || {};
       const idx = this.list();
       const card = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB
       idx.unshift({ id: tid, name: name, width: pack.project.width, height: pack.project.height, duration: pack.project.duration, thumb: card });
-      writeJSON(TPL_INDEX, idx);
+      /* THE INDEX WRITE CAN FAIL, AND SAYING "saved" ANYWAY IS THE WORST OUTCOME (BUG-HUNT).
+         writeJSON swallows a quota failure — it returns false and calls warnQuota, which only toasts
+         the FIRST time in a session, so once autosave has hit quota nothing is said at all. The return
+         value was discarded and this returned an unconditional true, so home.js toasted "saved" for a
+         template that never appeared and could never be recovered. Meanwhile the pack — full copies of
+         the project's video and image files — sat in IndexedDB with nothing pointing at it, and the
+         boot sweep was coded to skip that prefix outright, so the space was never coming back.
+         Tell the truth, and take the pack with it. */
+      if (!writeJSON(TPL_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'tpl:' + tid); db2.close(); } catch (e) {} return false; }
       return true;
     },
     cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === curId() ? makeThumb() : null); },
@@ -1300,7 +1320,7 @@ window.FM = window.FM || {};
       try { const db = await openDB(); await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
       const idx = this.list();
       idx.unshift({ id: eid, name: name, count: layers.length });
-      writeJSON(ELEM_INDEX, idx);
+      if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
       return true;
     },
     async getPack(eid) { try { const db = await openDB(); const p = await idbGet(db, 'elem:' + eid); db.close(); return p; } catch (e) { return null; } },
@@ -1327,7 +1347,7 @@ window.FM = window.FM || {};
       } catch (e) { return false; }
       const idx = this.list();
       idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
-      writeJSON(ELEM_INDEX, idx);
+      if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
       return true;
     },
     async remove(eid) {
@@ -1404,7 +1424,13 @@ window.FM = window.FM || {};
       _fontReg.add(id);
       try { const db = await openDB(); await idbPut(db, 'font:' + id, { file: file }); db.close(); } catch (e) {}
       const name = ((file.name || 'Custom font').replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'Custom font';
-      const idx = this.list(); idx.push({ id: id, name: name, family: family, css: css }); writeJSON(FONT_INDEX, idx);
+      const idx = this.list(); idx.push({ id: id, name: name, family: family, css: css });
+      if (!writeJSON(FONT_INDEX, idx)) {   // see templates.save — a font that cannot be indexed is not imported
+        _fontReg.delete(id);
+        try { const db2 = await openDB(); await idbDel(db2, 'font:' + id); db2.close(); } catch (e) {}
+        if (FM.toast) FM.toast('Storage is full — that font could not be saved');
+        return null;
+      }
       if (FM.requestRender) FM.requestRender();
       if (FM.toast) FM.toast('Font “' + name + '” added');
       return { id: id, name: name, family: family, css: css };
