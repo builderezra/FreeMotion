@@ -2065,7 +2065,14 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   width: var(--head-w); flex: 0 0 var(--head-w);
   display: flex; align-items: center; gap: 6px; padding: 0 8px;
   border-right: 1px solid var(--line); cursor: grab; background: var(--panel);
-  position: sticky; left: 0; z-index: 6;
+  /* ABOVE THE RULER ROW (queue 348). Ezra: *"You shouldn't be able to see the bookmarks over the top of
+     the far left layer preview section."* The benchmark pin lives in `#tl-rulerrow`, which carries
+     `z-index: 7` — so its 320px drop-line inherited a stacking level ABOVE these heads at 6 and painted
+     straight through the eyes and thumbnails. The marker's own `z-index: 3` was never the deciding
+     number; its ROW's was, which is why lowering the marker would have done nothing.
+     8, so the sticky column wins against the row rather than against the pin. The heads and the ruler
+     never overlap vertically, so nothing else changes. */
+  position: sticky; left: 0; z-index: 8;
 }
 /* EVERY tint on .track-head must be layered OVER var(--panel), never used as the background on its
    own. The head is `position: sticky; left: 0` — the clips scroll UNDERNEATH it — so a bare
@@ -5649,7 +5656,12 @@ body.fm-pushing #toast { z-index: 213; }
    reads as a notification. Transform-only, so it composites and costs nothing while a decode is
    already occupying the device. */
 #loading-dot {
-  position: fixed; left: 12px; z-index: 62; display: none; align-items: center; gap: 8px;
+  /* BEHIND THE PANELS (queue 393). Ezra: *"Make it so the loading bar goes behind the pop up menus, so
+     it isn't obstructing."* It sat at 62, above the phone inspector sheet (55) and the desktop side panel
+     (58), so a background job's progress pill covered controls you were trying to press.
+     Lowered, not hidden: a loading state you cannot see at all is worse than one partly covered — it is
+     the only thing telling him the app has not frozen, which is exactly what he would report next. */
+  position: fixed; left: 12px; z-index: 50; display: none; align-items: center; gap: 8px;
   bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
   padding: 7px 12px 7px 8px; border-radius: 999px;
   background: rgba(10, 16, 22, .82); border: 1px solid var(--line);

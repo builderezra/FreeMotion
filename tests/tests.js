@@ -28705,4 +28705,38 @@
     }
   });
 
+  /* Queue 348 / 393 — two stacking bugs with the same shape: something unimportant painting over
+   * something you are trying to use.
+   * Both assert the ORDER, not a specific number, so re-tuning a z-index later cannot silently
+   * reintroduce either while the test still passes. */
+  test('the benchmark line stops at the lanes, and the loading pill sits under the panels (queue 348/393)', { item: 'stack-order' }, async function () {
+    var z = function (sel, pseudo) {
+      var el2 = document.querySelector(sel);
+      if (!el2) return null;
+      var v = getComputedStyle(el2, pseudo || null).zIndex;
+      return v === 'auto' ? 0 : parseInt(v, 10);
+    };
+    /* 348 — the pin hangs from #tl-rulerrow, so the ROW's level is what fights the sticky heads. The
+       marker's own z-index never mattered, which is why lowering it would have changed nothing. */
+    var row = z('#tl-rulerrow'), head = z('.track-head');
+    if (row === null || head === null) throw new Error('no timeline ruler row / track head to compare');
+    if (!(head > row)) {
+      throw new Error('the track heads (' + head + ') do not sit above the ruler row (' + row + ') — the ' +
+                      'benchmark line hangs out of that row and will paint over the layer previews');
+    }
+    /* 393 — measured AT PHONE WIDTH, because the panel only gets a z-index inside the phone media query;
+       at desktop it is `auto`, and the first version of this compared 50 against 0 and reported a failure
+       that was purely its own measuring position. That is the same mistake as the anchor test next door,
+       made twice in one session: check where the rule you are testing actually applies. */
+    await atPhoneWidth(async function () {
+      await sleep(80);
+      var pill = z('#loading-dot'), panel = z('#inspector-panel');
+      if (pill === null) throw new Error('no #loading-dot to check');
+      if (panel === null) throw new Error('no #inspector-panel to compare against');
+      if (!(pill < panel)) {
+        throw new Error('the loading pill (' + pill + ') is not below the inspector sheet (' + panel + ') — it will cover the controls');
+      }
+    });
+  });
+
 })();

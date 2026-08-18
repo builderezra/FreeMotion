@@ -7297,7 +7297,7 @@ better still, keep working inside the turn rather than parking work for a later 
       easing to a halt.
 
 
-- [ ] **348 — The benchmark line is drawn OVER the left-hand layer-preview column.** (17 Aug,
+- [x] **348 — The benchmark line is drawn OVER the left-hand layer-preview column.** ✅ **v9.94.** (17 Aug,
       screenshot.) His words, verbatim: *"You shouldn't be able to see the bookmarks over the top of the
       far left layer preview section"*.
       In his shot the yellow benchmark line runs from the ruler all the way down the timeline and
@@ -7308,6 +7308,13 @@ better still, keep working inside the turn rather than parking work for a later 
       BELOW the heads in the stack, or the lane area needs to clip it. Check what the PLAYHEAD does — in
       the same screenshot the white playhead line stops correctly and does not cross the heads, so there
       is already a working answer in this codebase to copy rather than invent.
+      ✅ **DONE v9.94, and the entry's instinct to look at the playhead was right for the wrong reason.**
+      The deciding number was never the marker's own `z-index: 3` — the pin lives inside `#tl-rulerrow`,
+      which carries `z-index: 7`, so its 320px drop-line inherited a stacking level ABOVE the sticky heads
+      at 6. Lowering the marker would have changed nothing at all. The heads go to 8 instead, so the column
+      wins against the ROW rather than against the pin; they never overlap the ruler vertically, so nothing
+      else moves. The test asserts the ORDER, not the numbers, so re-tuning either later cannot quietly
+      reintroduce it.
       ⚠️ Do not fix it by shortening the line to a guessed offset: that is the head-width constant
       problem from 327/334 all over again, and it would come apart the moment the head changes size.
       Whatever the playhead does is the thing to match.
@@ -10195,3 +10202,13 @@ wait for them to report back."*
          device", which is a standing rule for this app and his call alone.
       **Not started.** Option 1 can ship in an afternoon and is worth doing regardless; 2 and 3 are
       different features wearing the same button.
+
+- [x] **393 — The "Loading …" bar sits ON TOP of the pop-up menus.** ✅ **v9.94.** (18 Aug, phone screenshot at v9.93:
+      the "Loading IMG_2596" pill covering the Edit Shape card in the category grid.) His words, verbatim:
+      *"Make it so the loading bar goes behind the pop up menus, so it isn't obstructing."*
+      A progress pill is the least important thing on screen once a panel is open — it reports background
+      work, it is not something you act on — so it should lose the stacking contest, not win it.
+      **Clause:** the loading indicator renders BEHIND the inspector / add / effect panels.
+      ⚠️ Do not simply hide it while a panel is open: he asked for it to go behind, and a loading state you
+      cannot see at all is worse than one partly covered — it is the only thing telling him the app has not
+      frozen. Lower the z-index; do not remove it.
