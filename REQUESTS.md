@@ -6628,7 +6628,7 @@ better still, keep working inside the turn rather than parking work for a later 
       pruned rather than fixed, check with him whether 334 is still worth doing.
 
 
-- [ ] **338 — The two "extend" buttons are still too alike ON MOBILE.** (17 Aug, screenshot with both
+- [x] **338 — The two "extend" buttons are still too alike ON MOBILE.** ✅ **v9.86.** (17 Aug, screenshot with both
       circled in red, v9.31.) His words, verbatim: *"The two extend icons are too similar, you fixed on
       of now fix on mobile"*.
       The shot is the phone inspector: the two full-width buttons directly above the Colouring /
@@ -6639,8 +6639,15 @@ better still, keep working inside the turn rather than parking work for a later 
       pair, so there is already an answer in this codebase to copy — find what desktop does to tell them
       apart and apply the same idea here, rather than inventing a third pair of glyphs. Do not just
       recolour them; at that size the SHAPE has to differ.
-      ⚠️ Verify at 380px in the Studio layout, not just at desktop width — that is the exact mistake the
-      v7.79 note is about, and it is how one of these got fixed on one layout and not the other.
+      ✅ **DONE v9.86.** His "you fixed one of" was exactly right and it made this cheap: queue 235 solved
+      the identical complaint on the floating DESKTOP pair, so that design was copied rather than a third
+      pair of glyphs invented — **fill versus outline**, the strongest cue at this size, with the arrowheads
+      reinforcing it. MOVE is a solid block with a double chevron; EXTEND is an outlined block open at the
+      near edge with a dashed span. Kept byte-identical to the desktop's so the two homes for one action
+      cannot drift into meaning different things.
+      The test asserts **fill-vs-outline and not-identical**, not the path data: pinning `d` attributes would
+      fail the next time either icon is nudged while saying nothing about whether they can be told apart,
+      which is the entire request. Mutation-checked by making them the same drawing again.
 
 
 - [ ] **339 — The layer category cards: same background, a unique GRADIENT border per card, with a

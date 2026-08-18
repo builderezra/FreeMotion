@@ -2098,7 +2098,12 @@ window.FM = window.FM || {};
     function qbtn(title, icon, opts, fn) {
       opts = opts || {};
       const b = el('button', 'qr-btn' + (opts.on ? ' on' : '') + (opts.disabled ? ' disabled' : '') + (opts.cls ? ' ' + opts.cls : ''));
-      b.title = title; b.innerHTML = svgIcon(icon);
+      /* `opts.html` is raw inner-SVG for the few icons that cannot be one stroked path — see the
+         move/extend pair below, whose whole point is that one is FILLED and one is not. */
+      b.title = title;
+      b.innerHTML = opts.html
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + opts.html + '</svg>'
+        : svgIcon(icon);
       if (opts.disabled) b.disabled = true; else b.addEventListener('click', fn);
       return b;
     }
@@ -2125,15 +2130,31 @@ window.FM = window.FM || {};
        * here on desktop by CSS rather than removed, so the phone (whose timeline is too narrow for a
        * floating pair, and whose layout is off-limits) keeps them exactly where they have always
        * been. One home per platform, never two at once. */
-      const mv = qbtn(right ? 'Move clip right to the playhead' : 'Move clip left to the playhead',
-        right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16',
-        {}, () => { if (FM.moveClipTo(layer, FM.time)) after(); });
+      /* THE SAME PAIR THE DESKTOP ALREADY FIXED (queue 338). Ezra: *"The two extend icons are too
+         similar, you fixed on of now fix on mobile"* — and he is right about the history. Queue 235 was
+         this identical complaint about the floating DESKTOP pair (*"at first glance, I cannot tell a
+         fucking difference"*), it was solved there, and the phone copy was left on the old drawings. The
+         two differed only in whether the box was closed or open at one end: about four pixels of ink at
+         this size, on two buttons that sit side by side.
+         So the desktop's answer is copied rather than a third pair of glyphs invented — FILL versus
+         OUTLINE, the strongest cue available this small, with the arrowheads reinforcing it:
+           MOVE   solid block + DOUBLE chevron — the whole clip picks up and travels to the line.
+           EXTEND outlined block open at the near edge + a DASHED span + one arrow — that edge is pulled
+                  out to the line, and the dashes are the new material.
+         Kept identical to js/timeline.js:3025 so the two homes for one action cannot drift apart. */
+      const mv = qbtn(right ? 'Move clip right to the playhead' : 'Move clip left to the playhead', '',
+        { html: right
+          ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
+          : '<path d="M12 8.5h8.5v7H12z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
+        () => { if (FM.moveClipTo(layer, FM.time)) after(); });
       mv.classList.add('qr-nudge');
       row.appendChild(mv);
       // open-ended box = that edge stretches; closed box above = the whole clip travels
-      const ex = qbtn(right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead',
-        right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16',
-        {}, () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); });
+      const ex = qbtn(right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead', '',
+        { html: right
+          ? '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
+          : '<path d="M12 8.5h8.5v7H12"/><path d="M11.5 12h-6" stroke-dasharray="2 2"/><path d="M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
+        () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); });
       ex.classList.add('qr-nudge');
       row.appendChild(ex);
     } else {

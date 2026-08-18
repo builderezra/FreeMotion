@@ -28507,4 +28507,35 @@
     }
   });
 
+  /* Queue 338 — *"The two extend icons are too similar, you fixed on of now fix on mobile"*.
+   * The pair is Move-clip-to-playhead and Extend-edge-to-playhead, side by side in the phone inspector.
+   * They used to be the same drawing except that one box was closed and the other open at one end —
+   * four pixels of ink at this size. Queue 235 fixed the identical complaint on the DESKTOP pair; the
+   * phone copy was left behind, which is what he is pointing at.
+   * The assertion is FILL, not path strings. Pinning the exact `d` attributes would fail the next time
+   * either icon is nudged while saying nothing about whether they can be told apart — and "can you tell
+   * them apart" is the entire request. Fill-vs-outline is the cue that carries at 15px, so that is what
+   * is checked, plus a plain not-identical guard so a copy-paste slip cannot pass. */
+  test('the phone move/extend buttons are not the same drawing (queue 338)', { item: 'extend-icons' }, async function () {
+    await atPhoneWidth(async function () {
+      var L = FM.scene.layers[0];
+      if (!L) throw new Error('no layer to work from');
+      L.start = 0; L.duration = 2;
+      FM.selectLayer(L.id);
+      FM.setTime(L.start + L.duration + 1);        // playhead PAST the clip → the move/extend pair renders
+      FM.inspector.openCategory('home'); FM.refreshAll();
+      await sleep(200);
+      var btns = [].slice.call(document.querySelectorAll('#inspector .qr-nudge'));
+      if (btns.length < 2) throw new Error('the move/extend pair is not on screen (' + btns.length + ' found)');
+      var a = btns[0].innerHTML, b = btns[1].innerHTML;
+      if (a === b) throw new Error('the two buttons render the identical icon');
+      var filled = function (h) { return /fill="currentColor"/.test(h); };
+      if (filled(a) === filled(b)) {
+        throw new Error('both icons are ' + (filled(a) ? 'filled' : 'outlined') + ' — at this size the ' +
+                        'fill/outline contrast is what tells them apart, and it is the fix the desktop pair already got');
+      }
+      if (!/stroke-dasharray/.test(a + b)) throw new Error('neither icon shows the dashed span that says "this edge stretches"');
+    });
+  });
+
 })();
