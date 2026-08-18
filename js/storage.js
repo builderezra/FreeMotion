@@ -626,6 +626,35 @@ window.FM = window.FM || {};
     return { keep: false };
   }
   function sanitizeEffects(l) {
+    /* MOTION BLUR (OBJECT): FLAG → EFFECT (queue 335). It used to be `layer.motionBlur`, layer state
+     * rather than a stack entry, which is why it could never go inside a Filter. Every project he has
+     * already made carries the flag, and there is NO scene versioning and no other load-time layer
+     * normalisation in this app — so if nothing converts it, his existing work silently loses its motion
+     * blur. Silently is the operative word: nothing throws, no test goes red, the picture just stops
+     * smearing.
+     * This is the FIRST statement in the function on purpose. Below are two early returns
+     * (`l.effects == null`, and the registry not being loaded), and a layer carrying the flag with no
+     * effects array is the commonest legacy shape there is — hooked underneath them, the migration would
+     * die on exactly the layer it exists for.
+     * It sits here rather than at the call sites because this one function is reached from all three
+     * routes in: project load, import, and history.restore.
+     * UNSHIFT, never push. The dispatch that read this flag is at the BASE of the post-fx recursion, so
+     * the blur has always composited INNERMOST; appending it would put it outermost and quietly change
+     * the picture on every project that has both an effect and the blur.
+     * Cameras are skipped: `cam.motionBlur` is a different feature with its own renderer (camBlurSlices)
+     * and a camera cannot hold an effect at all. */
+    if (l && l.type !== 'camera' && l.motionBlur && typeof l.motionBlur === 'object' && l.motionBlur.enabled) {
+      const mb = l.motionBlur;
+      if (!Array.isArray(l.effects)) l.effects = [];
+      if (!l.effects.some(e => e && e.type === 'objectblur')) {
+        // Both params written explicitly — sanitizeEffects keeps only params that are PRESENT, so an
+        // empty object would render at the kernel's fallbacks and silently reset everyone's settings.
+        const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(1, mb.shutter)) : 0.5;
+        const sa = typeof mb.samples === 'number' && isFinite(mb.samples) ? Math.max(2, Math.min(32, Math.round(mb.samples))) : 8;
+        l.effects.unshift({ type: 'objectblur', enabled: true, params: { shutter: sh, samples: sa } });
+      }
+      delete l.motionBlur;   // converted — leaving it would render the blur twice
+    }
     /* PER-CUE STACKS GO THROUGH THE SAME GATE (queue 151). A caption cue can carry its own effects
      * array now, and it arrives from exactly the same places layer.effects does — an imported project
      * file, an autosave written by an older build, a hand-edited JSON. This function's own note calls

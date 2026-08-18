@@ -482,7 +482,10 @@ window.FM = window.FM || {};
       fadeOut: 0,                 // audio fade-out seconds (ramps volume→0 over the clip's last fadeOut s)
       speed: 1,                   // playback-rate multiplier (0.25 = slow-mo, 2 = fast)
       frameBlend: false,          // cross-dissolve adjacent frames for smooth slow-mo
-      motionBlur: { enabled: false, shutter: 0.5, samples: 8 },   // shutter = fraction of a frame sampled
+      // Motion Blur (Object) is an EFFECT now (queue 335), so nothing is seeded here any more — a dead
+    // key on every layer of every type, including cameras and the synthetic '_flat' group proxy, was
+    // just something for a future reader to mistake for live state. The CAMERA's own motionBlur is a
+    // different feature and is set where cameras are built, not here.
       wiggle: { enabled: false, amp: 12, freq: 2 },               // procedural position jitter (deterministic)
       parent: null,               // layer id this layer inherits transform from (AM parenting)
       parentMode: 'normal',       // 'normal' | 'locked' (stay upright) | 'weighted' (partial rotation)

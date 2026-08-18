@@ -32,7 +32,12 @@ iframe{border:0;display:block;width:900px;height:180px}#out{padding:8px;white-sp
           // A real animation, not a static layer: motion blur declines to do anything when nothing moves,
           // and a fixture that stands still would fingerprint the ordinary draw path under both names.
           L.transform.x = { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 2, v: 260, e: 'linear' }] };
-          if (blur) L.motionBlur = { enabled: true, shutter: 0.9, samples: 12 };
+          // Three ways in, and they must agree: the legacy flag, the same flag put through the real
+          // load-path migration, and the effect written by hand. If the migrated one differs from the
+          // legacy one, his saved projects have changed appearance — which is the whole risk here.
+          if (blur === 'flag') L.motionBlur = { enabled: true, shutter: 0.9, samples: 12 };
+          if (blur === 'migrated') { L.motionBlur = { enabled: true, shutter: 0.9, samples: 12 }; FM.storage._sanitizeLayers([L]); }
+          if (blur === 'effect') L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.9, samples: 12 } }];
           return { project: P, layers: [L] };
         }
         function fingerprint(sc, t) {
@@ -50,15 +55,16 @@ iframe{border:0;display:block;width:900px;height:180px}#out{padding:8px;white-sp
           }
           return { hash: h.toString(36), lit: lit, mean: +(sum / (px.length / 4)).toFixed(3) };
         }
-        var off = scene(false), on = scene(true);
+        var off = scene(false), on = scene('flag'), mig = scene('migrated'), eff = scene('effect');
         lines.push('Motion Blur (Object) — baseline before any migration');
         lines.push('project ' + P.width + 'x' + P.height + '@' + P.fps + ', ball animating x 60→260 over 2s, shutter 0.9, samples 12');
         lines.push('');
-        lines.push('   t     OFF hash/lit/mean                    ON hash/lit/mean');
+        lines.push('   t     OFF hash          legacy flag     migrated        effect');
         [0.25, 0.5, 1.0, 1.5, 1.9].forEach(function (t) {
-          var a = fingerprint(off, t), b = fingerprint(on, t);
-          lines.push('  ' + t.toFixed(2) + '   ' + (a.hash + '/' + a.lit + '/' + a.mean).padEnd(34) + ' ' + (b.hash + '/' + b.lit + '/' + b.mean) +
-                     (a.hash === b.hash ? '   ⚠️ IDENTICAL — the fixture is not exercising the blur' : ''));
+          var a = fingerprint(off, t), b = fingerprint(on, t), c = fingerprint(mig, t), e2 = fingerprint(eff, t);
+          lines.push('  ' + t.toFixed(2) + '   ' + a.hash.padEnd(16) + b.hash.padEnd(16) + c.hash.padEnd(16) + e2.hash +
+                     (a.hash === b.hash ? '   ⚠️ blur did nothing' : '') +
+                     (b.hash === c.hash && c.hash === e2.hash ? '   ✅ all three agree' : '   ❌ THEY DIFFER'));
         });
         lines.push('');
         lines.push('A migration that preserves behaviour must reproduce the ON column exactly.');

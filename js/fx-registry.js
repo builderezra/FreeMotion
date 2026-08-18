@@ -70,6 +70,7 @@ window.FM = window.FM || {};
     // batch 24
     squeeze: 'distort', tiles: 'repeat',
     motionflow: 'blur',   // content-aware motion blur (temporal)
+    objectblur: 'blur',   // the layer's OWN movement, was layer.motionBlur (queue 335)
     copybg: 'stylize',    // copy the backdrop below into this layer
     magnifybg: 'stylize', // …and the same copy through a lens
     fillbehind: 'blur',  // …and the third of the family: fill the frame AROUND the layer with a blurred copy of it

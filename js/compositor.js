@@ -828,6 +828,15 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0.5 },
     ] },
+    /* Motion Blur (Object) — the same pass that was `layer.motionBlur`, now an ordinary stack entry so it
+       can be reordered, keyframed, swiped away and put inside a Filter like everything else (queue 335).
+       Shutter stays 0..1 (a fraction of a frame) to match what the renderer has always clamped to; film
+       talks in degrees and that swap is one multiplication whenever Ezra wants it. */
+    { type: 'objectblur', label: 'Motion Blur (Object)', desc: 'Smears the layer along its OWN movement — position, scale or rotation. It cannot see movement inside the picture; for that use Motion Blur (Footage). It does nothing on a layer that is not moving.',
+      params: [
+      { key: 'shutter', label: 'Shutter', min: 0, max: 1, step: 0.05, def: 0.5 },
+      { key: 'samples', label: 'Samples', min: 2, max: 32, step: 1, def: 8 },
+    ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
     { type: 'softglow', label: 'Soft Glow', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -2009,10 +2018,12 @@ window.FM = window.FM || {};
   const _mbPool = []; let _mbDepth = 0;
   // Returns TRUE when it drew the layer, FALSE when there was nothing to blur and the caller should
   // fall through to the ordinary single draw.
-  function drawMotionBlur(ctx, layer, t, scene) {
+  function drawMotionBlur(ctx, layer, t, scene, mbIn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return true;   // invisible: drawing it again would be pointless, not wrong
-    const mb = layer.motionBlur;
+    // `mbIn` is the effect's params when an `objectblur` drives this; `layer.motionBlur` is the legacy
+    // flag, still read so projects saved before the migration keep working (queue 335).
+    const mb = mbIn || layer.motionBlur;
     // evalProp, not `mb.samples || 8`: a KEYFRAMED shutter/samples is an object, Math.round of which
     // is NaN — the sample loop then ran zero times and the layer silently vanished.
     const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
@@ -2067,7 +2078,11 @@ window.FM = window.FM || {};
       pctx.globalAlpha = 1; pctx.globalCompositeOperation = 'source-over'; pctx.filter = 'none';
       // behaviors/wiggle are KEPT: this plate is rendered in REAL space and the delta cancels them.
       // (drawContentMotionBlur nulls them because it renders in neutral space — opposite situation.)
-      const tmp = Object.assign({}, layer, { motionBlur: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      /* STRIPPED BY TYPE, not just by the legacy flag. `objectblur` is deliberately NOT in POSTFX — it
+         is dispatched at the wrap level like motionflow — so the recursive drawLayer below would reach
+         the same dispatch, find the same effect and call this function again, forever. Nulling
+         `motionBlur` alone was enough while the only route in was the flag; it is not any more. */
+      const tmp = Object.assign({}, layer, { motionBlur: null, effects: (layer.effects || []).filter(e => !e || e.type !== 'objectblur'), blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(pctx, tmp, t, scene);
 
       const AW = Math.max(1, Math.round(PW * ps)), AH = Math.max(1, Math.round(PH * ps));
@@ -2122,7 +2137,14 @@ window.FM = window.FM || {};
     } finally { _mbDepth--; }
     return true;
   }
-  FM.layerHasMotionBlur = function (layer) { return !!(layer && layer.motionBlur && layer.motionBlur.enabled); };
+  // Repointed, not left behind (queue 335): it had ZERO callers, so if it had been left reading the
+  // retired flag it would simply answer `false` forever for whoever added the first caller after this
+  // change — a trap that nothing turns red for.
+  FM.layerHasMotionBlur = function (layer) {
+    if (!layer) return false;
+    if (layer.motionBlur && layer.motionBlur.enabled) return true;   // camera, and any un-migrated layer
+    return (layer.effects || []).some(e => e && e.type === 'objectblur' && e.enabled !== false);
+  };
 
   // The per-pixel post-process effects, and a dispatcher that applies one (the outermost pass).
   // Each draw* renders a clean copy of the layer with THIS effect instance removed (recursing
@@ -9939,7 +9961,10 @@ window.FM = window.FM || {};
     // behaviors: null — this proxy renders in NEUTRAL space and the real composite re-applies the full
     // applyLayerTransform (behaviors included), so keeping them here applied every positional behavior
     // TWICE (same reason wiggle is nulled).
-    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, behaviors: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
+    // …and `objectblur` by TYPE alongside the identity filter on `fx`: today the object blur is dropped
+    // here by `motionBlur: null`, and after the migration that key is empty on a migrated layer, so a
+    // clip carrying BOTH blurs would smear twice on this path only (queue 335).
+    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, behaviors: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx && !(e && e.type === 'objectblur')) });
     drawLayer(actx, proxy, t, scene);
     if (!_mbcB) _mbcB = document.createElement('canvas');
     if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
@@ -10609,6 +10634,17 @@ window.FM = window.FM || {};
     }
     // Motion blur wraps the whole layer (averaged sub-frames). It declines when the layer is not
     // actually moving this frame, and then we simply carry on down the ordinary draw path.
+    /* MOTION BLUR (OBJECT) AS A REAL EFFECT (queue 335). Ezra, twice: *"Motion blur doesn't even act as
+       an effect and is pretty poorly designed"* and *"Motion blur is still fucked and doesn't work as a
+       filter"*. It was layer state — a flag, not a stack entry — which is exactly why it could not go
+       inside a Filter: a filter is a container of EFFECTS.
+       Dispatched here rather than from POSTFX because it wraps the whole layer instead of filtering its
+       pixels; `motionflow` is dispatched the same way a few lines up, so this is the file's own existing
+       shape for "an effect that drives the renderer", not a new one.
+       This point is the BASE of the recursion — line ~10609 returns while any post-fx remains — which is
+       why the blur has always composited innermost, and why the migration unshifts it to index 0. */
+    const _ob = (layer.effects || []).filter(e => e && e.type === 'objectblur' && e.enabled !== false)[0];
+    if (scene && _ob && layer.type !== '_flat') { if (drawMotionBlur(ctx, layer, t, scene, _ob.params || {})) return; }
     if (scene && layer.motionBlur && layer.motionBlur.enabled) { if (drawMotionBlur(ctx, layer, t, scene)) return; }
     // A feathered mask needs an offscreen pass (clip() is hard-edged only).
     if (scene && layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0) { drawFeatheredMaskLayer(ctx, layer, t, scene); return; }

@@ -52,7 +52,10 @@ window.FM = window.FM || {};
   // grid, so they are favouritable like everything else; readList has to stop filtering them out.
   // (Declared here, populated after the tile builders exist — see PSEUDO_TILES.) (#62)
   let _into = null;   // the filter container an add is destined for, or null for the layer's own stack
-  const PSEUDO = { _mask: 'Mask', _objblur: 'Motion Blur (Object)' };
+  // `_objblur` LEFT this table at queue 335: Motion Blur (Object) is a real registry effect now, so it
+  // gets an ordinary tile, an ordinary row and a place inside a Filter. Mask is still layer state and
+  // still needs the pseudo machinery, which is why the machinery stays.
+  const PSEUDO = { _mask: 'Mask' };
   /* Own keys only. This one is the sharpest of the family, because the ids it is keyed by come
    * straight out of localStorage ('fm.fx.recents' / 'fm.fx.fav') and PSEUDO_TILES is CALLED, not just
    * tested: a stored id of 'toString' passes knownId, survives readList, and tileForId then invokes
@@ -62,7 +65,12 @@ window.FM = window.FM || {};
    * the sort calls .localeCompare on it. */
   Object.setPrototypeOf(PSEUDO, null);
   function knownId(id) { return !!(PSEUDO[id] || FM.fxRegistry.get(id)); }
-  function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(knownId) : []; } catch (e) { return []; } }
+  /* `_objblur` → `objectblur` (queue 335). Favourites and recents are RAW ids in localStorage and
+     knownId drops anything it does not recognise — with no error and nothing in the suite watching —
+     so without this rename the one user who starred Motion Blur (Object) silently loses it. */
+  const ID_ALIAS = { _objblur: 'objectblur' };
+  Object.setPrototypeOf(ID_ALIAS, null);
+  function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.map(id => ID_ALIAS[id] || id).filter(knownId) : []; } catch (e) { return []; } }
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
@@ -471,10 +479,10 @@ window.FM = window.FM || {};
 
   // Build whatever tile an id names — a registry effect or one of the two pseudo-entries. This is what
   // lets the Favourites page hold a favourited Mask / Motion Blur (Object) instead of dropping it. (#62)
-  const PSEUDO_TILES = { _mask: maskTile, _objblur: objectBlurTile };
+  const PSEUDO_TILES = { _mask: maskTile };
   // What each pseudo tile DOES, keyed the same way its tile is — so the commit path and the grid can
   // never disagree about which entries exist (queue 321).
-  const PSEUDO_ACTION = { _mask: addMaskFromBrowser, _objblur: enableObjectBlur };
+  const PSEUDO_ACTION = { _mask: addMaskFromBrowser };
   Object.setPrototypeOf(PSEUDO_ACTION, null);
   Object.setPrototypeOf(PSEUDO_TILES, null);   // own keys only — see PSEUDO. This table gets CALLED.
   function tileForId(id, onStarChange) {
@@ -909,7 +917,6 @@ window.FM = window.FM || {};
   function favLabel(id) { const r = FM.fxRegistry.get(id); return PSEUDO[id] || (r && r.label) || id; }
   function favCatKey(id) {
     if (id === '_mask') return 'matte';          // the pseudo-entries sort into the categories they lead
-    if (id === '_objblur') return 'blur';
     const r = FM.fxRegistry.get(id); return (r && r.category) || '';
   }
   function favCatLabel(key) {
@@ -1063,7 +1070,6 @@ window.FM = window.FM || {};
     view.appendChild(subTop(cat.label, closeView));
     const grid = el('div', 'fxb-grid');
     if (cat.key === 'matte') grid.appendChild(maskTile());   // Mask leads its home category
-    if (cat.key === 'blur') grid.appendChild(objectBlurTile());   // …and the object blur leads Blur, beside Motion Blur (Footage)
     FM.fxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
     const scroller = el('div', 'fxb-catview-scroll'); scroller.appendChild(grid);
     view.appendChild(scroller);
@@ -1099,7 +1105,6 @@ window.FM = window.FM || {};
     if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
     // …and so is the object blur. Match the words someone would actually type when the clip they
     // MOVED isn't smearing: "motion", "blur", "object", plus its controls.
-    if (/motion|blur|object|smear|shutter|transform/.test(needle)) grid.appendChild(objectBlurTile());
     // Name, id, category, DESCRIPTION and TAGS — so "shutter", "angle" or "smear" find the thing you
     // meant even when the word never appears in its title. (Ezra: "when you search for effects it
     // will also show effects with descriptions matching what you searched".)

@@ -28273,4 +28273,67 @@
     });
   });
 
+  /* Queue 335 — *"Motion blur doesn't even act as an effect and is pretty poorly designed"*, then
+   * *"Motion blur is still fucked and doesn't work as a filter"*. It was `layer.motionBlur`, a flag on
+   * the layer, so it could never sit in a Filter — a Filter is a container of EFFECTS.
+   * The dangerous half of moving it is not the render, it is the projects he has ALREADY made: this app
+   * has no scene versioning and no other load-time layer normalisation, so a migration that misses is
+   * not a crash, it is his motion blur quietly disappearing. Every assertion below is aimed at a way
+   * that could happen silently. */
+  test('a project saved with the old motion-blur flag migrates to the effect, innermost (queue 335)', { item: 'mb-migrate' }, function () {
+    var L = FM.makeLayer('shape', { name: 'B', shape: 'ellipse', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#fff' });
+    L.effects = [{ type: 'contrast', params: { amount: 1.2 } }];
+    L.motionBlur = { enabled: true, shutter: 0.9, samples: 12 };
+    FM.storage._sanitizeLayers([L]);
+
+    var ob = L.effects.filter(function (e) { return e.type === 'objectblur'; })[0];
+    if (!ob) throw new Error('the flag did not become an effect — a saved project just lost its motion blur');
+    /* INDEX 0, not appended. The dispatch that read the flag sits at the BASE of the post-fx recursion,
+       so the blur has always composited INNERMOST. Appending would put it outermost and change the
+       picture on every project that has both an effect and the blur — with nothing to notice. */
+    if (L.effects.indexOf(ob) !== 0) throw new Error('the migrated blur is at index ' + L.effects.indexOf(ob) + ', not 0 — it used to composite innermost, so this silently re-orders the render');
+    if (ob.params.shutter !== 0.9 || ob.params.samples !== 12) {
+      throw new Error('settings were not carried over: ' + JSON.stringify(ob.params) + ' — an empty params object renders at the kernel defaults, which is a silent reset');
+    }
+    if (L.motionBlur) throw new Error('the old flag survived the migration — the blur would render twice');
+    // Idempotent: load, undo, re-import all run this same function over the same layer.
+    FM.storage._sanitizeLayers([L]);
+    if (L.effects.filter(function (e) { return e.type === 'objectblur'; }).length !== 1) {
+      throw new Error('running the migration twice added a second blur');
+    }
+  });
+
+  /* The camera is the trap here. `cam.motionBlur` is a DIFFERENT feature with its own renderer
+   * (camBlurSlices) and its own panel, and a camera cannot hold an effect at all — supportsLayer
+   * refuses every effect on one. So a migration that treats every layer alike silently kills camera
+   * motion blur: the flag stays, nothing reads it, the frame just stops smearing.
+   * The existing camera tests cannot catch this — they build their own `cam` object and never touch the
+   * load path — which is exactly why this one goes through _sanitizeLayers. */
+  test('a camera keeps its own motion blur through the migration (queue 335)', { item: 'mb-camera' }, function () {
+    var cam = FM.makeLayer('camera', { name: 'Camera', x: 100, y: 100 });
+    cam.motionBlur = { enabled: true, shutter: 0.5, samples: 12 };
+    FM.storage._sanitizeLayers([cam]);
+    if (!cam.motionBlur || !cam.motionBlur.enabled) throw new Error('the migration ate the CAMERA blur — it has its own renderer and nothing else reads this');
+    if ((cam.effects || []).some(function (e) { return e && e.type === 'objectblur'; })) {
+      throw new Error('an objectblur was put on a camera, which cannot hold an effect at all');
+    }
+  });
+
+  /* And the thing he actually asked for: it works as a filter. A Filter is a container of effects, and
+     filter eligibility is supportsLayer AND-ed over the children — so this is the assertion that his
+     words "doesn't work as a filter" map onto. */
+  test('Motion Blur (Object) is a real effect and can go inside a Filter (queue 335)', { item: 'mb-filter' }, function () {
+    var reg = FM.fxRegistry.get('objectblur');
+    if (!reg) throw new Error('objectblur is not in the registry — it is still layer state');
+    if ((reg.category || '') !== 'blur') throw new Error('it landed in category "' + reg.category + '" instead of blur');
+    var keys = (reg.params || []).map(function (p) { return p.key; });
+    if (keys.indexOf('shutter') < 0 || keys.indexOf('samples') < 0) throw new Error('missing its params: ' + JSON.stringify(keys));
+
+    var L = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#fff' });
+    if (!FM.fxRegistry.supportsLayer('objectblur', L)) throw new Error('a shape layer will not accept it');
+    var box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+    box.effects = [FM.fxRegistry.makeInstance('objectblur')];
+    if (!FM.fxRegistry.supportsFilter(box, L)) throw new Error('a Filter holding only Motion Blur (Object) is still refused — which is the exact complaint');
+  });
+
 })();

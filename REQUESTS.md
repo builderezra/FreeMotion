@@ -9797,3 +9797,22 @@ wait for them to report back."*
       and it is the kind that only shows up later, on the second thing you delete.
       Also decide the name: projects duplicate as "X copy" or similar — match whatever that does rather
       than inventing a second convention.
+
+- [ ] **375 — The Template icon is Alight Motion's, just recoloured. Make it our own.** (18 Aug.) His
+      words, verbatim: *"Template icon needs to be a little bit different as it's identical to alight
+      motions just with colour, should be a simple task just make it look good"*.
+      **The icon:** the Template tab in the ADD sheet — the small window/layout glyph beside Elements,
+      Shape, Media, Audio (visible in the #358 screenshots).
+      ⚠️ **THIS IS THE FIRST ITEM WHERE HE HAS NAMED THE ALIGHT MOTION RESEMBLANCE HIMSELF**, which is
+      what [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) exists for. That note says the UI was modelled on
+      AM deliberately, as the fast way to build, and must be made visually our own before anything is
+      published. He is not asking for the whole identity pass here — he is asking for one icon — so this
+      entry is that one icon, and the standing note is not being quietly widened into it.
+      **But it should be logged there as it lands**, which is what BEFORE-PUBLISHING.md asks for, and it
+      is worth him knowing the same question applies to the other icons in that row.
+      **Clauses:**
+      1. [ ] Redraw the Template icon so it is not AM's shape.
+      2. [ ] *"Just make it look good"* — same standard as #367: check it at a large size AND at its real
+             size, and against the four icons it sits beside, not alone. A tab icon that is handsome in
+             isolation and wrong next to its neighbours is the #313 mistake.
+      ⚠️ Same 24×24 grid and stroke weight as its siblings, or it reads as a different set.

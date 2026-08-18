@@ -4489,7 +4489,9 @@ window.FM = window.FM || {};
       } else {
         // Motion Blur (Object) sits with the effects because that is where people look for it, and
         // because it reads as one: added from the browser, removed with an ×.
-        const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
+        // The Motion Blur (Object) block is GONE (queue 335) — it is an ordinary effect row now, which
+        // is the whole point of that change. Leaving this would also re-create `layer.motionBlur` on
+        // any layer whose card was opened, re-arming the legacy path the migration just retired.
         const s = effectsSection(layer);
         const h4 = s.querySelector('h4'); if (h4) h4.remove();
         body.appendChild(s);
