@@ -27925,4 +27925,54 @@
     }
   });
 
+  /* Queue 330 — *"Also when you save a preset you have to exit and go back into the menu, make it auto
+   * update the menu"*.
+   * Four things change the two preset lists (two save buttons, two ✕) and each had to remember to
+   * refresh the panel. Three did. The fourth, "Save look + animations…", runs through
+   * FM.savePresetPrompt in app.js, which knows nothing about the inspector — so the one path that
+   * could not see the panel was the one that left it stale.
+   * The test goes through the STORE rather than the button, deliberately: the button opens a native
+   * prompt() that cannot be driven headless, and the store is where the fix lives now. It asserts the
+   * property that was missing — the list changed and the open panel shows it — WITHOUT anything
+   * calling refresh() by hand, which is the whole complaint. Both lists are covered, because a fix in
+   * one store says nothing about the other. */
+  test('saving a preset updates the open Presets card by itself (queue 330)', { item: 'preset-live' }, async function () {
+    var L = FM.scene.layers[0];
+    if (!L) throw new Error('no layer to work from');
+    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    var NAME_L = '__qa layer preset', NAME_F = '__qa fx preset';
+    FM.selectLayer(L.id);
+    FM.inspector.openCategory('presets');
+    await sleep(120);
+    var rows = function () {
+      return [].slice.call(document.querySelectorAll('#inspector .insp-preset-row'))
+               .map(function (r) { return r.textContent || ''; }).join(' | ');
+    };
+    if (rows().indexOf(NAME_L) >= 0 || rows().indexOf(NAME_F) >= 0) throw new Error('test names already present — stale state');
+    try {
+      // No refresh() here on purpose. If the panel does not update on its own, that IS the defect.
+      FM.layerPresets.save(NAME_L, L);
+      await sleep(120);
+      if (rows().indexOf(NAME_L) < 0) {
+        throw new Error('saved a layer preset and the open Presets card still does not list it — ' +
+                        'you would have to close the card and reopen it');
+      }
+      FM.fxPresets.save(NAME_F, L.effects || []);
+      await sleep(120);
+      if (rows().indexOf(NAME_F) < 0) {
+        throw new Error('saved an effects preset and the open Presets card still does not list it');
+      }
+      // …and removing one must take it off screen by the same route, since deletes share the write.
+      FM.layerPresets.remove(NAME_L);
+      await sleep(120);
+      if (rows().indexOf(NAME_L) >= 0) throw new Error('removed a preset and its row is still on screen');
+    } finally {
+      FM.layerPresets.remove(NAME_L);
+      FM.fxPresets.remove(NAME_F);
+      if (id0) FM.selectLayer(id0);
+      FM.inspector.openCategory('home');
+      await sleep(80);
+    }
+  });
+
 })();

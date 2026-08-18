@@ -199,12 +199,25 @@ window.FM = window.FM || {};
   // menu remove the effects in there, like dreamy and shit"). They existed to showcase the effects
   // back when there were a few dozen; with 177 of them and a browser that groups and searches, four
   // fixed looks were just clutter you could not delete sitting on top of the presets you made.
+  /* THE PRESET LIST CHANGED, SO THE PANEL SHOWING IT MUST RE-READ IT (queue 330). Ezra: *"Also when
+   * you save a preset you have to exit and go back into the menu, make it auto update the menu"*.
+   * The two save buttons and the two ✕ buttons were four separate places that each had to remember to
+   * call refresh(), and three of them did — the fourth, "Save look + animations…", goes through
+   * FM.savePresetPrompt over in app.js, which has no idea the inspector exists. So exactly the path
+   * that could not see the panel was the path that did not refresh it.
+   * Adding the call there too would fix today and leave the same trap set for the next path. Instead
+   * the rule lives at the ONE point every change to either list passes through — the write — so
+   * refreshing is a consequence of the list having changed rather than something a caller remembers. */
+  function presetsChanged() {
+    if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+  }
+
   FM.fxPresets = {
     _key: 'fm.fxpresets',
     builtins: [],
     saved() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
     list() { return this.builtins.concat(this.saved()); },
-    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { } },
+    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { return; } presetsChanged(); },
     save(name, effects) { if (!name) return; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [], FM.jsonReplacer)) }); this._write(arr); },   // jsonReplacer strips _expanded etc. from presets
     get(name) { return this.list().find(p => p.name === name); },
     remove(name) { this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
@@ -330,7 +343,7 @@ window.FM = window.FM || {};
   FM.layerPresets = {
     _key: 'fm.layerpresets',
     list() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
-    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); } },
+    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); return; } presetsChanged(); },
     save(name, layer) {
       if (!name || !layer) return;
       const tr = layer.transform || {};
@@ -1413,7 +1426,7 @@ window.FM = window.FM || {};
       }
     });
     const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
-    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
+    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
     tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);
     s.appendChild(tools);
     return s;
@@ -4197,7 +4210,7 @@ window.FM = window.FM || {};
           sub: 'Look + animations',
           applyTo: doc => FM.layerPresets.applyTo(p.data, doc),
           onTap: () => { FM.layerPresets.apply(p.name, layer); if (FM.toast) FM.toast('Applied “' + p.name + '”'); },
-          onDelete: () => { FM.layerPresets.remove(p.name); FM.inspector.refresh(); }
+          onDelete: () => { FM.layerPresets.remove(p.name); }   // the store refreshes — see presetsChanged
         }));
       });
       /* THE LABELS SAY WHAT EACH ONE KEEPS (queue 329). Ezra: *"what is the difference between pressing
@@ -4240,7 +4253,7 @@ window.FM = window.FM || {};
           pwrap.appendChild(presetRow({
             name: p.name, cls: ' broken', title: t0, sub: '⚠ ' + why,
             onTap: () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); },
-            onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); })
+            onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); })
           }));
           return;
         }
@@ -4263,7 +4276,7 @@ window.FM = window.FM || {};
             FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit();
             if (FM.toast) FM.toast('Applied “' + p.name + '”' + (skipped ? ' (' + skipped + ' effect' + (skipped === 1 ? '' : 's') + ' skipped — not in this build)' : ''));
           },
-          onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); })
+          onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); })
         }));
       });
       // Say WHY there are no pictures rather than leaving a column of bare names looking half-built.

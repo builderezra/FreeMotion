@@ -26,7 +26,11 @@
         var L = FM.makeLayer('shape', { name: 'Layer 1', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
         L.start = 0; L.duration = 4; FM.scene.layers.push(L);
         FM.selectLayer(L.id); FM.refreshAll();
-        FM.inspector.openFxTab('filters');
+        // ?cat=<key> opens an ordinary inspector card instead, so one probe serves any panel that
+        // needs looking at on the phone rather than a new file per card.
+        var cat = q.get('cat');
+        if (cat) FM.inspector.openCategory(cat); else FM.inspector.openFxTab('filters');
+        if (cat === 'presets') { FM.layerPresets.save('Sunset look', FM.scene.layers[0]); }
       } catch (e) {}
       // Tiles generate on a queue, one per frame — give the whole grid time to land before the shot.
       setTimeout(function () { window.__done = true; }, 3500);

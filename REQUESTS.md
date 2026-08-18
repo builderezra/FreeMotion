@@ -6209,13 +6209,27 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Related: **queue 37 already plans to replace both preset systems with one namespace + a
       migration.** If that lands first this entry becomes part of it rather than a separate rename.
 
-- [ ] **330 — Saving a preset does not refresh the Presets menu.** (17 Aug.) His words, verbatim:
+- [x] **330 — Saving a preset does not refresh the Presets menu.** ✅ **v9.77.** (17 Aug.) His words, verbatim:
       *"Also when you save a preset you have to exit and go back into the menu, make it auto update the
       menu"*. Straightforward: the save handlers write to localStorage and toast, but nothing rebuilds
       the panel, so the new row only appears after the card is closed and reopened. Both buttons need it
       (the "Save this layer as preset…" path goes through `FM.savePresetPrompt`, which is in app.js and
       does not know about the inspector). Worth checking the same gap does not exist on DELETE — those
       handlers do call `FM.inspector.refresh()`.
+
+      **Both checks came back exactly as this entry guessed.** DELETE was fine — both ✕ handlers
+      refreshed — and so did "Save effects only…". The single path that did not was
+      `FM.savePresetPrompt`, and the reason is worth keeping: it lives in app.js, where the inspector is
+      not in scope, so **the one path that could not see the panel was the one that did not refresh it.**
+      That is not an oversight anyone would catch by reading the save handlers; it is a consequence of
+      where the function sits.
+      **So the call did not go there.** Four places could change these lists and each had to remember —
+      which is the shape of thing that goes wrong again the moment a fifth appears. The refresh moved to
+      the one point every change to either list already passes through, `_write`, and the three redundant
+      hand-written refreshes were removed. Refreshing is now a consequence of the list having changed.
+      Tested through the store rather than the button (the button opens a native `prompt()`, which cannot
+      be driven headless): with the card open, a save must put the row on screen with nothing calling
+      refresh by hand — both lists, plus a remove. Mutation-checked, and confirmed by eye at 380px.
 
 
 - [ ] **331 — Organise the Presets card: tags, rename, search, and tidy the top of it.** (17 Aug,
