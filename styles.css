@@ -731,6 +731,49 @@ body.text-editing .sb-wrap { display: none !important; }
 
 .cat-card { flex: 0 0 calc((100% - (var(--cat-cols) - 1) * var(--cat-gap)) / var(--cat-cols)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 17px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; transition: background .12s, border-color .12s, transform .04s; }
 .cat-card { position: relative; }
+/* GRADIENT BORDER PER CARD, WITH A SHINE THAT MOVES (queue 339). Ezra: "the line around it is a unique
+   colour that matches the colours in the icon, using gradients, make it shine and have a bit of glow that
+   subtly moves around so it doesn't look stale and make sure each one is doing its own thing".
+   The ring is a masked ::before rather than a border-image: border-image cannot follow border-radius, and
+   these cards are rounded, so it would have squared off the corners.
+   The shine is a background-position sweep over an over-wide gradient — NOT a rotation. Rotating the ring
+   would rotate a rounded rectangle and break its shape, and animating a conic gradient's angle needs
+   @property, which is newer than it needs to be for a decoration. A sweep is cheap, composited, and
+   degrades to a static gradient if the animation never runs.
+   The card's BACKGROUND is untouched, which was his first clause. */
+.cat-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(115deg,
+    var(--c1, #2fd0b5), var(--c2, #4FC3FF), var(--c3, #9B5CFF),
+    var(--c2, #4FC3FF), var(--c1, #2fd0b5));
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: .85;
+  animation: cat-shine var(--shine-dur, 9s) linear var(--shine-delay, 0s) infinite;
+}
+/* THE GLOW IS ON THE CARD, NOT ON ::after — ::after IS ALREADY TAKEN. Queue 286 lights the card edges
+   from the cursor and owns that pseudo-element; its test asserts the ring reads opacity 0 until the
+   pointer approaches. A second ::after here silently overwrote that feature, and the only thing that
+   noticed was 286's own test. Worth remembering: a pseudo-element is a single slot, and "add a glow"
+   twice on one element is a collision, not a layering.
+   So the breathing glow rides the card's own box-shadow, on a period deliberately unrelated to the sweep
+   (×1.6) so the two never settle into one rhythm. */
+.cat-card { animation: cat-glow calc(var(--shine-dur, 9s) * 1.6) ease-in-out var(--shine-delay, 0s) infinite; }
+@keyframes cat-shine { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+@keyframes cat-glow {
+  0%, 100% { box-shadow: 0 0 6px -3px var(--c2, #4FC3FF); }
+  50%      { box-shadow: 0 0 13px -2px var(--c2, #4FC3FF); }
+}
+/* The border itself steps out of the way — two rings would read as a double outline. */
+.cat-card { border-color: transparent; }
+.cat-card:hover { border-color: transparent; }
+.cat-card:hover::before { opacity: 1; }
+.cat-card-disabled::before { animation: none; opacity: .25; }
+.cat-card-disabled { animation: none; box-shadow: none; }
+/* Nothing moves for anyone who has asked the OS for less motion; the gradient stays. */
+@media (prefers-reduced-motion: reduce) { .cat-card, .cat-card::before { animation: none; } }
 .cat-num { position: absolute; top: 5px; left: 7px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-faint); font-variant-numeric: tabular-nums; opacity: .8; }
 .cat-card:hover .cat-num { color: var(--accent); }
 .cat-card:hover { background: var(--panel-3); border-color: var(--accent); }

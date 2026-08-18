@@ -28538,4 +28538,63 @@
     });
   });
 
+  /* Queue 339 — *"make it so each buttons background is the same but the line around it is a unique colour
+   * that matches the colours in the icon, using gradients, make it shine and have a bit of glow that subtly
+   * moves around so it doesn't look stale and make sure each one is doing its own thing so it doesn't look
+   * like they're all moving in the same pattern"*.
+   * Four of his five clauses are checkable without judging how pretty it is, and clause 5 is the one most
+   * likely to rot — a later refactor that drops the per-card phase would leave the grid pulsing in unison
+   * and nothing else would notice. */
+  test('every category card has its own gradient ring, out of step with the others (queue 339)', { item: 'cat-rings' }, async function () {
+    await atPhoneWidth(async function () {
+      var L = FM.scene.layers[0];
+      if (!L) throw new Error('no layer to work from');
+      FM.selectLayer(L.id); FM.inspector.openCategory('home'); FM.refreshAll();
+      await sleep(200);
+      var cards = [].slice.call(document.querySelectorAll('#inspector .cat-card'));
+      if (cards.length < 6) throw new Error('only ' + cards.length + ' category cards on screen');
+
+      var bgs = {}, hues = {}, delays = {}, durs = {};
+      // A DISABLED card is meant to sit still (Volume on a silent layer), so its phase is not a phase and
+      // comparing it to the others reports a clash that is actually correct behaviour.
+      cards = cards.filter(function (c) { return !c.classList.contains('cat-card-disabled'); });
+      if (cards.length < 5) throw new Error('too few live cards to judge phase: ' + cards.length);
+      cards.forEach(function (c) {
+        var cs = getComputedStyle(c);
+        bgs[cs.backgroundColor] = 1;
+        var h = [c.style.getPropertyValue('--c1'), c.style.getPropertyValue('--c2'), c.style.getPropertyValue('--c3')].join(',');
+        hues[h] = (hues[h] || 0) + 1;
+        var b = getComputedStyle(c, '::before');
+        delays[b.animationDelay] = (delays[b.animationDelay] || 0) + 1;
+        durs[b.animationDuration] = 1;
+      });
+
+      // 1 — same background on every card. The change was meant to be the border, not the fill.
+      if (Object.keys(bgs).length !== 1) throw new Error('the cards no longer share one background: ' + Object.keys(bgs).join(' | '));
+
+      // 2 — a ring, and it is a GRADIENT rather than a flat colour.
+      var ring = getComputedStyle(cards[0], '::before');
+      if (!/gradient/.test(ring.backgroundImage)) throw new Error('the card ring is not a gradient: ' + ring.backgroundImage);
+      /* Read the mask through the properties the engine actually reports. The first version concatenated
+         four names and tested for the word "mask" IN THE VALUE — but the values are things like
+         "exclude" and "linear-gradient(...)", which never contain it, so this failed on correct code.
+         A composite of exclude/xor is the thing that makes this a RING rather than a filled overlay. */
+      var mk = (ring.webkitMaskComposite || '') + ' ' + (ring.maskComposite || '');
+      if (!/exclude|xor/.test(mk)) {
+        throw new Error('the ring is not masked to a ring (mask-composite "' + mk.trim() + '") — it would cover the card rather than outline it');
+      }
+
+      // 3 — the colours differ per card. Two cards sharing a triple means the palette is not per-icon.
+      var dupHue = Object.keys(hues).filter(function (k) { return hues[k] > 1 && k !== ',,'; });
+      if (dupHue.length) throw new Error('cards share a border palette, so it is not taken from their own icon: ' + dupHue[0]);
+
+      /* 4 — out of step. Delay is asserted rather than duration because a NEGATIVE delay is what puts each
+         card at a different point of its cycle from the first frame; equal durations with equal delays is
+         exactly the synchronised grid he ruled out, and it looks fine in a still screenshot. */
+      var dupDelay = Object.keys(delays).filter(function (k) { return delays[k] > 1; });
+      if (dupDelay.length) throw new Error(delays[dupDelay[0]] + ' cards share the animation delay ' + dupDelay[0] + ' — they will move in lockstep');
+      if (Object.keys(durs).length < 2) throw new Error('every card animates at the same speed, so they read as one pattern');
+    });
+  });
+
 })();

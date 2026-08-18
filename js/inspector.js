@@ -1845,6 +1845,33 @@ window.FM = window.FM || {};
 
   /* Which coloured glyph a category shows, given the layer it is describing. Returns raw inner SVG
    * for icoMulti, or null to fall back to the old single-path currentColor icon. */
+  /* THE BORDER COLOURS ARE THE ICON'S OWN (queue 339). Ezra: *"make it so each buttons background is the
+   * same but the line around it is a unique colour that matches the colours in the icon, using gradients"*.
+   * These are LIFTED from the gradient stops a few lines up, not picked to look nice beside them — that is
+   * the whole request, and a hand-matched approximation is the version that drifts the first time an icon
+   * is retouched. Where a card has no gradient icon (Blending is two flat circles, Captions and the rest
+   * fall back to a stroked glyph) the pair is taken from the flat fills instead, same principle.
+   * The fallback is the app's accent, so a category added later gets a working border rather than none. */
+  const CAT_HUES = {
+    color:     ['#9B5CFF', '#E255D8', '#FF6FB5'],
+    border:    ['#6FE3FF', '#4F9DFF', '#7C6BFF'],
+    blend:     ['#3FA9FF', '#A05FD0', '#FF4FA3'],   // the two circles, plus where they overlap
+    transform: ['#3FE0C8', '#4FA8FF', '#A96BFF'],
+    // RED-DOMINANT, with the green only in one corner (his note on the v9.87 screenshot): *"the speeds
+    // outer line should be mainly red as it looks too similar to the presets one, so like red mainly
+    // with a bit of green in the corner"*. Taking Speed's three stops straight from its dial ran
+    // green→amber→orange, which sat right next to Presets' amber→yellow and read as the same ring.
+    speed:     ['#5BE7B8', '#FF3B30', '#C2261F'],
+    volume:    ['#49E39B', '#3FD8D8', '#4FC3FF'],
+    element:   ['#8CE86B', '#3FD8B0', '#4FC3FF'],
+    presets:   ['#FFB03A', '#FFD84D', '#FFF0A6'],
+    effects:   ['#FF4FA3', '#FFE14D', '#4FC3FF'],
+    captions:  ['#7CC6FF', '#4F9DFF', '#9B8CFF'],
+    editgroup: ['#8CE86B', '#3FD8B0', '#4FC3FF'],
+    cameraopts:['#6FE3FF', '#4F9DFF', '#7C6BFF'],
+  };
+  Object.setPrototypeOf(CAT_HUES, null);
+
   function catIco(key, layer) {
     if (key === 'color') return ICO_COLOR;
     if (key === 'border') return ICO_BORDER;
@@ -2475,6 +2502,23 @@ window.FM = window.FM || {};
       // re-time a source clock; see viewAllowed.)
       if (volDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
+      /* EACH CARD OUT OF STEP WITH THE OTHERS (queue 339 clause 5). Ezra: *"make sure each one is doing
+         its own thing so it doesn't look like they're all moving in the same pattern"*.
+         Two knobs, and BOTH are needed. A different duration alone still lets two cards drift into step
+         and sit there; a different delay alone leaves them all at the same speed, which reads as one
+         pattern however offset. The delay is NEGATIVE so every card starts already part-way through its
+         cycle — with a positive delay they would all begin at the same frame and only separate later,
+         which is precisely the "they all move together" he is describing.
+         The multipliers are irrational-ish on purpose (1.37s, 2.9s) so the phases do not re-align on any
+         short loop. */
+      const hue = CAT_HUES[cat.key] || ['#2fd0b5', '#4FC3FF', '#9B5CFF'];
+      card.style.setProperty('--c1', hue[0]);
+      card.style.setProperty('--c2', hue[1]);
+      card.style.setProperty('--c3', hue[2]);
+      card.style.setProperty('--shine-dur', (7.4 + i * 1.37).toFixed(2) + 's');
+      // (1 + i), not i: at i=0 the delay is 0s, which is also what a card with `animation: none` reports,
+      // so the first card and any disabled one looked identical to anything comparing phases.
+      card.style.setProperty('--shine-delay', '-' + ((1 + i) * 2.9).toFixed(2) + 's');
       const gico = catIco(cat.key, layer);
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') +
         '<span class="cat-ico">' + (gico ? icoMulti(gico) : svgIcon(cat.icon)) + '</span>' +

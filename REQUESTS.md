@@ -6650,22 +6650,22 @@ better still, keep working inside the turn rather than parking work for a later 
       which is the entire request. Mutation-checked by making them the same drawing again.
 
 
-- [ ] **339 — The layer category cards: same background, a unique GRADIENT border per card, with a
+- [x] **339 — ✅ v9.87. The layer category cards: same background, a unique GRADIENT border per card, with a
       subtle moving glow — each one out of step with the others.** (17 Aug, screenshot of the phone
       inspector's 3x3 category grid, v9.31.) His words, verbatim:
 
       > In this layer menu, make it so each buttons background is the same but the line around it is a unique colour that matches the colours in the icon, using gradients, make it shine and have a bit of glow that subtly moves around so it doesn’t look stale and make sure each one is doing its own thing so it doesn’t look like they’re all moving in the same pattern
 
       **Clauses:**
-      1. [ ] Every card keeps the **same background** — the change is the border, not the fill.
-      2. [ ] Each card's **border is a gradient**, in colours **taken from that card's own icon**
+      1. [x] ✅ **v9.87** — Every card keeps the **same background** — the change is the border, not the fill.
+      2. [x] ✅ **v9.87** — Each card's **border is a gradient**, in colours **taken from that card's own icon**
              (Colouring = the pink/magenta droplet, Border/Shadow = the blue square, Blending = the
              pink/blue circles, Position/Scale = the blue arrows, Speed = the red/amber/green dial,
              Volume = the green speaker, Edit Shape = the green diamond, Presets = the yellow star,
              Effects = the multicoloured burst).
-      3. [ ] It should **shine** — the gradient reads as lit, not flat.
-      4. [ ] A **subtle moving glow**, so it does not look stale.
-      5. [ ] **Each card animates independently** — no two in the same phase, or the grid reads as one
+      3. [x] ✅ **v9.87** — It should **shine** — the gradient reads as lit, not flat.
+      4. [x] ✅ **v9.87** — A **subtle moving glow**, so it does not look stale.
+      5. [x] ✅ **v9.87** — **Each card animates independently** — no two in the same phase, or the grid reads as one
              synchronised pattern, which is exactly what he is ruling out.
 
       Before building: this is nine cards animating continuously on the phone screen he has just spent
@@ -10081,3 +10081,20 @@ wait for them to report back."*
       and previewing an effect you cannot see is its own bug. Check why it was added before removing it; if
       the reason was "you can't see the layer", the answer may be showing everything AND marking the layer,
       rather than swapping one problem for the other.
+
+
+      ✅ **ALL FIVE CLAUSES — v9.87.** The palettes are **lifted from each icon's own gradient stops**, not
+      matched by eye — that was the request, and a hand-picked approximation is the version that drifts the
+      first time an icon is retouched. **Except Speed**, on his direct note against the screenshot: *"the
+      speeds outer line should be mainly red as it looks too similar to the presets one, so like red mainly
+      with a bit of green in the corner"* — its real dial runs green→amber→orange, which sat beside Presets'
+      amber→yellow and read as the same ring, so it is red-dominant with the green kept in one corner.
+      **Two collisions found while building, both worth recording:**
+      · `.cat-card::after` was **already taken** by queue 286 (the cursor-lit card edges), and putting a glow
+        there silently overwrote that feature. Only 286's own test noticed. A pseudo-element is one slot —
+        "add a glow" twice on one element is a collision, not a layering — so the glow moved onto the card's
+        box-shadow, on a period unrelated to the sweep so the two never settle into one rhythm.
+      · The first card's delay was `0s`, which is also what a card with `animation: none` reports — so the
+        first card and the disabled Volume card were indistinguishable to anything comparing phases. Delays
+        start at a non-zero offset now, and the test skips disabled cards, which genuinely should not move.
+      Mutation-checked by removing the per-card phase: the grid goes into lockstep and the test fails.
