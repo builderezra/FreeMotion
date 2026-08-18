@@ -870,6 +870,11 @@ window.FM = window.FM || {};
   FM._tileTints = function () { return Object.keys(BY_LABEL); };
 
   FM.addMenu = {
+    /* Exposed for the suite (queue 340). The Elements browser's empty state tells you how to MAKE an
+       element, and for a long time it named a route through this menu that had been deleted — so the
+       one instruction in the room pointed at a door that is not there. A test can only catch that if it
+       can read what is actually in the menu, rather than being told. */
+    _tabs: function () { return TABS; },
     // container: where to render. opts: { variant: 'panel' | 'sheet', onAfterAdd, onClose }
     render: function (container, opts) {
       opts = opts || {};

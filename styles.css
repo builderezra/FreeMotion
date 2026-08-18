@@ -4624,6 +4624,42 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 /* Elements browser (v4.81) — reuses the effect browser's chrome; only the real element thumbnail
    needs anything of its own. */
 #el-browser .elb-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+/* ---- the Elements browser, made worth opening (queue 340 clause 2) --------------------------------
+   Ezra: "when you press the add element button the menu is not thought and looks lazy and shit, make
+   it good." Three things were wrong and all three were visible in one 380px screenshot: the search
+   field stopped half way across (fixed in js/elements-browser.js — it was in an unstyled wrapper, so
+   an <input>'s intrinsic width won), the tiles inherited the effect browser's FOUR columns, and the
+   empty state was one line of italic grey text at the top of a black screen.
+   FOUR COLUMNS IS RIGHT FOR AN EFFECT AND WRONG HERE. An effect tile is a glyph and reads at any size;
+   an element tile is a PHOTOGRAPH of a composition you made. At 380px four columns gave each one 78px.
+   auto-fill from a 108px floor is 3 across a phone and 5 in the 680px desktop panel, and it needs no
+   breakpoint to say so. */
+#el-browser .fxb-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+/* Six gradients walked by index for elements that have no thumbnail yet. Drawn from the same ring the
+   effect browser's categories use, so a wall of them belongs to this app rather than looking random,
+   and far enough apart in hue that neighbours never blur into one field. */
+#el-browser .fxb-thumb[data-h="0"] { background: linear-gradient(135deg, #3a7bd5, #00d2ff); }
+#el-browser .fxb-thumb[data-h="1"] { background: linear-gradient(135deg, #ff8cf0, #8c6aff); }
+#el-browser .fxb-thumb[data-h="2"] { background: linear-gradient(135deg, #29d9bb, #1a8f6e); }
+#el-browser .fxb-thumb[data-h="3"] { background: linear-gradient(135deg, #ffd666, #ff8442); }
+#el-browser .fxb-thumb[data-h="4"] { background: linear-gradient(135deg, #ff5e9e, #ff945e); }
+#el-browser .fxb-thumb[data-h="5"] { background: linear-gradient(135deg, #6a8dff, #b18cff); }
+/* The empty state is a page, not a caption — so it opts out of .fxb-empty's italic 12px grey. */
+#el-browser .fxb-empty { font-style: normal; font-size: inherit; color: inherit; padding: 0; }
+.elb-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 34px 22px 22px; }
+.elb-empty-mark { width: 54px; height: 54px; color: var(--accent, #4ea8ff); opacity: .5; }
+.elb-empty-mark svg { width: 100%; height: 100%; display: block; }
+.elb-empty-title { font-size: 17px; font-weight: 700; color: var(--text); }
+.elb-empty-sub { font-size: 13px; line-height: 1.45; color: var(--text-dim, #9aa7b8); max-width: 34ch; }
+.elb-ways { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px; margin-top: 6px; }
+.elb-way { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 11px 13px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; }
+.elb-way-n { flex: none; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+             font-size: 11px; font-weight: 700; color: var(--bg, #0b0e14); background: var(--accent, #4ea8ff); }
+.elb-way-t { font-size: 12.5px; line-height: 1.45; color: var(--text-dim, #9aa7b8); }
+.elb-empty-go { margin-top: 8px; padding: 12px 18px; border-radius: 12px; border: 1px solid var(--accent, #4ea8ff); cursor: pointer;
+                background: color-mix(in srgb, var(--accent, #4ea8ff) 18%, transparent); color: var(--text); font-size: 13.5px; font-weight: 650; }
+.elb-empty-go:hover { background: color-mix(in srgb, var(--accent, #4ea8ff) 28%, transparent); }
+.elb-nomatch { color: var(--text-faint); font-size: 12px; font-style: italic; padding: 22px 12px; text-align: center; }
 
 /* Undo / redo with nothing behind or ahead of them (v4.84). Greyed rather than hidden — the control
    should stay where your eye expects it, just visibly unavailable. pointer-events stays ON so a tap

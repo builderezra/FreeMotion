@@ -35,7 +35,7 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(ok === false ? 'Element data missing — re-save it from a project' : 'Inserted “' + (e.name || 'element') + '”');
   }
 
-  function tile(e) {
+  function tile(e, i) {
     const b = el('button', 'fxb-tile');
     b.title = e.name || 'Element';
     const t = el('div', 'fxb-thumb'); t.dataset.cat = 'object';
@@ -43,6 +43,12 @@ window.FM = window.FM || {};
       const img = el('img', 'elb-thumb-img'); img.src = e.thumb; img.alt = '';
       t.appendChild(img);
     } else {
+      /* A RING WALKED BY INDEX, not a hash of the name — the same decision addmenu.js already made
+         and wrote down for the tab palettes: a hash gives every tile its own hue and no two of them
+         any relationship, which reads as accidental, while walking a chosen ring keeps neighbours far
+         apart and needs no upkeep. Before this, every element without a thumbnail was the SAME blue
+         gradient, so a screen of them was one colour repeated — part of what "looks lazy" meant. */
+      t.dataset.h = String((i || 0) % 6);
       t.appendChild(el('span', 'fxb-thumb-glyph', (e.name || '?').slice(0, 1).toUpperCase()));
     }
     b.appendChild(t);
@@ -61,16 +67,63 @@ window.FM = window.FM || {};
     return b;
   }
 
+  /* THE EMPTY STATE WAS THE WHOLE COMPLAINT (queue 340 clause 2). Ezra: "when you press the add
+     element button the menu is not thought and looks lazy and shit, make it good."
+     What it was: a screen of black with one line of italic grey text at the top of it, a search field
+     that stopped half way across the phone, and no way to do anything from here.
+     And the line was WRONG as well as small — it said "select some layers, then Elements ▸ Save
+     selection as element", and that item was removed from the Add menu (see the note in addmenu.js:216:
+     it acts on a selection and that menu only ever opens when nothing is selected). So the one
+     instruction in the room pointed at a door that is not there any more.
+     What it is now: the mark this feature already uses, a heading, the TWO routes that actually exist,
+     and — when there is a selection to act on — the button that does it, right here. */
+  function emptyState() {
+    const wrap = el('div', 'elb-empty');
+    // The four-square mark from the Add menu's Custom elements tile, so the empty screen is recognisably
+    // the same place as the button that opened it. Static markup, no user data.
+    const mark = el('div', 'elb-empty-mark');
+    mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
+      + '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>'
+      + '<rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>';   // static markup, no user data
+    wrap.appendChild(mark);
+    wrap.appendChild(el('div', 'elb-empty-title', 'No elements yet'));
+    wrap.appendChild(el('div', 'elb-empty-sub', 'An element is a piece you build once and drop into any project — a title, a logo lockup, a lower third.'));
+
+    const ways = el('div', 'elb-ways');
+    const way = (n, text) => { const r = el('div', 'elb-way'); r.appendChild(el('span', 'elb-way-n', n)); r.appendChild(el('span', 'elb-way-t', text)); return r; };
+    ways.appendChild(way('1', 'In a project: select the layers, then ⋯ → Save selection as element.'));
+    ways.appendChild(way('2', 'On the home screen: Elements → New element, build it, then ⋯ → Save as element.'));
+    wrap.appendChild(ways);
+
+    /* The button appears only when there is something for it to save. A permanently present control
+       whose only behaviour is a toast telling you why it did nothing is the "lazy" this is fixing. */
+    let n = 0;
+    try { n = (FM.selectionIds ? FM.selectionIds() : []).length; } catch (e) {}
+    if (n) {
+      const b = el('button', 'elb-empty-go', 'Save ' + (n === 1 ? 'the selected layer' : 'the ' + n + ' selected layers') + ' as an element');
+      b.type = 'button';
+      b.addEventListener('click', () => { close(); if (FM.saveElementPrompt) FM.saveElementPrompt(); });
+      wrap.appendChild(b);
+    }
+    return wrap;
+  }
+
   function draw() {
     if (!grid) return;
     grid.textContent = '';
     const items = list();
-    items.forEach(e => grid.appendChild(tile(e)));
-    const none = !items.length;
-    empty.classList.toggle('hidden', !none);
-    empty.textContent = needle
-      ? 'No element matches “' + needle + '”'
-      : 'No elements yet — select some layers, then Elements ▸ Save selection as element.';
+    items.forEach((e, i) => grid.appendChild(tile(e, i)));
+    const all = (FM.elements && FM.elements.list) ? (FM.elements.list() || []) : [];
+    empty.textContent = '';
+    empty.classList.toggle('hidden', !!items.length);
+    if (!items.length) {
+      if (all.length) empty.appendChild(el('div', 'elb-nomatch', 'No element matches “' + needle + '”'));
+      else empty.appendChild(emptyState());
+    }
+    // Searching a library with nothing in it is furniture. Hidden on the count of the WHOLE library,
+    // not of the filtered list, or typing a word that matches nothing would remove the field you typed
+    // it into.
+    if (searchInput) searchInput.classList.toggle('hidden', !all.length);
   }
 
   function build() {
@@ -83,13 +136,16 @@ window.FM = window.FM || {};
     top.appendChild(close_);
     root.appendChild(top);
 
-    const sw = el('div', 'fxb-search');
+    /* NO WRAPPER. `.fxb-search-input` is styled for a flex COLUMN parent — the effect browser appends
+       it straight into the root, where the default `align-items: stretch` gives it the full width.
+       This browser wrapped it in an unstyled div, so the input fell back to an <input>'s intrinsic
+       ~20-character width and stopped half way across the phone. Measured at 380px before the fix:
+       190px of a 380px screen, hard against the left margin. */
     searchInput = el('input', 'fxb-search-input');
     searchInput.type = 'search'; searchInput.placeholder = 'Search elements';
     searchInput.setAttribute('aria-label', 'Search elements');
     searchInput.addEventListener('input', () => { needle = (searchInput.value || '').trim().toLowerCase(); draw(); });
-    sw.appendChild(searchInput);
-    root.appendChild(sw);
+    root.appendChild(searchInput);
 
     const scroll = el('div', 'fxb-catview-scroll');
     grid = el('div', 'fxb-grid');

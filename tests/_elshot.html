@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#340 — what the element menus actually look like</title>
+<style>html,body{margin:0;background:#060c0f}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* #340 clause 2 — "when you press the add element button the menu is not thought and looks lazy and
+   shit". Two surfaces answer to that name and the entry does not say which, so both get looked at
+   before anything is redrawn: ?at=browser is the full-screen Custom elements browser, ?at=tab is the
+   Elements tab of the Add menu, ?at=home is the home screen's Elements tab. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app');
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait() {
+      if (++t > 300) { window.__done = true; return; }
+      if (!w.FM || !w.FM.home || !w.FM.addMenu) return setTimeout(wait, 50);
+      var FM = w.FM, at = q.get('at') || 'browser';
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (at === 'home') {
+          if (!FM.home.isOpen()) FM.home.open();
+          setTimeout(function () {
+            var tb = d.querySelector('.hm-tab[data-tab="element"], .hm-tab[data-tab="elements"]');
+            if (tb) tb.click();
+          }, 500);
+        } else {
+          if (FM.home.isOpen()) FM.home.close();
+          setTimeout(function () {
+            /* ?seed=N stubs the LIST rather than writing real elements. The browser's job here is to
+               render what the store hands it, and going through IndexedDB only adds a way for the
+               fixture to hang — which it did, silently, and produced a screenshot of the editor. */
+            var seed = +(q.get('seed') || 0);
+            if (seed) {
+              var names = ['Title card', 'Logo lockup', 'Lower third with a long name', 'Callout', 'Endslate', 'Bug', 'Ident'];
+              var fake = [];
+              for (var i = 0; i < seed; i++) fake.push({ id: 'e' + i, name: names[i % names.length], thumb: '' });
+              FM.elements = FM.elements || {};
+              FM.elements.list = function () { return fake; };
+            }
+            if (at === 'browser') { if (FM.elementsBrowser) FM.elementsBrowser.open(); }
+            else { FM.openAddMenu ? FM.openAddMenu() : (d.getElementById('add-fab') && d.getElementById('add-fab').click()); }
+          }, 700);
+        }
+      } catch (e) {}
+      setTimeout(function () { window.__done = true; }, +(q.get('seed') || 0) ? 9000 : 3000);
+    })();
+  });
+})();
+</script></body></html>

@@ -6713,8 +6713,8 @@ better still, keep working inside the turn rather than parking work for a later 
       the Alight Motion look, which is the direction that file wants, so it is worth noting there.
 
 
-- [ ] **340 — "New element" on the home screen just makes a PROJECT, and the add-element menu looks
-      unconsidered.** (17 Aug.) His words, verbatim: *"When you create a new element it just creates a
+- [x] **340 — "New element" on the home screen just makes a PROJECT, and the add-element menu looks
+      unconsidered.** ✅ **both clauses done — v9.89 + v9.96.** (17 Aug.) His words, verbatim: *"When you create a new element it just creates a
       new project (element tab in Home Screen) and also when you press the add element button the menu
       is not thought and looks lazy and shit , make it good"*.
       **Two clauses, and the first is a straight bug:**
@@ -6729,12 +6729,24 @@ better still, keep working inside the turn rather than parking work for a later 
              then ⋯ → Save as element", and tapping it reopens the workspace rather than inserting
              anything — a finished element inserts, a draft has nothing to insert yet, so they are
              deliberately different cards. **Clause 2 (the menu's looks) is NOT done and this stays open.**
-      2. [ ] The **add-element menu** is visually lazy. ⚠️ Taste, so it needs looking at next to the
-             tabs he already signed off — **queue 210** settled the per-tab colour direction for
-             Elements ("more subtle background colours, the main icon can stay bright but the backdrop
-             more subtle… we don't want it the exact same as the shape menu") and that shipped in v8.20.
-             So there is an agreed direction to build on rather than a fresh guess; check what the tab
-             looks like now against what 210 asked for before redesigning anything.
+      2. [x] ✅ **v9.96** — The **add-element menu** is visually lazy.
+             **It was the full-screen Custom elements browser, not the Add menu's Elements tab** — both
+             answer to "the add element button", so both were screenshotted at 380px before anything was
+             redrawn, and the tab (coloured tiles, queue 210's direction) was already fine. The browser
+             was not. Four faults, all in the one picture:
+             · the **search field stopped half way across** (176px of 380) — it sat in an unstyled
+               wrapper, so an `<input>`'s intrinsic width won instead of the flex column's stretch;
+             · **four fixed columns** inherited from the effect browser gave each element thumbnail 78px,
+               and an element tile is a photograph of a composition, not a glyph;
+             · **every element without a thumbnail was the same blue**, so a screenful was one colour;
+             · the **empty state was one line of italic grey text** on a black screen — and it named
+               *"Elements ▸ Save selection as element"*, a menu item that had been removed, so the only
+               instruction in the room pointed at a door that is not there.
+             Now: full-width field (hidden entirely when the library is empty), a responsive grid, a
+             six-gradient ring walked by index, and a real empty state — the four-square mark, a heading,
+             what an element IS, the two routes that actually exist, and the save button when there is a
+             selection for it to act on. Two tests, mutation-proven; the width one runs at **380px**
+             because above 701px a media rule hides the defect entirely.
 
 
 - [x] **341 — The film-grain background: he wanted it still, then wanted it MOVING again — now moving on both, and paused behind a project.** ✅ **v9.90, reversed and rebuilt v9.92.** (17 Aug,

@@ -458,6 +458,81 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('elements: the browser fills its width, and an empty one is a page rather than a caption', { item: 'el-browser-look' }, async function () {
+    /* Queue 340 clause 2. Ezra, having opened it: "when you press the add element button the menu is
+       not thought and looks lazy and shit, make it good." One 380px screenshot held all three faults.
+       · The SEARCH FIELD stopped half way across. `.fxb-search-input` is styled for a flex COLUMN
+         parent — the effect browser appends it straight into the root and `align-items: stretch` gives
+         it the width. This browser wrapped it in an unstyled div, so an <input>'s intrinsic ~20ch width
+         won: 190px of a 380px screen.
+       · The EMPTY STATE was one line of italic grey text at the top of a black screen, and the line was
+         WRONG — it said "select some layers, then Elements ▸ Save selection as element", and that item
+         was removed from the Add menu (addmenu.js:216 explains why: it acts on a selection, and that
+         menu only ever opens when nothing is selected). The single instruction in the room pointed at a
+         door that is not there.
+       Both are asserted, because the second is the one that can rot silently. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const realList = FM.elements && FM.elements.list;
+    const stub = arr => { FM.elements.list = () => arr; };
+    /* AT 380px, and that is not decoration — it is the only width where the defect exists.
+       Above 701px a media rule gives `#el-browser .fxb-search-input` an explicit `min(680px, 94vw)`,
+       so the field fills its column whether or not it is wrapped, and the FIRST version of this test
+       ran at the suite's 900px and reported a perfectly green result with the bug put back. The
+       mutation check is what said so. Below the breakpoint there is no width rule at all and the field
+       gets its width from being a stretched child of a flex column — which is exactly what the wrapper
+       took away. Same lesson as v7.79: measure the layout you ship to. */
+    return await atPhoneWidth(async function () {
+    try {
+      // --- populated: the field has to reach across the browser it sits in
+      stub([{ id: 'a', name: 'Title card' }, { id: 'b', name: 'Logo lockup' }]);
+      FM.elementsBrowser.open();
+      await sleep(40);
+      const root = document.getElementById('el-browser');
+      if (!root || root.classList.contains('hidden')) throw new Error('the elements browser did not open');
+      const input = root.querySelector('.fxb-search-input');
+      if (!input) throw new Error('no search field in the elements browser');
+      if (input.classList.contains('hidden')) throw new Error('the search field is hidden with 2 elements in the library');
+      /* Measured against the CONTENT COLUMN, not the root. Above 701px the browser is a centred
+         `min(680px, 94vw)` column inside a full-viewport backdrop, so comparing the field to the root
+         reports a perfectly correct field as 680 of 900 — the first version of this test did exactly
+         that and failed for its own reasons. Same lesson as v7.79: measure the box the thing lives in. */
+      const col = root.querySelector('.fxb-catview-scroll');
+      if (!col) throw new Error('no .fxb-catview-scroll in the elements browser — this test cannot find the column the field belongs to');
+      const cw = col.getBoundingClientRect().width, iw = input.getBoundingClientRect().width;
+      // Control: a column measured at zero width would make any comparison meaningless.
+      if (cw < 200) throw new Error('the browser column measured ' + cw + 'px wide — nothing below can mean anything');
+      if (iw < cw - 60) throw new Error('the search field is ' + Math.round(iw) + 'px inside a ' + Math.round(cw) + 'px column — it stops short of the width instead of filling it');
+      // The tiles are pictures of compositions, not glyphs: four fixed columns made each one 78px on a phone.
+      const cols = getComputedStyle(root.querySelector('.fxb-grid')).gridTemplateColumns.trim().split(/\s+/).length;
+      if (cols > 4 && cw < 500) throw new Error('the element grid is ' + cols + ' columns wide in a ' + Math.round(cw) + 'px column — a thumbnail of a whole composition needs more room than an effect glyph');
+
+      // --- empty: a page, with the routes that actually exist
+      stub([]);
+      FM.elementsBrowser.close(); FM.elementsBrowser.open();
+      await sleep(40);
+      const emptyEl = root.querySelector('.fxb-empty');
+      if (!emptyEl || emptyEl.classList.contains('hidden')) throw new Error('an empty library shows no empty state at all');
+      const txt = (emptyEl.textContent || '');
+      if (!root.querySelector('.elb-empty-title')) throw new Error('the empty state has no heading — it is still a caption floating in a black screen');
+      if (!/⋯|home screen/i.test(txt)) throw new Error('the empty state does not name either real route to making an element: "' + txt.slice(0, 120) + '"');
+      // THE ASSERTION THAT WOULD HAVE CAUGHT THE STALE LINE: the Add menu is walked for real, and the
+      // empty state may not send you to an item that is not in it.
+      const addLabels = [];
+      try {
+        (FM.addMenu && FM.addMenu._tabs ? FM.addMenu._tabs() : []).forEach(t => { (t.options ? t.options() : []).forEach(o => addLabels.push(String(o.label || ''))); });
+      } catch (e) {}
+      if (addLabels.length && /Elements\s*▸/.test(txt)) {
+        throw new Error('the empty state routes you through the Add menu, and "Save selection as element" is not in it any more: ' + txt.slice(0, 120));
+      }
+      // Searching a library with nothing in it is furniture.
+      if (!input.classList.contains('hidden')) throw new Error('the search field is still shown with an empty library');
+    } finally {
+      if (realList) FM.elements.list = realList;
+      try { FM.elementsBrowser.close(); } catch (e) {}
+    }
+    }, 380);
+  });
+
   test('tiles: "Whole clip" repeats a clip that is entirely off-canvas', { item: 'tiles-offcanvas' }, function () {
     // v4.82. Tiles' "Whole clip" mode builds its own plate reaching past the frame — but the call was
     // gated on the CANVAS bbox, so a clip dragged fully off-frame had no on-screen alpha, the effect
