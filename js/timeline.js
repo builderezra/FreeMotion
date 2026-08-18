@@ -2099,7 +2099,13 @@ window.FM = window.FM || {};
   const MOM_FRICTION = 0.947, MOM_MAX_V = 0.028, MOM_STOP = 2.2e-4;
   let momentumRAF = 0;
   function stopMomentum() { if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = 0; } }
+  /* Exposed for the suite (queue 351). Whether a released swipe FLINGS is the whole difference between
+     a scrub that feels smooth and one that stops dead, and it cannot be read off the playhead position
+     afterwards — a glide that is legitimately tiny and a glide that never started look the same. So the
+     release velocity is recorded here, at the one place both gesture paths have to come through. */
+  let _lastFling = null;
   function startMomentum(vTimePerMs) {   // vTimePerMs = project-seconds per ms at release
+    _lastFling = { v: vTimePerMs, at: performance.now() };
     stopMomentum();
     let v = vTimePerMs;
     if (!isFinite(v) || Math.abs(v) < 4e-5) return;     // too gentle to bother → just settle
@@ -2404,6 +2410,8 @@ window.FM = window.FM || {};
     _abortGestures: function () { abortGestures(); },
     // The scrub glide's tuning, exposed so the suite can pin the effect sliders to it — see queue 116.
     momentumTuning: { friction: MOM_FRICTION, maxV: MOM_MAX_V, stopAt: MOM_STOP },
+    _lastFling: function () { return _lastFling; },
+    _clearFling: function () { _lastFling = null; },
     // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
     deleteKeyframesAt: deleteKeyframesAt,
     // Read-only view of the magnet. The ⋯ menu could not tick 'Snapping' because this was a
@@ -2666,7 +2674,10 @@ window.FM = window.FM || {};
           // Tap vs scrub vs hold-to-move. A horizontal-dominant drag past a low threshold is a SCRUB:
           // commit early (and kill the long-press timer) so a slow deliberate "drag the line over the
           // clips" gesture — which can travel <8px in the first 350ms — isn't hijacked into a clip move.
-          const scrubIntent = adx > 6 && adx > ady;
+          /* 4px, matching the empty-lane path's own commit threshold as closely as tap discrimination
+             allows (it commits at 3). At 6 the first six pixels of a swipe did nothing and then the
+             playhead took all six at once — a small jump, but the second half of the same complaint. */
+          const scrubIntent = adx > 4 && adx > ady;
           if (!clipTap.moved && !scrubIntent && adx < 8 && ady < 8) return;   // still a potential tap / hold
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
@@ -2684,6 +2695,19 @@ window.FM = window.FM || {};
             if (timelineEl) timelineEl.scrollTop = clipTap.startScrollTop - dy;
             return;
           }
+          /* SAMPLE THE VELOCITY, because this gesture has to end the same way the other one does
+             (queue 351). Ezra: "Timeline doesn't scrub smoothly when you press on a layer when swiping,
+             this is annoying".
+             It is not the frame cost — that has been measured repeatedly and is fine. It is that a swipe
+             beginning ON A CLIP and the identical swipe beginning on empty lane ran down two different
+             paths, and only the empty-lane one sampled a release velocity and flung. So the same flick
+             glided or stopped dead depending purely on where your finger happened to land — and on a
+             timeline with layers in it there is barely any empty lane, so the version that stops dead is
+             the one you almost always get. Same smoothing constants as the path 90 lines below, on
+             purpose: two flings that feel different are worse than one that is slightly wrong. */
+          const cNow = e.timeStamp || performance.now(), cDt = cNow - (clipTap.lastT || cNow);
+          if (cDt > 0) { const cvx = (e.clientX - (clipTap.lastX != null ? clipTap.lastX : e.clientX)) / cDt; clipTap.vTime = (clipTap.vTime || 0) * 0.35 + (-cvx / pxPerSec()) * 0.65; }
+          clipTap.lastX = e.clientX; clipTap.lastT = cNow;
           FM.scrubTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));   // relative drag-scrub (scrollLeft-independent)
           return;
         }
@@ -2814,6 +2838,13 @@ window.FM = window.FM || {};
           // a deliberate tap selects (opens the property menu); in select-mode it TOGGLES membership
           // like head taps do — the big clip bar collapsing a painted multi-selection was maddening
           if (!ct.moved) { if (FM.selectMode && FM.toggleSelect) { FM.toggleSelect(ct.layer.id); FM.refreshAll(); } else FM.selectLayer(ct.layer.id); }
+          // …and a horizontal one that WAS a scrub keeps gliding, on the same terms as the empty-lane
+          // release below: only if the finger was still travelling when it lifted, so a deliberate
+          // settle-then-release still lands exactly where you put it. (queue 351)
+          else if (ct.axis === 'x' && !FM.playing) {
+            const cUp = (e && e.timeStamp) || performance.now();
+            startMomentum(((cUp - (ct.lastT || 0)) < 90) ? (ct.vTime || 0) : 0);
+          }
           return;
         }
         if (clipMove) {

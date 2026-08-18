@@ -7523,7 +7523,19 @@ better still, keep working inside the turn rather than parking work for a later 
       64-tap quality maximum measured 1.2 seconds a frame and had to be cut to 32.
 
 
-- [ ] **351 — Swiping the timeline is not smooth if your finger starts ON a layer.** (17 Aug.) His
+- [x] **351 — Swiping the timeline is not smooth if your finger starts ON a layer.** ✅ **v10.01.**
+      **The entry's instinct was right and its guess was not.** It guessed a slop threshold; what it
+      actually was is that a pointerdown on a CLIP and one on empty lane run down two different gesture
+      paths, and **only the empty-lane one sampled a release velocity and flung.** So the identical flick
+      glided or stopped dead depending purely on where your finger landed — and with layers on the
+      timeline there is barely any empty lane, so the dead-stop version is the one you nearly always get.
+      Now both sample velocity the same way and release through the same glide: measured, the same 72px
+      flick releases at **0.00913 from both**, where the clip one recorded nothing at all.
+      The dead zone came down with it — empty lane commits at 3px of travel, a clip needed 6, so the
+      first six pixels did nothing and then the playhead took all six at once. It is 4 now.
+      ⚠️ Worth knowing for the next gesture measurement: synthetic pointer events dispatched in one tick
+      all carry the same `timeStamp`, so dt is 0, no velocity is sampled, and BOTH paths look identical
+      and broken. The moves have to be spaced in real time. (17 Aug.) His
       words, verbatim: *"Timeline doesn't scrub smoothly when you press on a layer when swiping, this is
       annoying please add to list"*.
       Read the sentence precisely: it is not "scrubbing is laggy" in general — it is specifically a swipe

@@ -1,0 +1,84 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#351 — a swipe from a clip vs a swipe from empty lane</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #351. His words: "Timeline doesn't scrub smoothly when you press on a layer when swiping".
+   The entry says to measure the GESTURE, not the frame rate — the frame cost of scrubbing has been
+   measured repeatedly and is fine. So this drives the identical flick twice, once starting on a clip
+   and once on empty lane, and prints where the playhead is after each pointermove and where it ends up
+   after the release. A difference between the two columns IS the bug. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.timeline || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.scene.layers.length = 0;
+        var Lr = FM.makeLayer('shape', { name:'Clip', shape:'rect', x:540, y:960, shapeW:400, shapeH:400, fill:'#3a7bd5' });
+        Lr.start = 0; Lr.duration = 8; FM.scene.layers.push(Lr);
+        FM.scene.project.duration = 20;
+        FM.selectLayer(null); FM.refreshAll();
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+        /* THE MOVES HAVE TO BE SPACED IN REAL TIME. Both scrub paths derive their fling from
+           e.timeStamp deltas, and eight synthetic events dispatched in one tick all carry the same
+           stamp — dt is 0, no velocity is ever sampled, and BOTH columns read "glided 0.000". The first
+           version of this probe did exactly that and reported the bug as absent. */
+        async function flick(el, label) {
+          var r = el.getBoundingClientRect();
+          var x = r.left + r.width * 0.7, y = r.top + r.height / 2;
+          FM.setTime(6);
+          var ev = function (type, cx, tgt) {
+            (tgt || el).dispatchEvent(new w.PointerEvent(type, { bubbles:true, cancelable:true, pointerId:3,
+              isPrimary:true, pointerType:'touch', clientX:cx, clientY:y, buttons: type==='pointerup'?0:1 }));
+          };
+          var seen = [];
+          ev('pointerdown', x);
+          for (var i = 1; i <= 8; i++) { await sleep(16); ev('pointermove', x - i*9, w); seen.push(+FM.time.toFixed(3)); }
+          FM.timeline._clearFling();
+          ev('pointerup', x - 72, w);
+          var atLift = FM.time;
+          var fl = FM.timeline._lastFling();
+          return { label: label, seen: seen, atLift: atLift, fling: fl ? fl.v : null };
+        }
+        (async function () {
+          try {
+            var clip = d.querySelector('.clip');
+            if (!clip) { say('no .clip found'); window.__done = true; return; }
+            var a = await flick(clip, 'from a CLIP');
+            await sleep(900);
+            var afterClip = FM.time;
+            var b = await flick(d.getElementById('timeline'), 'from EMPTY lane');
+            await sleep(900);
+            var afterLane = FM.time;
+            say('the same 72px flick, twice');
+            say('');
+            say('  ' + a.label.padEnd(18) + 'playhead per move: ' + a.seen.join(' '));
+            say('  ' + ' '.repeat(18) + 'at lift ' + a.atLift.toFixed(3) + '   after glide ' + afterClip.toFixed(3) +
+                '   → glided ' + (afterClip - a.atLift).toFixed(3) + 's   release velocity ' + (a.fling == null ? 'NEVER FLUNG' : a.fling.toFixed(5)));
+            say('');
+            say('  ' + b.label.padEnd(18) + 'playhead per move: ' + b.seen.join(' '));
+            say('  ' + ' '.repeat(18) + 'at lift ' + b.atLift.toFixed(3) + '   after glide ' + afterLane.toFixed(3) +
+                '   → glided ' + (afterLane - b.atLift).toFixed(3) + 's   release velocity ' + (b.fling == null ? 'NEVER FLUNG' : b.fling.toFixed(5)));
+            say('');
+            say('Same gesture, so the two glide figures should match in sign and order.');
+            say('A clip flick that glides 0.000 while the lane one glides is exactly his report.');
+          } catch (e) { say('drive threw ' + e.message); }
+          window.__done = true;
+        })();
+      }, 1000);
+    })();
+  });
+})();
+</script></body></html>

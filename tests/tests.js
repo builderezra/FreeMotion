@@ -470,6 +470,68 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: a flick that starts ON a clip glides like one that starts on empty lane', { item: 'clip-swipe-fling' }, async function () {
+    /* Queue 351. His words: "Timeline doesn't scrub smoothly when you press on a layer when swiping,
+       this is annoying please add to list."
+       Not a frame-rate problem — that has been measured repeatedly and is fine. A pointerdown on a clip
+       and one on empty lane run down two DIFFERENT gesture paths, and only the empty-lane one sampled a
+       release velocity and flung. So the identical flick glided or stopped dead depending purely on
+       where your finger landed, and on a timeline with layers in it there is barely any empty lane.
+       Measured as the RELEASE VELOCITY rather than as the playhead's position afterwards, because a
+       glide that is legitimately tiny and a glide that never started look identical from outside. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Clip', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 8; FM.scene.layers.push(L);
+      FM.scene.project.duration = 20;
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(80);
+
+      /* THE MOVES MUST BE SPACED IN REAL TIME. Both paths derive the fling from e.timeStamp deltas, and
+         events dispatched in one tick all carry the same stamp — dt is 0, no velocity is ever sampled,
+         and BOTH read "never flung". The first version of this probe did that and reported no bug. */
+      const flick = async (el) => {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width * 0.7, y = r.top + r.height / 2;
+        FM.setTime(6);
+        const ev = (type, cx, tgt) => (tgt || el).dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 3, isPrimary: true, pointerType: 'touch',
+          clientX: cx, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+        ev('pointerdown', x);
+        for (let i = 1; i <= 8; i++) { await sleep(16); ev('pointermove', x - i * 9, window); }
+        FM.timeline._clearFling();
+        ev('pointerup', x - 72, window);
+        const f = FM.timeline._lastFling();
+        FM.timeline._abortGestures();
+        return f ? f.v : null;
+      };
+
+      const clip = document.querySelector('.clip');
+      if (!clip) throw new Error('no .clip on the timeline — this test has nothing to swipe from');
+      const fromClip = await flick(clip);
+      await sleep(120);
+      const fromLane = await flick(document.getElementById('timeline'));
+
+      // Control: the reference path has to have flung, or there is nothing to compare against and the
+      // assertion below would pass on a build where NEITHER of them does.
+      if (fromLane == null || Math.abs(fromLane) < 1e-4) {
+        throw new Error('the empty-lane flick did not fling either (' + fromLane + ') — the fixture is not producing a real gesture, so this test proves nothing');
+      }
+      if (fromClip == null) throw new Error('a flick that started on a CLIP never flung at all, while the identical flick on empty lane released at ' + fromLane.toFixed(5) + ' — same gesture, two different feels depending only on where your finger landed');
+      const ratio = Math.abs(fromClip) / Math.abs(fromLane);
+      if (ratio < 0.5 || ratio > 2) {
+        throw new Error('the clip flick released at ' + fromClip.toFixed(5) + ' against the lane flick\u2019s ' + fromLane.toFixed(5) +
+          ' (' + ratio.toFixed(2) + 'x) — the same swipe should hand the same velocity to the same glide whichever it started on');
+      }
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
     /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
        actually move in a cool way and not just a drag it up and down, like they're alive. Because
