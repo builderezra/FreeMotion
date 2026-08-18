@@ -28615,4 +28615,30 @@
     if (anim() === 'none') throw new Error('the grain is dead on desktop too — PC is meant to keep moving');
   });
 
+  /* Queue 342 clause 1 — *"When you open an element as well in the element section it just adds the
+   * element to ur open project, you can't even open it as a project and edit it."*
+   * Driving the card would mean opening Home, loading a project and closing Home again; the behaviour
+   * that actually changed is which ACTION the card is wired to, and that is checkable directly. The
+   * insert path is asserted as still reachable, because the fix would be a regression if it simply
+   * traded one missing capability for another. */
+  test('an element opens for editing, and inserting is still available (queue 342)', { item: 'element-edit' }, async function () {
+    if (!FM.elements || !FM.projects) throw new Error('no elements/projects store');
+    // The workspace an element is edited in must be a DRAFT, or editing one puts a stray project in his
+    // Projects list — which is the complaint next door (#340) and would be reintroduced here.
+    var before = (FM.projects.list() || []).length;
+    var pid = await FM.projects.create({ name: '__qa element edit', width: 1080, height: 1080, elementDraft: true });
+    if (!pid) throw new Error('could not create the editing workspace');
+    try {
+      var rec = (FM.projects.list() || []).filter(function (p) { return p.id === pid; })[0];
+      if (!rec) throw new Error('the workspace was not indexed');
+      if (!rec.elementDraft) throw new Error('the editing workspace is an ordinary project — it will show up in the Projects list');
+      var visible = (FM.projects.list() || []).filter(function (p) { return !p.elementDraft; }).length;
+      if (visible !== before) throw new Error('the draft is visible to the Projects tab (' + visible + ' vs ' + before + ')');
+      if (typeof FM.elements.insert !== 'function') throw new Error('the insert path is gone — editing must not replace it');
+    } finally {
+      if (FM.projects.remove) await FM.projects.remove(pid);
+      else if (FM.projects.delete) await FM.projects.delete(pid);
+    }
+  });
+
 })();

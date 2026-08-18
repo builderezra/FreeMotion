@@ -6732,14 +6732,21 @@ better still, keep working inside the turn rather than parking work for a later 
       1:1, 0 layers, alongside Project 25 and Project 24. So an element really is being created as a
       project, and it lands in the wrong tab.
       **Clauses:**
-      1. [ ] Opening an element from the Elements tab must OPEN it for editing, not insert it into
-             whatever project happens to be open.
-      2. [ ] An element created from the home screen must be an ELEMENT, not a project, and must not
-             appear in the Projects list.
-      3. [ ] *"a lot more effort into the elements feature"* — ⚠️ deliberately not guessed at. When this
+      1. [x] ✅ **v9.91** — Opening an element from the Elements tab must OPEN it for editing, not insert
+             it into whatever project happens to be open.
+      2. [x] ✅ **v9.89** — An element created from the home screen must be an ELEMENT, not a project, and
+             must not appear in the Projects list. (Done under #340: it is an `elementDraft` workspace now,
+             hidden from Projects and shown under Elements.)
+      3. [ ] ⚠️ **Clause 3 is still open — this entry stays open.** *"a lot more effort into the elements feature"* — ⚠️ deliberately not guessed at. When this
              reaches the top, the question is what an element IS to him: a reusable clip you drop in
              (which is what the insert behaviour assumes), or a small project you build and re-use
              (which is what "open it and edit it" assumes). Those are different features and the answer
+             ✅ **Clauses 1-2 answered that question without having to ask it:** WHERE YOU ARE STANDING
+             decides. On Home there is frequently no project open — that tap used to reply "Open a project
+             first", a tap that does nothing wearing an error — so Home is for managing and editing.
+             Inserting already has a place where the target is open by definition: Add → Elements, inside a
+             project. It also stays on the card's ⋯ menu, so nothing was traded away. What remains of
+             clause 3 is whatever ELSE he wants from the feature, which is still not guessed at.
              decides the shape of all of it.
 
 

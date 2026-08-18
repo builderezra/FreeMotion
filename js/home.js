@@ -1412,12 +1412,39 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Add to the open project', action: use },
+        { label: 'Add to the open project', action: use },
         pinMenuItem('elements', e.id),
         { sep: true },
         { label: 'Delete element…', danger: true, action: async () => { if (!confirm('Delete element "' + e.name + '"?')) return; await FM.elements.remove(e.id); render(); } },
       ]);
     });
     more.setAttribute('aria-label', 'Element actions');
+    /* OPENING AN ELEMENT NOW OPENS IT (queue 342 clause 1). Ezra: *"When you open an element as well in
+       the element section it just adds the element to ur open project, you can't even open it as a project
+       and edit it."*
+       The ambiguity his entry flagged — is an element a clip you drop in, or a small project you build and
+       re-use — is settled by where you are standing when you tap it. On HOME there is frequently no project
+       open at all; this very function used to answer a tap with "Open a project first", which is a tap that
+       does nothing dressed as an error. Inserting already has a home that always makes sense: Add → Elements,
+       inside a project, where the thing you are inserting INTO is by definition open.
+       So the Elements tab is where you manage and EDIT them, and inserting stays where it belongs. Nothing
+       is lost — insert is still on this card's ⋯ menu for when a project happens to be open.
+       Editing reuses `elements.insert` wholesale rather than re-deriving media hydration: a fresh transparent
+       draft is opened first, so "insert into the current project" and "open for editing" are the same code
+       path pointed at different projects. */
+    async function edit() {
+      holdPress();
+      try {
+        const pid = await FM.projects.create({ name: e.name || 'Element', width: 1080, height: 1080, elementDraft: true });
+        if (!pid) { if (FM.toast) FM.toast('Could not open that element'); return; }
+        FM.scene.project.background = null;   // transparent, like the element itself
+        const ok = await FM.elements.insert(e.id);
+        if (!ok) { if (FM.toast) FM.toast('That element’s data is missing — save it again'); return; }
+        if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
+        FM.home.close({ push: true, lead: card });
+        if (FM.toast) FM.toast('Editing “' + (e.name || 'element') + '” — ⋯ → Save as element when you’re done', 3600);
+      } finally { clearPress(true); }
+    }
     async function use() {
       // Elements go INTO a project, so there has to be one open. Home is reachable with no project
       // loaded (first run, or after deleting the last one) — say so rather than failing silently.
@@ -1433,7 +1460,7 @@ window.FM = window.FM || {};
         else if (FM.toast) FM.toast('That element’s data is missing — save it again');
       } finally { clearPress(true); }
     }
-    if (selectify(card, th, e.id, use)) card.appendChild(more);
+    if (selectify(card, th, e.id, edit)) card.appendChild(more);   // tap EDITS; insert lives on the ⋯ menu (queue 342)
     keyActivate(card);
     return card;
   }
