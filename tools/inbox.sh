@@ -34,11 +34,21 @@ if [ -f "$ICLOUD" ]; then
   # `index($0, MARK)` not `/^### drained/`: his phone appends without a trailing newline, so the marker
   # can land on the END of his last line rather than on one of its own. Anchoring to the start of a line
   # missed it, and every already-logged request came back a second time.
+  # ONE awk, BOTH cases. The version before this cut at the last drain marker and then piped through a
+  # sed range that skipped the header line of dashes -- but that header exists once, at the top of the
+  # file. After the first drain, everything new sits BELOW the marker with no dashes above it, so the
+  # range never opened and every fresh request was invisible. It printed "inbox empty" while holding a
+  # line I had just written to prove it worked. Keep what follows the last marker; only when there is no
+  # marker at all does the header need skipping, handled in the same pass.
   DROP="$(for f in "$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt" \
                    "$HOME/Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents/"*.txt; do
             [ -f "$f" ] || continue
-            awk 'index($0, "### drained"){buf=""; next}{buf = buf $0 ORS} END{printf "%s", buf}' "$f" \
-              | sed -n '/^----*$/,$p' | sed '1d' | sed '/^[[:space:]]*$/d'
+            awk 'index($0, "### drained"){buf=""; seen=1; next}
+                 {buf = buf $0 ORS}
+                 END{ if (seen) { printf "%s", buf }
+                      else { n=split(buf, L, ORS); go=0
+                             for (i=1; i<=n; i++) { if (go) print L[i]; else if (L[i] ~ /^----*$/) go=1 } } }' "$f" \
+              | sed '/^[[:space:]]*$/d'
           done)"
   [ -n "$DROP" ] && BODY="$BODY
 --- from iCloud (FreeMotion-requests.txt) ---
