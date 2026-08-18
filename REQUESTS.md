@@ -9264,6 +9264,29 @@ wait for them to report back."*
       `.addmenu-page` children and page dots, which is exactly this. So the fix is to give the library
       grid the same paging rather than a max-height, and the v9.47 height cap comes out.
 
+      🔁 **RESTATED 18 Aug, and it adds a SECOND, separate fault.** His words, verbatim: *"Not only did
+      you make the mistake when fixing the media and audio rows of making them three layers still but
+      also they aren't even the same height as the other menus, they need to always open at the same
+      height"* — with two phone screenshots at v9.81, the Media tab and the Shape tab, taken seconds
+      apart so they can be compared directly.
+      **What the two shots show, measured against each other:** the Shape sheet opens TALLER — its top
+      edge sits above where the Media sheet's does, and the Media shot still has the `00:06:18` timecode
+      visible above the sheet while the Shape shot does not. So the ADD sheet changes height depending on
+      which tab is selected, because each tab's content decides it.
+      **Clauses:**
+      1. [ ] **Two rows, paged sideways** — the original clause above, still not done.
+      2. [ ] **Still three rows.** In his shot the Media tab reads as three stacked rows
+             (Import / Sample clip / AI Scene, then two rows of thumbnails), which is what he is counting.
+             Worth settling: does the **action row** (Import / Sample clip / AI Scene) count toward his
+             "two rows", or is it two rows of THUMBNAILS beneath it? His shot suggests he is counting
+             everything he sees. Building it as two thumbnail rows unless he says otherwise, since that
+             is what "the media and audio rows" most naturally means.
+      3. [ ] **Every ADD tab opens at the SAME height** — Elements, Shape, Media, Audio, Template. This
+             is the new one and it is the more annoying of the two in practice: the sheet jumping size as
+             you move between tabs is exactly the "feels slow and buggy and not smooth" complaint from
+             #355. Fix it by giving the sheet ONE height rather than by tuning each tab to match — a
+             height that is the max of the tabs is still five numbers that can drift apart.
+
 - [x] **359 — 🚨 The filter thumbnails are the drawn landscape, not the good photos they used to be.** — **v9.76** (the "tuff" car-photo filters themselves remain #349)
       (18 Aug, phone screenshot at v9.74 of the Filters tab: Teal & Orange, Bleach Bypass, Cross Process,
       Faded Film, VHS Tape, CRT Monitor, Super 8, Old Film, Dreamy Bloom, Golden Hour, Light Leak, Neon
