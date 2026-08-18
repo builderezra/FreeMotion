@@ -6232,7 +6232,7 @@ better still, keep working inside the turn rather than parking work for a later 
       refresh by hand — both lists, plus a remove. Mutation-checked, and confirmed by eye at 380px.
 
 
-- [ ] **331 — Organise the Presets card: tags, rename, search, and tidy the top of it.** (17 Aug,
+- [x] **331 — Organise the Presets card: tags, rename, search, and tidy the top of it.** ✅ **clauses 1-3 v9.78, clauses 4-9 v9.79.** (17 Aug,
       screenshot of the new v9.29 Presets card on his phone.) His words, verbatim, in full:
 
       > Get rid of explanation and put the save current effects as preset at the top. Also the X isn’t centred in this screenshot for each preset and there’s no way to search presets or organise, make it so if you hold on a preset you can re name it and also tag it and when you put on a tag that tag is now a new group that you can go through, so the preset section can be organised, each tag menu will appear at the top and each time you create a new tag a new option will appear at the top, and loose ones that aren’t tagged will appear at the bottom like they do now
@@ -6243,12 +6243,12 @@ better still, keep working inside the turn rather than parking work for a later 
       2. [x] ✅ **v9.78** — Move **"Save current effects as preset"** to the TOP of the card.
       3. [x] ✅ **v9.78** — The **✕ is not centred** inside its button on each preset row. (Same class as queue 188/209 —
              measure the INK, not the button box, and it is a text glyph again, so use an SVG cross.)
-      4. [ ] A way to **search** presets.
-      5. [ ] **Hold** a preset → **rename** it.
-      6. [ ] **Hold** a preset → **tag** it.
-      7. [ ] A tag becomes a **group you can go through**.
-      8. [ ] Each tag appears as an option at the **top**; creating a new tag adds a new option there.
-      9. [ ] **Untagged** presets stay at the **bottom**, as they are now.
+      4. [x] ✅ **v9.79** — A way to **search** presets.
+      5. [x] ✅ **v9.79** — **Hold** a preset → **rename** it.
+      6. [x] ✅ **v9.79** — **Hold** a preset → **tag** it.
+      7. [x] ✅ **v9.79** — A tag becomes a **group you can go through**.
+      8. [x] ✅ **v9.79** — Each tag appears as an option at the **top**; creating a new tag adds a new option there.
+      9. [x] ✅ **v9.79** — **Untagged** presets stay at the **bottom**, as they are now.
 
       Notes before starting: this needs a place to STORE tags and renames, and today the two preset
       stores are keyed by NAME (`fm.layerpresets` / `fm.fxpresets`), so a rename is a re-key and would
@@ -6258,10 +6258,34 @@ better still, keep working inside the turn rather than parking work for a later 
       Sits with 329 (the two save buttons, and their naming) and 330 (the menu not refreshing after a
       save) — all three are the same card and should go in one pass.
 
-      ✅ **CLAUSES 1-3 DONE, v9.78. Clauses 4-9 (search, rename, tags, tag groups) are NOT done and this
-      entry stays open.** They are the ones the note above says are much cheaper after queue 37 replaces
-      both name-keyed stores with one namespace: a rename is a re-key today, so doing it now means
-      writing the tag/rename storage once against the old shape and again against the new one.
+      ✅ **ALL NINE CLAUSES DONE — 1-3 in v9.78, 4-9 in v9.79.**
+      ⚠️ **The note above, about waiting for queue 37, was STALE and nearly cost this entry another
+      month.** It said 4-9 were much cheaper after #37 replaced both name-keyed stores with one
+      namespace. #37 is ticked — but it shipped as the preset PREVIEW screen and never went near the
+      stores, and no store rework is scheduled anywhere. So the reason these four clauses were parked
+      had quietly stopped being true, and nothing would have said so. Checked before building rather
+      than inherited.
+      **What that meant for the build:** tags live in a sidecar map keyed by `'<store>:<name>'`, which is
+      what a name-keyed store allows without a migration. A rename is therefore a RE-KEY, and the one
+      thing a re-key can do that is genuinely bad is merge two presets into one and lose whichever lost
+      — so renaming onto a name already in use is REFUSED rather than resolved, and the tags are carried
+      across in the same operation instead of being orphaned under the old name. Deleting a preset
+      forgets its tags, or the map fills with entries for presets that no longer exist.
+      · **4 — search** filters on the name AND the tags, live as you type (a box that only filters when
+        you leave it is a box you have to be told how to use).
+      · **5, 6 — hold a row** for the rename and tag menu. A hold rather than two more buttons: the row
+        already carries a thumbnail, a name, a sub-line and a ✕ at 380px, and a fifth control is what got
+        this card put on the list. The tap that follows a hold is swallowed, or letting go APPLIES the
+        preset you were trying to rename — which replaces your whole effect stack.
+      · **7, 8 — the chips ARE the tag menus**, one per tag in use, so creating a tag makes its chip
+        appear by construction rather than by a second list that has to be kept in step. "All" leads the
+        row so there is always a way out of a filter.
+      · **9 — untagged sink to the bottom**, as a stable partition rather than a sort, so within each
+        half the order you saved them in survives.
+      Three assertions mutation-checked (the ordering, the filter, the tag-carrying rename). *One of them
+      was DEAD when first written and only the mutation check found it: the fixture saved its two presets
+      in an order where the store already listed the tagged one first, so "untagged last" passed with the
+      ordering code deleted.*
       · **1 — the explanation is gone.** It was the `insp-hint` v9.29 added. The card now opens on its
         first heading. (The "No previews — nothing of this layer is on screen at the playhead" line at the
         BOTTOM stays: that is a live report about your layer, not an explanation of what a preset is.)
@@ -7112,7 +7136,17 @@ better still, keep working inside the turn rather than parking work for a later 
       hit before.
 
 
-- [ ] **350 — Voronoi Cells needs to MOVE, and move like it is alive.** (17 Aug.) His words, verbatim:
+- [ ] **350 — Voronoi Cells needs to MOVE, and move like it is alive — AND its explanation block goes
+      at the same time.** (17 Aug; second clause added 18 Aug.) His words on the second, verbatim:
+      *"When you improve the voronoi cells like I asked you can also get rid of the explanation at the
+      same time"* — with a phone shot at v9.78 showing the Voronoi Cells card open and the sentence
+      *"Breaks the frame into organic cells, the pattern of cracked mud or a giraffe's coat."* sitting
+      above the Cells slider. That is the effect DESCRIPTION block, rendered for every effect, so
+      removing it here is either a per-effect exception or the start of removing it everywhere —
+      **worth knowing which he means, and he has now asked for an explanation block to go three times
+      (queue 331 clause 1, queue 346, this).** Doing it just for Voronoi is the literal reading and is
+      what will ship unless he says otherwise; it is a one-line change to widen later.
+      His original words, verbatim:
       *"Voronoi cells needs the ability to make them move, and I want it to actually move in a cool way
       and not just a drag it up and down, like they're alive. Because that's what alight motion has"*.
       **Confirmed against the code: it is completely static today.** `{ type: 'voronoi', params: [cells,
@@ -9267,3 +9301,28 @@ wait for them to report back."*
          the picks away is a trap.
       3. **After adding an effect it often does not open that effect.** It should land on the new effect's
          controls; he says it frequently drops him out of the layer entirely.
+
+- [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
+      a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
+      sketching so you can draw many things at once but you still have the edit points thing and didn't
+      do the other stuff I asked and when you're actually drawing and start a second line you can't see
+      what you're doing until you press done. Fix"*.
+      **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
+      1. [ ] **A second line is invisible until you press Done.** The concrete, new, reproducible one and
+             the place to start: the live preview evidently draws only the stroke in progress, or only
+             the committed layer, so once a first stroke is committed the one you are currently drawing
+             is not composited over it. Drive TWO strokes through the real overlay and screenshot
+             MID-SECOND-STROKE — the existing probe (`tests/_sketch2.html`) checks the DATA and would
+             pass while the screen showed nothing, which is exactly how this got missed.
+      2. [ ] **"You still have the edit points thing."** Needs pinning to a specific screen before it is
+             guessed at — most likely the same complaint as **#206** ("shapes need sensible edit points,
+             not a million dots"), which is marked HELD because he said he was doing it himself. Check
+             whether he means edit points appearing on a finished sketch, or #206 recurring here.
+      3. [ ] **"Didn't do the other stuff I asked."** Not specific enough to act on alone, so the honest
+             move is to re-read every open sketch/drawing clause and report what is actually outstanding
+             rather than pick one: **#315** (clause 1 now fixed by his own account — *"you can draw many
+             things at once"* — clause 2 shipped v9.62), **#314** (rename to Sketching), **#179**,
+             **#165**, **#206**. Whatever is still open there is what he means.
+      **Also confirmed by this message: #315 clause 1 is FIXED** — he says the multi-stroke case works
+      now. That entry was left open because I could not reproduce the failure; his word closes it.
+

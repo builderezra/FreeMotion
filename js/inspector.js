@@ -212,6 +212,56 @@ window.FM = window.FM || {};
     if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
   }
 
+  /* TAGS AND RENAMES LIVE BESIDE THE PRESETS, NOT INSIDE THEM (queue 331 clauses 5-9). Ezra: *"if you
+   * hold on a preset you can re name it and also tag it and when you put on a tag that tag is now a new
+   * group that you can go through"*.
+   * Both preset stores are keyed by NAME, and this entry was parked on the belief that queue 37 would
+   * replace them with one id-keyed namespace first — doing tags before that meant writing the storage
+   * twice. **That is stale: #37 shipped as the preset PREVIEW screen and never touched the stores**, and
+   * no store rework is scheduled anywhere. So it was that or leave four clauses waiting on something
+   * that is not coming.
+   * A sidecar map keyed by '<store>:<name>' is what a name-keyed store allows without a migration.
+   * A rename is therefore a RE-KEY, and the one thing a re-key can do that is genuinely bad is silently
+   * merge two presets into one — so renaming onto a name that already exists is refused rather than
+   * resolved, and the tags are carried across in the same breath. Deleting a preset forgets its tags,
+   * or the map slowly fills with entries for presets that no longer exist. */
+  /* The card is rebuilt from scratch on every refresh (and presetsChanged now fires one on every
+     write), so the filter and the search text cannot live in the card — they would reset on the first
+     keystroke. Module state, deliberately not persisted: a search you typed a session ago is clutter,
+     not a preference. */
+  let presetQuery = '', presetTag = '';
+
+  FM.presetTags = {
+    _key: 'fm.presettags',
+    all() { try { const o = JSON.parse(localStorage.getItem(this._key) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } },
+    _write(o, quiet) {
+      try { localStorage.setItem(this._key, JSON.stringify(o)); }
+      catch (e) { if (FM.toast) FM.toast('Storage full — tag not saved'); return; }
+      if (!quiet) presetsChanged();
+    },
+    get(key) { const t = this.all()[key]; return Array.isArray(t) ? t.filter(x => typeof x === 'string') : []; },
+    set(key, tags, quiet) {
+      const o = this.all(), seen = Object.create(null), out = [];
+      (tags || []).forEach(t => {
+        const v = String(t).trim(); if (!v) return;
+        const k = v.toLowerCase(); if (seen[k]) return;      // "Warm" and "warm" are one tag, not two
+        seen[k] = 1; out.push(v);
+      });
+      if (out.length) o[key] = out; else delete o[key];
+      this._write(o, quiet);
+    },
+    move(from, to) { const o = this.all(); if (!(from in o)) return; o[to] = o[from]; delete o[from]; this._write(o, true); },
+    forget(key) { const o = this.all(); if (!(key in o)) return; delete o[key]; this._write(o, true); },
+    // Every tag in use, once each, in the order they read best on a chip row.
+    list() {
+      const o = this.all(), seen = Object.create(null), out = [];
+      Object.keys(o).forEach(k => (o[k] || []).forEach(t => {
+        const lk = String(t).toLowerCase(); if (seen[lk]) return; seen[lk] = 1; out.push(t);
+      }));
+      return out.sort((a, b) => a.localeCompare(b));
+    }
+  };
+
   FM.fxPresets = {
     _key: 'fm.fxpresets',
     builtins: [],
@@ -220,7 +270,20 @@ window.FM = window.FM || {};
     _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { return; } presetsChanged(); },
     save(name, effects) { if (!name) return; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [], FM.jsonReplacer)) }); this._write(arr); },   // jsonReplacer strips _expanded etc. from presets
     get(name) { return this.list().find(p => p.name === name); },
-    remove(name) { this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
+    /* Refused rather than resolved when the new name is taken: the name IS the key, so writing over it
+       would silently merge two saved looks into one and lose whichever lost. */
+    rename(oldName, newName) {
+      const to = String(newName || '').trim();
+      if (!to || to === oldName) return false;
+      const arr = this.saved(), p = arr.filter(x => x.name === oldName)[0];
+      if (!p) return false;
+      if (this.get(to)) { if (FM.toast) FM.toast('There is already a preset called “' + to + '”'); return false; }
+      p.name = to;
+      FM.presetTags.move('fp:' + oldName, 'fp:' + to);
+      this._write(arr);
+      return true;
+    },
+    remove(name) { FM.presetTags.forget('fp:' + name); this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
   };
 
   // Copy/paste for ONE effect (v5.39, Ezra: "in the three dots for each effect, add options to copy
@@ -361,6 +424,17 @@ window.FM = window.FM || {};
       arr.unshift({ name: name, data: data });
       this._write(arr);
     },
+    rename(oldName, newName) {
+      const to = String(newName || '').trim();
+      if (!to || to === oldName) return false;
+      const arr = this.list(), p = arr.filter(x => x.name === oldName)[0];
+      if (!p) return false;
+      if (arr.some(x => x !== p && x.name === to)) { if (FM.toast) FM.toast('There is already a preset called “' + to + '”'); return false; }
+      p.name = to;
+      FM.presetTags.move('lp:' + oldName, 'lp:' + to);
+      this._write(arr);
+      return true;
+    },
     apply(name, layer) {
       const p = this.list().find(x => x.name === name);
       if (!p || !layer) return;
@@ -393,7 +467,7 @@ window.FM = window.FM || {};
       if (dt.xDelta) tr.x = shiftKf(xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time)), t0);   // relative motion from HERE, timed from the clip's start
       if (dt.yDelta) tr.y = shiftKf(xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time)), t0);
     },
-    remove(name) { this._write(this.list().filter(p => p.name !== name)); },
+    remove(name) { FM.presetTags.forget('lp:' + name); this._write(this.list().filter(p => p.name !== name)); },
   };
 
   // ===== AM-style ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
@@ -4161,6 +4235,55 @@ window.FM = window.FM || {};
       }
     } else if (key === 'presets') {
       const pwrap = el('div', 'preset-wrap rows');
+
+      /* SEARCH AND TAG CHIPS (queue 331 clauses 4, 7, 8). Ezra: *"there's no way to search presets or
+         organise … each tag menu will appear at the top and each time you create a new tag a new option
+         will appear at the top"*. The chips ARE those menus: one per tag in use, so creating a tag on a
+         preset makes its chip appear here by construction rather than by a second list that has to be
+         kept in step. "All" leads the row so there is always a way back out of a filter. */
+      const bar = el('div', 'preset-tools');
+      const q = el('input', 'preset-search');
+      q.type = 'search'; q.placeholder = 'Search presets'; q.value = presetQuery;
+      q.setAttribute('aria-label', 'Search presets');
+      /* 'input', not 'change': he asked to SEARCH, and a box that only filters when you leave it is a
+         box you have to be told how to use. The card rebuild puts focus back, since rebuilding replaces
+         the node the caret was in. */
+      q.addEventListener('input', () => {
+        presetQuery = q.value;
+        FM.inspector.refresh();
+        const again = document.querySelector('#inspector .preset-search');
+        if (again) { again.focus(); const n = again.value.length; try { again.setSelectionRange(n, n); } catch (e) {} }
+      });
+      bar.appendChild(q);
+      const tags = FM.presetTags.list();
+      if (tags.length) {
+        const chips = el('div', 'preset-chips');
+        const chip = (label, val) => {
+          const b = el('button', 'preset-chip' + (presetTag === val ? ' on' : ''), label);
+          b.type = 'button';
+          b.addEventListener('click', () => { presetTag = (presetTag === val) ? '' : val; FM.inspector.refresh(); });
+          chips.appendChild(b);
+        };
+        chip('All', '');
+        tags.forEach(t => chip(t, t));
+        bar.appendChild(chips);
+      }
+      pwrap.appendChild(bar);
+
+      // One filter for both lists: a row survives if the search matches its name or one of its tags,
+      // and if the chosen tag (when there is one) is on it.
+      const tagsOf = k => FM.presetTags.get(k);
+      const passes = (name, key) => {
+        const t = tagsOf(key);
+        if (presetTag && t.map(x => x.toLowerCase()).indexOf(presetTag.toLowerCase()) < 0) return false;
+        const needle = presetQuery.trim().toLowerCase();
+        if (!needle) return true;
+        return name.toLowerCase().indexOf(needle) >= 0 || t.some(x => x.toLowerCase().indexOf(needle) >= 0);
+      };
+      /* UNTAGGED LAST (clause 9) — *"loose ones that aren't tagged will appear at the bottom like they
+         do now"*. A stable partition, not a sort: within each half the order the store already has is
+         the order he saved them in, and shuffling that to satisfy "grouped" would lose it. */
+      const byTag = list => list.filter(x => tagsOf(x._k).length).concat(list.filter(x => !tagsOf(x._k).length));
       /* EVERY ROW SHOWS THE LAYER WITH THE PRESET ON IT. Ezra: "the preset menu I wanted to show what
        * the layer would look like with that effect … when you would tap on one thing it would show how
        * the effects preset would make the layer look, this is similar to how we have the effects menu
@@ -4174,6 +4297,28 @@ window.FM = window.FM || {};
       // Keyed on CONTENTS, not name: re-saving a preset under a name it already had must not serve
       // the old picture out of the tile cache.
       const stamp = o => { const t = JSON.stringify(o) || ''; let h = 5381; for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0; return t.length + '_' + h.toString(36); };
+      /* Rename and Tags both go through prompt(), which is what the two Save buttons on this same card
+         already do. A bespoke inline editor would be a nicer thing to own and a worse thing to meet:
+         one idiom on one card beats two. */
+      function presetHoldMenu(anchorEl, o) {
+        const r = anchorEl.getBoundingClientRect();
+        const store = o.storeKey.slice(0, 2) === 'lp' ? FM.layerPresets : FM.fxPresets;
+        FM.contextMenu.show(r.left + 8, r.bottom + 4, [
+          { label: 'Rename…', action: () => {
+              const to = prompt('Rename preset:', o.name);
+              if (to === null) return;
+              if (store.rename(o.name, to) && FM.toast) FM.toast('Renamed to “' + String(to).trim() + '”');
+            } },
+          { label: 'Tags…', action: () => {
+              const now = FM.presetTags.get(o.storeKey);
+              const t = prompt('Tags for “' + o.name + '” (separate with commas):', now.join(', '));
+              if (t === null) return;
+              FM.presetTags.set(o.storeKey, String(t).split(','));
+              if (FM.toast) FM.toast(String(t).trim() ? 'Tagged “' + o.name + '”' : 'Tags cleared');
+            } }
+        ]);
+      }
+
       function presetRow(o) {
         const row = el('div', 'fxp-row insp-preset-row' + (o.cls || ''));
         if (canThumb && o.applyTo) {
@@ -4186,7 +4331,24 @@ window.FM = window.FM || {};
         const txt = el('div', 'fxp-txt');
         const nm = el('button', 'fxp-name insp-preset-name', o.name);
         nm.type = 'button'; nm.title = o.title;
-        nm.addEventListener('click', o.onTap);
+        nm.addEventListener('click', () => { if (nm._held) { nm._held = false; return; } o.onTap(); });
+        /* HOLD TO RENAME OR TAG (queue 331 clauses 5-6). Ezra: *"if you hold on a preset you can re name
+           it and also tag it"*. A hold, not a second button: the row already carries a thumbnail, a name,
+           a sub-line and a ✕ at 380px, and a fifth control is what made him ask for this card to be
+           tidied in the first place.
+           The tap that follows a hold is swallowed — otherwise letting go APPLIES the preset you were
+           trying to rename, which on a card whose whole job is replacing your effect stack is the worst
+           possible accident. Same guard the Add menu uses on its own long-press. */
+        if (o.storeKey) {
+          let ht = null;
+          const stop = () => { if (ht) { clearTimeout(ht); ht = null; } };
+          nm.addEventListener('pointerdown', () => {
+            stop();
+            ht = setTimeout(() => { ht = null; nm._held = true; presetHoldMenu(nm, o); }, 550);
+          });
+          ['pointerup', 'pointercancel', 'pointerleave', 'pointermove'].forEach(e => nm.addEventListener(e, stop));
+          nm.addEventListener('contextmenu', e => { e.preventDefault(); nm._held = true; presetHoldMenu(nm, o); });
+        }
         txt.appendChild(nm);
         if (o.sub) txt.appendChild(el('div', 'fxp-desc', o.sub));
         row.appendChild(txt);
@@ -4206,7 +4368,8 @@ window.FM = window.FM || {};
       }
 
       // LAYER presets first (look + animations — the AM-style ones saved via "Save Preset")
-      const lps = FM.layerPresets.list();
+      const lps = byTag(FM.layerPresets.list().map(p => { p._k = 'lp:' + p.name; return p; }))
+                    .filter(p => passes(p.name, p._k));
       /* THE SAVE ACTION LEADS ITS SECTION (queue 331 clauses 1-2). Ezra: *"Get rid of explanation and
          put the save current effects as preset at the top"*. Both buttons used to sit UNDER their lists,
          so with a few presets saved the thing you came to the card to do was below the fold on a phone,
@@ -4226,7 +4389,10 @@ window.FM = window.FM || {};
           name: p.name,
           key: 'lp:' + p.name + ':' + stamp(p.data),
           title: 'Apply “' + p.name + '” — look + animations',
-          sub: 'Look + animations',
+          storeKey: p._k,
+          // Its tags ARE the sub-line when it has any: on a filtered card "why is this one here" should
+          // be answerable from the row, and 'Look + animations' is already the heading above it.
+          sub: tagsOf(p._k).length ? tagsOf(p._k).map(t => '#' + t).join('  ') : 'Look + animations',
           applyTo: doc => FM.layerPresets.applyTo(p.data, doc),
           onTap: () => { FM.layerPresets.apply(p.name, layer); if (FM.toast) FM.toast('Applied “' + p.name + '”'); },
           onDelete: () => { FM.layerPresets.remove(p.name); }   // the store refreshes — see presetsChanged
@@ -4258,7 +4424,9 @@ window.FM = window.FM || {};
       // namespace + migration, which retires this class of bug; this is the stop-the-bleeding fix.)
       const usableFx = p => (Array.isArray(p.effects) ? p.effects : [])
         .filter(e => e && typeof e === 'object' && typeof e.type === 'string' && FM.fxRegistry.get(e.type));
-      FM.fxPresets.list().forEach(p => {
+      byTag(FM.fxPresets.list().map(p => { p._k = 'fp:' + p.name; return p; }))
+        .filter(p => passes(p.name, p._k))
+        .forEach(p => {
         const raw = Array.isArray(p.effects) ? p.effects : [];
         const fx = usableFx(p);
         const skipped = raw.length - fx.length;
@@ -4285,7 +4453,9 @@ window.FM = window.FM || {};
           cls: p.builtin ? ' builtin' : '',
           cat: (FM.fxRegistry.get(fx[0].type) || {}).category || 'stylize',
           title: t1,
-          sub: fx.length + ' effect' + (fx.length === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : ''),
+          storeKey: p.builtin ? '' : p._k,   // a built-in cannot be renamed or deleted, so it gets no hold menu
+          sub: (tagsOf(p._k).map(t => '#' + t).join('  ') + ' ' +
+                fx.length + ' effect' + (fx.length === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : '')).trim(),
           // A preset is a saved LOOK → it REPLACES the stack, and the preview has to show THAT, not the
           // layer's current effects with these added on top.
           applyTo: doc => { doc.effects = usableFx(p).map(e => JSON.parse(JSON.stringify(e))); },

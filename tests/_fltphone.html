@@ -30,7 +30,15 @@
         // needs looking at on the phone rather than a new file per card.
         var cat = q.get('cat');
         if (cat) FM.inspector.openCategory(cat); else FM.inspector.openFxTab('filters');
-        if (cat === 'presets') { FM.layerPresets.save('Sunset look', FM.scene.layers[0]); }
+        if (cat === 'presets') {
+          // Two tagged and one loose, so the chip row, the tag sub-lines and "untagged last" are all
+          // visible in one shot rather than needing three.
+          FM.layerPresets.save('Loose look', FM.scene.layers[0]);
+          FM.layerPresets.save('Sunset look', FM.scene.layers[0]);
+          FM.layerPresets.save('Neon look', FM.scene.layers[0]);
+          FM.presetTags.set('lp:Sunset look', ['Warm', 'Cinematic']);
+          FM.presetTags.set('lp:Neon look', ['Night']);
+        }
       } catch (e) {}
       // Tiles generate on a queue, one per frame — give the whole grid time to land before the shot.
       setTimeout(function () { window.__done = true; }, 3500);

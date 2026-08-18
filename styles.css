@@ -1584,6 +1584,24 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 /* Drawn, not typed — see the note in inspector.js. A glyph's ink sits where the font puts it;
    an SVG's is centred by geometry, which is the whole reason this stopped being an \2715. */
 .fxp-del svg { width: 14px; height: 14px; display: block; }
+/* Presets card toolbar — search + tag chips (queue 331 clauses 4, 7, 8). The chips scroll SIDEWAYS
+   rather than wrapping: a growing number of tags must not push the card's actual contents off a phone
+   screen, which is the same mistake the card was being tidied for in the first place. */
+.preset-tools { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.preset-search {
+  width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--text); font-size: 13px; -webkit-appearance: none; appearance: none;
+}
+.preset-search::placeholder { color: var(--text-dim); }
+.preset-search:focus { outline: none; border-color: var(--accent); }
+.preset-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.preset-chips::-webkit-scrollbar { display: none; }
+.preset-chip {
+  flex: none; padding: 5px 11px; border-radius: 999px; font-size: 12px; line-height: 1.2;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); white-space: nowrap;
+}
+.preset-chip.on { background: var(--accent); border-color: var(--accent); color: #06212a; font-weight: 600; }
 .fxp-export { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 11px; padding: 3px 9px; cursor: pointer; text-transform: none; letter-spacing: 0; }
 .fxb-tile, .fxb-card { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 /* SLIP pill — centered on the selected video clip; drag slides the media inside the clip */

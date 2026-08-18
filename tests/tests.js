@@ -28041,4 +28041,95 @@
     }
   });
 
+  /* Queue 331, clauses 4-9 — *"there's no way to search presets or organise, make it so if you hold on
+   * a preset you can re name it and also tag it and when you put on a tag that tag is now a new group
+   * that you can go through … each tag menu will appear at the top and each time you create a new tag a
+   * new option will appear at the top, and loose ones that aren't tagged will appear at the bottom"*.
+   * The HOLD itself is not driven here: it opens prompt(), which cannot run headless — the same reason
+   * queue 330's test goes through the store. What is driven is everything the hold leads to, which is
+   * where the behaviour he described actually lives: a tag creates its chip, the chip filters, search
+   * filters, untagged sink, and a rename carries the tags with it instead of orphaning them.
+   * The rename-clash check is the one that matters most and is the least visible: the stores are keyed
+   * by NAME, so renaming onto a name in use would merge two saved looks and destroy one without a word. */
+  test('presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)', { item: 'preset-tags' }, async function () {
+    var L = FM.scene.layers[0];
+    if (!L) throw new Error('no layer to work from');
+    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    var A = '__qa alpha', B = '__qa bravo', A2 = '__qa alpha renamed';
+    var names = function () {
+      return [].slice.call(document.querySelectorAll('#inspector .insp-preset-name'))
+               .map(function (n) { return n.textContent; });
+    };
+    var mine = function () { return names().filter(function (n) { return n.indexOf('__qa') === 0; }); };
+    var chips = function () {
+      return [].slice.call(document.querySelectorAll('#inspector .preset-chip'))
+               .map(function (c) { return c.textContent; });
+    };
+    FM.selectLayer(L.id);
+    try {
+      /* SAVED IN THE ORDER THAT MAKES THE "UNTAGGED LAST" CHECK MEAN SOMETHING. The first version saved
+         A then B, and save() UNSHIFTS — so the store already listed the tagged one first and the
+         assertion passed with the ordering code deleted. The mutation check caught it; nothing else
+         would have. Saved B first, so the raw store order puts the UNTAGGED preset on top and only the
+         partition can move it. */
+      FM.layerPresets.save(B, L);
+      FM.layerPresets.save(A, L);
+      FM.presetTags.set('lp:' + B, ['__qatag']);
+      FM.inspector.openCategory('presets');
+      await sleep(180);
+
+      // 7-8 — a tag in use is an option at the top.
+      if (chips().indexOf('__qatag') < 0) throw new Error('tagged a preset and no chip for it appeared: ' + JSON.stringify(chips()));
+      if (chips()[0] !== 'All') throw new Error('the chip row does not lead with All, so a filter cannot be cleared');
+
+      // 9 — untagged sinks below tagged.
+      var order = mine();
+      if (order.indexOf(B) < 0 || order.indexOf(A) < 0) throw new Error('both presets should be listed: ' + JSON.stringify(order));
+      if (order.indexOf(B) > order.indexOf(A)) throw new Error('the untagged preset is listed ABOVE the tagged one: ' + JSON.stringify(order));
+
+      // 7 — the chip is a group you can go through.
+      var chip = [].slice.call(document.querySelectorAll('#inspector .preset-chip'))
+                   .filter(function (c) { return c.textContent === '__qatag'; })[0];
+      chip.click();
+      await sleep(160);
+      if (mine().indexOf(A) >= 0) throw new Error('filtering by a tag still lists a preset that does not carry it');
+      if (mine().indexOf(B) < 0) throw new Error('filtering by a tag hid the preset that DOES carry it');
+      [].slice.call(document.querySelectorAll('#inspector .preset-chip'))
+        .filter(function (c) { return c.textContent === 'All'; })[0].click();
+      await sleep(160);
+      if (mine().length !== 2) throw new Error('All did not bring both presets back: ' + JSON.stringify(mine()));
+
+      // 4 — search.
+      var box = document.querySelector('#inspector .preset-search');
+      if (!box) throw new Error('the Presets card has no search box');
+      box.value = 'bravo';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(160);
+      if (mine().indexOf(A) >= 0 || mine().indexOf(B) < 0) throw new Error('searching did not narrow the list: ' + JSON.stringify(mine()));
+      box = document.querySelector('#inspector .preset-search');
+      box.value = '';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(160);
+
+      // 5 — rename carries the tags, and refuses a name already in use.
+      FM.presetTags.set('lp:' + A, ['__qatag2']);
+      if (!FM.layerPresets.rename(A, A2)) throw new Error('rename refused a perfectly good new name');
+      if (FM.presetTags.get('lp:' + A2).join() !== '__qatag2') {
+        throw new Error('the tags did not follow the rename — they are orphaned under the old name');
+      }
+      if (FM.presetTags.get('lp:' + A).length) throw new Error('the tags were copied, not moved: the old key still has them');
+      if (FM.layerPresets.rename(A2, B)) throw new Error('renaming onto a name already in use was allowed — that merges two presets and loses one');
+      await sleep(140);
+      if (mine().indexOf(A2) < 0) throw new Error('the renamed preset is not on screen under its new name: ' + JSON.stringify(mine()));
+    } finally {
+      [A, B, A2].forEach(function (n) { FM.layerPresets.remove(n); });
+      FM.presetTags.set('lp:' + A, []); FM.presetTags.set('lp:' + A2, []); FM.presetTags.set('lp:' + B, []);
+      var bx = document.querySelector('#inspector .preset-search');
+      if (bx) { bx.value = ''; bx.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (id0) FM.selectLayer(id0);
+      FM.inspector.openCategory('home');
+      await sleep(80);
+    }
+  });
+
 })();
