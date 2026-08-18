@@ -10020,3 +10020,17 @@ wait for them to report back."*
       ⚠️ Previous rounds measured desktop timings and found nothing, repeatedly (#95, #125, #202). Do not do
       that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
       asymmetry is the control that makes such a profile meaningful.
+
+- [ ] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.**
+      (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
+      make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
+      to open a tab when there's only one choice in it."*
+      A collapsible group containing exactly one item makes you open a thing to reach a thing. He is right,
+      and the rule generalises: **any blend group with one member should render as a plain row.** Build it as
+      the general rule rather than special-casing "Basic", or the next single-member group repeats this.
+      **Clauses:**
+      1. [ ] "Basic" no longer renders as a collapsible group — Normal appears directly.
+      2. [ ] It still shows as SELECTED the way it does now (the ✓ and the accent).
+      ⚠️ Normal is the DEFAULT blend mode, so this row is the one every layer starts on — it must still be
+      tappable to return to Normal from another mode, not just a label.
+      **Ships with #366**, which renames this card to "Mixing" — same card, one release.
