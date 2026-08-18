@@ -396,6 +396,18 @@ window.FM = window.FM || {};
     towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
     dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
     ramp:    ['highlightsshadows'],                                     // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
+    /* HIS CARS, ON THE SHAKE SECTION (queue 332 clause 1). Ezra sent four photographs and settled where
+     * they go himself: *"All just for the shake section"*. Four across seven effects rather than one
+     * repeated, because a category whose tiles are all the same picture tells you nothing about which
+     * effect is which — the exact fault queue 359 was about. Ordered so no two ADJACENT tiles in the
+     * category (wiggle, shake, swing, spin, pulse, drift, orbit) share a car.
+     * This works without touching the subject machinery because the move category already uses the CARD
+     * form — a photo inset in the frame with room to travel — which is what makes a shake visible at
+     * all; a full-frame subject that shakes just swings its own edges through the tile. */
+    huracan:  ['shake', 'pulse'],
+    mclaren:  ['wiggle', 'drift'],
+    revuelto: ['swing', 'orbit'],
+    tesla:    ['spin'],
   };
   const PHOTO_SUBJECT = {};
   Object.keys(PHOTO_OF).forEach(k => PHOTO_OF[k].forEach(t => { PHOTO_SUBJECT[t] = k; }));
@@ -1396,6 +1408,9 @@ window.FM = window.FM || {};
     // names is in the preload set — rather than checking a copy of the list (queue 359).
     _photoKeys: function () { return photoKeys().slice(); },
     _filterSubject: function (id) { return FILTER_SUBJECT[id] || null; },
+    // The subject an EFFECT resolves to ('photocard:huracan', 'full:color', 'keyshot', …). Read-only,
+    // so a test can check which picture a category actually demonstrates on (queue 332).
+    _subjectOf: function (type) { return subjectFor(type, FM.fxRegistry.get(type)); },
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },

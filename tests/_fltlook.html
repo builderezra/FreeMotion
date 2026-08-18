@@ -68,6 +68,20 @@ h3{padding:10px 14px 0;margin:0;color:#e6b980;font-size:12px}</style></head><bod
         im.src = 'fx-art/' + k + '.jpg?v=1';
       });
       function go() {
+        /* ?fx=<category> shows that CATEGORY's effect tiles instead of the filters, so the shake
+           section's four cars can be judged the same way the filters were — by looking. */
+        var fxcat = new URLSearchParams(location.search).get('fx');
+        if (fxcat) {
+          FM.fxRegistry.all().filter(function (r) { return r.category === fxcat; }).forEach(function (r) {
+            var cv = document.createElement('canvas');
+            var fig = document.createElement('figure'); fig.appendChild(cv);
+            fig.appendChild(document.createElement('figcaption')).textContent = r.name || r.id;
+            grid.appendChild(fig);
+            try { FM.fxThumbs.mount(cv, r.id); } catch (e) { fig.lastChild.textContent = r.id + ' THREW ' + e.message; }
+          });
+          setTimeout(function () { window.__done = true; }, 3000);
+          return;
+        }
         FM.filters.all().forEach(function (f) {
           var cv = document.createElement('canvas');
           var fig = document.createElement('figure'); fig.appendChild(cv);

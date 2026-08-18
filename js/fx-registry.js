@@ -115,7 +115,7 @@ window.FM = window.FM || {};
     proc: 'Procedural',
     matte: 'Matte / Mask / Key',
     drawing: 'Drawing / Edge',
-    move: 'Move / Transform',
+    move: 'Shakes / Movement',   // his name for it (queue 332 clause 2)
     repeat: 'Repeat',
     stylize: 'Stylize',
     threed: '3D',

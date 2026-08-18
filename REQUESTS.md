@@ -6306,7 +6306,7 @@ better still, keep working inside the turn rather than parking work for a later 
       through that lens, which is worth remembering.)*
 
 
-- [ ] **332 — Use his own car photos as the effect preview art, and rename the Move/Transform effect
+- [x] **332 — Use his own car photos as the effect preview art, and rename the Move/Transform effect
       group to "Shakes / Movement".** (17 Aug, FOUR photos sent in chat.) His words, verbatim:
 
       > Use this as the photo for all the stuff in the move / transform section and change its name to shakes / movement
@@ -6343,9 +6343,9 @@ better still, keep working inside the turn rather than parking work for a later 
       quietly ship past him. (Belongs with BEFORE-PUBLISHING.md as well.)
 
       **Clauses:**
-      1. [ ] **All four photos** become the sample art for the **Move / Transform (shake) category** —
-             his last message resolves the earlier ambiguity: none of them go anywhere else.
-      2. [ ] That category is **renamed to "Shakes / Movement"**.
+      1. [x] ✅ **v9.80** — **All four photos** become the sample art for the **Move / Transform (shake)
+             category** — his last message resolves the earlier ambiguity: none of them go anywhere else.
+      2. [x] ✅ **v9.80** — That category is **renamed to "Shakes / Movement"**.
       Four photos across one category means the tiles in it can differ from each other, which is
       probably the point — a row of identical cars would read as one repeated tile.
 
@@ -6361,6 +6361,19 @@ better still, keep working inside the turn rather than parking work for a later 
       Told him so in the reply rather than leaving it silently un-started.
       Everything else about the entry is ready: the category rename is independent of the photos and can
       ship on its own.
+
+      ✅ **BOTH CLAUSES DONE — v9.80.** Four photographs across seven effects (wiggle, shake, swing, spin,
+      pulse, drift, orbit), arranged so **no two neighbouring tiles share a car**: one car repeated seven
+      times would satisfy "use these photos" and leave the category unreadable, which is exactly the
+      fault queue 359 had just been about. All four are used — three would have quietly dropped one of
+      the photos he sent.
+      **No new machinery was needed, and the reason is worth keeping:** the move category already uses
+      the inset CARD form rather than a full-frame subject, and that is what makes a shake visible at all
+      — a full-frame photo that shakes just swings its own edges through the tile. So this was a table
+      entry, not a rewrite. Adding the cars to that table also preloads them by construction, because of
+      the derivation put in for 359.
+      Four assertions, all mutation-checked: every shake effect uses one of his cars, no two neighbours
+      share one, all four photos are in use, and the category reads **Shakes / Movement**.
 
 
 - [ ] **333 — Selected effects do nothing, and some effects add themselves instead of previewing —

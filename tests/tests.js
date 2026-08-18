@@ -28132,4 +28132,40 @@
     }
   });
 
+  /* Queue 332 — Ezra sent four photographs of his own cars and settled where they go himself:
+   * *"Use this as the photo for all the stuff in the move / transform section and change its name to
+   * shakes / movement"*, then *"All just for the shake section"*.
+   * FOUR photographs across SEVEN effects, and the adjacency check is the point of the test rather than
+   * decoration: one car repeated seven times would satisfy "use these photos" and still leave the
+   * category unreadable, which is the fault queue 359 was about. Adjacent means adjacent in REGISTRY
+   * order, because that is the order they are laid out in. */
+  test('the shake section demonstrates on his cars, and no two neighbours share one (queue 332)', { item: 'shake-art' }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs._subjectOf) throw new Error('no subject seam — FM.fxThumbs._subjectOf missing');
+    var CARS = ['huracan', 'mclaren', 'revuelto', 'tesla'];
+    var moves = FM.fxRegistry.all().filter(function (r) { return r.category === 'move'; });
+    if (moves.length < 5) throw new Error('expected the move category to hold the shake effects, found ' + moves.length);
+
+    var seq = moves.map(function (r) {
+      var subj = String(FM.fxThumbs._subjectOf(r.id) || '');
+      var car = CARS.filter(function (c) { return subj.indexOf(c) >= 0; })[0] || '';
+      if (!car) throw new Error(r.id + ' does not demonstrate on one of his cars — it uses "' + subj + '"');
+      return { id: r.id, car: car };
+    });
+    for (var i = 1; i < seq.length; i++) {
+      if (seq[i].car === seq[i - 1].car) {
+        throw new Error('“' + seq[i - 1].id + '” and “' + seq[i].id + '” sit next to each other and use the same photo (' + seq[i].car + ')');
+      }
+    }
+    // All four were sent, so all four should be in use — three would quietly drop one of his photos.
+    var used = {};
+    seq.forEach(function (x) { used[x.car] = 1; });
+    var unused = CARS.filter(function (c) { return !used[c]; });
+    if (unused.length) throw new Error('he sent four photos and these are not used anywhere: ' + unused.join(', '));
+
+    // Clause 2 — the name he asked for, read from the list the UI actually renders from.
+    var cat = (FM.FX_CATEGORIES || []).filter(function (c) { return c.key === 'move'; })[0];
+    if (!cat) throw new Error('the move category is not in FM.FX_CATEGORIES at all');
+    if (cat.label !== 'Shakes / Movement') throw new Error('the category is still called “' + cat.label + '”');
+  });
+
 })();
