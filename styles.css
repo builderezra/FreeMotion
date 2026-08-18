@@ -2083,6 +2083,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .clip.sel .clip-grip::after { content: ''; width: 5px; height: 5px; border-top: 2px solid #1b1f27; border-right: 2px solid #1b1f27; }
 .clip.sel .clip-grip.left::after { transform: rotate(-135deg); margin-left: 2px; }
 .clip.sel .clip-grip.right::after { transform: rotate(45deg); margin-right: 2px; }
+/* ARMED — the trim is live (queue 336). The whole cap goes the signature colour rather than just the
+   chevron: at 13px a recoloured 5px arrowhead is a smudge, and he asked to be able to SEE that it is
+   now movable. The transition is on the cap only, so it reads as the control lighting up rather than
+   as the clip flickering. */
+.clip.sel .clip-grip { transition: background .16s ease; }
+.clip.sel .clip-grip.armed { background: var(--accent); box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
+.clip.sel .clip-grip.armed::after { border-top-color: #06212a; border-right-color: #06212a; }
 /* AM: the layer name printed ON the clip bar, left-aligned, readable over fills/waveforms.
    Phone-only: on desktop the track-head column still shows the name (no redundancy). */
 .clip-label {

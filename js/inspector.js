@@ -1270,7 +1270,13 @@ window.FM = window.FM || {};
       // A one-line "what this actually does", above the controls. Two effects can have names that
       // sound like the same thing (Directional Blur vs Motion Blur (Footage) vs the transform blur in
       // Move & Transform) and no arrangement of sliders will tell you which is which.
-      if (reg.desc) body.appendChild(el('div', 'fx-desc', reg.desc));
+      /* NO EXPLANATION BLOCK (queue 378). Ezra, for the fourth time and now as a rule rather than an
+         instance: *"Get rid of motion blur explanation, and make a note to get rid of all
+         explanations, if you have to, write it down somewhere else, so that when we make tutorials
+         the info is there for you to reference"*. (Also 331 clause 1, 346, 350.)
+         The PANEL stops rendering it; the text is NOT deleted. `reg.desc` is still the browser tile's
+         tooltip and still the written record of what each effect does — which is the "somewhere else"
+         he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);

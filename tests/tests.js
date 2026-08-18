@@ -28336,4 +28336,110 @@
     if (!FM.fxRegistry.supportsFilter(box, L)) throw new Error('a Filter holding only Motion Blur (Object) is still refused — which is the exact complaint');
   });
 
+  /* Queue 336 — *"To extend out a clip you should have to hold down on the arrows first because currently
+   * accidentally touching for a second moves it … and to signify it can move now the colour of the arrow
+   * should change to the signature blue or sum"*.
+   * Three things have to hold at once and they pull against each other, which is why all three are
+   * asserted: a graze must NOT retime the clip, a real hold must, and a MOUSE must keep working with no
+   * wait at all — a hold forced on the desktop would be an annoyance guarding against nothing, since a
+   * mouse-down on a 13px target cannot happen by accident mid-scroll. */
+  test('a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)', { item: 'trim-hold' }, async function () {
+    await atPhoneWidth(async function () {
+      var L = FM.scene.layers[0];
+      if (!L) throw new Error('no layer to work from');
+      L.start = 1; L.duration = 3;
+      FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(160);
+      var grip = document.querySelector('.clip.sel .clip-grip.right');
+      if (!grip) throw new Error('no trim grip on the selected clip');
+      var r = grip.getBoundingClientRect();
+      var mk = function (type, opts) {
+        return new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 7,
+          pointerType: 'touch', clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, buttons: 1 }, opts || {}));
+      };
+      var dur0 = L.duration;
+
+      // 1 — a graze: down, up well before the arm time. Nothing may move.
+      grip.dispatchEvent(mk('pointerdown'));
+      await sleep(120);
+      if (grip.classList.contains('armed')) throw new Error('the grip armed after 120ms — that is a graze, not a hold');
+      grip.dispatchEvent(mk('pointermove', { clientX: r.left + r.width / 2 + 60 }));
+      grip.dispatchEvent(mk('pointerup', { buttons: 0 }));
+      await sleep(60);
+      if (Math.abs(L.duration - dur0) > 0.001) throw new Error('brushing the grip retimed the clip: ' + dur0 + ' → ' + L.duration);
+
+      // 2 — a real hold arms it, and says so.
+      grip.dispatchEvent(mk('pointerdown'));
+      await sleep(700);
+      if (!grip.classList.contains('armed')) throw new Error('held for 700ms and the grip never armed');
+      var cs = getComputedStyle(grip).backgroundColor;
+      if (/^rgba?\(\s*255,\s*255,\s*255/.test(cs)) throw new Error('the armed grip is still white — nothing signals that it is live: ' + cs);
+      grip.dispatchEvent(mk('pointerup', { buttons: 0 }));
+      await sleep(60);
+      if (grip.classList.contains('armed')) throw new Error('the grip stayed armed after the finger lifted');
+
+      // 3 — a MOUSE trims immediately: no hold, no wait.
+      FM.timeline.rebuild(); await sleep(120);
+      grip = document.querySelector('.clip.sel .clip-grip.right');
+      r = grip.getBoundingClientRect();
+      grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 8,
+        pointerType: 'mouse', button: 0, buttons: 1, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+      if (!FM.timeline._trimming) throw new Error('no _trimming seam — this half of the test could only assume it worked');
+      var armedNow = FM.timeline._trimming();
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'mouse', buttons: 0 }));
+      if (!armedNow) throw new Error('a mouse press did not start a trim straight away');
+      await sleep(60);
+    });
+  });
+
+  /* Queue 378 / 379 — *"Get rid of motion blur explanation, and make a note to get rid of all
+   * explanations"* and *"motion blur … needs to be able to be stronger, the cranks should be able to
+   * crank more, currently the strongest setting is only subtle"*.
+   * The strength half asserts the RENDER, not the slider's max. A ceiling raised in the param schema
+   * while the renderer still clamps internally would leave the crank turning further and doing nothing
+   * — which is the exact complaint, made worse by looking fixed. */
+  test('effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379)', { item: 'fx-desc-crank' }, async function () {
+    var L = FM.scene.layers[0];
+    if (!L) throw new Error('no layer to work from');
+    var fx0 = L.effects ? L.effects.slice() : [];
+    try {
+      L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.5, samples: 8 } }];
+      FM.selectLayer(L.id); FM.inspector.openCategory('effects'); FM.refreshAll();
+      await sleep(200);
+      var desc = document.querySelector('#inspector .fx-desc');
+      if (desc) throw new Error('an effect explanation block is still rendered: ' + JSON.stringify((desc.textContent || '').slice(0, 50)));
+
+      var reg = FM.fxRegistry.get('objectblur');
+      var sh = (reg.params || []).filter(function (p) { return p.key === 'shutter'; })[0];
+      if (!sh || sh.max <= 1) throw new Error('the shutter still tops out at ' + (sh && sh.max) + ' — the crank cannot go further');
+
+      // …and the RENDERER must honour it. A moving layer, because the blur is a no-op on a still one.
+      var P = { width: 160, height: 120, fps: 30, duration: 3 };
+      var mk = function (shutter) {
+        var B = FM.makeLayer('shape', { name: 'B', shape: 'ellipse', x: 30, y: 60, shapeW: 24, shapeH: 24, fill: '#fff' });
+        B.start = 0; B.duration = 3;
+        B.transform.x = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 130, e: 'linear' }] };
+        B.effects = [{ type: 'objectblur', enabled: true, params: { shutter: shutter, samples: 16 } }];
+        return { project: P, layers: [B] };
+      };
+      var lit = function (sc) {
+        var c = offscreen(P.width, P.height), g = c.getContext('2d', { willReadFrequently: true });
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, P.width, P.height);
+        FM.renderScene(g, sc, 1.0);
+        var d = g.getImageData(0, 0, P.width, P.height).data, n = 0;
+        for (var i = 0; i < d.length; i += 4) if (d[i] > 24) n++;
+        return n;
+      };
+      var one = lit(mk(1)), four = lit(mk(4));
+      if (!(four > one * 1.15)) {
+        throw new Error('shutter 4 smears no wider than shutter 1 (' + four + ' vs ' + one + ' lit px) — the ' +
+                        'slider goes further but the renderer still clamps, so the crank does nothing');
+      }
+    } finally {
+      L.effects = fx0;
+      FM.inspector.openCategory('home'); FM.refreshAll();
+      await sleep(80);
+    }
+  });
+
 })();

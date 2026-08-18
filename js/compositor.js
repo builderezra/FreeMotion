@@ -834,7 +834,7 @@ window.FM = window.FM || {};
        talks in degrees and that swap is one multiplication whenever Ezra wants it. */
     { type: 'objectblur', label: 'Motion Blur (Object)', desc: 'Smears the layer along its OWN movement — position, scale or rotation. It cannot see movement inside the picture; for that use Motion Blur (Footage). It does nothing on a layer that is not moving.',
       params: [
-      { key: 'shutter', label: 'Shutter', min: 0, max: 1, step: 0.05, def: 0.5 },
+      { key: 'shutter', label: 'Shutter', min: 0, max: 4, step: 0.05, def: 0.5 },   // 4 frames of travel, not 1 — queue 379
       { key: 'samples', label: 'Samples', min: 2, max: 32, step: 1, def: 8 },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
@@ -2029,7 +2029,12 @@ window.FM = window.FM || {};
     const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
     const samples = Math.max(2, Math.min(32, Math.round(_num(mb.samples, 8))));
     const fps = (scene && scene.project && scene.project.fps) || 30;
-    const dt = Math.max(0, Math.min(1, _num(mb.shutter, 0.5))) / fps;   // shutter window in seconds
+    /* CEILING RAISED 1 → 4 (queue 379). Ezra: *"needs to be able to be stronger, the cranks should be
+       able to crank more, currently the strongest setting is only subtle"*. A real shutter cannot stay
+       open longer than a frame, and clamping to 1 was that physical honesty — which is exactly why a
+       full crank looked timid. Nothing here needs to be physically honest. Default is unchanged at 0.5,
+       so nothing already made moves. */
+    const dt = Math.max(0, Math.min(4, _num(mb.shutter, 0.5))) / fps;   // shutter window in seconds
     /* NOTHING MOVING → NOTHING TO BLUR. Without this, switching it on cost a flat N full renders of
      * the layer every frame whether it moved or not, and averaged N identical sub-frames back into
      * the sharp original — all of the cost, none of the effect. Returning false hands the caller

@@ -649,7 +649,7 @@ window.FM = window.FM || {};
       if (!l.effects.some(e => e && e.type === 'objectblur')) {
         // Both params written explicitly — sanitizeEffects keeps only params that are PRESENT, so an
         // empty object would render at the kernel's fallbacks and silently reset everyone's settings.
-        const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(1, mb.shutter)) : 0.5;
+        const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(4, mb.shutter)) : 0.5;   // ceiling matches the renderer (queue 379)
         const sa = typeof mb.samples === 'number' && isFinite(mb.samples) ? Math.max(2, Math.min(32, Math.round(mb.samples))) : 8;
         l.effects.unshift({ type: 'objectblur', enabled: true, params: { shutter: sh, samples: sa } });
       }

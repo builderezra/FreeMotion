@@ -9858,3 +9858,96 @@ wait for them to report back."*
              row's padding/margin goes with it or the change is invisible.
       ⚠️ Check the heading is not doing double duty as the sheet's drag handle or its accessibility label
       before deleting it — if it is, the handle stays and only the word goes.
+
+- [ ] **378 — Get rid of the effect explanation blocks — ALL of them — and keep the text somewhere it can
+      feed the tutorials.** (18 Aug, phone screenshot at v9.83 of Motion Blur (Object) with its paragraph
+      under the title.) His words, verbatim: *"Get rid of motion blur explanation, and make a note to get
+      rid of all explanations, if you have to, write it down somewhere else, so that when we make tutorials
+      the info is there for you to reference if you cant remember how shit works"*.
+      **This is the FOURTH time he has asked for an explanation block to go** — queue 331 clause 1 (the
+      Presets card), queue 346 (Move & Transform), queue 350 (Voronoi), and now every effect at once. He is
+      no longer reporting instances; he is stating a rule. Treated as a rule.
+      **Clauses:**
+      1. [x] ✅ **v9.84** — Motion Blur (Object)'s paragraph specifically.
+      2. [x] ✅ **v9.84** — Every effect's, by the same change: the panel stopped rendering
+             `reg.desc` (`js/inspector.js:1273`) rather than the description being deleted from 190-odd
+             effects one at a time.
+      3. [x] ✅ **The text is kept, exactly as he asked.** `desc` stays in the registry — it is still the
+             browser tile's tooltip and it is still the written record of what each effect does, which is
+             precisely the "somewhere else to reference when we make tutorials" he described. Deleting the
+             strings would have thrown away the thing he asked to keep.
+      ⚠️ Still open elsewhere: the explanation blocks that are NOT `reg.desc` — the `insp-hint` lines in
+      other cards (queue 346 names one). Those are separate elements and this change does not touch them.
+
+- [ ] **379 — Motion blur needs to crank much harder; the strongest setting is only subtle.** (18 Aug,
+      immediately after v9.83.) His words, verbatim: *"Also motion blur looks good but needs to be able to
+      be stronger, the cranks should be able to crank more, currently the strongest setting is only
+      subtle"*.
+      **He has answered the open question in #335 without being asked it.** That entry recorded a choice I
+      deliberately did not make for him: keep shutter at 0..1 (a fraction of a frame, what the renderer has
+      always clamped to) or move to film's 0..360 degrees. "Crank more" is that answer — the ceiling was
+      the problem, not the units.
+      **Why it was capped at all:** `Math.min(1, …)` in `drawMotionBlur` means the smear can never span more
+      than a single frame of travel, which is physically what a real shutter does and is exactly why it
+      tops out subtle. Nothing about this app needs to be physically honest.
+      1. [x] ✅ **v9.84** — the shutter ceiling goes from **1 → 4** in both the slider and the renderer,
+             so a full crank smears across four frames of travel instead of one. Default stays 0.5, so
+             nothing he has already made changes.
+
+- [ ] **380 — "Paste style" does nothing.** (18 Aug.) His words, verbatim: *"Make sure paste style actually
+      works, I just tried pasting style and only selected the position and scale and it didn't do anything"*.
+      **Read carefully, his sentence describes the likely cause as well as the symptom:** he *"only selected
+      the position and scale"* — so the copy captured a SUBSET, and pasting that subset changed nothing.
+      Two candidates, and they need telling apart before anything is changed:
+      · the COPY side stored an empty/partial style because of which boxes were ticked, or
+      · the PASTE side ignores the subset and only applies a fixed set of properties.
+      **Do not "fix" it by making paste apply everything** — that would destroy the selective behaviour he
+      was deliberately using. Reproduce with exactly his selection (position + scale only) first.
+      ⚠️ Position and scale are TRANSFORM properties, and a style paste that silently skips transform would
+      look exactly like this. Check whether transform is even in the copied set.
+
+- [ ] **381 — Hold a layer-edit card to reset just that group's values.** (18 Aug, phone screenshot at
+      v9.83 of the nine category cards.) His words, verbatim: *"Make it so if you hold down on any of the
+      layer edit buttons it gives an option to reset that one specific groups values back to how to was"*.
+      **The buttons:** the numbered category cards — Colouring, Border / Shadow, Blending / Opacity,
+      Position / Scale, Speed, Volume, Edit Points, Presets, Effects.
+      **Clauses:**
+      1. [ ] Holding a card offers **reset this group**.
+      2. [ ] It resets ONLY that group's properties, not the whole layer.
+      ⚠️ *"back to how it was"* is ambiguous and matters: **back to the app's DEFAULTS**, or back to what it
+      was when you opened the card? Building it as **defaults** — that is what "reset" means everywhere
+      else, and "undo my last few changes" is what undo is for. Say if you meant the other one.
+      ⚠️ It must be ONE undo step, and it must not touch keyframes on properties outside the group.
+      Same hold idiom and the same swallow-the-tap guard as queue 331 and 365.
+
+- [ ] **382 — Motion blur should smear movement that EFFECTS cause, like shakes.** (18 Aug.) His words,
+      verbatim: *"Motion blur should work when other effects make a layer move, currently it doesn't, like
+      shake effects"*.
+      **He is right, and this is a known structural gap rather than a bug** — it is the same one as
+      **#31b** and **#93**: Motion Blur (Object) re-projects the layer's plate through its TRANSFORM
+      matrices either side of the shutter, so it can only see motion the transform expresses. Shake,
+      Wiggle, Swing, Spin, Pulse, Drift and Orbit move the layer by displacing it at DRAW time, which
+      never touches the matrix — so there is nothing for the blur to read. The v9.83 description said as
+      much out loud; he is asking for the limitation to go, not for the wording.
+      **Two routes, and they are very different sizes:**
+      · Make the movers write their displacement into a place the blur can sample at t±dt (a per-frame
+        "extra transform" the mover contributes). Correct and reusable — **#31b's effects half was solved
+        exactly this way in v7.50**, so there may already be a channel to read.
+      · Or let the blur re-render the layer at the sub-times instead of re-projecting one plate. Simple to
+        describe, and much dearer: it turns one render per frame into N.
+      **Start by checking what v7.50 built for #31b** — if effect-driven motion is already exposed for
+      the transform blur, this may be small.
+
+- [ ] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** (18 Aug.) His
+      words, verbatim: *"When I grab on a layer and try dragging it up on the effects menu it doesn't work,
+      but if I press on the dots in the side it does, and this would make sense but the fact that it kinda
+      works but not fully unless I grab the dots is weird, just make it grabbing and holding on an effect
+      lets you drag it and position it as if you were doing it from the dots"*.
+      He is not asking for the handle to go — he is asking for **hold-anywhere-then-drag** to do the same
+      thing, with the dots still working.
+      **Clauses:**
+      1. [ ] Hold anywhere on an effect row → it becomes draggable, exactly as the ⠿ handle does.
+      2. [ ] The handle keeps working (immediate drag, no hold).
+      ⚠️ The row already has a TAP (expand/collapse) and a SWIPE-LEFT (delete). A hold-to-drag has to
+      coexist with both: the tap must still fire when there is no hold, and a horizontal swipe must still
+      delete rather than starting a reorder. That three-way split is the whole difficulty here.

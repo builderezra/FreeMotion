@@ -1358,16 +1358,51 @@ window.FM = window.FM || {};
       const grip = document.createElement('div');
       grip.className = 'clip-grip ' + edge;
       grip.title = 'Trim ' + edge + ' edge';
-      grip.addEventListener('pointerdown', (e) => {
-        e.stopPropagation(); e.preventDefault();
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
-        if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
+      /* A TRIM MUST BE HELD BEFORE IT WILL DRAG (queue 336). Ezra: *"To extend out a clip you should have
+         to hold down on the arrows first because currently accidentally touching for a second moves it
+         but you should have to hold down for a second and to signify it can move now the colour of the
+         arrow should change to the signature blue or sum"*.
+         Retiming a clip is a destructive edit reachable by brushing a 13px target while scrolling, and
+         nothing about the old behaviour distinguished a deliberate grab from a graze.
+         TOUCH ONLY. A mouse-down on a 13px target is already deliberate — it cannot happen while
+         scrolling — so forcing a desktop user to wait half a second would be an annoyance protecting
+         against nothing. The guard exists for fingers, so it applies to fingers.
+         550ms is not a new number: it is what the Add menu's long-press and the Presets card's hold
+         already use, and a second feel for the same gesture is worse than a slightly wrong one.
+         The pointer is captured only ON ARMING. Capturing at pointerdown would swallow the swipe that a
+         graze actually is, so brushing a grip mid-scroll would stop the scroll dead — trading a wrong
+         trim for a stuck timeline. */
+      const ARM_MS = 550;
+      let armTimer = null, armAt = null;
+      const disarm = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } armAt = null; grip.classList.remove('armed'); };
+      const beginTrim = (e) => {
         try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
         trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer) };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
+      };
+      grip.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
+        if (e.pointerType === 'mouse') { beginTrim(e); return; }
+        disarm();
+        armAt = { x: e.clientX, y: e.clientY };
+        const at = { clientX: e.clientX, pointerId: e.pointerId };   // the event object is recycled; the two fields it needs are not
+        armTimer = setTimeout(() => {
+          armTimer = null;
+          if (layer.locked || pinch) return;
+          grip.classList.add('armed');     // the colour change IS the signal that it is live now
+          beginTrim(at);
+        }, ARM_MS);
       });
+      // A finger that TRAVELS was scrolling, not grabbing. 8px, so a resting thumb's tremor still arms.
+      grip.addEventListener('pointermove', (e) => {
+        if (!armTimer || !armAt) return;
+        if (Math.abs(e.clientX - armAt.x) > 8 || Math.abs(e.clientY - armAt.y) > 8) disarm();
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => grip.addEventListener(ev, disarm));
       clip.appendChild(grip);
     });
     // SLIP (Canva-style): the clip keeps its exact place and length on the timeline — dragging the
@@ -2321,6 +2356,10 @@ window.FM = window.FM || {};
   }
 
   FM.timeline = {
+    // Whether a trim drag is live. Read-only seam: the hold guard (queue 336) is only meaningful if a
+    // test can tell "a trim started" from "nothing happened", and without this the mouse half of that
+    // test can only assume it worked — which is not a test.
+    _trimming: function () { return !!trimDrag; },
     /* Which timeline gesture, if any, is still live. Exposed because a drag that OUTLIVES the thing
      * that started it is invisible state: nothing on screen says so, the timeline does not complain,
      * and the next feature to key off `clipMove` inherits a drag it never started. That is not
