@@ -9536,7 +9536,13 @@ wait for them to report back."*
       right; App settings is appearance, and stopping playback to toggle a theme would be irritating.
       **One word and either or both get the same treatment.**
 
-- [ ] **354 — Hide the playhead while the big add button is up, and give that + real colours.**
+- [x] **354 — Hide the playhead while the big add button is up, and give that + real colours.** ✅ **v10.02, both clauses.**
+      The fixed-centre line is hidden while the big empty state is up — and comes back the instant a clip
+      exists, which the test asserts too, because a rule that simply killed the playhead would otherwise
+      look identical. The + now carries a conic sweep through the four hues this app already uses for
+      "many things" (the Custom elements mark, the add-menu tabs), with the glass highlight kept so it
+      still belongs to the FAB's family. Conic, not linear: a linear gradient across a circle reads as a
+      lit cylinder.
       (18 Aug, phone screenshot of Project 30 at v9.74: the empty-project state with the big **+** and
       "Tap here to start creating", with the white playhead line running straight down through the
       middle of the + and the label.) His words, verbatim: *"Hide the player head while the add button

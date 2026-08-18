@@ -2313,6 +2313,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   border-left: 5px solid transparent; border-right: 5px solid transparent;
   border-top: 8px solid #eaf0f8;
 }
+/* NOT WHILE THE BIG + IS UP (queue 354). Ezra, with a screenshot of the white line running down
+   through the + and through "Tap here to start creating": "Hide the player head while the add button
+   is big". An empty project has nothing to scrub, so the line is a ruler over a blank page — and it
+   sits on top of the one control the screen exists for. `display: none` rather than opacity, so its
+   triangle goes too; timeline.js puts .tl-empty-start on the panel in the same place it decides the
+   row is empty, so the two can never disagree about what "empty" means. */
+#timeline-panel.tl-empty-start #tl-centerline { display: none; }
 .kf-dot { position: absolute; top: 13px; width: 11px; height: 11px; background: #ffffff; transform: translateX(-5.5px) rotate(45deg); z-index: 6; box-shadow: 0 0 0 1px rgba(0,0,0,.55); cursor: ew-resize; }
 .kf-dot::after { content: ''; position: absolute; inset: -12px; }   /* invisible ~35px touch pad — the 11px diamond alone is untappable on a phone */
 .kf-dot.ease-linear { background: #ffffff; }      /* linear */
@@ -6308,7 +6315,23 @@ body.fm-pushing #toast { z-index: 213; }
    grip drags the row to choose where new layers land, and with nothing in the timeline there is nowhere
    to put it. It comes back with the slim row the moment a clip exists. */
 .tl-addrow--empty .tl-addrow-grip { display: none; }
-.tl-addrow--empty .tl-addrow-plus { width: 64px; height: 64px; box-shadow: 0 0 26px rgba(90, 199, 237, .45), inset 0 0 0 1px rgba(255,255,255,.4); }
+/* REAL COLOURS AT 64px (queue 354). Ezra: "give the plus add button some actual nice colours not just
+   basic blue". The slim row's + is a blue glass pill and that is right at 21px — at 21px a gradient is
+   a hint of depth and nothing more. Blown up to 64 the same treatment reads as one flat blue disc.
+   So the big one gets its own paint: a conic sweep through the four hues this app already uses for
+   "many things" — the Custom elements mark and the add-menu tabs both say it — with the glass
+   highlight kept over the top so it still belongs to the same family as the FAB. Conic rather than
+   linear because a round button wants its colour to travel around it; a linear gradient across a
+   circle always reads as a lit cylinder.
+   The glow underneath picks up the same violet so the halo is not arguing with the face. */
+.tl-addrow--empty .tl-addrow-plus {
+  width: 64px; height: 64px;
+  color: #06121c;
+  background:
+    radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%),
+    conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
+  box-shadow: 0 0 30px rgba(154, 120, 255, .40), 0 0 14px rgba(90, 199, 237, .34), inset 0 0 0 1px rgba(255,255,255,.5);
+}
 .tl-addrow--empty .tl-addrow-plus svg { width: 40px; height: 40px; }
 .tl-addrow--empty .tl-addrow-plus svg path { stroke-width: 2.2; }
 .tl-addrow--empty .tl-addrow-label { font-size: 15px; color: var(--text); }

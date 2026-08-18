@@ -1755,6 +1755,14 @@ window.FM = window.FM || {};
        start". Only while there is nothing to show: the moment a clip exists it goes back to the slim row,
        which is the state his second screenshot shows and which must not change. */
     const empty = phone && !FM.scene.layers.length;
+    /* AND THE PLAYHEAD GOES WITH IT (queue 354). Ezra, with a screenshot of exactly this: "Hide the
+       player head while the add button is big". The fixed-centre line is drawn straight down through
+       the + and through the label, and in an empty project it is pointing at nothing — there is no
+       clip to scrub past it, so it is a ruler over a blank page sitting on top of the one control that
+       matters. The flag goes on the PANEL rather than on the row because #tl-centerline is a sibling
+       of #timeline, not a descendant of it, so a class on the row could never reach it. */
+    const tlPanel = document.getElementById('timeline-panel');
+    if (tlPanel) tlPanel.classList.toggle('tl-empty-start', !!empty);
     row.className = 'tl-addrow' + (phone ? '' : ' tl-addrow--line') + (empty ? ' tl-addrow--empty' : '') + (addDragging ? ' tl-addrow-dragging' : '');
     row.setAttribute('role', 'button');
     row.tabIndex = 0;

@@ -470,6 +470,79 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: an empty project shows the big + with no playhead drawn through it', { item: 'empty-add-playhead' }, async function () {
+    /* Queue 354, from a phone screenshot of an empty project: the white fixed-centre line running
+       straight down through the + and through "Tap here to start creating". His words: "Hide the player
+       head while the add button is big and also give the plus add button some actual nice colours not
+       just basic blue."
+       At a phone width, because the big empty state only exists there — the desktop timeline keeps the
+       slim row and must keep its playhead. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const panel = document.getElementById('timeline-panel');
+        const line = document.getElementById('tl-centerline');
+        const row = document.querySelector('.tl-addrow');
+        if (!row || !line || !panel) throw new Error('missing the add row, the centreline or the panel — this test is looking at the wrong screen');
+        // Control: the big state has to be ON, or "the playhead is hidden" would be measuring the
+        // ordinary slim row and saying nothing about his screenshot.
+        if (!row.classList.contains('tl-addrow--empty')) throw new Error('the add row is not in its big empty state (' + row.className + ') — nothing below is about the screen he photographed');
+        if (getComputedStyle(line).display !== 'none') throw new Error('the playhead is still drawn over the big + and its label');
+
+        // …and it must come BACK the moment there is something to scrub.
+        const L = FM.makeLayer('shape', { name: 'x', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#fff' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        if (getComputedStyle(document.getElementById('tl-centerline')).display === 'none') {
+          throw new Error('the playhead stayed hidden once the project had a clip in it — this hides it for the empty state only');
+        }
+
+        /* And the + is not the slim row's treatment scaled up. Comparing the two computed backgrounds
+           rather than looking for a particular gradient function: the requirement is that the big one
+           is its own thing, not that it is implemented any specific way. */
+        FM.scene.layers.length = 0; FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const big = document.querySelector('.tl-addrow--empty .tl-addrow-plus');
+        if (!big) throw new Error('no big + to look at');
+        const bg = getComputedStyle(big).backgroundImage || '';
+        if (bg.length < 20) throw new Error('the big + has no background image at all (' + bg + ')');
+        /* COUNT DISTINCT HUES, not colour stops. The first version of this counted `rgb(` occurrences
+           and the mutation check killed it: the slim row's blue pill is three stops of blue plus a
+           two-stop white highlight, which is five occurrences and passed. Three shades of the same blue
+           is exactly the "just basic blue" he is complaining about, so the question is how far apart
+           they are on the wheel, not how many there are. Near-white and near-black are dropped first —
+           the glass highlight is white by design and would otherwise count as a hue. */
+        const cols = bg.match(/rgba?\(([^)]+)\)/g) || [];
+        const buckets = [];
+        cols.forEach(c => {
+          const n = c.replace(/^rgba?\(|\)$/g, '').split(',').map(parseFloat);
+          const r = n[0], g = n[1], b = n[2], a = n.length > 3 ? n[3] : 1;
+          if (!(a > 0.05)) return;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          if (mx - mn < 26) return;                      // grey, white or black: no hue to speak of
+          let h;
+          if (mx === r) h = 60 * (((g - b) / (mx - mn)) % 6);
+          else if (mx === g) h = 60 * ((b - r) / (mx - mn) + 2);
+          else h = 60 * ((r - g) / (mx - mn) + 4);
+          if (h < 0) h += 360;
+          if (!buckets.some(x => { const d = Math.abs(x - h); return Math.min(d, 360 - d) < 40; })) buckets.push(h);
+        });
+        if (buckets.length < 3) {
+          throw new Error('the big + uses ' + buckets.length + ' distinct hue(s) (' + buckets.map(h => Math.round(h) + '\u00b0').join(', ') +
+            ') — three shades of one blue is the slim row\u2019s pill scaled up, and at 64px that reads as one flat disc');
+        }
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('timeline: a flick that starts ON a clip glides like one that starts on empty lane', { item: 'clip-swipe-fling' }, async function () {
     /* Queue 351. His words: "Timeline doesn't scrub smoothly when you press on a layer when swiping,
        this is annoying please add to list."
