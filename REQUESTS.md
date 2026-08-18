@@ -6454,7 +6454,7 @@ better still, keep working inside the turn rather than parking work for a later 
       element containing both halves. The test asserts the clip, the tick, a benchmark's centre AND that
       both halves reserve the same head width — the narrow version of it is what let this survive.
 
-- [ ] **335 — Motion Blur is not really an effect, and is badly designed.** (17 Aug.) His words:
+- [x] **335 — Motion Blur is not really an effect, and is badly designed.** ✅ **v9.83.** (17 Aug.) His words:
       *"Motion blur doesn't even act as an effect and is pretty poorly designed"*.
       He is factually right about the first half: Motion Blur (Object) is NOT a stack entry — it has its
       own block in the inspector (`motionBlurBlock`) and its own tile behaviour in the browser, which is
@@ -6572,7 +6572,18 @@ better still, keep working inside the turn rather than parking work for a later 
       of travel, so any assertion of the form "on differs from off" passes vacuously on a still layer —
       byte-identical by design. Every behavioural assertion must use a layer that actually travels. (The
       baseline fixture above does; that is why its two columns differ.)
-      **His call, not mine, and NOT blocking — building the first option:** the shutter is 0..1 today.
+      ✅ **DONE — v9.83.** `objectblur` is a registry effect, dispatched at the wrap level exactly as
+      `motionflow` is, and **it goes inside a Filter** — which was the literal complaint. The pseudo-tile,
+      the inspector's separate block and the `makeLayer` seed are all gone; `FM.layerHasMotionBlur` was
+      repointed rather than left answering `false` forever, and `_objblur` is aliased so starred
+      favourites survive.
+      **The proof that mattered:** the fingerprint captured before any edit is reproduced EXACTLY, at all
+      five times, by three independent routes — the legacy flag, a project put through the real load-path
+      migration, and a hand-written effect. Identical hashes, not "looks the same".
+      Four mutation-checked assertions, each aimed at a silent failure: append instead of unshift (silently
+      re-orders the render), migrating a camera (silently kills camera blur), empty params (silently resets
+      everyone's settings), and the flag surviving (renders twice).
+      **His call, not mine, and NOT blocking — built the first option:** the shutter is 0..1 today.
       Film talks in DEGREES (0..360, default 180), which would give the scrubber real travel and match how
       it is described everywhere else. Keeping 0..1 for now because changing it is a separate decision and
       the conversion is one multiplication whenever he wants it. **Say the word and it changes.**
