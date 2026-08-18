@@ -9330,11 +9330,16 @@ wait for them to report back."*
          layer state (`layer.masks`), not a registry effect, which is why its row cannot be swiped away or
          collapsed like every other row in the stack. Same root as **335** (Motion Blur), which is the
          other non-effect wearing an effect's clothes.
-      2. **Done inside a category discards your selection.** Queue 297 added Done to every sub-view so you
-         could leave without going backwards first — but with the queue-277 multi-select, Done CLOSES and
-         the picks go with it. He expects Done to mean "add what I picked". **This is my design mistake,
-         not a misunderstanding on his part:** a button called Done, next to numbered picks, that throws
-         the picks away is a trap.
+      2. ✅ **DONE — v9.81.** **Done inside a category discards your selection.** Queue 297 added Done to
+         every sub-view so you could leave without going backwards first — but with the queue-277
+         multi-select, Done CLOSES and the picks go with it. He expects Done to mean "add what I picked".
+         **This is my design mistake, not a misunderstanding on his part:** a button called Done, next to
+         numbered picks, that throws the picks away is a trap.
+         Fixed while working **#333**, whose first clause (*"all the effects I have selected do nothing"*)
+         turned out to be this same bug reported from the other side — he described it twice, weeks apart,
+         and I read them as two problems. Done now commits the picks; with nothing picked it still just
+         closes, which is all it can mean then. Mutation-checked as part of the 198-tile sweep in #333.
+         **Clauses 1 and 3 are still open, so this entry stays open.**
       3. **After adding an effect it often does not open that effect.** It should land on the new effect's
          controls; he says it frequently drops him out of the layer entirely.
 
