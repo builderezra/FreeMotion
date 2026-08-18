@@ -470,6 +470,71 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('sliders: a ruler stops dead at its limit instead of sliding on under your finger', { item: 'slider-wall' }, async function () {
+    /* Queue 347. His words, with a screenshot of X Skew and Y Skew both pinned at 80.00°: "Make it so
+       the sliders here and everywhere actually stop when you reach the limit, currently it keeps
+       letting you swipe."
+       THIS ENTRY WAS DIAGNOSED WRONG TWICE, which is why the test drives the real control rather than
+       asserting anything about the source. The first note said mtScrub advanced its offset
+       unconditionally (true, and fixed in v9.93). The second said mtScrub was the crop scrubber and his
+       Skew sliders were tickStrip — and that was wrong too: inspector.js:3595 builds both Skew strips
+       with mtScrub. Reading settled nothing; a gesture settles it.
+       "and everywhere" is the other half of his sentence, so both ruler kinds are driven: mtScrub,
+       which travels by moving its background, and tickStrip, which travels by transforming its ruler.
+       Nine controls use the first and five the second, so between them this is every slider in the app. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), mode0 = FM._mtMode;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+
+      // Drag a strip far past its wall, sampling what the user can SEE travel at every step.
+      const push = (strip, readTravel, steps) => {
+        const r = strip.getBoundingClientRect();
+        let x = r.left + r.width - 10;
+        const ev = (type, buttons) => strip.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, pointerType: 'touch',
+          clientX: x, clientY: r.top + r.height / 2, buttons: buttons == null ? 1 : buttons }));
+        const seen = [];
+        ev('pointerdown');
+        for (let i = 0; i < steps; i++) { x -= 60; ev('pointermove'); seen.push(readTravel()); }
+        x -= 0; ev('pointerup', 0);
+        return seen;
+      };
+      // The last few samples are deep past the wall, so they must all be identical; and the first few
+      // must NOT be, or the strip never moved at all and this proves nothing.
+      const judge = (what, seen) => {
+        const tail = seen.slice(-4), head = seen.slice(0, 3);
+        if (head.every(v => v === seen[0])) throw new Error(what + ' never travelled at all (' + JSON.stringify(head) + ') — the gesture is not reaching it, so nothing below can mean anything');
+        if (!tail.every(v => v === tail[0])) throw new Error(what + ' is still travelling well past its limit: ' + JSON.stringify(tail) + ' — that is the strip sliding on under your finger while the value is pinned');
+      };
+
+      FM._mtMode = 'skew';
+      FM.inspector.openCategory('transform');
+      await sleep(90);
+      const mt = document.querySelector('.mt-scrub');
+      if (!mt) throw new Error('no .mt-scrub in the Skew panel — this test is looking at the wrong screen');
+      judge('the Skew strip (mtScrub)', push(mt, () => mt.style.backgroundPositionX || '', 14));
+      const skew = Math.abs(FM.evalProp ? FM.evalProp(L.transform.skewX, 0) : L.transform.skewX);
+      if (Math.abs(skew - 80) > 0.01) throw new Error('the drag left skewX at ' + skew + ', not pinned at its 80° wall — the fixture never reached the limit');
+
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      L.effects[0]._expanded = true;
+      FM.inspector.openCategory('effects');
+      await sleep(120);
+      const fx = document.querySelector('.fx-scrub'), ruler = fx && fx.querySelector('.fx-scrub-ticks');
+      if (!fx || !ruler) throw new Error('no .fx-scrub ruler in the effects panel — this test is looking at the wrong screen');
+      judge('an effect slider (tickStrip)', push(fx, () => ruler.style.transform || '', 14));
+    } finally {
+      FM._mtMode = mode0;
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them', { item: 'template-fill' }, function () {
     /* Queue 343 clause 2. Ezra, with an Alight Motion screenshot: "the long term goal for templates is
        to make it when you press on them you can quickly swap out the media for ur own clips so you can

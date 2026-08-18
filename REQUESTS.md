@@ -7345,7 +7345,19 @@ better still, keep working inside the turn rather than parking work for a later 
       them in the same pass and asking him which, if any, earn their place.
 
 
-- [ ] **347 — Sliders should STOP at their limit; the strip keeps scrolling past it.** (17 Aug,
+- [x] **347 — Sliders should STOP at their limit; the strip keeps scrolling past it.** ✅ **v9.98 — and the fix was already in (v9.93); what this release adds is the proof and the guard.**
+      **The two diagnoses below are BOTH wrong and are kept only as a record of how.** Note one blamed
+      `mtScrub` (right control, right defect — fixed v9.93). Note two "corrected" it to `tickStrip` and
+      was wrong: `js/inspector.js:3595` builds both Skew strips with `mtScrub`, so note one had it.
+      **Settled by driving the control instead of reading it.** At 380px with real pointer events on the
+      X Skew strip: the value climbs to −72.00, **pins at −80.00 on step 7**, and the strip's offset
+      freezes at **−360px on that same step** and never moves again through seven more steps of dragging.
+      **"and everywhere":** the other ruler kind (`tickStrip`, the effects sliders) was driven too and
+      holds at −700px for its last four steps. Those two controls are every slider in the app — nine
+      sites use `mtScrub` (the volume strip among them) and five use `tickStrip`.
+      A regression test now performs the gesture and judges only what you can see travel, with a control
+      at each end: the strip must move before the wall and must be perfectly still after it. Both halves
+      mutation-checked separately. (17 Aug,
       screenshot: X Skew and Y Skew both pinned at 80.00° — their maximum — with both ruler strips
       still able to scroll.) His words, verbatim: *"Make it so the sliders here and everywhere actually
       stop when you reach the limit, currently it keeps letting you swipe"*.

@@ -1,0 +1,103 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#347 — does the Skew strip stop at 80°?</title>
+<style>html,body{margin:0;background:#101820;color:#cfd6e4;font:11px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}#out{padding:8px;white-space:pre;color:#8fa}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #347. His words: "Make it so the sliders here and everywhere actually stop when you reach the limit,
+   currently it keeps letting you swipe", with a screenshot of X Skew and Y Skew both pinned at 80.00°.
+   The entry has been diagnosed TWICE and the second diagnosis contradicted the first, so this measures
+   the control in his screenshot instead of reading any more code: it drives real pointer events into a
+   Skew strip well past the wall and prints both the VALUE and the strip's own scroll offset at each
+   step. If the value pins while the offset keeps climbing, the strip is still travelling under his
+   finger, which is what "it keeps letting you swipe" describes. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s) { L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait() {
+      if (++t > 300) { say('FM never initialised'); window.__done = true; return; }
+      if (!w.FM || !w.FM.inspector || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0;
+        var Lr = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+        Lr.start = 0; Lr.duration = 4; FM.scene.layers.push(Lr);
+        FM.selectLayer(Lr.id); FM.refreshAll();
+        FM._mtMode = 'skew';
+        FM.inspector.openCategory('transform');
+      } catch (e) { say('setup threw: ' + e.message); }
+      setTimeout(function () {
+        try {
+          /* "and everywhere" is half his sentence, so the OTHER ruler gets driven too: the effects
+             panel's .fx-scrub, built by tickStrip, which is a different control with its own clamp and
+             its own way of showing travel (a transform on the ruler, not a background offset). */
+          if (q.get('at') === 'fx') {
+            var lay0 = FM.scene.layers[0];
+            lay0.effects = [FM.fxRegistry.makeInstance('blur')];
+            lay0.effects[0]._expanded = true;
+            FM.inspector.openCategory('effects');
+            setTimeout(function () {
+              var fs = d.querySelectorAll('.fx-scrub');
+              say('fx-scrub strips found: ' + fs.length);
+              if (!fs.length) { say('!! none — wrong panel'); window.__done = true; return; }
+              var f = fs[0], fr2 = f.getBoundingClientRect(), ruler = f.querySelector('.fx-scrub-ticks');
+              function fev(type, x, buttons) {
+                f.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9, isPrimary: true,
+                  pointerType: 'mouse', clientX: x, clientY: fr2.top + fr2.height / 2, buttons: buttons == null ? 1 : buttons }));
+              }
+              say('');
+              say('  step   dragged    ruler transform');
+              var fx0 = fr2.left + fr2.width - 10, tot = 0;
+              fev('pointerdown', fx0);
+              for (var k = 0; k < 14; k++) {
+                fx0 -= 60; tot -= 60;
+                fev('pointermove', fx0);
+                say('   ' + String(k + 1).padStart(2) + '    ' + String(tot).padStart(6) + 'px   ' + (ruler.style.transform || '(none)'));
+              }
+              fev('pointerup', fx0, 0);
+              say('');
+              say('The transform must stop changing once the value has hit its wall.');
+              window.__done = true;
+            }, 700);
+            return;
+          }
+          var strips = d.querySelectorAll('.mt-scrub');
+          say('mt-scrub strips found: ' + strips.length + '   (X Skew and Y Skew each get one)');
+          if (!strips.length) { say('!! no strip — the probe is looking at the wrong panel'); window.__done = true; return; }
+          var s = strips[0], r = s.getBoundingClientRect();
+          var lay = FM.scene.layers[0];
+          function ev(type, x, buttons) {
+            s.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, isPrimary: true,
+              pointerType: 'touch', clientX: x, clientY: r.top + r.height / 2, buttons: buttons == null ? 1 : buttons }));
+          }
+          function offs() { return s.style.backgroundPositionX || '(none)'; }
+          say('');
+          say('  step   dragged     skewX       strip offset');
+          var x = r.left + r.width - 10;
+          ev('pointerdown', x);
+          var totalDx = 0;
+          for (var i = 0; i < 14; i++) {
+            var dx = -60;                        // drag LEFT, which raises the value towards +80
+            x += dx; totalDx += dx;
+            ev('pointermove', x);
+            say('   ' + String(i + 1).padStart(2) + '    ' + String(totalDx).padStart(6) + 'px   ' +
+                (FM.evalProp ? FM.evalProp(lay.transform.skewX, 0) : lay.transform.skewX).toFixed(2).padStart(7) + '°    ' + offs());
+          }
+          ev('pointerup', x, 0);
+          say('');
+          say('The value must pin at 80.00 AND the offset must stop changing on the same step.');
+          say('An offset that keeps climbing after the value pins is the strip still moving under the finger.');
+        } catch (e) { say('drive threw: ' + e.message); }
+        window.__done = true;
+      }, 900);
+    })();
+  });
+})();
+</script></body></html>
