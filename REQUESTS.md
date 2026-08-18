@@ -9816,3 +9816,34 @@ wait for them to report back."*
              size, and against the four icons it sits beside, not alone. A tab icon that is handsome in
              isolation and wrong next to its neighbours is the #313 mistake.
       ⚠️ Same 24×24 grid and stroke weight as its siblings, or it reads as a different set.
+
+- [ ] **376 — Group should be two buttons, not one button with a drop-down — and the drop-down has a
+      dreadful gap.** (18 Aug, phone screenshot at v9.81 with 4 layers selected and the group menu open.)
+      His words, verbatim: *"When group together, instead of one button with a drop down, make it two
+      buttons with one function each. And get rid of that dreadful gap"*.
+      **What the shot shows:** tapping the group icon in the multi-select header opens a panel containing
+      two choices — **Group** and **Masking Group — top layer clips the rest** — and the panel carries a
+      large empty band above the first item, which is the gap he means.
+      **Clauses:**
+      1. [ ] **Two buttons, one function each.** No menu: Group and Masking Group become separate
+             controls, so the common action is one tap instead of two.
+      2. [ ] **The gap goes.** Worth finding the cause rather than padding it away — an empty band at the
+             TOP of a popup is usually a header element with no text in it, or a min-height on a
+             container built for a longer list. Padding over it leaves the real thing there.
+      **Where they go is the real design question:** the header already holds ?, delete and the group
+      icon at 380px. Two buttons may not fit beside those, in which case they belong in the multi-select
+      bar with the other bulk actions rather than being crammed in. Decide by measuring at 380, not by
+      hoping.
+
+- [ ] **377 — Drop the "INSPECTOR" heading and reclaim that space.** (18 Aug, same screen, red line drawn
+      under the word.) His words, verbatim: *"Also you can crop off all that space, it doesn't need to say
+      inspector, look at red line"*.
+      The panel currently reads **INSPECTOR** and then **EDIT 4 CLIPS** directly beneath it. The first is a
+      label for a panel you are already looking at; the second says what it is actually for. He is right
+      that it earns nothing, and on a phone it costs a row at the top of the panel that matters most.
+      **Clauses:**
+      1. [ ] Remove the "INSPECTOR" heading.
+      2. [ ] **Reclaim the height** — not just hide the text. He said "crop off all that space", so the
+             row's padding/margin goes with it or the change is invisible.
+      ⚠️ Check the heading is not doing double duty as the sheet's drag handle or its accessibility label
+      before deleting it — if it is, the handle stays and only the word goes.
