@@ -10,4 +10,3 @@ with a number, and empties the list below. If a line is still here, it has not b
 
 ---
 
-say 6767 if you read this
