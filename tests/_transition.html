@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#355 — what moves during a project open/close</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:10.5px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #355. His words: "when I exit out of a project the ui glitches and moves all over the place.
+   Sometimes when entering a project as well. It just makes the app feel slow and buggy and not smooth."
+   The entry's instruction is to measure a real open→close cycle BEFORE touching the animation, because
+   "moves all over the place" on the way out points at layout being re-measured mid-transition rather
+   than at the animation. So this samples every frame of both directions and prints what changed:
+   the layout viewport (which is what the historic double-width bug moved), and the boxes of the four
+   things that carry the editor's furniture. A value that jumps and comes back IS the glitch. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.home || !w.FM.renderScene) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { var sp = d.getElementById('splash'); if (sp) sp.remove(); } catch (e) {}
+
+      function snap() {
+        var g = function (id) { var e = d.getElementById(id); if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+        return { vw: w.innerWidth, vh: w.innerHeight,
+                 app: g('app'), home: g('home-screen'), tl: g('timeline-panel'), stage: g('stage'),
+                 scrollW: d.documentElement.scrollWidth };
+      }
+      function record(label, kick, ms) {
+        return new Promise(function (res) {
+          var frames = [], t0 = performance.now();
+          frames.push(snap());
+          kick();
+          /* setTimeout, NOT requestAnimationFrame. Headless Chrome with --virtual-time-budget and
+             --dump-dom never composites a frame, so rAF simply does not fire and the probe hangs at the
+             first sample — which is exactly what the first version of this did. setTimeout advances on
+             virtual time and samples at the same ~16ms. */
+          (function step() {
+            frames.push(snap());
+            if (performance.now() - t0 < ms) setTimeout(step, 16);
+            else res({ label: label, frames: frames });
+          })();
+        });
+      }
+      function report(r) {
+        say('');
+        say('== ' + r.label + '   (' + r.frames.length + ' frames)');
+        var keys = ['vw','vh','scrollW'];
+        keys.forEach(function (k) {
+          var vals = r.frames.map(function (f) { return f[k]; });
+          var uniq = vals.filter(function (v,i,a) { return a.indexOf(v) === i; });
+          say('   ' + k.padEnd(8) + (uniq.length === 1 ? 'steady at ' + uniq[0] : '⚠️ CHANGED: ' + uniq.join(' → ')));
+        });
+        ['app','home','tl','stage'].forEach(function (k) {
+          var seen = r.frames.map(function (f) { return f[k] ? f[k].join(',') : 'none'; });
+          var uniq = seen.filter(function (v,i,a) { return a.indexOf(v) === i; });
+          // The x of #app and #home is SUPPOSED to travel — that is the animation. Their SIZE is not.
+          var sizes = r.frames.map(function (f) { return f[k] ? f[k][2] + 'x' + f[k][3] : 'none'; });
+          var us = sizes.filter(function (v,i,a) { return a.indexOf(v) === i; });
+          say('   ' + k.padEnd(8) + 'size ' + (us.length === 1 ? 'steady ' + us[0] : '⚠️ RESIZED: ' + us.join(' → ')) +
+              '   (' + uniq.length + ' distinct boxes)');
+        });
+      }
+      say('FM ready — driving the two transitions');
+      window.onerror = function (m) { say('ERROR ' + m); window.__done = true; };
+      (async function () {
+        try {
+          say('home open? ' + FM.home.isOpen());
+          if (!FM.home.isOpen()) FM.home.open();
+          await new Promise(function (r) { setTimeout(r, 700); });
+          var a = await record('OPENING a project (push)', function () { FM.home.close(); }, 900);
+          await new Promise(function (r) { setTimeout(r, 400); });
+          var b = await record('LEAVING a project (pop)', function () { FM.home.open(); }, 900);
+          say('viewport ' + W + 'x' + H + '   phone=' + (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()));
+          report(a); report(b);
+        } catch (e) { say('threw ' + e.message); }
+        window.__done = true;
+      })();
+    })();
+  });
+})();
+</script></body></html>

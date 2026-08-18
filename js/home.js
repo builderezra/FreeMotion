@@ -284,6 +284,7 @@ window.FM = window.FM || {};
   function endPop() {
     if (popTimer) { clearTimeout(popTimer); popTimer = 0; }
     const app = document.getElementById('app');
+    if (app) app.removeEventListener('animationend', onPopEnd);
     if (app) app.classList.remove('fm-pop-out');
     if (root) root.classList.remove('fm-pop-in');
     document.body.classList.remove('fm-popping');
@@ -316,18 +317,45 @@ window.FM = window.FM || {};
     }, PUSH_MS + 80);
   }
 
+  /* Ends the pop the moment its animation really finishes, rather than only when a timer says it
+     should have (queue 355). The push has had this since it was written — see onPushEnd — and the pop
+     was left on a bare setTimeout alone. Every one of these keyframes is `animation-fill-mode: both`,
+     so the CLASS is the geometry: leave it on and #app stays translated a full viewport away, as a
+     position:fixed z-index 210 box over everything. A timer is fine until the tab is backgrounded
+     mid-transition, where it is throttled to seconds — and coming back to a screen that has "moved all
+     over the place" is precisely the report. Same filter as onPushEnd: #app is the one element that
+     animates on this path, and the card entrances and both backdrop drifts bubble their animationend
+     through these same nodes. */
+  function onPopEnd(e) {
+    if (e.target !== e.currentTarget || e.pseudoElement) return;
+    if (e.animationName !== 'fm-pop-out') return;
+    endPop();
+  }
+
   function startPop() {
     const app = document.getElementById('app');
     if (!app || !root) return;
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) return;                       // the CSS zeroes these animations anyway; don't even class up
+    /* THE POP IS A PHONE BEHAVIOUR TOO (queue 355). His words: "when I exit out of a project the ui
+       glitches and moves all over the place. Sometimes when entering a project as well."
+       The gate below this function explains, at length, why the PUSH is restricted to phones: it was
+       designed and measured at 380/390/414 only, and a verifier caught the unscoped version playing the
+       full slide on desktop with #app going position:fixed z-index 210 mid-flight at 1280x720, where
+       the Studio layout has its own fixed chrome to collide with. Every word of that applies to this
+       direction — `body.fm-popping #app` sets the same position:fixed z-index 210 — and the pop was
+       never given the same gate. So on a desktop, LEAVING a project played exactly the animation
+       entering it was gated away from, which is why exiting is the half he notices most. Desktop keeps
+       the instant swap, in both directions, until that case is measured on its own terms. */
+    if (!pushAllowed()) return;
     endPop();                                 // a second Back before the first finished restarts cleanly
     void app.offsetWidth;
     app.classList.add('fm-pop-out');
     root.classList.add('fm-pop-in');
     document.body.classList.add('fm-popping');
+    app.addEventListener('animationend', onPopEnd);   // same ref every time, so this registers once
     const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fm-push-ms')) || 380;
-    popTimer = setTimeout(endPop, ms + 140);
+    popTimer = setTimeout(endPop, ms + 140);          // backstop only: animationend does not fire on a hidden tab
   }
 
   function onPushEnd(e) {

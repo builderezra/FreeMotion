@@ -9556,8 +9556,20 @@ wait for them to report back."*
          flat blue. Worth looking at what he has said before about colour here — the add-menu tiles and
          the custom-elements ring are both multi-colour, and he has asked for that idea twice.
 
-- [ ] **355 — Exiting (and sometimes entering) a project makes the UI glitch and move all over the
-      place.** (18 Aug.) His words, verbatim: *"There's a glitch at the moment where when I exit out of
+- [x] **355 — Exiting (and sometimes entering) a project makes the UI glitch and move all over the
+      place.** ✅ **v10.03.**
+      **Measured first, and the entry's suspicion was wrong in a useful way.** Across 59 frames of both
+      transitions at 380 AND 1440, the layout viewport, the document scroll width and the boxes of #app,
+      #timeline-panel and #stage are all steady — nothing is re-laid out mid-flight.
+      **It was an asymmetry.** js/home.js gates the push to phones and explains why at length (measured
+      at 380/390/414 only; a verifier caught the unscoped version playing the full slide on desktop with
+      #app going position:fixed z-index 210 mid-flight, colliding with the Studio layout's own fixed
+      chrome). `body.fm-popping #app` sets that same position:fixed z-index 210 — and **the pop never got
+      the same gate.** So on a desktop, LEAVING a project played exactly the animation entering it had
+      been gated away from. That is why exiting is the half you notice.
+      Also fixed: the pop ends on `animationend` now, not only on a timer. These keyframes are
+      fill-mode:both, so a class left on IS a stranded transform — #app parked a viewport away, fixed,
+      over everything — and a timer is throttled to seconds in a backgrounded tab. (18 Aug.) His words, verbatim: *"There's a glitch at the moment where when I exit out of
       a project the ui glitches and moves all over the place. Sometimes when entering a project as well.
       It just makes the app feel slow and buggy and not smooth"*.
       Arrived in one message with **356** and **357**.

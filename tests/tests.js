@@ -470,6 +470,53 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('home: leaving a project animates on a phone and swaps instantly on desktop, and strands nothing', { item: 'pop-gate' }, async function () {
+    /* Queue 355. His words: "There's a glitch at the moment where when I exit out of a project the ui
+       glitches and moves all over the place. Sometimes when entering a project as well. It just makes
+       the app feel slow and buggy and not smooth."
+       Measured first: nothing thrashes. Across 59 frames of both transitions at 380 and at 1440 the
+       layout viewport, the document scroll width and the boxes of #app, #timeline-panel and #stage are
+       all steady — so it is not layout being re-measured mid-flight.
+       What it is, is an ASYMMETRY. js/home.js gates the push to phones and says why at length: the
+       animation was designed and measured at 380/390/414 only, and a verifier caught the unscoped
+       version playing the full slide on desktop with #app going position:fixed z-index 210 mid-flight,
+       where the Studio layout has its own fixed chrome to collide with. `body.fm-popping #app` sets the
+       same position:fixed z-index 210 — and the pop never got the same gate. So on a desktop, LEAVING a
+       project played exactly the animation entering it was gated away from. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen();
+    const app = document.getElementById('app');
+    const popping = () => document.body.classList.contains('fm-popping') || app.classList.contains('fm-pop-out');
+    try {
+      // --- desktop: an instant swap, like the push
+      if (!matchMedia('(max-width: 700px)').matches) {
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(120);
+        FM.home.open();
+        await sleep(40);
+        if (popping()) throw new Error('leaving a project ran the slide animation at desktop width — the push is gated off desktop for measured reasons and this is the same animation with the same position:fixed z-index 210');
+        await sleep(600);
+      }
+
+      // --- phone: it MUST animate, or the gate above is just a deletion
+      await atPhoneWidth(async function () {
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(150);
+        FM.home.open();
+        await sleep(40);
+        if (!popping()) throw new Error('leaving a project did not animate at phone width either — the gate removed the transition instead of scoping it');
+        // …and nothing is left behind once it is over. Every one of these keyframes is fill-mode:both,
+        // so a class left on IS a stranded transform: #app parked a whole viewport away, fixed, over
+        // everything. That is the shape of "moves all over the place".
+        await sleep(700);
+        if (popping()) throw new Error('the pop left #app carrying fm-pop-out / body carrying fm-popping — those keyframes are fill-mode:both, so the class IS the geometry and the editor stays parked off screen');
+      }, 380);
+    } finally {
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
   test('timeline: an empty project shows the big + with no playhead drawn through it', { item: 'empty-add-playhead' }, async function () {
     /* Queue 354, from a phone screenshot of an empty project: the white fixed-centre line running
        straight down through the + and through "Tap here to start creating". His words: "Hide the player
@@ -10760,7 +10807,14 @@
     var read = function () { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tl-panel-left')) || 0; };
     var wasHome = FM.home.isOpen();
     try {
-      if (wasHome && FM.home.close) { FM.home.close(); await sleep(120); }
+      /* AT PHONE WIDTH, since v10.03 (queue 355). The pop is gated to phones now, for the same measured
+         reasons the push always has been — on desktop `body.fm-popping #app` went position:fixed
+         z-index 210 mid-flight into a layout with its own fixed chrome. So the hazard this test exists
+         to exercise only exists on a phone, and running it at the suite's default width found no
+         animation at all. Its own control assertion is what said so, which is the assertion earning its
+         keep rather than a failure. */
+      return await atPhoneWidth(async function () {
+      if (FM.home.isOpen() && FM.home.close) { FM.home.close(); await sleep(150); }
       FM.timeline.rebuild(); await sleep(40);
       var truth = read();
       FM.home.open();                       // fires the pop; #app carries fm-pop-out's transform
@@ -10781,6 +10835,7 @@
         throw new Error('the panel never moved during the pop (raw drift ' + maxRaw.toFixed(2) +
           'px) — the hazard was not exercised, so a green result here would be meaningless');
       }
+      }, 380);
     } finally {
       if (!wasHome && FM.home.close) FM.home.close();
       else if (wasHome && !FM.home.isOpen()) FM.home.open();
