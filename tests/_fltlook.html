@@ -1,0 +1,84 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#359 — what the filter tiles actually show</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:1000px;height:200px}
+#grid{display:flex;gap:12px;padding:14px;flex-wrap:wrap;align-items:flex-start}
+#grid figure{margin:0;text-align:center;width:150px}
+#grid canvas{width:150px;height:150px;background:#000;border:1px solid #22303c;border-radius:10px;display:block}
+#grid figcaption{padding-top:5px;color:#8fa;font-size:11px}
+h3{padding:10px 14px 0;margin:0;color:#e6b980;font-size:12px}</style></head><body>
+<iframe id="app" src="index.html"></iframe>
+<h3 id="h1">the art itself</h3><div id="art" class="g"></div>
+<h3>every filter tile, at a size you can judge</h3><div id="grid"></div>
+<script>
+/* #359 — *"Why did you change all the filters images to shit photos instead of the good ones they were
+   before? Change it back man come on, and also I still need the tuff filters like I discussed with the
+   car photos"*.
+
+   THE FIRST VERSION OF THIS INVESTIGATION MEASURED THE WRONG THING and reached a confident wrong answer.
+   It compared a filter tile's mean brightness and colour count against the raw city.jpg and concluded
+   "the tile is NOT city.jpg — it is painting the drawn fallback". But a filter tile is the photograph
+   WITH A COLOUR GRADE ON IT: Teal & Orange pushes shadows teal and lifts contrast, so of course its
+   mean moved 133 -> 115. The numbers were evidence of the grade working, read as evidence of the wrong
+   art. A statistic that both hypotheses predict cannot choose between them.
+
+   So this probe does not compute anything. It PAINTS: the raw photograph, the drawn fallback beside it,
+   and then every real filter tile at 150px. The complaint is about what the pictures look like, which
+   is a thing you settle by looking. */
+(function () {
+  var fr = document.getElementById('app'), grid = document.getElementById('grid'), art = document.getElementById('art');
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { document.getElementById('h1').textContent = 'FM never initialised'; window.__done = true; return; }
+      if (!w.FM || !w.FM.fxThumbs || !w.FM.filters || !w.FM.renderScene) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+
+      /* The photographs, drawn straight, so "is the tile this picture?" is answerable by eye. Both the
+         art the COLOR section uses and the parametric fallback are shown — they are the two candidates
+         the broken measurement was trying to tell apart. */
+      function show(parent, label, paint) {
+        var cv = d.createElement('canvas'); cv.width = cv.height = 192;
+        paint(cv.getContext('2d'), 192);
+        var out = document.createElement('canvas'); out.width = out.height = 192;
+        out.getContext('2d').drawImage(cv, 0, 0);
+        var fig = document.createElement('figure'); fig.appendChild(out);
+        fig.appendChild(document.createElement('figcaption')).textContent = label;
+        parent.appendChild(fig);
+      }
+      art.style.cssText = 'display:flex;gap:12px;padding:14px;flex-wrap:wrap';
+      ['city', 'ramp', 'huracan', 'mclaren', 'revuelto', 'tesla'].forEach(function (k) {
+        var im = new w.Image(); im.src = 'fx-art/' + k + '.jpg?v=1';
+        im.onload = function () { show(art, k + '.jpg  ' + im.naturalWidth + 'x' + im.naturalHeight, function (g, S) { g.drawImage(im, 0, 0, S, S); }); };
+        im.onerror = function () { show(art, k + '.jpg  MISSING', function (g, S) { g.fillStyle = '#400'; g.fillRect(0, 0, S, S); }); };
+      });
+
+      /* WAIT FOR EVERY PHOTOGRAPH TO DECODE BEFORE MOUNTING ANYTHING. A fixed delay is not enough and
+         a run with one tile showing the stand-in proves nothing about the CHOICE of subject, which is
+         what this probe is for. The app recovers from that race on its own (a decoded photo clears the
+         samples and re-mounts every live tile); these canvases are not the app's, so nothing would ever
+         re-mount them and whichever tile lost the race would stay wrong here and only here. */
+      var keys = ['city','ramp','dusk','towers','dog','sunpath','bush','shore','bay','run','clouds',
+                  'figures','cat','pair','huracan','mclaren','revuelto','tesla'];
+      var left = keys.length;
+      keys.forEach(function (k) {
+        var im = new w.Image();
+        im.onload = im.onerror = function () { if (--left === 0) go(); };
+        im.src = 'fx-art/' + k + '.jpg?v=1';
+      });
+      function go() {
+        FM.filters.all().forEach(function (f) {
+          var cv = document.createElement('canvas');
+          var fig = document.createElement('figure'); fig.appendChild(cv);
+          fig.appendChild(document.createElement('figcaption')).textContent = f.name + '  (' + f.section + ')';
+          grid.appendChild(fig);
+          try { FM.fxThumbs.mountFilter(cv, f.id); } catch (e) { fig.lastChild.textContent = f.name + ' THREW ' + e.message; }
+        });
+        setTimeout(function () { window.__done = true; }, 3000);
+      }
+    })();
+  });
+})();
+</script>
+</body></html>

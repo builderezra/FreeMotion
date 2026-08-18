@@ -1,0 +1,95 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#359 — why filter tiles take the drawn fallback</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:900px;height:520px}
+#out{padding:8px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #359 — *"Why did you change all the filters images to shit photos instead of the good ones they were
+   before?"*. The drawn landscape is the FALLBACK: SECTION_ART.color is photoArt('city', paintPhoto), so
+   a filter tile showing the landscape means city.jpg was not ready when that tile rendered.
+   Effect tiles are getting real photos in the same session, so this is not "the photos are broken" —
+   it is something about the FILTER path. This asks the three questions that separate those: does the
+   file load at all, is it loaded by the time filters are built, and does re-mounting fix it. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.fxThumbs || !w.FM.filters) return setTimeout(wait, 50);
+      var FM = w.FM, lines = [];
+      // 1. does the file load at all, by the exact URL the app uses?
+      var probe = new w.Image();
+      probe.onload = function () { step2('LOADED ' + probe.naturalWidth + 'x' + probe.naturalHeight); };
+      probe.onerror = function () { step2('FAILED TO LOAD — the tile can only ever draw the fallback'); };
+      probe.src = 'fx-art/city.jpg?v=1';
+      function step2(status) {
+        lines.push('fx-art/city.jpg?v=1 : ' + status);
+        // 2. mount one FILTER tile and one COLOUR EFFECT tile, side by side, and compare their pixels.
+        var f = d.createElement('canvas'); f.className = 'fxb-thumb-cv'; f.style.cssText = 'width:96px;height:96px';
+        var e = d.createElement('canvas'); e.className = 'fxb-thumb-cv'; e.style.cssText = 'width:96px;height:96px';
+        d.body.appendChild(f); d.body.appendChild(e);
+        FM.fxThumbs.mountFilter(f, 'tealorange');
+        FM.fxThumbs.mount(e, 'contrast');          // the filter's OWN first ingredient
+        setTimeout(function () {
+          function sig(cv) {
+            try {
+              var g = cv.getContext('2d'), im = g.getImageData(0, 0, cv.width, cv.height).data;
+              var n = 0, sum = 0, uniq = {};
+              for (var i = 0; i < im.length; i += 4) { sum += im[i]; n++; uniq[(im[i] >> 4) + ',' + (im[i+1] >> 4) + ',' + (im[i+2] >> 4)] = 1; }
+              return { mean: Math.round(sum / n), colours: Object.keys(uniq).length, w: cv.width };
+            } catch (err) { return { err: String(err && err.message || err) }; }
+          }
+          /* THE DECISIVE ONE: draw city.jpg straight into a canvas and put it beside the tile. If the
+             tile IS that photo then nothing is broken and the memory is wrong; if it is the drawn
+             landscape they will look nothing alike. Comparing signatures is not enough — a drawn scene
+             with gradients has plenty of distinct colours too, which is why the first version of this
+             probe reported "same subject" and settled nothing. */
+          var ref = d.createElement('canvas'); ref.width = 192; ref.height = 192;
+          ref.style.cssText = 'width:96px;height:96px';
+          ref.getContext('2d').drawImage(probe, 0, 0, 192, 192);
+          d.body.appendChild(ref);
+          var sr = sig(ref);
+          var sf = sig(f), se = sig(e);
+          lines.push('city.jpg drawn direct    : ' + JSON.stringify(sr));
+          lines.push('');
+          lines.push('filter tile  (tealorange): ' + JSON.stringify(sf));
+          lines.push('effect tile  (contrast)  : ' + JSON.stringify(se));
+          /* A PHOTOGRAPH has far more distinct colours than a drawn scene of flat bands. If the two
+             differ wildly in that count, they are painting different subjects — which is the whole
+             question. */
+          lines.push('');
+          lines.push(sr.colours && sf.colours
+            ? (Math.abs(sf.mean - sr.mean) < 18 && Math.abs(sf.colours - sr.colours) < 60
+                ? '→ the filter tile IS city.jpg — the art is the photo, nothing is falling back'
+                : '→ the filter tile is NOT city.jpg — it is painting the drawn fallback')
+            : '→ could not read the reference');
+          lines.push(sf.colours && se.colours
+            ? (Math.abs(sf.colours - se.colours) > 40
+                ? '→ DIFFERENT SUBJECTS: the filter and its own first ingredient are not drawn on the same art'
+                : '→ same subject — the filter is using whatever the effect uses')
+            : '→ could not read one of the tiles');
+          /* IS IT THE INVALIDATION OR THE SAMPLE CACHE? The photo IS loaded by now, so if forcing a
+             re-mount fixes the tile then the recovery simply is not firing; if it does not, the baked
+             sample canvas is stale and re-mounting cannot reach it. Those are different fixes. */
+          FM.fxThumbs.remountLive();
+          setTimeout(function () {
+            var s2 = sig(f);
+            lines.push('');
+            lines.push('filter tile after a forced remountLive(): ' + JSON.stringify(s2));
+            lines.push(Math.abs(s2.mean - sr.mean) < 18
+              ? '→ a FORCED remount fixes it — the recovery is not firing on its own'
+              : '→ still the fallback after a forced remount — the baked SAMPLE is stale, not the tile');
+            out.textContent = lines.join('\n');
+            window.__done = true;
+          }, 1200);
+        }, 1800);
+      }
+    })();
+  });
+})();
+</script>
+</body>
+</html>

@@ -9157,7 +9157,7 @@ wait for them to report back."*
       `.addmenu-page` children and page dots, which is exactly this. So the fix is to give the library
       grid the same paging rather than a max-height, and the v9.47 height cap comes out.
 
-- [ ] **359 — 🚨 The filter thumbnails are the drawn landscape, not the good photos they used to be.**
+- [x] **359 — 🚨 The filter thumbnails are the drawn landscape, not the good photos they used to be.** — **v9.76** (the "tuff" car-photo filters themselves remain #349)
       (18 Aug, phone screenshot at v9.74 of the Filters tab: Teal & Orange, Bleach Bypass, Cross Process,
       Faded Film, VHS Tape, CRT Monitor, Super 8, Old Film, Dreamy Bloom, Golden Hour, Light Leak, Neon
       Night — every one of them rendered on the parametric mini-landscape.) His words, verbatim: *"Why
@@ -9170,6 +9170,41 @@ wait for them to report back."*
       size and a read-only seam) and touched `FM.FX_FEATURED` at v9.64.
       The second half — **the "tuff" filters on his car photos — is already #349**, and the car art for
       the shake section is **#332**. Both still open and still wanted; he is restating them, not adding.
+
+      **His report was exactly right and I talked myself out of it halfway through, which is worth
+      recording.** The first probe compared a tile's mean brightness and colour count against the raw
+      city.jpg, found them different, and concluded the tile was the drawn art. Then I noticed a filter
+      tile is the photo WITH A GRADE ON IT — of course the numbers move — decided the measurement was
+      worthless, and wrote that the tiles were fine. Both readings were built on the same mistake:
+      **a statistic both explanations predict cannot choose between them.** What settled it was opening
+      the Filters tab at 380px and looking: four drawn stand-ins, exactly as he said.
+
+      **Three separate faults, each enough on its own:**
+      1. **The re-mount could not see the filter tiles.** When a photograph decodes, every tile built
+         before it is stale, and `remountLive()` repaints them — by finding them with
+         `querySelectorAll('canvas.fxb-thumb-cv')`, the EFFECTS browser's class. The Filters tab is
+         built by the inspector and its tiles wear `flt-thumb-cv`. So they were never swept, and kept
+         the stand-in for the whole session while every other tile in the app came good — which is why
+         the complaint named the Filters tab and nothing else. The sweep now walks a registry of
+         canvases that have actually been mounted, so being findable follows from having been painted
+         instead of from wearing the right class.
+      2. **Four photographs were never preloaded.** The preload was a literal array of fourteen names
+         three hundred lines above the tables that name the art, and it had fallen behind them —
+         missing every car he shot for this. A car tile therefore began its own fetch mid-render and
+         baked the stand-in. That list is gone; the set is computed from the tables themselves.
+      3. **A picture painted before its photo arrived was cached.** Now marked provisional and not
+         stored — neither the sample nor the frame — so the next paint is the real one.
+
+      **And the part he actually asked for: every filter now demonstrates on its own photograph.** A
+      filter had no subject of its own — it borrowed the one belonging to its first child effect, and
+      eleven of the sixteen open on `contrast` or `saturate`, which resolve to city.jpg. The tab was one
+      Perth sunset over and over. Each of the sixteen was re-picked **by eye**, laying all eighteen
+      photographs beside all sixteen tiles, so the filter has something to visibly act on: Teal & Orange
+      on the yellow Huracán, Bleach Bypass draining the orange McLaren to silver, Cross Process putting
+      cyan into the Tesla's black panels, VHS on the Revuelto, Thermal on the cat, Comic Ink on a car
+      because a car outlines cleanly and a skyline turns to mush.
+      Two tests, both mutation-checked: a typo'd subject key (which renders as the stand-in with nothing
+      logged) and a tile canvas wearing any other class both fail loudly now.
 
 - [ ] **360 — Mask does not behave like an effect; the Done button in an effect group throws away your
       picks; and adding an effect often does not take you to it.** (18 Aug.) His words, verbatim:

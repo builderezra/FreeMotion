@@ -27837,4 +27837,92 @@
     }
   });
 
+  /* Queue 359 — *"Why did you change all the filters images to shit photos instead of the good ones
+   * they were before? Change it back man come on, and also I still need the tuff filters like I
+   * discussed with the car photos"*.
+   *
+   * Nothing had been changed and nothing threw. A filter simply had no subject of its own: it inherited
+   * the one belonging to its first child effect, and eleven of the sixteen open on `contrast` or
+   * `saturate`, which resolve to city.jpg — so the tab was one Perth sunset over and over and not one of
+   * the four cars he shot for it. Silent, because a wrong-but-valid photograph renders perfectly.
+   *
+   * The half of that failure a test can hold is the plumbing, and there were TWO separate silent paths:
+   * a subject key with no matching file falls back to the drawn art without an error, and a photograph
+   * missing from the preload set starts its own fetch mid-render and bakes the drawn art into the cached
+   * sample. The second one is exactly what happened — the preload was a hand-kept array of names sitting
+   * three hundred lines from the tables that name them, and it had fallen four behind, missing every
+   * car. Both checks below fail loudly where the app would just quietly show the wrong picture.
+   * (Which photograph suits which look is a taste call and is deliberately NOT asserted — pinning it
+   * would only mean re-writing the test every time one is re-picked by eye.) */
+  test('every filter demonstrates on a photograph that exists and is preloaded (queue 359)', { item: 'filter-art' }, async function () {
+    if (!FM.filters || !FM.fxThumbs || !FM.fxThumbs._filterSubject || !FM.fxThumbs._photoKeys) {
+      throw new Error('no filter-subject seam — FM.fxThumbs._filterSubject/_photoKeys missing');
+    }
+    var preload = FM.fxThumbs._photoKeys();
+    var missing = [], unloaded = [];
+    var subs = FM.filters.all().map(function (f) {
+      var k = FM.fxThumbs._filterSubject(f.id);
+      if (!k) missing.push(f.id + ' has no subject');
+      else if (preload.indexOf(k) < 0) missing.push(f.id + ' uses "' + k + '", which is not preloaded');
+      return k;
+    }).filter(Boolean);
+    if (missing.length) throw new Error(missing.join('; '));
+
+    // The file itself. A typo'd key renders as the drawn stand-in with nothing logged, so the only way
+    // to catch it is to ask the network for the picture.
+    var uniq = subs.filter(function (k, i) { return subs.indexOf(k) === i; });
+    await Promise.all(uniq.map(function (k) {
+      return new Promise(function (done) {
+        var im = new Image();
+        im.onload = function () { if (!im.naturalWidth) unloaded.push(k + ' (zero width)'); done(); };
+        im.onerror = function () { unloaded.push(k + ' (404)'); done(); };
+        im.src = 'fx-art/' + k + '.jpg?v=1';
+      });
+    }));
+    if (unloaded.length) throw new Error('filter subject art missing: ' + unloaded.join(', '));
+  });
+
+  /* Queue 359, the half that actually caused the report. When a photograph finishes decoding every
+   * tile built before it is stale, and `remountLive` repaints them — except it found its tiles with
+   * querySelectorAll('canvas.fxb-thumb-cv'), the EFFECTS browser's class. The Filters tab is built by
+   * the inspector and its tiles wear `flt-thumb-cv`, so not one of them was ever swept: they kept the
+   * drawn stand-in for the whole session while every other tile in the app came good. Hence a complaint
+   * that named the Filters tab alone.
+   * The test mounts a tile on a canvas wearing a DIFFERENT class and asserts the sweep still finds it,
+   * because the defect was never about which class is right — it was about the sweep reading markup at
+   * all. Naming `flt-thumb-cv` here would pass while the next surface to mount a tile broke again. */
+  test('a decoded photo re-mounts every tile, whatever class its canvas wears (queue 359)', { item: 'remount-any' }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs.remountLive || !FM.fxThumbs.mountFilter) {
+      throw new Error('no fxThumbs remount/mountFilter to check');
+    }
+    var id = (FM.filters && FM.filters.all()[0] || {}).id;
+    if (!id) throw new Error('no filters to mount');
+    var cv = document.createElement('canvas');
+    cv.className = 'not-a-browser-tile';     // deliberately NOT either of the classes in the app
+    document.body.appendChild(cv);
+    try {
+      FM.fxThumbs.mountFilter(cv, id);
+      await sleep(400);
+      if (!cv._fxType) throw new Error('mountFilter did not tag the canvas — the probe is wrong, not the code');
+      /* Paint the canvas a colour no tile contains, then sweep. remountLive's return count is not the
+         assertion — it counts every tile in the document, so it stays non-zero whether or not THIS one
+         was included, which is the difference the test exists to see. Whether these particular pixels
+         were painted over is not confusable with anything. */
+      var g = cv.getContext('2d');
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.fillStyle = '#ff00ff'; g.fillRect(0, 0, cv.width, cv.height);
+      FM.fxThumbs.remountLive();
+      await sleep(600);
+      var d = g.getImageData(0, 0, cv.width, cv.height).data, other = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        if (!(d[i] > 245 && d[i + 1] < 10 && d[i + 2] > 245)) { other++; if (other > 200) break; }
+      }
+      if (other <= 200) throw new Error('the tile was never repainted — the re-mount sweep cannot see a canvas ' +
+                                        'unless it wears the effects browser\'s class');
+    } finally {
+      FM.fxThumbs.stopAll && FM.fxThumbs.stopAll();
+      cv.remove();
+    }
+  });
+
 })();

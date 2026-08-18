@@ -56,20 +56,48 @@ window.FM = window.FM || {};
     im.src = 'fx-art/' + key + '.jpg?v=1';
     return im;
   }
+  /* A PICTURE PAINTED WITHOUT ITS PHOTOGRAPH IS NEVER KEPT (queue 359). The drawn art is the stand-in
+   * for the moment before a JPEG decodes — but `sampleFor` BAKES whatever it painted into a canvas and
+   * keeps it, so a tile built during that moment showed the stand-in for the rest of the session. There
+   * is an invalidation for this (`photosChanged` clears the samples and re-mounts) and it does work,
+   * which is why this was invisible for so long: the tile heals a fraction of a second later, unless it
+   * is a canvas the app is not tracking. Watching the grid re-render, the victim moved — Cross Process
+   * one run, CRT Monitor the next — which is the signature of a race rather than a broken table.
+   * Healing after the fact is weaker than not being wrong: the flag below marks any paint that had to
+   * fall back, and nothing marked is stored — not the sample, not the frame. The next paint, once the
+   * photograph is in, is the real one and is kept. Cost is a few re-renders in the first second of a
+   * session and none after it. */
+  let artFellBack = false;
   function photoArt(key, fallback) {
     return function (g, S) {
       const im = photo(key);
       if (im.complete && im.naturalWidth > 0) { g.drawImage(im, 0, 0, S, S); return; }
+      artFellBack = true;
       fallback(g, S);
     };
   }
   // Every photo, requested the moment the browser opens. Without this a photo is only fetched when
   // the first tile that needs it is built — which is always AFTER that tile has already painted its
   // fallback, so every tile visibly flashed drawn art and then swapped. 243 KB for the set. (#66)
-  const ALL_PHOTOS = ['city', 'ramp', 'dusk', 'towers', 'dog', 'sunpath', 'bush', 'shore', 'bay',
-                      'run', 'clouds', 'figures', 'cat', 'pair'];
+  /* WHICH PHOTOGRAPHS TO FETCH UP FRONT — DERIVED, NEVER HAND-KEPT (queue 359). This was a literal
+   * array of fourteen names sitting three hundred lines above the tables that name the photographs, and
+   * it had fallen four behind them: every car Ezra shot for the Filters tab was referenced by a tile and
+   * missing from the preload, so a car tile started its own fetch mid-generation and baked the drawn
+   * fallback into the sample while it waited. Nothing announced the omission — the tile just quietly
+   * showed the wrong picture.
+   * A second list of the same names is exactly the kind of thing that goes stale silently, so there is
+   * no longer a second list: the set is computed from the three tables that actually reference art, and
+   * adding a photograph to any of them preloads it by construction. `photoKeys()` is deferred to first
+   * call because those tables are declared below this point. */
+  function photoKeys() {
+    const set = Object.create(null);
+    Object.keys(PHOTO_OF).forEach(k => { set[k] = 1; });                       // per-effect subjects
+    Object.keys(FILTER_SUBJECT).forEach(k => { set[FILTER_SUBJECT[k]] = 1; }); // per-filter subjects
+    Object.keys(SECTION_PHOTO).forEach(k => { set[SECTION_PHOTO[k]] = 1; });   // per-section defaults
+    return Object.keys(set);
+  }
   let preloaded = false;
-  function preloadArt() { if (preloaded) return; preloaded = true; ALL_PHOTOS.forEach(photo); }
+  function preloadArt() { if (preloaded) return; preloaded = true; photoKeys().forEach(photo); }
 
   // A decoded photo makes every tile that used it stale — the sample scene baked the fallback art
   // into a canvas, and the frame cache baked that. Coalesced, because fourteen files land at once.
@@ -330,10 +358,14 @@ window.FM = window.FM || {};
    * The other eight sections keep their drawn art on purpose: opacity needs a FLAT block (a photo at
    * 60% is just a slightly different photo), move/repeat/threed need a small asymmetric token with
    * room to travel, matte needs a defined light/dark split, and proc/drawing get drawn ON. (#66) */
+  // The photograph each section defaults to, kept as DATA so the preload set can be derived from it
+  // rather than restated by hand — see photoKeys().
+  const SECTION_PHOTO = { color: 'city', other: 'ramp', blur: 'dusk', distort: 'towers', stylize: 'dog' };
+  Object.setPrototypeOf(SECTION_PHOTO, null);
   const SECTION_ART = {
-    color: photoArt('city', paintPhoto), other: photoArt('ramp', paintPhoto), text: paintPhoto,
-    blur: photoArt('dusk', paintDetail), distort: photoArt('towers', paintGrid), proc: paintPlate,
-    stylize: photoArt('dog', paintBars),
+    color: photoArt(SECTION_PHOTO.color, paintPhoto), other: photoArt(SECTION_PHOTO.other, paintPhoto), text: paintPhoto,
+    blur: photoArt(SECTION_PHOTO.blur, paintDetail), distort: photoArt(SECTION_PHOTO.distort, paintGrid), proc: paintPlate,
+    stylize: photoArt(SECTION_PHOTO.stylize, paintBars),
     drawing: paintEmblem, move: paintToken, repeat: paintMotif, matte: paintSplit,
     opacity: paintChip, threed: paintFacet,
   };
@@ -367,6 +399,33 @@ window.FM = window.FM || {};
   };
   const PHOTO_SUBJECT = {};
   Object.keys(PHOTO_OF).forEach(k => PHOTO_OF[k].forEach(t => { PHOTO_SUBJECT[t] = k; }));
+
+  /* WHICH PHOTOGRAPH EACH FILTER IS DEMONSTRATED ON (queue 359). Ezra: *"Why did you change all the
+   * filters images to shit photos instead of the good ones they were before? Change it back man come
+   * on, and also I still need the tuff filters like I discussed with the car photos"*.
+   *
+   * Nothing had been changed and nothing was broken — the tiles were, and had always been, real
+   * photographs with the grade correctly applied. The fault was that a filter had no subject of its
+   * own: it borrowed the one belonging to its FIRST CHILD EFFECT, and eleven of the sixteen filters
+   * open on `contrast` or `saturate`, which live in the colour section and resolve to city.jpg. So the
+   * Filters tab was the same Perth sunset fourteen times, and not one of the four cars he shot for it.
+   * A wall of near-identical thumbnails is worth less than no thumbnail — you cannot tell the looks
+   * apart, which is the only thing the grid is for.
+   *
+   * The subject is a taste call, so each of these was picked by LOOKING at all eighteen photographs
+   * beside all sixteen tiles, not by reasoning from filenames. Each one is chosen so the filter has
+   * something to visibly act ON: the split-tone gets a yellow car on grey pavement so both anchors are
+   * present, the bleach bypass gets orange paint to drain to silver, cross process gets big flat black
+   * panels for its cyan to land in, thermal gets a warm animal because that is what a thermal camera is
+   * for, and the two line-art filters get cars because a car outlines cleanly and a skyline turns to
+   * mush. An id missing here simply keeps the old child-effect behaviour. */
+  const FILTER_SUBJECT = {
+    tealorange: 'huracan', bleach: 'mclaren', crossproc: 'tesla',  faded: 'city',
+    vhs:        'revuelto', crt:  'towers',   super8:    'bush',   oldfilm: 'dog',
+    dreamy:     'shore',   goldenhour: 'sunpath', leak:  'pair',   neonnight: 'dusk',
+    comic:      'huracan', poster: 'clouds',  thermal:   'cat',    nightvis: 'figures',
+  };
+  Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 
   /* Four effects act on PIXEL-LEVEL detail, and a photograph resampled down to a 96px tile has none
    * left to act on — which is exactly why the drawn art carries 1px specks. This is not a guess:
@@ -463,6 +522,7 @@ window.FM = window.FM || {};
   // shadow or a 3D rotation still has somewhere to land inside the tile.
   function sampleFor(key) {
     if (samples[key]) return samples[key];
+    artFellBack = false;          // see photoArt — a sample painted without its photograph is provisional
     const cut = key.indexOf(':');
     if (cut < 0) return samples.ball;
     const form = key.slice(0, cut), cat = key.slice(cut + 1);
@@ -473,14 +533,14 @@ window.FM = window.FM || {};
       const ps = (form === 'photocard')
         ? { layers: [mkArt('_fxthumbPC_' + cat, pa, 64, 46, 44), bg()], heroIdx: 0 }
         : { layers: [mkArt('_fxthumbPF_' + cat, pa, SIZE, 48, 48), bg()], heroIdx: 0 };
-      samples[key] = ps;
+      if (!artFellBack) samples[key] = ps;
       return ps;
     }
     const art = SECTION_ART[cat] || paintPhoto;
     const s = (form === 'card')
       ? { layers: [mkArt('_fxthumbC_' + cat, art, 64, 46, 44), bg()], heroIdx: 0 }
       : { layers: [mkArt('_fxthumbF_' + cat, art, SIZE, 48, 48), bg()], heroIdx: 0 };
-    samples[key] = s;
+    if (!artFellBack) samples[key] = s;
     return s;
   }
 
@@ -850,9 +910,11 @@ window.FM = window.FM || {};
   // its own effects array — never share an effects array between types.
   // `inst` (optional) = a ready effect instance (preset previews); `span` extends layer/project
   // duration when a preset's keyframes run past the default 2s sample.
-  function sceneFor(type, inst, span) {
+  function sceneFor(type, inst, span, subject) {
     const reg = FM.fxRegistry.get(type);
-    const base = sampleFor(subjectFor(type, reg));
+    // `subject` names the sample outright — a filter chooses its own (FILTER_SUBJECT) rather than
+    // inheriting whatever its first child effect happens to demonstrate on.
+    const base = sampleFor(subject || subjectFor(type, reg));
     const layers = base.layers.map(l => Object.assign({}, l));
     if (span && span > 2) layers.forEach(l => { l.duration = span + 0.5; });
     const target = layers[base.heroIdx];
@@ -1234,13 +1296,18 @@ window.FM = window.FM || {};
     if (key != null) {
       const m = meta.get(key);
       let entry = cache.get(key);
+      artFellBack = false;
       if (!entry) entry = (m && m.layerId) ? layerStep(key, m)
                         : (m && m.filter) ? generateFilter(m.filter)
                         : (m && m.preset) ? generatePreset(m.preset)
                         : generate(key);
+      /* A frame rendered while a photograph was still decoding is provisional — see photoArt. It is
+         still PAINTED, so a tile is never blank; it is simply not remembered, and the next mount builds
+         the real one. */
+      const provisional = artFellBack;
       if (entry) {
         queue.shift();
-        cache.set(key, entry);
+        if (!provisional) cache.set(key, entry);
         if (m && m.layerId) remember(key, entry);
         const ws = pendingQ.get(key) || [];
         pendingQ.delete(key);
@@ -1269,7 +1336,8 @@ window.FM = window.FM || {};
     try {
       const box = FM.filters && FM.filters.makeInstance(id);
       if (!box || !box.effects || !box.effects.length) return fallback();
-      const scene = sceneFor(box.effects[0].type, box, 0);
+      const pk = FILTER_SUBJECT[id];
+      const scene = sceneFor(box.effects[0].type, box, 0, pk ? 'photo:' + pk : null);
       renderFrame(scene, 0.001);
       return { kind: 'static', frame: snap() };
     } catch (e) {
@@ -1277,6 +1345,18 @@ window.FM = window.FM || {};
       return fallback();
     }
   }
+
+  /* EVERY CANVAS A TILE HAS BEEN PAINTED INTO (queue 359). `remountLive` used to find its tiles with
+   * querySelectorAll('canvas.fxb-thumb-cv') — the effects browser's class. The Filters tab is built by
+   * the inspector and its tiles wear `flt-thumb-cv`, so the sweep could not see a single one of them:
+   * when the photographs finished decoding and every other tile in the app was repainted, the sixteen
+   * filter tiles kept the drawn stand-in they had been born with, for the rest of the session. That is
+   * precisely what Ezra reported and precisely why it looked like the Filters tab alone had been
+   * vandalised — *"Why did you change all the filters images to shit photos"*.
+   * Naming the second class would fix today and rot the same way the moment a third surface mounts a
+   * tile. So the sweep no longer guesses from markup: a canvas is registered here when it is mounted,
+   * and being findable is a consequence of having been painted rather than of wearing the right class. */
+  const mounted = new Set();
 
   // Shared mount plumbing: size the canvas, paint from cache or join the generation queue.
   function mountKey(cv, key, m) {
@@ -1290,6 +1370,7 @@ window.FM = window.FM || {};
     if (cv.width !== w) cv.width = w;
     if (cv.height !== h) cv.height = h;
     cv._fxType = key;
+    mounted.add(cv);        // see remountLive — the re-mount sweep must not depend on a CSS class
     if (m) meta.set(key, m);
     const hit = cache.get(key);
     if (hit) { paint(cv, hit); if (m && m.layerId) touch(key); return; }
@@ -1311,6 +1392,10 @@ window.FM = window.FM || {};
        could hold it to the rule the file states for itself. Read-only: it hands back the function, and
        the caller supplies its own throwaway layer to run it on. */
     _override: function (type) { return OVERRIDES[type] || null; },
+    // Read-only seams so the suite can check the derivation itself — that every photograph a table
+    // names is in the preload set — rather than checking a copy of the list (queue 359).
+    _photoKeys: function () { return photoKeys().slice(); },
+    _filterSubject: function (id) { return FILTER_SUBJECT[id] || null; },
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },
@@ -1376,7 +1461,13 @@ window.FM = window.FM || {};
      * fx-art photographs decode, and it is exposed so the suite can prove that a preset tile comes
      * back as its preset rather than as the fallback ball. */
     remountLive: function () {
-      const els = [].slice.call(document.querySelectorAll('canvas.fxb-thumb-cv')).filter(function (cv) { return cv._fxType && cv.isConnected; });
+      const els = [];
+      mounted.forEach(function (cv) {
+        // A canvas that has left the document is not coming back — the inspector rebuilds its tiles
+        // from scratch on every refresh — so drop it here rather than letting the set grow forever.
+        if (!cv.isConnected) { mounted.delete(cv); return; }
+        if (cv._fxType) els.push(cv);
+      });
       /* IN-FLIGHT TILES ARE CARRIED ACROSS, not just the ones the DOM can see (queue 110).
        * This used to re-mount purely from that querySelectorAll, and stopAll() below wipes the queue —
        * so any tile that was queued but NOT YET IN THE DOCUMENT was dropped on the floor with nothing

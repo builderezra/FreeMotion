@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#359 — every photograph in fx-art/, side by side</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+#g{display:flex;gap:10px;padding:12px;flex-wrap:wrap}
+figure{margin:0;text-align:center;width:150px}
+img{width:150px;height:150px;object-fit:cover;border-radius:8px;display:block;background:#111}
+figcaption{padding-top:4px;color:#8fa}</style></head><body>
+<div id="g"></div>
+<script>
+/* The subject each filter demonstrates on is a TASTE call — Ezra asked for "the tuff filters like I
+   discussed with the car photos" — and taste calls cannot be made from filenames. This lays all 18
+   photographs out at once so a subject can be picked by looking at it. */
+var KEYS = ['bay','bush','cat','city','clouds','dog','dusk','figures','huracan','mclaren','pair','ramp','revuelto','run','shore','sunpath','tesla','towers'];
+var g = document.getElementById('g'), left = KEYS.length;
+KEYS.forEach(function (k) {
+  var f = document.createElement('figure');
+  var im = document.createElement('img'); im.src = 'fx-art/' + k + '.jpg?v=1';
+  im.onload = im.onerror = function () { if (--left <= 0) window.__done = true; };
+  f.appendChild(im);
+  f.appendChild(document.createElement('figcaption')).textContent = k;
+  g.appendChild(f);
+});
+setTimeout(function () { window.__done = true; }, 4000);
+</script>
+</body></html>

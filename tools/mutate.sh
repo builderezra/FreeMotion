@@ -33,7 +33,25 @@ if [ -z "$FAILS" ]; then
   exit 1
 fi
 echo "✅ CAUGHT:"; printf '%s\n' "$FAILS" | head -4
-if [ -n "$EXPECT" ] && ! printf '%s' "$FAILS" | grep -q "$EXPECT"; then
-  echo "⚠️  but not by the test you expected (\"$EXPECT\") — check which assertion actually fired."
+if [ -n "$EXPECT" ] && ! printf '%s' "$FAILS" | grep -qF "$EXPECT"; then
+  # A FAIL line prints the test's TITLE, but every other tool here addresses a test by its ITEM name —
+  # so passing the item, which is the natural thing to do, could never match and always warned "not the
+  # test you expected" after a mutation the test had in fact caught. A warning that fires on success
+  # teaches you to ignore warnings, so resolve item -> title and match that too before complaining.
+  TITLE="$(python3 - "$EXPECT" <<'PYX'
+import re, sys
+# Scoped to the ONE line that declares the item. A whole-file search with DOTALL looked right and was
+# not: `.*?` simply grew from the first test() in the file until the item matched, so the "title" came
+# back thousands of lines long and grep died with "Argument list too long".
+want = "item: '" + sys.argv[1] + "'"
+for line in open('tests/tests.js', encoding='utf-8'):
+    if want in line:
+        m = re.search(r"test\(\s*'([^']*)'", line) or re.search(r'test\(\s*"([^"]*)"', line)
+        if m: print(m.group(1)); break
+PYX
+)"
+  if [ -z "$TITLE" ] || ! printf '%s' "$FAILS" | grep -qF "$TITLE"; then
+    echo "⚠️  but not by the test you expected (\"$EXPECT\") — check which assertion actually fired."
+  fi
   exit 4
 fi
