@@ -6769,7 +6769,15 @@ better still, keep working inside the turn rather than parking work for a later 
       **Replace Media** button. Done in the corner. So the model is: a template declares which of its
       clips are placeholders, and you fill them.
       **Clauses, longest-term last:**
-      1. [ ] Opening a template OPENS it, rather than dumping it into the current project (same as 342).
+      1. [x] ✅ **ALREADY TRUE — checked, not fixed (18 Aug).** Opening a template OPENS it, rather than
+             dumping it into the current project (same as 342).
+             **This one did not need a change and it is worth saying so rather than shipping a no-op.**
+             Tapping a template calls `FM.templates.useAsNew`, which creates a whole NEW PROJECT from the
+             pack — its own size, its own layers, its own history (`js/storage.js:1316`). It has never
+             inserted into the open project. His *"And the same thing happens for templates"* was written
+             right after the elements complaint and is true of elements, which DID insert; templates only
+             looked the same from outside because both cards behave differently from what their tab implies.
+             Elements were fixed in v9.91; nothing here to fix.
       2. [ ] A template's media clips are **swappable** — tap a slot, pick your own clip, it takes that
              slot's place and keeps the template's timing and effects.
       3. [ ] *(long term)* People can **create** templates.
