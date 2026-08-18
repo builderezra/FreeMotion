@@ -9664,3 +9664,21 @@ wait for them to report back."*
       string-only — the `border` key stays, so nothing saved is touched — and they should ship TOGETHER as
       one release rather than three, so the vocabulary changes once instead of three times.
 
+- [ ] **370 — Drop the Volume card from a text layer so Effects fits the grid.** (18 Aug, phone
+      screenshot at v9.81 of a text layer's card grid.) His words, verbatim: *"In the text edit menu just
+      get rid of the volume button so the effects button can fit"*.
+      **What the shot shows and why he is right:** the cards run 1 Colouring, 2 Border / Shadow,
+      3 Blending / Opacity, 4 Position / Scale, 5 Speed, 6 **Volume (greyed out)**, 7 Edit Text,
+      8 Captions, 9 Presets — and then **Effects alone on a tenth row**, orphaned under a 3×3 block.
+      So a card that can never do anything on a text layer is costing the one card he uses most its place
+      in the grid. Ten cards is 3+3+3+1; nine is a clean 3×3.
+      **The cause, found:** `catsForBase` returns everything except `editgroup` for shape/text/image
+      (`js/inspector.js:2321`), so `volume` is included and merely rendered disabled.
+      **The fix is one line in the same blacklist that already exists** for `cameraopts` and `captions`
+      (`js/inspector.js:2293-2295`) — and note the comment right above it warns about precisely this
+      trap: every branch there builds by blacklist, so anything not taken out leaks in.
+      ⚠️ **Do it for shape and image too, not only text.** They are equally silent, they show the same
+      dead card, and fixing only the layer type he happened to screenshot leaves the same bug in two
+      other places — which is the shape of thing that comes back as a second report a week later.
+      Audio and video layers keep Volume, obviously.
+
