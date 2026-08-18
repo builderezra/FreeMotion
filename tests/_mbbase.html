@@ -1,0 +1,72 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#335 — what Motion Blur (Object) renders today</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:900px;height:180px}#out{padding:8px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #335 — Motion Blur (Object) is layer state (`layer.motionBlur`), not a stack effect, which is why it
+   cannot go inside a Filter: *"Motion blur is still fucked and doesn't work as a filter"*.
+   Moving it into the effect stack is a change to the most load-bearing file in the app, and the failure
+   that would matter is not a crash — it is the picture quietly coming out DIFFERENT, on projects he has
+   already made. A fingerprint taken BEFORE the change is the only way to tell "it still works" from "it
+   still runs".
+   So this prints a fingerprint of the real renderer at several times, with the blur on and off, on a
+   layer that is actually moving. The off/on pair matters as much as the numbers: if they were equal the
+   fixture would not be exercising the blur at all, and every later comparison would be meaningless. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { out.textContent = 'FM never initialised'; window.__done = true; return; }
+      if (!w.FM || !w.FM.renderScene || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM, lines = [];
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+
+        var P = { width: 320, height: 240, fps: 30, duration: 4 };
+        function scene(blur) {
+          var L = FM.makeLayer('shape', { name: 'Ball', shape: 'ellipse', x: 60, y: 120, shapeW: 48, shapeH: 48, fill: '#ffffff' });
+          L.start = 0; L.duration = 4;
+          // A real animation, not a static layer: motion blur declines to do anything when nothing moves,
+          // and a fixture that stands still would fingerprint the ordinary draw path under both names.
+          L.transform.x = { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 2, v: 260, e: 'linear' }] };
+          if (blur) L.motionBlur = { enabled: true, shutter: 0.9, samples: 12 };
+          return { project: P, layers: [L] };
+        }
+        function fingerprint(sc, t) {
+          var c = d.createElement('canvas'); c.width = P.width; c.height = P.height;
+          var g = c.getContext('2d', { willReadFrequently: true });
+          g.setTransform(1, 0, 0, 1, 0, 0);
+          FM.renderScene(g, sc, t);
+          var px = g.getImageData(0, 0, P.width, P.height).data;
+          var h = 5381, lit = 0, sum = 0;
+          for (var i = 0; i < px.length; i += 4) {
+            var v = px[i];
+            if (v > 24) lit++;
+            sum += v;
+            h = ((h * 33) ^ v) >>> 0;
+          }
+          return { hash: h.toString(36), lit: lit, mean: +(sum / (px.length / 4)).toFixed(3) };
+        }
+        var off = scene(false), on = scene(true);
+        lines.push('Motion Blur (Object) — baseline before any migration');
+        lines.push('project ' + P.width + 'x' + P.height + '@' + P.fps + ', ball animating x 60→260 over 2s, shutter 0.9, samples 12');
+        lines.push('');
+        lines.push('   t     OFF hash/lit/mean                    ON hash/lit/mean');
+        [0.25, 0.5, 1.0, 1.5, 1.9].forEach(function (t) {
+          var a = fingerprint(off, t), b = fingerprint(on, t);
+          lines.push('  ' + t.toFixed(2) + '   ' + (a.hash + '/' + a.lit + '/' + a.mean).padEnd(34) + ' ' + (b.hash + '/' + b.lit + '/' + b.mean) +
+                     (a.hash === b.hash ? '   ⚠️ IDENTICAL — the fixture is not exercising the blur' : ''));
+        });
+        lines.push('');
+        lines.push('A migration that preserves behaviour must reproduce the ON column exactly.');
+      } catch (e) { lines.push('threw: ' + (e && e.message || e)); }
+      out.textContent = lines.join('\n');
+      window.__done = true;
+    })();
+  });
+})();
+</script>
+</body></html>

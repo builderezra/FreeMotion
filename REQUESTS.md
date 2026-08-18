@@ -6477,6 +6477,38 @@ better still, keep working inside the turn rather than parking work for a later 
       original complaint ("not really an effect"), seen from a different angle, so it belongs here rather
       than in a new number.
       Logged verbatim and NOT acted on yet — it is still #335's turn to come round.
+
+      **STARTED 18 Aug. His second message settles the question this entry was parked on.** It asked:
+      does he want it to become an ORDINARY effect, or stay a setting but look like one? *"Doesn't work
+      as a filter"* answers it — a Filter is a container of effects, so he wants it to BE an effect.
+      **Four facts established by reading the code directly, before trusting any plan:**
+      1. `drawMotionBlur` **re-renders the whole layer N times at N sub-times and averages them**
+         (`js/compositor.js:2012`). An ordinary stack effect only ever sees the CURRENT frame's pixels,
+         so this cannot simply be moved into POSTFX/PIXEL_FX. Any plan that says it can is wrong.
+      2. **But there is already a precedent for exactly this shape:** `motionflow` — Motion Blur
+         (Footage) — IS an ordinary registry effect, and it is intercepted at the wrap level in
+         `drawLayer` (`js/compositor.js:10607`) rather than running as a pixel pass. So a registry
+         effect CAN drive the renderer. That is the route.
+      3. **Filter eligibility has no special gate**: `supportsFilter` is just `supportsLayer` AND-ed over
+         the container's children (`js/fx-registry.js:532`). So registering it properly is precisely
+         what makes "doesn't work as a filter" go away — there is nothing else to unlock.
+      4. ⚠️ **There is NO scene versioning and NO load-time layer normalisation anywhere** — layers load
+         as raw JSON. So the migration must be explicit and lazy, or projects he has already made lose
+         their motion blur silently. **That is the one outcome worth designing against**, and it is the
+         kind that passes a test suite.
+      **Baseline captured BEFORE touching anything** (`tests/_mbbase.html`), because the failure that
+      would matter here is not a crash but the picture quietly coming out different. A ball animating
+      x 60→260 over 2s, shutter 0.9, samples 12, at five times:
+      | t | blur OFF (hash/lit/mean) | blur ON (hash/lit/mean) |
+      |---|---|---|
+      | 0.25 | fav9ad / 1884 / 6.255 | t42k79 / 1980 / 6.574 |
+      | 0.50 | 1ubu01x / 1884 / 6.255 | dul685 / 1980 / 6.574 |
+      | 1.00 | i7jphh / 1884 / 6.255 | ullsjp / 1980 / 6.574 |
+      | 1.50 | 1766dad / 1884 / 6.255 | 3rv9hh / 1980 / 6.574 |
+      | 1.90 | z7lgp1 / 1884 / 6.255 | j2uvgl / 1980 / 6.574 |
+      The OFF/ON pair differing at every time is what makes the fixture worth anything — if they matched,
+      it would not be exercising the blur and every later comparison would be meaningless. **A migration
+      that preserves behaviour must reproduce the ON column exactly.**
 - [ ] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.**
       (17 Aug.) His words, verbatim: *"To extend out a clip you should have to hold down on the arrows
       first because currently accidentally touching for a second moves it but you should have to hold
