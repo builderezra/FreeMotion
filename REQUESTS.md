@@ -9367,3 +9367,22 @@ wait for them to report back."*
       **Also confirmed by this message: #315 clause 1 is FIXED** — he says the multi-stroke case works
       now. That entry was left open because I could not reproduce the failure; his word closes it.
 
+- [ ] **362 — The canvas rail's zoom control: up/down arrows instead of + and −, and say "Full" at 100%.**
+      (18 Aug, phone screenshot at v9.81 with the control circled in red.) His words, verbatim:
+      *"With the highlighted area make it up and down arrows instead of plus and minus and when it's at
+      100% make it say “Full”"*.
+      **Which control this is, from the screenshot:** the right-hand rail down the side of the canvas,
+      reading top to bottom — fullscreen, layers, camera, then the circled one (**+ / 100% / −**), then a
+      second stepper (**− / 1× / +**, the playback speed), then loop, then the magnet. So it is the
+      **upper** stepper, the one showing a percentage, and NOT the 1× speed one directly under it.
+      **Clauses:**
+      1. [ ] The **+ and − become up and down arrows** (▲ / ▼).
+      2. [ ] At exactly 100% the readout says **“Full”** instead of “100%”.
+      **Worth settling when this comes up:** the two steppers sit adjacent and currently look identical
+      apart from their readouts. Changing only the top one to arrows makes them tell each other apart,
+      which is probably part of the point — but if he wants BOTH as arrows it is the same one-line change.
+      Doing only what he circled unless he says otherwise.
+      ⚠️ Draw the arrows rather than using ▲/▼ characters — a glyph's ink sits where the font puts it,
+      which is the defect he has now reported three times (queue 209, 296, 331 clause 3). This control is
+      the exact shape that keeps producing it.
+
