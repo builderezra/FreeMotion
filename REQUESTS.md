@@ -9558,3 +9558,23 @@ wait for them to report back."*
       containers** — not `document.body.textContent`, which includes the suite printing its own test
       titles and has produced a self-matching false pass in this repo before.
 
+- [ ] **367 — The Presets icon should be a little bookmark/flag, not a star.** (18 Aug.) His words,
+      verbatim: *"Change the presets logo to be a little bookmark flag icon thing instead of a star, keep
+      the same colours and put work into making sure it's great looking"*.
+      **Where it is:** the Presets category card's icon, a star path at `js/inspector.js:1675`-ish
+      (`{ key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' }`).
+      Check whether the same star is drawn anywhere else (the favourite ★ in the effects browser is a
+      DIFFERENT thing and must NOT change — that one means "favourite", and a bookmark there would be a
+      second meaning for the same shape).
+      **Clauses:**
+      1. [ ] Bookmark/flag shape instead of the star.
+      2. [ ] **Same colours** — this is not a recolour.
+      3. [ ] *"Put work into making sure it's great looking"* — an explicit instruction not to do the
+             quick version. He has called out half-done icon work before (queue 313: *"the shading you
+             added to the notepad looks so bad, you barely did anything and what you did do is complete
+             ass"*), so: draw it at a large size AND at its real size before shipping, the way #313 had
+             to be checked, because a shape that reads well at 200px can be mud at 24.
+      ⚠️ It must sit on the same 24×24 grid and the same stroke weight as its eleven sibling category
+      icons, or it will look wrong next to them however good it is alone. Compare against the row, not
+      in isolation — that is the mistake #313 was.
+
