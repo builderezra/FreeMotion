@@ -9461,3 +9461,33 @@ wait for them to report back."*
       specific containers — *not* `document.body.textContent`, which includes the suite printing its own
       test titles and has produced a self-matching false pass here before.
 
+- [ ] **364 — The time pill BECOMES the play button, bookmarks move onto the playhead, and the row that
+      only existed to hold the pill goes away.** (18 Aug, phone screenshot at v9.81 with an arrow drawn
+      from the ▶ button down to the `00:01:36` pill, the pill circled, and the empty ruler row either
+      side of it scribbled out.) His words, verbatim, in full:
+
+      > Make it so that the play button is now the project time pill and when you press on it it pauses and plays the project, and just make it so that now when you're hovering over  bookmark it just makes the play head yellow instead and make it so you tap the top of the playhead to add bookmarks, and also make it so the top of the playhead is a bit thicker so it's easier to tap on.
+
+      > And also now that the pill is moved we can get rid of the whole row that is wasted just for a spot to put the pill on, giving the timeline more space up.
+
+      **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
+      1. [ ] **The time pill IS the play button.** Tapping `00:01:36` plays and pauses. The separate ▶ in
+             the transport row goes (that is what his arrow means — the ▶ moving *into* the pill).
+      2. [ ] **Hovering a bookmark turns the PLAYHEAD yellow**, instead of whatever it does today.
+      3. [ ] **Tap the top of the playhead to add a bookmark.**
+      4. [ ] **The top of the playhead gets thicker**, so it is easier to hit.
+      5. [ ] **Delete the ruler row that exists only to hold the pill**, giving the timeline that height
+             back. This is the payoff for clause 1 and should land in the same release, or he gets the
+             cost without the benefit.
+      **Two things to settle while building, not after:**
+      · *"Hovering"* on a phone is not a thing — there is no pointer. Most likely he means when the
+        PLAYHEAD is on/near a bookmark, which is the only "hover" a touch timeline has. On PC a real
+        mouse hover also exists and should do the same. Building it as "playhead is over a bookmark"
+        unless he says otherwise, and doing the PC hover too since it costs nothing.
+      · Clauses 3 and 4 interact with **#351** (swiping the timeline is not smooth if your finger starts
+        ON a layer) and with the existing playhead drag: making the top of the playhead a tap target must
+        not eat the DRAG that scrubs it. A tap and a drag starting in the same place is exactly the kind
+        of thing that silently breaks scrubbing, so the test needs to cover both.
+      ⚠️ Whatever draws the ▶ inside the pill must be DRAWN, not a font glyph — same reason as
+      queue 209/296/331 clause 3.
+
