@@ -21,13 +21,33 @@ BODY="$(sed -n '/^---$/,$p' INBOX.md | sed '1d' | sed '/^[[:space:]]*$/d')"
 # no conflict copies that matter, nothing to merge. Read from the Mac, which has iCloud mounted.
 ICLOUD="$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt"
 if [ -f "$ICLOUD" ]; then
-  DROP="$(sed -n '/^----*$/,$p' "$ICLOUD" | sed '1d' | sed '/^[[:space:]]*$/d')"
+  # NEVER TRUNCATE THIS FILE. Emptying it from the Mac looked like it worked and then iCloud synced the
+  # phone's copy back over the top, so already-logged requests reappeared as if they were new. Deleting
+  # a line here is a WRITE, and a write races the phone; appending a marker does not, because the phone
+  # only ever appends too. So the file grows, and everything above the last marker is already logged.
+  # `index($0, MARK)` not `/^### drained/`: his phone appends without a trailing newline, so the marker
+  # can land on the END of his last line rather than on one of its own. Anchoring to the start of a line
+  # missed it, and every already-logged request came back a second time.
+  DROP="$(awk 'index($0, "### drained"){buf=""; next}{buf = buf $0 ORS} END{printf "%s", buf}' "$ICLOUD" \
+          | sed -n '/^----*$/,$p' | sed '1d' | sed '/^[[:space:]]*$/d')"
   [ -n "$DROP" ] && BODY="$BODY
 --- from iCloud (FreeMotion-requests.txt) ---
 $DROP"
 fi
 
 if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then echo "inbox empty"; else
-  echo "=== UNLOGGED — move these into REQUESTS.md, then clear BOTH files ==="
+  echo "=== UNLOGGED — move these into REQUESTS.md, then run: tools/inbox.sh --done ==="
   printf '%s\n' "$BODY"
+fi
+# --done draws a line under everything above it. Append-only, so it cannot race the phone.
+if [ "$1" = "--done" ]; then
+  # Leading newline: his last line may have none, and a marker glued to the end of his text is a marker
+  # on a line that also carries a request — which then gets swallowed with it.
+  [ -f "$ICLOUD" ] && printf '\n### drained %s\n' "$(date '+%Y-%m-%d %H:%M')" >> "$ICLOUD"
+  python3 - <<'PYX'
+import re
+p='INBOX.md'; s=open(p,encoding='utf-8').read()
+open(p,'w',encoding='utf-8').write(s.split('---')[0] + '---\n\n')
+PYX
+  echo "marked drained"
 fi
