@@ -6663,3 +6663,58 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
 /* An element still being built (queue 340) — reads as unfinished at a glance, without a second layout. */
 .hm-card-draft { border-style: dashed; }
 .hm-thumb-draft { display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--accent); background: var(--panel-3); }
+
+/* ---- "Insert your Media" — filling a template's clips (queue 343 clause 2) -----------------------
+   Ezra, with an Alight Motion screenshot: "the long term goal for templates is to make it when you
+   press on them you can quickly swap out the media for ur own clips". His reference is specific and
+   this follows it rather than inventing a shape: the template previewing at the top, a scrub bar under
+   it, "Tap to Replace with your Media", a row of slots each showing its duration, and a Replace Media
+   button, with Done in the corner.
+   position: fixed + inset: 0 like every other full-screen surface here, and it pays the safe-area
+   insets on both edges it touches — v5.49 turned on viewport-fit=cover, so an overlay that does not
+   pay them puts its title under the clock and its button under the home indicator. */
+#tpl-fill { position: fixed; inset: 0; z-index: 165; background: var(--panel, #10141d); display: flex; flex-direction: column;
+            padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+#tpl-fill.hidden { display: none; }
+.tfill-top { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+             padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
+.tfill-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.tfill-done { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+              font-size: 13.5px; font-weight: 650; cursor: pointer; }
+/* The preview takes what is left after the row below it, with a floor so a short window still shows a
+   picture rather than a sliver. min-height: 0 because a flex child's default is min-content, which on
+   a canvas means it refuses to shrink and pushes the slots off the bottom. */
+.tfill-stage { flex: 1 1 auto; min-height: 120px; display: flex; align-items: center; justify-content: center; padding: 12px; }
+.tfill-cv { display: block; border-radius: 10px; background: #000; max-width: 100%; max-height: 100%; }
+.tfill-scrub { width: calc(100% - 28px); margin: 0 14px; accent-color: var(--accent, #4ea8ff); }
+.tfill-lead { text-align: center; font-size: 13px; color: var(--text-dim, #9aa7b8); padding: 12px 14px 8px; }
+/* A horizontal rail, not a grid: one slot per clip and templates can have a lot of them, and a row you
+   swipe keeps the preview above it on screen. overflow-x AND overflow-y are both declared, because CSS
+   will not let one axis be visible while the other scrolls and leaving it implicit is how three other
+   rails in this file quietly gained a second scrollbar. */
+/* scroll-padding, not just padding. Snap aligns a slot to the SCROLLPORT's start, which excludes the
+   container's own padding — so the first slot snapped to scrollLeft: 14 and sat flush against the
+   screen edge with its selection ring clipped. Measured, not guessed: padding read 14px and scrollLeft
+   read 14 at the same moment. */
+.tfill-slots { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 0 14px 4px;
+               scroll-snap-type: x proximity; scroll-padding: 0 14px; }
+.tfill-slot { position: relative; flex: 0 0 auto; width: 84px; padding: 0; border-radius: 12px; cursor: pointer;
+              background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; scroll-snap-align: start; }
+.tfill-slot.is-sel { border-color: var(--accent, #4ea8ff); box-shadow: 0 0 0 1px var(--accent, #4ea8ff) inset; }
+.tfill-thumb { display: block; width: 100%; height: 84px; object-fit: cover; }
+.tfill-slot-n { position: absolute; top: 5px; left: 5px; min-width: 17px; height: 17px; border-radius: 999px; display: inline-flex;
+                align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700;
+                color: var(--bg, #0b0e14); background: var(--accent, #4ea8ff); }
+.tfill-slot-d { display: block; padding: 5px 6px; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--text-dim, #9aa7b8); text-align: center; }
+.tfill-none { padding: 16px 14px; font-size: 12.5px; color: var(--text-faint); font-style: italic; }
+.tfill-replace { margin: 12px 14px 0; padding: 13px 18px; border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: 650;
+                 color: var(--text); border: 1px solid var(--accent, #4ea8ff);
+                 background: color-mix(in srgb, var(--accent, #4ea8ff) 20%, transparent); }
+.tfill-replace:disabled { opacity: .45; cursor: default; border-color: var(--line); background: var(--panel-2); }
+/* On a wide window the same screen simply centres — a 1440px-wide preview of a phone-shaped template
+   would be a wall of letterbox, and the rail would run half a metre. */
+@media (min-width: 701px) {
+  #tpl-fill { align-items: center; }
+  .tfill-top, .tfill-scrub, .tfill-lead, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
+  .tfill-top { align-self: center; }
+}

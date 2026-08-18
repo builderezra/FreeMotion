@@ -6840,8 +6840,15 @@ better still, keep working inside the turn rather than parking work for a later 
              right after the elements complaint and is true of elements, which DID insert; templates only
              looked the same from outside because both cards behave differently from what their tab implies.
              Elements were fixed in v9.91; nothing here to fix.
-      2. [ ] A template's media clips are **swappable** — tap a slot, pick your own clip, it takes that
-             slot's place and keeps the template's timing and effects.
+      2. [x] ✅ **v9.97** — A template's media clips are **swappable** — tap a slot, pick your own clip, it
+             takes that slot's place and keeps the template's timing and effects.
+             **The swap already existed**; `FM.replaceMediaWith` keeps the transform, keyframes, timing,
+             effects and masks and only re-clamps the trim to the new source. What was missing was the
+             SCREEN, and it is built to your reference shot: the template previewing at the top with a
+             scrub bar, "Tap to Replace with your Media", a rail of numbered slots each showing its
+             duration, a Replace Media button, Done in the corner. It opens itself once a template has
+             become a project, and it stays away entirely when a template has no video or image clips.
+             Tapping a slot selects it AND seeks the preview to that clip, so the second tap is not blind.
       3. [ ] *(long term)* People can **create** templates.
       4. [ ] *(long term)* Templates can be **shared** — his words: *"so noobs can use them or whoever
              and get quick easy edits"* — plus ones we make ourselves.

@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#343 — Insert your Media</title>
+<style>html,body{margin:0;background:#060c0f}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* #343 clause 2 — the template-filling screen, in the layout he uses. The slots are built from the
+   project's media layers, so the fixture makes a few with staggered starts and different lengths;
+   they carry no media record on purpose, which is also the honest worst case for the chip (a template
+   whose pack has not hydrated yet must still draw a slot rather than throw). */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app');
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait() {
+      if (++t > 300) { window.__done = true; return; }
+      if (!w.FM || !w.FM.home || !w.FM.templateFill) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+      } catch (e) {}
+      setTimeout(function () {
+        try {
+          FM.scene.layers.length = 0;
+          var starts = [0, 1.5, 3.2, 5, 7.4], durs = [1.5, 1.7, 1.8, 2.4, 3.1];
+          for (var i = 0; i < (+q.get('n') || 5); i++) {
+            var L = FM.makeLayer(i % 2 ? 'image' : 'video', { name: 'Clip ' + (i + 1), x: 540, y: 960 });
+            L.start = starts[i % 5]; L.duration = durs[i % 5];
+            FM.scene.layers.push(L);
+          }
+          // a shape too, to prove the slot row lists MEDIA only
+          var S = FM.makeLayer('shape', { name: 'Title', shape: 'rect', x: 540, y: 400, shapeW: 700, shapeH: 200, fill: '#3a7bd5' });
+          S.start = 0; S.duration = 10; FM.scene.layers.push(S);
+          FM.scene.project.duration = 10.5;
+          FM.refreshAll();
+          FM.templateFill.open();
+        } catch (e) { d.title = 'threw: ' + e.message; }
+        setTimeout(function () {
+          try {
+            var sl = d.querySelector('.tfill-slots'), b0 = d.querySelector('.tfill-slot');
+            var cs = w.getComputedStyle(sl);
+            document.title = 'slots pad=' + cs.paddingLeft + '/' + cs.paddingRight + ' rect=' + JSON.stringify(sl.getBoundingClientRect())
+              + ' slot0=' + JSON.stringify(b0.getBoundingClientRect()) + ' scrollLeft=' + sl.scrollLeft;
+          } catch (e) { document.title = 'probe threw ' + e.message; }
+          window.__done = true;
+        }, 1400);
+      }, 900);
+    })();
+  });
+})();
+</script></body></html>

@@ -66,6 +66,18 @@
     T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn });
   }
 
+  /* A NAME WITH A DOUBLE QUOTE IN IT TRUNCATES ITS OWN FAILURE REPORT, and this is a note turned into
+     a gate. tools/mutate.sh and tools/ship.sh both read the runner's JSON with `grep -o 'FAIL[^"]*'`,
+     because the summary is JSON and a greedy match would run past it — so the first `"` inside a test
+     NAME ends the line. A test called `templates: "Insert your Media" …` reported itself as
+     `FAILtemplates: \` and the mutation check could not tell which assertion had fired.
+     Cheaper to forbid the character than to teach two shell scripts to parse JSON. */
+  test('suite: no test name can truncate its own failure report', { item: 'suite-name-quotes' }, function () {
+    var bad = T.filter(function (t) { return String(t.name).indexOf('"') >= 0; });
+    if (bad.length) throw new Error(bad.length + ' test name(s) contain a double quote, which cuts the FAIL line short in ship.sh and mutate.sh — use single quotes: ' + bad.map(function (t) { return t.name.slice(0, 60); }).join(' | '));
+    if (T.length < 50) throw new Error('only ' + T.length + ' tests were registered when this ran — it would pass without checking anything');
+  });
+
   /* ---------------- regression (must stay green) ---------------- */
 
   test('render: a red shape draws red at its centre', { item: 'render-core' }, function () {
@@ -458,6 +470,66 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them', { item: 'template-fill' }, function () {
+    /* Queue 343 clause 2. Ezra, with an Alight Motion screenshot: "the long term goal for templates is
+       to make it when you press on them you can quickly swap out the media for ur own clips so you can
+       use them as templates and not just the exact same thing as elements."
+       The SWAP was never the missing part — FM.replaceMediaWith already keeps the layer's transform,
+       keyframes, timing and effects and only re-clamps the trim. What was missing was the screen, and
+       what the screen is is its SLOT LIST: one per replaceable clip, in the order they play. So that is
+       what is asserted, plus the two things that were actually wrong when it was first built. */
+    if (!FM.templateFill) throw new Error('FM.templateFill missing — opening a template has nothing to show');
+    ['open', 'close', 'isOpen', '_slots'].forEach(k => { if (!FM.templateFill[k]) throw new Error('FM.templateFill.' + k + ' missing'); });
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    try {
+      // Deliberately built OUT of timeline order, and with two non-media layers mixed in: a slot row
+      // that simply echoed the layer array would pass a same-order fixture and still be wrong.
+      const mk = (type, name, start, d) => { const L = FM.makeLayer(type, { name: name, x: 100, y: 100, shape: 'rect', shapeW: 50, shapeH: 50, fill: '#fff' }); L.start = start; L.duration = d; return L; };
+      FM.scene.layers.length = 0;
+      FM.scene.layers.push(mk('video', 'third', 6, 2), mk('shape', 'Title', 0, 8), mk('image', 'first', 0, 3),
+                           mk('text', 'Caption', 1, 4), mk('video', 'second', 3, 2.5));
+      FM.scene.project.duration = 9;
+      const got = FM.templateFill._slots();
+      if (got.length !== 3) throw new Error('the slot row listed ' + got.length + ' clips, not the 3 media layers (a shape and a text layer are not yours to replace)');
+      const names = got.map(l => l.name).join(',');
+      if (names !== 'first,second,third') throw new Error('the slots are in layer order, not timeline order: ' + names);
+
+      /* ENOUGH SLOTS TO OVERFLOW THE RAIL, and that is not padding the fixture — it is the condition
+         the bug needs. A rail that fits its contents never scrolls, so scroll-snap has nothing to snap
+         and the gutter check below passes with the fix removed. The mutation check said exactly that
+         about the first version of this test, which used the three clips above. The rail is capped at
+         `min(680px, 94vw)`, so twelve 84px slots overflow it at any width the suite can run at. */
+      for (let i = 0; i < 9; i++) FM.scene.layers.push(mk('image', 'fill' + i, 9 + i, 1));
+      FM.scene.project.duration = 20;
+      if (!FM.templateFill.open()) throw new Error('open() refused a project that has replaceable clips');
+      if (document.querySelectorAll('#tpl-fill .tfill-slot').length !== 12) throw new Error('expected 12 slots, drew ' + document.querySelectorAll('#tpl-fill .tfill-slot').length);
+      if (!FM.templateFill.isOpen()) throw new Error('open() reported success but the screen is not showing');
+      const rail = document.querySelector('#tpl-fill .tfill-slots');
+      const slot = document.querySelector('#tpl-fill .tfill-slot');
+      if (!rail || !slot) throw new Error('the screen is open but has no slot rail');
+      const rr = rail.getBoundingClientRect(), sr = slot.getBoundingClientRect();
+      // Control: a rail measured at zero width makes the gutter check meaningless.
+      if (rr.width < 100) throw new Error('the slot rail measured ' + Math.round(rr.width) + 'px wide — nothing below can mean anything');
+      // Control: and it must genuinely OVERFLOW, or snap is inert and the gutter check proves nothing.
+      if (rail.scrollWidth <= rail.clientWidth) throw new Error('the slot rail does not overflow (' + rail.scrollWidth + ' in ' + rail.clientWidth + ') — scroll-snap is inert, so the check below cannot fail');
+      /* THE MEASURED BUG. `scroll-snap-type` aligns a slot to the SCROLLPORT's start, which excludes the
+         rail's own padding — so the first slot snapped to scrollLeft: 14 and sat flush against the screen
+         edge with its selection ring clipped off. `scroll-padding` is what makes snap respect the gutter. */
+      if (sr.left - rr.left < 10) throw new Error('the first slot sits ' + Math.round(sr.left - rr.left) + 'px from the rail edge (scrollLeft ' + rail.scrollLeft + ') — its selection ring is clipped against the side of the screen');
+
+      // A template of nothing but text and shapes has nothing to fill, and a screen saying "replace
+      // your media" over an empty row is worse than no screen.
+      FM.templateFill.close();
+      FM.scene.layers = FM.scene.layers.filter(l => l.type !== 'video' && l.type !== 'image');
+      if (FM.templateFill.open() !== false) throw new Error('the screen opened for a template with no media clips to replace');
+      if (FM.templateFill.isOpen()) throw new Error('open() returned false but left the screen up');
+    } finally {
+      try { FM.templateFill.close(); } catch (e) {}
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('elements: the browser fills its width, and an empty one is a page rather than a caption', { item: 'el-browser-look' }, async function () {
     /* Queue 340 clause 2. Ezra, having opened it: "when you press the add element button the menu is
        not thought and looks lazy and shit, make it good." One 380px screenshot held all three faults.
@@ -533,7 +605,7 @@
     }, 380);
   });
 
-  test('tiles: "Whole clip" repeats a clip that is entirely off-canvas', { item: 'tiles-offcanvas' }, function () {
+  test('tiles: Whole-clip mode repeats a clip that is entirely off-canvas', { item: 'tiles-offcanvas' }, function () {
     // v4.82. Tiles' "Whole clip" mode builds its own plate reaching past the frame — but the call was
     // gated on the CANVAS bbox, so a clip dragged fully off-frame had no on-screen alpha, the effect
     // function never ran, and the tiles rendered NOTHING. Measured before the fix: centred 100% of the
@@ -5048,6 +5120,8 @@
       { sel: '#topbar-m', edge: 'top' },        // editor top bar
       { sel: '#add-fab', edge: 'bottom' },      // the + orb, over the home indicator
       { sel: '#add-sheet', edge: 'bottom' },    // the add sheet's last row
+      { sel: '.tfill-top', edge: 'top' },       // "Insert your Media" — its title and Done (queue 343)
+      { sel: '#tpl-fill', edge: 'bottom' },     // …and its Replace Media button, over the home indicator
     ];
     let css = '';
     for (const sheet of document.styleSheets) {
@@ -13973,7 +14047,7 @@
 
   /* #172 / #173. Two small ones that both hinge on the same trap: a default is only a default until
      something remembers over the top of it. */
-  test('export offers "same as project" for size, and opens on High quality', { item: 'export-defaults' }, async function () {
+  test('export offers same-as-project for size, and opens on High quality', { item: 'export-defaults' }, async function () {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const P = FM.scene.project, keep = localStorage.getItem('fm.exportPrefs');
@@ -16134,7 +16208,7 @@
     }
   });
 
-  test('the clip menu names it for what it does, not "improve quality"', { item: 'improve-quality' }, function () {
+  test('the clip menu names it for what it does, not improve-quality', { item: 'improve-quality' }, function () {
     /* The label is the first place to be honest. "Improve quality" invites exactly the expectation a
        browser cannot meet — it cannot invent detail — and a button that implies it can reads as
        broken the first time it fails to rescue a genuinely soft clip. */
@@ -17320,7 +17394,7 @@
    * between the project-name field and the version chip, alone in the middle of the bar while the
    * other three icons clustered to its right. */
 
-  test('the phone "?" sits to the RIGHT of the version chip (queue 266)', { item: 'help-pos' }, function () {
+  test('the phone help button sits to the RIGHT of the version chip (queue 266)', { item: 'help-pos' }, function () {
     return atPhoneWidth(async function () {
       await new Promise(r => setTimeout(r, 60));
       const help = document.getElementById('m-help'), ver = document.getElementById('ver-m');
@@ -17350,7 +17424,7 @@
    * one was off: ink box y 8.50–17.50 in a circle centred at 12, so 4.5 units of air above it and 2.5
    * below. Both tests stay. The old one still guards the thing it actually measures; this one asks his
    * question. */
-  test('the "?" is centred in its own circle, at the same weight on both bars (queue 305)', { item: 'help-pos' }, function () {
+  test('the help glyph is centred in its own circle, at the same weight on both bars (queue 305)', { item: 'help-pos' }, function () {
     const seen = [];
     ['btn-help', 'm-help'].forEach(function (id) {
       const b = document.getElementById(id);
@@ -17390,7 +17464,7 @@
     if (seen[0].sw !== seen[1].sw) throw new Error('the PC "?" is stroke ' + seen[0].sw + ' and the phone one ' + seen[1].sw + ' — the same glyph at two weights is how this drifted in the first place');
   });
 
-  test('the "?" glyph is centred in its button (queue 266)', { item: 'help-pos' }, function () {
+  test('the help glyph is centred in its button (queue 266)', { item: 'help-pos' }, function () {
     /* NOTE (queue 305): this measures the SVG ELEMENT against the BUTTON, and that was never what he
        was reporting — see the test above, which measures the question mark against its circle and
        found the 1-unit drop he had been describing since 266. Kept, because the thing it does measure
@@ -18340,7 +18414,7 @@
 
   /* ---------------- queue 289: the "Other" catch-all is gone ---------------- */
 
-  test('there is no "Other" effects category, and nothing fell out of the browser (queue 289)', { item: 'no-other' }, function () {
+  test('there is no Other effects category, and nothing fell out of the browser (queue 289)', { item: 'no-other' }, function () {
     /* "Just put the effects from the other menu into menus that would fit them and get rid of the other
      * menu."
      * The second half is the one that needs a test. Deleting a catch-all is easy; the risk is an effect
@@ -22075,7 +22149,7 @@
    * the play button row along side everything else." Half already existed as #btn-help, desktop-only
    * and stranded in the top bar. */
 
-  test('the phone top bar has a "?" that opens the shortcuts, in both selection states', { item: 'help-btn' }, async function () {
+  test('the phone top bar has a help button that opens the shortcuts, in both selection states', { item: 'help-btn' }, async function () {
     const frame = () => new Promise(r => setTimeout(r, 120));
     return atPhoneWidth(async function () {
       const b = document.getElementById('m-help');
@@ -22114,7 +22188,7 @@
     }, 380);
   });
 
-  test('on PC the "?" rides the transport row, not the top bar', { item: 'help-btn' }, function () {
+  test('on PC the help button rides the transport row, not the top bar', { item: 'help-btn' }, function () {
     /* "On pc it can go on the play button row along side everything else." btn-notes went missing in
        exactly this migration once (v7.52 left it behind in the header), which is why the list is
        asserted rather than assumed. */
@@ -22539,7 +22613,7 @@
     } finally { window.requestAnimationFrame = realRAF; FM.perfProbe.stop(); }
   });
 
-  test('the "what\u2019s slow" row fits a phone and its report does not scroll sideways', { item: 'perf-probe' }, async function () {
+  test('the what\u2019s-slow row fits a phone and its report does not scroll sideways', { item: 'perf-probe' }, async function () {
     /* Verified here rather than by hand because the browser pane I check screenshots in reports
        document.hidden, and FM.settings.open() adds its class inside requestAnimationFrame — which a
        hidden tab never fires, so the panel cannot be made to paint there at all. The suite's browser
@@ -23919,7 +23993,7 @@
    * The case that matters and is easy to get wrong is speech that starts BEFORE the caption clip: the
    * clip has to move back to meet it, and every cue has to re-base by the same amount or they all
    * slide by however far it moved. */
-  test('captions: "whole project" keeps speech that falls outside the caption clip, and re-bases it', { item: 'cap-scope' }, function () {
+  test('captions: whole-project mode keeps speech that falls outside the caption clip, and re-bases it', { item: 'cap-scope' }, function () {
     var C = FM.captions;
     if (!C || typeof C.fitCues !== 'function') throw new Error('FM.captions.fitCues is missing — the scope choice has no testable seam');
     // A caption clip at 10s lasting 4s. Speech at −2s (before it starts), inside, and past the end.
@@ -28599,7 +28673,7 @@
    * just a deleted handler: the ADD is gone, the marker actions that shared that gesture still work, and a
    * benchmark can still be ADDED by another route. Taking away the only way to add one would have satisfied
    * his sentence and broken the feature. */
-  test('the timeline long-press no longer offers "add benchmark", but keeps the rest (queue 337)', { item: 'no-add-marker' }, async function () {
+  test('the timeline long-press no longer offers add-benchmark, but keeps the rest (queue 337)', { item: 'no-add-marker' }, async function () {
     var P = FM.scene.project;
     var m0 = P.markers ? P.markers.slice() : [];
     try {

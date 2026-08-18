@@ -1382,7 +1382,15 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Creating project…');
       try {
         const ok = await FM.templates.useAsNew(t.id);
-        if (ok) FM.home.close({ push: true, lead: card }); else if (FM.toast) FM.toast('Could not load that template');
+        if (ok) {
+          FM.home.close({ push: true, lead: card });
+          /* AFTER the push, not during it (queue 343 clause 2). The overlay is position:fixed, and
+             body.fm-popping/fm-pushing put #app on a transform for the length of the animation — a
+             fixed child raised mid-push would be re-rooted to that transformed ancestor and travel
+             with it. Waiting the push out also means the first thing you see is the template, not a
+             file-picker screen sliding in over a screen that is still moving. */
+          setTimeout(() => { if (FM.templateFill) FM.templateFill.open(); }, 420);
+        } else if (FM.toast) FM.toast('Could not load that template');
       } finally { clearPress(true); }   // eased: on the push path startPush already took it, so this only runs when nothing happened
     }
     if (selectify(card, th, t.id, use)) card.appendChild(more);
