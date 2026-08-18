@@ -28597,4 +28597,22 @@
     });
   });
 
+  /* Queue 341 — *"Film grain background isn't even moving on mobile, and honestly I prefer it, maybe pc
+   * moving and mobile not"*. A decision, and he made it.
+   * The point of the test is that it is now OURS. The grain was already still on his phone with nothing
+   * in the stylesheet doing that — the device was dropping the animation — so the look was right by
+   * accident and could come back at any iOS release. Asserting both sides is what turns it into a rule. */
+  test('the home grain is static on a phone and alive on desktop (queue 341)', { item: 'grain-static' }, async function () {
+    var g = document.getElementById('hm-grain');
+    if (!g) { if (FM.home && FM.home.open) { FM.home.open(); await sleep(200); g = document.getElementById('hm-grain'); } }
+    if (!g) throw new Error('no #hm-grain on the home screen');
+    var anim = function () { return getComputedStyle(g, '::after').animationName; };
+    await atPhoneWidth(async function () {
+      await sleep(80);
+      if (anim() !== 'none') throw new Error('the grain still animates at phone width: ' + anim());
+    });
+    await sleep(80);
+    if (anim() === 'none') throw new Error('the grain is dead on desktop too — PC is meant to keep moving');
+  });
+
 })();

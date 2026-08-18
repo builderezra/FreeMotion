@@ -3538,6 +3538,17 @@ body.hm-selecting .hm-card { touch-action: none; }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the dissolve. */
 @media (prefers-reduced-motion: reduce) { .hm-card::before, .hm-card::after, #hm-grain::before, #hm-grain::after { animation: none; } }
+/* STATIC ON THE PHONE, ALIVE ON PC — his call, not a bug (queue 341). His words: "Film grain background
+   isn't even moving on mobile, and honestly I prefer it, maybe pc moving and mobile not".
+   It was ALREADY still on his phone, and nothing in this file was doing that — there is no phone rule
+   above, only the reduced-motion one, so the animation was being dropped by the device (a throttle, or
+   Low Power Mode) rather than by us. That is the part worth fixing even though the LOOK is already what
+   he wants: behaviour that depends on whether the phone feels like it today is not a decision, and the
+   next iOS release could hand him back a moving grain he has said he does not want.
+   700px is this file's existing phone breakpoint, not a new number.
+   `::before` keeps opacity 0 and `::after` keeps its alpha, so switching the animations off leaves ONE
+   static field rather than two stacked — the cross-fade between them is what the animation was for. */
+@media (max-width: 700px) { #hm-grain::before, #hm-grain::after { animation: none; } }
 
 /* The overpull slam (v6.25). Ezra: pull the home list down past the top and keep pulling, and "the
    project will just slam back up really hard and shake the screen". home.js animates the list itself;

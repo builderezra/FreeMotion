@@ -6703,7 +6703,7 @@ better still, keep working inside the turn rather than parking work for a later 
              looks like now against what 210 asked for before redesigning anything.
 
 
-- [ ] **341 — The film-grain background does not move on mobile, and he prefers it that way.** (17 Aug,
+- [x] **341 — The film-grain background does not move on mobile, and he prefers it that way.** ✅ **v9.90.** (17 Aug,
       home-screen screenshot.) His words, verbatim: *"Film grain background isn't even moving on mobile,
       and honestly I prefer it, maybe pc moving and mobile not"*.
       **This is a decision, not a bug report — and he has made it.** Keep the grain STATIC on phone and
@@ -6711,6 +6711,13 @@ better still, keep working inside the turn rather than parking work for a later 
       media query or a reduced-motion guard is already doing it, the work is to make that deliberate and
       documented rather than accidental. If it is stopped for a reason that also applies to PC (cost),
       say so.
+      ✅ **DONE v9.90 — and the entry's own question had a worthwhile answer.** It asked why the grain was
+      already still on mobile. **Nothing in the stylesheet was doing it**: there is no phone rule, only a
+      reduced-motion one, so the DEVICE was dropping the animation (a throttle, or Low Power Mode). The look
+      he likes was an accident, and an accident is not a decision — a future iOS release could have handed
+      him back a moving grain he has said he does not want. It is ours now, at the 700px breakpoint this
+      file already uses. Both sides are asserted, because a rule that only stops the phone would be
+      indistinguishable from having killed it everywhere.
       Cheap, independent, and it makes the phone slightly cheaper to run — which is the direction
       95/125/202 want anyway.
 
