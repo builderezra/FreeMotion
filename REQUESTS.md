@@ -9982,3 +9982,41 @@ wait for them to report back."*
       glint and does not pay for it.
       ⚠️ Measure before building — if leaving a project already tears most of this down, the fix is small or
       already done, and saying so is worth more than a rebuild.
+
+- [ ] **386 — Videos and clips lost the Outline toggle, and there is no plain shadow — only the long drop
+      one.** (18 Aug, phone screenshot at v9.83: a video layer's Border / Shadow card containing ONE control,
+      "Drop shadow".) His words, verbatim: *"Outlines should still be a toggle option on videos and clips, not
+      just shadow, and also there needs to be a normal shadow not just the long drop one"*.
+      **Confirmed in the code:** `canBorder` is `(shape && !openKind) || text || group` (`js/inspector.js:4540`)
+      — video and image are deliberately excluded, so a media layer's card offers only the shadow. He is
+      saying that exclusion is wrong: a video should be outline-able like anything else.
+      **Clauses:**
+      1. [ ] **Outline works on video and image layers**, as a toggle, like it does on shapes and text.
+      2. [ ] **A normal shadow** as well as the long drop shadow — a soft shadow hugging the layer, rather
+             than the offset one that is the only option today.
+      ⚠️ An outline on a VIDEO means stroking the layer's rectangle (or its crop/rounded-corner shape), not
+      an alpha silhouette the way it works on a shape — check which the existing stroke code assumes before
+      wiring it up, or it will do nothing on media and look "still broken".
+      **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
+      the card is renamed and correct in one go rather than renamed while still missing half its controls.
+
+- [ ] **387 — 🚨 PHONE: pressing on a layer to scrub is still laggy, and PLAYBACK is a buggy mess while
+      scrubbing is fine.** (18 Aug, *"On mobile"*.) His words, verbatim: *"The issue of scrubbing when
+      pressing on a layer being laggy for some reason is still an issue, so you need to be careful where you
+      place ur finger on the timeline to avoid slowness."* and *"And also for some reason a video will
+      playback fine when scrubbing but actually pressing play is a buggy mess"*.
+      **The second sentence is the most valuable thing in any of the phone-performance reports so far**, and
+      it should be treated as the lead. SCRUBBING renders fine; PLAY does not. Both draw the same frames
+      through the same compositor — so whatever is wrong is almost certainly NOT rendering cost. It is
+      something only playback does: the media element's own clock, `syncMediaToClock`, the rAF loop, or the
+      audio clock driving the video. That splits the search in half and rules out the thing every previous
+      round measured.
+      **First half restates #351** (*"swiping the timeline is not smooth if your finger starts ON a layer"*)
+      and it is now confirmed still live at v9.83 — he has learned to avoid where he puts his finger, which
+      is the sort of workaround that means a bug has been open too long.
+      **Clauses:**
+      1. [ ] Scrubbing by pressing ON a layer is laggy (same as #351, confirmed still present).
+      2. [ ] Playback is buggy on mobile where scrubbing is not — chase the PLAYBACK path, not the renderer.
+      ⚠️ Previous rounds measured desktop timings and found nothing, repeatedly (#95, #125, #202). Do not do
+      that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
+      asymmetry is the control that makes such a profile meaningful.
