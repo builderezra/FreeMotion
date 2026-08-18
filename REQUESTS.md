@@ -9479,6 +9479,13 @@ wait for them to report back."*
       5. [ ] **Delete the ruler row that exists only to hold the pill**, giving the timeline that height
              back. This is the payoff for clause 1 and should land in the same release, or he gets the
              cost without the benefit.
+      6. [ ] **The speed-modifier popup stops appearing on that row.** Added minutes later, verbatim:
+             *"Also on that row the speed modifier would pop up but you can just make the speed modifier
+             pop up not go there anymore since it's sufficient to have it just show in the view menu on
+             the right side"*. So the row has a SECOND occupant, and it does not need rehousing — the
+             1× stepper already lives in the right-hand rail (visible in the #362 screenshot), which he
+             is saying is enough. Removing the popup is what unblocks clause 5: the row cannot be
+             deleted while something else still pops up in it.
       **Two things to settle while building, not after:**
       · *"Hovering"* on a phone is not a thing — there is no pointer. Most likely he means when the
         PLAYHEAD is on/near a bookmark, which is the only "hover" a touch timeline has. On PC a real
