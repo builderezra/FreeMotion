@@ -15,7 +15,19 @@ if [ -n "$(git log --oneline HEAD..ssh/main)" ]; then
   echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
 fi
 BODY="$(sed -n '/^---$/,$p' INBOX.md | sed '1d' | sed '/^[[:space:]]*$/d')"
-if [ -z "$BODY" ]; then echo "inbox empty"; else
-  echo "=== UNLOGGED — move these into REQUESTS.md, then clear the file ==="
+
+# SECOND CHANNEL: a plain text file in iCloud Drive. His phone can append to it in one tap and it is
+# NOT a git repo, so none of the reasons not to put the project in iCloud apply — no .git to corrupt,
+# no conflict copies that matter, nothing to merge. Read from the Mac, which has iCloud mounted.
+ICLOUD="$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt"
+if [ -f "$ICLOUD" ]; then
+  DROP="$(sed -n '/^----*$/,$p' "$ICLOUD" | sed '1d' | sed '/^[[:space:]]*$/d')"
+  [ -n "$DROP" ] && BODY="$BODY
+--- from iCloud (FreeMotion-requests.txt) ---
+$DROP"
+fi
+
+if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then echo "inbox empty"; else
+  echo "=== UNLOGGED — move these into REQUESTS.md, then clear BOTH files ==="
   printf '%s\n' "$BODY"
 fi
