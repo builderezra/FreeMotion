@@ -1,0 +1,94 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#360 c3 — where you land after adding an effect</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #360 clause 3. His words: "for some reason what I do I had an effect. Normally it doesn't even take
+   me to the effect sometimes it just kicks me out of the [layer] and then I have to go back into the
+   [layer] and go to effect and find it."
+   Two paths add an effect and they are not the same code: a single tap (addEffect, not quiet) and the
+   multi-select commit (queue 277), which adds every pick quietly and lands once at the end. This drives
+   both and prints where the inspector actually ends up. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.fxBrowser || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      function state(tag) {
+        var open = d.querySelector('.fx-row.fx-open');
+        var grid = d.querySelector('.insp-cats, .cat-grid, .insp-grid');
+        var rows = d.querySelectorAll('.fx-row').length;
+        var inView = false;
+        if (open) { var r = open.getBoundingClientRect(); var p = (d.getElementById('inspector-panel')||d.body).getBoundingClientRect(); inView = r.top < p.bottom && r.bottom > p.top; }
+        var nfx = (FM.scene.layers[0] && FM.scene.layers[0].effects || []).length;
+        say('  ' + tag.padEnd(22) + 'layer.effects=' + String(nfx).padStart(2) + '  fx rows=' + String(rows).padStart(2) +
+            '  open row=' + (open ? 'YES' : 'no ') +
+            '  in view=' + (open ? (inView ? 'yes' : 'NO ') : '-  ') +
+            '  category grid showing=' + (grid && grid.offsetParent !== null ? 'YES (kicked out)' : 'no'));
+      }
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0;
+        var Lr = FM.makeLayer('shape', { name:'L', shape:'rect', x:540, y:960, shapeW:400, shapeH:400, fill:'#3a7bd5' });
+        Lr.start = 0; Lr.duration = 4; FM.scene.layers.push(Lr);
+        FM.selectLayer(Lr.id); FM.refreshAll();
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        try {
+          /* Drive the REAL tiles rather than an internal seam. There is no _add/_pick/_commit on
+             FM.fxBrowser, and inventing one to test with would test the seam, not the button. */
+          function tiles() { return [].slice.call(d.querySelectorAll('#fx-browser [data-fxid]')); }
+          function openCat() { var cats = FM.fxRegistry.categories() || []; FM.fxBrowser._openCategory(cats[0]); }
+          say('SINGLE TAP');
+          FM.fxBrowser.open(FM.scene.layers[0]);
+          setTimeout(function () {
+            openCat();
+            setTimeout(function () {
+              var ts = tiles();
+              if (!ts.length) { say('  no tiles found in the category view'); window.__done = true; return; }
+              ts[0].click();
+              setTimeout(function () {
+                var picks = FM._fxPicks ? FM._fxPicks() : [];
+                if (picks.length) {
+                  // sheet mode: a tap SELECTS. Commit through the real bar.
+                  var done = d.querySelector('#fx-browser .fxb-commit, #fx-browser .fxb-done, #fx-browser .fxb-subdone');
+                  say('  (sheet multi-select: ' + picks.length + ' picked, committing via ' + (done ? done.className : 'NO BUTTON') + ')');
+                  if (done) done.click();
+                }
+                setTimeout(function () {
+                  state('after one tap');
+                  say('');
+                  say('MULTI-SELECT (three picks, then Done)');
+                  FM.scene.layers[0].effects = [];
+                  FM.refreshAll();
+                  FM.fxBrowser.open(FM.scene.layers[0]);
+                  setTimeout(function () {
+                    openCat();
+                    setTimeout(function () {
+                      var ts2 = tiles();
+                      ts2.slice(0, 3).forEach(function (el) { el.click(); });
+                      var picks2 = FM._fxPicks ? FM._fxPicks() : [];
+                      say('  picked ' + picks2.length);
+                      var done2 = d.querySelector('#fx-browser .fxb-commit, #fx-browser .fxb-done, #fx-browser .fxb-subdone');
+                      if (done2) done2.click(); else say('  NO commit button found');
+                      setTimeout(function () { state('after commit'); window.__done = true; }, 600);
+                    }, 500);
+                  }, 600);
+                }, 600);
+              }, 500);
+            }, 500);
+          }, 700);
+        } catch (e) { say('drive threw ' + e.message); window.__done = true; }
+      }, 900);
+    })();
+  });
+})();
+</script></body></html>

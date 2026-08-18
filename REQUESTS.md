@@ -9764,6 +9764,20 @@ wait for them to report back."*
          **Clauses 1 and 3 are still open, so this entry stays open.**
       3. **After adding an effect it often does not open that effect.** It should land on the new effect's
          controls; he says it frequently drops him out of the layer entirely.
+         **PARTLY MEASURED, 19 Aug — and the measurement is NOT yet trustworthy, so nothing was shipped
+         on it.** `tests/_afteradd.html` drives the real tiles and the real commit bar at 380px and
+         reports, for both a single pick and three: **you land on the nine-category grid, not on the new
+         effect** — which is his report exactly. But the same probe reads `layer.effects = 0`, i.e. it
+         says nothing was added at all, and **that contradicts a green 198-tile sweep in the suite** which
+         asserts picks do commit (#333 / v9.81). One of the two is wrong and it is more likely the probe:
+         the most probable faults are that `.fxb-commit` is not the element the handler is bound to, or
+         that `FM.scene.layers[0]` is stale after the `refreshAll()` between the two runs.
+         **Settle THAT before touching the code**, because "adding does nothing" and "adding works but
+         lands you in the wrong place" need opposite fixes and the probe currently claims both.
+         **The code lead, for when it is settled:** the batch path (js/fx-browser.js `commitPicks`) calls
+         `FM.inspector.openCategory('effects')` and THEN `FM.refreshAll()`. The single-tap path calls
+         openCategory and then only `FM.timeline.rebuild()`. If refreshAll re-renders the inspector back
+         to the category grid, that ordering is the whole bug — and it would explain "sometimes".
 
 - [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
       a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
