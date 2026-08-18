@@ -1,0 +1,90 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#350 — Voronoi: alive, compatible, and what it costs</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}
+iframe{border:0;width:420px;height:110px}#out{padding:8px;white-space:pre}canvas{margin:6px;border-radius:6px}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div><div id="strip"></div>
+<script>
+/* #350. Three questions, and the entry asks for all three:
+   1. does an effect with NO motion param render exactly as it did (the EFFECTS-PLAN compatibility rule),
+   2. does it actually move when motion is on, and move per-CELL rather than as one sliding sheet —
+      "not just a drag it up and down… like they're alive",
+   3. what does it cost. The entry warns that Voronoi is already a per-pixel nearest-seed search and
+      that a previous round measured 1.2s a frame and had to be cut back. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), strip = document.getElementById('strip'), L = [];
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait(){
+      if (++tries > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.renderScene || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        var P = { width: 240, height: 240, fps: 30, duration: 6 };
+        function scene(params) {
+          var Lr = FM.makeLayer('shape', { name:'V', shape:'rect', x:120, y:120, shapeW:240, shapeH:240, fill:'#8fd4ff' });
+          Lr.start = 0; Lr.duration = 6;
+          Lr.effects = [{ type:'voronoi', enabled:true, params: params }];
+          return { project:P, layers:[Lr] };
+        }
+        function shot(sc, t, keep) {
+          var c = d.createElement('canvas'); c.width = P.width; c.height = P.height;
+          var g = c.getContext('2d', { willReadFrequently:true });
+          g.setTransform(1,0,0,1,0,0); FM.renderScene(g, sc, t);
+          var px = g.getImageData(0,0,P.width,P.height).data;
+          if (keep) { var o = document.createElement('canvas'); o.width=120; o.height=120;
+            o.getContext('2d').drawImage(c,0,0,120,120); strip.appendChild(o); }
+          return px;
+        }
+        function diff(a,b){ var n=0; for(var i=0;i<a.length;i+=4){ if(Math.abs(a[i]-b[i])>6) n++; } return n; }
+
+        // 1 — an OLD effect (no motion param at all) must be frozen.
+        var oldFx = scene({ cells: 16, edge: 0.35 });
+        var o0 = shot(oldFx, 0), o1 = shot(oldFx, 1.7), o2 = shot(oldFx, 4.3);
+        say('COMPATIBILITY (no motion param — an effect saved before this release)');
+        say('   pixels differing t=0 vs t=1.7 : ' + diff(o0,o1) + '   (must be 0)');
+        say('   pixels differing t=0 vs t=4.3 : ' + diff(o0,o2) + '   (must be 0)');
+
+        // 2 — with motion on it must move, and each cell on its own path.
+        var live = scene({ cells: 16, edge: 0.35, motion: 0.6, speed: 0.6 });
+        var a0 = shot(live, 0, true), a1 = shot(live, 0.9, true), a2 = shot(live, 1.8, true), a3 = shot(live, 2.7, true);
+        say('');
+        say('ALIVE (motion 0.6, speed 0.6)');
+        say('   pixels differing t=0 vs t=0.9 : ' + diff(a0,a1));
+        say('   pixels differing t=0 vs t=1.8 : ' + diff(a0,a2));
+        /* "Not one sliding sheet" measured rather than asserted: if the whole field merely translated,
+           some single (dx,dy) shift of the later frame would line it back up. Try every shift in a
+           +/-6px window and report the BEST match — a field of independently wandering cells should
+           never be rescued by any of them. */
+        function bestShift(A,B){
+          var best = 1e9, bx=0, by=0, Wp=P.width, Hp=P.height;
+          for(var dy=-6; dy<=6; dy++) for(var dx=-6; dx<=6; dx++){
+            var n=0, seen=0;
+            for(var y=10;y<Hp-10;y+=3) for(var x=10;x<Wp-10;x+=3){
+              var i=(y*Wp+x)*4, j=((y+dy)*Wp+(x+dx))*4; seen++;
+              if(Math.abs(A[i]-B[j])>6) n++;
+            }
+            var frac = n/seen;
+            if(frac<best){ best=frac; bx=dx; by=dy; }
+          }
+          return { frac: best, dx: bx, dy: by };
+        }
+        var bs = bestShift(a0,a2);
+        say('   best whole-field shift that would explain it: (' + bs.dx + ',' + bs.dy + ') still leaves ' +
+            (bs.frac*100).toFixed(1) + '% of samples wrong');
+        say('   (a field that merely slid would drop near 0% at the right shift)');
+
+        // 3 — cost.
+        function ms(sc){ var t0=performance.now(); for(var k=0;k<5;k++) shot(sc, k*0.31); return (performance.now()-t0)/5; }
+        say('');
+        say('COST at ' + P.width + 'x' + P.height + '  (ms per frame, mean of 5)');
+        say('   no motion param (the old path): ' + ms(oldFx).toFixed(2));
+        say('   motion 0.6                    : ' + ms(live).toFixed(2));
+      } catch (e) { say('threw: ' + (e && e.message)); }
+      window.__done = true;
+    })();
+  });
+})();
+</script></body></html>

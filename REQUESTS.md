@@ -7481,8 +7481,18 @@ better still, keep working inside the turn rather than parking work for a later 
       hit before.
 
 
-- [ ] **350 — Voronoi Cells needs to MOVE, and move like it is alive — AND its explanation block goes
-      at the same time.** (17 Aug; second clause added 18 Aug.) His words on the second, verbatim:
+- [x] **350 — Voronoi Cells needs to MOVE, and move like it is alive — AND its explanation block goes
+      at the same time.** ✅ **v10.00 (both clauses; the explanation half was already done in queue 378).**
+      **Motion** and **Speed** sliders. Each cell hashes its index into its OWN phase and orbits its
+      resting place — the two axes run at 1 and 0.73 of the same clock so they never re-sync and there is
+      no direction you can point at. That is the *"not just a drag it up and down… like they're alive"*
+      clause, and it is what the test pins: it searches every whole-field shift and asks how much the
+      best one improves on not shifting — a sliding sheet is rescued by its true offset (measured: gains
+      15.5–19.7 points), independent cells by none (1.1–3.2).
+      **Motion 0 is today exactly**, byte for byte — 0 pixels differ across three times, and an effect
+      saved before this release has no motion param so it reads 0.
+      **It also costs LESS than the static version**: the seed grid is built once per frame instead of
+      hashing inside the pixel loop, so at 240x240 it went 5.66ms → 5.32ms with the motion ON. (17 Aug; second clause added 18 Aug.) His words on the second, verbatim:
       *"When you improve the voronoi cells like I asked you can also get rid of the explanation at the
       same time"* — with a phone shot at v9.78 showing the Voronoi Cells card open and the sentence
       *"Breaks the frame into organic cells, the pattern of cracked mud or a giraffe's coat."* sitting

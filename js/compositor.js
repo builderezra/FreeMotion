@@ -876,6 +876,11 @@ window.FM = window.FM || {};
     { type: 'voronoi', label: 'Voronoi Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
+      /* Queue 350. Default 0.4, not 0 — he asked for it to move, so a cell field you have just added
+         should already be alive; 0 is still there for anyone who wants the frozen pattern, and an
+         effect saved BEFORE this release carries no motion param at all and renders exactly as it did. */
+      { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4 },
+      { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
     ] },
     { type: 'tunnel', label: 'Tunnel', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -4937,7 +4942,36 @@ window.FM = window.FM || {};
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=d.slice(); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcpx=(vccx+vcH(vccx,vccy,1))*vcG, vcpy=(vccy+vcH(vccx,vccy,2))*vcG; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*0.08){ var vcF=1-vcE*(1-vcEw/(vcG*0.08)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=d.slice(); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+      /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
+         actually move in a cool way and not just a drag it up and down, like they're alive."
+         "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
+         is what one Speed slider usually produces. So the drift is per SEED, not per field: each cell
+         gets its own phase out of two more hash channels and orbits its resting place. The two axes run
+         at 1 and 0.73 of the same clock, a deliberately non-integer ratio, so they never re-sync and the
+         motion has no visible loop and no direction you could point at.
+         Radius is capped at 0.34 of a grid cell so a seed cannot wander far enough to be missed by the
+         3x3 neighbour search below — a seed that escapes its neighbourhood does not make a nicer
+         pattern, it makes a wrong one.
+         MOTION 0 IS TODAY EXACTLY, byte for byte: the offset term is skipped entirely rather than
+         multiplied by zero, and an effect saved before this release has no `motion` param at all, so it
+         reads 0 and renders as it always did. That is the EFFECTS-PLAN rule and it is a suite test.
+         THE SEEDS ARE PRECOMPUTED, and that is the cost answer rather than a hope. The old code hashed
+         both offsets INSIDE the pixel loop — 9 neighbours x 2 hashes x every pixel, and each hash is a
+         Math.sin. Adding two more hashes and two trig calls there would have been 4x that. Building the
+         grid once per frame (at most ~4k cells) removes the per-pixel hashing altogether, so this runs
+         FEWER transcendentals than the static version it replaces. */
+      var vcM=FM.evalProp(p.motion,t); if(vcM==null||isNaN(vcM))vcM=0; vcM=vcM<0?0:(vcM>1?1:vcM);
+      var vcSp=FM.evalProp(p.speed,t); if(vcSp==null||isNaN(vcSp))vcSp=0.5; vcSp=vcSp<0?0:(vcSp>2?2:vcSp);
+      var vcR=vcM*0.34, vcW=(t<0?0:t)*vcSp*6.2831853, vcTAU=6.2831853;
+      var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
+      var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
+      for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){
+        var vcCx=vcgx-1, vcCy=vcgy-1, vcIdx=vcgy*vcGX+vcgx;
+        var vcOx=vcH(vcCx,vcCy,1), vcOy=vcH(vcCx,vcCy,2);
+        if(vcR){ vcOx+=vcR*Math.cos(vcW+vcH(vcCx,vcCy,3)*vcTAU); vcOy+=vcR*Math.sin(vcW*0.73+vcH(vcCx,vcCy,4)*vcTAU); }
+        vcPX[vcIdx]=(vcCx+vcOx)*vcG; vcPY[vcIdx]=(vcCy+vcOy)*vcG;
+      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*0.08){ var vcF=1-vcE*(1-vcEw/(vcG*0.08)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
     // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
     // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
     // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate

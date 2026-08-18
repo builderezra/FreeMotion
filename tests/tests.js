@@ -470,6 +470,88 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
+    /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
+       actually move in a cool way and not just a drag it up and down, like they're alive. Because
+       that's what alight motion has."
+       The second half is the design instruction and it is the one worth pinning, because the cheap
+       implementation — one Speed slider scrolling the whole field — satisfies "it moves" and is exactly
+       what he ruled out. So the test does not ask whether pixels changed; it asks whether any single
+       whole-field SHIFT would explain the change. A sliding sheet is rescued by the right offset. A
+       field of independently wandering cells is rescued by none of them.
+       And the compatibility rule from EFFECTS-PLAN: an effect saved before this release carries no
+       `motion` param, so it must render exactly as it always did. */
+    const P = { width: 120, height: 120, fps: 30, duration: 6 };
+    const scene = params => {
+      const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 60, y: 60, shapeW: 120, shapeH: 120, fill: '#8fd4ff' });
+      L.start = 0; L.duration = 6;
+      L.effects = [{ type: 'voronoi', enabled: true, params: params }];
+      return { project: P, layers: [L] };
+    };
+    const shot = (sc, t) => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, t);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 6) n++; return n; };
+
+    // 1 — no motion param: frozen, exactly as before this release.
+    const oldFx = scene({ cells: 16, edge: 0.35 });
+    const o0 = shot(oldFx, 0);
+    [1.7, 4.3].forEach(t => {
+      const n = diff(o0, shot(oldFx, t));
+      if (n) throw new Error(n + ' pixels changed at t=' + t + ' on a Voronoi with no motion param — an effect saved before this release must render exactly as it did');
+    });
+
+    /* 2 and 3 use BIG cells on purpose. A shared-drift field translates by radius x cell size, so at
+       16 cells across a 120px frame that is under 2px — a sub-pixel slide that an integer shift search
+       cannot line back up, and the first version of this test passed happily with the per-seed phases
+       mutated out. The mutation check said so. Six cells makes the same drift ~7px, which a shift can
+       genuinely rescue if the field really is sliding. */
+    /* AND THE SECOND TIME IS CHOSEN, not picked. The drift is a cosine, so two times half a cycle apart
+       are the furthest the field can travel; two times a whole cycle apart are back where they started.
+       At speed 0.6 a half cycle is 1/(2 x 0.6) = 0.833s. The first version of this test compared t=0
+       with t=1.8, which is 1.08 cycles — a shared drift would have moved the whole field by 0.8px there,
+       far too little for an integer shift to detect, and the mutation survived. Twice. */
+    const live = scene({ cells: 6, edge: 0.35, motion: 1, speed: 0.6 });
+    const a0 = shot(live, 0), a2 = shot(live, 0.833);
+    const moved = diff(a0, a2);
+    if (moved < a0.length / 4 * 0.05) throw new Error('only ' + moved + ' pixels changed between t=0 and t=0.833 with motion 1 — the cells are not moving');
+
+    /* THE CLAUSE THAT MATTERS, and it is measured as a COMPARISON rather than an absolute. Search every
+       whole-field shift in a +/-16px window and ask how much the best one improves on not shifting at
+       all. A field that merely slid is nearly rescued by its true offset, so the improvement is large.
+       A field of independently wandering cells cannot be rescued by any single offset, so the best
+       shift is barely better than none. Scale-free, which an absolute threshold was not. */
+    const score = (dx, dy) => {
+      let n = 0, seen = 0;
+      for (let y = 16; y < P.height - 16; y += 2) for (let x = 16; x < P.width - 16; x += 2) {
+        const i = (y * P.width + x) * 4, j = ((y + dy) * P.width + (x + dx)) * 4;
+        seen++; if (Math.abs(a0[i] - a2[j]) > 6) n++;
+      }
+      return n / seen;
+    };
+    const zero = score(0, 0);
+    let best = zero, bx = 0, by = 0;
+    for (let dy = -16; dy <= 16; dy++) for (let dx = -16; dx <= 16; dx++) {
+      const f = score(dx, dy);
+      if (f < best) { best = f; bx = dx; by = dy; }
+    }
+    // Control: if the two frames barely differ, every shift scores the same and the comparison is empty.
+    if (zero < 0.15) throw new Error('the two frames differ in only ' + (zero * 100).toFixed(1) + '% of samples — too alike for the shift comparison below to mean anything');
+    /* 8 POINTS, and the number is measured rather than chosen. Rendering the same fixture with the
+       per-seed phases removed — i.e. the sliding sheet he ruled out — the best shift gains 15.5, 15.8
+       and 19.7 points at three different time pairs; with them in it gains 1.1, 2.9 and 3.2. Eight sits
+       between those two clusters with better than 2x margin on each side. The first threshold here was
+       18, which is ABOVE the sliding case, so the mutation passed. */
+    if (zero - best > 0.08) {
+      throw new Error('shifting the whole frame by (' + bx + ',' + by + ') rescues it from ' + (zero * 100).toFixed(1) +
+        '% wrong to ' + (best * 100).toFixed(1) + '% — the cells are travelling together as one sheet, which is the "just a drag it up and down" he ruled out');
+    }
+  });
+
   test('filters: the Tuff section is real, validates, and every look carries the flash', { item: 'tuff-filters' }, function () {
     /* Queue 349. His words: "Make a filter section called 'tuff' and use the car images for the filters
        you make… These filters will be good for people who make edits on TikTok that are a tuff style
