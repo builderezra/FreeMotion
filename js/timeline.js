@@ -1386,7 +1386,11 @@ window.FM = window.FM || {};
         e.stopPropagation(); e.preventDefault();
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
-        if (e.pointerType === 'mouse') { beginTrim(e); return; }
+        /* Expressed as "guard FINGERS", not "exempt mice". Keyed the other way round it also caught
+           every pointer whose type is unset — synthetic events, and anything a browser reports oddly —
+           and silently put them behind a hold they can never satisfy. A trim that simply stops working
+           for an input nobody thought about is a worse failure than the graze this guards against. */
+        if (e.pointerType !== 'touch' && e.pointerType !== 'pen') { beginTrim(e); return; }
         disarm();
         armAt = { x: e.clientX, y: e.clientY };
         const at = { clientX: e.clientX, pointerId: e.pointerId };   // the event object is recycled; the two fields it needs are not

@@ -6587,17 +6587,17 @@ better still, keep working inside the turn rather than parking work for a later 
       Film talks in DEGREES (0..360, default 180), which would give the scrubber real travel and match how
       it is described everywhere else. Keeping 0..1 for now because changing it is a separate decision and
       the conversion is one multiplication whenever he wants it. **Say the word and it changes.**
-- [ ] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.**
+- [x] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.** ✅ **v9.84.**
       (17 Aug.) His words, verbatim: *"To extend out a clip you should have to hold down on the arrows
       first because currently accidentally touching for a second moves it but you should have to hold
       down for a second and to signify it can move now the colour of the arrow should change to the
       signature blue or sum, make it look good"*.
       **Clauses:**
-      1. [ ] A trim grip must be **held for about a second** before it will drag. A brief accidental
+      1. [x] ✅ **v9.84 (550ms, matching the app's other holds)** — A trim grip must be **held for about a second** before it will drag. A brief accidental
              touch currently retimes the clip.
-      2. [ ] Once armed, the arrow **changes colour** — he suggests the app's signature blue — so you can
+      2. [x] ✅ **v9.84** — Once armed, the arrow **changes colour** — he suggests the app's signature blue — so you can
              see it is now live.
-      3. [ ] *"make it look good"* — the arm should read as deliberate, not as a flicker.
+      3. [x] ✅ **v9.84** — *"make it look good"* — the arm should read as deliberate, not as a flicker.
       Worth knowing before building: the app already has a long-press arming pattern elsewhere (the
       timeline's clip long-press), so match its timing rather than inventing a second feel. Also check
       what this does to the DESKTOP path, where a mouse-down-drag is precise and a forced hold would be
@@ -9859,7 +9859,7 @@ wait for them to report back."*
       ⚠️ Check the heading is not doing double duty as the sheet's drag handle or its accessibility label
       before deleting it — if it is, the handle stays and only the word goes.
 
-- [ ] **378 — Get rid of the effect explanation blocks — ALL of them — and keep the text somewhere it can
+- [x] **378 — ✅ v9.84. Get rid of the effect explanation blocks — ALL of them — and keep the text somewhere it can
       feed the tutorials.** (18 Aug, phone screenshot at v9.83 of Motion Blur (Object) with its paragraph
       under the title.) His words, verbatim: *"Get rid of motion blur explanation, and make a note to get
       rid of all explanations, if you have to, write it down somewhere else, so that when we make tutorials
@@ -9879,7 +9879,7 @@ wait for them to report back."*
       ⚠️ Still open elsewhere: the explanation blocks that are NOT `reg.desc` — the `insp-hint` lines in
       other cards (queue 346 names one). Those are separate elements and this change does not touch them.
 
-- [ ] **379 — Motion blur needs to crank much harder; the strongest setting is only subtle.** (18 Aug,
+- [x] **379 — ✅ v9.84. Motion blur needs to crank much harder; the strongest setting is only subtle.** (18 Aug,
       immediately after v9.83.) His words, verbatim: *"Also motion blur looks good but needs to be able to
       be stronger, the cranks should be able to crank more, currently the strongest setting is only
       subtle"*.
@@ -9951,3 +9951,34 @@ wait for them to report back."*
       ⚠️ The row already has a TAP (expand/collapse) and a SWIPE-LEFT (delete). A hold-to-drag has to
       coexist with both: the tap must still fire when there is no hold, and a horizontal swipe must still
       delete rather than starting a reorder. That three-way split is the whole difficulty here.
+
+- [ ] **384 — The home screen's + button needs real colour, specialised for the button.** (18 Aug, phone
+      screenshot at v9.83 of the Projects list.) His words, verbatim: *"Make the plus button in this menu an
+      array of colours and look pretty like what you did with the background but instead specialised for the
+      button. I want things to stand out"*.
+      **Not the same button as #354.** That one is the big "Tap to add a layer" + in the TIMELINE; this is the
+      floating **+** on the home Projects list. Both want colour, and they should be done in one pass so they
+      end up looking like siblings rather than two separate attempts.
+      **Clauses:**
+      1. [ ] Multi-colour treatment on the home +, in the spirit of the animated background but tuned for a
+             small round button rather than a full screen.
+      2. [ ] *"I want things to stand out"* — it currently reads as the same dark glass as everything around
+             it, which is why it disappears into the list.
+      ⚠️ A full-screen gradient scaled down to a 56px circle turns to mud — the #313 lesson. Design it AT
+      button size and check it there, not by shrinking the background.
+
+- [ ] **385 — Should a project unload when you leave it? He is asking for a judgement, not an
+      instruction.** (18 Aug.) His words, verbatim: *"I think it may be worth having project not stay open
+      and close when you leave them, needing them to be re loaded when you back in and out, incase a project
+      is broken and really laggy then it won't effect the home menu. Also if you think this is a bad idea
+      then don't go through with it."* and *"I do like the effect of having a project open with the glint
+      around it but not at the cost of a shitty system"*.
+      **My read, to be given properly when this comes up:** the diagnosis is sound — a heavy project staying
+      resident is exactly why the home screen can feel slow after opening one, and it is very likely part of
+      **#355** ("exiting a project makes the UI glitch") and the standing perf items.
+      **But the two things he wants are not actually in tension, and that is the answer.** The "OPEN" glint
+      is a FLAG on a card — it costs nothing to keep. What costs is the resident scene, its decoded media and
+      its render loop. So the shape is: **release the heavy state on leaving, keep the marker.** He gets the
+      glint and does not pay for it.
+      ⚠️ Measure before building — if leaving a project already tears most of this down, the fix is small or
+      already done, and saying so is worth more than a rebuild.
