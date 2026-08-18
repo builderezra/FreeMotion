@@ -3513,22 +3513,22 @@ body.hm-selecting .hm-card { touch-action: none; }
 #hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a, hm-boil-a; animation-duration: .22s, .31s; }
 #hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b, hm-boil-b; animation-duration: .22s, .38s; }
 @keyframes hm-boil-a {
-  0%   { background-position:   0px   0px; }
-  16%  { background-position: 137px  61px; }
-  33%  { background-position:  43px 189px; }
-  50%  { background-position: 211px 118px; }
-  66%  { background-position:  91px  27px; }
-  83%  { background-position: 168px 233px; }
-  100% { background-position:   0px   0px; }
+  0% { transform: translate3d(0px, 0px, 0); }
+  16% { transform: translate3d(137px, 61px, 0); }
+  33% { transform: translate3d(43px, 189px, 0); }
+  50% { transform: translate3d(211px, 118px, 0); }
+  66% { transform: translate3d(91px, 27px, 0); }
+  83% { transform: translate3d(168px, 233px, 0); }
+  100% { transform: translate3d(0px, 0px, 0); }
 }
 @keyframes hm-boil-b {
-  0%   { background-position:  74px 152px; }
-  16%  { background-position: 199px  35px; }
-  33%  { background-position:  18px  97px; }
-  50%  { background-position: 121px 214px; }
-  66%  { background-position: 236px  73px; }
-  83%  { background-position:  57px 176px; }
-  100% { background-position:  74px 152px; }
+  0% { transform: translate3d(74px, 152px, 0); }
+  16% { transform: translate3d(199px, 35px, 0); }
+  33% { transform: translate3d(18px, 97px, 0); }
+  50% { transform: translate3d(121px, 214px, 0); }
+  66% { transform: translate3d(236px, 73px, 0); }
+  83% { transform: translate3d(57px, 176px, 0); }
+  100% { transform: translate3d(74px, 152px, 0); }
 }
 #hm-grain::before, #hm-grain::after { animation-timing-function: linear, steps(1, end); }
 /* The pair still sums to a constant, which is what stops the field pulsing — it is just read from a
@@ -3538,17 +3538,30 @@ body.hm-selecting .hm-card { touch-action: none; }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the dissolve. */
 @media (prefers-reduced-motion: reduce) { .hm-card::before, .hm-card::after, #hm-grain::before, #hm-grain::after { animation: none; } }
-/* STATIC ON THE PHONE, ALIVE ON PC — his call, not a bug (queue 341). His words: "Film grain background
-   isn't even moving on mobile, and honestly I prefer it, maybe pc moving and mobile not".
-   It was ALREADY still on his phone, and nothing in this file was doing that — there is no phone rule
-   above, only the reduced-motion one, so the animation was being dropped by the device (a throttle, or
-   Low Power Mode) rather than by us. That is the part worth fixing even though the LOOK is already what
-   he wants: behaviour that depends on whether the phone feels like it today is not a decision, and the
-   next iOS release could hand him back a moving grain he has said he does not want.
-   700px is this file's existing phone breakpoint, not a new number.
-   `::before` keeps opacity 0 and `::after` keeps its alpha, so switching the animations off leaves ONE
-   static field rather than two stacked — the cross-fade between them is what the animation was for. */
-@media (max-width: 700px) { #hm-grain::before, #hm-grain::after { animation: none; } }
+/* MOVING ON BOTH, AND ACTUALLY MOVING ON THE PHONE (queue 341, reversed by him at v9.90).
+   His words: "I actually do want the film grain moving on pc and mobile, at one point you made it look
+   good moving and I saw it now I want it back."
+   Deleting v9.90's phone rule is NOT enough, and that is the whole point of this note: the grain was
+   never animating on his phone even BEFORE that rule existed — nothing in this file was stopping it, so
+   iOS was dropping it on its own. Put back as it was, it would be static again and look like the change
+   had not shipped.
+   The reason it gets dropped is the technique: `background-position` on a full-screen layer repaints the
+   whole field every step, which is exactly the kind of work a phone browser sheds under load. The step
+   offsets move to `translate3d` instead — same visual (the tile slides by a non-repeating offset, still
+   in `steps()`, so it reads as grain rather than as fabric drifting past a window) but it runs on the
+   compositor, which phones do not throttle the same way.
+   The layers are oversized so a translation never drags an edge into view; #hm-grain has overflow:hidden,
+   so the excess costs nothing. */
+#hm-grain::before, #hm-grain::after { inset: -280px; will-change: transform, opacity; }
+/* …AND IT STOPS THE MOMENT A PROJECT IS OPEN. His own diagnosis, and it is the right one: *"I'm sure the
+   film grain background will run fine as long as it stops when I open a project. It was running great
+   before"*. The home screen is still in the DOM behind the editor, so without this the field keeps
+   boiling — and repainting — underneath every frame you render, forever, for something nobody can see.
+   `body.home-open` is already maintained by home.js on the way in and out, so this needs no new state.
+   This is also what makes the phone case honest rather than hopeful: the animation is compositor-only
+   now AND it only runs while you are looking at it. */
+body:not(.home-open) #hm-grain::before,
+body:not(.home-open) #hm-grain::after { animation-play-state: paused; }
 
 /* The overpull slam (v6.25). Ezra: pull the home list down past the top and keep pulling, and "the
    project will just slam back up really hard and shake the screen". home.js animates the list itself;

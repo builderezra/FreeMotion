@@ -28602,17 +28602,48 @@
    * The point of the test is that it is now OURS. The grain was already still on his phone with nothing
    * in the stylesheet doing that — the device was dropping the animation — so the look was right by
    * accident and could come back at any iOS release. Asserting both sides is what turns it into a rule. */
-  test('the home grain is static on a phone and alive on desktop (queue 341)', { item: 'grain-static' }, async function () {
+  test('the home grain moves on the phone as well as desktop (queue 341, reversed)', { item: 'grain-static' }, async function () {
     var g = document.getElementById('hm-grain');
     if (!g) { if (FM.home && FM.home.open) { FM.home.open(); await sleep(200); g = document.getElementById('hm-grain'); } }
     if (!g) throw new Error('no #hm-grain on the home screen');
     var anim = function () { return getComputedStyle(g, '::after').animationName; };
     await atPhoneWidth(async function () {
       await sleep(80);
-      if (anim() !== 'none') throw new Error('the grain still animates at phone width: ' + anim());
+      if (anim() === 'none') throw new Error('the grain is static at phone width — he asked for it moving on both');
     });
     await sleep(80);
-    if (anim() === 'none') throw new Error('the grain is dead on desktop too — PC is meant to keep moving');
+    if (anim() === 'none') throw new Error('the grain is dead on desktop');
+
+    /* AND IT HAS TO BE THE CHEAP TECHNIQUE, or it will be "moving" in the stylesheet and still frozen on
+       his phone — which is the state it was in before any of this, with nothing in the CSS to blame.
+       `background-position` repaints the whole field per step and is what a phone browser sheds under
+       load; a transform runs on the compositor. Asserting the property is the only way to keep the fix
+       rather than just the intent. */
+    var kf = getComputedStyle(document.getElementById('hm-grain'), '::after').animationName;
+    var found = null;
+    for (var i = 0; i < document.styleSheets.length && !found; i++) {
+      var rules; try { rules = document.styleSheets[i].cssRules; } catch (e) { continue; }
+      for (var j = 0; j < rules.length; j++) {
+        if (rules[j].type === CSSRule.KEYFRAMES_RULE && /hm-boil/.test(rules[j].name)) { found = rules[j]; break; }
+      }
+    }
+    if (!found) throw new Error('could not find the hm-boil keyframes to check how they move');
+    var txt = found.cssText;
+    if (/background-position/.test(txt)) {
+      throw new Error('the grain still animates background-position — that repaints the whole field and is what the phone drops');
+    }
+    if (!/translate3d|transform/.test(txt)) throw new Error('the grain keyframes move nothing: ' + txt.slice(0, 80));
+
+    /* …and it must STOP once a project is open — his own condition for wanting it back at all. The home
+       screen stays in the DOM behind the editor, so an unpaused field boils underneath every rendered
+       frame for something nobody can see. */
+    var g2 = document.getElementById('hm-grain');
+    var hadHome = document.body.classList.contains('home-open');
+    document.body.classList.remove('home-open');
+    await sleep(60);
+    var st = getComputedStyle(g2, '::after').animationPlayState;
+    if (hadHome) document.body.classList.add('home-open');
+    if (st !== 'paused') throw new Error('the grain keeps running with a project open (play-state "' + st + '") — it repaints behind every frame');
   });
 
   /* Queue 342 clause 1 — *"When you open an element as well in the element section it just adds the

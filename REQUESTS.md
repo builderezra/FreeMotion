@@ -6703,7 +6703,7 @@ better still, keep working inside the turn rather than parking work for a later 
              looks like now against what 210 asked for before redesigning anything.
 
 
-- [x] **341 — The film-grain background does not move on mobile, and he prefers it that way.** ✅ **v9.90.** (17 Aug,
+- [x] **341 — The film-grain background: he wanted it still, then wanted it MOVING again — now moving on both, and paused behind a project.** ✅ **v9.90, reversed and rebuilt v9.92.** (17 Aug,
       home-screen screenshot.) His words, verbatim: *"Film grain background isn't even moving on mobile,
       and honestly I prefer it, maybe pc moving and mobile not"*.
       **This is a decision, not a bug report — and he has made it.** Keep the grain STATIC on phone and
@@ -6720,6 +6720,22 @@ better still, keep working inside the turn rather than parking work for a later 
       indistinguishable from having killed it everywhere.
       Cheap, independent, and it makes the phone slightly cheaper to run — which is the direction
       95/125/202 want anyway.
+
+      🔁 **REVERSED BY HIM, same day.** *"I actually do want the film grain moving on pc and mobile, at one
+      point you made it look good moving and I saw it now I want it back"*, and then the part that made it
+      work: *"I'm sure the film grain background will run fine as long as it stops when I open a project. It
+      was running great before"*.
+      **Simply deleting v9.90's rule would have shipped nothing.** The grain was never animating on his phone
+      even BEFORE that rule existed — that was the whole finding of v9.90 — so putting it back as it was
+      would have left it frozen and looked like the change had not landed. The technique was the problem:
+      `background-position` on a full-screen layer repaints the entire field every step, which is precisely
+      the work a phone browser sheds under load. The step offsets are `translate3d` now, same look (still
+      `steps()`, so it reads as grain and not as fabric drifting past a window) but composited.
+      **And his condition is the better design, not a compromise.** The home screen stays in the DOM behind
+      the editor, so before this the field kept boiling — and repainting — under every frame being rendered,
+      for something nobody can see. It pauses on `body:not(.home-open)`, which home.js already maintains.
+      Three assertions, mutation-checked: it moves at phone width, it moves on desktop, the keyframes carry
+      no `background-position`, and it is paused with a project open.
 
 - [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
       Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
