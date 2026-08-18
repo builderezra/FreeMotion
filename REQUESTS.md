@@ -9386,3 +9386,23 @@ wait for them to report back."*
       which is the defect he has now reported three times (queue 209, 296, 331 clause 3). This control is
       the exact shape that keeps producing it.
 
+- [ ] **363 — Rename the "Null" layer to something that actually describes it.** (18 Aug.) His words,
+      verbatim: *"If you can think of another name for null that still makes sense and describes what it
+      is then change the name of it to that,"*.
+      He is giving me the call rather than naming one, so the job is to pick well and say why.
+      **What the thing IS:** an invisible layer that renders nothing and exists to be PARENTED to — you
+      animate it and everything attached follows. "Null" is inherited from After Effects and describes
+      what it is not.
+      **Recommendation: "Controller".** It says what you use it for, it is a real word, and it does not
+      collide with anything already in this app.
+      ⚠️ **"Anchor" and "Pivot" are both out, and the reason is worth writing down**: the app already has
+      an **anchor point** control on every layer (queue 345 is about it), so an "Anchor" layer would
+      collide with an existing, different, visible concept — which is worse than a vague name. "Empty"
+      (Blender's word) has the same problem as Null: it names an absence.
+      **Scope when this comes up** — it is a user-facing STRING change, not a data change: `layer.type`
+      stays `'null'` so every saved project keeps working. Places to sweep: the Add menu, the layer row
+      label, the inspector title, any hint text, and `viewAllowed`/category lists that show the type name.
+      A test should assert the old word is gone from the UI and the new one is present, scoped to
+      specific containers — *not* `document.body.textContent`, which includes the suite printing its own
+      test titles and has produced a self-matching false pass here before.
+
