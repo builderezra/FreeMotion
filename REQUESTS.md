@@ -9725,3 +9725,38 @@ wait for them to report back."*
              means the buttons are inside the scrolling element instead of beside it.
       ⚠️ Verify at ~380px AND scrolled to the very bottom — that is the only state where clause 2 shows,
       and a check at the top of the list would pass while the bug is fully intact.
+
+- [ ] **373 — Swap undo/redo with copy/paste in the transport row, and add a switch that sends the
+      add-layer row to the top or bottom of the timeline.** (18 Aug, phone screenshot at v9.81, annotated
+      "NEW" with arrows showing the swap.) His words, verbatim, in full:
+
+      > Move the undo and redo buttons to where to copy paste button is then move the copy paste to where they were on the left side and on its right put a little switch toggle that moves the add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch will gradually move closer from the top to the bottom depending on how far down you've moved the add row button, and press it while it's mid way just forces it in the direction it's furthest from, so if it's close to the top you press the switch and it goes to the bottom.
+
+      > Make sure everything aligned perfectly and don't make me have to say it's not right, make sure the switch has a clean animation, do the same stuff for pc, and make sure everything perfect before you sign off on it
+
+      **His clauses, ticked one at a time — cannot be marked DONE while any is unticked:**
+      1. [ ] **Undo / redo move RIGHT**, to where the copy/paste button is now.
+      2. [ ] **Copy / paste moves LEFT**, to where undo/redo were.
+      3. [ ] **A small switch toggle sits to the RIGHT of copy/paste** in its new left-hand home.
+      4. [ ] The switch **sends the add-layer row to the top or the bottom** of the timeline.
+      5. [ ] **Switch facing UP = add row at the top; facing DOWN = at the bottom.**
+      6. [ ] **Mid positions are shown proportionally** — the switch leans further down the further down
+             the add row has been moved.
+      7. [ ] **Pressing it mid-way forces it to the END IT IS FURTHEST FROM.** Near the top → pressing
+             sends it to the bottom.
+      8. [ ] **Everything aligned perfectly** — his words, and he has asked not to have to report it.
+      9. [ ] **The switch animates cleanly.**
+      10. [ ] **Same on PC.**
+      🚨 **CLAUSE 6 ASSUMES SOMETHING THAT MAY NOT EXIST — check before designing.** "how far down you've
+      moved the add row button" implies the add row can already sit at arbitrary positions in the
+      timeline. Today it renders as a single row (`.tl-addrow`) and #357 is open about not being able to
+      DRAG onto it. **If the add row is only ever top-or-bottom, clause 6 has no middle to represent** and
+      the switch is a plain two-state toggle with a nice animation between the two. Find out which before
+      building, and if there is no middle state, say so plainly rather than inventing a drag to justify
+      the design — that is a bigger feature hiding inside a toggle.
+      ⚠️ **He has explicitly pre-empted a sloppy result** (*"don't make me have to say it's not right"*),
+      so this one needs measured alignment, not an eyeball: assert the row's controls share a common
+      baseline/centre line at 380px AND on desktop, in the STUDIO layout, not just Classic — that is the
+      v7.79 lesson and the #241 lesson, both of which shipped half-right because they were checked in the
+      layout that happened to be open.
+      ⚠️ The switch must be DRAWN, not a font glyph (queue 209 / 296 / 331 clause 3).
