@@ -6519,6 +6519,63 @@ better still, keep working inside the turn rather than parking work for a later 
       The OFF/ON pair differing at every time is what makes the fixture worth anything — if they matched,
       it would not be exercising the blur and every later comparison would be meaningless. **A migration
       that preserves behaviour must reproduce the ON column exactly.**
+
+      ✏️ **CORRECTION to fact 1 above, found by the mapping pass and verified by hand.** I said
+      `drawMotionBlur` "re-renders the whole layer N times at N sub-times". **It does not.** It rasterises
+      the layer ONCE at `t` into a padded plate (`drawLayer(pctx, tmp, t, scene)`, `js/compositor.js:2071`)
+      and then blits that ONE plate N times through transform deltas `D = M(τ)·M(t)⁻¹` at alpha 1/N with
+      `'lighter'` (`js/compositor.js:2096-2101`). It RE-PROJECTS, it does not re-render.
+      That is not a detail — it makes the whole job smaller. The pass needs the layer's plate plus its
+      transform matrices either side of the shutter, and both are things an effect can get. It also
+      explains a limitation worth knowing: object blur can only smear TRANSFORM motion, never footage
+      content, which is exactly why Motion Blur (Footage) exists separately.
+
+      **THE PLAN (mapped by 4 readers, 3 competing designs, 1 adversarial judge; then checked against the
+      five facts above).** Shape: register a real effect **`objectblur`** and dispatch it at the WRAP level
+      in `drawLayer`, exactly as `motionflow` already is — that is the precedent that makes this a known
+      shape rather than a new one. Keep the legacy `layer.motionBlur` READ as insurance; stop SEEDING it.
+      **Must-dos, each of which is a silent failure if skipped:**
+      1. **Migrate by UNSHIFT to index 0**, never push. `js/compositor.js:10609` returns while any post-fx
+         remains, so the legacy branch at `:10612` is only reached at the BASE of the recursion — the blur
+         is structurally INNERMOST today. A push makes it outermost and silently changes the picture on
+         every project that has both an effect and the blur.
+      2. **Hook the migration at the TOP of `sanitizeEffects`** (`js/storage.js:628`) — above
+         `if (l.effects == null) return;`. That one point covers load (`:231`), import (`:686`) AND undo
+         (`js/history.js:28`). Below those early returns it dies on exactly the layer it exists for: a
+         blur flag with no effects array is the commonest legacy shape.
+      3. **Skip `layer.type === 'camera'` before touching anything** — `cam.motionBlur` is a different
+         feature with its own renderer and panel (fact 5). And note the existing camera tests build their
+         own `cam` object and never go through the load path, so they CANNOT catch a regression here — a
+         guard test has to run a camera layer through `FM.storage._sanitizeLayers`.
+      4. **Write BOTH shutter and samples into params explicitly.** `sanitizeEffects` keeps params only
+         when present, so an empty params object renders at the kernel fallbacks (0.5 / 8) rather than at
+         his stored values — a silent reset of everyone's settings.
+      5. **Keep the `return false` → ordinary-draw fallback on all five early-outs** of `drawMotionBlur`
+         (opacity, sub-0.75px travel, no DOMMatrix, degenerate, nothing drawn). Whatever dispatches it
+         must draw the layer when the blur declines, or a stationary layer VANISHES from preview and
+         export — the single worst bug available here, and one a test that samples only moving frames
+         would never see.
+      6. **Strip the effect from the recursion plate by TYPE, not identity** (`:2070`), and do the same on
+         the `drawContentMotionBlur` proxy (`:9942`), whose filter is identity-based on the motionflow
+         instance — an `objectblur` rides straight through it.
+      7. **Mirror the `_flat` drop on the RENDER side** (`:10567`). `supportsLayer` is UI-only;
+         `buildGroupUnit` copies `tmp.effects = g.effects || []`, so a file, a paste or an AI node can
+         still land one on a group.
+      8. **Alias `_objblur` → `objectblur` in `readList`** (`js/fx-browser.js:64`) before `knownId` filters,
+         or his favourites and recents vanish with no error and no failing test.
+      9. **Add the `CATEGORY_OF` entry**, or the tile silently parks in Stylize.
+      10. **Delete or repoint `FM.layerHasMotionBlur`** (`js/compositor.js:2125`) — it has zero callers, so
+          nothing goes red if it is left answering `false` forever.
+      11. **Fix the stale toast** at `js/fx-browser.js:441`, which still says the shutter is "in Position /
+          Scale" where it has not lived for many versions.
+      ⚠️ **The vacuous-pass trap that poisons every test here:** the blur is a NO-OP below 0.75 device px
+      of travel, so any assertion of the form "on differs from off" passes vacuously on a still layer —
+      byte-identical by design. Every behavioural assertion must use a layer that actually travels. (The
+      baseline fixture above does; that is why its two columns differ.)
+      **His call, not mine, and NOT blocking — building the first option:** the shutter is 0..1 today.
+      Film talks in DEGREES (0..360, default 180), which would give the scrubber real travel and match how
+      it is described everywhere else. Keeping 0..1 for now because changing it is a separate decision and
+      the conversion is one multiplication whenever he wants it. **Say the word and it changes.**
 - [ ] **336 — Trimming a clip should need a HOLD first, and the arrow should change colour to say so.**
       (17 Aug.) His words, verbatim: *"To extend out a clip you should have to hold down on the arrows
       first because currently accidentally touching for a second moves it but you should have to hold
