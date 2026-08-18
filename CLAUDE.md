@@ -103,6 +103,19 @@ So, structurally:
    repeating verbatim: *measure the layout you ship to, not the one you have open.* For a PC report
    that means a desktop width AND the Studio layout, not Classic.
 
+## ⚠️ DRAIN [INBOX.md](INBOX.md) BEFORE EVERY LOOP ITEM
+
+He asked for a way to log requests himself while Claude keeps working: *"I feel like that 20 seconds of
+not working adds up as I spam requests, I need a way for you to work and log at the same time."*
+His own idea was moving the repo into iCloud Drive. **Do not do that** — iCloud syncs `.git` internals
+non-atomically and leaves conflict-duplicate files inside them, which is a known way to corrupt a repo.
+The repo is already on GitHub, which solves the same problem properly.
+
+So: **he appends to `INBOX.md` from his phone; Claude is the only thing that empties it.** One writer
+each way means a conflict is impossible. `git pull` first, move anything found into REQUESTS.md with a
+number, clear the file, and carry on. Check it at the START of each loop item, not only when he speaks —
+the whole point is that he can add things without interrupting.
+
 ## ⚠️ Every request Ezra makes goes in REQUESTS.md — immediately
 
 **[REQUESTS.md](REQUESTS.md) is the running list of everything he has asked for.** Read it at the

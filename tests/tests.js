@@ -28461,19 +28461,36 @@
 
       ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
       await sleep(120);
+      /* Visibility by CLASS, not by offsetParent. The first version used offsetParent, which is null for
+         any position:fixed element even while it is plainly on screen — so this read '' every time and
+         BOTH checks passed vacuously: "no add option" was satisfied by an empty string, and "the actions
+         survived" then failed for the same reason and pointed at the code instead of at itself. */
       var txt = function () {
-        var m = document.querySelector('.ctx-menu, #ctx-menu');
-        return (m && m.offsetParent !== null) ? (m.textContent || '') : '';
+        var m = document.getElementById('ctx-menu');
+        return (m && !m.classList.contains('hidden')) ? (m.textContent || '') : '';
       };
       if (/add marker|add benchmark/i.test(txt())) throw new Error('the long-press still offers to add a benchmark');
+      FM.contextMenu.hide();
+      // A control that the probe CAN see a menu through — otherwise "no add option" is indistinguishable
+      // from "this probe cannot read menus", which is exactly the hole the offsetParent version fell into.
+      FM.contextMenu.show(10, 10, [{ label: 'probe can read menus', action: function () {} }]);
+      await sleep(60);
+      if (!/probe can read menus/.test(txt())) throw new Error('the probe cannot read an open menu at all — every menu assertion here would pass vacuously');
       FM.contextMenu.hide();
 
       // The actions that shared the gesture must survive — removing the whole handler would take them.
       P.markers = [{ t: FM.time, label: 'Benchmark' }];
       FM.timeline.rebuild(); await sleep(140);
-      var px = ruler.getBoundingClientRect();
-      var mx = Math.round(px.left + (FM.time / (P.duration || 5)) * px.width);
-      ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: mx, clientY: y }));
+      /* Aim at the marker's OWN rendered position rather than computing one from time ÷ duration. The
+         first version did the arithmetic, missed (the ruler scrolls and zooms, so that mapping is not
+         the identity), found no marker under the point — and with Add now gone that correctly produces
+         an EMPTY menu, which the test then read as "the marker actions were deleted". A near-miss that
+         reports the wrong failure is worse than a clean one. */
+      var pin = document.querySelector('.tl-marker');
+      if (!pin) throw new Error('the benchmark did not render on the ruler at all');
+      var pr = pin.getBoundingClientRect();
+      var mx = Math.round(pr.left + pr.width / 2);
+      ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: mx, clientY: Math.round(pr.top + pr.height / 2) }));
       await sleep(120);
       if (!/rename|remove|clear/i.test(txt())) throw new Error('the marker actions went with the add option: ' + JSON.stringify(txt().slice(0, 60)));
       FM.contextMenu.hide();

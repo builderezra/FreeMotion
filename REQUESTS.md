@@ -6605,7 +6605,7 @@ better still, keep working inside the turn rather than parking work for a later 
       measure the layout you ship to.
 
 
-- [ ] **337 — Remove the long-press-on-the-timeline option to add a benchmark.** (17 Aug.) His words,
+- [x] **337 — Remove the long-press-on-the-timeline option to add a benchmark.** ✅ **v9.85.** (17 Aug.) His words,
       verbatim: *"Get rid of the feature where holding down somewhere on the timeline gives you the
       option to add a benchmark"*.
       Straightforward removal, but check TWO things first: (a) that a benchmark can still be added by
@@ -6613,6 +6613,17 @@ better still, keep working inside the turn rather than parking work for a later 
       and (b) whether that long-press menu carries anything ELSE, since removing the whole gesture would
       take those with it. Sits with **336** (hold-to-arm on the trim grips): both are about what a long
       press on the timeline should mean, and they should be decided together rather than one at a time.
+      ✅ **DONE v9.85.** Both checks the entry asked for came back usable: (a) a benchmark can still be added
+      by tapping the timecode chip and by **M** on a keyboard, so the feature is not stranded — and queue 364
+      moves that first route onto the playhead's top, so the two changes agree; (b) the gesture DID carry
+      more — rename, remove and clear — so this is a one-item deletion, not a removed handler. An empty
+      stretch of ruler now opens no menu at all (and no haptic), since a menu holding nothing is the same
+      species of thing he asked to remove.
+      *Worth recording: the test for this passed twice while reading nothing.* It checked menu visibility with
+      `offsetParent`, which is null for any `position:fixed` element even when it is plainly on screen — so
+      both assertions were comparing against an empty string. It now reads the class the menu actually uses,
+      and carries a control that opens a known menu first, so "I cannot see menus" can never again look like
+      "there is no add option".
       Note **334** is also about benchmarks (they do not land on the playhead) — if benchmarks are being
       pruned rather than fixed, check with him whether 334 is still worth doing.
 
