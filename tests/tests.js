@@ -27975,4 +27975,70 @@
     }
   });
 
+  /* Queue 331, clauses 1-3 — *"Get rid of explanation and put the save current effects as preset at the
+   * top. Also the X isn't centred in this screenshot for each preset"*.
+   * Three separate assertions because they are three separate clauses, and the entry cannot be ticked
+   * while any is unticked. The ORDER one compares document position rather than pixel tops: a row that
+   * happens to render above the button because the list is empty would pass a coordinate check while
+   * the structure was still wrong. The ✕ one measures the drawn box against the button box — the same
+   * method as queue 209 and 296, because the button was ALREADY a centred flex box and measuring the
+   * box is exactly what makes a mis-set glyph look correct. */
+  test('the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)', { item: 'preset-card' }, async function () {
+    var L = FM.scene.layers[0];
+    if (!L) throw new Error('no layer to work from');
+    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    var NAME = '__qa card preset';
+    FM.selectLayer(L.id);
+    FM.layerPresets.save(NAME, L);
+    FM.inspector.openCategory('presets');
+    await sleep(160);
+    try {
+      var wrap = document.querySelector('#inspector .preset-wrap');
+      if (!wrap) throw new Error('no Presets card on screen');
+
+      var save = wrap.querySelector('.fx-act');
+      var row = wrap.querySelector('.insp-preset-row');
+      if (!save) throw new Error('no save button in the Presets card');
+      if (!row) throw new Error('no preset row — the probe saved one, so something else is wrong');
+
+      /* 1 — no explanation ABOVE the card's controls. Scoped by position rather than by "is there any
+         hint at all", which is what the first version of this asserted and it failed on unmutated code:
+         the card legitimately ends with "No previews — nothing of this layer is on screen at the
+         playhead", and in the suite the layer often is not. That hint is not the one he asked to remove
+         and must not be caught here; an explanation reinstated at the TOP still is. */
+      var hints = [].slice.call(document.querySelectorAll('#inspector .insp-hint')).filter(function (h) {
+        return !!(h.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      if (hints.length) {
+        throw new Error('the Presets card still opens with an explanation block: ' +
+                        JSON.stringify(hints[0].textContent.slice(0, 60)));
+      }
+
+      // 2 — the save button comes before the first saved row, not after the list.
+      var before = !!(save.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (!before) throw new Error('the save button is still BELOW the list of presets');
+
+      // 3 — the ✕ is an SVG, and its ink is concentric with the button.
+      var del = row.querySelector('.fxp-del');
+      if (!del) throw new Error('no delete button on the preset row');
+      if ((del.textContent || '').trim()) {
+        throw new Error('the ✕ is still a font glyph (' + JSON.stringify(del.textContent.trim()) +
+                        ') — a font decides where its ink sits, so it cannot be reliably centred');
+      }
+      var svg = del.querySelector('svg');
+      if (!svg) throw new Error('the delete button has neither text nor an SVG — nothing would be drawn');
+      var db = del.getBoundingClientRect(), sb = svg.getBoundingClientRect();
+      var dx = (sb.left + sb.width / 2) - (db.left + db.width / 2);
+      var dy = (sb.top + sb.height / 2) - (db.top + db.height / 2);
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        throw new Error('the ✕ sits ' + dx.toFixed(2) + 'px across and ' + dy.toFixed(2) + 'px down from the centre of its button');
+      }
+    } finally {
+      FM.layerPresets.remove(NAME);
+      if (id0) FM.selectLayer(id0);
+      FM.inspector.openCategory('home');
+      await sleep(80);
+    }
+  });
+
 })();

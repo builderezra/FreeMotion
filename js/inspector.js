@@ -4160,7 +4160,6 @@ window.FM = window.FM || {};
         }
       }
     } else if (key === 'presets') {
-      body.appendChild(el('div', 'insp-hint', 'Each row shows this layer with that preset on it. Tap one to apply it, or save the current look as a preset.'));
       const pwrap = el('div', 'preset-wrap rows');
       /* EVERY ROW SHOWS THE LAYER WITH THE PRESET ON IT. Ezra: "the preset menu I wanted to show what
        * the layer would look like with that effect … when you would tap on one thing it would show how
@@ -4192,7 +4191,14 @@ window.FM = window.FM || {};
         if (o.sub) txt.appendChild(el('div', 'fxp-desc', o.sub));
         row.appendChild(txt);
         if (o.onDelete) {
-          const d = el('button', 'fxp-del', '✕'); d.type = 'button'; d.title = 'Delete this preset';
+          /* AN SVG CROSS, NOT THE CHARACTER (queue 331 clause 3). Ezra: *"the X isn't centred in this
+             screenshot for each preset"*. The button was already a centred flex box, so nothing about
+             the BOX was wrong — flex centres the line box and the font decides where the ink sits
+             inside it, which is why an ✕ can look level on one screen and high on another. Third time
+             this exact defect has been reported (the × and the magnifier in queue 209, the + in 296),
+             and the fix is the same each time: draw it, so the ink is centred by geometry. */
+          const d = el('button', 'fxp-del'); d.type = 'button'; d.title = 'Delete this preset';
+          d.innerHTML = svgIcon('M6 6l12 12M18 6L6 18');
           d.addEventListener('click', e => { e.stopPropagation(); o.onDelete(); });
           row.appendChild(d);
         }
@@ -4201,7 +4207,20 @@ window.FM = window.FM || {};
 
       // LAYER presets first (look + animations — the AM-style ones saved via "Save Preset")
       const lps = FM.layerPresets.list();
-      if (lps.length) pwrap.appendChild(el('div', 'preset-sec', 'Look + animations'));
+      /* THE SAVE ACTION LEADS ITS SECTION (queue 331 clauses 1-2). Ezra: *"Get rid of explanation and
+         put the save current effects as preset at the top"*. Both buttons used to sit UNDER their lists,
+         so with a few presets saved the thing you came to the card to do was below the fold on a phone,
+         and the first thing on screen was a sentence explaining what a preset is — the second time he
+         has asked for an explanation block to go.
+         Each button stays with the heading that names what it makes, rather than both being stacked at
+         the very top: that pairing is what queue 329 was for, and separating a button from its own list
+         would undo it to satisfy the word "top" too literally. The heading is unconditional now, so an
+         empty section reads as a heading and a button rather than a button floating with nothing above
+         it — which is what an empty "Look + animations" used to give you. */
+      pwrap.appendChild(el('div', 'preset-sec', 'Look + animations'));
+      const svL = el('button', 'fx-act', 'Save look + animations…');
+      svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
+      pwrap.appendChild(svL);
       lps.forEach(p => {
         pwrap.appendChild(presetRow({
           name: p.name,
@@ -4222,12 +4241,13 @@ window.FM = window.FM || {};
          themselves a few lines up, so the words that describe the thing on the button are the words on
          the thing it makes. The contrast with "effects only" is what carries the difference — neither
          label needs a sentence under it, which is what he has asked twice to stop doing. */
-      const svL = el('button', 'fx-act', 'Save look + animations…');
-      svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
-      pwrap.appendChild(svL);
       // "Effect looks" said no more than "My presets" did — the two headings were as interchangeable as
       // the two buttons under them, which is half of why the question got asked (queue 329).
       pwrap.appendChild(el('div', 'preset-sec', 'Effects only'));
+      const sv = el('button', 'fx-act', 'Save effects only…'); sv.disabled = !(layer.effects && layer.effects.length);
+      // No refresh() here: the store fires presetsChanged on write (queue 330).
+      sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
+      pwrap.appendChild(sv);
       // A row is only APPLICABLE if it carries at least one effect this build can actually build.
       // 'fm.fxpresets' is written by more than one code path and nothing validates another's shape,
       // so rows turn up with .effects missing, empty, a string, or full of types the registry no
@@ -4281,9 +4301,6 @@ window.FM = window.FM || {};
       });
       // Say WHY there are no pictures rather than leaving a column of bare names looking half-built.
       if (noPreview) pwrap.appendChild(el('div', 'insp-hint', 'No previews — nothing of this layer is on screen at the playhead.'));
-      const sv = el('button', 'fx-act', 'Save effects only…'); sv.disabled = !(layer.effects && layer.effects.length);
-      sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
-      pwrap.appendChild(sv);
       body.appendChild(pwrap);
     } else if (key === 'effects') {
       // Two stacks, one card (queue 45): the toggle picks which one the panel is editing, and matches

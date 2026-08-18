@@ -6238,10 +6238,10 @@ better still, keep working inside the turn rather than parking work for a later 
       > Get rid of explanation and put the save current effects as preset at the top. Also the X isn’t centred in this screenshot for each preset and there’s no way to search presets or organise, make it so if you hold on a preset you can re name it and also tag it and when you put on a tag that tag is now a new group that you can go through, so the preset section can be organised, each tag menu will appear at the top and each time you create a new tag a new option will appear at the top, and loose ones that aren’t tagged will appear at the bottom like they do now
 
       **His clauses, to be ticked one at a time — this entry cannot be marked DONE while any is unticked:**
-      1. [ ] Get rid of the explanation text at the top of the card. (That is the `insp-hint` line added
+      1. [x] ✅ **v9.78** — Get rid of the explanation text at the top of the card. (That is the `insp-hint` line added
              in v9.29 — "Each row shows this layer with that preset on it…". It is visible in his shot.)
-      2. [ ] Move **"Save current effects as preset"** to the TOP of the card.
-      3. [ ] The **✕ is not centred** inside its button on each preset row. (Same class as queue 188/209 —
+      2. [x] ✅ **v9.78** — Move **"Save current effects as preset"** to the TOP of the card.
+      3. [x] ✅ **v9.78** — The **✕ is not centred** inside its button on each preset row. (Same class as queue 188/209 —
              measure the INK, not the button box, and it is a text glyph again, so use an SVG cross.)
       4. [ ] A way to **search** presets.
       5. [ ] **Hold** a preset → **rename** it.
@@ -6257,6 +6257,29 @@ better still, keep working inside the turn rather than parking work for a later 
       first means writing the tag/rename storage twice. Clauses 1-3 are independent and cheap.
       Sits with 329 (the two save buttons, and their naming) and 330 (the menu not refreshing after a
       save) — all three are the same card and should go in one pass.
+
+      ✅ **CLAUSES 1-3 DONE, v9.78. Clauses 4-9 (search, rename, tags, tag groups) are NOT done and this
+      entry stays open.** They are the ones the note above says are much cheaper after queue 37 replaces
+      both name-keyed stores with one namespace: a rename is a re-key today, so doing it now means
+      writing the tag/rename storage once against the old shape and again against the new one.
+      · **1 — the explanation is gone.** It was the `insp-hint` v9.29 added. The card now opens on its
+        first heading. (The "No previews — nothing of this layer is on screen at the playhead" line at the
+        BOTTOM stays: that is a live report about your layer, not an explanation of what a preset is.)
+      · **2 — each Save button now leads its section** instead of sitting under the list, so on a phone
+        with a few presets saved the thing you came to do is no longer below the fold. Both buttons moved,
+        not just the effects one — but each stayed WITH the heading naming what it makes, because that
+        pairing is what 329 was for and stacking both at the very top would undo it to satisfy the word
+        "top" too literally. Say if you'd rather have them both at the very top and it is a small change.
+        The headings are unconditional now, so an empty section reads as a heading and a button.
+      · **3 — the ✕ is drawn, not typed.** The button was already a centred flex box, so nothing about the
+        BOX was wrong: flex centres the line box and the FONT decides where the ink sits inside it. Third
+        report of this exact defect (the × and magnifier in 209, the + in 296) and the same fix. Measured
+        against the button's centre, not its box, since measuring the box is what makes a wrong glyph look
+        right. All three clauses mutation-checked.
+      *(One honest note: the first version of the clause-1 test failed on unmutated code — it asserted
+      "no hint anywhere in the inspector" and caught the legitimate no-previews line. The mutation runner
+      reported CAUGHT, because something failed. A test that fails for the wrong reason still looks green
+      through that lens, which is worth remembering.)*
 
 
 - [ ] **332 — Use his own car photos as the effect preview art, and rename the Move/Transform effect
