@@ -9635,3 +9635,32 @@ wait for them to report back."*
       icons, or it will look wrong next to them however good it is alone. Compare against the row, not
       in isolation — that is the mistake #313 was.
 
+- [ ] **368 — "Edit Points / Edit Shape / Edit Text" become "Customise …".** (18 Aug.) His words,
+      verbatim: *"Change edit points and edit shape and edit text to replace the work edit with
+      customise"* ("the work edit" = the WORD edit).
+      **The three he named, all in one list:** `js/inspector.js:1700` `'Edit Text'`, `:1701`
+      `'Edit Points'`, `:1702` `'Edit Shape'`. Australian spelling — **Customise**, as he wrote it.
+      ⚠️ **Doing only the three he named leaves the app inconsistent, and he should get to decide that,
+      not me.** There are three MORE "Edit …" labels: `'Edit Group'` (`js/inspector.js:1682`),
+      `'Edit group'` (`js/app.js:2954`) and `'Edit path'` (`js/inspector.js:1936`). After this change the
+      menu reads Customise Points / Customise Shape / Customise Text / **Edit** Group / **Edit** path,
+      which looks like an oversight rather than a decision.
+      **Doing exactly the three he named**, and flagging the other three here so he can say "those too" in
+      one word. They are the same one-line change.
+      Also note `js/app.js:701` toasts *"Converted to outline — Edit points to reshape it"*, which names
+      the feature in prose and should follow whatever the label does, or the toast sends you looking for a
+      button that no longer exists.
+
+- [ ] **369 — "Border / Shadow" becomes "Outline & Shadows", and every "Border" inside it becomes
+      "Outline".** (18 Aug.) His words, verbatim: *"Change border and shadow to outline add shadows then
+      in the actual menu change anything saying border to outline"*.
+      Reading *"outline add shadows"* as dictation for **"Outline and Shadows"** — plural shadows, as he
+      said it. If he meant something else it is one word to change.
+      **Sites:** the category label appears TWICE and both must stay in step —
+      `js/inspector.js:1674` and `js/inspector.js:1958`, both `'Border / Shadow'`. Inside the card, the
+      toggle row is literally `checkRow('Border', …)` at `js/inspector.js:4545`. Sweep for any other
+      user-facing "Border" in that card (`canBorder` at `:4540` is an internal name and stays).
+      **Note this is the third rename in a row (#363 Null, #366 Blending / Opacity, this).** They are all
+      string-only — the `border` key stays, so nothing saved is touched — and they should ship TOGETHER as
+      one release rather than three, so the vocabulary changes once instead of three times.
+
