@@ -6754,7 +6754,7 @@ better still, keep working inside the turn rather than parking work for a later 
      which is written for Ezra, would have taken them as finished. Moved back up 17 Aug. tools/next.sh
      now refuses to print a quiet list if it ever happens again. -->
 
-- [ ] **187 — The black bar is STILL there, and it CREEPS in.** ⚠️ **WATCHING, not open work (17 Aug):** his answer that day was *"I think black bar is gone"*. Not ticked — it has come back before — but there is nothing to act on until he sees it again, so it does not hold the queue. His words: *"The black bar that comes in
+- [ ] **187 — 🚨 LIVE AGAIN (18 Aug): the black bar is BACK, and it has moved to the LEFT SIDE.** ⚠️ **was WATCHING, not open work (17 Aug):** his answer that day was *"I think black bar is gone"*. Not ticked — it has come back before — but there is nothing to act on until he sees it again, so it does not hold the queue. His words: *"The black bar that comes in
       is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
       urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
       **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
@@ -6764,6 +6764,23 @@ better still, keep working inside the turn rather than parking work for a later 
       So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
       state — the previous rounds all measured the finished picture, which is exactly why they kept
       finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
+
+      🔁 **BACK, 18 Aug, ON THE LEFT.** His words, verbatim: *"The black bar you got rid of now is
+      appearing on the left side ahahhaha"*. So this entry is **live again** and no longer "watching" —
+      the trigger it was waiting for has happened.
+      **The side change is the most useful fact anyone has had about this bug, and it should reframe the
+      hunt.** Every round so far — the #000 document canvas (v6.85), `theme-color`, the safe-area inset —
+      assumed a bar at an EDGE tied to the viewport chrome, and a fix aimed at one edge that reappears on
+      a different edge was never a fix; it moved the symptom. A band that can show up on the bottom and
+      then on the left is far more likely to be **something sized slightly smaller than its container,
+      showing the page behind it**, than a painted band belonging to any one edge.
+      **So the next attempt measures the GAP, not the colour:** find the element whose box does not fill
+      its parent (compare `getBoundingClientRect` against the parent's, on every candidate wrapper), at
+      several widths, rather than screenshotting the black and guessing what paints it. Combined with the
+      earlier "it CREEPS in" detail — the gap OPENS over time — a box that animates its size or gets a
+      transform/inset applied after first paint fits both reports at once, which no previous theory did.
+      ⚠️ **Ask for the screen/state when it happens** — he did not say where he was, and this bug has
+      historically been in the home screen AND the editor. Which one narrows it enormously.
 
       **A CONFIRMED BLACK-BAR MECHANISM WAS FOUND AND FIXED IN v7.87 (#239), AND IT MATCHES THIS
       DESCRIPTION — including the "creeps in" that nobody could explain.** #239 gave the reproduction
