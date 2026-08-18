@@ -1,5 +1,39 @@
 # Ezra's requests — the running list
 
+> ## 📌 HANDOVER — written 18 Aug at v9.94, before a context compact
+>
+> **State:** v9.94, 659 tests green, tree clean, `HEAD == ssh/main`. 70 items open.
+> **Next actionable item: #349** (the "tuff" car-photo filters — the cars were removed from the ordinary
+> filter tiles in v9.82 specifically so they could land there on purpose).
+>
+> **HE HAS A PHONE INBOX NOW — DRAIN IT AT THE START OF EVERY LOOP ITEM:**
+> ```
+> ./tools/inbox.sh          # shows anything unlogged
+> ./tools/inbox.sh --done   # marks it drained, AFTER moving it into this file
+> ```
+> It reads two places (an iCloud text file and the Shortcuts app's own container, because his shortcut
+> writes to whichever it feels like) and screenshots land in `iCloud Drive/FreeMotion-shots`. It appends a
+> marker instead of deleting — deleting raced iCloud and resurrected old requests twice.
+>
+> **He asked for PACE.** *"you're going really slow, I'm paying for a lot of usage and you're not doing
+> much."* The fix that worked: **batch several queue items into ONE suite run and one release**. The suite
+> is 3-4 minutes; shipping one item per run is the bottleneck, not the work.
+>
+> **Two things I got wrong today that are already corrected in their entries — do not re-derive them:**
+> · **#347's recorded diagnosis was WRONG** (it blamed `mtScrub`; his sliders are `tickStrip`, which
+>   already clamps). The entry now says where to actually look. It is still OPEN.
+> · **#345's UI clamp is UNGUARDED.** Its test proves the renderer honours an out-of-box anchor, which was
+>   never broken — it passes with the fix reverted. Written into the entry as a gap.
+>
+> **Three test mistakes made more than once today — worth not making a fourth time:**
+> 1. **Measuring where the rule does not apply.** A z-index that only exists inside a phone media query
+>    reads 0 at desktop width; a test that checks it there fails for its own reasons and blames the code.
+> 2. **`offsetParent` is null for `position: fixed`** — a menu-visibility check using it read '' every
+>    time, and BOTH its assertions passed vacuously.
+> 3. **A test that cannot find its subject reports the subject as broken.** Two tests hunted for controls
+>    under the wrong selector/mode and produced confident wrong failures.
+> **The mutation check is what caught all of these. Run it on every new assertion, without exception.**
+
 > ## ⚠️ OLDEST FIRST
 > The next item to work on is the **lowest-numbered open `- [ ]` entry in this file**. New requests are
 > added at the bottom and wait their turn. The file is NOT in numeric order — find the next one with:
