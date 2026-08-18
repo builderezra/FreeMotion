@@ -6496,6 +6496,16 @@ better still, keep working inside the turn rather than parking work for a later 
          as raw JSON. So the migration must be explicit and lazy, or projects he has already made lose
          their motion blur silently. **That is the one outcome worth designing against**, and it is the
          kind that passes a test suite.
+      5. 🚨 **THE CAMERA USES `motionBlur` TOO, and a camera CANNOT hold a registry effect.**
+         `camBlurSlices(cam, …)` reads `cam.motionBlur` and renders the whole frame in slices
+         (`js/compositor.js:11471`) — a completely separate path from the per-layer one, with five tests
+         of its own. And `supportsLayer` refuses every effect on `layer.type === 'camera'`
+         (`js/fx-registry.js:556`, *"rig controls have no pixels to affect"*). So a plan that simply
+         retires `layer.motionBlur` in favour of a stack effect **silently kills camera motion blur** —
+         the flag stays on the camera, nothing reads it any more, and the render just stops smearing.
+         `layer.motionBlur` therefore has to keep working for cameras whatever happens to layers. This is
+         the constraint most likely to be missed by reading only the per-layer code, which is why it is
+         written down before any plan is chosen rather than after one fails.
       **Baseline captured BEFORE touching anything** (`tests/_mbbase.html`), because the failure that
       would matter here is not a crash but the picture quietly coming out different. A ball animating
       x 60→260 over 2s, shutter 0.9, samples 12, at five times:
