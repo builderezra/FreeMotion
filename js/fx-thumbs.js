@@ -431,11 +431,16 @@ window.FM = window.FM || {};
    * panels for its cyan to land in, thermal gets a warm animal because that is what a thermal camera is
    * for, and the two line-art filters get cars because a car outlines cleanly and a skyline turns to
    * mush. An id missing here simply keeps the old child-effect behaviour. */
+  /* NO CARS HERE (queue 371). Five of these had one, and none of that was asked for: the four car
+   * photographs were sent for the SHAKE section — *"All just for the shake section"* (queue 332) — and
+   * I read them as general art once the files existed. His correction: *"I didn't want the car images
+   * as the main images for any of the groups but the tuff group"*. The cars are reserved for the tuff
+   * filters (queue 349), which do not exist yet. */
   const FILTER_SUBJECT = {
-    tealorange: 'huracan', bleach: 'mclaren', crossproc: 'tesla',  faded: 'city',
-    vhs:        'revuelto', crt:  'towers',   super8:    'bush',   oldfilm: 'dog',
+    tealorange: 'bay',     bleach: 'run',     crossproc: 'ramp',   faded: 'city',
+    vhs:        'city',    crt:  'towers',    super8:    'bush',   oldfilm: 'dog',
     dreamy:     'shore',   goldenhour: 'sunpath', leak:  'pair',   neonnight: 'dusk',
-    comic:      'huracan', poster: 'clouds',  thermal:   'cat',    nightvis: 'figures',
+    comic:      'dog',     poster: 'clouds',  thermal:   'cat',    nightvis: 'figures',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

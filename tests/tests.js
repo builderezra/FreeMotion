@@ -27880,6 +27880,21 @@
       });
     }));
     if (unloaded.length) throw new Error('filter subject art missing: ' + unloaded.join(', '));
+
+    /* AND NO CARS (queue 371). His four car photographs were sent for the SHAKE section — "All just for
+       the shake section" — and I spread them across five filters that never asked for one. His
+       correction: "I didn't want the car images as the main images for any of the groups but the tuff
+       group". The tuff filters (queue 349) do not exist yet, so for now the rule is simply: no filter
+       uses a car. When they do exist this assertion gets an exemption for that section, not a deletion —
+       the point is that a car ends up on a filter tile ON PURPOSE or not at all. */
+    var CARS = ['huracan', 'mclaren', 'revuelto', 'tesla'];
+    var strays = FM.filters.all().map(function (f) {
+      return { id: f.id, k: FM.fxThumbs._filterSubject(f.id) };
+    }).filter(function (x) { return CARS.indexOf(x.k) >= 0; });
+    if (strays.length) {
+      throw new Error('these filters demonstrate on a car, which he asked for only on the tuff group: ' +
+                      strays.map(function (x) { return x.id + '→' + x.k; }).join(', '));
+    }
   });
 
   /* Queue 359, the half that actually caused the report. When a photograph finishes decoding every

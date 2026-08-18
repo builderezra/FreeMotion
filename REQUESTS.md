@@ -9682,3 +9682,46 @@ wait for them to report back."*
       other places — which is the shape of thing that comes back as a second report a week later.
       Audio and video layers keep Volume, obviously.
 
+- [x] **371 — 🚨 MY ERROR: the cars are on filter tiles he never asked for. Only the "tuff" group gets
+      them.** (18 Aug.) His words, verbatim: *"In the filters menu I didn't want the car images as the
+      main images for any of the groups but the tuff group, you've used it for a bunch of others, select
+      images that actually make sense based on what I've given you. And when you eventually make tuff
+      filters use the cars"*.
+      **He is right and this is mine, from v9.76 this morning.** Working #359 I gave five of the sixteen
+      filters a car — Teal & Orange (huracan), Bleach Bypass (mclaren), Cross Process (tesla), VHS Tape
+      (revuelto), Comic Ink (huracan) — and none of that was asked for. What he actually said about the
+      cars, in #332, was *"All just for the shake section"*, and I had read the four photos as general
+      art once they were in `fx-art/`. The shake section (#332, v9.80) is correct and stays.
+      **Reserved:** the cars belong to the **tuff filters (#349)**, which do not exist yet. Noted there.
+      **Replacements, picked so each filter still has something to act on** (the reason the tiles were
+      re-picked at all):
+      · Teal & Orange → **bay** — sunset over water with buildings: warm sky, cool water, so the
+        split-tone has both of its anchors in one frame.
+      · Bleach Bypass → **run** — low sun on a beach with a dog; strong tonal structure is what survives
+        being drained to silver, and a flat frame would show nothing.
+      · Cross Process → **ramp** — estuary at dusk, big flat areas of sky and water for the cyan to land
+        in. Cross process needs room, not detail.
+      · VHS Tape → **city** — a skyline is the classic tape subject, and heavy glitching makes it read
+        nothing like Faded Film, which also uses city.
+      · Comic Ink → **dog** — one clear subject with a clean outline. A cityscape turns to mush in line
+        art, which is what the tile looked like BEFORE the cars and is why it got changed in the first
+        place; the answer was never "a car", it was "something that outlines".
+      **Done out of queue order, deliberately, and this is the reasoning so it is not treated as licence:**
+      it is not a new request, it is a defect I shipped this morning, it is a five-line table, and the
+      alternative is leaving wrong art in his app for the length of the #335 compositor migration.
+
+- [ ] **372 — The help panel: the Close button's outline is glitched, and the footer scrolls with the
+      shortcuts when it should stay put.** (18 Aug, phone screenshot at v9.81 of the ? / keyboard-shortcuts
+      overlay, scrolled to the bottom.) His words, verbatim: *"The close buttons outline is glitched and
+      when you swipe down the menu it should only swipe the shortcuts not the close and tutorials buttons
+      like it does now when you reach the bottom of the scroll"*.
+      **Clauses:**
+      1. [ ] **The Close button's outline is wrong.** In the shot, Tutorials is a solid filled button and
+             Close is an outlined one whose border does not read cleanly. Measure it before guessing —
+             likely a border on a container that also has a radius/overflow, or a double border from two
+             rules both applying. Compare the two buttons' computed styles rather than eyeballing.
+      2. [ ] **Pin the footer.** Tutorials and Close must NOT move with the shortcut list; only the
+             shortcuts scroll. He is describing them being dragged up as the scroll bottoms out, which
+             means the buttons are inside the scrolling element instead of beside it.
+      ⚠️ Verify at ~380px AND scrolled to the very bottom — that is the only state where clause 2 shows,
+      and a check at the top of the list would pass while the bug is fully intact.
