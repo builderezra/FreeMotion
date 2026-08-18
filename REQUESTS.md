@@ -10098,3 +10098,14 @@ wait for them to report back."*
         first card and the disabled Volume card were indistinguishable to anything comparing phases. Delays
         start at a non-zero offset now, and the test skips disabled cards, which genuinely should not move.
       Mutation-checked by removing the per-card phase: the grid goes into lockstep and the test fails.
+
+      🔁 **HIS FEEDBACK ON v9.87, fixed in v9.88.** Verbatim: *"the glow is way too strong for each
+      outline, also the line doesn't perfectly trace the edge of each button, the lines slightly inside
+      it."* Both correct, and both visible in his zoomed shot.
+      · **Glow too strong** — I set it by eye on a 380px screenshot where a soft halo looked like "a bit
+        of glow"; at real size on an OLED it is a headlight. Cut hard.
+      · **The ring sits inside the edge** — the card keeps `border: 1px solid transparent` for layout, so
+        a ring at `inset: 0` draws against the PADDING box, one pixel in from the outline you actually
+        see. It now sits at `inset: -1px` with a radius to match, so it traces the true outer edge.
+        Worth keeping: "inset: 0" is not the outside of a bordered box, and on a 1px border at 3x that
+        is the difference between tracing an edge and hovering just inside it.

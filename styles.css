@@ -742,7 +742,11 @@ body.text-editing .sb-wrap { display: none !important; }
    degrades to a static gradient if the animation never runs.
    The card's BACKGROUND is untouched, which was his first clause. */
 .cat-card::before {
-  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  /* -1px, not 0. The card keeps a 1px transparent border for layout, so `inset: 0` lands on the PADDING
+     box — one pixel inside the outline you can see, which at 3x reads as a line hovering just within the
+     edge rather than tracing it. His words: "the line doesn't perfectly trace the edge of each button,
+     the lines slightly inside it." */
+  content: ''; position: absolute; inset: -1px; border-radius: calc(var(--radius) + 1px); padding: 1px; pointer-events: none;
   background: linear-gradient(115deg,
     var(--c1, #2fd0b5), var(--c2, #4FC3FF), var(--c3, #9B5CFF),
     var(--c2, #4FC3FF), var(--c1, #2fd0b5));
@@ -750,7 +754,7 @@ body.text-editing .sb-wrap { display: none !important; }
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
-  opacity: .85;
+  opacity: .72;
   animation: cat-shine var(--shine-dur, 9s) linear var(--shine-delay, 0s) infinite;
 }
 /* THE GLOW IS ON THE CARD, NOT ON ::after — ::after IS ALREADY TAKEN. Queue 286 lights the card edges
@@ -762,9 +766,12 @@ body.text-editing .sb-wrap { display: none !important; }
    (×1.6) so the two never settle into one rhythm. */
 .cat-card { animation: cat-glow calc(var(--shine-dur, 9s) * 1.6) ease-in-out var(--shine-delay, 0s) infinite; }
 @keyframes cat-shine { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+/* MUCH weaker. His words: "the glow is way too strong for each outline." It was tuned by eye on a 380px
+   screenshot, where a soft halo reads as "a bit of glow" — at real size on an OLED it was a headlight.
+   The spread stays negative so the shadow never reaches past the card's own corner radius. */
 @keyframes cat-glow {
-  0%, 100% { box-shadow: 0 0 6px -3px var(--c2, #4FC3FF); }
-  50%      { box-shadow: 0 0 13px -2px var(--c2, #4FC3FF); }
+  0%, 100% { box-shadow: 0 0 3px -2px var(--c2, #4FC3FF); }
+  50%      { box-shadow: 0 0 6px -2px var(--c2, #4FC3FF); }
 }
 /* The border itself steps out of the way — two rings would read as a double outline. */
 .cat-card { border-color: transparent; }
