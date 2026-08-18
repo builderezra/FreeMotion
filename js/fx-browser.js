@@ -1034,10 +1034,21 @@ window.FM = window.FM || {};
     back.addEventListener('click', closeView);
     top.appendChild(back);
     top.appendChild(el('div', 'fxb-catview-title', titleText));
+    /* DONE ADDS WHAT YOU PICKED (queue 333 clause 1 / queue 360). It used to call close() and nothing
+       else, so every numbered pick was thrown on the floor — Ezra, twice, from opposite directions:
+       *"All the effects I have selected do nothing im pretty sure, we talked about this ages ago but I
+       guess you never fixed"* (a screenshot of EIGHT effects numbered 1-8 and an unchanged canvas), and
+       *"when you press the dumb button it just kicks you out and doesn't actually add any of the effects
+       or do anything. It's just there to fuck you over"*.
+       He is describing one defect from two angles, and the second quote is the more useful one: a button
+       labelled Done, beside a numbered selection, cannot mean "discard". Nobody presses Done to cancel.
+       That was my design mistake, not a misreading on his part — the button predates the multi-select
+       and was never revisited when picking arrived.
+       With nothing picked it still just closes, which is the only thing it can mean then. */
     const done = el('button', 'fxb-back fxb-subdone', 'Done');
     done.type = 'button';
-    done.title = 'Finish adding effects';
-    done.addEventListener('click', () => FM.fxBrowser.close());
+    done.title = 'Add the effects you picked and close';
+    done.addEventListener('click', () => { if (_picked.length) commitPicks(); else FM.fxBrowser.close(); });
     top.appendChild(done);
     return top;
   }
@@ -1177,7 +1188,16 @@ window.FM = window.FM || {};
     // Suite seams: whether the sheet is up, and a way to open a category sub-view without hunting for
     // its tile in the grid.
     isOpen: function () { return !!(root && !root.classList.contains('hidden')); },
-    _openCategory: function (cat) { return openCategory(cat); },
+    /* Takes the category OBJECT or just its key. It used to take only the object, and passing a key
+       did not throw — `cat.key` came back undefined, byCategory(undefined) returned nothing, and you
+       got a category view containing an empty grid. A sweep written against that reaches zero tiles and
+       passes every assertion it makes about the tiles it reached. Resolving the key here means the
+       wrong call is impossible rather than merely documented. */
+    _openCategory: function (cat) {
+      const c = (cat && typeof cat === 'object') ? cat : (FM.fxRegistry.categories() || []).filter(x => x.key === cat)[0];
+      if (!c) throw new Error('no such effect category: ' + cat);
+      return openCategory(c);
+    },
     init: function () {
       root = document.getElementById('fx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');

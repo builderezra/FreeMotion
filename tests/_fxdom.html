@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#333 — what the category view actually puts in the DOM</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}#out{padding:8px;white-space:pre;color:#8fa}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* The sweep test for queue 333 found ZERO tiles, which is not the same as finding misbehaving ones —
+   a sweep that reaches nothing passes every assertion it makes about what it reached. Before guessing
+   at a selector, this prints what is really there after opening the browser and a category. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = (+q.get('w') || 380) + 'px'; fr.style.height = '820px';
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { out.textContent = 'FM never initialised'; window.__done = true; return; }
+      if (!w.FM || !w.FM.fxBrowser || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM, lines = [];
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        FM.scene.layers.length = 0;
+        var L = FM.makeLayer('shape', { name: 'L', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        FM.selectLayer(L.id); FM.refreshAll();
+        FM.fxBrowser.open(L);
+      } catch (e) { lines.push('open threw: ' + e.message); }
+      setTimeout(function () {
+        var root = d.getElementById('fx-browser');
+        lines.push('browser open: ' + FM.fxBrowser.isOpen());
+        lines.push('root classes: ' + (root ? root.className : 'NO #fx-browser'));
+        lines.push('sheet mode  : ' + (root ? root.classList.contains('fxb-sheet') : '?'));
+        var cats = (FM.FX_CATEGORIES || []).map(function (c) { return c.key; });
+        lines.push('categories  : ' + cats.join(', '));
+        FM.fxBrowser._openCategory(cats[0]);
+        setTimeout(function () {
+          lines.push('');
+          lines.push('after _openCategory("' + cats[0] + '"):');
+          [['#fx-browser .fxb-catview', 0], ['.fxb-catview', 0],
+           ['#fx-browser [data-fxid]', 0], ['[data-fxid]', 0],
+           ['#fx-browser .fxb-catview [data-fxid]', 0],
+           ['#fx-browser .fxb-tile', 0], ['.fxb-subdone', 0]].forEach(function (p) {
+            lines.push('  ' + p[0] + '  → ' + d.querySelectorAll(p[0]).length);
+          });
+          var any = d.querySelector('[data-fxid]');
+          if (any) {
+            lines.push('  first [data-fxid]: <' + any.tagName.toLowerCase() + ' class="' + any.className + '" data-fxid="' + any.dataset.fxid + '">');
+            var p = any.parentElement, chain = [];
+            while (p && chain.length < 6) { chain.push(p.className || p.tagName); p = p.parentElement; }
+            lines.push('  its ancestors: ' + chain.join(' < '));
+          }
+          out.textContent = lines.join('\n');
+          window.__done = true;
+        }, 500);
+      }, 900);
+    })();
+  });
+})();
+</script>
+</body></html>

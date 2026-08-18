@@ -6376,7 +6376,7 @@ better still, keep working inside the turn rather than parking work for a later 
       share one, all four photos are in use, and the category reads **Shakes / Movement**.
 
 
-- [ ] **333 — Selected effects do nothing, and some effects add themselves instead of previewing —
+- [x] **333 — Selected effects do nothing, and some effects add themselves instead of previewing —
       SWEEP EVERY EFFECT.** (17 Aug, two screenshots, v9.31.) His words, verbatim:
 
       > All the effects I have selected do nothing im pretty sure, we talked about this ages ago but I guess you never fixed
@@ -6391,16 +6391,16 @@ better still, keep working inside the turn rather than parking work for a later 
       past the frame.)*
 
       **Three separate things in here, and the third is the instruction:**
-      1. [ ] **Multi-selecting effects does nothing.** Eight are selected and numbered in his shot and
+      1. [x] ✅ **v9.81** — **Multi-selecting effects does nothing.** Eight are selected and numbered in his shot and
              the picture has not changed. Either the selection never applies, or it applies and the
              preview does not show it. ⚠️ Find out WHICH before touching anything — those are opposite
              fixes. His "we talked about this ages ago" is fair: the multi-select browser is **queue 277**,
              which is still open.
-      2. [ ] **Motion Blur adds itself on tap instead of previewing**, and doing so "broke my timeline".
+      2. [x] ✅ **already fixed in v9.4x by queue 321, and PROVEN here** — **Motion Blur adds itself on tap instead of previewing**, and doing so "broke my timeline".
              Same shape as **queue 321** (the Mask tile, which he reported doing exactly this) — so this
              is a CLASS of bug, not one tile. The timeline damage needs its own look: Motion Blur (Object)
              is not an ordinary stack entry, it has its own block in the inspector.
-      3. [ ] **Go through EVERY effect and find the ones that do not select.** His words. This is a sweep,
+      3. [x] ✅ **v9.81** — **Go through EVERY effect and find the ones that do not select.** His words. This is a sweep,
              and it should be a TEST rather than a one-off pass — the honest version is a suite test that
              taps every tile in the browser and asserts each one previews rather than applies, so the
              answer stays true after the next change. That is the only version of "go through all of
@@ -6409,6 +6409,29 @@ better still, keep working inside the turn rather than parking work for a later 
       Related and already open: **277** (rework the effects menu into a multi-select browser with a live
       preview — his original ask), **321** (mask adds instead of previewing + trackpad editing).
       This entry is the evidence that 277's multi-select is shipped but not working, which 277 does not say.
+
+      ✅ **ALL THREE DONE — v9.81, and clause 1 turned out to be one line.**
+      **The answer to "find out WHICH before touching anything" is: the selection applied fine, and the
+      button you left by threw it away.** `Done` called `close()` and nothing else. Pick eight effects,
+      press the button that says you are finished, and all eight are discarded with no message — *"all
+      the effects I have selected do nothing"*, exactly, and the same defect he reported again from the
+      other side in **#360**: *"when you press the dumb button it just kicks you out and doesn't actually
+      add any of the effects or do anything. It's just there to fuck you over."* One bug, two reports,
+      and the second wording is the more useful one: a button labelled Done, beside a numbered
+      selection, cannot mean discard. Nobody presses Done to cancel. **That was my design mistake — the
+      button predates the multi-select and was never revisited when picking arrived** — not a
+      misunderstanding on his part. With nothing picked it still just closes, which is all it can mean.
+      **Clause 2 was already fixed** by queue 321 (Mask and Motion Blur (Object) are layer state rather
+      than registry effects, so they were written outside the multi-select and left committing on click)
+      — his report predates that release. It is no longer taken on trust: the sweep below covers both.
+      **Clause 3 is a test, which is the only version of "go through all of them" that does not rot.**
+      It opens all twelve categories, taps all **198** tiles, and fails if any applies itself instead of
+      selecting, or fails to select at all, or does not reach the live preview. Every tile behaves today.
+      *Worth recording: the first version of that sweep found ZERO tiles and passed anyway.* The seam it
+      used took a category OBJECT; handing it a key did not throw — it built a category view with an
+      empty grid. A sweep that reaches nothing satisfies every assertion it makes about what it reached.
+      The seam now accepts either, so that particular silence is not available any more, and the test
+      carries a floor on how many tiles it must have swept.
 
 
 - [x] **334 — Benchmarks do not land on the playhead. FIXED v9.33 — the ruler was 18px out, the other half of 327.** (17 Aug, screenshot, v9.31.) His words:

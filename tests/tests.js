@@ -28168,4 +28168,94 @@
     if (cat.label !== 'Shakes / Movement') throw new Error('the category is still called “' + cat.label + '”');
   });
 
+  /* Queue 333 — *"All the effects I have selected do nothing im pretty sure, we talked about this ages
+   * ago but I guess you never fixed"* (a screenshot of eight effects numbered 1-8 and an unchanged
+   * canvas), and *"I just tapped on motion blur and instead of previewing it added it then broke my
+   * timeline lmao. Make sure you go through all the effects and see which ones don't select, because
+   * this isn't the first one I've seen"*.
+   *
+   * The third clause is an instruction — go through every effect — and the only version of that which
+   * does not rot the day after it is done is a test, so this is the sweep. It opens every category and
+   * taps every tile in it, asserting each one PICKS rather than applies: the layer's stack must not grow
+   * and the tile's id must land in the pick list. Both pseudo tiles (Mask, Motion Blur (Object)) are
+   * included deliberately, because those are the two he actually caught — they are layer state rather
+   * than registry effects, so they were the ones written outside the multi-select and left committing on
+   * click while every other tile in the same grid picked.
+   * The FIRST clause turned out to be the same bug as queue 360's Done button and is asserted here too:
+   * with effects picked, Done must ADD them. It used to call close() and nothing else, so the whole
+   * numbered selection was discarded — "the effects I have selected do nothing", exactly. */
+  test('every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)', { item: 'fx-sweep' }, async function () {
+    await atPhoneWidth(async function () {
+      var L = FM.scene.layers[0];
+      if (!L) throw new Error('no layer to work from');
+      FM.selectLayer(L.id);
+      L.effects = [];
+      FM.fxBrowser.open(L);
+      await sleep(220);
+      if (!FM.fxBrowser.isOpen()) throw new Error('the effects browser did not open');
+
+      var bad = [], swept = 0, seen = {};
+      try {
+        var cats = (FM.FX_CATEGORIES || []).map(function (c) { return c.key; });
+        if (cats.length < 5) throw new Error('expected the effect categories, found ' + cats.length);
+        // A category view with an empty grid is indistinguishable from a well-behaved one, so the
+        // swept-count floor below is not a formality — it is the only thing standing between this test
+        // and passing on nothing. It has already caught exactly that once.
+
+        for (var ci = 0; ci < cats.length; ci++) {
+          FM.fxBrowser._openCategory(cats[ci]);
+          await sleep(90);
+          var tiles = [].slice.call(document.querySelectorAll('#fx-browser .fxb-catview [data-fxid]'));
+          for (var ti = 0; ti < tiles.length; ti++) {
+            var id = tiles[ti].dataset.fxid;
+            if (seen[id]) continue;          // favourites/recents repeat a tile; one verdict per effect
+            seen[id] = 1;
+            var before = L.effects.length, picks0 = FM._fxPicks().length;
+            tiles[ti].click();
+            swept++;
+            if (L.effects.length !== before) {
+              bad.push(id + ' ADDED itself on tap (stack ' + before + ' → ' + L.effects.length + ')');
+              L.effects.length = before;
+            } else if (FM._fxPicks().length === picks0) {
+              bad.push(id + ' did not select at all');
+            }
+          }
+          var back = document.querySelector('#fx-browser .fxb-catview .fxb-back');
+          if (back) back.click();
+          await sleep(60);
+        }
+        if (swept < 40) throw new Error('only swept ' + swept + ' tiles — the sweep is not reaching the grid');
+        if (bad.length) throw new Error(bad.length + ' of ' + swept + ' tiles misbehave: ' + bad.slice(0, 8).join('; '));
+
+        // Clause 1 — Done must ADD the picks, not bin them.
+        FM.fxBrowser._openCategory(cats[0]);
+        await sleep(90);
+        var tile = document.querySelector('#fx-browser .fxb-catview [data-fxid]');
+        var pid = tile.dataset.fxid;
+        L.effects = [];
+        tile.click();
+        if (!FM._fxPicks().length) throw new Error('picking a tile for the Done check did not register');
+        /* …and the pick must reach the PREVIEW, not just the badge. His clause was "the effects I have
+           selected do nothing", and a numbered badge over a canvas that never changes is one of the two
+           ways that sentence can be true. The Done trap was the other, and was the one that bit — but a
+           badge with no preview behind it would look identical from where he was sitting. */
+        if (!(FM._fxPreview && FM._fxPreview.list && FM._fxPreview.list.length)) {
+          throw new Error('picked “' + pid + '” and nothing reached the live preview — the badge is the only thing that changed');
+        }
+        var doneBtn = document.querySelector('#fx-browser .fxb-subdone');
+        if (!doneBtn) throw new Error('the category view has no Done button');
+        doneBtn.click();
+        await sleep(220);
+        if (!L.effects.length) {
+          throw new Error('pressed Done with “' + pid + '” selected and nothing was added — the picks were thrown away');
+        }
+      } finally {
+        if (FM.fxBrowser.isOpen()) FM.fxBrowser.close();
+        L.effects = [];
+        FM.refreshAll();
+        await sleep(120);
+      }
+    });
+  });
+
 })();
