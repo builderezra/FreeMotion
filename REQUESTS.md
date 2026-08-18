@@ -9534,3 +9534,27 @@ wait for them to report back."*
       trap applies: the tap that ENDS a hold must not also fire the tap action, or holding to open the
       settings would toggle the camera's visibility on the way.
 
+- [ ] **366 — Rename "Blending / Opacity" to something that describes it just as well.** (18 Aug.) His
+      words, verbatim: *"Also if you can think of a rename for blending and opacity that describes what it
+      does just as well then change that name too"*.
+      Same shape as **#363** (renaming Null) — he is handing me the call, so the job is to pick well and
+      say why, not to ask him.
+      **The current label is `Blending / Opacity`**, in two places that must stay in step:
+      `js/inspector.js:1675` (the category card) and `js/inspector.js:1959` (the same list again).
+      **What the card actually does:** blend mode — HOW this layer's pixels combine with what is under it
+      — and opacity — HOW MUCH of it combines. Both halves are the same question, which is why the
+      current name needing a slash is a hint that it is one idea being described as two.
+      **Recommendation: "Mixing".** Opacity is the mix AMOUNT, blend mode is the mix METHOD; one word
+      covers both honestly, it is a plain English word rather than jargon, and nothing else in the app is
+      called that. It also drops the slash, which is the thing that makes the current name read as a list.
+      **Considered and rejected, with reasons, so this is not re-litigated:**
+      · *"Compositing"* — exactly right and exactly the wrong register; it is the word a manual uses.
+      · *"Transparency"* — describes opacity and says nothing about blend modes, so it names half.
+      · *"Blend & Fade"* — legible, but "fade" implies a change over TIME, and this card is static values.
+      · *"Blending"* alone — drops opacity, which is the more commonly used of the two.
+      **Scope:** user-facing STRING only — the `blend` key stays, so saved projects and every lookup keep
+      working. Sweep both label sites plus any hint text or menu that says "Blending". A test should
+      assert the old words are gone from the UI and the new one is present, **scoped to the specific
+      containers** — not `document.body.textContent`, which includes the suite printing its own test
+      titles and has produced a self-matching false pass in this repo before.
+
