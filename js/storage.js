@@ -1128,7 +1128,14 @@ window.FM = window.FM || {};
       clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
       writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
       const idx = this.list();
-      idx.unshift({ id: id, name: fresh.project.name, created: Date.now(), modified: Date.now(), width: fresh.project.width, height: fresh.project.height, fps: fresh.project.fps, duration: fresh.project.duration, thumb: null });
+      /* `elementDraft` marks a project that exists only as a WORKSPACE for building an element (queue
+         340). Ezra: *"When you create a new element it just creates a new project"* — and he was right,
+         because it does: an element is saved from layers, so something has to hold those layers while
+         you draw them. The mistake was letting that workspace land in Projects looking like an ordinary
+         project. Flagged here, hidden from the Projects tab, and shown under Elements as a draft. */
+      const rec = { id: id, name: fresh.project.name, created: Date.now(), modified: Date.now(), width: fresh.project.width, height: fresh.project.height, fps: fresh.project.fps, duration: fresh.project.duration, thumb: null };
+      if (opts.elementDraft) rec.elementDraft = true;
+      idx.unshift(rec);
       this.saveIndex(idx);
       await this.open(id);
       return id;

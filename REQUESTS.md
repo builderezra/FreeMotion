@@ -10109,3 +10109,32 @@ wait for them to report back."*
         see. It now sits at `inset: -1px` with a radius to match, so it traces the true outer edge.
         Worth keeping: "inset: 0" is not the outside of a bordered box, and on a 1px border at 3x that
         is the difference between tracing an edge and hovering just inside it.
+- [ ] **391 — The Edit Text menu is still a bit broken.** (18 Aug, phone screenshot at v9.87 with the
+      keyboard up.) His words, verbatim: *"edit text menu still a bit broken and also"* (the sentence runs
+      into #392, which is the separate request below).
+      **Not specific enough to act on, and the shot shows a known non-bug**, so this needs one line from him
+      before anything is changed: the bar above the keyboard carrying `^ v ✓` is **iOS Safari's own form
+      assistant**, not ours — that was measured under #98 (our DOM contains exactly one ✓ and zero up/down
+      arrows) and it cannot be removed by app code.
+      **So: which part is broken?** The size readout (160 pt against small-looking text) is the other half
+      of #98 and is still open. If he means something else, it is new.
+
+- [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
+      strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
+      text to voice and make a whole menu and feature for this"*.
+      **The button goes in the row he circled** — the strip directly under the clip, above the
+      `[|  <|>  |]` trio, on a TEXT layer.
+      🚨 **Raise the hard part with him BEFORE building, because it decides what this feature can even be.**
+      The browser can SPEAK text (`speechSynthesis`, which Safari has) — but it speaks to the speakers and
+      **there is no supported way to capture that into an audio file**. It is not routable through
+      WebAudio, so it cannot become an audio LAYER, cannot be trimmed on the timeline, and **will not be in
+      an export**. This app is local-only and has no backend, so the usual answer (a server-side TTS call)
+      is off the table by design.
+      **What is actually buildable offline, in order of usefulness:**
+      1. **Speak it aloud on demand** — a preview button. Real, small, honest; no audio layer.
+      2. **Bring your own voice file** — record/import a voiceover and have it auto-trim to the text's
+         timing. Solves the actual job (a spoken line on the timeline) with no TTS at all.
+      3. **BYOK cloud TTS** — a real audio track, but it needs a key and it breaks "nothing leaves the
+         device", which is a standing rule for this app and his call alone.
+      **Not started.** Option 1 can ship in an afternoon and is worth doing regardless; 2 and 3 are
+      different features wearing the same button.

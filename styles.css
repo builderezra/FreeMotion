@@ -6544,3 +6544,6 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
   mask-composite: exclude;
   pointer-events: none;
 }
+/* An element still being built (queue 340) — reads as unfinished at a glance, without a second layout. */
+.hm-card-draft { border-style: dashed; }
+.hm-thumb-draft { display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--accent); background: var(--panel-3); }

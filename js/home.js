@@ -1443,6 +1443,27 @@ window.FM = window.FM || {};
   // Templates and elements are both made FROM a project, so both routes pick one — there is nothing
   // else they could sensibly mean, and the alternative (a + that silently makes a project while you
   // are looking at a list of templates) is the bug being fixed.
+  /* An element still being built. Deliberately NOT elementCard: that one inserts a finished element into
+     the open project, and a draft has nothing to insert yet — tapping it must OPEN it to keep working.
+     One control, one meaning. */
+  function elementDraftCard(p) {
+    /* Built with el(), not innerHTML — the name is user text, and every other card in this file already
+       goes through el() so it lands as textContent. Following the idiom is both safer and shorter than
+       introducing an escaper this file has never needed. */
+    const card = el('button', 'hm-card hm-card-draft');
+    card.appendChild(el('div', 'hm-thumb hm-thumb-draft', '◇'));
+    const body = el('div', 'hm-meta');
+    body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));
+    body.appendChild(el('div', 'hm-sub', 'Draft — open it, build it, then ⋯ → Save as element'));
+    card.appendChild(body);
+    card.addEventListener('click', async () => {
+      await FM.projects.open(p.id);
+      FM.home.close({ push: true, lead: card });
+    });
+    keyActivate(card);
+    return card;
+  }
+
   function pickProject(title, then) {
     const list = FM.projects.list();
     if (!list.length) { if (FM.toast) FM.toast('Make a project first — templates and elements are saved from one'); return; }
@@ -1471,7 +1492,7 @@ window.FM = window.FM || {};
         { label: 'New element', disabled: true }, { sep: true },
         { label: 'Build a new one…', action: async () => {
           const name = prompt('Element name:', 'My element'); if (!name || !name.trim()) return;
-          const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080 });
+          const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
           if (!pid) { if (FM.toast) FM.toast('Could not create that'); return; }
           FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
           if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
@@ -1603,7 +1624,10 @@ window.FM = window.FM || {};
       // Deliberately NOT applied to the search results below: when you have typed a query you want the
       // best MATCH first, and a pinned project outranking a closer one would read as the search being
       // broken. Pins are about the resting order of the list, not about relevance.
-      const list = pinSort('projects', FM.projects.list().slice().sort(byName
+      /* Element DRAFTS are not projects and do not belong in this list (queue 340) — they are the
+         workspace a new element is built in, and showing them here is the whole of his complaint that
+         "it just creates a new project". They appear under Elements instead. */
+      const list = pinSort('projects', FM.projects.list().filter(p => !p.elementDraft).slice().sort(byName
         ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
         : (a, b) => (b.modified || 0) - (a.modified || 0)), p => p.id);
       if (query) {
@@ -1664,7 +1688,16 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('◇', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
+      /* DRAFTS LEAD THE TAB (queue 340). "Build a new one…" has to make a workspace to draw in — an
+         element is saved FROM layers, so there is nothing to save until something exists. Until now that
+         workspace was an ordinary project sitting in the Projects list, which is exactly what he
+         reported: *"When you create a new element it just creates a new project"*.
+         It is a draft now: hidden from Projects, shown HERE, and labelled as unfinished so the tab tells
+         the truth about what it holds. Tapping one reopens it to keep building; it becomes a real
+         element when you save it from the project's ⋯ menu, and the draft goes with it. */
+      const drafts = (FM.projects.list() || []).filter(p => p.elementDraft);
+      if (!list.length && !drafts.length) grid.appendChild(emptyState('◇', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
+      drafts.forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
       list.forEach(e => { shownIds.push(e.id); grid.appendChild(elementCard(e)); });
     }
     renderSelBar();
