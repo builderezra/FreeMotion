@@ -41,7 +41,17 @@
         }
       } catch (e) {}
       // Tiles generate on a queue, one per frame — give the whole grid time to land before the shot.
-      setTimeout(function () { window.__done = true; }, 3500);
+      // ?to=<section-label> scrolls that section's banner to the top first, so a section far down the
+      // list (Tuff is last) can be photographed without a screenshot of the four above it.
+      setTimeout(function () {
+        var to = q.get('to');
+        if (to) {
+          var hit = [].slice.call(d.querySelectorAll('.flt-sec, .flt-section, h3, h4, div'))
+            .filter(function (n) { return (n.textContent || '').trim().toUpperCase() === to.toUpperCase() && n.children.length === 0; })[0];
+          if (hit) hit.scrollIntoView({ block: 'start' });
+        }
+        setTimeout(function () { window.__done = true; }, 1800);
+      }, 3200);
     })();
   });
 })();

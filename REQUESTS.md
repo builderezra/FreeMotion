@@ -7410,19 +7410,23 @@ better still, keep working inside the turn rather than parking work for a later 
       Whatever the playhead does is the thing to match.
 
 
-- [ ] **349 — A new filter section called "tuff", in the TikTok rage-edit style, previewed on his car
-      photos.** (17 Aug.) His words, verbatim:
+- [x] **349 — A new filter section called "tuff", in the TikTok rage-edit style, previewed on his car
+      photos.** ✅ **v9.99 — all three clauses, plus the flash effect it needed.** (17 Aug.) His words, verbatim:
 
       > Make a filter section called “tuff” and use the car images for the filters you make.
 
       > These filters will be good for people who make edits on TikTok that are a tuff style where they use rage rap music etc, kinda dark, just reference TikTok styles on what people do
 
       **Clauses:**
-      1. [ ] A new SECTION in the filter library, key `tuff`, label "Tuff" (js/filters.js `SECTIONS`).
-      2. [ ] A set of filters in it, authored for that look: dark, hard, high-contrast.
-      3. [ ] The **car photos** are the preview art for them. ⚠️ **Blocked on the same files as 332** —
-             a photo pasted into chat is not a file I can write; they need saving into `fx-art/`. The
-             filters themselves are NOT blocked and can ship first on the existing art.
+      1. [x] ✅ **v9.99** — A new SECTION in the filter library, key `tuff`, label "Tuff".
+      2. [x] ✅ **v9.99** — **Blackout, Cold Steel, Bloodline, Static, Nightdrive, Overdrive, Ash.**
+             Two were re-authored after LOOKING at them at 380px rather than after reading the numbers:
+             Blackout needed an explicit brightness pull (crushed blacks cannot show on a daylight photo
+             that has barely any) and Static's colour split came down from 5px to 3 (a preview tile
+             renders at tile size, so an aberration authored for 1080p is enormous on it).
+      3. [x] ✅ **v9.99** — the **car photos** are the preview art. *(The "blocked on files" note was
+             stale — all four have been in `fx-art/` since v9.80.)* Paired by look, not by rotation, and
+             checked for repeats across and down at both grid widths.
 
       **The brief, written down while it is fresh, as a starting point rather than a decision.** What
       that style actually is, visually: crushed blacks, contrast well up, saturation pulled back but not
@@ -7460,11 +7464,17 @@ better still, keep working inside the turn rather than parking work for a later 
       **What his workaround actually is, in maths:** a black wash over the picture whose strength varies
       with time — i.e. multiply RGB by k while leaving ALPHA untouched. That is a small pixel effect in
       exactly the shape of the ones already here, and it is the missing piece:
-      · [ ] **New effect, working name "Flicker (darken)" / "Flash"** — multiplies RGB, never alpha, so
+      · [x] ✅ **v9.99 — shipped as "Flash (darken)".** New effect — multiplies RGB, never alpha, so
             the layer never disappears; params along the lines of Depth (how black it gets at its
             darkest), Speed, and a Smoothness or shape control so it can be a hard strobe or a soft
             pulse. A `hold`/floor so it never reaches pure black unless asked.
-      · [ ] Once it exists, the Tuff filters carry it — that is his "they should also come with flicker".
+      · [x] ✅ **v9.99** — all seven Tuff filters carry it, and a test refuses one that does not.
+             ⚠️ **It shipped inert on the first pass and a browser probe caught it**: the renderer existed
+             and the registry knew the type, but `POSTFX` — the routing map — did not list it, so nothing
+             dispatched. Worth knowing for the next new effect: the registry knowing a type is not the
+             same as the compositor rendering it.
+      ⚠️ **One question recorded rather than asked:** should Tuff also appear as a FEATURED row? The whole
+      point is discoverability for people who do not want to build a look themselves. Say the word.
       ⚠️ Two things to get right when building it: it must be **alpha-preserving** (that is the entire
       distinction he drew), and it must be **deterministic on t** like `flicker` already is (hashed off a
       stepped time index), or preview and export will disagree — which is a bug class this codebase has

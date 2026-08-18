@@ -1,0 +1,48 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>flashdark probe</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0;width:400px;height:120px}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.renderScene || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        say('registry has flashdark: ' + !!(FM.fxRegistry && FM.fxRegistry.makeInstance && FM.fxRegistry.makeInstance('flashdark')));
+        var inst = FM.fxRegistry.makeInstance('flashdark');
+        say('instance: ' + JSON.stringify(inst));
+        var P = { width: 64, height: 64, fps: 30, duration: 4 };
+        function mk(withFx, raw) {
+          var Lr = FM.makeLayer('shape', { name:'B', shape:'rect', x:32, y:32, shapeW:40, shapeH:40, fill:'#ffffff' });
+          Lr.start = 0; Lr.duration = 4;
+          if (withFx) Lr.effects = [raw ? { type:'flashdark', enabled:true, params:{ amount:0.6, speed:10, soft:0.3, floor:0.1 } }
+                                        : Object.assign(FM.fxRegistry.makeInstance('flashdark'), { params: Object.assign({}, FM.fxRegistry.makeInstance('flashdark').params, { amount:0.6, speed:10, soft:0.3, floor:0.1 }) })];
+          return { project:P, layers:[Lr] };
+        }
+        function shot(sc, tt) {
+          var c = d.createElement('canvas'); c.width = 64; c.height = 64;
+          var g = c.getContext('2d', { willReadFrequently:true });
+          g.setTransform(1,0,0,1,0,0); FM.renderScene(g, sc, tt);
+          return g.getImageData(0,0,64,64).data;
+        }
+        var off = mk(false), rawOn = mk(true,true), instOn = mk(true,false);
+        var px = (32*64+32)*4;
+        say('');
+        say('   t      off rgb/a          raw-object rgb/a      registry-instance rgb/a');
+        [0.05,0.11,0.17,0.23,0.31,0.43].forEach(function (tt) {
+          var a = shot(off,tt), b = shot(rawOn,tt), c2 = shot(instOn,tt);
+          say('  ' + tt.toFixed(2) + '   ' + a[px]+','+a[px+3] + '            ' + b[px]+','+b[px+3] + '                  ' + c2[px]+','+c2[px+3]);
+        });
+      } catch (e) { say('threw: ' + (e && e.message)); }
+      window.__done = true;
+    })();
+  });
+})();
+</script></body></html>

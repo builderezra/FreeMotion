@@ -37,6 +37,12 @@ window.FM = window.FM || {};
     { key: 'retro', label: 'Retro / Analogue' },
     { key: 'glow', label: 'Light / Glow' },
     { key: 'stylised', label: 'Stylised' },
+    /* Queue 349. His words: "Make a filter section called 'tuff' and use the car images for the filters
+       you make… These filters will be good for people who make edits on TikTok that are a tuff style
+       where they use rage rap music etc, kinda dark, just reference TikTok styles on what people do".
+       Last, because it is the newest and the most specific — the other four are general grades and this
+       one is a scene. */
+    { key: 'tuff', label: 'Tuff' },
   ];
 
   /* e(type, params) — one child effect. Params are only the ones being moved off their default, so a
@@ -118,6 +124,75 @@ window.FM = window.FM || {};
       effects: [e('nightvision', { amount: 0.85 }), e('noise', { amount: 25, speed: 20 }),
                 e('scanlines', { amount: 0.22, spacing: 4 }),
                 e('vignette', { amount: 0.5, size: 30 })] },
+
+    /* ---- Tuff (queue 349) ---------------------------------------------------------------------
+     * His brief, verbatim: "These filters will be good for people who make edits on TikTok that are a
+     * tuff style where they use rage rap music etc, kinda dark, just reference TikTok styles on what
+     * people do." So: crushed blacks, contrast well up, saturation pulled back but not dead, a hard
+     * colour cast, heavy vignette, grain, and bloom so the bright bits smear.
+     * EVERY ONE CARRIES `flashdark`, because that was the other half of the same request — "they
+     * should also come with flicker or flash, not in a way that makes the effect flicker on and off but
+     * so there's like a black layer on top with not full opacity and has flickering". That effect is new
+     * in this release and exists for this: it multiplies RGB and leaves alpha alone, so the picture
+     * pulses dark without the layer disappearing. Its `Darkest` floor is authored high (0.3–0.45) so the
+     * flash is a wash rather than a blackout — see rule 2 at the top of this file.
+     * The two file rules hold here as everywhere: CSS-filter effects (contrast / saturate / grayscale /
+     * glow) are listed FIRST so the row order matches the render order, and nothing sits at an extreme. */
+    { id: 'blackout', name: 'Blackout', section: 'tuff',
+      desc: 'Crushed blacks, contrast up hard, colour pulled back — with a dark pulse over the top.',
+      /* The brightness pull is not decoration. Authored without it, the tile read as an ordinary
+         daylight photo with slightly more contrast — "crushed blacks" cannot show on a picture that
+         has barely any, and this filter has to say what it is at a glance. Looked at, at 380px. */
+      effects: [e('brightness', { amount: 0.82 }), e('contrast', { amount: 1.3 }), e('saturate', { amount: 0.7 }),
+                e('highlightsshadows', { highlights: -25, shadows: -45 }),
+                e('vignette', { amount: 0.5, size: 30 }),
+                e('flashdark', { amount: 0.35, speed: 9, soft: 0.35, floor: 0.35 })] },
+    { id: 'coldsteel', name: 'Cold Steel', section: 'tuff',
+      desc: 'The cold night look — blue bias, desaturated, sharpened until it bites.',
+      effects: [e('contrast', { amount: 1.22 }), e('saturate', { amount: 0.6 }),
+                e('colorbalance', { red: -18, green: -2, blue: 26 }),
+                e('unsharpmask', { amount: 1.1, radius: 2 }),
+                e('vignette', { amount: 0.4, size: 34 }),
+                e('flashdark', { amount: 0.3, speed: 12, soft: 0.2, floor: 0.4 })] },
+    { id: 'bloodline', name: 'Bloodline', section: 'tuff',
+      desc: 'Deep red-orange driven into crushed shadows, with the highlights bleeding.',
+      effects: [e('contrast', { amount: 1.28 }), e('saturate', { amount: 1.1 }),
+                e('colorbalance', { red: 30, green: -8, blue: -14 }),
+                e('highlightsshadows', { highlights: -15, shadows: -40 }),
+                e('lightglow', { amount: 0.5, radius: 14, threshold: 55 }),
+                e('vignette', { amount: 0.45, size: 32 }),
+                e('flashdark', { amount: 0.32, speed: 8, soft: 0.4, floor: 0.35 })] },
+    { id: 'static', name: 'Static', section: 'tuff',
+      desc: 'Grain, split colour and hard contrast — dirty rather than nostalgic.',
+      /* 3px, not 5. A preview tile renders at tile size, so an aberration authored for a 1080p frame
+         is proportionally enormous on it — at 5 the tile came out as rainbow smear rather than as a
+         dirty picture, which sells the wrong filter. Measured the only way that counts: looked at. */
+      effects: [e('contrast', { amount: 1.24 }), e('saturate', { amount: 0.75 }),
+                e('chromaticaberration', { amount: 3, angle: 0 }),
+                e('filmgrain', { amount: 48, size: 2 }),
+                e('vignette', { amount: 0.42, size: 34 }),
+                e('flashdark', { amount: 0.4, speed: 16, soft: 0.1, floor: 0.3 })] },
+    { id: 'nightdrive', name: 'Nightdrive', section: 'tuff',
+      desc: 'Teal shadows, warm lights, bloom on every bright thing — headlights at 2am.',
+      effects: [e('contrast', { amount: 1.18 }), e('saturate', { amount: 1.05 }),
+                e('tealorange', { amount: 0.7 }),
+                e('lightglow', { amount: 0.55, radius: 16, threshold: 50 }),
+                e('vignette', { amount: 0.4, size: 34 }),
+                e('flashdark', { amount: 0.26, speed: 7, soft: 0.5, floor: 0.45 })] },
+    { id: 'overdrive', name: 'Overdrive', section: 'tuff',
+      desc: 'Over-clarified and blooming — the look of an edit that has been pushed on purpose.',
+      effects: [e('brightness', { amount: 0.92 }), e('contrast', { amount: 1.26 }), e('saturate', { amount: 1.2 }),
+                e('unsharpmask', { amount: 1.8, radius: 2 }),
+                e('lightglow', { amount: 0.6, radius: 12, threshold: 60 }),
+                e('vignette', { amount: 0.35, size: 38 }),
+                e('flashdark', { amount: 0.3, speed: 14, soft: 0.15, floor: 0.35 })] },
+    { id: 'ash', name: 'Ash', section: 'tuff',
+      desc: 'Near-monochrome with a faint warm cast and no mercy in the contrast.',
+      effects: [e('contrast', { amount: 1.3 }), e('grayscale', { amount: 0.82 }),
+                e('temperature', { amount: 18, tint: 2 }),
+                e('filmgrain', { amount: 30, size: 2 }),
+                e('vignette', { amount: 0.48, size: 32 }),
+                e('flashdark', { amount: 0.28, speed: 10, soft: 0.3, floor: 0.4 })] },
   ];
 
   /* Validate a definition against the LIVE registry and build a real container instance from it.

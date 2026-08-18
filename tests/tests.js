@@ -470,6 +470,99 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('filters: the Tuff section is real, validates, and every look carries the flash', { item: 'tuff-filters' }, function () {
+    /* Queue 349. His words: "Make a filter section called 'tuff' and use the car images for the filters
+       you make… These filters will be good for people who make edits on TikTok that are a tuff style
+       where they use rage rap music etc, kinda dark" — and, in the same conversation, "they should also
+       come with flicker or flash".
+       The risk this file warns about is silent: definitions are validated against the live registry on
+       read, so a mistyped effect or an out-of-range param is DROPPED rather than raised. A filter can
+       therefore look authored and arrive with half its controls missing, or none. So the test builds
+       every one through the real creation path and counts what came out. */
+    const defs = FM.filters.bySection('tuff');
+    if (defs.length < 7) throw new Error('the Tuff section has ' + defs.length + ' filters, not the 7 authored');
+    if (!FM.filters.sections().some(s => s.key === 'tuff')) throw new Error('Tuff is not offered as a section — sections() only returns ones with something in them, so something is empty');
+    const css = FM.CSS_FX || {};
+    defs.forEach(def => {
+      const inst = FM.filters.makeInstance(def.id);
+      if (!inst) throw new Error(def.id + ' built nothing at all');
+      const got = (inst.effects || []).length;
+      if (got !== def.effects.length) {
+        throw new Error(def.id + ' authored ' + def.effects.length + ' effects and only ' + got + ' survived validation — a type or a param does not exist in this build, and the library drops those silently');
+      }
+      // His explicit second request: the flash comes WITH them.
+      if (!def.effects.some(x => x.type === 'flashdark')) throw new Error(def.id + ' carries no flashdark — "they should also come with flicker or flash"');
+      /* Rule 1 at the top of js/filters.js: CSS-filter effects are folded into one ctx.filter string
+         applied BEFORE the layer is drawn whatever order they sit in, so listing one after a
+         non-CSS effect makes the row order disagree with the render order. */
+      let seenOther = false;
+      def.effects.forEach(x => {
+        if (css[x.type]) { if (seenOther) throw new Error(def.id + ' lists the CSS-filter effect "' + x.type + '" after a non-CSS one — the rows would read in a different order from the render'); }
+        else seenOther = true;
+      });
+    });
+    /* And the art: he pulled the cars off every other filter in v9.82 specifically so they could land
+       here — "I didn't want the car images as the main images for any of the groups but the tuff group". */
+    if (FM.fxThumbs && FM.fxThumbs._filterSubject) {
+      const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 };
+      defs.forEach(def => {
+        const subj = FM.fxThumbs._filterSubject(def.id);
+        if (!CARS[subj]) throw new Error('Tuff filter ' + def.id + ' previews on "' + subj + '", not one of the car photos');
+      });
+      // Control: the same lookup must NOT hand a car to an ordinary filter, or the check above would
+      // pass on a build that put cars everywhere again — which is the exact regression v9.82 fixed.
+      const strays = FM.filters.all().filter(f => f.section !== 'tuff' && CARS[FM.fxThumbs._filterSubject(f.id)]);
+      if (strays.length) throw new Error(strays.length + ' non-Tuff filter(s) preview on a car photo again: ' + strays.map(f => f.id).join(', '));
+    }
+  });
+
+  test('effects: Flash (darken) dims the picture without making the layer disappear', { item: 'flashdark-alpha' }, function () {
+    /* Queue 349, the half that needed a new effect. His words: "there's like a black layer on top with
+       not full opacity and has flickering, this is a popular thing to have… usually what I do is get a
+       black shape that covers the screen, make opacity like 30% and put a flash or flicker filter on".
+       He was explicit that it must NOT be "in a way that makes the effect flicker on and off" — and
+       every existing effect of this family (flicker, blink, pulseopacity) writes the ALPHA channel,
+       which is precisely that. So the one property that defines this effect is that alpha is untouched,
+       and it is the one property a future rewrite could lose without anything else noticing.
+       Asserted end to end through renderScene rather than by calling the pixel function, because the
+       thing that matters is what lands on the canvas. */
+    const P = { width: 64, height: 64, fps: 30, duration: 4 };
+    const mk = withFx => {
+      const L = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+      L.start = 0; L.duration = 4;
+      if (withFx) L.effects = [{ type: 'flashdark', enabled: true, params: { amount: 0.6, speed: 10, soft: 0.3, floor: 0.1 } }];
+      return { project: P, layers: [L] };
+    };
+    const shot = (sc, t) => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, t);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+    const off = mk(false), on = mk(true);
+    const px = (32 * P.width + 32) * 4;                     // dead centre, inside the rect
+    let found = null;
+    /* ALPHA IS CHECKED AT EVERY SAMPLE, not only at the one that darkened, and it is checked FIRST.
+       getImageData un-premultiplies, so an effect that wrongly multiplied alpha would leave RGB at 255
+       and simply look like it was doing nothing — the failure would be reported as "it never darkened"
+       and send the next person hunting the wrong bug. Ask the defining question directly. */
+    for (let i = 1; i <= 24; i++) {
+      const t = i * 0.037;
+      const a = shot(off, t), b = shot(on, t);
+      if (a[px + 3] < 250) throw new Error('the fixture rect is not opaque at its centre (alpha ' + a[px + 3] + ') — nothing below can mean anything');
+      let alphaMoved = 0;
+      for (let j = 3; j < a.length; j += 4) if (a[j] !== b[j]) alphaMoved++;
+      if (alphaMoved) throw new Error(alphaMoved + ' pixels changed ALPHA at t=' + t.toFixed(3) + ' — Flash (darken) must move brightness only and leave the layer\u2019s shape and opacity exactly as they were, or it is just Flicker again and the layer comes and goes');
+      if (!found && b[px] < a[px] - 4) found = { t: t, a: a, b: b };
+    }
+    if (!found) throw new Error('Flash (darken) never darkened the picture at any of 24 sampled times — it is doing nothing at all');
+    const { t, b } = found;
+    // Deterministic on t, or a preview and an export of the same frame disagree.
+    const again = shot(mk(true), t);
+    for (let i = 0; i < b.length; i += 997) if (again[i] !== b[i]) throw new Error('two renders of the same frame differ at byte ' + i + ' — the flash is not deterministic on t, so an export would not match the preview');
+  });
+
   test('sliders: a ruler stops dead at its limit instead of sliding on under your finger', { item: 'slider-wall' }, async function () {
     /* Queue 347. His words, with a screenshot of X Skew and Y Skew both pinned at 80.00°: "Make it so
        the sliders here and everywhere actually stop when you reach the limit, currently it keeps
@@ -28177,13 +28270,24 @@
        group". The tuff filters (queue 349) do not exist yet, so for now the rule is simply: no filter
        uses a car. When they do exist this assertion gets an exemption for that section, not a deletion —
        the point is that a car ends up on a filter tile ON PURPOSE or not at all. */
+    /* THE EXEMPTION, TAKEN AS THIS BLOCK SAID IT SHOULD BE (queue 349, v9.99): the Tuff filters exist
+       now, so they are allowed a car and every OTHER filter still is not. Both halves are asserted —
+       an exemption with nothing on the other side of it is just a deletion with a comment. */
     var CARS = ['huracan', 'mclaren', 'revuelto', 'tesla'];
-    var strays = FM.filters.all().map(function (f) {
-      return { id: f.id, k: FM.fxThumbs._filterSubject(f.id) };
-    }).filter(function (x) { return CARS.indexOf(x.k) >= 0; });
+    var marked = FM.filters.all().map(function (f) {
+      return { id: f.id, sec: f.section, k: FM.fxThumbs._filterSubject(f.id) };
+    });
+    var strays = marked.filter(function (x) { return x.sec !== 'tuff' && CARS.indexOf(x.k) >= 0; });
     if (strays.length) {
       throw new Error('these filters demonstrate on a car, which he asked for only on the tuff group: ' +
                       strays.map(function (x) { return x.id + '→' + x.k; }).join(', '));
+    }
+    var tuff = marked.filter(function (x) { return x.sec === 'tuff'; });
+    if (!tuff.length) throw new Error('no Tuff filters found — the exemption above would then be checking nothing');
+    var carless = tuff.filter(function (x) { return CARS.indexOf(x.k) < 0; });
+    if (carless.length) {
+      throw new Error('these Tuff filters do NOT use a car, which is the one group he asked to have them: ' +
+                      carless.map(function (x) { return x.id + '→' + x.k; }).join(', '));
     }
   });
 

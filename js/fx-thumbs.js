@@ -360,7 +360,7 @@ window.FM = window.FM || {};
    * room to travel, matte needs a defined light/dark split, and proc/drawing get drawn ON. (#66) */
   // The photograph each section defaults to, kept as DATA so the preload set can be derived from it
   // rather than restated by hand — see photoKeys().
-  const SECTION_PHOTO = { color: 'city', other: 'ramp', blur: 'dusk', distort: 'towers', stylize: 'dog' };
+  const SECTION_PHOTO = { color: 'city', other: 'ramp', blur: 'dusk', distort: 'towers', stylize: 'dog', tuff: 'revuelto' };
   Object.setPrototypeOf(SECTION_PHOTO, null);
   const SECTION_ART = {
     color: photoArt(SECTION_PHOTO.color, paintPhoto), other: photoArt(SECTION_PHOTO.other, paintPhoto), text: paintPhoto,
@@ -441,6 +441,16 @@ window.FM = window.FM || {};
     vhs:        'city',    crt:  'towers',    super8:    'bush',   oldfilm: 'dog',
     dreamy:     'shore',   goldenhour: 'sunpath', leak:  'pair',   neonnight: 'dusk',
     comic:      'dog',     poster: 'clouds',  thermal:   'cat',    nightvis: 'figures',
+    /* THE CARS, AT LAST, AND ONLY HERE (queue 349). His correction in v9.82 pulled them off every
+       ordinary filter — *"I didn't want the car images as the main images for any of the groups but the
+       tuff group… And when you eventually make tuff filters use the cars"* — so they were held back for
+       exactly these seven. Four cars over seven filters, and the pairing is by LOOK rather than by
+       rotation: the darkest shot (mclaren) carries the two monochrome-ish grades, the red car at night
+       carries the two warm ones, and the bright daylight yellow carries the two that need something
+       bright to visibly dirty. Checked for repeats at BOTH grid widths — no two cars touch, across or
+       down, at four columns or at two. */
+    blackout:   'mclaren', coldsteel: 'tesla',   bloodline: 'revuelto', static: 'huracan',
+    nightdrive: 'revuelto', overdrive: 'huracan', ash:     'mclaren',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

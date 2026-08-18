@@ -526,6 +526,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0 },
     ] },
     { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }] },
+    /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
+       them: this one darkens, it does not make the layer vanish (queue 349). */
+    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }] },
     { type: 'pulseopacity', label: 'Pulse Opacity', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }] },
     { type: 'dissolve', label: 'Dissolve', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -2168,7 +2171,7 @@ window.FM = window.FM || {};
     bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1,
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
-    blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1,
+    blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
     wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
@@ -4318,6 +4321,46 @@ window.FM = window.FM || {};
       if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
       else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
     flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = Math.floor(fl_tt * fl_spd); var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
+    /* FLASH (DARKEN) — queue 349. His words: "there's like a black layer on top with not full opacity
+       and has flickering… usually what I do is get a black shape that covers the screen, make opacity
+       like 30% and put a flash or flicker filter on".
+       He is describing a real gap rather than a preference. `flicker`, `blink` and `pulseopacity` all
+       write the ALPHA channel, so they make the LAYER come and go — which is exactly the "flicker on
+       and off" he ruled out. Nothing in ~200 effect types modulated BRIGHTNESS over time; `brightness`,
+       `exposure` and `gamma` are static grades. His two-layer workaround exists because there was no
+       one-effect way to do it.
+       So this multiplies RGB and NEVER TOUCHES ALPHA — the layer's shape, its edges and anything
+       composited against it are unchanged; only how lit it is varies. That is the whole distinction he
+       drew, and it is the one thing to preserve if this is ever rewritten.
+       Deterministic on a stepped time index, hashed the same way `flicker` is, because a preview and an
+       export that disagree about a random number is a bug class this file has already been bitten by.
+       `soft` interpolates between one step's value and the next, so 0 is a hard strobe and 1 a pulse;
+       `floor` is how dark it may ever get, so it can be a wash rather than a blackout. */
+    flashdark: function (d, W, H, p, t) {
+      var fdN = function (i) {
+        var h = (i ^ 0x9e3779b9) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+      };
+      var fdA = FM.evalProp(p.amount, t); if (fdA == null || isNaN(fdA)) fdA = 0.45; if (fdA < 0) fdA = 0; if (fdA > 1) fdA = 1;
+      var fdS = FM.evalProp(p.speed, t); if (fdS == null || isNaN(fdS)) fdS = 10; if (fdS < 1) fdS = 1; if (fdS > 30) fdS = 30;
+      var fdSo = FM.evalProp(p.soft, t); if (fdSo == null || isNaN(fdSo)) fdSo = 0.3; if (fdSo < 0) fdSo = 0; if (fdSo > 1) fdSo = 1;
+      var fdF = FM.evalProp(p.floor, t); if (fdF == null || isNaN(fdF)) fdF = 0.15; if (fdF < 0) fdF = 0; if (fdF > 1) fdF = 1;
+      var fdT = (t < 0) ? 0 : t;
+      var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
+      var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
+      var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
+      var fdV = fd0 + (fdSmooth - fd0) * fdSo;
+      var fdK = 1 - fdA * fdV;
+      if (fdK < fdF) fdK = fdF;
+      if (fdK > 1) fdK = 1;
+      if (fdK >= 0.9999) return;
+      var fdLen = W * H * 4;
+      for (var fdI = 0; fdI < fdLen; fdI += 4) {
+        d[fdI] = d[fdI] * fdK; d[fdI + 1] = d[fdI + 1] * fdK; d[fdI + 2] = d[fdI + 2] * fdK;   // alpha (fdI+3) deliberately untouched
+      }
+    },
     pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt=FM.evalProp(p.amount,t); if(dsAmt==null)dsAmt=0.5; if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
       /* One static salt-and-pepper pattern, identical in every project and every instance: it ate the

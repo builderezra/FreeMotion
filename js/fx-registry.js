@@ -44,6 +44,7 @@ window.FM = window.FM || {};
     dropshadow: 'stylize', chromaticaberration: 'distort', innerglow: 'drawing', unsharpmask: 'blur', hextiles: 'distort', linstreaks: 'blur',
     // batch 13 (opacity / visibility)
     blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
+    flashdark: 'opacity',   // queue 349 — sits with its family, though it is the only one that leaves alpha alone
     // batch 14 (matte / mask / key)
     wipe: 'matte', radialwipe: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
     // batch 15 (repeat / tiling)
@@ -383,6 +384,7 @@ window.FM = window.FM || {};
     // Opacity / visibility
     blink: 'Switches the layer on and off at a steady rate.',
     flicker: 'Flickers the opacity irregularly, like a failing bulb.',
+    flashdark: 'Darkens the picture in irregular flashes — like a black wash pulsing over it. The layer never disappears, because only its brightness moves, not its opacity.',
     pulseopacity: 'Fades the layer smoothly in and out, over and over.',
     dissolve: 'Punches random holes in the layer. Keyframe Amount to dissolve it away.',
     blockdissolve: 'The same, in blocks rather than single pixels — a chunkier, more digital exit.',
