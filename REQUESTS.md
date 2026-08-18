@@ -10034,3 +10034,32 @@ wait for them to report back."*
       ⚠️ Normal is the DEFAULT blend mode, so this row is the one every layer starts on — it must still be
       tappable to return to Normal from another mode, not just a label.
       **Ships with #366**, which renames this card to "Mixing" — same card, one release.
+
+- [ ] **389 — 🚨 RE-REPORT: the numbered effects STILL do nothing, at v9.83.** (18 Aug, phone screenshot of
+      the Colouring category with EIGHT effects numbered 1-8 and the video behind them visibly unchanged.)
+      His words, verbatim: *"The effects selected here still don't do anything at allllllllllllllllll"*.
+      **This matters because #333 was closed at v9.81 believing it fixed, and he is on v9.83.** The fix there
+      was real — `Done` used to discard the picks and now commits them — and it is mutation-tested. So either
+      that was not the whole of it, or there is a second cause underneath it that the first one was masking.
+      **Do NOT re-fix Done. Find out which of these it is first:**
+      · the picks ARE applied on exit but the CANVAS never previewed them while picking (his screenshot shows
+        an unchanged video WITH eight badges, which is the live-preview half, not the commit half);
+      · he left via **Back** rather than Done — Back still discards, and after #333 that is now an
+        inconsistency I introduced by fixing only one of the two exits;
+      · the preview runs but is invisible on a VIDEO layer specifically (his subject is a video; the #333
+        sweep drove shape layers).
+      ⚠️ The v9.81 sweep asserts every tile PICKS and reaches `FM._fxPreview`. It does not assert the canvas
+      changes. That gap is exactly the shape of this report, and it is the first thing to close.
+
+- [ ] **390 — While previewing effects, show the WHOLE composition, not just the one layer.** (18 Aug.) His
+      words, verbatim: *"Make it so when you are previewing a layer in the effect menu and adding effects it
+      actually just shows all the layers on the timeline and not just that layer, sometimes seeing how the
+      other layers will interact with the layer you're adding effects to is pivotal"*.
+      The effects sheet currently isolates the layer being edited (an `FM.isolate`-style solo). He wants the
+      real frame, because a blend mode, a glow or a matte only means anything against what is behind it.
+      **Clauses:**
+      1. [ ] The preview shows every layer, with the effect applied to the selected one.
+      ⚠️ The solo was almost certainly deliberate — on a busy comp the edited layer can be completely hidden,
+      and previewing an effect you cannot see is its own bug. Check why it was added before removing it; if
+      the reason was "you can't see the layer", the answer may be showing everything AND marking the layer,
+      rather than swapping one problem for the other.

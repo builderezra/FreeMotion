@@ -2555,16 +2555,27 @@ window.FM = window.FM || {};
         if (near) {
           items.push({ label: 'Rename marker…', action: () => { const n = prompt('Marker name:', near.label || 'Marker'); if (n != null && n.trim()) { near.label = n.trim(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } } });
           items.push({ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
-        } else {
-          items.push({ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.updateReadout) FM.updateReadout(); if (FM.history) FM.history.commit(); } });   // updateReadout: the chip's yellow is decided from the markers, and adding one is not a time change (queue 243)   // markers live on exact frames
         }
+        /* NO "ADD MARKER HERE" (queue 337). Ezra: *"Get rid of the feature where holding down somewhere on
+           the timeline gives you the option to add a benchmark"*.
+           Only the ADD is gone. Rename, remove and clear stay, because they act on a marker you are already
+           pointing at and taking the whole gesture away would remove those with it — the entry warned about
+           exactly that, and it is why this is a one-item deletion rather than dropping the handler.
+           A benchmark can still be added two other ways, checked before removing this one: tapping the
+           timecode chip (js/app.js:3795) and M on a keyboard (js/app.js:4995). Worth knowing for later:
+           queue 364 moves that first route onto the playhead's top, so the two changes agree rather than
+           leaving the feature unreachable. */
         if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { const hadThumb = P.markers.some(m => m.thumb); P.markers = []; unpinIf(hadThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         return items;
       };
       rulerEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         if (!FM.contextMenu) return;
-        FM.contextMenu.show(e.clientX, e.clientY, rulerMenuItems(timeFromX(e.clientX)));
+        // With Add gone, an empty stretch of ruler has nothing to offer — and a menu that opens holding
+        // nothing is worse than no menu, which is the shape of the thing being removed here.
+        const it = rulerMenuItems(timeFromX(e.clientX));
+        if (!it.length) return;
+        FM.contextMenu.show(e.clientX, e.clientY, it);
       });
       // touch: long-press the ruler for the same marker menu (phones have no right-click)
       let rulerHold = 0, rulerHX = 0, rulerHY = 0;
@@ -2574,8 +2585,12 @@ window.FM = window.FM || {};
         clearTimeout(rulerHold);
         rulerHold = setTimeout(() => {
           if (!FM.contextMenu) return;
+          // Same gate as the right-click path (queue 337): nothing to offer, nothing opens — and no buzz
+          // either, since a haptic for a menu that never appears is worse than silence.
+          const it = rulerMenuItems(timeFromX(rulerHX));
+          if (!it.length) return;
           if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-          FM.contextMenu.show(rulerHX, rulerHY + 10, rulerMenuItems(timeFromX(rulerHX)));
+          FM.contextMenu.show(rulerHX, rulerHY + 10, it);
         }, 550);
       });
       rulerEl.addEventListener('pointermove', (e) => { if (rulerHold && (Math.abs(e.clientX - rulerHX) > 12 || Math.abs(e.clientY - rulerHY) > 12)) { clearTimeout(rulerHold); rulerHold = 0; } });

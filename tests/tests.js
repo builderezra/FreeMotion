@@ -28442,4 +28442,52 @@
     }
   });
 
+  /* Queue 337 — *"Get rid of the feature where holding down somewhere on the timeline gives you the option
+   * to add a benchmark"*.
+   * A removal, so the test has to prove three things at once, and the last two are the reason this was not
+   * just a deleted handler: the ADD is gone, the marker actions that shared that gesture still work, and a
+   * benchmark can still be ADDED by another route. Taking away the only way to add one would have satisfied
+   * his sentence and broken the feature. */
+  test('the timeline long-press no longer offers "add benchmark", but keeps the rest (queue 337)', { item: 'no-add-marker' }, async function () {
+    var P = FM.scene.project;
+    var m0 = P.markers ? P.markers.slice() : [];
+    try {
+      P.markers = [];
+      FM.timeline.rebuild(); await sleep(140);
+      var ruler = document.querySelector('#tl-ruler') || document.querySelector('.tl-ruler');
+      if (!ruler) throw new Error('no timeline ruler to long-press');
+      var r = ruler.getBoundingClientRect();
+      var x = Math.round(r.left + r.width * 0.6), y = Math.round(r.top + r.height / 2);
+
+      ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      await sleep(120);
+      var txt = function () {
+        var m = document.querySelector('.ctx-menu, #ctx-menu');
+        return (m && m.offsetParent !== null) ? (m.textContent || '') : '';
+      };
+      if (/add marker|add benchmark/i.test(txt())) throw new Error('the long-press still offers to add a benchmark');
+      FM.contextMenu.hide();
+
+      // The actions that shared the gesture must survive — removing the whole handler would take them.
+      P.markers = [{ t: FM.time, label: 'Benchmark' }];
+      FM.timeline.rebuild(); await sleep(140);
+      var px = ruler.getBoundingClientRect();
+      var mx = Math.round(px.left + (FM.time / (P.duration || 5)) * px.width);
+      ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: mx, clientY: y }));
+      await sleep(120);
+      if (!/rename|remove|clear/i.test(txt())) throw new Error('the marker actions went with the add option: ' + JSON.stringify(txt().slice(0, 60)));
+      FM.contextMenu.hide();
+
+      // …and adding one is still possible, or the feature is gone rather than the gesture.
+      P.markers = [];
+      if (!FM.toggleMarkerAtPlayhead) throw new Error('no route left to ADD a benchmark — the feature is gone, not just the long-press');
+      FM.toggleMarkerAtPlayhead();
+      if (!(P.markers || []).length) throw new Error('the remaining add route did not add a benchmark');
+    } finally {
+      P.markers = m0;
+      if (FM.contextMenu) FM.contextMenu.hide();
+      FM.timeline.rebuild(); await sleep(80);
+    }
+  });
+
 })();
