@@ -9626,7 +9626,15 @@ wait for them to report back."*
          couple of pixels and is exactly the sort of thing that gets nudged the wrong way by eye.
       Goes with **354**, which is the same control.
 
-- [ ] **357 — A layer cannot be dragged onto the add-layer row.** (18 Aug.) His words, verbatim: *"Also
+- [x] **357 — A layer cannot be dragged onto the add-layer row.** ✅ **v10.05 — and the entry's guess was right.**
+      The reorder mapped `.track-row` only, and the add row is deliberately not one. But it OCCUPIES a
+      row's worth of the stack, and drop positions are resolved from evenly-spaced slots — so its 42px
+      pushed **every layer below it out of step by a whole slot**: nothing opened a gap where it sits,
+      a drop on it did nothing, and a drop below it landed a row off.
+      It is a static slot in the model now, with no id; landing on it resolves to the next real row below
+      (the same boundary its position already means). It glides with its neighbours, and the drop's
+      cleanup was widened to clear it too — otherwise this fix would have stranded it mid-drag forever.
+      Measured at 380px: it shifts on **4 of 4** drag steps where it shifted on 0, and nothing is left behind. (18 Aug.) His words, verbatim: *"Also
       currently you can't drag a layer on top of the add layer, it's like they don't think it's there or
       something"*.
       Reading it: dragging a layer to reorder it will not drop it at the add row's position — the

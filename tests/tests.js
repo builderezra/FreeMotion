@@ -470,6 +470,70 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: the add row is a real slot in a reorder drag, not a hole in the stack', { item: 'reorder-addrow' }, async function () {
+    /* Queue 357. His words: "currently you can't drag a layer on top of the add layer, it's like they
+       don't think it's there or something."
+       He described the model exactly. The reorder mapped `.track-row` only, and the add row is
+       deliberately not one — no layer, no index. But it OCCUPIES a row's worth of the stack, and every
+       drop position is resolved from `listTop + j * slotH`, i.e. from evenly-spaced rows. So its 42px
+       pushed every layer beneath it out of step with the model by a whole slot, and nothing opened a gap
+       where it sits: dropping there did nothing, and dropping below it landed one row off. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), addAt0 = FM.addAt;
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.addAt = 2;                                   // park the add row in the MIDDLE of the stack
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(120);
+        const rows = [].slice.call(document.querySelectorAll('.track-row'));
+        const addRow = document.querySelector('.tl-addrow');
+        if (rows.length !== 4 || !addRow) throw new Error('needed 4 layer rows and the add row, found ' + rows.length + '/' + !!addRow);
+        const grip = rows[rows.length - 1].querySelector('.row-drag');
+        if (!grip) throw new Error('no .row-drag handle on the bottom row');
+
+        /* THE EVENTS GO TO THE HANDLE. It takes pointer capture, so a real browser retargets the moves
+           to it — but a synthetic dispatch on `window` never reaches a listener bound to the handle, and
+           the first version of this probe did exactly that and reported every row motionless, which
+           looks identical to the bug. */
+        const gr = grip.getBoundingClientRect();
+        const x = gr.left + gr.width / 2, y0 = gr.top + gr.height / 2;
+        const ev = (type, cy) => grip.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 11, isPrimary: true, pointerType: 'touch',
+          clientX: x, clientY: cy, buttons: type === 'pointerup' ? 0 : 1 }));
+        const ty = (el) => { const m = /translateY\((-?[\d.]+)px\)/.exec((el && el.style.transform) || ''); return m ? parseFloat(m[1]) : 0; };
+
+        ev('pointerdown', y0);
+        let addMoved = 0, anyRowMoved = 0;
+        for (let k = 1; k <= 4; k++) {
+          ev('pointermove', y0 - k * 42);
+          if (Math.abs(ty(addRow)) > 0.5) addMoved++;
+          if (rows.some(r => Math.abs(ty(r)) > 0.5)) anyRowMoved++;
+        }
+        ev('pointerup', y0 - 4 * 42);
+        await sleep(400);
+
+        // Control: if nothing moved at all the drag never armed, and "the add row did not move" would be
+        // true for a reason that has nothing to do with the bug.
+        if (!anyRowMoved) throw new Error('no layer row moved during the drag either — the gesture never armed, so this test proves nothing');
+        if (!addMoved) throw new Error('the add row never moved while the rows around it parted — it is not a slot in the reorder model, so a drop on it does nothing and a drop below it lands a row off');
+        // …and it must not be left behind. It carries row-part and an inline transform now, so a cleanup
+        // that only queried .track-row would strand it there for the rest of the session.
+        if (addRow.style.transform || addRow.classList.contains('row-part')) {
+          throw new Error('the add row kept its drag transform/class after the drop (' + addRow.style.transform + ' / ' + addRow.className + ')');
+        }
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0; FM.addAt = addAt0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('timeline: the add row fills exactly one layer slot, and the big one has no outline', { item: 'addrow-geometry' }, async function () {
     /* Queue 356. His words: "when the add button is big and there's nothing on the project get rid of
        the lines around it, then also when it's small make sure it's centred on its layer a bit better,

@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#357 — dragging a layer past the add row</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #357. His words: "currently you can't drag a layer on top of the add layer, it's like they don't
+   think it's there or something." The reorder model mapped .track-row only, so the add row's 42px sat
+   in the stack unseen: nothing opened a gap where it is, and every row below it was out of step with
+   the model by a slot. This drags the bottom layer up past the add row one row-height at a time and
+   prints where the drop would land at each step. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.timeline || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0;
+        for (var i = 0; i < 4; i++) {
+          var Lr = FM.makeLayer('shape', { name:'L'+i, shape:'rect', x:540, y:960, shapeW:300, shapeH:300, fill:'#3a7bd5' });
+          Lr.start = 0; Lr.duration = 3; FM.scene.layers.push(Lr);
+        }
+        FM.addAt = 2;                       // park the add row in the MIDDLE of the stack
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        try {
+          var rows = [].slice.call(d.querySelectorAll('.track-row'));
+          var addRow = d.querySelector('.tl-addrow');
+          say('NOTE: pointer events go to the HANDLE — it takes pointer capture, and a synthetic dispatch on window never reaches it.');
+          say('rows=' + rows.length + '  addRow present=' + !!addRow);
+          say('stack order (top→bottom): ' + [].slice.call(d.querySelectorAll('.track-row, .tl-addrow'))
+              .map(function (r) { return r.classList.contains('tl-addrow') ? '[ADD]' : (r.querySelector('.track-head') ? FM.scene.layers[+r.querySelector('.track-head').dataset.idx].name : '?'); }).join(' → '));
+          var last = rows[rows.length - 1];
+          var grip = last.querySelector('.row-drag');
+          if (!grip) { say('no .row-drag grip on the bottom row'); window.__done = true; return; }
+          var gr = grip.getBoundingClientRect();
+          var x = gr.left + gr.width/2, y0 = gr.top + gr.height/2;
+          function ev(type, cy, tgt) { (tgt||grip).dispatchEvent(new w.PointerEvent(type, { bubbles:true, cancelable:true, pointerId:11, isPrimary:true, pointerType:'touch', clientX:x, clientY:cy, buttons: type==='pointerup'?0:1 })); }
+          function ty(el){ var t = el && el.style.transform; if(!t) return 0; var m = t.match(/translateY\((-?[\d.]+)px\)/); return m ? +(+m[1]).toFixed(1) : 0; }
+          ev('pointerdown', y0);
+          say('');
+          say('   dragged up   add-row shift   track-row shifts');
+          var slot = 42, addMoved = 0;
+          for (var k = 1; k <= 4; k++) {
+            ev('pointermove', y0 - k*slot);
+            var a = ty(addRow); if (Math.abs(a) > 0.5) addMoved++;
+            var shifts = [].slice.call(d.querySelectorAll('.track-row')).map(ty).join(',');
+            say('   ' + String(k*slot).padStart(4) + 'px      ' + String(a).padStart(7) + '        ' + shifts);
+          }
+          say('');
+          say('the add row moved on ' + addMoved + ' of 4 steps  (0 = the drag cannot see it — his report)');
+          ev('pointerup', y0 - 4*slot);
+          setTimeout(function () {
+            say('');
+            say('final order: ' + FM.scene.layers.map(function(l){return l.name;}).join(' → '));
+            var stray = [].slice.call(d.querySelectorAll('.tl-addrow')).filter(function(r){ return r.style.transform || r.classList.contains('row-part'); });
+            say('add row left with a stranded transform/class: ' + stray.length);
+            window.__done = true;
+          }, 500);
+        } catch (e) { say('drive threw ' + e.message); window.__done = true; }
+      }, 1000);
+    })();
+  });
+})();
+</script></body></html>

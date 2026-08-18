@@ -1033,20 +1033,33 @@ window.FM = window.FM || {};
       let statics = [], dragged = [], slotH = 43, blockH = 43, listTop = 0, grabOffset = 0, lastGap = -1;
       function acquire() {
         const sc = timelineEl.scrollTop;
-        const all = [].slice.call(tracksEl.querySelectorAll('.track-row')).map(r => {
-          const hd = r.querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
-          return { id: L ? L.id : null, el: r, top: r.getBoundingClientRect().top + sc };
+        /* THE ADD ROW IS A SLOT TOO (queue 357). Ezra: "currently you can't drag a layer on top of the
+           add layer, it's like they don't think it's there or something."
+           He is describing the model exactly. This mapped `.track-row` only, and the add row is
+           deliberately not one — it has no layer and no index. But it OCCUPIES a row's worth of the
+           stack, and every position below is resolved from `listTop + j * slotH`, i.e. from an
+           assumption that the rows are evenly spaced. So the add row's 42px shifted every layer beneath
+           it out of step with the model by a whole slot, and nothing opened a gap where it sits — a drop
+           there did nothing and a drop below it landed one row off.
+           It joins the list as a static with no id. It can never be dragged (it is not a layer, so it is
+           never in groupSet) and it is never a drop TARGET in its own right — `beforeId` below resolves
+           it to whatever real row follows it, which is the same boundary its own position means. */
+        const all = [].slice.call(tracksEl.querySelectorAll('.track-row, .tl-addrow')).map(r => {
+          const isAdd = r.classList.contains('tl-addrow');
+          const hd = isAdd ? null : r.querySelector('.track-head');
+          const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
+          return { id: (!isAdd && L) ? L.id : null, isAdd: isAdd, el: r, top: r.getBoundingClientRect().top + sc };
         });
         if (!all.length) { statics = []; dragged = []; return; }
         slotH = all.length > 1 ? (all[1].top - all[0].top) : (all[0].el.getBoundingClientRect().height + 1);
         listTop = all[0].top;
-        statics = all.filter(r => !groupSet[r.id]);
-        dragged = all.filter(r => groupSet[r.id]);
+        statics = all.filter(r => r.isAdd || !groupSet[r.id]);
+        dragged = all.filter(r => !r.isAdd && groupSet[r.id]);
         blockH = Math.max(1, dragged.length) * slotH;
         const prim = dragged.find(d => d.id === layer.id) || dragged[0];
         grabOffset = prim ? (startY + startScroll) - prim.top : 0;   // where in the primary row the finger grabbed
         dragged.forEach(d => d.el.classList.add('row-dragging'));
-        statics.forEach(s => s.el.classList.add('row-part'));        // transitioned: rows glide apart/together
+        statics.forEach(s => s.el.classList.add('row-part'));        // transitioned: rows glide apart/together (the add row included — see acquire)
       }
       function layout() {   // position the block under the finger, open the gap, resolve the drop target
         if (!dragged.length || !dragged[0].el.isConnected) { acquire(); if (!dragged.length) return; }   // mid-drag rebuild → re-grab fresh rows
@@ -1069,7 +1082,11 @@ window.FM = window.FM || {};
           const idx = FM.scene.layers.findIndex(l => l.id === statics[statics.length - 1].id);
           for (let i2 = idx + 1; i2 < FM.scene.layers.length; i2++) { if (!groupSet[FM.scene.layers[i2].id]) { bottomBefore = FM.scene.layers[i2].id; break; } }
         }
-        dropBeforeId = statics[g] ? statics[g].id : bottomBefore;
+        /* Land ON the add row and you mean the boundary it marks, which is the next real row below it —
+           the same answer dropping on that row gives, so the two agree instead of competing. */
+        let tgt = g;
+        while (statics[tgt] && statics[tgt].isAdd) tgt++;
+        dropBeforeId = statics[tgt] ? statics[tgt].id : bottomBefore;
         if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
@@ -1112,7 +1129,10 @@ window.FM = window.FM || {};
       const cleanup = () => {
         reorderActive = false;
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
-        [].slice.call(tracksEl.querySelectorAll('.track-row')).forEach(r => { r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = ''; });
+        // `.tl-addrow` too — it is a slot in the model now (queue 357), so it also carries row-part and
+        // an inline transform, and clearing only the track rows would strand the add row where the drag
+        // left it for the rest of the session.
+        [].slice.call(tracksEl.querySelectorAll('.track-row, .tl-addrow')).forEach(r => { r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = ''; });
         if (rebuildPending) FM.timeline.rebuild();   // flush anything deferred while we held the DOM
       };
       const up = () => {
