@@ -6811,7 +6811,7 @@ better still, keep working inside the turn rather than parking work for a later 
       should show the template's hero image — still open).
 
 
-- [ ] **344 — The "Custom elements" card's ring should be multi-coloured like its own icon.** (17 Aug,
+- [x] **344 — The "Custom elements" card's ring should be multi-coloured like its own icon.** ✅ **v9.93.** (17 Aug,
       screenshot of the Add sheet's Elements tab.) His words, verbatim: *"Also just for the ring around
       custom elements make it have multiple colours like the logo itself but keep the background the
       same just the ring around it"*.
@@ -7238,7 +7238,7 @@ better still, keep working inside the turn rather than parking work for a later 
       I should quietly optimise away. Say which and it is quick.
 
 
-- [ ] **345 — The anchor point should be placeable ANYWHERE, not just inside the layer.** (17 Aug.)
+- [x] **345 — The anchor point should be placeable ANYWHERE, not just inside the layer.** ✅ **v9.93.** (17 Aug.)
       His words, verbatim: *"The anchor currently has a limit on where you can place it but you should
       be able to put it anywhere"*.
       **Found the limit already:** the Anchor X and Anchor Y boxes are built with `min: 0, max: 100`
@@ -7253,7 +7253,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Sensible range once unclamped: something like -200% to 300% rather than literally unbounded, so
       the scrub still has usable resolution — worth confirming with him if the number matters.
 
-- [ ] **346 — Get rid of two more explanation blocks in Move & Transform.** (17 Aug, screenshot.) His
+- [x] **346 — Get rid of two more explanation blocks in Move & Transform.** ✅ **v9.93.** (17 Aug, screenshot.) His
       words, verbatim: *"Get rid of these two explanations"*.
       The two in his shot, both in the Move & Transform card below the pad:
       1. [ ] *"Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move
@@ -7277,6 +7277,17 @@ better still, keep working inside the turn rather than parking work for a later 
       under your finger keeps sliding, which reads as "the control is still responding" when it is not.
       The gesture already knows: `gest.apply()` returns false exactly when a hard limit refused the
       movement (that is what v9.24 added). So the fix is to advance `offset` only when it returns true.
+      🚨 **THE DIAGNOSIS ABOVE IS WRONG, found 18 Aug while trying to act on it — corrected here so the
+      next attempt does not start from it.** `mtScrub` is the CROP scrubber. The X Skew / Y Skew sliders in
+      his screenshot are built by `tickStrip` (`js/inspector.js:645`), a different control that renders
+      `.fx-scrub` rather than `.mt-scrub` — and `tickStrip` ALREADY clamps: it pins `cur` to `o.min/o.max`
+      before painting and returns false at a wall. So the recorded one-line fix does not touch the control
+      he photographed, and this entry stays OPEN.
+      `mtScrub`'s unconditional `offset += dx` was real and has been fixed anyway (v9.93) — it is the same
+      defect in the crop scrubber — but that is not what he reported.
+      **What the next attempt should do:** reproduce on a SKEW slider specifically, at its 80° limit, and
+      find what moves when `cur` is already pinned. Suspects: `attachGlide`'s momentum continuing after
+      `applyDx` returns false, or a second element under the finger. Do not re-derive from `mtScrub`.
       **CHECKED WHETHER I CAUSED IT — I did not.** `offset += dx; paint();` was unconditional before
       v9.24 as well (verified against the commit before it), so this is long-standing rather than new
       damage. v9.24 is only why it is now cleanly visible: the value pins properly, so the strip running

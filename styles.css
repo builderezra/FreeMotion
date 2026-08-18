@@ -1023,6 +1023,27 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   border-color: rgba(var(--am-tint, 41, 217, 187), .26);
 }
 .addmenu-card:hover { background: rgba(var(--am-tint, 41, 217, 187), .20); border-color: rgba(var(--am-tint, 41, 217, 187), .5); }
+/* CUSTOM ELEMENTS GETS ITS ICON'S FOUR COLOURS IN ITS RING (queue 344). Ezra: *"Also just for the ring
+   around custom elements make it have multiple colours like the logo itself but keep the background the
+   same just the ring around it"*.
+   Same masked-::before ring as the layer-category cards in queue 339, deliberately — that entry asked for
+   both to be done together precisely so the technique is not built twice and drift into two different
+   looks. The four stops are the icon's own gradient ends (blue, orange, green, purple), lifted rather
+   than matched by eye, for the same reason as 339: a hand-picked approximation is what goes stale when
+   the icon is retouched. Background untouched, which was his only other instruction. */
+.addmenu-card--multi { position: relative; border-color: transparent; }
+.addmenu-card--multi::before {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(115deg, #4F9BFF, #FF8A3D, #49C97E, #C86BFF, #4F9BFF);
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: .8; animation: cat-shine 11s linear infinite;
+}
+.addmenu-card--multi:hover { border-color: transparent; }
+.addmenu-card--multi:hover::before { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .addmenu-card--multi::before { animation: none; } }
 /* A media tile paints the user's own frame edge to edge; a colour wash over a photograph is noise. */
 .addmenu-card.addmenu-media { background: var(--panel-2); }
 

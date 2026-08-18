@@ -28672,4 +28672,37 @@
     }
   });
 
+  /* Queue 345 — *"The anchor currently has a limit on where you can place it but you should be able to
+   * put it anywhere"*. The clamp was 0-100% of the layer's own box, in the two inspector controls.
+   * ⚠️ WHAT THIS COVERS, HONESTLY: it renders a layer pivoting about an anchor well outside its own box
+   * and asserts the ink moves. That proves the compositor honours it end to end — but the compositor
+   * NEVER clamped, so this test passes with the fix reverted. It is a guard against a future regression
+   * in the renderer, not proof of the change that shipped. Two attempts at driving the real Anchor
+   * controls failed on their own selectors, and a test that cannot find its subject reports the subject
+   * as broken; that is worse than an honest gap. The UI clamp is unguarded and is written down as such. */
+  test('a layer pivots about an anchor outside its own box (queue 345)', { item: 'anchor-outside' }, function () {
+    var P = { width: 160, height: 120, fps: 30, duration: 2 };
+    var mk = function (ax) {
+      var L = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 80, y: 60, shapeW: 30, shapeH: 20, fill: '#fff' });
+      L.start = 0; L.duration = 2;
+      L.transform.anchorX = ax;
+      L.transform.rotation = 40;   // rotation is what MAKES an anchor visible; at 0 every anchor looks alike
+      return { project: P, layers: [L] };
+    };
+    var ink = function (sc) {
+      var c = offscreen(P.width, P.height), g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, P.width, P.height);
+      FM.renderScene(g, sc, 0.5);
+      var d = g.getImageData(0, 0, P.width, P.height).data, n = 0, sx = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] > 24) { n++; sx += (i / 4) % P.width; }
+      return n ? (sx / n) : -1;
+    };
+    var inside = ink(mk(0.5)), outside = ink(mk(2.5));
+    if (inside < 0 || outside < 0) throw new Error('the fixture rendered nothing to measure');
+    if (Math.abs(outside - inside) < 4) {
+      throw new Error('pivoting about an anchor well outside the layer put the ink in the same place (' +
+                      inside.toFixed(1) + ' vs ' + outside.toFixed(1) + ') — the renderer is clamping it');
+    }
+  });
+
 })();

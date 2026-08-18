@@ -2968,7 +2968,13 @@ window.FM = window.FM || {};
     const gest = scrubGesture(getVal, setVal, lim ? mkClamp(lim.min, lim.max) : null);
     const applyDx = (dx) => {
       const alive = gest.apply(dx * scrub);
-      offset += dx; paint();
+      /* THE STRIP STOPS WHEN THE VALUE DOES (queue 347). Ezra: *"Make it so the sliders here and
+         everywhere actually stop when you reach the limit, currently it keeps letting you swipe"*.
+         `offset` advanced unconditionally, so at a hard limit the value pinned correctly and the ticks
+         under your finger kept sliding — which reads as "still responding" while nothing changes.
+         `gest.apply` already returns false for exactly this case; nothing was listening. One line, and
+         it fixes every scrubber at once because they all share this one. */
+      if (alive) { offset += dx; paint(); }
       if (onChange) onChange();
       return alive;
     };
@@ -3359,7 +3365,6 @@ window.FM = window.FM || {};
         zpad.addEventListener('pointerup', zEnd);
         zpad.addEventListener('pointercancel', zEnd);
         control.appendChild(zpad);
-        if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
       } else {
 
       // 2D trackpad
@@ -3433,7 +3438,6 @@ window.FM = window.FM || {};
       control.appendChild(pad);
       // The parallax payoff is otherwise undiscoverable — Z, the Camera object and "pans give depth"
       // live in three unconnected places. One line here connects them at the moment Z is in hand.
-      if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
       }
     } else if (mode === 'rotate') {
       const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5, kfKey: 'rotation', layer: layer });
@@ -3555,8 +3559,15 @@ window.FM = window.FM || {};
         FM.shiftTransform(layer, 'y', Math.round(mtEval(layer, 'y') + dy), FM.time);
         FM.requestRender();
       };
-      const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
-      const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      /* THE ANCHOR IS NOT TRAPPED IN THE LAYER (queue 345). Ezra: *"The anchor currently has a limit on
+         where you can place it but you should be able to put it anywhere"*. It was clamped to 0-100% of
+         the layer's own box, so you could never put a pivot OUTSIDE the thing being pivoted — which is
+         the case people actually reach for (a door hinging off its frame, an arm swinging from a
+         shoulder). Checked before widening, per the entry's own warning: the compositor never clamped
+         it — `anchorX(tr)` only defaults a missing value and passes anything finite through — so this
+         was purely these two boxes. */
+      const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       refreshables.push(bax, bay); values.append(bax, bay);
       const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to centre, edges and corners'));
       // 260px of swipe crosses the layer, and it snaps to the nine points you actually want
@@ -3750,10 +3761,7 @@ window.FM = window.FM || {};
     const list = el('div', 'fx-list be-list');
     (layer.behaviors || []).forEach((beh, idx) => { if (beh && beh.type) list.appendChild(behaviorRow(layer, beh, idx)); });
     s.appendChild(list);
-    if (!(layer.behaviors && layer.behaviors.length)) s.appendChild(el('div', 'insp-hint', 'Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from audio.'));
-    // Behavior params are deliberately NOT keyframable — say so, or the missing ◆ (used everywhere
-    // else) reads as a broken control to an AM power user.
-    else s.appendChild(el('div', 'insp-hint', 'Behaviors run live on top of keyframes — their settings hold steady rather than keyframing.'));
+    // (the two explanation lines that were here are gone — queue 346/378)
 
     const add = el('button', 'fx-add-btn', '+ Add behavior');
     const picker = el('div', 'be-picker'); picker.style.display = 'none';
