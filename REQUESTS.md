@@ -9760,3 +9760,23 @@ wait for them to report back."*
       v7.79 lesson and the #241 lesson, both of which shipped half-right because they were checked in the
       layout that happened to be open.
       ⚠️ The switch must be DRAWN, not a font glyph (queue 209 / 296 / 331 clause 3).
+
+- [ ] **374 — There is no way to duplicate a template or an element.** (18 Aug.) His words, verbatim:
+      *"There's no way to duplicate templates or elements"*.
+      **Confirmed against the code before logging:** PROJECTS have had Duplicate for a long time — it is
+      in the home card's ⋯ menu (`js/home.js:1039`, `FM.projects.duplicate(p.id)`) and in the
+      multi-select bar (`js/home.js:1244`). Templates and elements have **remove** (e.g.
+      `FM.elements.remove(e.id)`, `js/elements-browser.js:55`) and no duplicate anywhere. So this is a
+      gap in one of three sibling libraries, not a missing feature nobody thought about — which is
+      probably why it reads as an oversight.
+      **Clauses:**
+      1. [ ] Duplicate an **element**.
+      2. [ ] Duplicate a **template**.
+      **Worth reusing rather than reinventing:** `FM.projects.duplicate` already solves the hard half —
+      copying the media blobs in IndexedDB under fresh ids so the copy is independent of the original
+      rather than sharing records with it. Templates and elements are stored as packs (`tpl:<id>` in
+      IDB, `js/storage.js:~1255`) that carry `pack.media`, so a duplicate MUST re-key those too or the
+      copy and the original will share media and deleting one will gut the other. That is the trap here
+      and it is the kind that only shows up later, on the second thing you delete.
+      Also decide the name: projects duplicate as "X copy" or similar — match whatever that does rather
+      than inventing a second convention.
