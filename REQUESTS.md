@@ -7161,7 +7161,33 @@ better still, keep working inside the turn rather than parking work for a later 
       **So when it happens to you again, read the toast and the console line and send me those** — that
       is the whole answer, and it takes one screenshot.
 
-- [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
+- [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
+
+      **★ HIS SECOND REAL MEASUREMENT, 19 Aug (v10.02) — and it moves this entry on.** Verbatim:
+      ```
+      FRAMES   53.6 fps average
+               median gap 17.0ms · p95 26.0ms · worst 252.0ms
+               8 of 536 frames were late (over 42ms)
+      QUALITY  tier 0 (6 available) · mode smooth
+               app-measured render 0.02ms · app-measured gap 17.13ms
+      CANVAS   561k pixels
+      PROJECT  1080x1350 @60fps · 3 layers (1 video, 2 shape) · 0 effects
+      DEVICE   screen 440x956 @dpr3 · 4 cores · Safari · iOS
+      ```
+      **What this rules OUT, which is most of the entry's history:**
+      · **The 12.2-megapixel project is gone.** 1080x1350 is a sane comp — v9.27's import cap worked, and
+        finding 1 of his first report is closed by measurement rather than by argument.
+      · **The blind quality ladder is fixed.** His first report showed `app-measured gap 0ms` while the
+        real gaps were huge; it reads **17.13ms** now, so v8.27's fix is live on his device.
+      · **Our own drawing is not the cost.** `render 0.02ms` against a 16.7ms budget. Nothing in
+        `renderScene` is what he is feeling.
+      **What is LEFT, and it is specific:** the average is healthy (53.6fps, median 17ms) and it still
+      STUTTERS — **8 of 536 frames late, worst 252ms**. A median cannot see a freeze, and a freeze is what
+      "laggy" feels like. With render at 0.02ms the candidates are **GPU compositing, video decode, or
+      garbage collection** — and one video layer is present, which points at decode first.
+      **So the next measurement is a frame-time TRACE around the late frames, not another average** —
+      what ran in the 252ms, and whether the late frames cluster on video seeks/keyframes. Averages have
+      now been measured four times and have never found this. His words:
       *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
       lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading
       properly."*
@@ -9579,8 +9605,16 @@ wait for them to report back."*
       editor is still mounted underneath, and anything that resizes the stage while home is sliding
       would shove it around. Measure a real open→close cycle before touching the animation.
 
-- [ ] **356 — Get rid of the lines around the big add button, and centre the small one properly on its
-      layer.** (18 Aug, two phone screenshots at v9.74: the empty project with the big + inside a dashed
+- [x] **356 — Get rid of the lines around the big add button, and centre the small one properly on its
+      layer.** ✅ **v10.04, both clauses.**
+      **The measurement moved the second diagnosis.** "Slightly lower than high" reads as a centring
+      problem, and the row's CONTENTS were already exact — the + and the label each 8.5px from the top of
+      their box and 8.5px from the bottom, off by **0.00**. It was the BOX: a layer row is 42px with no
+      margin, and the add row was **38px with 4px of margin at each end**, so it took 46px of the stack
+      while calling itself a layer — 4px shorter than its neighbours and floating 4px clear at each end,
+      which is exactly why its outline could not line up with the rows above and below.
+      40 + 1 + 1 = 42 now, one layer slot to the pixel. The dashed outline is transparent in the big
+      state (kept at 1px so nothing inside shifts). (18 Aug, two phone screenshots at v9.74: the empty project with the big + inside a dashed
       box, and a 2-layer project with the slim "Tap to add a layer" row between them.) His words,
       verbatim: *"Also when the add button is big and there's nothing on the project get rid of the
       lines around it, then also when it's small make sure it's centred on its layer a bit better, if
@@ -10364,3 +10398,40 @@ wait for them to report back."*
          which would corrupt every later layout pass.
       ⚠️ Measure it: drag a layer far right in a real browser at 380px and read the scroll extent, the
       project duration and the clip's `start`/`duration` after the drop — do not guess from the symptom.
+
+- [ ] **395 — More export formats, MP3 among them.** (19 Aug, via the phone inbox.)
+      His words, verbatim: *"I want more export options like mp3 or whatever"*
+      **Clauses:**
+      1. Audio-only export — MP3 or whatever the browser can actually encode without a library.
+      2. "or whatever" is an invitation, not a spec: work out what the export dialog can honestly offer
+         given this is a local-only app with no backend. Worth checking what MediaRecorder and
+         WebCodecs support on iOS Safari specifically before promising a format.
+      ⚠️ Check what the exporter already does — GIF and video exist (js/gif-encode.js, js/exporter.js),
+      so this may be a third branch of an existing dialog rather than a new feature.
+
+- [ ] **396 — The UI sizes itself from the TIMELINE instead of from itself.** (19 Aug, via the phone inbox.)
+      His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
+      not itself"*
+      ⚠️ **This is almost certainly the defect already measured on 18 Aug and left un-filed:**
+      `js/timeline.js` sizes `#tl-inner` as `window.innerWidth + content` rather than from the timeline's
+      own scrollport, and `laneViewW()` uses `timelineEl.clientWidth`. Measured at 1440: the timeline's
+      scroll range is **346px too long** — exactly the width the inspector column takes — so the
+      timeline believes it is as wide as the window. Two widths for one control, and the wrong one wins.
+      **Start there and confirm it against what he is seeing before changing it.**
+
+- [ ] **397 — On PC the effects browser should live in the inspector, not over the screen.** (19 Aug, via
+      the phone inbox.) His words, verbatim: *"Make the effects browser on pc only show in the inspector"*
+      **Clause:** at desktop widths the Add-Effect browser opens inside the inspector column rather than
+      as a full-screen overlay. The phone keeps its sheet (queue 277 built that deliberately and it is
+      his design).
+
+- [ ] **398 — The new big + should have MOVING colours.** (19 Aug, via the phone inbox, on v10.02.)
+      His words, verbatim: *"Make the colours in the new add button actually move in a subtle but
+      satisfying way"*
+      **Clause:** the conic sweep on `.tl-addrow--empty .tl-addrow-plus` animates — slowly, subtly.
+      ⚠️ A conic gradient's angle is not animatable in CSS without `@property`, which iOS Safari only
+      got recently. The cheap and safe version is to rotate the PAINT rather than the gradient: put the
+      sweep on a `::before` that fills the button and give that a slow `rotate` — the button is a circle,
+      so a rotating disc inside it is invisible except as the colours travelling. Check it does not cost
+      a repaint per frame on the empty-project screen, which is the one screen a beginner sits on.
+      Goes with **354**, same control, and it is his reply to what shipped there.

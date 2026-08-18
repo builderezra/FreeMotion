@@ -470,6 +470,67 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: the add row fills exactly one layer slot, and the big one has no outline', { item: 'addrow-geometry' }, async function () {
+    /* Queue 356. His words: "when the add button is big and there's nothing on the project get rid of
+       the lines around it, then also when it's small make sure it's centred on its layer a bit better,
+       if you look closely the lines and stuff are just off, going slightly lower than high."
+       MEASURED BEFORE CHANGING ANYTHING, because two pixels is exactly what gets nudged the wrong way by
+       eye — and the measurement moved the diagnosis. The row's CONTENTS were already perfect: the + and
+       the label each sat 8.5px from the top and 8.5px from the bottom of their own box, off by 0.00. It
+       was the BOX. A layer row is 42px with no margin; the add row was 38px with 4px of margin at each
+       end, so it took 46px of the stack while claiming to be a layer, and its dashed outline could not
+       line up with the rows around it.
+       So this asserts the OUTER slot, not the inner centring — the inner centring was never broken and
+       an assertion about it would have gone green on the bug. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        // --- big state: no outline
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const big = document.querySelector('.tl-addrow--empty');
+        if (!big) throw new Error('no big empty add row — this test is looking at the wrong screen');
+        const bc = getComputedStyle(big).borderTopColor || '';
+        const alpha = (bc.match(/rgba?\(([^)]+)\)/) || [null, ''])[1].split(',')[3];
+        if (!(alpha !== undefined && parseFloat(alpha) < 0.02)) {
+          throw new Error('the big add row still draws its outline (border-top-color ' + bc + ') — the dashed box says "this is a row among others" and there are no others');
+        }
+
+        // --- slim state: exactly one layer slot
+        for (let i = 0; i < 2; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(120);
+        const slim = document.querySelector('.tl-addrow');
+        const track = document.querySelector('.track-row');
+        if (!slim || !track) throw new Error('need both the slim add row and a real layer row to compare — found ' + (!!slim) + '/' + (!!track));
+        if (slim.classList.contains('tl-addrow--empty')) throw new Error('the add row is still in its big state with two layers on the timeline');
+        const outer = (el) => { const cs = getComputedStyle(el); return el.getBoundingClientRect().height + parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0); };
+        const a = outer(slim), b = outer(track);
+        // Control: a zero-height row would make the comparison meaningless.
+        if (b < 20) throw new Error('a layer row measured ' + b + 'px tall — nothing below can mean anything');
+        if (Math.abs(a - b) > 1.01) {
+          throw new Error('the add row takes ' + a.toFixed(1) + 'px of the stack against a layer row\u2019s ' + b.toFixed(1) +
+            'px — it cannot line up with the rows around it, which is what "the lines and stuff are just off" is');
+        }
+        // …and the contents are still centred inside it, so a fix that only stretched the box fails here.
+        const inner = slim.querySelector('.tl-addrow-plus') || slim.querySelector('.tl-addrow-inner');
+        if (inner) {
+          const rr = slim.getBoundingClientRect(), ir = inner.getBoundingClientRect();
+          const off = (ir.top - rr.top) - (rr.bottom - ir.bottom);
+          if (Math.abs(off) > 1.01) throw new Error('the + sits ' + off.toFixed(2) + 'px off centre inside the row');
+        }
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('home: leaving a project animates on a phone and swaps instantly on desktop, and strands nothing', { item: 'pop-gate' }, async function () {
     /* Queue 355. His words: "There's a glitch at the moment where when I exit out of a project the ui
        glitches and moves all over the place. Sometimes when entering a project as well. It just makes

@@ -6282,7 +6282,18 @@ body.fm-pushing #toast { z-index: 213; }
   /* Its own layout, not `.track-row`'s — see the note in timeline.js. The height is the phone row's
      42px-ish so it reads as a layer there; the PC variant overrides it to a line below. */
   display: flex; align-items: center; justify-content: space-between;
-  min-height: 38px; margin: 4px 0;
+  /* ONE ROW SLOT, EXACTLY (queue 356). Ezra: "when it's small make sure it's centred on its layer a
+     bit better, if you look closely the lines and stuff are just off, going slightly lower than high".
+     Measured before touching it, because two pixels is exactly what gets nudged the wrong way by eye:
+     the row's CONTENTS are already perfect — the + and the label each sit 8.5px from the top and 8.5px
+     from the bottom of their own box, off by 0.00. What was wrong is the box itself. A layer row is
+     42px with no margin; this was 38px with 4px of margin above and below, so it took 46px of the
+     stack while claiming to be a layer, and its dashed outline could not line up with the rows around
+     it — 4px shorter, floating 4px clear at each end. (The comment here even said "the phone row's
+     42px-ish", which it was not.)
+     40 + 1 + 1 = 42, so it now occupies a layer's slot to the pixel, and the 1px margins keep a
+     hairline between its dashed outline and its neighbours' edges instead of them touching. */
+  min-height: 40px; margin: 1px 0;
   cursor: pointer; position: relative;
   border-radius: 10px;
   border: 1px dashed rgba(120, 214, 240, .45);
@@ -6296,6 +6307,12 @@ body.fm-pushing #toast { z-index: 213; }
 /* EMPTY PROJECT (queue 326): the row becomes the whole timeline, with a big + in the MIDDLE, so the
    first thing a beginner sees is where to start. Reverts to the slim row the moment a clip exists. */
 .tl-addrow--empty {
+  /* NO OUTLINE IN THE BIG STATE (queue 356). Ezra: "when the add button is big and there's nothing on
+     the project get rid of the lines around it". The dashed border says "this is a row you can put
+     something next to", which is true of the slim row and meaningless when the row IS the whole
+     timeline — there is nothing for it to be a row among. Transparent rather than `border: none`, so
+     the box keeps its 1px and nothing inside it shifts by two pixels. */
+  border-color: transparent;
   min-height: min(52vh, 300px);
   justify-content: center;
   background:

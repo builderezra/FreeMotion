@@ -29,10 +29,53 @@
           var row = d.querySelector('.tl-addrow');
           var panel = d.getElementById('timeline-panel');
           var cl = d.getElementById('tl-centerline');
-          document.title = 'phone=' + (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()) +
-            ' row=' + (row ? row.className : 'NONE') +
-            ' panel=' + (panel ? panel.className : 'NONE') +
-            ' centerline display=' + (cl ? w.getComputedStyle(cl).display : 'NONE');
+          var out = [];
+          out.push('phone=' + (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()));
+          out.push('bigrow=' + (row ? row.className : 'NONE'));
+          out.push('bigborder=' + (row ? w.getComputedStyle(row).borderStyle + ' ' + w.getComputedStyle(row).borderTopWidth + ' ' + w.getComputedStyle(row).borderTopColor : '?'));
+          // …then the SLIM row, which is the other clause: add a layer and measure the contents
+          // against the row's own box. "slightly lower than high" is a couple of pixels.
+          if (q.get('keepempty')) { document.title = out.join(' | '); window.__done = true; return; }
+          for (var n = 0; n < 2; n++) {
+            var Lr = FM.makeLayer('shape', { name:'L'+n, shape:'rect', x:540, y:960, shapeW:300, shapeH:300, fill:'#3a7bd5' });
+            Lr.start = 0; Lr.duration = 3; FM.scene.layers.push(Lr);
+          }
+          FM.refreshAll(); FM.timeline.rebuild();
+          setTimeout(function () {
+            var slim = d.querySelector('.tl-addrow');
+            var inner = slim && slim.querySelector('.tl-addrow-inner');
+            var plus = slim && slim.querySelector('.tl-addrow-plus');
+            var lab = slim && slim.querySelector('.tl-addrow-label');
+            function box(e){ if(!e) return null; var r=e.getBoundingClientRect(); return {t:+r.top.toFixed(2), b:+r.bottom.toFixed(2), h:+r.height.toFixed(2)}; }
+            var rb = box(slim), ib = box(inner), pb = box(plus), lb = box(lab);
+            function gapReport(name, c) {
+              if (!c || !rb) return name + '=NONE';
+              var above = +(c.t - rb.t).toFixed(2), below = +(rb.b - c.b).toFixed(2);
+              return name + ' above=' + above + ' below=' + below + ' off=' + (+(above - below).toFixed(2));
+            }
+            out.push('slimrow h=' + (rb ? rb.h : '?'));
+            out.push(gapReport('inner', ib));
+            out.push(gapReport('plus ', pb));
+            out.push(gapReport('label', lb));
+            var cs = w.getComputedStyle(slim);
+            out.push('slim padding=' + cs.paddingTop + '/' + cs.paddingBottom + ' border=' + cs.borderTopWidth + '/' + cs.borderBottomWidth + ' align=' + cs.alignItems + ' margin=' + cs.marginTop + '/' + cs.marginBottom);
+            /* AND THE ROW AGAINST ITS NEIGHBOURS. "the lines and stuff are just off, going slightly
+               lower than high" may not be about the contents inside the row at all — measured above,
+               those are exact — but about where the row itself sits in the stack of layer rows. */
+            var kids = [].slice.call(slim.parentElement ? slim.parentElement.children : []);
+            var mine = kids.indexOf(slim);
+            var prev = kids[mine-1], next = kids[mine+1];
+            function cls(e){ return e ? (e.className || e.tagName) : 'none'; }
+            if (prev) { var pr = prev.getBoundingClientRect(); out.push('gapAbove=' + (+(rb.t - pr.bottom).toFixed(2)) + ' (from ' + cls(prev) + ')'); }
+            if (next) { var nx = next.getBoundingClientRect(); out.push('gapBelow=' + (+(nx.top - rb.b).toFixed(2)) + ' (to ' + cls(next) + ')'); }
+            var trs = [].slice.call(d.querySelectorAll('.track-row'));
+            out.push('trackrow h=' + (trs.length ? trs.map(function(e){ return e.getBoundingClientRect().height.toFixed(1); }).join(',') : 'none'));
+            var tcs = trs.length ? w.getComputedStyle(trs[0]) : null;
+            if (tcs) out.push('trackrow margin=' + tcs.marginTop + '/' + tcs.marginBottom + ' border=' + tcs.borderTopWidth + '/' + tcs.borderBottomWidth);
+            document.title = out.join(' | ');
+            window.__done = true;
+          }, 500);
+          return;
         } catch (e) { document.title = 'threw ' + e.message; }
         window.__done = true;
       }, 900);
