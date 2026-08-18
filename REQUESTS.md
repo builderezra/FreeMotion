@@ -9642,7 +9642,7 @@ wait for them to report back."*
       no layer, no index; see the note in js/timeline.js). So the marker is invisible to the drop
       resolver and there is no slot where it sits. That is the likely cause and it is checkable.
 
-- [ ] **358 — The two-row Media/Audio cap was implemented WRONG: he wants two rows locked with
+- [x] **358 — ✅ v10.06 — The two-row Media/Audio cap was implemented WRONG: he wants two rows locked with
       HORIZONTAL paging, not a two-row window you scroll down inside.** (18 Aug, phone screenshot at
       v9.74 showing the Media tab with a row cut off at the top and more below.) His words, verbatim:
       *"When I said I wanted the media and audio rows to be only two rows instead of three I didn't mean
@@ -9665,14 +9665,22 @@ wait for them to report back."*
       visible above the sheet while the Shape shot does not. So the ADD sheet changes height depending on
       which tab is selected, because each tab's content decides it.
       **Clauses:**
-      1. [ ] **Two rows, paged sideways** — the original clause above, still not done.
-      2. [ ] **Still three rows.** In his shot the Media tab reads as three stacked rows
+      1. [x] ✅ **v10.06** — **Two rows, paged sideways.** The limit is on the PAGE now, not on the body's
+             height, so the spill-over is one swipe sideways with page dots underneath. Measured at 380px:
+             Media 2 rows over 2 pages, Audio 2 rows.
+      2. [x] ✅ **v10.06** — **Still three rows.** Built as two rows of THUMBNAILS beneath the action
+             row, per the reading recorded below. ⚠️ If you were counting the Import / Sample clip / AI Scene
+             row as one of your two, say so and it is a one-line change.
+             *(original note)*  In his shot the Media tab reads as three stacked rows
              (Import / Sample clip / AI Scene, then two rows of thumbnails), which is what he is counting.
              Worth settling: does the **action row** (Import / Sample clip / AI Scene) count toward his
              "two rows", or is it two rows of THUMBNAILS beneath it? His shot suggests he is counting
              everything he sees. Building it as two thumbnail rows unless he says otherwise, since that
              is what "the media and audio rows" most naturally means.
-      3. [ ] **Every ADD tab opens at the SAME height** — Elements, Shape, Media, Audio, Template. This
+      3. [x] ✅ **v10.06** — **Every ADD tab opens at the SAME height** — measured spread **0px** across all
+             five. It was the same override causing it: Media and Audio were the only tabs replacing the
+             sheet's stated height, so removing it fixed this and clause 1 together.
+             *(original note)* **Every ADD tab opens at the SAME height** — Elements, Shape, Media, Audio, Template. This
              is the new one and it is the more annoying of the two in practice: the sheet jumping size as
              you move between tabs is exactly the "feels slow and buggy and not smooth" complaint from
              #355. Fix it by giving the sheet ONE height rather than by tuning each tab to match — a
@@ -10443,3 +10451,19 @@ wait for them to report back."*
       so a rotating disc inside it is invisible except as the colours travelling. Check it does not cost
       a repaint per frame on the empty-project screen, which is the one screen a beginner sits on.
       Goes with **354**, same control, and it is his reply to what shipped there.
+
+- [ ] **399 — A clip does not survive a reload: "your browser can't decode the image", then the video goes
+      blank.** (19 Aug, via the phone inbox.) His words, verbatim:
+      *"I keep getting an issue where I add a clip and make an edit but then load it again and it says my
+      browser can't decode the image then the video goes blank. Probably won't be an issue when we make
+      it an app so it's not a huge deal for web browser current testing version."*
+      ⚠️ **He is discounting this and I do not think he should.** "Add a clip, edit it, load it again,
+      the video is blank" is work being lost between sessions — the most serious class of bug this app
+      can have — and "it will be fine once it's an app" is an assumption, not a fact: the media path
+      (IndexedDB blob + a media record rehydrated on load) is the same code in a wrapper.
+      **Where to look, in order:** `js/storage.js` hydrate/`pruneOrphans` (a blob evicted or pruned while
+      still referenced), the `data:`-URL rejection path at storage.js:763 (which already logs "layer loads
+      media-less — relink via Replace media…"), and whether the decode error is the IMAGE poster or the
+      VIDEO itself, because the message says image and the symptom is video.
+      **Measure it before theorising:** add a clip, edit, reload, and read what the console says and what
+      `FM.media.get(id)` holds afterwards — the app already reports this case and the report is the lead.

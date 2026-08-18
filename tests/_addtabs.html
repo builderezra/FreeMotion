@@ -1,0 +1,83 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#358 — every Add tab at the same height, two rows paged</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #358, both faults in one measurement. His words: "I just meant two rows solid locked in then you
+   scroll left and right to go to the other rows where the spill over will be" and "they aren't even the
+   same height as the other menus, they need to always open at the same height".
+   So: open each tab of the Add sheet in turn and print the BODY's height, and for the two library tabs
+   the rows-per-page and the page count. `FM.mediaLib.list` is stubbed with a known number of imports —
+   the library is his own past files and the fixture must not depend on what happens to be there. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.addMenu || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        var N = +(q.get('n') || 11);
+        var fake = [];
+        for (var i = 0; i < N; i++) fake.push({ mid: 'm' + i, name: 'Clip ' + i, kind: i % 3 ? 'video' : 'image', dur: 3 });
+        for (var j = 0; j < 5; j++) fake.push({ mid: 'a' + j, name: 'Song ' + j, kind: 'audio', dur: 90 });
+        FM.mediaLib = FM.mediaLib || {};
+        FM.mediaLib.list = function () { return fake; };
+        FM.mediaLib.isAudio = function (m) { return m.kind === 'audio'; };
+        FM.mediaLib.use = function () {};
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        try {
+          var host = d.createElement('div');
+          host.style.cssText = 'position:fixed;left:0;bottom:0;width:100%;';
+          d.body.appendChild(host);
+          var tabs = (FM.addMenu._tabs ? FM.addMenu._tabs() : []).map(function (t2) { return t2.key; });
+          say('tabs: ' + tabs.join(', '));
+          say('');
+          say('  tab        body height   rows/page   pages   body classes');
+          var heights = [];
+          tabs.forEach(function (key) {
+            /* Render once, then CLICK the tab. The buttons carry `data-key`, not `data-tab` — the
+               first version of this probe filtered on the wrong attribute, never switched tab, and
+               reported five identical readings of whichever tab happened to be remembered. Which looks
+               exactly like "they all open at the same height", i.e. like a pass. */
+            FM.addMenu.render(host, { variant: 'sheet' });
+            var root = host.querySelector('.addmenu');
+            if (root) root.classList.add('addmenu--sheet');
+            var btn = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(function (b) { return b.dataset && b.dataset.key === key; })[0];
+            if (!btn) { say('  ' + key.padEnd(11) + 'NO TAB BUTTON (found: ' + [].slice.call(host.querySelectorAll('.addmenu-tab')).map(function(b){return b.dataset.key;}).join(',') + ')'); return; }
+            btn.click();
+            var body = host.querySelector('.addmenu-body');
+            if (!body) { say('  ' + key.padEnd(11) + 'NO BODY'); return; }
+            var hgt = Math.round(body.getBoundingClientRect().height);
+            heights.push({ key: key, h: hgt });
+            var pages = host.querySelectorAll('.addmenu-page');
+            var first = pages[0] && pages[0].querySelector('.addmenu-grid');
+            var cols = first ? getComputedStyle(first).gridTemplateColumns.trim().split(/\s+/).length : 0;
+            var n0 = first ? first.children.length : 0;
+            var rows = cols ? Math.ceil(n0 / cols) : 0;
+            say('  ' + key.padEnd(11) + String(hgt).padStart(6) + 'px' + String(rows).padStart(11) + String(pages.length).padStart(8) + '   ' + body.className);
+          });
+          say('');
+          var hs = heights.map(function (x) { return x.h; });
+          var min = Math.min.apply(null, hs), max = Math.max.apply(null, hs);
+          say('height spread across tabs: ' + (max - min) + 'px  (' + min + '–' + max + ')   0 = they all open the same');
+          if (q.get('keep')) {
+            // leave the sheet up on one tab so it can be photographed at 380px
+            var kb = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(function (b) { return b.dataset && b.dataset.key === q.get('keep'); })[0];
+            if (kb) kb.click();
+          } else host.remove();
+        } catch (e) { say('drive threw ' + e.message); }
+        window.__done = true;
+      }, 900);
+    })();
+  });
+})();
+</script></body></html>

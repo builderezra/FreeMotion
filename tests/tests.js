@@ -470,6 +470,72 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('add menu: every tab opens at the same height, and the library pages two rows at a time', { item: 'addtabs-height' }, function () {
+    /* Queue 358, correcting queue 299 / v9.47 — and both of his complaints in that entry are one fault.
+       "When I said I wanted the media and audio rows to be only two rows instead of three I didn't mean
+       two rows fitting on screen then you have to scroll down, I just meant two rows solid locked in
+       then you scroll left and right to go to the other rows where the spill over will be." And:
+       "they aren't even the same height as the other menus, they need to always open at the same height."
+       v9.47 gave the library body `height: auto` plus a two-row `max-height`, which is a vertical scroll
+       window (the shape he ruled out) AND the reason Media and Audio were the only two tabs overriding
+       the stated height. Removing the override fixes the second; moving the two-row limit onto the PAGE
+       fixes the first. */
+    const libWas = FM.mediaLib;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;bottom:0;width:380px;';
+    document.body.appendChild(host);
+    try {
+      // A known library — his own past imports are whatever they happen to be, and a fixture that
+      // depends on that measures a different thing every run.
+      const fake = [];
+      for (let i = 0; i < 11; i++) fake.push({ mid: 'm' + i, name: 'Clip ' + i, kind: i % 3 ? 'video' : 'image', dur: 3 });
+      for (let j = 0; j < 5; j++) fake.push({ mid: 'a' + j, name: 'Song ' + j, kind: 'audio', dur: 90 });
+      /* Spread the real library and override only the LIST. A hand-built stub omitted getThumb and the
+         card builder threw — the test then failed for its own reason, which is indistinguishable from a
+         real failure until you read the message. Keep everything, replace one thing. */
+      FM.mediaLib = Object.assign({}, libWas, { list: () => fake, isAudio: (m) => m.kind === 'audio', use: () => {} });
+
+      const keys = (FM.addMenu._tabs ? FM.addMenu._tabs() : []).map(t => t.key);
+      if (keys.length < 4) throw new Error('only ' + keys.length + ' add-menu tabs found — nothing below can mean anything');
+      const seen = [];
+      keys.forEach(key => {
+        FM.addMenu.render(host, { variant: 'sheet' });
+        /* The tab buttons carry `data-key`, not `data-tab`. The first version of this filtered on the
+           wrong attribute, never switched tab, and read the SAME tab five times — which reports a
+           spread of 0 and looks exactly like a pass. */
+        const btn = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(b => b.dataset && b.dataset.key === key)[0];
+        if (!btn) throw new Error('no tab button for "' + key + '" (found: ' + [].slice.call(host.querySelectorAll('.addmenu-tab')).map(b => b.dataset.key).join(',') + ')');
+        btn.click();
+        const body = host.querySelector('.addmenu-body');
+        if (!body) throw new Error('tab "' + key + '" rendered no body');
+        const pages = host.querySelectorAll('.addmenu-page');
+        const first = pages[0] && pages[0].querySelector('.addmenu-grid');
+        const cols = first ? getComputedStyle(first).gridTemplateColumns.trim().split(/\s+/).length : 0;
+        const rows = (first && cols) ? Math.ceil(first.children.length / cols) : 0;
+        seen.push({ key: key, h: Math.round(body.getBoundingClientRect().height), rows: rows, pages: pages.length, lib: body.classList.contains('addmenu-body--lib') });
+      });
+
+      // Control: the tabs must genuinely differ, or every reading below is of one tab five times.
+      if (!seen.some(x => x.lib) || !seen.some(x => !x.lib)) {
+        throw new Error('every tab reported the same kind of body (' + seen.map(x => x.key + ':' + x.lib).join(', ') + ') — the tab switch is not happening');
+      }
+      const hs = seen.map(x => x.h), lo = Math.min.apply(null, hs), hi = Math.max.apply(null, hs);
+      if (lo < 100) throw new Error('a tab body measured ' + lo + 'px — the sheet is not laid out, so nothing below can mean anything');
+      if (hi - lo > 1) {
+        throw new Error('the Add sheet changes height by ' + (hi - lo) + 'px between tabs (' + seen.map(x => x.key + ' ' + x.h).join(', ') + ') — it jumps under your thumb every time you change tab');
+      }
+      seen.filter(x => x.lib).forEach(x => {
+        if (x.rows > 2) throw new Error('the ' + x.key + ' library page holds ' + x.rows + ' rows — he asked for two, with the spill-over one swipe sideways');
+      });
+      // Control: two rows only means something if there was MORE than two rows' worth to place.
+      const media = seen.filter(x => x.key === 'media')[0];
+      if (!media || media.pages < 2) throw new Error('the media library fitted on one page (' + (media && media.pages) + ') — the fixture did not exercise the paging, so "two rows" was free');
+    } finally {
+      FM.mediaLib = libWas;
+      host.remove();
+    }
+  });
+
   test('timeline: the add row is a real slot in a reorder drag, not a hole in the stack', { item: 'reorder-addrow' }, async function () {
     /* Queue 357. His words: "currently you can't drag a layer on top of the add layer, it's like they
        don't think it's there or something."
@@ -13727,6 +13793,15 @@
     try {
       FM.addMenu.render(host, { variant: 'panel' });
       await sleep(80);
+      /* PIN THE TAB. This measured whichever tab happened to be REMEMBERED from the last render, and
+         that was luck: media and audio are library tabs, their cards are the user's own imports, and
+         those are explicitly exempt from the colour assertion below — so landing on one leaves almost
+         nothing to check. It went red the moment a library page held fewer cards (queue 358 pages them
+         two rows at a time). Elements is a fixed set of real item cards and is what this is about. */
+      const pin = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(b => b.dataset && b.dataset.key === 'object')[0];
+      if (!pin) throw new Error('no Elements tab in the add menu (keys: ' + [].slice.call(host.querySelectorAll('.addmenu-tab')).map(b => b.dataset.key).join(',') + ')');
+      pin.click();
+      await sleep(60);
       const tab = host.querySelector('.addmenu-tab:not(.active)');
       const cards = [].slice.call(host.querySelectorAll('.addmenu-card'));
       if (!tab) throw new Error('the add menu built no inactive tab to compare');
@@ -27260,8 +27335,21 @@
         tab('media'); await settle();
         var body = sheet().querySelector('.addmenu-body');
         if (!body.classList.contains('addmenu-body--lib')) throw new Error('the Media tab did not get the capped-library body, so its height is still unbounded');
-        var h = body.getBoundingClientRect().height;
-        if (h > 2 * 64 + 12) throw new Error('the recent-clips area is ' + Math.round(h) + 'px — taller than the two rows he asked for');
+        /* WHAT "TWO ROWS" MEANS CHANGED, and he is the one who changed it (queue 358, v10.06). This used
+           to assert the BODY was two rows TALL, which is what v9.47 built and what he then corrected:
+           "I didn't mean two rows fitting on screen then you have to scroll down, I just meant two rows
+           solid locked in then you scroll left and right to go to the other rows where the spill over
+           will be." A short body was also the reason Media and Audio opened at a different height from
+           every other tab — his second complaint in the same message.
+           So the two-row limit is asserted where it now lives: on the PAGE. The body keeps the sheet's
+           one stated height like every other tab, and the spill-over is one swipe sideways. */
+        var page1 = body.querySelector('.addmenu-page');
+        var grid1 = page1 && page1.querySelector('.addmenu-grid');
+        if (!grid1) throw new Error('the Media tab has no paged grid to measure');
+        var cols1 = getComputedStyle(grid1).gridTemplateColumns.trim().split(/\s+/).length;
+        var rows1 = Math.ceil(grid1.children.length / cols1);
+        if (rows1 > 2) throw new Error('a Media page holds ' + rows1 + ' rows — he asked for two, with the rest one swipe sideways');
+        if (body.querySelectorAll('.addmenu-page').length < 2) throw new Error('9 clips fitted on a single page — the fixture did not exercise the paging, so "two rows" was free');
 
         /* NOTHING IS LOST — asserted as REACHABILITY rather than against a particular element. The
            first version of this checked whether the BODY scrolled and failed against working code: the

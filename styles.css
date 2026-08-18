@@ -3359,17 +3359,19 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    height (the queue 208 fix for the dead band under the last row) and `min-height:100%` pins the page
    and grid to it. With those in force five rows simply squashed into the cap and nothing scrolled —
    the cap became a truncation by another route, which is the one outcome this must not be. */
-.addmenu--sheet .addmenu-body--lib {
-  height: auto;
-  max-height: calc(2 * clamp(50px, 8.5vh, 64px) + 10px);
-  overflow-y: auto;
-}
-.addmenu--sheet .addmenu-body--lib .addmenu-pager,
-.addmenu--sheet .addmenu-body--lib .addmenu-page,
-.addmenu--sheet .addmenu-body--lib .addmenu-grid {
-  min-height: 0;
-  height: auto;
-}
+/* THE HEIGHT OVERRIDE IS GONE (queue 358, correcting queue 299 / v9.47).
+   Ezra: "When I said I wanted the media and audio rows to be only two rows instead of three I didn't
+   mean two rows fitting on screen then you have to scroll down, I just meant two rows solid locked in
+   then you scroll left and right to go to the other rows where the spill over will be." — and, in the
+   same entry: "they aren't even the same height as the other menus, they need to always open at the
+   same height."
+   Those are one fault, not two. v9.47 gave this body `height: auto` plus a two-row `max-height`, which
+   (a) is a vertical scroll window, the shape he ruled out, and (b) is precisely WHY Media and Audio
+   were the two tabs that opened at a different height from every other one — they were the only bodies
+   overriding the stated height above.
+   Deleting the override does both: Media and Audio take the same `clamp(170px, 32vh, 260px)` as
+   Elements, Shape and Template, and the two-row limit moves to where it belongs — the PAGE, in
+   js/addmenu.js, which puts the spill-over one swipe sideways exactly as he described. */
 .addmenu--sheet .addmenu-body--lib .addmenu-grid { grid-auto-rows: clamp(50px, 8.5vh, 64px); }
 /* …EXCEPT the Elements tab, which is a searchable list rather than a sideways pager: your own
    elements are an open-ended pile, and a page you have to know to swipe to is the same as not

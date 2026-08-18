@@ -978,7 +978,8 @@ window.FM = window.FM || {};
            — gained a row of height per couple of imports while every other tab stayed put.
            Capped, never truncated: showing only the newest four would satisfy "two rows" and quietly
            make every older import unreachable, and one-tap re-adding is the whole point of the list. */
-        bodyEl.classList.toggle('addmenu-body--lib', splitTab && pinnedOpts.length > 0);
+        var isLib = !!(splitTab && pinnedOpts.length > 0);
+        bodyEl.classList.toggle('addmenu-body--lib', isLib);
         var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
            button keeps its colour when the pager moves and two pages never open with the same run of
@@ -1074,7 +1075,19 @@ window.FM = window.FM || {};
           }
         }
         applyPlan(plan, box);
-        var perPage = plan ? plan.perPage : (iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12));   // shapes 5\u00d73 / 6\u00d73; others 3\u00d73 / 4\u00d73
+        var COLS = iconOnly ? (variant === 'sheet' ? 5 : 6) : (variant === 'sheet' ? 3 : 4);
+        var perPage = plan ? plan.perPage : (iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12));   // shapes 5x3 / 6x3; others 3x3 / 4x3
+        /* TWO ROWS, PAGED SIDEWAYS — queue 358, correcting queue 299 / v9.47.
+           His words: "When I said I wanted the media and audio rows to be only two rows instead of three
+           I didn't mean two rows fitting on screen then you have to scroll down, I just meant two rows
+           solid locked in then you scroll left and right to go to the other rows where the spill over
+           will be."
+           v9.47 capped the body's HEIGHT and left it scrolling vertically, which is the thing he is
+           ruling out — and it also made Media and Audio the two tabs that opened at a different height
+           from every other one, which is his second complaint in the same entry. Both come out here.
+           The machinery was already right beside it: this pager is what the Shape tab uses. A library
+           tab simply gets a page that holds exactly two rows, and the spill-over is the next page. */
+        if (isLib) perPage = Math.max(1, 2 * COLS);
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';
@@ -1095,8 +1108,7 @@ window.FM = window.FM || {};
            * So one row keeps its natural size and the sheet simply has room to spare, which is honest.
            * Better a little empty space than a card stretched to four times its height pretending the
            * space is used. */
-          var cols = iconOnly ? (variant === 'sheet' ? 5 : 6) : (variant === 'sheet' ? 3 : 4);
-          if (Math.ceil(pageOpts.length / cols) >= 2) grid.classList.add('addmenu-grid--fill');
+          if (Math.ceil(pageOpts.length / COLS) >= 2) grid.classList.add('addmenu-grid--fill');
           page.appendChild(grid); pager.appendChild(page);
         }
         bodyEl.appendChild(pager);
