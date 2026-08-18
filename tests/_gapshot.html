@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#187 — paint the ground MAGENTA and look for it</title>
+<style>html,body{margin:0;background:#ff00ff}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* #187, the decisive shot. The box survey next door found no screen-sized element falling short of the
+   viewport, which rules out one shape of the theory and not the theory: #app is TRANSPARENT and only
+   its panels paint, so a seam between two panels shows the page behind them and no single box is short.
+   A seam like that is invisible to geometry and obvious to the eye — provided the ground is not also
+   black, which is exactly why every previous round mistook it for a painted band.
+   So: repaint the ground MAGENTA. Anything still magenta in the shot is a hole nothing covers, and its
+   edge and thickness are readable straight off the picture. Black in the shot is something painting
+   black, which is a different bug with a different fix. One screenshot separates the two.
+   ?at=home|editor picks the screen, ?wait= how long to settle. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app');
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { window.__done = true; return; }
+      if (!w.FM || !w.FM.home || !w.FM.renderScene) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        /* html wins the canvas background whenever it has one, so body must be cleared or it keeps
+           painting the theme colour over the marker and the shot proves nothing. */
+        d.documentElement.style.setProperty('background', '#ff00ff', 'important');
+        d.body.style.setProperty('background', 'transparent', 'important');
+        var at = q.get('at') || 'editor';
+        if (at === 'editor' && FM.home.isOpen()) FM.home.close();
+        if (at === 'home' && !FM.home.isOpen()) FM.home.open();
+        if (at === 'roundtrip') { FM.home.close(); setTimeout(function () { FM.home.open(); setTimeout(function () { FM.home.close(); }, 900); }, 900); }
+      } catch (e) {}
+      setTimeout(function () { window.__done = true; }, +q.get('wait') || 3000);
+    })();
+  });
+})();
+</script></body></html>

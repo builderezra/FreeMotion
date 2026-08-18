@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#187 — can a test see a pseudo-element's geometry?</title>
+<style>html,body{margin:0;background:#101820;color:#cfd6e4;font:11px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block;width:380px;height:820px}#out{padding:8px;white-space:pre;color:#8fa}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  function say(s) { L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait() {
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      try { var sp = d.getElementById('splash'); if (sp) sp.remove(); if (!w.FM.home.isOpen()) w.FM.home.open(); } catch (e) {}
+      setTimeout(function () {
+        var hs = d.getElementById('home-screen');
+        ['::before', '::after'].forEach(function (p) {
+          var cs = w.getComputedStyle(hs, p);
+          say(p + '  top=' + cs.top + ' right=' + cs.right + ' bottom=' + cs.bottom + ' left=' + cs.left);
+          say('        transform=' + cs.transform + '  animationName=' + cs.animationName);
+        });
+        var anims = hs.getAnimations({ subtree: true });
+        say('getAnimations(subtree) → ' + anims.length);
+        anims.forEach(function (a) {
+          say('   name=' + (a.animationName || '?') + '  pseudo=' + (a.effect && a.effect.pseudoElement) +
+              '  target=' + (a.effect && a.effect.target && (a.effect.target.id || a.effect.target.tagName)) +
+              '  dur=' + (a.effect && a.effect.getTiming().duration));
+        });
+        // and does stepping one of them change the computed transform on the pseudo?
+        var drift = anims.filter(function (a) { return a.animationName === 'hm-drift'; })[0];
+        if (drift) {
+          drift.pause();
+          [0, 0.5, 1].forEach(function (f) {
+            drift.currentTime = drift.effect.getTiming().duration * f;
+            say('   hm-drift @' + f + ' → ' + w.getComputedStyle(hs, '::after').transform);
+          });
+        } else say('   !! hm-drift not found among the pseudo animations');
+        say('hs rect: ' + JSON.stringify(hs.getBoundingClientRect()));
+        window.__done = true;
+      }, 1200);
+    })();
+  });
+})();
+</script></body></html>

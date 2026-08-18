@@ -4898,9 +4898,32 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    realign every ~7 minutes, so the light still keeps rearranging rather than repeating, even though
    each loop is shorter. */
 #home-screen::before { animation: hm-drift-a 17s ease-in-out infinite alternate; }
+/* THIS LAYER WAS THE BLACK BAR (#187), and it took six rounds to find because it has no box to
+   measure. It is a pseudo-element: `querySelectorAll` cannot return it and `getBoundingClientRect`
+   cannot be called on it, so every previous investigation — each of which walked the DOM comparing
+   rects against the viewport and correctly reported that nothing falls short — was structurally
+   incapable of seeing it.
+   It was `inset: 0` while carrying `hm-drift`, which translates it by up to 8% of its own box and
+   scales it 1 → 1.12. Work the arithmetic at the `to` frame: scale about the centre puts the edges at
+   .5 ± .56, then +8% shifts them to .02 … 1.14 — so the left 2% of the screen is simply NOT COVERED by
+   this layer. Measured at 380x820: a 7px strip down the LEFT edge, 44% darker than the pixels beside
+   it (luminance 13.4 against 19.3), with a hard seam at x=7.
+   Both of his reports fall out of that one number. The band CREEPS because the miss is one end of a
+   12s ease-in-out alternate, so it opens and closes over six seconds rather than appearing. And it
+   MOVED EDGES because the other end of the same cycle (translate -6%, scale 1) uncovers the RIGHT
+   instead — the reason the left one is the one you see is that the pool is centred at 30% x, so
+   losing it near the light is a 44% drop and losing it at the far edge, past `transparent 60%`, is
+   worth nothing.
+   Fixed the way its sibling was fixed in v8.54: overhang the box so the drift cannot walk it off the
+   screen. -12% is arithmetic, not taste — the binding frame is `from`, where the right edge sits at
+   f - .06(1 + 2f) past the viewport, so f must clear .068 for the layer to reach the edge at all;
+   .12 leaves ~17px of margin at 380 and holds at every other frame on all four edges.
+   The gradient's POSITION is compensated so the look does not move: the box is now 1.24 viewports
+   wide, so the old `30% 78%` would land the pool at 26% / 74% of the screen. (.30 + .12) / 1.24 and
+   (.78 + .12) / 1.24 put it back exactly where it was. The SIZE is in vmax and does not care. */
 #home-screen::after {
-  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(52vmax 44vmax at 30% 78%, rgba(41, 217, 187, .10), transparent 60%);
+  content: ""; position: absolute; inset: -12%; z-index: -1; pointer-events: none;
+  background: radial-gradient(52vmax 44vmax at 33.87% 72.58%, rgba(41, 217, 187, .10), transparent 60%);
   animation: hm-drift 12s ease-in-out infinite alternate;
 }
 @keyframes hm-drift {

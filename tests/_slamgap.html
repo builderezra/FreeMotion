@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#187 — does the slam still uncover an edge?</title>
+<style>html,body{margin:0;background:#ff00ff}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* #187 + #250. The one mechanism in this app with a DOCUMENTED history of putting a black bar on the
+   SIDE of the screen is the overpull slam: home is position:fixed inset:0, the shake moves it, and for
+   420ms the edges are uncovered. That has been patched three times — a flat ring (which itself became
+   the black bar, v7.87), a 1.06 overscan scale (which broke the PC layout, v8.54), and now an
+   overhanging paint field on #home-screen::before at inset:-8%.
+   The overhang is the current guarantee and it is NOT static: that same pseudo-element carries
+   `hm-drift-a`, a 17s alternate animation that translates it by ±4% and scales it between 1.04 and 1.
+   So the amount of overhang available to cover a slam CHANGES SLOWLY OVER TIME — which is the only
+   theory anyone has had that predicts both of his reports at once: a band that appears on an edge, and
+   one that "will slowly creep in".
+   Measured the only way that can settle it: paint the ground MAGENTA, freeze the slam at a given
+   progress and the drift at a given progress, and screenshot. Magenta in the shot is uncovered
+   viewport. ?p= slam progress 0..1, ?d= drift progress 0..1. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var P = q.get('p') === null ? 0.12 : +q.get('p');
+  var D = q.get('d') === null ? 1 : +q.get('d');
+  var fr = document.getElementById('app');
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { window.__done = true; return; }
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        d.documentElement.style.setProperty('background', '#ff00ff', 'important');
+        d.body.style.setProperty('background', 'transparent', 'important');
+        if (!FM.home.isOpen()) FM.home.open();
+      } catch (e) {}
+      setTimeout(function () {
+        var root = d.getElementById('home-screen');
+        try {
+          if (q.get('slam') !== '0') root.classList.add('hm-slam');
+          // Freeze everything that moves: the slam itself, and every drift/grain animation under home,
+          // so the frame is reproducible instead of whatever the render clock happened to be on.
+          d.getAnimations().forEach(function (a) {
+            var n = (a.animationName || '');
+            var dur = (a.effect && a.effect.getTiming().duration) || 0;
+            if (!dur) return;
+            a.pause();
+            if (n === 'hm-slam') a.currentTime = dur * P;
+            else if (n.indexOf('hm-drift') === 0) a.currentTime = dur * D;
+          });
+        } catch (e) {}
+        setTimeout(function () { window.__done = true; }, 400);
+      }, 1400);
+    })();
+  });
+})();
+</script></body></html>

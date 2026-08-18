@@ -6863,7 +6863,32 @@ better still, keep working inside the turn rather than parking work for a later 
      which is written for Ezra, would have taken them as finished. Moved back up 17 Aug. tools/next.sh
      now refuses to print a quiet list if it ever happens again. -->
 
-- [ ] **187 — 🚨 LIVE AGAIN (18 Aug): the black bar is BACK, and it has moved to the LEFT SIDE.** ⚠️ **was WATCHING, not open work (17 Aug):** his answer that day was *"I think black bar is gone"*. Not ticked — it has come back before — but there is nothing to act on until he sees it again, so it does not hold the queue. His words: *"The black bar that comes in
+- [x] **187 — the black bar.** ✅ **FOUND AND FIXED, v9.95.**
+      **It was `#home-screen::after`**, the second of home's two drifting light layers. It sat at `inset: 0`
+      while carrying `hm-drift`, which translates it up to 8% of its own box and scales it 1 → 1.12; at the
+      `to` frame that leaves its left edge at 2% of the screen. **Measured at 380x820: a 7px strip down the
+      LEFT edge, hard seam at x=7, 44% darker than the pixels beside it** (luminance 13.4 against 19.3).
+      Both of your reports come out of that one number, which is why this is the first theory that fitted
+      them together. It **CREEPS** because the miss is at one END of a 12s ease-in-out `alternate` — it opens
+      and closes over six seconds instead of appearing. It **MOVED EDGES** because the other end of the same
+      cycle uncovers the RIGHT instead, and the only reason you see the left one is that the light pool sits
+      at 30% across, so losing it next to the light is a 44% drop and losing it at the far edge is worth
+      nothing.
+      **Why six rounds missed it, and this is the part worth keeping: a pseudo-element is not in the DOM.**
+      `querySelectorAll` cannot return it and it has no `getBoundingClientRect`. Every earlier round walked
+      the elements, compared each rect against the viewport, correctly found that nothing fell short — and
+      could not see the thing that did.
+      **Two families of theory were disproven on the way** (recorded so nobody re-derives them): no
+      screen-sized element leaves a gap on any edge, on home, in the editor or across either transition; and
+      nothing uncovers the ground even mid-slam — proven by repainting the document canvas magenta and
+      screenshotting, zero marker pixels at 380x820 and 1440x900.
+      Fixed the way its sibling was in v8.54 — overhang the box (`inset: -12%`, arithmetic not taste) with the
+      gradient's position compensated so the look does not move. Guarded by a test that rebuilds each
+      pseudo-element's box from computed style and STEPS the animation across 21 samples, because the bad
+      frame is at one end and one reading lands there about never. Mutation-checked.
+
+      *(Superseded report kept below for the history.)*
+- [x] **187 (original report) — the black bar creeps in, and had moved to the LEFT SIDE.** ⚠️ **was WATCHING, not open work (17 Aug):** his answer that day was *"I think black bar is gone"*. Not ticked — it has come back before — but there is nothing to act on until he sees it again, so it does not hold the queue. His words: *"The black bar that comes in
       is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
       urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
       **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
@@ -10246,3 +10271,15 @@ wait for them to report back."*
       ⚠️ Do not simply hide it while a panel is open: he asked for it to go behind, and a loading state you
       cannot see at all is worse than one partly covered — it is the only thing telling him the app has not
       frozen. Lower the z-index; do not remove it.
+
+- [ ] **394 — Dragging a layer too far right BREAKS the project timeline.** (18 Aug, via the phone inbox.)
+      His words, verbatim: *"Found a glitch where when you drag a layer to the right too far it breaks the
+      project timeline"*
+      **Clauses:**
+      1. Dragging a clip to the right past some limit must not break the timeline.
+      2. Find out what "breaks" means before fixing anything — the two obvious candidates are a clip
+         pushed past the project duration (so the ruler/scroll extent grows without bound, or the
+         playhead maths divides by a stale duration) and a clip whose `start` goes NaN/negative-width,
+         which would corrupt every later layout pass.
+      ⚠️ Measure it: drag a layer far right in a real browser at 380px and read the scroll extent, the
+      project duration and the clip's `start`/`duration` after the drop — do not guess from the symptom.

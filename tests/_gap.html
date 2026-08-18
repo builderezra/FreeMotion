@@ -1,0 +1,87 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#187 — measure the GAP, not the colour</title>
+<style>html,body{margin:0;background:#101820;color:#cfd6e4;font:11px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}#out{padding:8px;white-space:pre;color:#8fa}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #187 — the black bar. Every previous round screenshotted the finished picture and guessed at what
+   painted it, and each fix moved the symptom to a different edge instead of removing it. The entry's
+   own conclusion after it came back on the LEFT: a band that can be at the bottom and then at the side
+   is far more likely to be SOMETHING SIZED SMALLER THAN ITS CONTAINER, showing the page behind it, than
+   a painted band belonging to any one edge.
+   So this measures the GAP. For every element big enough to be mistaken for the screen, it reports how
+   far its box falls short of the viewport on each edge — repeatedly over time, because his other
+   detail is that the bar CREEPS IN, and once per transition, because the edge it appears on changed
+   right after a transition-related fix. A single sample at load could not have caught either. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), lines = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s) { lines.push(s); out.textContent = lines.join('\n'); }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { say('FM never initialised'); window.__done = true; return; }
+      if (!w.FM || !w.FM.home || !w.FM.renderScene) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { var sp = d.getElementById('splash'); if (sp) sp.remove(); } catch (e) {}
+
+      /* "Big enough to be mistaken for the screen" is the filter that matters. A 40px button that does
+         not reach the edge is not a black bar; a full-bleed wrapper that misses by 6px is exactly one.
+         60% of the viewport's smaller dimension on BOTH axes is deliberately loose — the point of the
+         probe is to find the offender, not to pre-judge which wrapper it is. */
+      function survey(label) {
+        var vw = w.innerWidth, vh = w.innerHeight;
+        var rows = [], seen = 0;
+        var all = d.querySelectorAll('body, #app, #main, #home-screen, #stage, #timeline, #inspector-panel, div, section, main, header, footer');
+        for (var i = 0; i < all.length; i++) {
+          var e = all[i];
+          var r = e.getBoundingClientRect();
+          if (r.width < vw * 0.6 || r.height < vh * 0.6) continue;   // not screen-sized: cannot be the bar
+          var cs = w.getComputedStyle(e);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+          seen++;
+          var gapL = r.left, gapT = r.top, gapR = vw - r.right, gapB = vh - r.bottom;
+          var worst = Math.max(gapL, gapT, gapR, gapB);
+          if (worst < 1) continue;   // fills the viewport on every edge — cannot be showing ground
+          rows.push({
+            id: (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : '') || e.tagName,
+            L: gapL.toFixed(1), T: gapT.toFixed(1), R: gapR.toFixed(1), B: gapB.toFixed(1),
+            tf: cs.transform === 'none' ? '' : cs.transform,
+            bg: cs.backgroundColor, pos: cs.position, worst: worst
+          });
+        }
+        rows.sort(function (a, b) { return b.worst - a.worst; });
+        say('');
+        say('== ' + label + '   viewport ' + vw + 'x' + vh + '   screen-sized elements: ' + seen +
+            '   horizontal overflow: ' + (d.documentElement.scrollWidth - d.documentElement.clientWidth) + 'px');
+        if (!rows.length) { say('   every screen-sized box fills the viewport — no gap here'); return; }
+        say('   gapL  gapT  gapR  gapB   pos       bg                      element');
+        rows.slice(0, 8).forEach(function (r) {
+          say('  ' + String(r.L).padStart(5) + String(r.T).padStart(6) + String(r.R).padStart(6) + String(r.B).padStart(6) +
+              '   ' + r.pos.padEnd(9) + r.bg.padEnd(24) + r.id.slice(0, 60) + (r.tf ? '\n        transform: ' + r.tf : ''));
+        });
+      }
+
+      var steps = [
+        ['home, first paint', 0, function () {}],
+        ['home, +2.5s (the "creeps in" window)', 2500, function () {}],
+        ['editor, right after close()', 60, function () { if (FM.home.isOpen()) FM.home.close(); }],
+        ['editor, +1.2s (after the push animation)', 1200, function () {}],
+        ['home again, right after open()', 60, function () { FM.home.open(); }],
+        ['home again, +1.2s (after the pop animation)', 1200, function () {}],
+        ['editor again, +1.5s', 1500, function () { if (FM.home.isOpen()) FM.home.close(); }]
+      ];
+      var n = 0;
+      (function next() {
+        if (n >= steps.length) { window.__done = true; return; }
+        var s = steps[n++];
+        try { s[2](); } catch (e) { say('step threw: ' + e.message); }
+        setTimeout(function () { try { survey(s[0]); } catch (e) { say('survey threw: ' + e.message); } next(); }, s[1]);
+      })();
+    })();
+  });
+})();
+</script></body></html>

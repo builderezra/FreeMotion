@@ -5019,6 +5019,82 @@
     if (Math.abs(sa - sb) < 1) throw new Error('both backdrop layers drift on the same ' + sa + 's period — they travel together and read as one sheet');
   });
 
+  test('home: neither drifting light layer ever walks off an edge (#187 — the black bar)', { item: 'backdrop-covers-edges' }, async function () {
+    /* THE BUG THIS EXISTS FOR. #home-screen::after carried `hm-drift` — translate up to 8% of its own
+       box, scale up to 1.12 — while sitting at `inset: 0`. At the `to` frame that leaves its left edge
+       at 2% of the screen, so the leftmost 7px (measured, at 380x820) got none of that layer's light:
+       a band 44% darker than the pixels beside it, opening and closing over the 12s ease-in-out.
+       That is both halves of what Ezra reported — a bar that "will slowly creep in", and one that had
+       "moved to the left side" after a fix aimed at the bottom, because the other end of the same
+       cycle uncovers the RIGHT instead.
+
+       WHY SIX ROUNDS OF MEASUREMENT MISSED IT, which is the reason this test is shaped the way it is:
+       a pseudo-element is not in the DOM. `querySelectorAll` cannot return it and it has no
+       `getBoundingClientRect`, so every previous investigation — each of which walked the elements
+       comparing rects against the viewport — correctly reported that nothing falls short, and none of
+       them could see the thing that did. So this reconstructs the box arithmetically from computed
+       style, and it steps the animation rather than reading one frame: the offending frame is at one
+       END of the cycle, and a single sample lands there about never. */
+    const el = document.getElementById('home-screen');
+    if (!el) throw new Error('#home-screen missing');
+    const wasOpen = FM.home.isOpen();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!wasOpen) { FM.home.open(); await sleep(520); }
+    try {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const box = el.getBoundingClientRect();
+      // Control: the layers are measured against the screen, so the thing they line in has to BE the
+      // screen. If home ever stops being a full-viewport surface this test is measuring the wrong box
+      // and would go quietly green.
+      if (Math.abs(box.width - vw) > 1 || Math.abs(box.height - vh) > 1) {
+        throw new Error('#home-screen is ' + box.width + 'x' + box.height + ', not the ' + vw + 'x' + vh + ' viewport — this test would be checking the wrong box');
+      }
+      const anims = el.getAnimations({ subtree: true }).filter(a => a.effect && /^::(before|after)$/.test(a.effect.pseudoElement || '') && a.effect.target === el);
+      // Control: without both of them found there is nothing to step, and every assertion below would
+      // pass by never running.
+      ['::before', '::after'].forEach(p => {
+        if (!anims.some(a => a.effect.pseudoElement === p)) throw new Error('no animation found on #home-screen' + p + ' — the drift is gone, or this test can no longer see it');
+      });
+      let moved = 0, worst = null;
+      const check = (p, label) => {
+        const cs = getComputedStyle(el, p);
+        // Both insets are set and width is auto, so the used box runs left … parentW-right. Computed
+        // style hands these back in px even when the rule is written in %.
+        const L = parseFloat(cs.left), T = parseFloat(cs.top), R = parseFloat(cs.right), B = parseFloat(cs.bottom);
+        if (![L, T, R, B].every(n => isFinite(n))) throw new Error('#home-screen' + p + ' has no resolvable inset (' + cs.left + '/' + cs.top + '/' + cs.right + '/' + cs.bottom + ')');
+        const x0 = L, x1 = box.width - R, y0 = T, y1 = box.height - B;
+        const m = new DOMMatrix(cs.transform === 'none' ? '' : cs.transform);
+        if (Math.abs(m.a - 1) > 0.001 || Math.abs(m.e) > 0.5 || Math.abs(m.f) > 0.5) moved++;
+        const og = (cs.transformOrigin || '').split(' ').map(parseFloat);
+        const ox = x0 + (isFinite(og[0]) ? og[0] : (x1 - x0) / 2), oy = y0 + (isFinite(og[1]) ? og[1] : (y1 - y0) / 2);
+        const tx = x => ox + m.a * (x - ox) + m.e, ty = y => oy + m.d * (y - oy) + m.f;
+        const gaps = { left: tx(x0), top: ty(y0), right: vw - tx(x1), bottom: vh - ty(y1) };
+        Object.keys(gaps).forEach(edge => {
+          if (gaps[edge] > 0.5) {
+            throw new Error('#home-screen' + p + ' leaves ' + gaps[edge].toFixed(1) + 'px of the ' + edge +
+              ' edge uncovered at ' + label + ' — that strip gets none of this layer\'s light and reads as a dark band (#187). ' +
+              'inset ' + cs.left + '/' + cs.top + '/' + cs.right + '/' + cs.bottom + ', transform ' + cs.transform);
+          }
+          if (!worst || gaps[edge] > worst.g) worst = { g: gaps[edge], e: edge, p: p, at: label };
+        });
+      };
+      const paused = [];
+      try {
+        anims.forEach(a => { a.pause(); paused.push(a); });
+        // 21 samples end to end. The offending frame is at an END, so 0 and 1 both have to be in the set.
+        for (let i = 0; i <= 20; i++) {
+          const f = i / 20;
+          anims.forEach(a => { const dur = a.effect.getTiming().duration; if (dur) a.currentTime = dur * f; });
+          check('::before', 'drift ' + f.toFixed(2));
+          check('::after', 'drift ' + f.toFixed(2));
+        }
+      } finally { paused.forEach(a => { try { a.play(); } catch (e) {} }); }
+      // Control: if stepping currentTime did nothing the boxes never moved, and 21 identical samples
+      // prove only that the resting frame is fine — which was true all along.
+      if (moved < 4) throw new Error('only ' + moved + ' of 42 samples had a non-identity transform — the animation is not being stepped, so this test proved nothing');
+    } finally { if (!wasOpen && FM.home.isOpen()) FM.home.close(); }
+  });
+
   test('effects: an OPEN effect row can still be dragged to reorder', { item: 'fx-reorder-open' }, async function () {
     // v5.52. Ezra: "dragging and layering effects is broken." Reordering worked on a COLLAPSED row and
     // silently did nothing on an open one — beginReorder bailed out on fx._expanded and the grip was

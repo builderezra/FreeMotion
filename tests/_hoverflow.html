@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#187 — every element that can scroll sideways</title>
+<style>html,body{margin:0;background:#101820;color:#cfd6e4;font:11px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}#out{padding:8px;white-space:pre;color:#8fa}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #187. CSS will not let one axis be `visible` while the other scrolls, so every `overflow-y: auto`
+   with no overflow-x beside it is a HORIZONTAL scroll container too — this repo has been bitten by
+   that rule three times and written it up three times, and the home list was never audited for it.
+   A horizontally scrollable box whose content is centred with `margin: 0 auto` displaces its content
+   to the right (scrollLeft cannot go below 0), leaving a strip on the LEFT that the content never
+   covers. That is a candidate for the bar, so: list every element that actually has horizontal
+   scroll range, on both screens, at phone and desktop width — measured, not reasoned about. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), lines = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s) { lines.push(s); out.textContent = lines.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 300) { say('FM never initialised'); window.__done = true; return; }
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try { var sp = d.getElementById('splash'); if (sp) sp.remove(); } catch (e) {}
+      function scan(label) {
+        say(''); say('== ' + label + '  (' + w.innerWidth + 'x' + w.innerHeight + ')');
+        var hits = 0;
+        d.querySelectorAll('*').forEach(function (e) {
+          var over = e.scrollWidth - e.clientWidth;
+          if (over <= 0 || !e.clientWidth) return;
+          var cs = w.getComputedStyle(e);
+          if (cs.overflowX === 'hidden' || cs.overflowX === 'visible' || cs.overflowX === 'clip') return;
+          if (cs.display === 'none') return;
+          hits++;
+          var kids = [].slice.call(e.children).map(function (c) {
+            var r = c.getBoundingClientRect(), pr = e.getBoundingClientRect();
+            return { n: c.tagName + (c.id ? '#' + c.id : '') + (c.className && typeof c.className === 'string' ? '.' + c.className.trim().split(/\s+/)[0] : ''), dl: (r.left - pr.left).toFixed(1), w: r.width.toFixed(1) };
+          }).slice(0, 3);
+          say('  +' + String(over).padStart(4) + 'px  ' +
+              ((e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : e.tagName)).slice(0, 52).padEnd(54) +
+              'scrollLeft=' + e.scrollLeft + '  overflow-x=' + cs.overflowX);
+          kids.forEach(function (k) { say('        child ' + k.n.slice(0, 40).padEnd(42) + ' offsetFromParentLeft=' + k.dl + '  w=' + k.w); });
+        });
+        if (!hits) say('  nothing can scroll sideways here');
+      }
+      setTimeout(function () {
+        if (!FM.home.isOpen()) FM.home.open();
+        setTimeout(function () {
+          scan('HOME');
+          FM.home.close();
+          setTimeout(function () { scan('EDITOR'); window.__done = true; }, 900);
+        }, 900);
+      }, 400);
+    })();
+  });
+})();
+</script></body></html>
