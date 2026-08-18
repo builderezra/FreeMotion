@@ -9520,10 +9520,16 @@ wait for them to report back."*
       3. [ ] **Tap** again → **unhide** it. (So after the first tap it is a two-state toggle, and it never
              deletes the camera — nothing here removes one.)
       4. [ ] **Hold** → open the camera's settings.
-      ⚠️ **Read as an INSTRUCTION, but the wording is ambiguous and worth one line from him.** *"works
-      like this"* is present tense, so it could equally be him describing behaviour that already exists so
-      I do not break it. **Check the current handler first** — if it already does all four, this closes as
-      "already true" and costs nothing; if it does not, this is the spec. Either way, do not assume.
+      ✅ **Ambiguity settled the cheap way, before it could cost anything.** *"works like this"* is present
+      tense, so this could have been him describing existing behaviour rather than asking for it. It is
+      not: `#vb-camera`'s handler is one line — `if (FM.addCameraLayer) FM.addCameraLayer()`
+      (`js/app.js:4159`) — and `addCameraLayer` refuses outright when a camera already exists, toasting
+      *"Scene already has a camera"* (`js/app.js:2033`). So today the button does clause 1 and nothing
+      else, and a second tap is a dead end with a scolding. **This is a spec, and all four clauses are
+      real work.**
+      Note the single-camera invariant is deliberate and stays: a second camera would hijack the view.
+      That is precisely why tap-again should HIDE rather than add — the button currently has no useful
+      second press, which is probably what prompted this.
       Note clause 4 (hold) is the same idiom just built for the Presets card in queue 331, and the same
       trap applies: the tap that ENDS a hold must not also fire the tap action, or holding to open the
       settings would toggle the camera's visibility on the way.
