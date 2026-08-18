@@ -6684,9 +6684,17 @@ better still, keep working inside the turn rather than parking work for a later 
       new project (element tab in Home Screen) and also when you press the add element button the menu
       is not thought and looks lazy and shit , make it good"*.
       **Two clauses, and the first is a straight bug:**
-      1. [ ] Home screen → **Elements tab → create** produces a new *project* instead of a new element.
+      1. [x] ✅ **v9.89** — Home screen → **Elements tab → create** produces a new *project* instead of a new element.
              Read what that button is actually wired to before assuming — it may be sharing the new-project
              path wholesale, in which case the element case was never built rather than broken.
+             ✅ **He was exactly right and the cause is the second guess:** "Build a new one…" calls
+             `FM.projects.create` outright. That is not avoidable — an element is saved FROM layers, so
+             something has to hold them while you draw. What WAS wrong is that the workspace landed in
+             Projects looking like an ordinary project. It carries `elementDraft` now: filtered out of the
+             Projects tab, shown at the TOP of Elements as a dashed draft card saying "open it, build it,
+             then ⋯ → Save as element", and tapping it reopens the workspace rather than inserting
+             anything — a finished element inserts, a draft has nothing to insert yet, so they are
+             deliberately different cards. **Clause 2 (the menu's looks) is NOT done and this stays open.**
       2. [ ] The **add-element menu** is visually lazy. ⚠️ Taste, so it needs looking at next to the
              tabs he already signed off — **queue 210** settled the per-tab colour direction for
              Elements ("more subtle background colours, the main icon can stay bright but the backdrop
