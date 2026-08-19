@@ -978,8 +978,14 @@
          moving a stop 36° SURVIVED that version; this takes everything from the conic to the end of the
          layer list instead, which is the whole ramp because the conic is the last layer on both. */
       const conic = s => { const i = String(s).indexOf('conic-gradient'); return i < 0 ? null : String(s).slice(i).replace(/\s+/g, ' '); };
+      /* THE TIMELINE +'s ramp moved onto a spinning pseudo at queue 398 — the colours had to MOVE, and a
+         conic `from` angle is not animatable without @property, so the paint rotates instead. The home +
+         keeps its ramp on the element and keeps it still: its ::before is the 82px hit-box ring (queue 213)
+         and its ::after is the glint sheen, so it has no pseudo left to spin. **The two are still read
+         from wherever they live and still have to MATCH** — #384's guarantee was one set of colours across
+         both buttons, and motion on one of them does not change that. */
       const home = getComputedStyle(fab).backgroundImage;
-      const tl = getComputedStyle(probePlus).backgroundImage;
+      const tl = getComputedStyle(probePlus, '::before').backgroundImage;
       const cHome = conic(home), cTl = conic(tl);
       if (!cTl) throw new Error('the timeline + no longer has a conic ramp to be a sibling OF — read [' + String(tl).slice(0, 90) + ']');
       if (!cHome) throw new Error('the home + has no conic ramp — it is back to plain glass and will disappear into the list again: [' + String(home).slice(0, 90) + ']');
@@ -1972,7 +1978,11 @@
         await sleep(90);
         const big = document.querySelector('.tl-addrow--empty .tl-addrow-plus');
         if (!big) throw new Error('no big + to look at');
-        const bg = getComputedStyle(big).backgroundImage || '';
+        /* …read from the SPINNING DISC as well as the button (queue 398). The ramp moved onto
+           `.tl-addrow-plus::before` so the colours could travel — a conic `from` angle is not animatable
+           without @property — and this test would otherwise be measuring only the white specular highlight
+           left behind on the element, which has no hue at all and reports 0. */
+        const bg = ((getComputedStyle(big).backgroundImage || '') + ' ' + (getComputedStyle(big, '::before').backgroundImage || ''));
         if (bg.length < 20) throw new Error('the big + has no background image at all (' + bg + ')');
         /* COUNT DISTINCT HUES, not colour stops. The first version of this counted `rgb(` occurrences
            and the mutation check killed it: the slim row's blue pill is three stops of blue plus a
@@ -30980,6 +30990,34 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+  });
+
+  test('the big + has moving colours, and they move slowly', { item: 'plus-colours-move' }, function () {
+    /* Queue 398. Ezra: "Make the colours in the new add button actually move in a subtle but satisfying
+       way."
+       ⚠️ **What this can and cannot assert.** CSS animations do not advance under the headless virtual
+       clock, so no test here can watch the colours travel — sampling the disc twice would return the same
+       frame and pass with the animation removed. What IS checkable is that the ramp sits on something that
+       spins, that the spin never stops, and that it is SLOW, which is the "subtle" half of the request and
+       the half most likely to be lost by someone later tuning it for effect. */
+    const probeRow = document.createElement('div');
+    probeRow.className = 'tl-addrow tl-addrow--empty';
+    probeRow.style.cssText = 'position:absolute;left:-9999px;top:0';
+    const plus = document.createElement('div');
+    plus.className = 'tl-addrow-plus';
+    probeRow.appendChild(plus);
+    document.body.appendChild(probeRow);
+    try {
+      const cs = getComputedStyle(plus, '::before');
+      if (String(cs.backgroundImage).indexOf('conic-gradient') < 0) {
+        throw new Error('the spinning disc carries no conic ramp — the colours it is supposed to move are not on it: [' + String(cs.backgroundImage).slice(0, 80) + ']');
+      }
+      if (!cs.animationName || cs.animationName === 'none') throw new Error('the + disc has no animation — the colours do not move');
+      if (cs.animationIterationCount !== 'infinite') throw new Error('the + spins ' + cs.animationIterationCount + ' time(s) and then stops');
+      const secs = parseFloat(cs.animationDuration);
+      if (!(secs >= 8)) throw new Error('the + turns once every ' + cs.animationDuration + ' — that is a spinner, not the "subtle" movement he asked for');
+      if (cs.animationTimingFunction !== 'linear') throw new Error('the turn eases (' + cs.animationTimingFunction + '), so it speeds up and slows down every cycle instead of drifting');
+    } finally { probeRow.remove(); }
   });
 
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {

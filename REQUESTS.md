@@ -11008,7 +11008,7 @@ wait for them to report back."*
       inherits that. #303 wanted the canvas clear, this asks for the inspector, and where the panel sits is
       a third question neither of them settles.
 
-- [ ] **398 — The new big + should have MOVING colours.** (19 Aug, via the phone inbox, on v10.02.)
+- [x] **398 — The new big + should have MOVING colours.** ✅ **v10.37.** (19 Aug, via the phone inbox, on v10.02.)
       His words, verbatim: *"Make the colours in the new add button actually move in a subtle but
       satisfying way"*
       **Clause:** the conic sweep on `.tl-addrow--empty .tl-addrow-plus` animates — slowly, subtly.
@@ -11018,6 +11018,23 @@ wait for them to report back."*
       so a rotating disc inside it is invisible except as the colours travelling. Check it does not cost
       a repaint per frame on the empty-project screen, which is the one screen a beginner sits on.
       Goes with **354**, same control, and it is his reply to what shipped there.
+      ✅ **Built exactly as this entry suggested — the PAINT rotates, not the gradient.** A conic's `from`
+      angle needs `@property` to animate, which is new enough on iOS to be a gamble, so the ramp moved onto
+      a pseudo-element that fills the button and spins. The button is a circle, so a spinning disc inside it
+      changes nothing about its shape; the only visible effect is the colours travelling. **34s per turn** —
+      about 5px a second at the rim, which is movement you notice only if you look.
+      ⚠️ **The TIMELINE + only.** v10.30 (#384) made the home + share this ramp, so animating both was the
+      obvious move — and `#hm-new` has no pseudo left: its ::before is the 82px hit-box ring (queue 213) and
+      its ::after is the glint sheen. #384's guarantee was one set of COLOURS across both, which still
+      holds; the motion is an addition to the button he named.
+      ⚠️ **The first version went flat and the screenshot caught it.** An element's own background paints
+      BELOW its pseudo-elements, so moving the ramp to ::before hid the specular highlight underneath it.
+      It could not ride on the spinning disc either — a highlight that turns reads as the light source
+      moving — so it has its own static layer above the disc.
+      ⚠️ Two existing tests had to be repointed rather than relaxed: the "big + has real colour" hue check
+      was reading only the element (which now holds a colourless white highlight and reported 0 hues), and
+      the #384 siblings check reads each button's ramp from wherever it now lives, still requiring a match.
+      ✅ `prefers-reduced-motion` gets the same colours, standing still.
 
 - [ ] **399 — A clip does not survive a reload: "your browser can't decode the image", then the video goes
       blank.** (19 Aug, via the phone inbox.) His words, verbatim:

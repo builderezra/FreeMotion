@@ -6619,9 +6619,8 @@ body.fm-pushing #toast { z-index: 213; }
 .tl-addrow--empty .tl-addrow-plus {
   width: 64px; height: 64px;
   color: #06121c;
-  background:
-    radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%),
-    conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
+  position: relative; isolation: isolate;
+  background: radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%);
   box-shadow: 0 0 30px rgba(154, 120, 255, .40), 0 0 14px rgba(90, 199, 237, .34), inset 0 0 0 1px rgba(255,255,255,.5);
 }
 .tl-addrow--empty .tl-addrow-plus svg { width: 40px; height: 40px; }
@@ -7032,4 +7031,38 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
   #tpl-fill { align-items: center; }
   .tfill-top, .tfill-scrub, .tfill-lead, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
   .tfill-top { align-self: center; }
+}
+
+
+/* THE + BUTTONS' COLOURS MOVE (queue 398). Ezra: "Make the colours in the new add button actually move in
+   a subtle but satisfying way." Both of them, because v10.30 (#384) made the home + and the timeline + the
+   same disc on purpose — animating one would split a pair that was deliberately joined.
+   A conic gradient's `from` angle is not animatable without `@property`, which is new enough on iOS to be
+   a gamble, and animating it would also make the two buttons' computed backgrounds drift apart mid-cycle.
+   So the PAINT rotates instead of the gradient: the ramp moves to a pseudo-element that fills the button
+   and spins. The button is a CIRCLE, so a spinning disc inside it changes nothing about its shape — the
+   only visible effect is the colours travelling round, which is exactly what he asked for.
+   `#hm-new`'s ::before is already its 82px hit-box ring (queue 213), so its disc goes on ::after.
+   34s per turn: at 58px that is about 5px of travel a second at the rim — movement you notice only if you
+   look, which is the "subtle" half. `isolation: isolate` + z-index keeps the + glyph above the disc, and
+   the disc is `pointer-events: none` so it cannot eat the tap. */
+.tl-addrow--empty .tl-addrow-plus::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
+  animation: fm-plus-turn 34s linear infinite;
+}
+/* THE HIGHLIGHT HAS TO SIT ON TOP OF THE DISC, and the first attempt lost it. An element's own
+   background paints BELOW its pseudo-elements, so the moment the ramp moved onto ::before the specular
+   sheen underneath it was hidden and the button went flat — visibly duller than the v10.30 shot, which is
+   how it was caught. It cannot ride on the spinning disc either: a highlight that turns with the colours
+   reads as the light source moving, not the paint. So it gets its own STATIC layer above the disc. */
+.tl-addrow--empty .tl-addrow-plus::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 1; pointer-events: none;
+  background: radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%);
+}
+.tl-addrow--empty .tl-addrow-plus > * { position: relative; z-index: 2; }
+@keyframes fm-plus-turn { to { transform: rotate(360deg); } }
+/* Anyone who has asked for less motion gets the same colours, standing still. */
+@media (prefers-reduced-motion: reduce) {
+  .tl-addrow--empty .tl-addrow-plus::before { animation: none; }
 }
