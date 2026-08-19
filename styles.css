@@ -1992,6 +1992,33 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .t-left  { justify-content: space-between; padding-right: 10px; }
 .t-right { justify-content: space-between; padding-left: 10px; }
 
+/* NARROW PHONES FIT TOO (queue 405, found while measuring queue 373). His words: "make sure other
+   peoples phones will actually fit everything nicely on screen and format correctly."
+   MEASURED at 320px — the narrowest screen still in real use, and 60px below the 380 everything here
+   has always been checked at: seven 34px buttons + an 82.5px pill + 24px of row padding is 344 in a
+   320 box. The row does not scroll (#app is overflow:hidden), so the excess is CLIPPED — the
+   view-options button was simply cut off. It was already true before the switch was added; the eighth
+   control made it worse, not new.
+   The design does not change, which he was explicit about ("I don't want it to change apart from where
+   I've specified") — the same controls in the same order just stop paying for padding they cannot
+   afford. 31px still clears a comfortable tap target because the row is 40px tall, so the touch area is
+   31x40. Gated at 360 so his own 440 phone and the common 375/390 are untouched. */
+@media (max-width: 360px) {
+  #transport { padding-left: 6px; padding-right: 6px; }
+  #transport .tbtn { width: 31px; }
+  #transport > #time-readout { padding: 4px 9px; }
+  .t-left { padding-right: 4px; }
+  .t-right { padding-left: 4px; }
+}
+/* One tier tighter for the true narrow end. 320 is the smallest screen still in use (an original SE),
+   and at 31px buttons it was still 17px over — measured, not assumed. 28px buttons in a 40px row is a
+   28x40 touch area, which is the smallest this row can honestly go; below that the answer would have to
+   be dropping a control, and that is his call, not mine. */
+@media (max-width: 340px) {
+  #transport .tbtn { width: 28px; }
+  #transport > #time-readout { padding: 4px 7px; font-size: 12px; }
+}
+
 /* THE SWITCH (queue 373, clauses 3-7 and 9). A vertical track with a knob: "if the switch is facing up
    it's at the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch
    will gradually move closer from the top to the bottom depending on how far down you've moved the add
