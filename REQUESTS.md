@@ -5796,7 +5796,7 @@ better still, keep working inside the turn rather than parking work for a later 
       It appears in the add menu (js/addmenu.js) and on the instant rail beside Text and Vector
       Drawing — check for every label, not just the first one found.
 
-- [ ] **315 — Freehand drawing stops after the first line, and it still reshapes what you drew.**
+- [x] **315 — Freehand drawing stops after the first line, and it still reshapes what you drew.** ✅ **CLOSED 19 Aug — clause 2 shipped v9.62, and clause 1 is closed BY HIS OWN WORD** in #361: *"You've fixed sketching so you can draw many things at once"*. It had been left open only because I could not reproduce the failure; his confirmation is better evidence than my probe.
       (17 Aug.) His words, verbatim: *"Also free hand drawing stops working after ur first line, like
       when you let go it doesn't let you draw more, and also it still has the issue where it will change
       what you drew to look different, which I don't want"*.
@@ -9826,21 +9826,38 @@ wait for them to report back."*
       do the other stuff I asked and when you're actually drawing and start a second line you can't see
       what you're doing until you press done. Fix"*.
       **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
-      1. [ ] **A second line is invisible until you press Done.** The concrete, new, reproducible one and
-             the place to start: the live preview evidently draws only the stroke in progress, or only
-             the committed layer, so once a first stroke is committed the one you are currently drawing
-             is not composited over it. Drive TWO strokes through the real overlay and screenshot
-             MID-SECOND-STROKE — the existing probe (`tests/_sketch2.html`) checks the DATA and would
-             pass while the screen showed nothing, which is exactly how this got missed.
+      1. [ ] **A second line is invisible until you press Done.** ⚠️ **MEASURED 19 Aug — it does NOT
+             reproduce, so nothing was changed.** `tests/_sketchlive.html` drives two real strokes and
+             reads PIXELS mid-second-stroke with the finger still down (the entry was right that the old
+             probe checked only the data and would pass while the screen showed nothing):
+             | mid-second-stroke, finger down | reading |
+             |---|---|
+             | `drawTool.points` | 9 — the stroke is being captured |
+             | overlay ink | **551 px painted** — it IS being drawn |
+             | overlay after the commit's timeline rebuild | SAME element, same size, `display: block` |
+             | topmost element where the stroke is | **`draw-overlay`** (z-index 40, above `#preview`) |
+             So the live stroke is captured, painted, on top, and survives the rebuild that lands between
+             strokes. **Four ways it could have been invisible, all ruled out.**
+             ⚠️ **What would settle it, one line from you:** does it happen with a **vector** drawing as
+             well as freehand, and does the first line stay visible while the second is missing — or do
+             BOTH disappear until Done? Those are different bugs. (Two probe faults found on the way and
+             worth not repeating: the overlay is `#draw-overlay` and the canvas is `#preview` — guessing
+             at either grabs an unrelated 300x150 canvas that reads as "no ink" for the wrong reason.)
       2. [ ] **"You still have the edit points thing."** Needs pinning to a specific screen before it is
              guessed at — most likely the same complaint as **#206** ("shapes need sensible edit points,
              not a million dots"), which is marked HELD because he said he was doing it himself. Check
              whether he means edit points appearing on a finished sketch, or #206 recurring here.
-      3. [ ] **"Didn't do the other stuff I asked."** Not specific enough to act on alone, so the honest
-             move is to re-read every open sketch/drawing clause and report what is actually outstanding
-             rather than pick one: **#315** (clause 1 now fixed by his own account — *"you can draw many
-             things at once"* — clause 2 shipped v9.62), **#314** (rename to Sketching), **#179**,
-             **#165**, **#206**. Whatever is still open there is what he means.
+      3. [x] ✅ **AUDITED 19 Aug — here is the honest answer, which is that almost none of it is
+             outstanding.** Every sketch/drawing entry, re-read:
+             | entry | state |
+             |---|---|
+             | **#314** rename to Sketching | ✅ done v9.61 — every label |
+             | **#165** centre canvas, erase, pan/zoom, real undo/redo | ✅ done v7.35 / v7.77 / v7.78 / v8.01 / v8.02 |
+             | **#315** stops after the first line; reshapes what you drew | clause 2 ✅ v9.62; clause 1 ✅ **by your own word in this message** |
+             | **#179** stuck in the full-height panel after a vector drawing | not reproduced; waiting on you to say if it still happens |
+             | **#206** sensible edit points | ⚠️ **HELD — you said you were doing this one yourself** |
+             **So the only sketch work genuinely still open is #206, which is held at your request**, plus
+             clause 2 of this entry (which may BE #206). If something else was meant, naming it settles it.
       **Also confirmed by this message: #315 clause 1 is FIXED** — he says the multi-stroke case works
       now. That entry was left open because I could not reproduce the failure; his word closes it.
 

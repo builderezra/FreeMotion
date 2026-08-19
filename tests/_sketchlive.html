@@ -1,0 +1,99 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#361 c1 — is the second stroke visible while you draw it?</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #361 clause 1. His words: "when you're actually drawing and start a second line you can't see what
+   you're doing until you press done."
+   The entry is explicit that the existing probe checks the DATA and would pass while the screen showed
+   nothing — so this reads PIXELS, mid-second-stroke, with the finger still down: the overlay canvas
+   (which paints the stroke in progress) and the main canvas (which paints the committed layer). */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.drawTool || !w.FM.home || !w.FM.startDraw) return setTimeout(wait, 50);
+      var FM = w.FM;
+      function ink(c) {
+        if (!c || !c.width) return -1;
+        try {
+          var g = c.getContext('2d', { willReadFrequently: true });
+          var px = g.getImageData(0, 0, c.width, c.height).data, n = 0;
+          for (var i = 3; i < px.length; i += 4) if (px[i] > 8) n++;
+          return n;
+        } catch (e) { return -2; }
+      }
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll();
+        FM.startDraw('freehand');
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        try {
+          // #draw-overlay (created in draw-tool.js init) and #preview — the first probe guessed at the
+          // class and the id and grabbed an unrelated 300x150 canvas, which reads as 'no ink' for a
+          // reason that has nothing to do with the bug.
+          var ov = d.getElementById('draw-overlay');
+          var main = d.getElementById('preview');
+          if (!ov) { say('no overlay canvas found'); window.__done = true; return; }
+          say('overlay ' + ov.width + 'x' + ov.height + '   main ' + (main ? main.width + 'x' + main.height : 'none'));
+          var r = ov.getBoundingClientRect();
+          function ev(type, x, y) { ov.dispatchEvent(new w.PointerEvent(type, { bubbles:true, cancelable:true, pointerId:9, isPrimary:true, pointerType:'touch', clientX:x, clientY:y, buttons: type==='pointerup'?0:1 })); }
+          function stroke(y, upToo) {
+            ev('pointerdown', r.left + r.width*0.25, r.top + y);
+            for (var k = 1; k <= 8; k++) ev('pointermove', r.left + r.width*(0.25 + k*0.05), r.top + y + k*2);
+            if (upToo) ev('pointerup', r.left + r.width*0.65, r.top + y + 16);
+          }
+          say('');
+          stroke(r.height*0.35, true);
+          say('after stroke 1 committed:  overlay ink=' + ink(ov) + '   layers=' + FM.scene.layers.length +
+              '   subs=' + ((FM.scene.layers[0] && FM.scene.layers[0].subs || []).length));
+          /* LET THE COMMIT SETTLE FIRST. commitStroke() appends to the layer and calls
+             FM.timeline.rebuild(); back-to-back strokes in one tick never let that land, and a rebuild
+             that re-creates or resizes the overlay mid-session is exactly the shape of "you can't see
+             what you're doing". Real use always has this gap. ?gap= controls it. */
+          var gap = +(q.get('gap') || 350);
+          setTimeout(function () {
+            try {
+              var ov2 = d.getElementById('draw-overlay');
+              say('after the rebuild settled: overlay is ' + (ov2 === ov ? 'the SAME element' : 'a NEW element') +
+                  '  size ' + (ov2 ? ov2.width + 'x' + ov2.height : 'gone') +
+                  '  display=' + (ov2 ? w.getComputedStyle(ov2).display : '-'));
+              ov = ov2 || ov;
+              r = ov.getBoundingClientRect();
+          // …now start a SECOND stroke and DO NOT lift the finger
+          stroke(r.height*0.6, false);
+          say('mid-SECOND stroke (finger still down):');
+          say('   drawTool.points = ' + FM.drawTool.points.length);
+          say('   overlay ink     = ' + ink(ov) + '   (0 = you cannot see what you are drawing)');
+          say('   main canvas ink = ' + ink(main));
+          say('   overlay visible = ' + (w.getComputedStyle(ov).display !== 'none' && w.getComputedStyle(ov).visibility !== 'hidden' && +w.getComputedStyle(ov).opacity > 0));
+          /* PAINTED IS NOT THE SAME AS SEEN. The overlay can hold ink and still be underneath the
+             preview canvas, which is repainted every frame — that would show the committed layer and
+             hide the stroke in progress, which is his report exactly. So ask the document what is
+             actually on top at a point the live stroke passes through. */
+          var cs1 = w.getComputedStyle(ov), cs2 = w.getComputedStyle(main);
+          say('');
+          say('   overlay  z-index=' + cs1.zIndex + ' position=' + cs1.position + ' pointer-events=' + cs1.pointerEvents);
+          say('   preview  z-index=' + cs2.zIndex + ' position=' + cs2.position);
+          say('   DOM order: overlay ' + (ov.compareDocumentPosition(main) & 4 ? 'BEFORE' : 'AFTER') + ' preview');
+          var mid = { x: r.left + r.width*0.35, y: r.top + r.height*0.6 + 4 };
+          var top = d.elementFromPoint(mid.x, mid.y);
+          say('   topmost element where the live stroke is: ' + (top ? (top.id || top.className || top.tagName) : 'none'));
+          ev('pointerup', r.left + r.width*0.65, r.top + r.height*0.6 + 16);
+            } catch (e2) { say('second half threw ' + e2.message); }
+            window.__done = true;
+          }, gap);
+        } catch (e) { say('drive threw ' + e.message); }
+      }, 1100);
+    })();
+  });
+})();
+</script></body></html>
