@@ -3319,13 +3319,28 @@ window.FM = window.FM || {};
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits
       // under it. (Relative drag-scrub also drives FM.time, which re-enters here to set scrollLeft.)
       const targetScroll = Math.max(0, FM.time * pps);
+      /* READ THE GEOMETRY BEFORE WRITING scrollLeft, not after (queue 387).
+         This function runs on EVERY animation frame of playback — 60 times a second, twice per drawn
+         frame of a 30fps project (measured: 180 calls to 90 renders, tests/_playcost.html). It used to
+         write scrollLeft and then read scrollLeft and clientWidth back, and a layout-dependent read
+         after a layout-dirtying write forces the browser to flush layout synchronously, there and then,
+         inside the frame. Reading first costs nothing — the values are the ones the last painted frame
+         left behind — and `sL` after our own write is simply the value we wrote, which we know.
+         This is an efficiency fix with a measured size (~0.3ms a frame at 6x CPU throttle with 8 clips),
+         NOT the answer to his report: that is still open, and the probe does not reproduce it. */
+      const t = FM.time;
+      let sL = timelineEl ? timelineEl.scrollLeft : 0;
+      const visW = timelineEl ? timelineEl.clientWidth : 0;
+      /* CLAMPED THE WAY THE BROWSER WOULD. `scrollLeft = x` silently pins x to the scrollable range, so
+         taking the written value on trust overstates sL at the very end of the timeline — and sL is what
+         the label's right-hand cap is measured from, which is the IMG_2445 defect the comment below
+         exists to fix. scrollWidth is read up here with the others, and a scrollLeft write cannot change
+         it, so this stays one read pass. */
+      const maxScroll = timelineEl ? Math.max(0, timelineEl.scrollWidth - visW) : 0;
       if (timelineEl && !trimDrag && !clipMove && !kfDrag && (!userScrollAt || performance.now() - userScrollAt > 150)) {
-        if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
+        if (Math.abs(sL - targetScroll) > 0.5) { timelineEl.scrollLeft = targetScroll; sL = Math.min(targetScroll, maxScroll); }
         lastProgScroll = targetScroll;   // remember our own write so the resulting 'scroll' event is ignored
       }
-      const t = FM.time;
-      const sL = timelineEl ? timelineEl.scrollLeft : 0;
-      const visW = timelineEl ? timelineEl.clientWidth : 0;   // read in the same layout pass as scrollLeft
       // Light the live keyframe the playhead is sitting on. Half a frame of tolerance, because a
       // keyframe's time and FM.time are both floats and an exact compare would flicker.
       const kfTol = 0.5 / Math.max(1, (FM.scene.project && FM.scene.project.fps) || 30);

@@ -2092,6 +2092,49 @@
     }
   });
 
+  test('timeline: the playhead update reads the scroller geometry before it writes, not after', { item: '387' }, async function () {
+    /* Queue 387, and stated for what it is: an efficiency fix found while profiling the PLAY path, not
+       the answer to his report — that is still open and the probe does not reproduce it.
+       updatePlayhead runs on every animation frame of playback: measured 180 calls against 90 rendered
+       frames on a 30fps project (tests/_playcost.html), so twice per drawn frame. It used to write
+       scrollLeft and then read scrollLeft and clientWidth back, and a layout-dependent READ after a
+       layout-dirtying WRITE forces the browser to flush layout synchronously inside the frame.
+       Asserted by watching the element's own properties rather than by reading the source, so it holds
+       however the function is rewritten. */
+    const tl = document.getElementById('timeline');
+    if (!tl) throw new Error('no #timeline to watch');
+    /* MAKE THE WRITE CERTAIN. updatePlayhead only scrolls when the scroller is more than half a pixel
+       from the playhead AND no user scroll happened in the last 150ms — so a version of this test that
+       simply called it could sit out both conditions and pass having watched nothing. */
+    await new Promise(r => setTimeout(r, 200));
+    const time0 = FM.time, scroll0 = tl.scrollLeft;
+    FM.time = 2; tl.scrollLeft = 0;
+    const seq = [];
+    const spy = (name, layoutRead) => {
+      const proto = Object.getPrototypeOf(tl);
+      let d = null, o = proto;
+      while (o && !d) { d = Object.getOwnPropertyDescriptor(o, name); o = Object.getPrototypeOf(o); }
+      if (!d || !d.get) throw new Error('cannot watch ' + name + ' — no getter on the prototype chain');
+      Object.defineProperty(tl, name, {
+        configurable: true,
+        get() { seq.push('read:' + name + (layoutRead ? '' : '')); return d.get.call(tl); },
+        set(v) { seq.push('write:' + name); if (d.set) d.set.call(tl, v); }
+      });
+      return () => { delete tl[name]; };
+    };
+    const undo = [spy('scrollLeft', true), spy('clientWidth', true), spy('scrollWidth', true)];
+    try {
+      FM.timeline.updatePlayhead();
+      const wrote = seq.indexOf('write:scrollLeft');
+      if (wrote < 0) throw new Error('updatePlayhead never wrote scrollLeft even with the playhead 2s from a scroller parked at 0 — this test would have proved nothing. It touched: ' + (seq.join(', ') || 'nothing'));
+      const after = seq.slice(wrote + 1).filter(a => a.indexOf('read:') === 0);
+      if (after.length) throw new Error('updatePlayhead reads the scroller geometry AFTER writing scrollLeft (' + after.join(', ') + '), which forces a synchronous layout on every frame of playback. Full order: ' + seq.join(' | '));
+    } finally {
+      undo.forEach(f => f());
+      FM.time = time0; tl.scrollLeft = scroll0;
+    }
+  });
+
   test('timeline: an empty project is one surface to the bottom of the screen, with no line across it', { item: '424' }, async function () {
     /* Queue 424, from a phone screenshot with a line drawn across the bottom of the empty state:
        "get rid of that line and continue the pattern all the way down". Two separate things made it,

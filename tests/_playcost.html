@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Play vs scrub per-frame cost (queue 387)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:900px;color:#cfe;font:12px ui-monospace;background:#06121a;padding:10px;white-space:pre-wrap"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow;
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  FM.scene.layers.length=0;
+  for(var i=0;i<8;i++){
+    var L=FM.makeLayer('shape',{name:'clip'+i,shape:'rect',x:300+i*40,y:500+i*60,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+    L.start=i*0.25; L.duration=6; FM.scene.layers.push(L);
+  }
+  FM.scene.project.duration=8;
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+
+  // Instrument: wrap the two per-frame DOM jobs and count calls + time.
+  var stat={ph:0,phN:0,ro:0,roN:0};
+  var tl=FM.timeline, origPH=tl.updatePlayhead.bind(tl);
+  tl.updatePlayhead=function(){var a=W.performance.now();origPH();stat.ph+=W.performance.now()-a;stat.phN++;};
+
+  function reset(){stat.ph=0;stat.phN=0;FM.playbackStats.renders=0;FM.playbackStats.drops=0;FM.playbackStats.syncs=0;}
+  function pct(a,q){if(!a.length)return 0;var b=a.slice().sort(function(x,y){return x-y;});return b[Math.min(b.length-1,Math.floor(b.length*q))];}
+  // Watch the frame gaps from OUTSIDE the app's own loop, so this measures what the screen got.
+  function gaps(ms){return new Promise(function(res){var g=[],last=W.performance.now(),t0=last;
+    (function step(){var n=W.performance.now();g.push(n-last);last=n;
+      if(n-t0>ms)return res(g.slice(1));W.requestAnimationFrame(step);})();});}
+
+  // ---- PLAY ----
+  reset(); FM.time=0;
+  var t0=W.performance.now(); FM.play(); var pg=await gaps(3000); FM.pause();
+  var t1=W.performance.now();
+  var play={ms:t1-t0, ph:stat.ph, phN:stat.phN, renders:FM.playbackStats.renders, drops:FM.playbackStats.drops, g:pg};
+
+  // ---- SCRUB ---- drive FM.time from rAF the way a finger does, same duration
+  reset();
+  var s0=W.performance.now(), sn=0;
+  await new Promise(function(res){
+    (function step(){
+      var el=W.performance.now()-s0;
+      if(el>3000) return res();
+      FM.time=(el/1000)%7; sn++;
+      if(FM.seekTo) FM.seekTo(FM.time); else { FM.requestRender(); FM.timeline.updatePlayhead(); }
+      W.requestAnimationFrame(step);
+    })();
+  });
+  var s1=W.performance.now();
+  var scrub={ms:s1-s0, ph:stat.ph, phN:stat.phN, steps:sn, renders:FM.playbackStats.renders};
+  var sg=[]; (function(){var l=null;})();
+
+  var fps=FM.scene.project.fps||30;
+  out.textContent=
+   'PROJECT  8 clips, fps '+fps+', 380x820\n\n'+
+   'PLAY   '+play.ms.toFixed(0)+'ms:  updatePlayhead x'+play.phN+' = '+play.ph.toFixed(1)+'ms  ('+(play.ph/Math.max(1,play.phN)).toFixed(2)+'ms each)\n'+
+   '        renders '+play.renders+'   drops '+play.drops+'   playhead calls per render '+(play.phN/Math.max(1,play.renders)).toFixed(2)+'\n'+
+   '        updatePlayhead share of wall clock: '+(100*play.ph/play.ms).toFixed(1)+'%\n'+
+   '        frame gaps ms: p50 '+pct(play.g,.5).toFixed(1)+'  p95 '+pct(play.g,.95).toFixed(1)+'  worst '+Math.max.apply(null,play.g).toFixed(1)+'   frames '+play.g.length+'\n\n'+
+   'SCRUB  '+scrub.ms.toFixed(0)+'ms:  updatePlayhead x'+scrub.phN+' = '+scrub.ph.toFixed(1)+'ms  ('+(scrub.ph/Math.max(1,scrub.phN)).toFixed(2)+'ms each)\n'+
+   '        steps '+scrub.steps+'   renders '+scrub.renders+'\n'+
+   '        updatePlayhead share of wall clock: '+(100*scrub.ph/scrub.ms).toFixed(1)+'%\n';
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Video: play vs scrub (queue 387)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:900px;color:#cfe;font:12px ui-monospace;background:#06121a;padding:10px;white-space:pre-wrap"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+
+// A REAL video, made here: canvas → captureStream → MediaRecorder. Every previous round of this
+// investigation had no video to play, which is why it kept measuring the wrong path.
+function makeVideo(seconds){
+  return new Promise(function(res,rej){
+    var c=document.createElement('canvas'); c.width=320; c.height=240;
+    var g=c.getContext('2d'); var n=0;
+    var stream=c.captureStream(30);
+    var mime=['video/webm;codecs=vp8','video/webm','video/mp4'].filter(function(m){return window.MediaRecorder&&MediaRecorder.isTypeSupported(m);})[0];
+    if(!mime) return rej(new Error('no MediaRecorder mime supported headless'));
+    var rec=new MediaRecorder(stream,{mimeType:mime}), parts=[];
+    rec.ondataavailable=function(e){if(e.data&&e.data.size)parts.push(e.data);};
+    rec.onstop=function(){res(new File(parts,'probe.'+(mime.indexOf('mp4')>=0?'mp4':'webm'),{type:mime.split(';')[0]}));};
+    rec.onerror=function(e){rej(new Error('recorder: '+e));};
+    (function draw(){
+      n++; g.fillStyle='hsl('+(n*7%360)+',70%,45%)'; g.fillRect(0,0,320,240);
+      g.fillStyle='#fff'; g.fillRect((n*4)%300,100,20,20);
+      if(n<seconds*30) requestAnimationFrame(draw); else rec.stop();
+    })();
+    rec.start();
+  });
+}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow;
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  FM.scene.layers.length=0; FM.refreshAll();
+  var file;
+  try { file=await makeVideo(4); say('made '+file.type+'  '+(file.size/1024).toFixed(0)+' KB'); }
+  catch(e){ say('CANNOT MAKE A VIDEO HEADLESS: '+e.message); document.title='ready'; return; }
+  var rec;
+  try { rec=await FM.loadVideoFile(file); } catch(e){ say('loadVideoFile FAILED: '+e.message); document.title='ready'; return; }
+  say('decoded: '+rec.kind+'  '+(rec.duration||0).toFixed(2)+'s  '+rec.w+'x'+rec.h);
+  FM.addMediaLayer(rec);
+  await sleep(600);
+  var L=FM.scene.layers[FM.scene.layers.length-1];
+  if(!L||L.type!=='video'){say('no video layer was added (got '+(L&&L.type)+')');document.title='ready';return;}
+  FM.scene.project.duration=Math.max(4,L.duration); FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  var m=FM.media.get(L.id);
+  function pct(a,q){if(!a.length)return 0;var b=a.slice().sort(function(x,y){return x-y;});return b[Math.min(b.length-1,Math.floor(b.length*q))];}
+
+  // ---- PLAY: watch the element's own clock as well as the frame gaps ----
+  FM.time=0; FM.playbackStats.renders=0; FM.playbackStats.drops=0; FM.playbackStats.syncs=0;
+  var gaps=[], cts=[], tms=[], pauses=0, seeks=0, lastCT=-1;
+  if(m&&m.el){ m.el.addEventListener('pause',function(){pauses++;}); m.el.addEventListener('seeking',function(){seeks++;}); }
+  FM.play();
+  await new Promise(function(res){var last=W.performance.now(),t0=last;
+    (function step(){var n=W.performance.now(); gaps.push(n-last); last=n;
+      if(m&&m.el){var ct=m.el.currentTime; cts.push(ct); lastCT=ct;}
+      tms.push(FM.time);
+      if(n-t0>3000) return res(); W.requestAnimationFrame(step);})();});
+  FM.pause();
+  var g=gaps.slice(1);
+  // How often did the element's clock FAIL to move between frames? That is the stall his report describes.
+  var stalls=0, backs=0;
+  for(var i=1;i<cts.length;i++){ var d=cts[i]-cts[i-1]; if(d<=0) stalls++; if(d<-0.001) backs++; }
+  say('');
+  say('PLAY   frames '+g.length+'   gaps ms: p50 '+pct(g,.5).toFixed(1)+'  p95 '+pct(g,.95).toFixed(1)+'  worst '+Math.max.apply(null,g).toFixed(1));
+  say('       app renders '+FM.playbackStats.renders+'   drops '+FM.playbackStats.drops+'   syncs '+FM.playbackStats.syncs);
+  say('       video clock: advanced to '+lastCT.toFixed(2)+'s   frames where it did NOT move: '+stalls+'/'+(cts.length-1)+'   went BACKWARDS: '+backs);
+  say('       element pause events '+pauses+'   seeking events '+seeks);
+  var tstall=0; for(var q=1;q<tms.length;q++) if(tms[q]-tms[q-1]<=0) tstall++;
+  say('       PLAYHEAD: reached '+FM.time.toFixed(2)+'s of a '+FM.scene.project.duration.toFixed(2)+'s project in 3.0s of real time');
+  say('       playhead frames where it did NOT move: '+tstall+'/'+(tms.length-1)+'   FM.playing now '+FM.playing);
+  say('       playhead trace @0.5s steps: '+tms.filter(function(v,ix){return ix%30===0;}).map(function(v){return v.toFixed(2);}).join(' '));
+
+  // ---- SCRUB: same duration, driven by hand ----
+  FM.playbackStats.renders=0; FM.playbackStats.syncs=0;
+  var sg=[], sseeks=0, sstalls=0, sct=[];
+  if(m&&m.el) m.el.addEventListener('seeking',function(){sseeks++;});
+  await new Promise(function(res){var last=W.performance.now(),t0=last;
+    (function step(){var n=W.performance.now(); sg.push(n-last); last=n;
+      FM.time=((n-t0)/1000)%Math.max(1,FM.scene.project.duration);
+      if(FM.seekTo) FM.seekTo(FM.time); else { FM.requestRender(); FM.timeline.updatePlayhead(); }
+      if(m&&m.el) sct.push(m.el.currentTime);
+      if(n-t0>3000) return res(); W.requestAnimationFrame(step);})();});
+  var s=sg.slice(1);
+  for(var j=1;j<sct.length;j++){ if(sct[j]-sct[j-1]<=0) sstalls++; }
+  say('');
+  say('SCRUB  frames '+s.length+'   gaps ms: p50 '+pct(s,.5).toFixed(1)+'  p95 '+pct(s,.95).toFixed(1)+'  worst '+Math.max.apply(null,s).toFixed(1));
+  say('       video clock frames where it did NOT move: '+sstalls+'/'+(sct.length-1)+'   seeking events '+sseeks);
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message);document.title='ERR';});
+});
+</script></body></html>

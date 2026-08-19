@@ -10772,6 +10772,35 @@ wait for them to report back."*
       that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
       asymmetry is the control that makes such a profile meaningful.
 
+      📐 **PROFILED 20 Aug (v10.62), the way this entry asked — and it does NOT reproduce. Read this before
+      spending another round on it.** Two probes were built, and they are the thing to keep:
+      · `tests/_playcost.html` — plays an 8-clip project and times the per-frame DOM work against a scrub
+        of the same length. Run it through `tests/_cdp.py`'s launcher with `Emulation.setCPUThrottlingRate`;
+        the screenshot script is NO USE here because `--virtual-time-budget` stops the real clock.
+      · `tests/_vidplay.html` — **makes a real video** (canvas → captureStream → MediaRecorder), imports it
+        through `FM.loadVideoFile` / `FM.addMediaLayer`, plays it, and reports frame gaps, the app's own
+        render/drop counts, and whether the ELEMENT's clock stalls or jumps. Every earlier round of this
+        investigation had no video to play, which is why they kept measuring the wrong path.
+      **What they say.** At 1x and at 6x CPU throttle, playback is healthy: frame gaps p50 16.6–16.9ms,
+      p95 20–22ms, **zero drops**, the playhead advancing linearly and pausing exactly at the project end,
+      the video element's clock never going backwards and never stalling before its clip ends. The scrub
+      path measures the same. So on this machine, with a small VP8 clip, there is nothing to see.
+      **What that rules out and what it does not.** It rules out the app's per-frame DOM work and the
+      transport logic as sufficient causes. It does NOT rule out his actual case, which the harness cannot
+      reach: a 1080p H.264 clip off an iPhone camera, decoded by iOS Safari on a real phone. That is a
+      different decoder, a different memory ceiling and a different GPU path.
+      🔦 **One real thing was found and fixed (v10.62), and it is stated as what it is — an efficiency fix,
+      not the answer.** `updatePlayhead` runs on EVERY animation frame: measured 180 calls against 90
+      rendered frames on a 30fps project, so twice per drawn frame, and `syncMediaToClock` the same. It was
+      writing `scrollLeft` and then reading `scrollLeft` and `clientWidth` back, and a layout-dependent read
+      after a layout-dirtying write forces a synchronous layout inside the frame. It reads first now.
+      Measured cost of what was removed: ~0.3ms a frame at 6x throttle with 8 clips — about 2% of the frame
+      budget, which is why this is not being sold as his fix. A test watches the element's own properties
+      and fails if any geometry read lands after the write, so it cannot creep back.
+      **What would actually move this:** one clip off his phone that misbehaves, or a screen recording of
+      the play. Failing that, the next thing worth trying is a Safari-specific decode path check, not more
+      Chrome timing.
+
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
