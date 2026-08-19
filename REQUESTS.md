@@ -10213,7 +10213,18 @@ wait for them to report back."*
       · the cap `100% - 290px` → **`330px`** — the switch adds one 34px control plus its 6px gap to the
         cluster, so the old number started biting 40px early. Fixes Studio; alone it leaves classic broken.
       With both: **Studio measures 0.99px off screen centre** — the same residual as the phone, i.e. done.
-      **Classic went 27px → 23px and is still out.** The lead: the desktop row carries far more controls
+      🔬 **AND IT IS NOT THE SWITCH — ruled out by measurement.** Taking the switch out of the desktop flow
+      entirely (absolutely positioned, exactly as `#btn-amfit` already is) left classic just as far off.
+      **What actually moves it is the SWAP.** The in-flow counts change: left goes 3 → 2 (undo+redo out,
+      copy/paste in) and right goes 2 → 3, so the pill shifts by roughly half a control. In CLASSIC the
+      right group also carries back / help / notes / settings / export, so its content exceeds the `1fr`
+      share and the track's auto minimum pushes the centre column left — which is why `minmax(0, 1fr)`
+      helped (27 → 23) without finishing the job.
+      **So the real question is what desktop's row should look like after the swap**, not how to patch the
+      tracks: with the extra desktop-only controls, "the same stuff for pc" may mean moving one of them to
+      the left group so the two sides balance again. That is a layout decision on HIS row, so it is worth
+      one line from him rather than me picking.
+      *(superseded)* **Classic went 27px → 23px and is still out.** The lead: the desktop row carries far more controls
       than the phone one (back / help / notes / settings / export as well), so its two sides are much more
       unequal than the swap alone implies — measure the two `.t-side` widths in CLASSIC at 1280 before
       touching anything else.
