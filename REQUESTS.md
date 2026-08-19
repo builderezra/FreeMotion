@@ -11071,7 +11071,7 @@ wait for them to report back."*
       been ruled out. **He was also wrong to discount it** and that stands: this was work going blank
       between sessions, and it would have shipped into the app wrapper unchanged.
 
-- [ ] **400 — The filter thumbnails are low-res and it makes them look unappealing.** (19 Aug, via the
+- [x] **400 — The filter thumbnails are low-res and it makes them look unappealing.** ✅ **v10.39.** (19 Aug, via the
       phone inbox.) His words, verbatim:
       *"The filters could use a quality bump, currently they're very low res and I think that makes them
       look un appealing"*
@@ -11084,6 +11084,25 @@ wait for them to report back."*
       ⚠️ Cost check: tiles are generated on a queue, one per frame, and there are ~200 of them. Tripling
       the pixels triples that work — measure the generation time at 380px before and after, and keep the
       queue so it stays off the first paint.
+      ✅ **IT WAS THE DPR, exactly as this entry guessed.** The tiles rasterised at a FIXED 2× while his
+      phone is 3×, so every one was drawn at two thirds of the resolution it is displayed at and upscaled
+      by the browser. The raster now follows the screen, floored at 2 (nothing regresses on a 1× display)
+      and capped at 3 (a 4× screen must not quietly quadruple a queue of ~200). **Verified by running the
+      app headlessly at `--force-device-scale-factor=3`: the tile really does become 228×174 (39,672px)
+      against 152×116 (17,632px) at 2×.**
+      ✅ **`R` ITSELF IS UNCHANGED, and that is the important restraint.** The note at the top of
+      fx-thumbs.js measured the all-effects worst case at ~163MB of cached canvas at 288²; 3× would take
+      that past 360MB. Only the 76×58 FILTER tiles moved — 2.25× of something small.
+      ⚠️ **THE TIMING MEASUREMENT THIS ENTRY ASKED FOR CANNOT BE TAKEN HEADLESSLY, and I am not going to
+      report a number I do not trust.** Two attempts: timing the tile queue's drain measures the harness,
+      because the queue is rAF-driven and rAF is throttled under a virtual clock; and timing the raster
+      directly returns 0.00ms/tile, because `performance.now()` does not advance under it either.
+      **The cost answer is structural instead, and it is stronger than a timing would have been:**
+      `layerStep` bounds each rAF slice to `SLICE_MS = 8` (js/fx-thumbs.js:1068, checked at :1260), so a
+      bigger tile CANNOT lengthen a frame — it can only make the queue take more frames to drain. The
+      thing the entry was worried about (blocking the first paint) is prevented by the budget, not by the
+      tile size. **If the grid now feels slower to fill on his phone, that is the trade and it is worth
+      one line from him**, because the fix would be a cap of 2 on low-power devices rather than a redesign.
 
 - [ ] **401 — Tapping the screen while the effects menu is open should close the MENU, not deselect the
       layer.** (19 Aug, via the phone inbox.) His words, verbatim:

@@ -31050,6 +31050,28 @@
     } finally { FM.decodeWait = wait0; }
   });
 
+  test('the filter tiles raster at the screen\'s resolution, not a fixed 2x', { item: 'fx-tile-dpr' }, function () {
+    /* Queue 400. Ezra: "The filters could use a quality bump, currently they're very low res and I think
+       that makes them look un appealing."
+       It is a DPR mismatch rather than a design problem — the tiles were rasterised at a fixed 2× and his
+       phone is 3×, so every one was drawn at two thirds of the resolution it is displayed at. This machine
+       is not 3×, so the RULE is tested rather than the outcome: a pure function of dpr, with a floor of 2
+       (nothing gets worse than it is today on a 1× screen) and a cap of 3 (a 4× display must not quietly
+       quadruple a queue of ~200 tiles). The tile box is then checked to actually use it, which is the half
+       that would otherwise drift — a correct rule wired to nothing looks exactly like a fix. */
+    const f = FM.fxThumbs && FM.fxThumbs._tileScaleFor;
+    if (!f) throw new Error('FM.fxThumbs._tileScaleFor is missing — the raster rule cannot be checked');
+    const cases = [[1, 2], [1.5, 2], [2, 2], [2.5, 3], [3, 3], [4, 3]];
+    cases.forEach(([dpr, want]) => {
+      const got = f(dpr);
+      if (got !== want) throw new Error('at dpr ' + dpr + ' the tiles raster at ' + got + '×, expected ' + want + '× (floor 2 so nothing regresses, cap 3 so a 4× screen does not quadruple the queue)');
+    });
+    const size = FM.fxThumbs._tileSize && FM.fxThumbs._tileSize();
+    if (!size) throw new Error('FM.fxThumbs._tileSize is missing');
+    if (size.scale !== f(window.devicePixelRatio)) throw new Error('the tile box was built at ' + size.scale + '× but this screen resolves to ' + f(window.devicePixelRatio) + '× — the rule is not wired to the raster');
+    if (size.w !== 76 * size.scale || size.h !== 58 * size.scale) throw new Error('the tile is ' + size.w + '×' + size.h + ' at ' + size.scale + '×, which is not the 76×58 box scaled — it will crop or letterbox');
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

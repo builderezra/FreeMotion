@@ -1051,7 +1051,20 @@ window.FM = window.FM || {};
    * of exactly that shape — at the same 2x used everywhere else in this file — crops NOTHING. The
    * project frame is then LETTERBOXED inside it: a 9:16 comp stretched to fill a 4:3 box is either
    * squashed or loses 57% of its height, and half a preview is worse than no preview. */
-  const TW = 76 * R, TH = 58 * R, MAT = '#0a0d13';
+  /* THE FILTER TILES FOLLOW THE SCREEN NOW (queue 400). Ezra: "The filters could use a quality bump,
+     currently they're very low res and I think that makes them look un appealing."
+     He is right and it is a DPR mismatch, not a design problem: these were rasterised at a fixed 2×, and
+     his phone is 3×, so every tile was drawn at two thirds of the resolution it is displayed at and
+     upscaled by the browser. **R itself stays at 2 deliberately** — the note at the top of this file
+     measured the all-effects worst case at ~163MB of cached canvas at 288², and 3× would take that past
+     360MB. These tiles are 76×58, not 288², so the same change costs 2.25× of something small: about
+     35k pixels per tile becoming 79k.
+     Floor of 2 so nothing gets WORSE than it is today on a 1× screen, cap of 3 so a 4× display does not
+     quietly quadruple the queue. Written as a function of dpr rather than read inline, so the rule is
+     testable without a 3× screen to test it on. */
+  function tileScaleFor(dpr) { return Math.max(2, Math.min(3, Math.round(dpr || 1))); }
+  const TSCALE = tileScaleFor(window.devicePixelRatio);
+  const TW = 76 * TSCALE, TH = 58 * TSCALE, MAT = '#0a0d13';
   const SLICE_MS = 8;   // main-thread budget per rAF for a layer strip — see layerStep
 
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
@@ -1419,6 +1432,10 @@ window.FM = window.FM || {};
        could hold it to the rule the file states for itself. Read-only: it hands back the function, and
        the caller supplies its own throwaway layer to run it on. */
     _override: function (type) { return OVERRIDES[type] || null; },
+    // queue 400: the tile raster follows the screen. Exposed so the rule can be checked without a 3×
+    // display, and so the measured cost of changing it can be re-derived rather than taken on trust.
+    _tileScaleFor: function (dpr) { return tileScaleFor(dpr); },
+    _tileSize: function () { return { w: TW, h: TH, scale: TSCALE }; },
     // Read-only seams so the suite can check the derivation itself — that every photograph a table
     // names is in the preload set — rather than checking a copy of the list (queue 359).
     _photoKeys: function () { return photoKeys().slice(); },
