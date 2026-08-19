@@ -3094,7 +3094,17 @@ window.FM = window.FM || {};
       try { val.releasePointerCapture(e.pointerId); } catch (_) {}
       if (moved) return;
       glide.cancelDrag();
-      if (opts.axis && (FM._mtAxis || 'xy') !== opts.axis) { FM._mtAxis = opts.axis; FM.inspector.refresh(); return; }
+      /* SWITCHING AXIS AND TYPING ARE THE SAME TAP NOW (queue 414). Ezra: "The buttons that show a number
+         for the position should be able to be tapped on and customised, so you can type exactly the number
+         you want."
+         Tap-to-type already existed on these boxes — but the X / Y / Z ones carry an `axis`, and this
+         branch RETURNED after switching it, so on the position readouts a tap never reached the editor.
+         "The buttons that show a number for the position" is precisely the set that had it swallowed.
+         The refresh is dropped rather than moved: it rebuilds the card, which would destroy the very
+         element startEdit is about to focus. The axis highlight is therefore a beat stale while you type,
+         and corrects itself the moment you finish — `finish()` already calls refresh(). A stale highlight
+         for the length of one edit is a much smaller thing than a control you cannot type into. */
+      if (opts.axis) FM._mtAxis = opts.axis;
       startEdit();
     });
     val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; glide.cancelDrag(); try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)

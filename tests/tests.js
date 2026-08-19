@@ -31660,6 +31660,49 @@
     }
   });
 
+  test('tapping a position number opens the editor on the FIRST tap', { item: 'position-tap-type' }, async function () {
+    /* Queue 414. Ezra: "The buttons that show a number for the position should be able to be tapped on and
+       customised, so you can type exactly the number you want."
+       Tap-to-type already existed on these boxes; what did not was reaching it. The X / Y / Z readouts
+       carry an axis, and the tap handler switched the axis and RETURNED — so on the position numbers,
+       exactly the ones he named, a tap never opened the editor. The test starts from the WRONG axis, which
+       is the state that swallowed the tap; starting from the right one passes either way. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), axis0 = FM._mtAxis;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Numy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      FM.inspector.openCategory('transform');
+      await sleep(220);
+      /* …and put the axis somewhere ELSE, AFTER the card has rendered. Setting it before the open was the
+         first version and it proved nothing: the rebuild resets it, so by tap time the axis already
+         matched and the old code's swallowing branch was never reached — the mutation survived. */
+      FM._mtAxis = 'z';
+      const boxes = [].slice.call(document.querySelectorAll('.mt-vbox'));
+      if (!boxes.length) throw new Error('the Position / Scale card rendered no numeric boxes');
+      const xBox = boxes.find(b => (b.querySelector('.mt-vbox-lab') || {}).textContent === 'X');
+      if (!xBox) throw new Error('no X box among [' + boxes.map(b => (b.querySelector('.mt-vbox-lab') || {}).textContent).join(', ') + ']');
+      const val = xBox.querySelector('.mt-vbox-val');
+      const r = val.getBoundingClientRect();
+      const at = { bubbles: true, button: 0, pointerId: 21, isPrimary: true, clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2) };
+      val.dispatchEvent(new PointerEvent('pointerdown', at));
+      val.dispatchEvent(new PointerEvent('pointerup', at));
+      await sleep(140);
+      const live = document.querySelector('.mt-vbox-val.editing') || (val.isContentEditable ? val : null);
+      if (!live) throw new Error('one tap on the X position number did not open the editor — it was swallowed switching axis, which is what he is reporting');
+      if (FM._mtAxis !== 'xy') throw new Error('the tap opened the editor but did not move the axis to the one you touched (' + FM._mtAxis + ')');
+    } finally {
+      FM._mtAxis = axis0;
+      document.querySelectorAll('.mt-vbox-val.editing').forEach(n => { n.contentEditable = 'false'; n.classList.remove('editing'); });
+      FM.scene.layers = layers0;
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

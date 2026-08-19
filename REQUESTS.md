@@ -11483,14 +11483,26 @@ wait for them to report back."*
       2. [x] **Judged as swatches at tile size, in tile order** (`tests/_tintstrip.html`), which is the
              honest version of "against the neighbours" — see the note below about the tab screenshot.
 
-- [ ] **414 — The position-number buttons should be tappable and typable.** (19 Aug, via the phone
+- [x] **414 — The position-number buttons should be tappable and typable.** ✅ **v10.52.** (19 Aug, via the phone
       inbox.) His words, verbatim:
       > The buttons that show a number for the position should be able to be tapped on and customised, so you can type exactly the number you want
       **Clauses:**
-      1. [ ] Tapping a numeric readout opens an input.
-      2. [ ] Typing an exact value commits it.
-      ⚠️ WHICH readouts is not named — X/Y position is the obvious reading, but the same pattern applies to
-      every numeric chip. Find them all, then decide the scope deliberately rather than doing one.
+      1. [x] Tapping a numeric readout opens an input.
+      2. [x] Typing an exact value commits it.
+      ✅ **FOUND THEM ALL FIRST, as the clause asked — and almost all of them already worked.** The effect
+      slider rows are `<input type="text">`, the transform rows are `<input type="number">`, and the
+      Move & Transform boxes (`mtVBox`) have had tap-to-type since they were written. **The exception is
+      exactly the set he named.** The X / Y / Z boxes carry an `axis`, and the tap handler switched the
+      axis and RETURNED — so on the POSITION numbers, and only those, a tap never reached the editor. His
+      sentence says "the buttons that show a number for the position", which is that set precisely.
+      ✅ **One tap now does both**: the axis follows what you touched, and the editor opens. The refresh was
+      dropped rather than moved, because it rebuilds the card and would destroy the element the editor is
+      about to focus; the axis highlight is a beat stale while you type and corrects itself on finish,
+      which already refreshes. A stale highlight for the length of one edit is much smaller than a control
+      you cannot type into.
+      ⚠️ **The first version of the test proved nothing and the mutation said so.** It set the axis BEFORE
+      opening the card — and the rebuild resets it, so by tap time the axis already matched and the old
+      code's swallowing branch was never reached. It sets the axis after the card renders now.
 
 - [ ] **415 — Vertical timeline scrolling should glide like the horizontal drag does.** (19 Aug, via the
       phone inbox.) His words, verbatim:
