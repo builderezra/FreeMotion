@@ -875,3 +875,14 @@ deciding where to spend its time.
   the frame's width falls by ~25px per 0.5 of scale, which is exactly a 400px layer at the preview's
   0.125 zoom, so it tracks correctly and collapses at 0. The `|| 1` sites turn out to be division
   guards in the text-wrap drag, not defaults. No defect.
+
+## 5. Undo fidelity — clean, and now a permanent sweep
+Twelve kinds of edit (delete, duplicate, add, move, trim, reorder, rename, transform, add-effect,
+opacity, project background, group), each done once and undone once, comparing the whole document
+before and after as a string. **All twelve restore byte-identically.**
+Kept as `history: one edit then undo puts the document back exactly, for every kind of edit`, because
+the snapshot is a whole-document string — so a field that stops being captured by a FUTURE change
+fails here regardless of which feature added it. Mutation-checked by dropping `project.background`
+during restore, which the sweep reports by name and character offset.
+It also counts how many operations actually CHANGED the document and fails if fewer than eight did:
+an operation that quietly stops doing anything would otherwise turn into silent coverage loss.

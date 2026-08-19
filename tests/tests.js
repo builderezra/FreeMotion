@@ -2092,6 +2092,68 @@
     }
   });
 
+  test('history: one edit then undo puts the document back exactly, for every kind of edit', { item: 'undo-fidelity' }, async function () {
+    /* THE INVARIANT, swept rather than spot-checked: do ONE edit, undo it, and the document must be
+       byte-identical to what it was. An operation that fails this is losing or inventing state, and
+       that is the class of bug nobody reports until they undo something and find it did not fully come
+       back — by which time the edit that broke it is weeks old.
+       Written as a sweep so it covers the paths a future change is most likely to break: the snapshot
+       is a whole-document string, so a field that stops being captured fails here whatever added it. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const doc = () => JSON.stringify({ p: FM.scene.project, l: FM.scene.layers }, FM.jsonReplacer);
+      const seed = () => {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 3; i++) {
+          const L = FM.makeLayer('shape', { name: 'Shape ' + (i + 1), shape: i === 1 ? 'star' : 'rect', x: 400 + i * 120, y: 600 + i * 200, shapeW: 300, shapeH: 220, fill: ['#3a7bd5', '#29d9bb', '#e0653f'][i] });
+          L.start = i * 0.5; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+        if (FM.history.reset) FM.history.reset();
+      };
+      const OPS = [
+        ['delete a layer', () => { FM.selectLayer(FM.scene.layers[1].id); if (FM.deleteLayer) FM.deleteLayer(FM.scene.layers[1].id); }],
+        ['duplicate a layer', () => { const L = FM.scene.layers[0]; FM.selectLayer(L.id); if (FM.duplicateLayer) FM.duplicateLayer(L.id); }],
+        ['add a shape', () => { const L = FM.makeLayer('shape', { name: 'New', shape: 'ellipse', x: 500, y: 500, shapeW: 200, shapeH: 200, fill: '#ffffff' }); L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); }],
+        ['move a clip in time', () => { FM.scene.layers[0].start += 1.25; FM.refreshAll(); }],
+        ['trim a clip', () => { FM.scene.layers[0].duration = 1.5; FM.refreshAll(); }],
+        ['reorder layers', () => { const a = FM.scene.layers.splice(0, 1)[0]; FM.scene.layers.push(a); FM.refreshAll(); }],
+        ['rename a layer', () => { FM.scene.layers[0].name = 'Renamed'; FM.refreshAll(); }],
+        ['change a transform', () => { FM.scene.layers[0].transform.x = 123; FM.scene.layers[0].transform.scale = 1.7; FM.refreshAll(); }],
+        ['add an effect', () => { const L = FM.scene.layers[0]; L.effects = (L.effects || []).concat([{ type: 'blur', params: { radius: 8 } }]); FM.refreshAll(); }],
+        ['set opacity', () => { FM.scene.layers[0].transform.opacity = 0.42; FM.refreshAll(); }],
+        ['change the project background', () => { FM.scene.project.background = '#123456'; FM.refreshAll(); }],
+        ['group two layers', () => { FM.scene.selectedIds = [FM.scene.layers[0].id, FM.scene.layers[1].id]; if (FM.groupSelection) FM.groupSelection(); }]
+      ];
+      const bad = [];
+      let ran = 0;
+      for (const op of OPS) {
+        seed(); await sleep(40);
+        const before = doc();
+        try { op[1](); } catch (e) { continue; }
+        FM.history.commit(); await sleep(40);
+        // An operation that changed nothing cannot answer the question, and counting it would let this
+        // sweep report coverage it does not have.
+        if (doc() === before) continue;
+        ran++;
+        FM.history.undo(); await sleep(60);
+        const back = doc();
+        if (back !== before) {
+          let w = 0; while (w < before.length && before[w] === back[w]) w++;
+          bad.push(op[0] + ' (first difference at char ' + w + ': was "' + before.slice(w, w + 50) + '", now "' + back.slice(w, w + 50) + '")');
+        }
+      }
+      if (ran < 8) throw new Error('only ' + ran + ' of ' + OPS.length + ' operations actually changed the document — the rest cannot answer anything, so this sweep is not covering what it claims');
+      if (bad.length) throw new Error(bad.length + ' operation(s) did not come back exactly on undo: ' + bad.join(' | ').slice(0, 500));
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.history && FM.history.reset) FM.history.reset();
+    }
+  });
+
   test('effects: a slider at 0 means zero, it does not quietly become the default', { item: 'zero-jump' }, function () {
     /* THE QUEUE 403 CLASS, swept rather than spot-checked. `FM.evalProp` returns 0 for an ABSENT
        parameter, never null, so `FM.evalProp(p.size, t) || 16` cannot tell "no value" from "the user

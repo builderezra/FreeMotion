@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Undo restores the document exactly</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:1280px;height:800px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:640px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* THE INVARIANT: do one edit, undo it, and the document must be byte-identical to what it was. Any
+   operation that fails this is losing or inventing state — the class of bug that is invisible until a
+   user undoes something and finds it did not fully come back. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.history)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  function doc(){ return JSON.stringify({p:FM.scene.project, l:FM.scene.layers}, FM.jsonReplacer); }
+  function seed(){
+    FM.scene.layers.length=0;
+    for(var i=0;i<3;i++){
+      var L=FM.makeLayer('shape',{name:'Shape '+(i+1),shape:i===1?'star':'rect',x:400+i*120,y:600+i*200,shapeW:300,shapeH:220,fill:['#3a7bd5','#29d9bb','#e0653f'][i]});
+      L.start=i*0.5; L.duration=3; FM.scene.layers.push(L);
+    }
+    FM.refreshAll(); if(FM.timeline)FM.timeline.rebuild();
+    if(FM.history.reset) FM.history.reset();
+  }
+  var OPS=[
+    ['delete a layer', function(){ FM.selectLayer(FM.scene.layers[1].id); if(FM.deleteLayer)FM.deleteLayer(FM.scene.layers[1].id); }],
+    ['duplicate a layer', function(){ var L=FM.scene.layers[0]; FM.selectLayer(L.id); if(FM.duplicateLayer)FM.duplicateLayer(L.id); }],
+    ['add a shape', function(){ var L=FM.makeLayer('shape',{name:'New',shape:'ellipse',x:500,y:500,shapeW:200,shapeH:200,fill:'#fff'}); L.start=0;L.duration=2; FM.scene.layers.push(L); FM.refreshAll(); }],
+    ['move a clip in time', function(){ FM.scene.layers[0].start += 1.25; FM.refreshAll(); }],
+    ['trim a clip', function(){ FM.scene.layers[0].duration = 1.5; FM.refreshAll(); }],
+    ['reorder layers', function(){ var a=FM.scene.layers.splice(0,1)[0]; FM.scene.layers.push(a); FM.refreshAll(); }],
+    ['rename a layer', function(){ FM.scene.layers[0].name='Renamed'; FM.refreshAll(); }],
+    ['change a transform', function(){ FM.scene.layers[0].transform.x = 123; FM.scene.layers[0].transform.scale = 1.7; FM.refreshAll(); }],
+    ['add an effect', function(){ var L=FM.scene.layers[0]; L.effects=(L.effects||[]).concat([{type:'blur',params:{radius:8}}]); FM.refreshAll(); }],
+    ['set opacity', function(){ FM.scene.layers[0].transform.opacity = 0.42; FM.refreshAll(); }],
+    ['change the project background', function(){ FM.scene.project.background='#123456'; FM.refreshAll(); }],
+    ['group two layers', function(){ FM.scene.selectedIds=[FM.scene.layers[0].id,FM.scene.layers[1].id]; if(FM.groupSelection)FM.groupSelection(); }]
+  ];
+  var bad=[], ran=0;
+  for (var i=0;i<OPS.length;i++){
+    seed(); await sleep(120);
+    var before=doc();
+    try { OPS[i][1](); } catch(e){ o.push('  (skipped "'+OPS[i][0]+'": '+e.message+')'); continue; }
+    FM.history.commit(); await sleep(120);
+    var after=doc();
+    if (after===before) { o.push('  (skipped "'+OPS[i][0]+'": it changed nothing, so undo proves nothing)'); continue; }
+    ran++;
+    FM.history.undo(); await sleep(150);
+    var back=doc();
+    if (back!==before){
+      var w=0; while(w<before.length&&before[w]===back[w])w++;
+      bad.push(OPS[i][0]+'  — undo did not restore; first difference at char '+w+':\n        was:  '+before.slice(Math.max(0,w-40),w+70)+'\n        now:  '+back.slice(Math.max(0,w-40),w+70));
+    }
+  }
+  o.unshift('UNDO SWEEP — '+ran+' operations actually exercised, '+bad.length+' did not restore the document');
+  o.push(''); bad.forEach(function(b){ o.push('  ❌ '+b); });
+  if(!bad.length) o.push('  every operation restored the document exactly.');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>
