@@ -6438,10 +6438,18 @@ body.fm-pushing #toast { z-index: 213; }
      the row ended up being a background. A dark wash recesses it instead: the group still reads as
      separate, but by sitting back rather than by shouting. The inset hairline goes too — it was the
      other half of the raised look, and a recess does not need an edge to be legible. */
+  /* DEEPER, NOT BRIGHTER (queue 425). Ezra: "the background they have is too subtle". The obvious
+     reading — lift it — is the one thing this must not do: v7.89 lifted it with a white wash and he
+     sent it back with "instead of being brighter than everything else make its lightly darker". So the
+     recess stays a recess and simply gets twice the depth. Measured against the row's own surface, .22
+     black separated the group by about 3 levels; .45 separates it by about 8, which is a difference you
+     can see without the group becoming the brightest thing in the row again.
+     The other half of "too subtle" was structural and is fixed in app.js: the copy button, one of the
+     three he named, sat OUTSIDE this pill and so had no background at all. */
   #t-sel.has-sel {
     padding: 0 5px; margin: 0 3px;
     border-radius: 11px;
-    background: rgba(0, 0, 0, .22);
+    background: rgba(0, 0, 0, .45);
   }
 }
 

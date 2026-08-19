@@ -4393,8 +4393,23 @@ window.FM = window.FM || {};
      * appears at 2+ selected, and putting it third keeps delete exactly "one over" as asked in both the
      * one-layer and the many-layer case. */
     const sel = document.createElement('span'); sel.id = 't-sel';
+    /* ON THE RIGHT, AND ALL FOUR IN ONE PILL (queue 425). Ezra, with a desktop screenshot: "THE three
+       buttons on pc with trash copy and parent need to be on the right side not left and also the
+       background they have is too subtle".
+       COPY (#btn-layermenu) DELIBERATELY STAYS ON THE LEFT, and that is a conflict with his own words
+       rather than an oversight. Queue 373, one day earlier: "move the copy paste to where they were on
+       the left side and on its right put a little switch toggle that moves the add menu button to the
+       top of to the bottom of the timeline" — so copy's position on the left is something he asked for
+       explicitly, and the add-row switch is placed RELATIVE to it. Moving copy would undo that and leave
+       the switch anchored to nothing. Building it either way silently would overwrite one instruction
+       with the other, so the layer-action group moves and copy does not, and the entry asks him which he
+       meant. One word from him moves it.
+       APPENDED to the right side, so the group ends up outermost there exactly as it was outermost on the
+       left — a mirror of where it was, not a new arrangement. The pill's own contrast is in styles.css.
+       The centring is safe by construction (the flanking tracks are minmax(0,1fr), #373 clause 8) and
+       `playhead-play-centre` proves it. */
     ['btn-parent', 'btn-del-layer', 'btn-group', 'btn-more-layer'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
-    if (sel.childNodes.length) menu.parentNode.insertBefore(sel, menu.nextSibling);
+    if (sel.childNodes.length) right.appendChild(sel);
 
     // far right — refresh chip, NOTES, cog, export, then view options OUTERMOST (his amendment)
     /* btn-notes was left behind by v7.52 and he caught it: "you still havent moved all the buttons on

@@ -25,6 +25,9 @@ f.addEventListener('load', function () {
       L.start = i * 0.6; L.duration = 4; FM.scene.layers.push(L);
     }
     FM.refreshAll(); FM.timeline.rebuild();
+    /* ?sel=1 — select a layer, because #t-sel's buttons only exist when something is selected and a
+       shot without them is a shot of the row he is NOT talking about (queue 425). */
+    if (Q.get('sel') === '1') { FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll(); }
     if (FM.moveAddMarker) FM.moveAddMarker(1);   // a genuine mid position, so the switch's lean shows
     await sleep(600);
     document.title = 'ready';

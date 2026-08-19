@@ -11786,9 +11786,23 @@ wait for them to report back."*
       parent, trash 🗑, ⋯ — and then the play cluster. So the layer-action group sits immediately left of the
       transport controls, and he wants it moved to the right-hand end.
       **Clauses:**
-      1. [ ] The three layer-action buttons (copy / parent / trash, and the ⋯ that travels with them) move to
-             the RIGHT side of the row.
-      2. [ ] **Their background is stronger** — they currently read as bare glyphs on the row's own surface.
+      1. [x] ✅ **v10.63 — partly, and the missing part is a CONFLICT WITH YOUR OWN EARLIER WORDS, not an
+             oversight.** The layer-action group (parent / trash / group / ⋯) is on the right now, appended
+             after undo-redo so it sits outermost there exactly as it sat outermost on the left.
+             ⚠️ **COPY DID NOT MOVE, and I need one word from you.** Queue 373, ONE DAY EARLIER, in your
+             words: *"Move the undo and redo buttons to where to copy paste button is then move the copy
+             paste to where they were on the left side and on its right put a little switch toggle that
+             moves the add menu button to the top of to the bottom of the timeline"*. So copy sitting on
+             the LEFT is something you asked for explicitly, and the add-row switch is positioned relative
+             to it — move copy and the switch is anchored to nothing. I moved it, three tests went red
+             saying so, and rather than overwrite one of your instructions with the other I left copy where
+             you put it. **Say "move copy too" and it goes right with the rest, switch and all.**
+      2. [x] ✅ **v10.63 — Their background is stronger**: the recess went from `rgba(0,0,0,.22)` to
+             `rgba(0,0,0,.45)`, about 3 levels of separation from the row's surface to about 8.
+             **DEEPER, not brighter** — v7.89 lifted this group with a white wash and you sent it back
+             with *"instead of being brighter than everything else make its lightly darker"*, so "stronger"
+             had exactly one safe direction. The test asserts BOTH: alpha ≥ .35 and a dark colour, so a
+             future "make it stand out" cannot reopen the older complaint.
       ⚠️ **The right side already carries a cluster** (`#t-far`: version chip, ?, notes, cog, export, view
       options), so "the right side" means deciding where these sit RELATIVE to that group — outside it, or
       between it and the play controls. Measure at a desktop width before moving anything.

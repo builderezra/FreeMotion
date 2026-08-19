@@ -2092,6 +2092,55 @@
     }
   });
 
+  test('PC: the layer actions sit on the right of the transport row, in one pill you can see', { item: '425' }, function () {
+    /* Queue 425, from a desktop screenshot. Ezra: "THE three buttons on pc with trash copy and parent
+       need to be on the right side not left and also the background they have is too subtle". */
+    if (!FM.pcTransportLayout) throw new Error('no pcTransportLayout to test');
+    FM.pcTransportLayout();
+    const sel = document.getElementById('t-sel');
+    const readout = document.getElementById('time-readout');
+    const menu = document.getElementById('btn-layermenu');
+    if (!sel || !readout || !menu) throw new Error('the desktop row is not built (t-sel ' + !!sel + ', readout ' + !!readout + ', copy ' + !!menu + ') — this test needs a desktop width');
+    if (window.innerWidth < 701) throw new Error('the frame is at a phone width (' + window.innerWidth + '), where this row does not exist — nothing below would mean anything');
+
+    // 1. On the RIGHT: past the centre pill, not before it.
+    const sr = sel.getBoundingClientRect(), rr = readout.getBoundingClientRect();
+    if (!(sr.left > rr.right)) throw new Error('the layer actions are still left of the timecode (t-sel ends ' + sr.right.toFixed(0) + ', readout starts ' + rr.left.toFixed(0) + ')');
+
+    /* 2. …and COPY IS NOT, on purpose. He named it as one of the three, but queue 373 — a day earlier —
+          put copy on the left in his own words and anchored the add-row switch to its right. The two
+          instructions contradict each other, so this asserts the one that is NOT being guessed at: copy
+          stays where he explicitly put it until he says otherwise. If he confirms he wants it moved,
+          this is the line that says so. */
+    if (sel.contains(menu)) throw new Error('the copy button was moved into the selection group — queue 373 put it on the left in his own words and the add-row switch is placed relative to it, so this needs his word first');
+
+    /* 3. The background is a REAL recess. Both halves of what he has asked for over two rounds: deep
+          enough to see (v10.61 and earlier were .22, which he called too subtle), and DARKER rather
+          than brighter — v7.89 lifted it with a white wash and he sent it back with "instead of being
+          brighter than everything else make its lightly darker". A future lift would satisfy "stronger"
+          and reopen the older complaint, so both are asserted. */
+    sel.classList.add('has-sel');
+    const bg = getComputedStyle(sel).backgroundColor || '';
+    const m = bg.match(/rgba?\(([^)]+)\)/);
+    if (!m) throw new Error('the group has no background colour at all (' + bg + ')');
+    const n = m[1].split(',').map(parseFloat), a = n.length > 3 ? n[3] : 1;
+    if (!(n[0] < 60 && n[1] < 60 && n[2] < 60)) throw new Error('the group background is a LIGHT wash (' + bg + ') — he asked for it darker than the row, not brighter');
+    if (!(a >= 0.35)) throw new Error('the group background is still faint (alpha ' + a + ') — "too subtle" was the complaint');
+
+    /* 4. …and the group survives a round trip. The wrapper now lives in .t-right rather than .t-left, so
+          the narrow-the-window teardown that queue 405 built is walking a different tree than it was
+          written against — and a wrapper left behind in the right-hand side is exactly the shape of the
+          bug that one fixed on the left. */
+    if (!/t-right/.test((sel.parentNode && sel.parentNode.className) || '')) throw new Error('the group is on the right by pixels but is not inside .t-right (' + ((sel.parentNode && sel.parentNode.className) || '?') + ') — the teardown will not find it there');
+    FM.pcTransportTeardown();
+    if (document.getElementById('t-sel')) throw new Error('tearing the desktop row down left the selection group behind in the row');
+    const parent = document.getElementById('btn-parent');
+    if (parent && parent.parentNode && /t-right/.test(parent.parentNode.className || '')) throw new Error('the parent button was left stranded in the right-hand side after teardown');
+    FM.pcTransportLayout();
+    const again = document.getElementById('t-sel');
+    if (!again || !/t-right/.test((again.parentNode && again.parentNode.className) || '')) throw new Error('the row did not rebuild the group back on the right');
+  });
+
   test('timeline: the playhead update reads the scroller geometry before it writes, not after', { item: '387' }, async function () {
     /* Queue 387, and stated for what it is: an efficiency fix found while profiling the PLAY path, not
        the answer to his report — that is still open and the probe does not reproduce it.
