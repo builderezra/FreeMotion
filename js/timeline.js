@@ -3023,6 +3023,19 @@ window.FM = window.FM || {};
       const ae = document.activeElement;
       if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
       rebuildPending = false;
+      /* THE SWITCH IS A READOUT OF WHERE THE ADD ROW IS, so it has to be re-read whenever the STACK
+         changes — not only when the row MOVES (queue 373 clause 6, reopened by him at v10.20). His
+         words: "Toggle switch doesn't update properly when you are adding layers, it should always be
+         accurate to where the add layer is." The lean is `addAt / layers.length`, so adding or deleting
+         a layer changes it even though addAt itself never moved — and every call site the sync had was
+         a MOVE: moveAddMarker, the toggle, the two drag paths and boot. His screenshot showed three
+         layers above the row and five below, i.e. 0.375, with the knob still hard up from when the
+         project had none.
+         Syncing from HERE rather than from each mutation is the structural version of the fix: rebuild()
+         is what runs whenever the rows on screen reflect a new stack, so add, delete, duplicate, undo,
+         redo, project-open and group enter/exit are all covered by construction instead of by remembering
+         to add a call to each. */
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
       // Preserve the vertical scroll across the DOM rebuild — buildTracks empties the container, which
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
       // glitch). The browser clamps if the content is now shorter (mobile solo / collapsed group).

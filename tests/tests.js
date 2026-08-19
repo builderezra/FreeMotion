@@ -554,6 +554,37 @@
     }
   });
 
+  test('transport: the add-row switch leans correctly as LAYERS are added, not just when the row moves', { item: 'addswitch-live' }, async function () {
+    /* Queue 373 clause 6, REOPENED by him at v10.20. His words: "Toggle switch doesn't update properly
+       when you are adding layers, it should always be accurate to where the add layer is."
+       The lean is `addAt / layers.length`, so the DENOMINATOR moves on every add — the row does not have
+       to go anywhere for the readout to go wrong. Every sync call site was a MOVE (moveAddMarker, the
+       toggle, the two drag paths, boot), which is precisely why the original clause-6 test passed with
+       the bug fully intact: it only ever moved the row. So this one never moves it after the first
+       placement, and changes the stack underneath it instead. */
+    const sw = document.getElementById('btn-addside');
+    if (!sw) throw new Error('#btn-addside — the add-row switch — is missing');
+    const lean = () => parseFloat(sw.style.getPropertyValue('--sw'));
+    const layers0 = FM.scene.layers.slice(), addAt0 = FM.addAt;
+    try {
+      FM.scene.layers.length = 0;
+      const add = (n) => { for (let i = 0; i < n; i++) { const L = FM.makeLayer('shape', { name: 'L', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' }); L.start = 0; L.duration = 3; FM.scene.layers.push(L); } };
+      add(4);
+      FM.moveAddMarker(2);
+      if (Math.abs(lean() - 0.5) > 0.001) throw new Error('with the add row at 2 of 4 the switch leans ' + lean() + ', not 0.5');
+      add(4);                                  // four more layers, and the row is NOT touched — his case
+      FM.timeline.rebuild();
+      if (Math.abs(lean() - 0.25) > 0.001) throw new Error('after adding four layers the row is 2 of 8, so the switch should lean 0.25 — it reads ' + lean() + ', i.e. it only updates when the row MOVES, which is his report');
+      FM.scene.layers.length = 4;              // …and deleting is the same fault in the other direction
+      FM.timeline.rebuild();
+      if (Math.abs(lean() - 0.5) > 0.001) throw new Error('after removing four layers the row is 2 of 4, so the switch should lean back to 0.5 — it reads ' + lean());
+    } finally {
+      FM.scene.layers = layers0; FM.addAt = addAt0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

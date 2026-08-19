@@ -10172,8 +10172,21 @@ wait for them to report back."*
       and a check at the top of the list would pass while the bug is fully intact.
 
 - [x] **373 — Swap undo/redo with copy/paste in the transport row, and add a switch that sends the
-      add-layer row to the top or bottom of the timeline.** ✅ **v10.20 — all ten clauses, measured in
-      BOTH layouts at phone and desktop width.** (18 Aug, phone screenshot at v9.81, annotated
+      add-layer row to the top or bottom of the timeline.** ✅ **v10.20 + v10.21.** v10.20 shipped nine of
+      the ten clauses; **clause 6 was REOPENED the same day — he caught it — and fixed in v10.21.** His words, verbatim:
+
+      > Toggle switch doesn't update properly when you are adding layers, it should always be accurate to where the add layer is
+
+      **He is right, and the original clause-6 test is why I did not catch it.** The lean is
+      `addAt / layers.length`, so the DENOMINATOR moves on every add — the row does not have to go
+      anywhere for the readout to become wrong. Every call site the sync had was a MOVE (`moveAddMarker`,
+      the toggle, the two drag paths, boot), and the test only ever moved the row, so it passed with the
+      bug fully intact. His screenshot shows three layers above the row and five below — 0.375 — with the
+      knob still hard up from when the project was empty.
+      ✅ **FIXED v10.21, structurally rather than by adding call sites:** the sync now runs from
+      `FM.timeline.rebuild()`, which is what runs whenever the rows on screen reflect a new stack, so add,
+      delete, duplicate, undo, redo, project-open and group enter/exit are covered by construction. The
+      new test never moves the row after placing it and changes the stack underneath it instead. (18 Aug, phone screenshot at v9.81, annotated
       "NEW" with arrows showing the swap.) His words, verbatim, in full:
 
       > Move the undo and redo buttons to where to copy paste button is then move the copy paste to where they were on the left side and on its right put a little switch toggle that moves the add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch will gradually move closer from the top to the bottom depending on how far down you've moved the add row button, and press it while it's mid way just forces it in the direction it's furthest from, so if it's close to the top you press the switch and it goes to the bottom.
@@ -10261,7 +10274,8 @@ wait for them to report back."*
       3. [x] **A small switch toggle sits to the RIGHT of copy/paste** in its new left-hand home.
       4. [x] The switch **sends the add-layer row to the top or the bottom** of the timeline.
       5. [x] **Switch facing UP = add row at the top; facing DOWN = at the bottom.**
-      6. [x] **Mid positions are shown proportionally** — the switch leans further down the further down
+      6. [x] **Mid positions are shown proportionally** — *(reopened at v10.20, fixed v10.21: it did not
+             re-read when LAYERS changed, only when the row moved — see the top of this entry.)* — the switch leans further down the further down
              the add row has been moved.
       7. [x] **Pressing it mid-way forces it to the END IT IS FURTHEST FROM.** Near the top → pressing
              sends it to the bottom.
@@ -10813,3 +10827,74 @@ wait for them to report back."*
       4. [ ] the tap targets stay at least ~34px.
       `atPhoneWidth(fn, w)` already parameterises width, so the harness exists — this is a loop over widths
       rather than a new mechanism.
+
+- [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
+      preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
+      (19 Aug, via the phone inbox.) His words, verbatim, in full:
+
+      > Get rid of saving presets from this menu and also make sure you grab my attention and let me know what the difference between saving a preset with just effects and saving a layer as a preset coz I assumed presets are just effects anyways so I'm confused. Let me know and don't stop until I reply acknowledging it, remind me to acknowledge as well, and if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects.
+
+      **Clauses:**
+      1. [ ] **Saving presets is removed from that menu.** ⚠️ WHICH menu is not named — it arrived without
+             a screenshot. Find where preset-saving is offered and work out which one he means before
+             deleting anything; if it is genuinely ambiguous, ask alongside the answer to clause 2.
+      2. [ ] **Tell him the difference** between "save a preset (just effects)" and "save a layer as a
+             preset" — read the real code, do not describe the intent.
+      3. [ ] **Keep reminding him to acknowledge** — his words: *"don't stop until I reply acknowledging
+             it, remind me to acknowledge as well"*. So this rides along at the top of every reply until
+             he answers, rather than being asked once and forgotten.
+      4. [ ] **If they turn out to be the same thing, delete the one that is NOT "save as effects."**
+      ⚠️ This is a QUESTION FIRST and a change second. Answering it wrong and then deleting a button is
+      worse than waiting — clause 4 is conditional on clause 2's finding.
+
+- [ ] **407 — The elements/presets round-trip is "convoluted and stupid": open a preset, edit it, and it
+      should just update that preset.** (19 Aug, via the phone inbox.) His words, verbatim, in full:
+
+      > I don't really like ur new system for elements because when I load into one and then save it as a preset it doesn't get rid of the thing in the presets menu explaining what to do, I just want to open a preset, edit it and then it automatically updates that preset. Right now the system is convoluted and stupid
+
+      **Clauses:**
+      1. [ ] **The explainer card in the presets menu disappears once a preset has been saved** — he saved
+             one and the "here is how to make one" placeholder was still sitting there.
+      2. [ ] **Open a preset → edit it → it updates THAT preset**, without a save-as step.
+      ⚠️ Clause 2 is a real design decision, not just a bug: an in-place update needs the editor to
+      remember which preset a layer came from, and it needs an answer for "what if I wanted a copy". Look
+      at how the preset is loaded today before assuming a field can just be written back.
+      🔗 Related to [#406] — both are about presets meaning two different things at once.
+
+- [ ] **408 — Templates need to be editable, and currently are not.** (19 Aug, via the phone inbox.)
+      His words, verbatim, in full:
+
+      > And templates need to be editable as well, currently they ain't
+
+      **Clauses:**
+      1. [ ] **A saved template can be opened and edited.**
+      2. [ ] **The edit persists** — same question as [#407] clause 2: does editing update the template in
+             place, or fork a copy? Answer it deliberately rather than by accident.
+
+- [ ] **409 — Both ENDS of the add-row switch land somewhere you cannot properly see or use: the top
+      crops the add row, and the bottom pins the last layer to the dead edge of the screen — which on
+      iPhone is where the system's close-the-app swipe lives.** (19 Aug, three phone screenshots at
+      v10.20.) His words, verbatim, in full:
+
+      > Second image is what it does look like on the timeline when you press the toggle to make it go to the top which is bad because it doesn't take you fully see the add layer the top bit is cropped off. The third image is it at the bottom which is also bad and bad for any layer because you can barely see it, there should be some space at the bottom just to push up the last layer and not have it at the dead bottom, only if you're at the bottom of the screen tho.
+
+      > Also if you try to drag something from the dead bottom rn it just makes you close the app on iPhone because swiping from the bottom of ur screen does that lol
+
+      **Clauses:**
+      1. [ ] **Toggling to the TOP shows the add row in full** — his second screenshot has "Tap to add a
+             layer" sliced through the middle by the top edge of the scroller. Moving the row there and
+             leaving it half off screen is the switch failing at the one job it has.
+      2. [ ] **There is space below the LAST row**, so it is pushed up off the dead bottom edge — and he
+             is explicit this is *"bad for any layer"*, not just the add row, so it belongs to the
+             scroller, not to the switch.
+      3. [ ] **Only when you are actually at the bottom of the scroll** — his words: *"only if you're at
+             the bottom of the screen tho"*. So this is trailing space at the end of the content, not a
+             permanent gap that shows at every scroll position.
+      4. [ ] **It has to be draggable from there.** On iPhone a drag starting at the very bottom edge is
+             swallowed by iOS's own home/close gesture, so a row sitting in that band cannot be picked up
+             at all. Clause 2's space is what makes the last row reachable, which is why he reported them
+             together.
+      ⚠️ **Measure this at his size, not just 380px** — the screenshots are a 440×956 @dpr3 device
+      (queue 405), and "the last row is at the dead bottom" is a viewport-height question.
+      🔗 Caused by, and completes, **#373** clauses 4/5 — the switch does send the row to both ends; both
+      ends are just not usable when it gets there.
