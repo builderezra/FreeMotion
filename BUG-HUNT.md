@@ -858,3 +858,20 @@ have blessed every mutation checked against it.
 recorded in `tools/.test-floor` and only ever allowed to rise. Zero tests, no summary line at all, or a
 count below the floor each refuse and say why. Deliberately removing a test is the one case that trips
 it, and the message gives the one line that lowers the number.
+
+## 4. Three more sweeps, all clean (same session)
+Recorded because "we looked and found nothing" is worth as much as a finding when the next session is
+deciding where to spend its time.
+- **Export audio (#215's territory).** Read the whole path expecting a silent drop. It is already
+  exhaustively instrumented: the AAC-probe failure and the encode failure each toast the user and are
+  named in `FM._audioTrackDropped`, the soundtrack is encoded BEFORE the muxer exists so a file can
+  never advertise a track it does not have, and `buildAudioMix` records a REASON for every clip it
+  skips and reports them. Nothing silent left on that path. Whatever #215 is, it is not here.
+- **User data reaching markup.** Every `innerHTML` in the app is a static literal or a trusted icon
+  constant; nothing interpolates a layer, project or file name. Captions — the most obviously
+  user-typed string in the app — go through `textContent`, with a comment saying why. Clean.
+- **A layer scaled to 0.** `canvas-edit.js` reads `evalProp(tr.scale, t) || 1` in places, which looked
+  like the selection frame would stay full size while the layer vanished. Measured instead of assumed:
+  the frame's width falls by ~25px per 0.5 of scale, which is exactly a 400px layer at the preview's
+  0.125 zoom, so it tracks correctly and collapses at 0. The `|| 1` sites turn out to be division
+  guards in the text-wrap drag, not defaults. No defect.
