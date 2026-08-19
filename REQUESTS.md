@@ -10532,19 +10532,31 @@ wait for them to report back."*
       label promises, and it is now deliberate rather than silent — say if you want position split onto its
       own tick instead, which is the other honest shape.
 
-- [ ] **381 — Hold a layer-edit card to reset just that group's values.** (18 Aug, phone screenshot at
+- [x] **381 — Hold a layer-edit card to reset just that group's values.** ✅ **v10.28.** (18 Aug, phone screenshot at
       v9.83 of the nine category cards.) His words, verbatim: *"Make it so if you hold down on any of the
       layer edit buttons it gives an option to reset that one specific groups values back to how to was"*.
       **The buttons:** the numbered category cards — Colouring, Border / Shadow, Blending / Opacity,
       Position / Scale, Speed, Volume, Edit Points, Presets, Effects.
       **Clauses:**
-      1. [ ] Holding a card offers **reset this group**.
-      2. [ ] It resets ONLY that group's properties, not the whole layer.
+      1. [x] Holding a card offers **reset this group**.
+      2. [x] It resets ONLY that group's properties, not the whole layer.
       ⚠️ *"back to how it was"* is ambiguous and matters: **back to the app's DEFAULTS**, or back to what it
       was when you opened the card? Building it as **defaults** — that is what "reset" means everywhere
       else, and "undo my last few changes" is what undo is for. Say if you meant the other one.
       ⚠️ It must be ONE undo step, and it must not touch keyframes on properties outside the group.
       Same hold idiom and the same swallow-the-tap guard as queue 331 and 365.
+      ✅ **Built as DEFAULTS**, per the reading above — say if you meant "back to when I opened the card"
+      instead and it changes. One `history.commit()`, so it is one undo step, and the hold sets a flag the
+      click handler swallows so the card does not also open.
+      ✅ **WHICH PROPERTIES BELONG TO A GROUP IS NOT RE-DECLARED.** `applyStyle` already knows, category by
+      category, and Paste Style exercises it on every build — so a reset is a paste FROM A PRISTINE LAYER of
+      the same type. One table, one place to update; a second list of the same properties is exactly how the
+      Paste Style icon grid went stale in queue 127. Only the categories applyStyle handles are offered:
+      Presets is a browser, Edit Points and Edit Group are doors to other screens, and Camera options has no
+      defaults of its own, so a Reset on any of those would be a dead menu item.
+      ⚠️ **The test dirties TWO groups and holds one**, because a reset that quietly restored the whole layer
+      would pass a colour-only check perfectly. Mutation-checked: widening the reset reports *"scale went
+      from 3.5 to 1, and he asked for one specific group only"*.
 
 - [ ] **382 — Motion blur should smear movement that EFFECTS cause, like shakes.** (18 Aug.) His words,
       verbatim: *"Motion blur should work when other effects make a layer move, currently it doesn't, like

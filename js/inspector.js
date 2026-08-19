@@ -2609,7 +2609,47 @@ window.FM = window.FM || {};
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') +
         '<span class="cat-ico">' + (gico ? icoMulti(gico) : svgIcon(cat.icon)) + '</span>' +
         '<span class="cat-label">' + label + '</span>';
-      card.addEventListener('click', () => {
+      /* HOLD A CARD TO RESET THAT GROUP (queue 381). Ezra: "Make it so if you hold down on any of the
+         layer edit buttons it gives an option to reset that one specific groups values back to how to
+         was."
+         "Back to how it was" is ambiguous and the entry called it: this is back to the app's DEFAULTS,
+         which is what reset means everywhere else — "undo my last few changes" is what undo is for.
+         WHICH PROPERTIES BELONG TO A GROUP IS NOT RE-DECLARED HERE. `applyStyle` already knows, category
+         by category, and it is exercised by Paste Style on every build; a second table listing the same
+         properties would be one more thing to forget when a card gains a field, which is exactly how the
+         Paste Style icon grid went stale in queue 127. So a reset is a paste FROM A PRISTINE LAYER of the
+         same type — one code path, one place to update.
+         Only the categories applyStyle actually handles are offered. Presets is a browser, Edit Points and
+         Edit Group are doors to other screens, and Camera options has no defaults of its own — a "reset"
+         on any of those would be a dead menu item. */
+      const RESETTABLE = { color: 1, border: 1, blend: 1, transform: 1, text: 1, speed: 1, volume: 1, effects: 1 };
+      if (RESETTABLE[cat.key] && !volDisabled) {
+        let holdT = null;
+        const clear = () => { if (holdT) { clearTimeout(holdT); holdT = null; } };
+        card.addEventListener('pointerdown', () => {
+          clear();
+          holdT = setTimeout(() => {
+            holdT = null;
+            card._heldReset = true;    // swallow the click this hold will produce (queue 331 / 365)
+            const r = card.getBoundingClientRect();
+            const live = FM.layerById(FM.scene, layer.id) || layer;
+            const doReset = () => {
+              const fresh = FM.makeLayer(live.type, live.shape ? { shape: live.shape } : {});
+              applyStyle(live, fresh, { [cat.key]: true });
+              FM.requestRender(); FM.inspector.refresh();
+              if (FM.timeline) FM.timeline.rebuild();
+              if (FM.canvasEdit) FM.canvasEdit.update();
+              if (FM.history) FM.history.commit();   // ONE undo step for the whole group, per the entry
+              if (FM.toast) FM.toast('Reset ' + label);
+            };
+            if (FM.contextMenu) FM.contextMenu.show(Math.max(8, Math.min(r.left, window.innerWidth - 220)), r.bottom + 6, [{ label: 'Reset ' + label, action: doReset }]);
+            else doReset();
+          }, 480);
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, clear));
+      }
+      card.addEventListener('click', (ev) => {
+        if (card._heldReset) { card._heldReset = false; if (ev) { ev.preventDefault(); ev.stopPropagation(); } return; }
         if (volDisabled) { if (FM.toast) FM.toast('This layer has no audio', 1200); return; }   // pressing Volume on a no-audio layer does nothing (Ezra)
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard

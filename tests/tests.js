@@ -858,6 +858,56 @@
     }
   });
 
+  test('holding a layer-edit card offers to reset just that group', { item: 'card-hold-reset' }, async function () {
+    /* Queue 381. Ezra: "Make it so if you hold down on any of the layer edit buttons it gives an option to
+       reset that one specific groups values back to how to was."
+       Two clauses, and the second is the one worth testing hardest: it must reset ONLY that group. So the
+       layer is dirtied in TWO groups — Colouring and Position / Scale — the hold is done on Colouring, and
+       the transform is asserted to be untouched afterwards. A reset that quietly restored the whole layer
+       would satisfy a colour-only check perfectly. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Holdy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      await sleep(60);
+      const live = FM.layerById(FM.scene, L.id);
+      live.fill = '#ff0000';                 // dirty group 1
+      live.transform.scale = 3.5;            // …and group 2, which must survive
+      FM.inspector.refresh();
+      await sleep(120);
+      const cards = [].slice.call(document.querySelectorAll('.cat-card'));
+      if (!cards.length) throw new Error('no category cards are rendered to hold');
+      const colour = cards.find(c => /Colour|Color/i.test(c.textContent || ''));
+      if (!colour) throw new Error('no Colouring card among [' + cards.map(c => (c.textContent || '').trim()).join(', ') + ']');
+      colour.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(700);                      // the hold is 480ms
+      colour.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));   // release it, or the page is left mid-gesture for every test after this one
+      const menu = document.getElementById('ctx-menu');
+      const items = menu ? [].slice.call(menu.querySelectorAll('.ctx-item')) : [];
+      const reset = items.find(i => /^Reset/.test((i.textContent || '').trim()));
+      if (!reset) throw new Error('holding the Colouring card offered no Reset — menu reads [' + items.map(i => (i.textContent || '').trim()).join(', ') + ']');
+      reset.click();
+      await sleep(150);
+      const after = FM.layerById(FM.scene, L.id);
+      if ((after.fill || '').toLowerCase() === '#ff0000') throw new Error('Reset did not clear the group: fill is still ' + after.fill);
+      if (Math.abs(after.transform.scale - 3.5) > 0.001) throw new Error('Reset touched a DIFFERENT group — scale went from 3.5 to ' + after.transform.scale + ', and he asked for one specific group only');
+    } finally {
+      /* Close the menu through its OWN api rather than removing the node: it tracks which control opened
+         it (`openedBy`, for the tap-again-to-close toggle), and tearing the element out from under that
+         left the next menu in the suite unable to open at all — two later tests went red reporting "no
+         menu" for a fault that was entirely this cleanup. */
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."
