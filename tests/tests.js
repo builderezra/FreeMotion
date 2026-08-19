@@ -31072,6 +31072,46 @@
     if (size.w !== 76 * size.scale || size.h !== 58 * size.scale) throw new Error('the tile is ' + size.w + '×' + size.h + ' at ' + size.scale + '×, which is not the 76×58 box scaled — it will crop or letterbox');
   });
 
+  test('a tap away closes the effects menu and leaves the layer selected', { item: 'fx-tap-away-keeps-layer' }, async function () {
+    /* Queue 401. Ezra: "Tapping anywhere on the screen when you're in the effects menu should close the
+       effects menu but not the layer."
+       BOTH halves are asserted, and the second is the one that was broken: a tap on empty canvas or
+       timeline ran `selectLayer(null)`, and the phone's inspector sheet is derived from the selection —
+       so losing the layer closed everything and you had to find it again to carry on. A test that only
+       checked "the menu closed" would pass with that intact, since the menu closes either way. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Tappy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      await sleep(80);
+      FM.fxBrowser.open(L);
+      await sleep(260);
+      const root = document.getElementById('fx-browser');
+      if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
+      // tap the timeline — one of the two places he means, and one that is on the KEEP list
+      const target = document.getElementById('timeline') || document.body;
+      const r = target.getBoundingClientRect();
+      const at = { clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height - 8), bubbles: true, button: 0, pointerId: 7, isPrimary: true };
+      target.dispatchEvent(new PointerEvent('pointerdown', at));
+      target.dispatchEvent(new PointerEvent('pointerup', at));
+      await sleep(220);
+      if (!document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('the tap did not close the effects menu');
+      const sel = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
+      if (sel.indexOf(L.id) < 0) throw new Error('the tap closed the menu AND dropped the layer (selection is now [' + sel.join(', ') + ']) — "close the effects menu but not the layer"');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers = layers0;
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

@@ -5193,6 +5193,25 @@ window.FM = window.FM || {};
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
         // A modal canvas tool is driving: every tap belongs to it, wherever it lands.
         if (FM.toolOwnsCanvas && FM.toolOwnsCanvas()) { armed = false; return; }
+        /* THE EFFECTS MENU EATS THE TAP THAT DISMISSES IT (queue 401). Ezra: "Tapping anywhere on the
+           screen when you're in the effects menu should close the effects menu but not the layer."
+           This has to happen on POINTERDOWN, and the first attempt on pointerup proved why: the timeline
+           and the canvas deselect from their OWN handlers, which run long before a document-level
+           pointerup — so the menu closed and the layer was gone anyway, which is exactly the half he was
+           complaining about. Closing here and stopping the event means the dismissing tap belongs to the
+           menu and reaches nothing underneath it.
+           The exit goes through the browser's own path so picks are applied rather than binned (queue
+           389 — a tap-away is an exit like any other), and `armed = false` stops the pointerup branch
+           below from treating the same gesture as a second tap. */
+        const fxbOpen = document.getElementById('fx-browser');
+        if (fxbOpen && !fxbOpen.classList.contains('hidden') &&
+            !(e.target && e.target.closest && e.target.closest('#fx-browser'))) {
+          if (FM._fxExitBrowser) FM._fxExitBrowser();
+          else if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+          armed = false; keepAtDown = true;
+          e.stopPropagation();
+          return;                                                                           // …the layer stays selected
+        }
         dx = e.clientX; dy = e.clientY; armed = true;
         // Decide NOW, while the target is still attached, whether it's a control / self-managing area.
         // Clicking a clip selects it → that calls timeline.rebuild() which DETACHES the clicked element,

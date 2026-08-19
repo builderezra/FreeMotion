@@ -11104,14 +11104,24 @@ wait for them to report back."*
       tile size. **If the grid now feels slower to fill on his phone, that is the trade and it is worth
       one line from him**, because the fix would be a cap of 2 on low-power devices rather than a redesign.
 
-- [ ] **401 — Tapping the screen while the effects menu is open should close the MENU, not deselect the
-      layer.** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **401 — Tapping the screen while the effects menu is open should close the MENU, not deselect the
+      layer.** ✅ **v10.40.** (19 Aug, via the phone inbox.) His words, verbatim:
       *"Tapping anywhere on the screen when you're in the effects menu should close the effects menu but
       not the layer."*
       **Clause:** a tap outside the effects menu dismisses the menu and leaves the layer selected.
       ⚠️ Today a tap on empty canvas/timeline calls `FM.selectLayer(null)`, which deselects — and the
       phone's inspector sheet is DERIVED from the selection, so losing the layer closes everything and you
       have to re-select to get back. That is the "and not the layer" half.
+      ✅ **THE DISMISSING TAP NOW BELONGS TO THE MENU and reaches nothing underneath it.** Written on
+      POINTERDOWN with `stopPropagation()`, and the first attempt is what proved that had to be the shape:
+      done on pointerup — modelled on the Add-sheet branch that sits right there — the menu closed and the
+      layer was gone anyway, because the timeline and the canvas deselect from their OWN handlers long
+      before a document-level pointerup runs. The test caught it on the first run.
+      ✅ The exit goes through the browser's own path, so a tap-away APPLIES the picks rather than binning
+      them — that is #389, and a tap-away is an exit like any other.
+      ⚠️ The test asserts BOTH halves. A check that only watched the menu close would pass with his actual
+      complaint intact, because the menu closed either way; the mutation that removes `stopPropagation()`
+      reports *"the tap closed the menu AND dropped the layer"*.
 
 - [ ] **402 — 🔁 The play button (the time pill) should not go yellow, and its text should be whiter.**
       (19 Aug, via the phone inbox — a reply to what shipped in v10.10/v10.11.) His words, verbatim:
