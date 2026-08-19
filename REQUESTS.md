@@ -11269,14 +11269,31 @@ wait for them to report back."*
       1. [ ] **Saving presets is removed from that menu.** ⚠️ WHICH menu is not named — it arrived without
              a screenshot. Find where preset-saving is offered and work out which one he means before
              deleting anything; if it is genuinely ambiguous, ask alongside the answer to clause 2.
-      2. [ ] **Tell him the difference** between "save a preset (just effects)" and "save a layer as a
-             preset" — read the real code, do not describe the intent.
+      2. [x] **Tell him the difference** — ANSWERED v10.44, from the code, and the answer is below.
       3. [ ] **Keep reminding him to acknowledge** — his words: *"don't stop until I reply acknowledging
              it, remind me to acknowledge as well"*. So this rides along at the top of every reply until
              he answers, rather than being asked once and forgotten.
-      4. [ ] **If they turn out to be the same thing, delete the one that is NOT "save as effects."**
+      4. [x] **RESOLVED — they are NOT the same thing, so nothing was deleted.** See the answer below; the
+             test `preset-scopes` now proves the distinction rather than asserting it in prose.
       ⚠️ This is a QUESTION FIRST and a change second. Answering it wrong and then deleting a button is
       worse than waiting — clause 4 is conditional on clause 2's finding.
+
+      ## ✅ THE ANSWER (read off the code, v10.44) — there are **three** savers, not two
+      | where | what it actually stores | where it comes back |
+      |---|---|---|
+      | an effect row's **⋯ → "Save this effect as preset…"** | **that ONE effect's settings** | hold that effect in the Effects browser |
+      | the Effects card's **"Save effects only…"** button | **the effects list, and nothing else** | the layer's Presets section |
+      | the layer **⋯ → "Save whole look as preset…"** | **everything**: every effect, PLUS fill / gradient / fill opacity / fill image, outline, shadow, blend mode, colour grade, corner radius — **AND the transform's ANIMATION** (rotation, scale and opacity keyframes, with x/y stored as deltas and re-based onto the target so it animates from where that layer already is instead of teleporting) | the layer's Presets section |
+      **So "presets are just effects" is true of two of them and false of the third**, and the third is the
+      powerful one: it is the only way to carry a MOVEMENT from one layer to another.
+      🚨 **AND THE LABEL WAS THE BUG.** The layer one used to read *"Save layer's effects as preset…"* — his
+      own wording from queue 182, chosen when a bare "Save as preset" said nothing about what it captured.
+      It names the owner and gets the content wrong, and the old code comment admitted as much in a
+      parenthesis. That label is what told him presets are just effects. All three are renamed to say what
+      they take.
+      ⏸️ **CLAUSE 1 IS STILL OPEN and needs one line from him:** *"Get rid of saving presets from this
+      menu"* arrived with no screenshot, and there are now three menus it could mean. Nothing was deleted —
+      deleting the wrong one costs a capability that has no other route.
 
 - [ ] **407 — The elements/presets round-trip is "convoluted and stupid": open a preset, edit it, and it
       should just update that preset.** (19 Aug, via the phone inbox.) His words, verbatim, in full:

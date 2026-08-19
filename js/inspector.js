@@ -1008,7 +1008,8 @@ window.FM = window.FM || {};
     }
     FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, items.concat(
       moveItems.length ? [{ sep: true }].concat(moveItems) : [], [
-      { label: 'Save as preset…', action: () => {
+      // "…THIS effect" (queue 406): one effect's own settings, not the layer's — see the note in app.js.
+      { label: 'Save this effect as preset…', action: () => {
         const name = prompt('Preset name:', (reg ? reg.label : fx.type) + ' preset'); if (!name || !name.trim()) return;
         const p = FM.effectPresets && FM.effectPresets.capture(fx, name.trim());
         // save() now reports its OWN failure (and any keyframe trim) on screen, so this only speaks
@@ -1517,7 +1518,10 @@ window.FM = window.FM || {};
                  (dropped ? ' — ' + dropped + ' didn\u2019t suit this layer' : ''));
       }
     });
-    const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
+    /* "Save EFFECTS ONLY" (queue 406). This one really does store just `layer.effects` — see the call
+       below — and sitting in the Effects card under a bare "Save preset…" it was indistinguishable from
+       the layer ⋯ menu's saver, which takes the whole look. That is the confusion he reported. */
+    const sv = el('button', 'fx-act', 'Save effects only…'); sv.disabled = !(layer.effects && layer.effects.length);
     sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
     tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);
     s.appendChild(tools);

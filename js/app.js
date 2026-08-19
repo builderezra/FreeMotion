@@ -3003,12 +3003,18 @@ window.FM = window.FM || {};
       items.push({ label: 'Group selection', action: () => FM.groupSelection() });
       items.push({ label: 'Masking group', action: () => FM.groupSelection({ mask: true }) });
     }
-    /* "Save LAYER'S EFFECTS as preset" (queue 182). Ezra: "Where it says save as preset, make it say
-       save layers effects as preset." On its own "Save as preset" did not say what it captured, and
-       there are two of them — this one and an individual effect's own ⋯ → Save as preset. Naming the
-       owner is what tells them apart. (Note it stores more than the effects list: the fill, stroke,
-       shadow, blend mode, colour grade, corner radius and the transform curves come too.) */
-    items.push({ label: "Save layer's effects as preset…", action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
+    /* "Save WHOLE LOOK as preset" (queue 406, correcting queue 182's wording with his own later words).
+       queue 182 asked for "save layers effects as preset" because a bare "Save as preset" did not say what
+       it captured — right problem, and the label it produced names the OWNER while getting the CONTENT
+       wrong. The old comment even admitted it in a parenthesis: this stores the fill, stroke, shadow, blend
+       mode, colour grade, corner radius AND the transform's animation as well as the effects.
+       That parenthesis is what cost him an afternoon: "I assumed presets are just effects anyways so I'm
+       confused". The label said effects. It is not effects. There are THREE savers in this app and each
+       one now says what it takes:
+         · this one              — the whole look, including movement
+         · Effects card → button — the effects list and nothing else
+         · an effect row's ⋯     — that ONE effect's settings */
+    items.push({ label: 'Save whole look as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to
     // live ONLY in the desktop top-bar ⋯ — merged here so every surface shows one identical menu
@@ -4133,7 +4139,7 @@ window.FM = window.FM || {};
         { label: 'Masking Group', disabled: selN < 2, action: () => FM.groupSelection({ mask: true }) },
         { label: (selN > 1 ? 'Duplicate ' + selN + ' Layers' : 'Duplicate Layer'), disabled: !hasSel, action: () => FM.duplicateSelection() },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
-        { label: 'Save Preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
+        { label: 'Save whole look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
         { label: 'Save Selection as Element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
         { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); }, arrow: hasClip, arrowTitle: 'Choose where to paste', arrowAction: openPastePos },
         { label: 'Paste Style…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },

@@ -16026,9 +16026,16 @@
     if (!FM.scene.layers.length) { FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 2 })); FM.timeline.rebuild(); }
     const items = FM.layerMenuItems(FM.scene.layers[0]) || [];
     const labels = items.map(i => i && i.label).filter(Boolean);
+    /* The wording moved on at queue 406, and this test moved with it rather than being deleted. queue 182
+       asked for "save layers effects as preset" because a bare "Save as preset…" said nothing about what it
+       captured — the right complaint, and the label it produced names the OWNER while getting the CONTENT
+       wrong: this saver takes the fill, outline, shadow, blend, colour grade and the transform's ANIMATION
+       as well as the effects. He came back with "I assumed presets are just effects anyways so I'm
+       confused", which is that label doing the confusing. Both requirements still hold: not the bare
+       wording, and it must SAY what it saves. */
     if (labels.indexOf('Save as preset…') >= 0) throw new Error('the layer ⋯ still says the bare "Save as preset…"');
-    if (labels.indexOf("Save layer's effects as preset…") < 0) {
-      throw new Error('no "Save layer\'s effects as preset…" in the layer ⋯ — have: ' + labels.join(' | '));
+    if (labels.indexOf('Save whole look as preset…') < 0) {
+      throw new Error('no "Save whole look as preset…" in the layer ⋯ — have: ' + labels.join(' | '));
     }
   });
 
@@ -31301,6 +31308,58 @@
       }, w);
     }
     if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('the three preset savers capture three different things', { item: 'preset-scopes' }, function () {
+    /* Queue 406. Ezra: "let me know what the difference between saving a preset with just effects and
+       saving a layer as a preset coz I assumed presets are just effects anyways so I'm confused… and if
+       you realise we just have two buttons for the same thing just get rid of the one isn't just saving as
+       effects."
+       **They are not the same thing**, which is why nothing was deleted — and this test is the proof of
+       that answer rather than a note claiming it. A layer preset must carry MORE than the effects list
+       (fill, outline, shadow, blend, grade and the transform's animation); an effects-only preset must
+       carry the effects and nothing else. If those two ever converge, one of them really has become
+       redundant and this goes red saying so. */
+    const layers0 = FM.scene.layers.slice();
+    const key = 'fm.layerpresets';
+    const saved0 = localStorage.getItem(key);
+    try {
+      const L = FM.makeLayer('shape', { name: 'Presetty', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#ff0000' });
+      L.start = 0; L.duration = 3;
+      L.effects = [{ type: 'blur', enabled: true, params: { amount: 4 } }];
+      L.stroke = { enabled: true, width: 6, color: '#00ff00' };
+      L.transform.rotation = 33;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+
+      if (!FM.layerPresets || !FM.layerPresets.save) throw new Error('FM.layerPresets is missing');
+      FM.layerPresets.save('probe-look', L);
+      const p = (FM.layerPresets.list() || []).find(x => x.name === 'probe-look');
+      if (!p) throw new Error('the layer preset did not save');
+      const d = p.data || {};
+      if (!d.effects || !d.effects.length) throw new Error('a layer preset dropped the effects — it is supposed to include them');
+      if (!d.stroke) throw new Error('a layer preset did NOT capture the outline — then it really is "just effects" and one of the two savers is redundant');
+      if (d.fill == null) throw new Error('a layer preset did NOT capture the fill');
+      if (!d.transform || (d.transform.rotation == null)) throw new Error('a layer preset did NOT capture the transform — the movement is the biggest thing that separates it from an effects preset');
+
+      // …and the effects-only saver really is effects-only
+      if (!FM.fxPresets || !FM.fxPresets.save) throw new Error('FM.fxPresets is missing');
+      const before = JSON.stringify(FM.fxPresets.list ? FM.fxPresets.list() : []);
+      FM.fxPresets.save('probe-fx', L.effects);
+      const q = (FM.fxPresets.list ? FM.fxPresets.list() : []).find(x => x.name === 'probe-fx');
+      if (!q) throw new Error('the effects-only preset did not save');
+      const blob = JSON.stringify(q);
+      if (/"stroke"|"fillGradient"|"colorGrade"/.test(blob)) throw new Error('the effects-only preset captured look properties too — then the two savers ARE the same thing and one should go');
+      if (before === undefined) throw new Error('unreachable');
+    } finally {
+      try { if (saved0 == null) localStorage.removeItem(key); else localStorage.setItem(key, saved0); } catch (e) {}
+      try {
+        const rest = (FM.fxPresets && FM.fxPresets.list) ? FM.fxPresets.list().filter(x => x.name !== 'probe-fx') : null;
+        if (rest && FM.fxPresets._write) FM.fxPresets._write(rest);
+      } catch (e) {}
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
   });
 
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
