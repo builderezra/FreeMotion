@@ -9767,8 +9767,15 @@ wait for them to report back."*
          · ⚠️ **Check first:** whether `_expanded` survives a save. Effects carry the same flag, so if
            storage already strips it this is free — and if it does NOT, masks must not start writing a UI
            flag into his project files.
-         That covers what he asked for. The deeper "make it a real effect" migration stays open under
-         this clause with its size written down, so it is a decision rather than a surprise.
+         ✅ **BOTH NAMED SYMPTOMS DONE — v10.07.** Collapsed by default with a chevron and a grip, an
+         accordion scoped to its siblings, and a left swipe deletes it (measured at 380px: 2 masks → 1).
+         `_expanded` is proven not to reach a saved project — the sanitiser's whitelist drops it, and
+         that is now a test rather than an assumption.
+         ⚠️ **STILL OPEN under this clause:** making a mask a REAL registry effect. Sized above at
+         #335-scale. Your call whether it is worth it now that it behaves like one.
+         ⚠️ **One loose end, recorded not glossed:** the mutation check caught the change only through
+         this test, but fired on the *open* assertion rather than the swipe one. The head's click handler
+         is attached independently of the gestures, so I cannot account for the coupling.
       2. ✅ **DONE — v9.81.** **Done inside a category discards your selection.** Queue 297 added Done to
          every sub-view so you could leave without going backwards first — but with the queue-277
          multi-select, Done CLOSES and the picks go with it. He expects Done to mean "add what I picked".

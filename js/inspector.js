@@ -1937,18 +1937,47 @@ window.FM = window.FM || {};
     if (layer.masks && !layer.masks.length) delete layer.masks;   // empty === absent → stay byte-for-byte diff-free
     commitH(); FM.requestRender(); FM.inspector.refresh(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
   }
+  /* A mask row behaves like an effect row now (queue 360 clause 1). Ezra: *"The mask effect… doesn't
+     work like an effect. I can't swipe it away to delete it or minimise it."*
+     He is right about the history and the deeper half of it is a big job — `layer.masks` is layer STATE
+     with 30 call sites across eight files including the render path, so making it a registry effect is
+     a #335-scale migration and is recorded as still open.
+     But neither thing he actually named needs any of that, and both come from the same place: this
+     block rendered every mask fully expanded with no gestures on it. `attachFxGestures` is already the
+     reusable wiring for swipe-left-to-delete AND press-hold-to-reorder, and it is generic — it reads
+     its list through a `stack` descriptor and deletes by OBJECT IDENTITY rather than by index, so it
+     takes masks unchanged. This is the same two-key descriptor the audio stack uses. */
+  const MASK_STACK = { list: l => (Array.isArray(l.masks) ? l.masks : []), after: afterMasks };
+
   function masksBlock(layer) {
     const wrap = el('div', 'mask-block');
     wrap.appendChild(el('div', 'insp-sub-label', 'Masks'));
     const masks = Array.isArray(layer.masks) ? layer.masks : [];   // caller only renders this block when it's non-empty
     masks.forEach((mask, idx) => {
-      const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : ''));
+      /* `_expanded` is SAFE to hang on a mask, and it was worth checking before doing it: the mask
+         sanitiser (js/storage.js:550) rebuilds every mask from a whitelist of eight keys, so a UI flag
+         cannot reach a saved project — the same guarantee `fx._expanded` already relies on. */
+      const expanded = !!mask._expanded;
+      const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : '') + (expanded ? ' fx-open' : ''));
       const head = el('div', 'mask-item-head');
+      const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
+      disc.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      disc.title = expanded ? 'Close this mask' : 'Open this mask\u2019s controls';
+      const toggleMask = () => {
+        if (_justReordered()) return;                    // a drag just dropped here — not a tap
+        if (item._g && item._g.moved) { item._g.moved = false; return; }
+        masks.forEach(m => { if (m !== mask) m._expanded = false; });   // accordion, same as the fx stack
+        mask._expanded = !expanded;
+        FM.inspector.refresh();
+      };
+      head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggleMask(); });
+      if (masks.length > 1) head.appendChild(el('span', 'fx-grip', '\u283f'));   // press-hold to reorder
       const eye = el('button', 'fx-icon-btn fx-eye' + (mask.enabled === false ? ' off' : ''));
       eye.title = mask.enabled === false ? 'Mask off — enable' : 'Mask on — disable';
       eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
       eye.addEventListener('click', () => { mask.enabled = mask.enabled === false; afterMasks(layer); });
       head.appendChild(eye);
+      head.appendChild(disc);
       head.appendChild(el('span', 'mask-name', 'Mask ' + (idx + 1)));
       head.appendChild(el('span', 'fx-spacer'));
       const anim = FM.isAnimated(mask.path);
@@ -1962,13 +1991,19 @@ window.FM = window.FM || {};
       del.addEventListener('click', () => { masks.splice(idx, 1); afterMasks(layer); });
       head.appendChild(del);
       item.appendChild(head);
-      item.appendChild(segRow('Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => mask.mode || 'add', v => { mask.mode = v; }));
-      item.appendChild(rangeRow('Feather', () => mask.feather || 0, v => { mask.feather = Math.max(0, v); }, 0, 200, 1));
-      item.appendChild(rangeRow('Opacity', () => Math.round((mask.opacity != null ? mask.opacity : 1) * 100), v => { mask.opacity = Math.max(0, Math.min(1, v / 100)); }, 0, 100, 1));
-      item.appendChild(checkRow('Invert', !!mask.invert, v => { mask.invert = v; FM.requestRender(); }));
-      const edit = el('button', 'mask-edit-btn', 'Edit path');
-      edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
-      item.appendChild(edit);
+      // MINIMISED unless opened — the other half of "I can't … minimise it". Every mask used to render
+      // its four controls and an Edit path button whether you were looking at it or not, so two masks
+      // buried the rest of the panel.
+      if (expanded) {
+        item.appendChild(segRow('Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => mask.mode || 'add', v => { mask.mode = v; }));
+        item.appendChild(rangeRow('Feather', () => mask.feather || 0, v => { mask.feather = Math.max(0, v); }, 0, 200, 1));
+        item.appendChild(rangeRow('Opacity', () => Math.round((mask.opacity != null ? mask.opacity : 1) * 100), v => { mask.opacity = Math.max(0, Math.min(1, v / 100)); }, 0, 100, 1));
+        item.appendChild(checkRow('Invert', !!mask.invert, v => { mask.invert = v; FM.requestRender(); }));
+        const edit = el('button', 'mask-edit-btn', 'Edit path');
+        edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
+        item.appendChild(edit);
+      }
+      attachFxGestures(item, head, layer, mask, idx, MASK_STACK);   // swipe-left = delete · press-hold + drag = reorder
       wrap.appendChild(item);
     });
     // No "+ Add mask" button any more: Mask is an entry in the effect browser now (Ezra), so there

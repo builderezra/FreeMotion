@@ -470,6 +470,72 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('masks: a mask row minimises, swipes away, and never writes its UI state to the project', { item: 'mask-row-fx' }, async function () {
+    /* Queue 360 clause 1. His words: "The mask effect… doesn't work like an effect. I can't swipe it
+       away to delete it or minimise it."
+       The deeper half of that — a mask being layer STATE rather than a registry effect — is a #335-scale
+       migration (30 call sites across eight files, render path included) and stays open. Neither thing
+       he NAMED needs it: both came from this block rendering every mask fully expanded with no gestures
+       on it, and `attachFxGestures` already does swipe-to-delete and press-hold-to-reorder generically. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'L', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4;
+      L.masks = [FM.masks.make(), FM.masks.make()];
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects');
+      await sleep(140);
+
+      const items = () => [].slice.call(document.querySelectorAll('.mask-item'));
+      if (items().length !== 2) throw new Error('expected 2 mask rows, found ' + items().length + ' — nothing below can mean anything');
+      const bodyBits = (it) => it.querySelectorAll('.insp-row, .seg-row, .range-row, .mask-edit-btn').length;
+      if (bodyBits(items()[0]) !== 0) throw new Error('a mask row renders its controls with the row closed — it cannot be minimised');
+      if (!items()[0].querySelector('.fx-disc')) throw new Error('a mask row has no open/close chevron');
+
+      /* PAST THE REORDER GUARD FIRST. `_justReordered()` swallows any tap within 400ms of a drop, so a
+         row does not open when you let go of a drag on it — correct behaviour, and a hazard for a test
+         that runs milliseconds after the suite's effect-reorder tests. This failed only inside the
+         suite: the same probe opens the row at 380 AND at 1280 in isolation. Not a width problem and
+         not a code bug — a cross-test one, which is exactly the kind that gets misdiagnosed as either. */
+      await sleep(450);
+      items()[0].querySelector('.mask-item-head').click();
+      await sleep(140);
+      if (bodyBits(items()[0]) === 0) throw new Error('tapping a mask head did not open its controls');
+      if (bodyBits(items()[1]) !== 0) throw new Error('opening one mask left the other open too — it is not an accordion like the effect stack');
+
+      // Swipe the SECOND row away, through the same gesture path an effect row uses.
+      const it1 = items()[1], head1 = it1.querySelector('.mask-item-head');
+      const r = head1.getBoundingClientRect(), y = r.top + r.height / 2, x0 = r.left + r.width - 20;
+      const ev = (type, cx) => head1.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 5, isPrimary: true, pointerType: 'touch',
+        clientX: cx, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+      const before = L.masks.length;
+      ev('pointerdown', x0);
+      for (let k = 1; k <= 8; k++) ev('pointermove', x0 - k * 22);
+      ev('pointerup', x0 - 8 * 22);
+      await sleep(600);
+      if (L.masks.length !== before - 1) throw new Error('a left swipe on a mask row left ' + L.masks.length + ' of ' + before + ' masks — it cannot be swiped away');
+
+      /* AND THE FLAG MUST NOT REACH HIS PROJECT FILES. This is the one risk the plan flagged before the
+         change was made: `_expanded` is transient UI state, and masks are serialised. The sanitiser
+         rebuilds each mask from a whitelist, so it is dropped — asserted rather than assumed, because a
+         whitelist gaining a passthrough later would silently start saving it. */
+      L.masks[0]._expanded = true;
+      if (FM.storage && FM.storage._sanitizeLayers) {
+        FM.storage._sanitizeLayers([L]);
+        if (L.masks[0] && L.masks[0]._expanded !== undefined) {
+          throw new Error('_expanded survived the save sanitiser — a UI flag would be written into his project files');
+        }
+      }
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('add menu: every tab opens at the same height, and the library pages two rows at a time', { item: 'addtabs-height' }, function () {
     /* Queue 358, correcting queue 299 / v9.47 — and both of his complaints in that entry are one fault.
        "When I said I wanted the media and audio rows to be only two rows instead of three I didn't mean

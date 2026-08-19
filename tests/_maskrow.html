@@ -1,0 +1,64 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#360 c1 — a mask row behaves like an effect row</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #360 clause 1. His words: "The mask effect… doesn't work like an effect. I can't swipe it away to
+   delete it or minimise it." Both are inspector-only, so this drives the real rows. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380, H = +q.get('h') || 820;
+  var fr = document.getElementById('app'), out = document.getElementById('out'), L = [];
+  fr.style.width = W + 'px'; fr.style.height = H + 'px';
+  function say(s){ L.push(s); out.textContent = L.join('\n'); }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, t = 0;
+    (function wait(){
+      if (++t > 300) { say('no FM'); window.__done = true; return; }
+      if (!w.FM || !w.FM.inspector || !w.FM.home || !w.FM.masks) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        var sp = d.getElementById('splash'); if (sp) sp.remove();
+        if (FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0;
+        var Lr = FM.makeLayer('shape', { name:'L', shape:'rect', x:540, y:960, shapeW:400, shapeH:400, fill:'#3a7bd5' });
+        Lr.start = 0; Lr.duration = 4;
+        Lr.masks = [FM.masks.make(), FM.masks.make()];
+        FM.scene.layers.push(Lr);
+        FM.selectLayer(Lr.id); FM.refreshAll();
+        FM.inspector.openCategory('effects');
+      } catch (e) { say('setup threw ' + e.message); }
+      setTimeout(function () {
+        try {
+          if (q.get('still')) { say('left as-is for a screenshot'); window.__done = true; return; }
+          var items = [].slice.call(d.querySelectorAll('.mask-item'));
+          say('mask rows: ' + items.length);
+          if (!items.length) { say('no mask rows rendered'); window.__done = true; return; }
+          function bodyRows(it) { return it.querySelectorAll('.insp-row, .seg-row, .range-row, .mask-edit-btn').length; }
+          say('  collapsed by default: row0 body elements = ' + bodyRows(items[0]) + '  (0 = minimised)');
+          say('  has a chevron: ' + !!items[0].querySelector('.fx-disc') + '   has a grip: ' + !!items[0].querySelector('.fx-grip'));
+          // open it
+          items[0].querySelector('.mask-item-head').click();
+          setTimeout(function () {
+            var it0 = d.querySelectorAll('.mask-item')[0];
+            say('  after tapping the head: body elements = ' + bodyRows(it0) + '  (>0 = it opened)');
+            // swipe the SECOND one away
+            var it1 = d.querySelectorAll('.mask-item')[1];
+            var head1 = it1.querySelector('.mask-item-head');
+            var r = head1.getBoundingClientRect(), y = r.top + r.height/2, x0 = r.left + r.width - 20;
+            function ev(type, cx) { head1.dispatchEvent(new w.PointerEvent(type, { bubbles:true, cancelable:true, pointerId:5, isPrimary:true, pointerType:'touch', clientX:cx, clientY:y, buttons: type==='pointerup'?0:1 })); }
+            var before = FM.scene.layers[0].masks.length;
+            ev('pointerdown', x0);
+            for (var k = 1; k <= 8; k++) ev('pointermove', x0 - k*22);
+            ev('pointerup', x0 - 8*22);
+            setTimeout(function () {
+              say('  swipe-to-delete: masks ' + before + ' → ' + FM.scene.layers[0].masks.length);
+              window.__done = true;
+            }, 700);
+          }, 400);
+        } catch (e) { say('drive threw ' + e.message); window.__done = true; }
+      }, 1000);
+    })();
+  });
+})();
+</script></body></html>
