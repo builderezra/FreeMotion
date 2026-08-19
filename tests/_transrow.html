@@ -26,6 +26,13 @@ fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
  }catch(e){say('setup '+e.message);}
  setTimeout(function(){
   try{
+   /* TOGGLE THE LAYOUT HERE, not at setup. refreshAll() re-applies the stored layout class, so a toggle
+      before it is simply overwritten — measured: both "classic" and "studio" runs reported Studio's
+      321px padding, i.e. the probe never tested classic at all and reported it as fine. */
+   var lay2=q.get('layout');
+   if(lay2==='classic') d.body.classList.remove('layout-studio');
+   if(lay2==='studio') d.body.classList.add('layout-studio');
+   if(lay2 && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
    var row=d.getElementById('transport'), pill=d.getElementById('time-readout'), sw=d.getElementById('btn-addside');
    var rr=row.getBoundingClientRect(), pr=pill.getBoundingClientRect();
    var rowMid=rr.left+rr.width/2, pillMid=pr.left+pr.width/2;
