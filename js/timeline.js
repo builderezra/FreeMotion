@@ -1835,7 +1835,18 @@ window.FM = window.FM || {};
     plus.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.6v12.8M5.6 12h12.8"/></svg>';
     const label = document.createElement('span');
     label.className = 'tl-addrow-label'; label.textContent = phone ? addRowLabel() : 'New layers go here';
-    inner.append(plus, label);
+    /* THE + GETS THE HEAD COLUMN, THE TEXT GETS THE LANE (queue 417). Ezra: "Re design the add layer to
+       make it cut off at the line all the others cut off at and make it so on the left over the line the
+       plus button will be there and centred and on the right will be the text saying tap here to add
+       layer."
+       Every other row is head + lane, split by a rule at `--head-w`; this one was a single box with both
+       marks huddled at the left, which is why it never lined up with anything. Wrapping the + in a box of
+       exactly `--head-w` puts the divider on the same pixel as every other row's by construction rather
+       than by a number copied here. */
+    const head = document.createElement('span');
+    head.className = 'tl-addrow-head';
+    head.appendChild(plus);
+    inner.append(head, label);
     row.appendChild(inner);
     const open = (e) => {
       if (e) { e.preventDefault(); e.stopPropagation(); }

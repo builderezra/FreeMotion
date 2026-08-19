@@ -11541,15 +11541,24 @@ wait for them to report back."*
       ✅ The drag publishes `FM.dragLayerId` and clears it on cleanup, so the switch returns to its own
       colour the moment you let go — asserted in both directions.
 
-- [ ] **417 — Redesign the add-layer row: cut it off at the same line as the other rows, + centred on the
-      left, text on the right.** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **417 — Redesign the add-layer row: cut it off at the same line as the other rows, + centred on the
+      left, text on the right.** ✅ **v10.55.** (19 Aug, via the phone inbox.) His words, verbatim:
       > Re design the add layer to make it cut off at the line all the others cut off at and make it so on the left over the line the plus button will be there and centred and on the right will be the text saying tap here to add layer.
       **Clauses:**
-      1. [ ] The row cuts off at the same vertical line every other row cuts off at (the layer-head
+      1. [x] The row cuts off at the same vertical line every other row cuts off at (the layer-head
              column's edge).
-      2. [ ] The + sits LEFT of that line, centred in that column.
-      3. [ ] The text "tap here to add layer" sits to the RIGHT of the line.
+      2. [x] The + sits LEFT of that line, centred in that column.
+      3. [x] The text "tap here to add layer" sits to the RIGHT of the line.
       🔗 Overlaps [#409] — both change the add row; do them together if they land in the same release.
+      ✅ **THE DIVIDER IS THE SAME `--head-w` EVERY OTHER ROW USES**, so it lands on the same pixel by
+      construction rather than by a number copied into this rule — and the test compares it against a real
+      `.track-head` for the same reason: "the line all the others cut off at" is a RELATIONSHIP, and a
+      constant would keep passing on the day the head column changes width and this row stops matching.
+      ⚠️ **Scoped to the PHONE row, and the measurement is why.** Applied to the PC "line" variant the
+      divider landed 10px past every other row's — that variant carries its own 10px padding, is a thin
+      hover line, and has no persistent caption at all, while his request names the caption ("on the right
+      will be the text saying tap here to add layer"). The empty-state panel is likewise left alone: it is
+      the big centred + from #354, which he asked for and likes.
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
       (19 Aug, via the phone inbox.) His words, verbatim, both messages:

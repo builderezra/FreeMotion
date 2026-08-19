@@ -31797,6 +31797,59 @@
     }
   });
 
+  test('the add row splits at the same line every other row splits at', { item: 'addrow-columns' }, async function () {
+    /* Queue 417. Ezra: "Re design the add layer to make it cut off at the line all the others cut off at
+       and make it so on the left over the line the plus button will be there and centred and on the right
+       will be the text saying tap here to add layer."
+       All three clauses are geometry, so all three are measured — and the FIRST one is measured against a
+       real `.track-head`, not against a number. "The line all the others cut off at" is a relationship
+       between two rows; asserting a constant here would keep passing on the day the head column changes
+       width and the add row stops matching it, which is exactly the failure he reported. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      for (let i2 = 0; i2 < 3; i2++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i2, shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.moveAddMarker(1);
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(160);
+      /* …at PHONE width, because the column split is the phone row's. The PC variant is a thin hover line
+         with its own padding and no persistent caption, and his request names the caption — "on the right
+         will be the text saying tap here to add layer". Measured before scoping it: applied to the PC line
+         the divider landed 10px past every other row's, which is that variant's own padding. */
+      await atPhoneWidth(async function () {
+        FM.timeline.rebuild();
+        await sleep(140);
+        check();
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+    function check() {
+      const head = document.querySelector('.track-head');
+      const aHead = document.querySelector('.tl-addrow-head');
+      const plus = document.querySelector('.tl-addrow-plus');
+      const label = document.querySelector('.tl-addrow-label');
+      if (!head) throw new Error('no .track-head to compare against');
+      if (!aHead || !plus || !label) throw new Error('the add row has no head column / plus / label');
+      const hr = head.getBoundingClientRect(), ar = aHead.getBoundingClientRect();
+      if (Math.abs(ar.right - hr.right) > 1.5) {
+        throw new Error('the add row cuts off at x=' + Math.round(ar.right) + ' but every other row cuts off at x=' + Math.round(hr.right) + ' — that is the line he means');
+      }
+      const pr = plus.getBoundingClientRect(), lr = label.getBoundingClientRect();
+      if (pr.right > ar.right + 0.5) throw new Error('the + is not fully LEFT of the line');
+      if (lr.left < ar.right - 0.5) throw new Error('the text starts at ' + Math.round(lr.left) + ', left of the line at ' + Math.round(ar.right) + ' — it belongs on the right');
+      // …and centred in that column, which is the part an eye would let slide
+      const off = ((pr.left + pr.right) / 2) - ((ar.left + ar.right) / 2);
+      if (Math.abs(off) > 1.5) throw new Error('the + sits ' + off.toFixed(1) + 'px off the centre of its column');
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

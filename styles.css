@@ -6659,9 +6659,30 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .tl-addrow-inner {
   position: sticky; left: 0;
-  display: flex; align-items: center; gap: 9px;
-  padding: 0 12px; max-width: 100vw; box-sizing: border-box;
+  display: flex; align-items: center; gap: 0;
+  padding: 0; max-width: 100vw; box-sizing: border-box;
 }
+/* THE HEAD COLUMN OF THE ADD ROW (queue 417). `--head-w` is the same variable every `.track-head` uses,
+   so the divider lands on the same pixel as every other row's without a number being copied — which is
+   the whole of "make it cut off at the line all the others cut off at". `align-self: stretch` makes the
+   rule run the row's full height rather than just the text's line box. */
+.tl-addrow-head {
+  width: var(--head-w); flex: 0 0 var(--head-w);
+  display: flex; align-items: center; justify-content: center;
+  align-self: stretch; border-right: 1px solid var(--line);
+}
+.tl-addrow-label { padding-left: 12px; }
+/* The EMPTY-state panel is a different design and keeps it (queue 354 / v10.02): one big centred + above
+   its caption, no columns. `display: contents` dissolves the head box there so the column split cannot
+   reach into it. */
+.tl-addrow--empty .tl-addrow-head { display: contents; }
+.tl-addrow--empty .tl-addrow-label { padding-left: 0; }
+/* …and the PC "line" variant keeps its own shape too. That one is a thin hover line with its own 10px
+   padding, not the phone's full row — his request is the phone one ("on the right will be the text saying
+   tap here to add layer", which only that variant shows). Measured: with the column applied there, the
+   add row's divider landed 10px past every other row's, which is that padding. */
+.tl-addrow--line .tl-addrow-head { display: contents; }
+.tl-addrow--line .tl-addrow-label { padding-left: 0; }
 /* THE + (queue 296 + 324). It is an SVG now — see the note in timeline.js: the character "+" is placed
    by the font, so it could not be centred reliably. And it carries colour again: queue 324, "make the
    tiny plus button that's on the tap to create layer have some nice colours to it like the old plus
