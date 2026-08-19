@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>the inspector category grid</title>
+<style>html,body{margin:0;background:#060c0f}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* The nine category cards, which is where the Presets icon lives (queue 367). */
+(function(){var q=new URLSearchParams(location.search),W=+q.get('w')||380,H=+q.get('h')||820;
+var fr=document.getElementById('app');fr.style.width=W+'px';fr.style.height=H+'px';
+fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
+(function wait(){if(++t>300){window.__done=true;return;}
+ if(!w.FM||!w.FM.inspector||!w.FM.home)return setTimeout(wait,50);
+ var FM=w.FM;
+ try{var sp=d.getElementById('splash');if(sp)sp.remove();if(FM.home.isOpen())FM.home.close();
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'L',shape:'rect',x:540,y:960,shapeW:400,shapeH:400,fill:'#3a7bd5'});
+  L.start=0;L.duration=4;FM.scene.layers.push(L);FM.selectLayer(L.id);FM.refreshAll();FM.inspector.refresh();
+ }catch(e){}
+ setTimeout(function(){window.__done=true;},1800);})();});})();
+</script></body></html>

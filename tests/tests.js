@@ -470,6 +470,71 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('inspector: the Presets icon is a bookmark, in the same colours, and the favourite star is untouched', { item: 'presets-bookmark' }, function () {
+    /* Queue 367. Ezra: "Change the presets logo to be a little bookmark flag icon thing instead of a
+       star, keep the same colours and put work into making sure it's great looking."
+       "It is a bookmark" is asserted as GEOMETRY rather than as a path string, because a path string
+       assertion only says "somebody changed this line". A bookmark's defining feature is the notch: ink
+       down both bottom corners and a bite out of the middle. That is what is measured. */
+    const STAR = 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z';
+    /* A LAYER HAS TO BE SELECTED FIRST, or the inspector renders no cards at all and this reads "could
+       not find the Presets icon" — a failure that has nothing to do with the icon. (The new baseline
+       gate in tools/mutate.sh caught exactly that here, on its first real use, before a mutation run
+       could be mistaken for proof.) */
+    const layers0 = FM.scene.layers.slice();
+    let icon = null;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'L', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+      const card = [].slice.call(document.querySelectorAll('.cat-card, .insp-cat'))
+        .filter(c => /Presets/.test(c.textContent || ''))[0];
+      if (!card) throw new Error('no Presets card rendered — nothing below can mean anything');
+      const path = card.querySelector('svg path');
+      icon = path && path.getAttribute('d');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+    if (!icon) throw new Error('the Presets card has no icon path');
+    if (icon.replace(/\s+/g, '') === STAR.replace(/\s+/g, '')) throw new Error('the Presets icon is still the star');
+
+    /* THE NOTCH, measured. Fill the path into a canvas and sample the bottom edge: a bookmark has ink at
+       both bottom corners and a gap in the middle; a star, a tab or a plain rectangle does not. */
+    const S = 96;
+    const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    g.setTransform(S / 24, 0, 0, S / 24, 0, 0);
+    g.fillStyle = '#fff';
+    g.fill(new Path2D(icon));
+    const px = g.getImageData(0, 0, S, S).data;
+    const inkAt = (x, y) => px[((y | 0) * S + (x | 0)) * 4 + 3] > 40;
+    // A row near the bottom of the shape: 20/24 of the way down.
+    const row = Math.round(S * 20 / 24);
+    const left = inkAt(S * 7 / 24, row), mid = inkAt(S * 12 / 24, row), right = inkAt(S * 17 / 24, row);
+    if (!left || !right) throw new Error('the icon has no ink at its bottom corners at y=' + row + ' — that is not a bookmark shape (left ' + left + ', right ' + right + ')');
+    if (mid) throw new Error('the icon is solid across its bottom — a bookmark needs the notch, which is the whole thing that says "bookmark"');
+
+    /* CLAUSE 2 — "keep the same colours". The coloured glyph carries its own gradient, and a recolour is
+       explicitly not what was asked for. */
+    if (!FM._presetIcoSrc) throw new Error('no _presetIcoSrc seam — the colour half of this test cannot run, and a silently-skipped assertion is worse than none');
+    const src = FM._presetIcoSrc();
+    {
+      ['#FFB03A', '#FFD84D', '#FFF0A6'].forEach(hex => {
+        if (src.toUpperCase().indexOf(hex) < 0) throw new Error('the Presets glyph lost its ' + hex + ' stop — he asked for the shape to change, not the colours');
+      });
+    }
+
+    /* AND THE FAVOURITE STAR STAYS A STAR. The entry warns about this directly: a bookmark in the
+       effects browser would be a second meaning for one shape. */
+    const favStar = document.querySelector('#fx-browser .fxb-fav svg path, .fxb-fav svg path');
+    if (favStar) {
+      const d = favStar.getAttribute('d') || '';
+      if (/a1\.2 1\.2 0 0 1/.test(d)) throw new Error('the effects browser favourite has become a bookmark too — it means "favourite" and must stay a star');
+    }
+  });
+
   test('inspector: the blend card is called Mixing, in both lists, and its key is unchanged', { item: 'mixing-rename' }, function () {
     /* Queue 366. Ezra handed me the call, same as #363: "if you can think of a rename for blending and
        opacity that describes what it does just as well then change that name too."

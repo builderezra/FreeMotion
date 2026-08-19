@@ -10018,7 +10018,7 @@ wait for them to report back."*
       containers** — not `document.body.textContent`, which includes the suite printing its own test
       titles and has produced a self-matching false pass in this repo before.
 
-- [ ] **367 — The Presets icon should be a little bookmark/flag, not a star.** (18 Aug.) His words,
+- [x] **367 — The Presets icon should be a little bookmark/flag, not a star.** ✅ **v10.14, all three clauses.** A ribbon bookmark with a deep notch, chosen by drawing the alternatives and looking at them at **22px** — a flag-on-a-pole collapses into a blob at that size. Same amber gradient (asserted). The effects-browser favourite ★ is untouched. The test fills the real path into a canvas and checks the notch is there, so a plain tab cannot pass. (18 Aug.) His words,
       verbatim: *"Change the presets logo to be a little bookmark flag icon thing instead of a star, keep
       the same colours and put work into making sure it's great looking"*.
       **Where it is:** the Presets category card's icon, a star path at `js/inspector.js:1675`-ish
@@ -10027,9 +10027,9 @@ wait for them to report back."*
       DIFFERENT thing and must NOT change — that one means "favourite", and a bookmark there would be a
       second meaning for the same shape).
       **Clauses:**
-      1. [ ] Bookmark/flag shape instead of the star.
-      2. [ ] **Same colours** — this is not a recolour.
-      3. [ ] *"Put work into making sure it's great looking"* — an explicit instruction not to do the
+      1. [x] ✅ Bookmark/flag shape instead of the star.
+      2. [x] ✅ **Same colours** — same three amber stops, mutation-checked.
+      3. [x] ✅ *"Put work into making sure it's great looking"* — an explicit instruction not to do the
              quick version. He has called out half-done icon work before (queue 313: *"the shading you
              added to the notepad looks so bad, you barely did anything and what you did do is complete
              ass"*), so: draw it at a large size AND at its real size before shipping, the way #313 had

@@ -1703,7 +1703,17 @@ window.FM = window.FM || {};
      * for captions would look first. Text and caption layers only — every other kind has nothing to
      * caption, and the branches below build by blacklist, so it is taken back out in catsFor. */
     { key: 'captions', label: 'Captions', icon: 'M3 5h18v14H3zM6.5 10.5h4M13.5 10.5h4M6.5 14h7' },
-    { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
+    /* A BOOKMARK, NOT A STAR (queue 367). Ezra: "Change the presets logo to be a little bookmark flag
+       icon thing instead of a star, keep the same colours and put work into making sure it's great
+       looking."
+       A ribbon with a deep V notch, chosen by DRAWING the alternatives and looking at them at 22px —
+       which is the size that actually decides it. A flag-on-a-pole was the other honest reading of
+       "bookmark flag" and it loses badly: filled at 22px it collapses into an illegible blob, because
+       the pole is a 1px line and the flag is most of the ink. The notch is what says "bookmark", so it
+       is cut deep enough to survive at real size rather than closing up into a plain tab.
+       ⚠️ The favourite ★ in the effects browser is a DIFFERENT glyph and is deliberately untouched — a
+       bookmark there would be a second meaning for one shape. */
+    { key: 'presets', label: 'Presets', icon: 'M6.6 3.2h10.8a1.2 1.2 0 0 1 1.2 1.2v16.4a.6.6 0 0 1-.95.49L12 16.6l-5.65 4.69A.6.6 0 0 1 5.4 20.8V4.4a1.2 1.2 0 0 1 1.2-1.2z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
     // camera only — the Effects-style door into the lens, focus and fog (Ezra)
     { key: 'cameraopts', label: 'Camera Options', icon: 'M3 8.5 8.5 4v3H14a6 6 0 0 1 0 12H9M3 8.5 8.5 13v-3' },
@@ -1851,7 +1861,7 @@ window.FM = window.FM || {};
 
   const ICO_PRESETS = lg('fm-ci-pre', 4, 20, 20, 4, [
       ['0', '#FFB03A'], ['.55', '#FFD84D'], ['1', '#FFF0A6']]) +
-    '<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z" fill="url(#fm-ci-pre)"/>';
+    '<path d="M6.6 3.2h10.8a1.2 1.2 0 0 1 1.2 1.2v16.4a.6.6 0 0 1-.95.49L12 16.6l-5.65 4.69A.6.6 0 0 1 5.4 20.8V4.4a1.2 1.2 0 0 1 1.2-1.2z" fill="url(#fm-ci-pre)"/>';   // same amber gradient, new shape (queue 367): "keep the same colours"
 
   /* Which coloured glyph a category shows, given the layer it is describing. Returns raw inner SVG
    * for icoMulti, or null to fall back to the old single-path currentColor icon. */
@@ -4981,6 +4991,12 @@ window.FM = window.FM || {};
    * Points already draws its own handles. Two special cases would drift apart the first time a third
    * section joined them.
    * Returns the section key, so the caller can also decide what to draw INSTEAD — not just a bool. */
+  /* Exposed for the suite (queue 367): the coloured Presets glyph, so "keep the same colours" can be
+     checked against the REAL gradient rather than against a copy of it living in a test. Attached after
+     FM.inspector exists — an earlier version ran at module-eval time, when it does not, and the guard
+     silently skipped, which would have made the colour assertion a no-op. */
+  FM._presetIcoSrc = function () { return ICO_PRESETS; };
+
   FM.inspector = {
     /* Open the Effects card on a particular side (queue 317). The full-screen browsers own two of the
        three sides and have nowhere to put the third — Filters is a list of ready-made looks, not a grid
