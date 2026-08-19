@@ -439,8 +439,26 @@ window.FM = window.FM || {};
       const p = this.list().find(x => x.name === name);
       if (!p || !layer) return;
       this.applyTo(p.data, layer);
+      /* REMEMBER WHERE THIS LOOK CAME FROM (queue 407 clause 2). Ezra: "I just want to open a preset, edit
+         it and then it automatically updates that preset." Without a note of the origin there is nothing to
+         update — the layer arrives carrying a look with no idea whose it was.
+         It is a plain field on the layer, so it saves and reloads with the project like everything else,
+         and applying a DIFFERENT preset overwrites it rather than accumulating. */
+      layer._fromPreset = name;
       afterFx();
       if (FM.canvasEdit) FM.canvasEdit.update();
+    },
+    /* …and writing the layer's current look BACK over that preset. Deliberately a one-tap action rather
+       than the literal "automatically" he asked for, and the reason is worth stating because it is a
+       judgement call he can overrule: a preset can be applied to many layers, so an automatic write-back
+       would mean nudging one layer silently restyles every other use of that preset — including in
+       projects not open. One tap keeps his round trip (open → edit → update) and cannot destroy anything
+       without being asked. Say the word and it becomes automatic. */
+    update(name, layer) {
+      if (!name || !layer) return false;
+      if (!this.list().some(x => x.name === name)) return false;
+      this.save(name, layer);          // save() already replaces a preset of the same name
+      return true;
     },
     /* WHAT APPLYING ACTUALLY DOES, with no side effects — split out of apply() so the PREVIEW can run
      * the very same code on a throwaway clone. That is the whole point of the preview: it has to show
@@ -4621,6 +4639,19 @@ window.FM = window.FM || {};
       const svL = el('button', 'fx-act', 'Save look + animations…');
       svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
       pwrap.appendChild(svL);
+      /* UPDATE THE PRESET THIS LAYER CAME FROM (queue 407 clause 2). It appears only when the layer was
+         applied from one that still exists, so it is never a dead control — and it closes his round trip:
+         open a preset, edit the layer, press this, and that preset now holds what you can see. */
+      const from = layer._fromPreset;
+      if (from && FM.layerPresets.list().some(x => x.name === from)) {
+        const up = el('button', 'fx-act insp-preset-update', 'Update “' + from + '”');
+        up.title = 'Write this layer’s current look + animations back over the “' + from + '” preset';
+        up.addEventListener('click', () => {
+          if (FM.layerPresets.update(from, layer) && FM.toast) FM.toast('Updated “' + from + '”');
+          FM.inspector.refresh();
+        });
+        pwrap.appendChild(up);
+      }
       lps.forEach(p => {
         pwrap.appendChild(presetRow({
           name: p.name,

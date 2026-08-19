@@ -31406,6 +31406,44 @@
     }
   });
 
+  test('applying a preset remembers it, and the layer can be written back over it', { item: 'preset-update' }, function () {
+    /* Queue 407 clause 2. Ezra: "I just want to open a preset, edit it and then it automatically updates
+       that preset. Right now the system is convoluted and stupid."
+       The round trip is asserted end to end: save a preset, apply it to a second layer, change that layer,
+       write it back, and the STORED preset must carry the change. The origin note is checked too, because
+       without it there is nothing to update and the button could never appear.
+       ⚠️ Built as ONE TAP rather than the literal "automatically" — a preset can be on many layers, so an
+       automatic write-back would let nudging one layer silently restyle every other use of it. That is a
+       judgement call recorded in the entry for him to overrule. */
+    const layers0 = FM.scene.layers.slice();
+    const key = 'fm.layerpresets';
+    const saved0 = localStorage.getItem(key);
+    try {
+      const src = FM.makeLayer('shape', { name: 'Src', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#ff0000' });
+      const dst = FM.makeLayer('shape', { name: 'Dst', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#00ff00' });
+      [src, dst].forEach(L => { L.start = 0; L.duration = 3; });
+      src.transform.rotation = 20;
+      FM.scene.layers.length = 0; FM.scene.layers.push(src, dst);
+
+      FM.layerPresets.save('rt-probe', src);
+      FM.layerPresets.apply('rt-probe', dst);
+      if (dst._fromPreset !== 'rt-probe') throw new Error('applying a preset did not record where the look came from — there is nothing to update');
+
+      dst.transform.rotation = 77;                       // …the edit
+      if (!FM.layerPresets.update('rt-probe', dst)) throw new Error('update() refused to write the layer back over its own preset');
+      const p = (FM.layerPresets.list() || []).find(x => x.name === 'rt-probe');
+      if (!p) throw new Error('the preset vanished on update');
+      const rot = p.data && p.data.transform && p.data.transform.rotation;
+      if (rot !== 77) throw new Error('the preset still holds ' + JSON.stringify(rot) + ', not the edited 77 — the round trip did not close');
+      if (FM.layerPresets.list().filter(x => x.name === 'rt-probe').length !== 1) throw new Error('updating made a SECOND preset of the same name instead of replacing it');
+    } finally {
+      try { if (saved0 == null) localStorage.removeItem(key); else localStorage.setItem(key, saved0); } catch (e) {}
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

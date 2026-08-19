@@ -11295,8 +11295,8 @@ wait for them to report back."*
       menu"* arrived with no screenshot, and there are now three menus it could mean. Nothing was deleted —
       deleting the wrong one costs a capability that has no other route.
 
-- [ ] **407 — The elements/presets round-trip is "convoluted and stupid": open a preset, edit it, and it
-      should just update that preset.** (19 Aug, via the phone inbox.) His words, verbatim, in full:
+- [x] **407 — The elements/presets round-trip is "convoluted and stupid": open a preset, edit it, and it
+      should just update that preset.** ✅ **v10.45 + v10.46.** (19 Aug, via the phone inbox.) His words, verbatim, in full:
 
       > I don't really like ur new system for elements because when I load into one and then save it as a preset it doesn't get rid of the thing in the presets menu explaining what to do, I just want to open a preset, edit it and then it automatically updates that preset. Right now the system is convoluted and stupid
 
@@ -11308,10 +11308,22 @@ wait for them to report back."*
              false one. It also pointed at "Save as preset", a label [#406] had just replaced. It now names
              the effect, names the exact action that would clear it, and says where the other two kinds of
              preset live. Nothing was hidden: hiding a true message would have been the wrong fix.
-      2. [ ] **Open a preset → edit it → it updates THAT preset**, without a save-as step.
+      2. [x] **Open a preset → edit it → it updates THAT preset — v10.46, in ONE TAP rather than
+             automatically.** Applying a preset now records its name on the layer (`_fromPreset`, a plain
+             field, so it saves and reloads with the project), and the Presets card grows an
+             **Update “<name>”** button whenever the layer came from a preset that still exists. Press it
+             and that preset holds what you can see — no save-as, no re-naming, no duplicate.
       ⚠️ Clause 2 is a real design decision, not just a bug: an in-place update needs the editor to
       remember which preset a layer came from, and it needs an answer for "what if I wanted a copy". Look
       at how the preset is loaded today before assuming a field can just be written back.
+      🚨 **ONE TAP, NOT AUTOMATIC — a judgement call, and it is his to overrule.** He asked for it to update
+      "automatically". A preset can be applied to MANY layers, so an automatic write-back means nudging one
+      layer silently restyles every other use of that preset, including in projects that are not open, with
+      no undo that reaches them. One tap keeps the round trip he asked for (open → edit → update) and cannot
+      destroy anything without being asked. **Say the word and it becomes automatic.**
+      ✅ "What if I wanted a copy" is answered by the button that was already there: **Save look +
+      animations…** makes a new one, **Update “X”** overwrites the one you came from. Two buttons, two
+      meanings, both visible at once.
       🔗 Related to [#406] — both are about presets meaning two different things at once.
 
 - [ ] **408 — Templates need to be editable, and currently are not.** (19 Aug, via the phone inbox.)
