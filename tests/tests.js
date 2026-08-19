@@ -31362,6 +31362,50 @@
     }
   });
 
+  test('the per-effect preset list says WHICH presets it means', { item: 'preset-empty-scope' }, async function () {
+    /* Queue 407 clause 1. Ezra: "when I load into one and then save it as a preset it doesn't get rid of
+       the thing in the presets menu explaining what to do."
+       It was never stuck. That list holds presets saved from ONE effect's own ⋯, and he had saved a layer
+       or effects-only preset — different stores, which never appear there. So the message was true and read
+       as false, and it pointed at "Save as preset", a label queue 406 replaced.
+       ⚠️ The first version of this test BUILT THE SENTENCE ITSELF and asserted against its own copy, which
+       proves nothing about the app — the classic self-satisfying assertion. It opens the real list and
+       reads the real node now. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      FM.fxBrowser.open(L);
+      await sleep(220);
+      /* FIND an effect with no presets rather than naming one: `blur` ships presets, so hardcoding it
+         rendered no empty state at all and the test failed for its own reason — which reads exactly like
+         a real failure. The registry is walked until one produces the empty node. */
+      if (!FM._fxOpenPresets) throw new Error('FM._fxOpenPresets seam is missing');
+      const all = FM.fxRegistry.all().slice(0, 60);
+      let reg = null, empty = null;
+      for (const cand of all) {
+        FM._fxOpenPresets(cand);
+        await sleep(70);
+        const node = document.querySelector('#fx-browser .fxb-empty');
+        if (node) { reg = cand; empty = node; break; }
+      }
+      if (!empty) throw new Error('no effect in the first 60 has an empty preset list, so this message could not be read at all');
+      const txt = empty.textContent || '';
+      if (txt.indexOf(reg.label) < 0) throw new Error('the message does not name the effect it is about: [' + txt + ']');
+      if (txt.indexOf('Save this effect as preset') < 0) throw new Error('the message does not name the action that would clear it: [' + txt + ']');
+      if (txt.indexOf('Presets card') < 0) throw new Error('the message does not say where the OTHER kinds of preset live, which is the confusion being fixed: [' + txt + ']');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers = layers0;
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

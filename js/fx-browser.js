@@ -541,6 +541,7 @@ window.FM = window.FM || {};
 
   // Full-cover preset sheet for one effect (same chrome as the category view, incl. the
   // depth-tracked pause of the featured auto-scroll).
+  FM._fxOpenPresets = function (reg) { return openPresets(reg); };   // suite seam (queue 407)
   function openPresets(reg) {
     if (!FM.effectPresets) return;
     const view = el('div', 'fxb-catview');
@@ -647,7 +648,15 @@ window.FM = window.FM || {};
       pools.shipped.forEach(p => list.appendChild(presetRow(p, false)));
     }
     if (!pools.mine.length && !pools.shipped.length) {
-      list.appendChild(el('div', 'fxb-empty', 'No presets for ' + reg.label + ' yet — set it up on a layer, then ⋯ → “Save as preset”'));
+      /* SAY WHICH presets are missing, and name the exact action (queue 407 clause 1, and the same
+         confusion as queue 406). Ezra: "when I load into one and then save it as a preset it doesn't get
+         rid of the thing in the presets menu explaining what to do."
+         It is not stuck — this list holds presets saved from THIS EFFECT's own ⋯, and he had saved a
+         LAYER preset or an effects-only one, which live in different stores and never appear here. The old
+         wording ("No presets for X yet — … ⋯ → Save as preset") read as "you have not saved anything",
+         and pointed at a menu item whose label no longer exists. Naming the scope and the current label
+         makes the message true and makes it obvious what would clear it. */
+      list.appendChild(el('div', 'fxb-empty', 'No ' + reg.label + ' presets yet — these are saved from ' + reg.label + '’s own ⋯ → “Save this effect as preset…”. Whole-look and effects-only presets live in the layer’s Presets card instead.'));
     }
     scroller.appendChild(list);
     view.appendChild(scroller);

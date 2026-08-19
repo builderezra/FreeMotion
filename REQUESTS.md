@@ -11301,8 +11301,13 @@ wait for them to report back."*
       > I don't really like ur new system for elements because when I load into one and then save it as a preset it doesn't get rid of the thing in the presets menu explaining what to do, I just want to open a preset, edit it and then it automatically updates that preset. Right now the system is convoluted and stupid
 
       **Clauses:**
-      1. [ ] **The explainer card in the presets menu disappears once a preset has been saved** — he saved
-             one and the "here is how to make one" placeholder was still sitting there.
+      1. [x] **The explainer names its scope now — v10.45.** ⚠️ **It was never stuck, and that matters:** the
+             "here is how" card lives in the per-EFFECT preset list (hold an effect in the browser), and it
+             only clears when a preset is saved from *that effect's own* ⋯. He had saved a whole-look or an
+             effects-only preset — different stores, which never appear there — so a true message read as a
+             false one. It also pointed at "Save as preset", a label [#406] had just replaced. It now names
+             the effect, names the exact action that would clear it, and says where the other two kinds of
+             preset live. Nothing was hidden: hiding a true message would have been the wrong fix.
       2. [ ] **Open a preset → edit it → it updates THAT preset**, without a save-as step.
       ⚠️ Clause 2 is a real design decision, not just a bug: an in-place update needs the editor to
       remember which preset a layer came from, and it needs an answer for "what if I wanted a copy". Look
