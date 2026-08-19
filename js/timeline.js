@@ -723,10 +723,19 @@ window.FM = window.FM || {};
     markHover(!!rulerEl.querySelector('.tl-marker:hover'));
   }
 
-  // The timecode chip's hover half. Kept next to the markers that drive it.
+  /* The hover half — and since queue 364 it lights the PLAYHEAD as well as the chip. His words:
+     "when you're hovering over a bookmark it just makes the play head yellow instead".
+     "Instead" is the operative word: the chip used to be the only thing that answered, and the chip has
+     since become the play/pause control, so pointing at a bookmark to make the PLAY button flash yellow
+     would say the wrong thing entirely. The playhead is where bookmarks live now — you tap its head to
+     add or remove one — so the playhead is what should answer.
+     Both are toggled together rather than moving it, because the chip's version is also what reports
+     "you are parked ON one" on a phone, where there is no hover at all (#61). */
   function markHover(on) {
     const ro = document.getElementById('time-readout');
     if (ro) ro.classList.toggle('mark-hover', on);
+    const cl = document.getElementById('tl-centerline');
+    if (cl) cl.classList.toggle('mark-hover', on);
   }
 
   function isSelected(id) { return id === FM.scene.selectedId || !!(FM.scene.selectedIds && FM.scene.selectedIds.indexOf(id) >= 0); }
@@ -2398,6 +2407,9 @@ window.FM = window.FM || {};
     // test can tell "a trim started" from "nothing happened", and without this the mouse half of that
     // test can only assume it worked — which is not a test.
     _trimming: function () { return !!trimDrag; },
+    // exposed for the suite (queue 364 clause 2): a real :hover cannot be synthesised, so the thing the
+    // hover DRIVES is what gets driven.
+    _markHover: markHover,
     /* Which timeline gesture, if any, is still live. Exposed because a drag that OUTLIVES the thing
      * that started it is invisible state: nothing on screen says so, the timeline does not complain,
      * and the next feature to key off `clipMove` inherits a drag it never started. That is not

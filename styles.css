@@ -2367,7 +2367,14 @@ body.fm-playing #time-readout {
 #tl-headtap:active { transform: scale(.9); }
 /* Parked on a bookmark → the head goes marker-yellow, which is also the affordance saying the tap will
    REMOVE rather than add. */
-#tl-centerline.on-mark::before { border-top-color: #ffd75e; }
+/* Parked on a bookmark, OR hovering one (queue 364 clause 2) → the head goes marker-yellow. Parked is
+   also the affordance saying a tap will REMOVE rather than add; hovering is the desktop half, which is
+   what he asked for when he said the playhead should go yellow "instead" of the chip. */
+#tl-centerline.on-mark::before,
+#tl-centerline.mark-hover::before { border-top-color: #ffd75e; }
+/* The whole line picks it up on hover too — a 11px triangle is a small thing to notice at the top of a
+   400px line, and hovering a marker is a deliberate question about where that marker IS. */
+#tl-centerline.mark-hover { border-left-color: #ffd75e; box-shadow: 0 0 6px rgba(255, 215, 94, .5); }
 /* NOT WHILE THE BIG + IS UP (queue 354). Ezra, with a screenshot of the white line running down
    through the + and through "Tap here to start creating": "Hide the player head while the add button
    is big". An empty project has nothing to scrub, so the line is a ruler over a blank page — and it

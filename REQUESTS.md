@@ -9911,8 +9911,8 @@ wait for them to report back."*
       specific containers — *not* `document.body.textContent`, which includes the suite printing its own
       test titles and has produced a self-matching false pass here before.
 
-- [ ] **364 — The time pill BECOMES the play button, bookmarks move onto the playhead, and the row that
-      only existed to hold the pill goes away.** (18 Aug, phone screenshot at v9.81 with an arrow drawn
+- [x] **364 — The time pill BECOMES the play button, bookmarks move onto the playhead, and the row that
+      only existed to hold the pill goes away.** ✅ **ALL SIX CLAUSES — v10.10 + v10.11.** (18 Aug, phone screenshot at v9.81 with an arrow drawn
       from the ▶ button down to the `00:01:36` pill, the pill circled, and the empty ruler row either
       side of it scribbled out.) His words, verbatim, in full:
 
@@ -9940,10 +9940,9 @@ wait for them to report back."*
       **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
       1. [x] ✅ **v10.10** — **The time pill IS the play button.** Tapping `00:01:36` plays and pauses. The separate ▶ in
              the transport row goes (that is what his arrow means — the ▶ moving *into* the pill).
-      2. [ ] **Hovering a bookmark turns the PLAYHEAD yellow.** ⚠️ **Half done in v10.10:** the playhead's
-             head already goes marker-yellow when the playhead is PARKED on a bookmark, which is also how
-             it says a tap will remove rather than add. The HOVER half is desktop-only and still open —
-             it is the one clause of this entry left, which is why the entry stays open.
+      2. [x] ✅ **v10.11** — **Hovering a bookmark turns the PLAYHEAD yellow.** The head goes marker-yellow
+             and the line picks up a soft glow with it. The chip keeps its own copy, because that half is
+             what reports "parked ON one" on a phone where there is no hover at all.
       3. [x] ✅ **v10.10** — **Tap the top of the playhead to add a bookmark** (tap again removes it).
       4. [x] ✅ **v10.10** — **The top of the playhead gets thicker** (5→7 half-width, 8→11 tall) with a 34x26 tap area.
       5. [x] ✅ **v10.10** — **Delete the ruler row that exists only to hold the pill**, giving the timeline that height

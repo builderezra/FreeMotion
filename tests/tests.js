@@ -470,6 +470,32 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: hovering a bookmark lights the PLAYHEAD, not just the chip', { item: 'mark-hover-playhead' }, function () {
+    /* Queue 364 clause 2. His words: "when you're hovering over a bookmark it just makes the play head
+       yellow instead".
+       "Instead" is the whole point. The timecode chip used to be the only thing that answered a hover —
+       and that chip is the PLAY/PAUSE control since clause 1 of this same message, so pointing at a
+       bookmark to make the play button flash yellow would now say something quite different. Bookmarks
+       live on the playhead (you tap its head to add or remove one), so the playhead is what answers. */
+    const line = document.getElementById('tl-centerline');
+    if (!line) throw new Error('#tl-centerline is missing');
+    if (!FM.timeline || !FM.timeline._markHover) throw new Error('no _markHover seam to drive');
+    const had = line.classList.contains('mark-hover');
+    try {
+      FM.timeline._markHover(false);
+      const off = getComputedStyle(line, '::before').borderTopColor;
+      FM.timeline._markHover(true);
+      if (!line.classList.contains('mark-hover')) throw new Error('hovering a bookmark did not mark the playhead at all');
+      const on = getComputedStyle(line, '::before').borderTopColor;
+      // Control: if the two states paint the same, the class is decorative and nothing turns yellow.
+      if (on === off) throw new Error('the playhead head paints ' + on + ' whether a bookmark is hovered or not — the class is doing nothing');
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(on);
+      if (!m) throw new Error('could not read the hovered head colour: ' + on);
+      const r = +m[1], g = +m[2], b = +m[3];
+      if (!(r > 200 && g > 150 && b < 140)) throw new Error('the hovered playhead is rgb(' + r + ',' + g + ',' + b + '), which is not the marker yellow he asked for');
+    } finally { FM.timeline._markHover(had); }
+  });
+
   test('timeline: the scroller fills the panel below the transport row', { item: 'timeline-fills-panel' }, function () {
     /* THE GUARD FOR A BUG THAT HAS NOW HAPPENED IN BOTH DIRECTIONS. #timeline-panel is a grid, and its
        `grid-template-rows` has to agree with how many children it actually has. Adding the timecode pill
