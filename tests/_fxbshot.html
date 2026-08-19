@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Effects browser placement (queue 397)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="border:0;display:block"></iframe>
+<script>
+var Q=new URLSearchParams(location.search), W=parseInt(Q.get('w')||'1280',10), H=parseInt(Q.get('h')||'800',10);
+var f=document.getElementById('app'); f.style.width=W+'px'; f.style.height=H+'px';
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.fxBrowser&&w.FM.scene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'Insp',shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+  L.start=0;L.duration=4;FM.scene.layers.push(L);
+  FM.refreshAll(); FM.timeline.rebuild(); FM.selectLayer(L.id); await sleep(300);
+  FM.fxBrowser.open(L); await sleep(700);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

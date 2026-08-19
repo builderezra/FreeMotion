@@ -23462,17 +23462,28 @@
       if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
       if (!root.classList.contains('fxb-sheet')) throw new Error('at desktop width the browser is still the centred dialog — he asked for "the same thing from mobile on PC"');
 
-      const r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
-      const vpH = document.documentElement.clientHeight, vpW = document.documentElement.clientWidth;
-      if (Math.abs(r.top - c.bottom) > 2) throw new Error('the sheet starts at y=' + Math.round(r.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — "cover everything on the bottom except for the canvas"');
-      if (Math.abs(r.bottom - vpH) > 2) throw new Error('the sheet stops at ' + Math.round(r.bottom) + ' in a ' + vpH + 'px viewport — it should take everything below the canvas');
-      if (Math.abs(r.width - vpW) > 2) throw new Error('the sheet is ' + Math.round(r.width) + 'px wide in a ' + vpW + 'px window — a sheet covers the bottom, it is not a column');
-      if (r.top < 40) throw new Error('the sheet covers the canvas (top ' + Math.round(r.top) + ') — the canvas is the thing he wants to keep watching');
+      /* WHERE IT SITS ON PC CHANGED AT queue 397, and these assertions changed with it rather than being
+         deleted. This test was written for his queue-303 words — *"it'll cover everything on the bottom
+         except for the canvas"* — and he has since said *"Make the effects browser on pc only show in the
+         inspector"*. Both quotes are kept so the flip reads as a decision. What has NOT changed, and is
+         still asserted below, is everything else this test is for: it is the sheet and not the centred
+         dialog, it is full-bleed inside, a tap PICKS rather than adds, and the canvas keeps playing. */
+      const r = root.getBoundingClientRect();
+      const insp = document.getElementById('inspector-panel');
+      const ir = insp ? insp.getBoundingClientRect() : null;
+      if (!ir || ir.width < 200) throw new Error('no inspector column to sit in at this width (' + (ir ? Math.round(ir.width) : 'none') + 'px)');
+      if (r.left < ir.left - 2 || r.right > ir.right + 2) throw new Error('the browser spans ' + Math.round(r.left) + '..' + Math.round(r.right) + ' but the inspector is ' + Math.round(ir.left) + '..' + Math.round(ir.right) + ' — "on pc only show in the inspector"');
+      if (Math.abs(r.top - ir.top) > 2 || Math.abs(r.bottom - ir.bottom) > 2) throw new Error('the browser runs ' + Math.round(r.top) + '..' + Math.round(r.bottom) + ' against the inspector\'s ' + Math.round(ir.top) + '..' + Math.round(ir.bottom));
+      /* NOT asserted: "it does not cover the canvas". Measured at 900, the canvas is centred across the
+         whole window (126..774) while the inspector column runs 0..300 — so the panel ALREADY overlaps the
+         canvas, and a browser confined to the panel inherits that. queue 303 wanted the canvas kept clear;
+         #397 asks for the inspector; where the panel sits is a separate layout question that neither
+         request settles, so asserting it here would be inventing a third requirement out of two. */
 
       /* Full-bleed INSIDE, not a desktop card sitting in a sheet. */
       const sc = root.querySelector('.fxb-scroll');
       const s = sc.getBoundingClientRect();
-      if (Math.abs(s.width - r.width) > 2) throw new Error('the sheet is ' + Math.round(r.width) + 'px wide but its scroller is ' + Math.round(s.width) + 'px — the PC dialog styling is still on the inside of the sheet');
+      if (Math.abs(s.width - r.width) > 2) throw new Error('the browser is ' + Math.round(r.width) + 'px wide but its scroller is ' + Math.round(s.width) + 'px — the PC dialog styling is still on the inside of it');
       const scs = getComputedStyle(sc);
       if (parseFloat(scs.marginBottom) > 2) throw new Error('the scroller keeps the dialog\'s ' + scs.marginBottom + ' bottom margin, so there is a gap above the bottom of the screen');
 
@@ -30913,6 +30924,61 @@
     if (Math.abs(pad - port) > 3) {
       throw new Error('the scroll range pads by ' + Math.round(pad) + 'px where the timeline is only ' + Math.round(port) +
         'px wide — a ' + Math.round(pad - port) + 'px difference' + (Math.abs(pad - window.innerWidth) <= 3 ? ', which is the WINDOW width, so it is still sizing itself from the window' : ''));
+    }
+  });
+
+  test('on PC the effects browser sits in the inspector column, and on a phone it does not', { item: 'fxb-in-inspector' }, async function () {
+    /* Queue 397. Ezra: "Make the effects browser on pc only show in the inspector."
+       Asserted as GEOMETRY against the panel's own box rather than "the class is present" — the class is
+       the mechanism of the day and what he asked for is where the thing lands. The phone half is asserted
+       in the other direction, because the full-bleed sheet there is his own design from the queue-277 spec
+       and a fix that quietly took it away on the phone would be a different change than the one he asked
+       for. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Insp', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+
+      const insp = document.getElementById('inspector-panel');
+      if (!insp) throw new Error('#inspector-panel is missing');
+      const ir = insp.getBoundingClientRect();
+      if (!(ir.width > 200)) throw new Error('the inspector column measured ' + Math.round(ir.width) + 'px at this width — nothing below would mean anything');
+      FM.fxBrowser.open(L);
+      await sleep(280);
+      const root = document.getElementById('fx-browser');
+      const br = root.getBoundingClientRect();
+      if (br.left < ir.left - 2 || br.right > ir.right + 2) {
+        throw new Error('on PC the browser spans ' + Math.round(br.left) + '..' + Math.round(br.right) +
+          ' but the inspector is only ' + Math.round(ir.left) + '..' + Math.round(ir.right) + ' — it is still covering the screen');
+      }
+      if (br.width < 100) throw new Error('the browser collapsed to ' + Math.round(br.width) + 'px — pinned to a box it should have refused');
+      FM.fxBrowser.close();
+      await sleep(140);
+
+      // …and the phone keeps its full-bleed sheet
+      let phoneW = null;
+      await atPhoneWidth(async function () {
+        FM.fxBrowser.open(L);
+        await sleep(300);
+        phoneW = document.getElementById('fx-browser').getBoundingClientRect();
+        FM.fxBrowser.close();
+        await sleep(120);
+      }, 380);
+      if (!phoneW) throw new Error('the phone measurement never ran');
+      if (phoneW.left > 2 || phoneW.width < 300) {
+        throw new Error('at 380 the sheet is no longer full-bleed (' + Math.round(phoneW.left) + '..' + Math.round(phoneW.right) + ') — the phone sheet is his own design and must not change');
+      }
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers = layers0;
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
     }
   });
 

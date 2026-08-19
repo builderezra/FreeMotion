@@ -10986,11 +10986,27 @@ wait for them to report back."*
       actually had the bug. In the suite the mutation reports *"pads by 900px where the timeline is only
       600px wide"*.
 
-- [ ] **397 — On PC the effects browser should live in the inspector, not over the screen.** (19 Aug, via
+- [x] **397 — On PC the effects browser should live in the inspector, not over the screen.** ✅ **v10.36.** (19 Aug, via
       the phone inbox.) His words, verbatim: *"Make the effects browser on pc only show in the inspector"*
       **Clause:** at desktop widths the Add-Effect browser opens inside the inspector column rather than
-      as a full-screen overlay. The phone keeps its sheet (queue 277 built that deliberately and it is
-      his design).
+      as a full-screen overlay. The phone keeps its sheet (#277 built that deliberately and it is his design).
+      ✅ **NOT REPARENTED — the panel's rect is published as four CSS variables and the fixed overlay lands
+      on it.** Moving `#fx-browser` into the inspector's DOM would have put it inside a scrolling container
+      and broken the commit bar, the pager, the sheet geometry and the preview loop in one go; pinning a
+      `position: fixed` element to a measured box changes where it is and nothing about what it does.
+      ✅ **Guarded on a real width** (>200px wide, >120px tall): a collapsed or hidden inspector would
+      otherwise pin the browser into a zero-width strip, which is a worse bug than the one being fixed. It
+      falls back to the canvas-bottom sheet whenever there is no panel to sit in — which is also what keeps
+      the phone unchanged.
+      ⚠️ **#303's test asserted the OLD placement** (*"it'll cover everything on the bottom except for the
+      canvas"*) and was flipped, not deleted — both quotes are kept in it so the change reads as a decision.
+      Everything else that test is for still holds: it is the sheet and not the centred dialog, it is
+      full-bleed inside, and a tap PICKS rather than adds.
+      ⚠️ **One assertion was deliberately NOT added.** "It must not cover the canvas" sounds right and is
+      not decidable here: measured at 900, the canvas is centred across the whole window (126..774) while
+      the inspector runs 0..300, so the PANEL already overlaps the canvas and anything confined to it
+      inherits that. #303 wanted the canvas clear, this asks for the inspector, and where the panel sits is
+      a third question neither of them settles.
 
 - [ ] **398 — The new big + should have MOVING colours.** (19 Aug, via the phone inbox, on v10.02.)
       His words, verbatim: *"Make the colours in the new add button actually move in a subtle but

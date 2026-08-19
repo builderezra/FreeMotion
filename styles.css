@@ -4494,6 +4494,18 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   border-radius: 14px 14px 0 0;
   box-shadow: 0 -18px 44px rgba(0, 0, 0, .5);
 }
+/* …and on a DESKTOP it sits over the inspector column instead of the whole screen (queue 397).
+   Ezra: "Make the effects browser on pc only show in the inspector." Four variables published by
+   FM.fxSheet from the panel's own rect, so the overlay lands exactly on it without being reparented
+   into a scrolling container — which would have broken the commit bar, the pager and the preview loop
+   at once. The phone rule above is untouched: there is no inspector column to sit in there, and the
+   full-bleed sheet is his own design from the queue-277 spec. */
+#fx-browser.fxb-sheet.fxb-in-inspector {
+  top: var(--fxb-top, 0); left: var(--fxb-left, 0);
+  right: var(--fxb-right, 0); bottom: var(--fxb-bottom, 0);
+  border-radius: 0; border-top: none; border-left: 1px solid var(--line);
+  box-shadow: -12px 0 30px rgba(0, 0, 0, .38);
+}
 /* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
    canvas above it already say what this is, so the row keeps only the close and search controls. */
 #fx-browser.fxb-sheet .fxb-title, #afx-browser.fxb-sheet .fxb-title { display: none; }

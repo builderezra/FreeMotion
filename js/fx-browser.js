@@ -37,11 +37,34 @@ window.FM = window.FM || {};
     const sheet = on !== false;
     root.classList.toggle('fxb-sheet', sheet);
     if (sheet) {
-      const cv = document.getElementById('preview');
-      const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
-      root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
+      /* ON A DESKTOP IT LIVES IN THE INSPECTOR (queue 397). Ezra: "Make the effects browser on pc only show
+         in the inspector." The phone keeps its full-bleed sheet — that is queue 277's design and his.
+         The overlay is NOT reparented into the panel: it is `position: fixed`, so publishing the panel's
+         rect as four variables puts it exactly over that column while every internal — the sheet class,
+         the commit bar, the pager, the preview loop — keeps working unchanged. Reparenting would have
+         moved it inside a scrolling container and broken all four.
+         Guarded on a real width: a collapsed or hidden inspector would otherwise pin the browser into a
+         zero-width strip, which is a worse bug than the one being fixed. Falls back to the canvas-bottom
+         sheet whenever the panel is not there to sit in. */
+      const wide = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+      const insp = wide ? document.getElementById('inspector-panel') : null;
+      const ir = insp ? insp.getBoundingClientRect() : null;
+      if (ir && ir.width > 200 && ir.height > 120) {
+        root.style.setProperty('--fxb-top', Math.round(ir.top) + 'px');
+        root.style.setProperty('--fxb-left', Math.round(ir.left) + 'px');
+        root.style.setProperty('--fxb-right', Math.round(window.innerWidth - ir.right) + 'px');
+        root.style.setProperty('--fxb-bottom', Math.round(window.innerHeight - ir.bottom) + 'px');
+        root.classList.add('fxb-in-inspector');
+      } else {
+        root.classList.remove('fxb-in-inspector');
+        ['--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));
+        const cv = document.getElementById('preview');
+        const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
+        root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
+      }
     } else {
-      root.style.removeProperty('--fxb-top');
+      root.classList.remove('fxb-in-inspector');
+      ['--fxb-top', '--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));
     }
     return sheet;
   };
