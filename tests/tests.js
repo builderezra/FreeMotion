@@ -470,6 +470,35 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('what\u2019s slow: the report says the EFFECTIVE scale and whether the ladder even ran', { item: 'perf-report-tier' }, async function () {
+    /* Queue 202, from his third measurement. It read "QUALITY tier 0 (6 available) · mode smooth" beside
+       a 294ms render — which looks exactly like a quality ladder frozen at full resolution. Two things
+       make that line unreadable as it stood:
+       · in 'smooth' mode previewScale() floors the factor at tier 2 WHATEVER the tier says, so "tier 0"
+         is not "full resolution" and never was;
+       · notePlaybackCost returns immediately unless the app is PLAYING or dragging, so on a sample taken
+         while sitting still the tier means "never asked", not "decided to stay".
+       Those are opposite diagnoses — a broken ladder versus one that was never consulted — and the report
+       could not tell them apart. Now it says both. */
+    if (!FM.perfProbe || !FM.perfProbe.run) throw new Error('FM.perfProbe.run is missing — the readout he uses is gone');
+    const report = await new Promise((res) => {
+      const ok = FM.perfProbe.run(1200, res);
+      if (ok === false) res(null);
+    });
+    if (!report) throw new Error('the probe refused to run');
+    if (!/QUALITY/.test(report)) throw new Error('no QUALITY line in the report:\n' + report.slice(0, 300));
+    // The effective scale, in plain percent — the number that says what is actually being rendered.
+    if (!/rendering at \d+% scale/.test(report)) {
+      throw new Error('the QUALITY line does not report the effective scale, so "tier 0" still reads as full resolution:\n' + report.slice(0, 400));
+    }
+    /* And the eligibility note. This sample is taken sitting still — not playing, not dragging — which
+       is precisely the case his reading was taken in, so the warning MUST be present here. If it is
+       absent the line is silently claiming the ladder considered the scene and chose not to act. */
+    if (!/never ran during this sample/.test(report)) {
+      throw new Error('a sample taken while not playing does not say the ladder never ran — that is the ambiguity this exists to remove:\n' + report.slice(0, 500));
+    }
+  });
+
   test('inspector: the border card is Outline & Shadows, and says Outline inside it too', { item: 'outline-rename' }, function () {
     /* Queue 369. Ezra: "Change border and shadow to outline add shadows then in the actual menu change
        anything saying border to outline."

@@ -120,6 +120,12 @@ window.FM = window.FM || {};
       let last = t0, frames = 0;
       let tierLow = 99, tierHigh = -1;
       let wasHidden = document.hidden;
+      /* WAS THE LADDER EVEN ALLOWED TO ACT? notePlaybackCost returns immediately unless the app is
+         PLAYING or in motion (a drag/scrub) — so on a sample taken while sitting still, "tier 0 of 6"
+         does not mean the ladder decided to stay put, it means the ladder never ran. Ezra's third
+         reading (queue 202) is exactly that shape, and without this line it cannot be told apart from
+         a ladder that is genuinely stuck. */
+      let everEligible = false;
       const self = this;
 
       /* A WALL-CLOCK DEADLINE, not just the rAF check below. Found by running this for real with the
@@ -140,6 +146,8 @@ window.FM = window.FM || {};
         const gap = now - last; last = now;
         if (gap > 0 && gap < 2000) gaps.push(gap);      // a tab-switch gap is not a frame
         frames++;
+        // the one thing the tier number cannot tell you on its own — see everEligible above
+        if (FM.playing || (FM.playbackQualityInfo && FM.playbackQualityInfo().inMotion)) everEligible = true;
         try {
           const st = FM._perfState ? FM._perfState() : null;
           if (st) { if (st.tier < tierLow) tierLow = st.tier; if (st.tier > tierHigh) tierHigh = st.tier; }
@@ -179,8 +187,20 @@ window.FM = window.FM || {};
         lines.push('         median gap ' + med.toFixed(1) + 'ms · p95 ' + p95.toFixed(1) + 'ms · worst ' + worst.toFixed(1) + 'ms');
         lines.push('         ' + late + ' of ' + sorted.length + ' frames were late (over ' + (budget * 2.5).toFixed(0) + 'ms)');
         if (qi) {
-          lines.push('QUALITY  tier ' + qi.tier + ' (' + (st ? st.tiers : '?') + ' available) · mode ' + qi.mode);
+          /* REPORT THE EFFECTIVE FACTOR, not just the tier (queue 202). In 'smooth' mode previewScale()
+             floors the factor at tier 2 whatever _playTier says, so a report reading "tier 0" does NOT
+             mean full resolution — and reading it that way is how his third measurement looked like a
+             ladder frozen at the top when it may simply never have been asked. */
+          lines.push('QUALITY  tier ' + qi.tier + ' of ' + (st ? st.tiers : '?') + ' · mode ' + qi.mode +
+                     (qi.effective != null ? ' · rendering at ' + Math.round(qi.effective * 100) + '% scale' : ''));
           lines.push('         app-measured render ' + qi.avgFrameMs + 'ms · app-measured gap ' + qi.avgGapMs + 'ms');
+          /* And whether the ladder was allowed to act at all. Without this, a tier that never moved
+             reads as "the ladder is broken" when the honest answer may be "nothing asked it". */
+          if (!everEligible) {
+            lines.push('         ⚠ the quality ladder never ran during this sample — it only adapts while');
+            lines.push('           PLAYING or dragging, and neither happened here. The tier above means');
+            lines.push('           "untouched", not "decided to stay".');
+          }
         }
         if (st) {
           lines.push('CANVAS   ' + (st.canvasPx ? Math.round(st.canvasPx / 1000) + 'k pixels' : 'unknown') +

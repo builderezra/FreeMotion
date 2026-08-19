@@ -7190,6 +7190,15 @@ better still, keep working inside the turn rather than parking work for a later 
       never steps down is worth more than any single effect optimisation.
       ⚠️ Worth getting from him next time: WHICH effects. 24 across 9 shapes at 1458k pixels could be one
       expensive type repeated, and the per-effect cost is already measurable in the suite.
+      **v10.18 — THE REPORT ITSELF WAS AMBIGUOUS, and that is fixed before anything else.** Two facts make
+      "tier 0 of 6" unreadable: in `smooth` mode `previewScale()` floors the factor at **tier 2** whatever
+      the tier says (so tier 0 is NOT full resolution), and `notePlaybackCost` returns immediately unless
+      the app is **playing or dragging** (so on a still sample the tier means "never asked"). Those point
+      at opposite fixes — a stuck ladder versus one nothing consulted — and the readout could not tell
+      them apart. It now prints the **effective scale as a percentage** and warns explicitly when the
+      ladder never ran during the sample.
+      **So the next reading settles it**, and it is worth taking one WHILE PLAYING. A probe rebuilding his
+      scene shape here cannot: real playback does not start headlessly, so renderAvg/gapAvg stay 0.
 
       **★ HIS SECOND REAL MEASUREMENT, 19 Aug (v10.02) — and it moves this entry on.** Verbatim:
       ```
