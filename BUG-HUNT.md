@@ -911,3 +911,12 @@ making `FM.cloneLayer` drop `colorGrade`, and that check earned its keep twice: 
 the mutation but reported `Cannot read properties of undefined (reading 'slice')` instead of naming
 the field, because a LOST property comes back undefined. A test whose failure message breaks in the
 one case it exists for is half a test; it names the property now.
+
+## 8. Keyframes land on their own value — clean, and now swept across every ease
+At its own time a keyframe must give back exactly the number you typed, whatever easing is on it.
+That is not free: a MIDDLE keyframe is reached as the END of the previous segment, so the value only
+lands if the easing function returns exactly 1 at 1 — and the generative families (bounce, elastic,
+cyclic, random, steps) have no particular reason to. **All twelve presets land exactly.**
+Kept as `keyframes: every ease lands exactly on the value you set, at every keyframe`, read from
+`FM.EASE_FAMILIES` so an ease added later is covered the day it is added. Mutation-checked by scaling
+the segment fraction by 0.999, which puts all twelve a hair off and is reported per ease.

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does a keyframe's own value get hit?</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:900px;height:600px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:700px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.evalProp&&w.FM.EASE_FAMILIES)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  var o=[], keys=[];
+  FM.EASE_FAMILIES.forEach(function(fam){ (fam.presets||[]).forEach(function(p){ keys.push(p.key||p); }); });
+  keys=keys.filter(function(k){return typeof k==='string';});
+  o.push('ease presets found: '+keys.length+'   ('+keys.join(', ')+')');
+  o.push('');
+  o.push('A property with keyframes at t=0 (v=0), t=1 (v=100), t=2 (v=50).');
+  o.push('Asking for the value AT each keyframe time — it must be exactly what was set.');
+  o.push('');
+  var bad=0;
+  keys.forEach(function(k){
+    var p={kf:[{t:0,v:0,e:k},{t:1,v:100,e:k},{t:2,v:50,e:k}]};
+    var at0=FM.evalProp(p,0), at1=FM.evalProp(p,1), at2=FM.evalProp(p,2);
+    var ok=(at0===0&&at1===100&&at2===50);
+    if(!ok) bad++;
+    o.push((ok?'  ok    ':'  ❌    ')+k.padEnd(14)+' t=0 → '+String(at0).slice(0,8).padEnd(9)+' t=1 → '+String(at1).slice(0,10).padEnd(11)+' t=2 → '+String(at2).slice(0,8));
+  });
+  o.push('');
+  o.push(bad? ('❌ '+bad+' of '+keys.length+' eases do NOT land on the middle keyframe you set.') : '✅ every ease lands exactly on every keyframe value.');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

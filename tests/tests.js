@@ -2092,6 +2092,27 @@
     }
   });
 
+  test('keyframes: every ease lands exactly on the value you set, at every keyframe', { item: 'kf-land' }, function () {
+    /* The property a keyframe is FOR: at its own time it must give back exactly the number you typed,
+       whatever easing is on it. This is not obvious from the code — a MIDDLE keyframe is reached as
+       the end of the previous segment, so the value only lands if the easing function returns exactly
+       1 at 1, and the generative families (bounce, elastic, cyclic, random, steps) are the ones with
+       no reason to. They all do; this keeps it that way.
+       Swept from FM.EASE_FAMILIES rather than a hardcoded list, so an ease added later is covered on
+       the day it is added. */
+    if (!FM.EASE_FAMILIES || !FM.evalProp) throw new Error('no ease table or evaluator to sweep');
+    const keys = [];
+    FM.EASE_FAMILIES.forEach(fam => (fam.presets || []).forEach(p => { const k = p && (p.key || p); if (typeof k === 'string') keys.push(k); }));
+    if (keys.length < 8) throw new Error('only ' + keys.length + ' ease presets were found — the table is not being read, so this would prove nothing');
+    const bad = [];
+    keys.forEach(k => {
+      const p = { kf: [{ t: 0, v: 0, e: k }, { t: 1, v: 100, e: k }, { t: 2, v: 50, e: k }] };
+      const at0 = FM.evalProp(p, 0), at1 = FM.evalProp(p, 1), at2 = FM.evalProp(p, 2);
+      if (at0 !== 0 || at1 !== 100 || at2 !== 50) bad.push(k + ' (0→' + at0 + ', 1→' + at1 + ', 2→' + at2 + ')');
+    });
+    if (bad.length) throw new Error(bad.length + ' of ' + keys.length + ' eases do not return the keyframed value at the keyframe itself — the middle one is the case to look at, it is reached as the END of the previous segment: ' + bad.join('; '));
+  });
+
   test('layers: duplicating one copies every property, and copies it deeply', { item: 'dup-fidelity' }, async function () {
     /* Third invariant of the same family as the undo and save/load sweeps, and the same failure mode:
        a property the duplicator forgets is silently missing from the copy, and nobody notices until
