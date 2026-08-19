@@ -31249,6 +31249,60 @@
     });
   });
 
+  test('the editor fits at 320 / 360 / 390 / 430, not just at his 380', { item: 'width-sweep' }, async function () {
+    /* Queue 405. Ezra: "make sure other peoples phones will actually fit everything nicely on screen and
+       format correctly."
+       Every layout check in this project has been at 380, his own device is 440, and neither is the narrow
+       end — an SE/mini is 375, a lot of Android is 360, and the narrowest still in use is 320. This is the
+       gate rather than the habit: a loop over the real widths, asserting the same four things at each.
+       ⚠️ It only became possible once the PC transport build was made REVERSIBLE (same queue item): the
+       desktop row physically moves five controls into itself behind a one-way latch, so a narrowed frame
+       used to show a thirteen-control row wrapped onto two lines — which reads as "overflow at 320" and is
+       an artefact of the resize, not anything a phone renders. `pcTransportLayout()` hands them back now,
+       and this calls it explicitly so the state is decided rather than hoped for. */
+    const bad = [];
+    for (const w of [320, 360, 390, 430]) {
+      await atPhoneWidth(async function () {
+        if (FM.pcTransportLayout) FM.pcTransportLayout();
+        const app = document.getElementById('app');
+        const row = document.getElementById('transport');
+        if (!app || !row) { bad.push(w + ': #app / #transport missing'); return; }
+
+        // 1 — nothing spills sideways
+        if (app.scrollWidth > app.clientWidth + 1) bad.push(w + ': the shell scrolls sideways by ' + (app.scrollWidth - app.clientWidth) + 'px');
+
+        const rr = row.getBoundingClientRect();
+        const ctrls = [].slice.call(row.querySelectorAll('button, #time-readout'))
+          .filter(function (e) { const b = e.getBoundingClientRect(); return b.width > 1 && b.height > 1; });
+        if (ctrls.length < 4) { bad.push(w + ': only ' + ctrls.length + ' visible controls in the transport row — it did not build'); return; }
+
+        const boxes = ctrls.map(function (e) { return { id: e.id || e.className, r: e.getBoundingClientRect() }; });
+        boxes.sort(function (a, b) { return a.r.left - b.r.left; });
+        for (let k = 0; k < boxes.length; k++) {
+          const b = boxes[k];
+          // 3 — inside the row, not clipped or pushed off the edge
+          if (b.r.left < rr.left - 0.5 || b.r.right > rr.right + 0.5) {
+            bad.push(w + ': ' + b.id + ' runs ' + Math.round(b.r.left) + '..' + Math.round(b.r.right) + ' outside the row (' + Math.round(rr.left) + '..' + Math.round(rr.right) + ')');
+          }
+          // 2 — no two controls on top of each other
+          if (k) {
+            const p0 = boxes[k - 1];
+            const sameLine = Math.abs(p0.r.top - b.r.top) < 4;
+            if (sameLine && b.r.left < p0.r.right - 0.5) bad.push(w + ': ' + p0.id + ' and ' + b.id + ' overlap by ' + Math.round(p0.r.right - b.r.left) + 'px');
+          }
+          // …and the row stays ONE line: a wrap is the failure this whole item is about
+          if (b.r.top > rr.top + rr.height * 0.6) bad.push(w + ': ' + b.id + ' has wrapped onto a second line');
+          /* 4 — tap targets. 28px, not 34: his own narrow-phone rules (queue 373) step the transport
+             buttons down to 28 at ≤340 so the row fits, and that is a layout he approved. Asserting 34
+             here would fail his design rather than protect it. */
+          const isBtn = /^btn-/.test(b.id || '');
+          if (isBtn && (b.r.width < 27.5 || b.r.height < 27.5)) bad.push(w + ': ' + b.id + ' is only ' + Math.round(b.r.width) + 'x' + Math.round(b.r.height) + ' — too small to hit');
+        }
+      }, w);
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

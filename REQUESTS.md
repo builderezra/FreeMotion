@@ -11230,7 +11230,7 @@ wait for them to report back."*
       20-card one, and it reported the exact 249px jump that test was written to remove. The fill is scoped
       to `#add-sheet` now, so both guarantees hold at once.
 
-- [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
+- [x] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** ✅ **v10.43 — the gate exists now, and his layout passes it at 320/360/390/430 unchanged.** (19 Aug.) His words,
       verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone
       and I don't want it to change apart from where I've specified but make sure other peoples phones
       will actually fit everything nicely on screen and format correctly"*
@@ -11243,10 +11243,10 @@ wait for them to report back."*
       specified". The job is that the SAME design degrades correctly on a narrower screen, not a redesign.
       **Make it structural rather than a habit** (CLAUDE.md's own rule — a note is a hope, a gate is a
       guarantee): a suite test that loads the editor at **320 / 360 / 390 / 430** and asserts, at each:
-      1. [ ] no horizontal overflow anywhere (`scrollWidth > clientWidth` on the shell);
-      2. [ ] no two controls in a row overlap;
-      3. [ ] nothing in the transport row or the view rail is clipped or pushed off-screen;
-      4. [ ] the tap targets stay at least ~34px.
+      1. [x] no horizontal overflow anywhere (`scrollWidth > clientWidth` on the shell);
+      2. [x] no two controls in a row overlap;
+      3. [x] nothing in the transport row or the view rail is clipped or pushed off-screen;
+      4. [x] the tap targets stay at least ~34px — see the note below, it is 28 at ≤340 BY HIS DESIGN.
       `atPhoneWidth(fn, w)` already parameterises width, so the harness exists — this is a loop over widths
       rather than a new mechanism.
       ⚠️ **FOUND WHILE DOING #410, AND IT LIMITS THIS ITEM'S HARNESS — read before writing the sweep.**

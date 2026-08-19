@@ -4315,11 +4315,24 @@ window.FM = window.FM || {};
     const t = document.getElementById('transport');
     if (!t) return;
     const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
-    if (!pc) return;                       // phone keeps its own bars untouched
+    if (!pc) { if (t._pcBuilt) pcTransportTeardown(t); return; }   // …and a narrowed window gives them back (queue 405)
     if (t._pcBuilt) return;                // idempotent: refreshAll calls this a lot
     const right = t.querySelector('.t-right');
     const menu = document.getElementById('btn-layermenu');
-    const grab = id => document.getElementById(id);
+    /* REMEMBER WHERE EVERY BORROWED CONTROL CAME FROM, so this can be undone (queue 405).
+       The build MOVES five controls out of the top bar into this row, and it used to be one-way: `_pcBuilt`
+       latched true and nothing put them back. Narrow a desktop window past 701px and the phone got a
+       thirteen-control row wrapped onto two lines — a real bug nobody had reported, and the thing that made
+       a width sweep impossible to write, because `atPhoneWidth` produces exactly that state and it is an
+       artefact of the resize rather than anything a phone renders.
+       The home is captured at MOVE time, next-sibling included, so a restore puts each control back in its
+       original order rather than appending them all at the end. */
+    const homes = (t._pcHomes = []);
+    const grab = id => {
+      const el = document.getElementById(id);
+      if (el && el.parentNode) homes.push({ el: el, parent: el.parentNode, next: el.nextSibling });
+      return el;
+    };
     if (!right || !menu) return;
 
     /* far left — leaving a project is where it was on the rail, and nothing else.
@@ -4353,7 +4366,13 @@ window.FM = window.FM || {};
      * — which was true while they all lived in the top bar and quietly stopped being true when the rest
      * of them moved. */
     const far = document.createElement('div'); far.id = 't-far';
-    const ver = document.querySelector('.brand .ver'); if (ver) far.appendChild(ver);
+    /* …and the version chip goes through the same recorder (queue 405). It is the ONE control this build
+       moves by querySelector rather than by id, so the first version of the teardown did not know where it
+       came from and deleted it with the wrapper — the suite's "the version on screen matches POLISH-LOG"
+       test went red with "no version label in the header", which is exactly the sort of thing a one-way
+       build hides until someone tries to undo it. */
+    const ver = document.querySelector('.brand .ver');
+    if (ver && ver.parentNode) { homes.push({ el: ver, parent: ver.parentNode, next: ver.nextSibling }); far.appendChild(ver); }
     /* "On pc it can go on the play button row along side everything else" (queue 248) — so btn-help
        comes DOWN out of the desktop top bar and rides here, before notes, matching the phone's order.
        Adding it to this list is the whole PC half: #171's order becomes ver · ? · notes · cog ·
@@ -4400,6 +4419,23 @@ window.FM = window.FM || {};
       lm.setAttribute('aria-disabled', n < 1 ? 'true' : 'false');
     }
   }
+  /* THE UNDO for pcTransportLayout (queue 405). Restores every borrowed control to the exact parent and
+     position it was taken from, then removes the three wrappers the build created. Without this the row
+     could only ever grow: `_pcBuilt` latched and a window narrowing past 701px kept a desktop row on a
+     phone-width screen, wrapped onto two lines. */
+  function pcTransportTeardown(t) {
+    t = t || document.getElementById('transport');
+    if (!t || !t._pcBuilt) return;
+    const homes = t._pcHomes || [];
+    for (let i = homes.length - 1; i >= 0; i--) {
+      const h = homes[i];
+      if (!h || !h.el || !h.parent) continue;
+      try { h.parent.insertBefore(h.el, h.next && h.next.parentNode === h.parent ? h.next : null); } catch (e) {}
+    }
+    ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
+    t._pcHomes = null; t._pcBuilt = false;
+  }
+  FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;
   FM.pcTransportSync = pcTransportSync;
   /* Build it at STARTUP, not on the first refresh. The row is part of the app's chrome, so anything
