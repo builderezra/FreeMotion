@@ -17,6 +17,33 @@ restore() { cp "$BAK" "$FILE"; rm -f "$BAK" "$LOCK"; }
 trap restore EXIT INT TERM
 echo "MUTATION IN PROGRESS on $FILE — do not run a browser check now" > "$LOCK"
 
+# ---- THE BASELINE GATE -------------------------------------------------------------------------
+# A mutation result is MEANINGLESS unless the suite was green before it. If the test you are checking
+# is already failing for its own reason — an anchored regex against text that carries a prefix, a
+# container selector that matches nothing — then the run comes back "CAUGHT" and proves exactly
+# nothing. That happened three times in one session on queue 366 before anyone checked.
+#
+# So the tree must be PROVEN GREEN before the mutation is applied. It is cached by a hash of the
+# sources, so the cost is one extra suite run per EDIT, not per mutation — and a session that checks
+# three mutations against one change pays it once.
+BASE_HASH="$(cat index.html styles.css js/*.js tests/tests.js 2>/dev/null | shasum | cut -d' ' -f1)"
+GREEN_FILE="tools/.mutate-green"
+if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
+  echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after)…"
+  BASE_OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
+  BASE_FAILS="$(printf '%s' "$BASE_OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
+  if [ -n "$BASE_FAILS" ]; then
+    echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
+    echo "   Whatever it 'catches' is just this, still failing:"
+    printf '%s\n' "$BASE_FAILS" | head -4
+    echo "   Fix these first, then mutation-check."
+    exit 5
+  fi
+  printf '%s' "$BASE_HASH" > "$GREEN_FILE"
+  echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
+fi
+# --------------------------------------------------------------------------------------------------
+
 python3 - "$FILE" "$OLD" "$NEW" << 'PY' || { echo "mutate: the old string was not found — the mutation did NOT apply, so a green run here proves nothing"; exit 3; }
 import sys
 p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -24,6 +51,7 @@ s = open(p, encoding='utf-8').read()
 if old not in s: sys.exit(1)
 open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
 PY
+
 
 OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
 FAILS="$(printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"

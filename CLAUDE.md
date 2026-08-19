@@ -35,6 +35,16 @@ which happened. **Refuses if the old string was not found**, because a mutation 
 apply produces a green run that looks like proof and is not. Holds `.mutation-in-progress` so nothing
 takes a browser measurement against a mutated tree — that produced one confidently wrong reading.
 
+```bash
+tools/mutate.sh   # …now also REFUSES when the tree is already red
+```
+Third one, added 19 Aug after it cost three false proofs in a row on queue 366. **A mutation result is
+meaningless unless the suite was green before it**: if the test is already failing for its own reason —
+an anchored regex against text that carries a prefix, a container selector that matches nothing — the run
+reports `✅ CAUGHT` and proves exactly nothing. It happened three times before anyone thought to check.
+The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the sources, so
+it costs one extra suite run per EDIT rather than per mutation.
+
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 
