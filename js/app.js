@@ -1725,6 +1725,22 @@ window.FM = window.FM || {};
     if (!b) return;
     const p = addSwitchProportion();
     b.style.setProperty('--sw', String(p));
+    /* WHILE YOU ARE DRAGGING A LAYER, THE SWITCH WEARS ITS COLOUR (queue 416). Ezra: "Genius idea, make it
+       so when you're dragging a layer the toggle button will change colour to the colour of that layer
+       then when you press the toggle button while dragging a layer it will jump that layer to the top or
+       bottom."
+       The colour comes from the timeline's own `clipColorOf`, not a second copy of that expression — the
+       switch and the clip must agree about which layer you are holding, and two copies is how they stop
+       agreeing. Cleared the moment the drag ends. */
+    const dragId = FM.dragLayerId;
+    const dragged = dragId && FM.layerById ? FM.layerById(FM.scene, dragId) : null;
+    if (dragged && FM._clipColorOf) {
+      b.classList.add('sw-dragging');
+      b.style.setProperty('--sw-colour', FM._clipColorOf(dragged));
+    } else {
+      b.classList.remove('sw-dragging');
+      b.style.removeProperty('--sw-colour');
+    }
     b.title = p <= 0.001 ? 'Add row is at the TOP — tap to send it to the bottom'
             : p >= 0.999 ? 'Add row is at the BOTTOM — tap to send it to the top'
             : 'Add row is ' + Math.round(p * 100) + '% down — tap to send it to the far end';
@@ -1732,6 +1748,22 @@ window.FM = window.FM || {};
   FM.syncAddSwitch = syncAddSwitch;
   FM.toggleAddSide = function () {
     const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
+    /* PRESSED MID-DRAG, IT THROWS THE LAYER INSTEAD OF THE ADD ROW (queue 416 clause 2). Same rule as the
+       add row's own (queue 373 clause 7): to the end it is FURTHEST from, so a layer near the top goes to
+       the bottom. Answering clause 3 by reusing that rule rather than inventing a second one — the switch
+       should mean one thing whatever it is holding. */
+    const dragId = FM.dragLayerId;
+    const layers = (FM.scene && FM.scene.layers) || [];
+    const i = dragId ? layers.findIndex(l => l.id === dragId) : -1;
+    if (i >= 0 && n > 1) {
+      const toTop = (i / n) >= 0.5;                     // nearer the bottom → throw it to the top
+      const target = toTop ? layers[0] : null;          // beforeId null = the very end
+      if (FM.moveLayers) FM.moveLayers([dragId], toTop ? target.id : null);
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (FM.history) FM.history.commit();
+      syncAddSwitch();
+      return;
+    }
     const p = addSwitchProportion();
     moveAddMarker(p < 0.5 ? n : 0);                     // to the end it is FURTHEST from
     syncAddSwitch();

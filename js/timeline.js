@@ -162,6 +162,13 @@ window.FM = window.FM || {};
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
   let reorderActive = false;       // a ≡ reorder drag is in flight (its listeners live on the captured handle — a rebuild would kill it)
+  /* ONE answer to "what colour is this clip", because queue 416 gives the add-row switch that colour while
+     you drag a layer — and a second copy of this expression would be the switch and the clip disagreeing
+     about which layer you are holding. */
+  function clipColorOf(layer) {
+    return (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
+  }
+  FM._clipColorOf = clipColorOf;
   const stripCache = new Map();    // layerId -> {key, canvas}: rendered filmstrip/waveform reuse across rebuilds
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
 
@@ -1028,6 +1035,12 @@ window.FM = window.FM || {};
       e.preventDefault(); e.stopPropagation();
       try { h.setPointerCapture(e.pointerId); } catch (_) {}
       reorderActive = true;   // defers rebuilds (a rebuild would destroy this captured handle → dead drag + zombie autoscroll) and blocks pinch-start
+      /* …and say WHICH layer, for queue 416. Ezra: "when you're dragging a layer the toggle button will
+         change colour to the colour of that layer then when you press the toggle button while dragging a
+         layer it will jump that layer to the top or bottom." Published rather than passed, because the
+         switch lives in app.js and has no other way to know a drag is happening. */
+      FM.dragLayerId = layer.id;
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
 
       // if the grabbed layer is inside the current multi-selection, move the whole set together
       const sel = FM.selectionIds ? FM.selectionIds() : [];
@@ -1149,6 +1162,8 @@ window.FM = window.FM || {};
       const unlisten = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort); if (autoRAF) cancelAnimationFrame(autoRAF); };
       const cleanup = () => {
         reorderActive = false;
+        FM.dragLayerId = null;                                  // the switch goes back to its own colour (queue 416)
+        if (FM.syncAddSwitch) FM.syncAddSwitch();
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
         // `.tl-addrow` too — it is a slot in the model now (queue 357), so it also carries row-part and
         // an inline transform, and clearing only the track rows would strand the add row where the drag
@@ -1194,7 +1209,7 @@ window.FM = window.FM || {};
     clip.style.width = Math.max(8, layer.duration * pps) + 'px';
     // A clip colour that was CHOSEN (clipColorSet) beats the shape's fill — it was set deliberately.
     // Every other clipColor is just the next entry off the spawn palette, so the fill wins over it.
-    const col = (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
+    const col = clipColorOf(layer);
     clip.style.background = 'linear-gradient(180deg, ' + shade(col, 8) + ', ' + shade(col, -20) + ')';
     clip.style.borderColor = shade(col, 24);
     clip.dataset.id = layer.id;

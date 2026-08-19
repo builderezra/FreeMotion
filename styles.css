@@ -2240,6 +2240,11 @@ body.fm-playing #time-readout {
    SCROLLPORT's top edge — which sits UNDER #tl-rulerrow, a 22px sticky header. So the row landed correctly
    and the ruler covered its top. scroll-margin is the one thing scrollIntoView does respect. */
 .tl-addrow { scroll-margin-top: 24px; scroll-margin-bottom: 12px; }
+/* THE SWITCH WEARS THE DRAGGED LAYER'S COLOUR (queue 416). Ezra: "when you're dragging a layer the toggle
+   button will change colour to the colour of that layer". The knob and the track both take it, so it reads
+   as the control having picked the layer up rather than as a stray highlight. */
+#btn-addside.sw-dragging .sw-knob { background: var(--sw-colour, var(--accent)); }
+#btn-addside.sw-dragging .sw-track { border-color: var(--sw-colour, var(--accent)); box-shadow: 0 0 8px -1px var(--sw-colour, var(--accent)); }
 
 /* AM-style: each layer is a timeline row — head (eye/thumb/name/lock) + clip lane. No separate panel. */
 .track-row { display: flex; height: 42px; border-bottom: 1px solid var(--line-soft); }

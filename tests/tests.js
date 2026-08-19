@@ -31752,6 +31752,51 @@
     }
   });
 
+  test('while dragging a layer the switch wears its colour and throws it to the far end', { item: 'switch-drag-throw' }, async function () {
+    /* Queue 416. Ezra: "Genius idea, make it so when you're dragging a layer the toggle button will change
+       colour to the colour of that layer then when you press the toggle button while dragging a layer it
+       will jump that layer to the top or bottom."
+       Clause 3 — which end — is not invented: it reuses the switch's existing rule from queue 373 clause 7,
+       the end it is FURTHEST from. So a layer near the TOP is thrown to the bottom, and that is what is
+       asserted, rather than "it moved". */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), drag0 = FM.dragLayerId;
+    try {
+      FM.scene.layers.length = 0;
+      for (let i2 = 0; i2 < 6; i2++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i2, shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.scene.layers[0].clipColorSet = true; FM.scene.layers[0].clipColor = '#ff00aa';
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(120);
+      const first = FM.scene.layers[0];
+
+      FM.dragLayerId = first.id;                       // …as the reorder drag publishes it
+      FM.syncAddSwitch();
+      const sw = document.getElementById('btn-addside');
+      if (!sw) throw new Error('#btn-addside is missing');
+      if (!sw.classList.contains('sw-dragging')) throw new Error('the switch does not mark itself while a layer is being dragged');
+      const worn = sw.style.getPropertyValue('--sw-colour').trim().toLowerCase();
+      if (worn !== '#ff00aa') throw new Error('the switch is wearing "' + worn + '", not the dragged layer\'s own #ff00aa');
+
+      // …pressed mid-drag: this layer is at the TOP, so it must go to the BOTTOM
+      FM.toggleAddSide();
+      await sleep(120);
+      const idx = FM.scene.layers.findIndex(l => l.id === first.id);
+      if (idx !== FM.scene.layers.length - 1) throw new Error('the top layer landed at index ' + idx + ' of ' + FM.scene.layers.length + ' — pressing the switch should throw it to the end it is FURTHEST from');
+
+      FM.dragLayerId = null; FM.syncAddSwitch();
+      if (sw.classList.contains('sw-dragging')) throw new Error('the switch kept the layer colour after the drag ended');
+    } finally {
+      FM.dragLayerId = drag0;
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

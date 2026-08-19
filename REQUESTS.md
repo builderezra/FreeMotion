@@ -11523,15 +11523,23 @@ wait for them to report back."*
       ⚠️ It stops if `scrollTop` refuses to move, so hitting the top or bottom ends the glide instead of
       spinning a rAF against a clamped value.
 
-- [ ] **416 — 💡 While dragging a layer, the add-row switch takes that layer's colour, and pressing it
-      jumps THAT layer to the top or bottom.** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **416 — 💡 While dragging a layer, the add-row switch takes that layer's colour, and pressing it
+      jumps THAT layer to the top or bottom.** ✅ **v10.54.** (19 Aug, via the phone inbox.) His words, verbatim:
       > Genius idea, make it so when you're dragging a layer the toggle button will change colour to the colour of that layer then when you press the toggle button while dragging a layer it will jump that layer to the top or bottom
       **Clauses:**
-      1. [ ] While a layer drag is live, the switch takes that layer's colour.
-      2. [ ] Pressing it mid-drag sends THAT LAYER to the top or bottom.
-      3. [ ] Which end? By his existing rule for the switch (#373 clause 7) it should be the end the layer
+      1. [x] While a layer drag is live, the switch takes that layer's colour.
+      2. [x] Pressing it mid-drag sends THAT LAYER to the top or bottom.
+      3. [x] Which end? By his existing rule for the switch (#373 clause 7) it should be the end the layer
              is FURTHEST from — worth confirming, but that is the consistent reading.
       🔗 Builds directly on [#373]'s switch.
+      ✅ **CLAUSE 3 WAS NOT INVENTED — it reuses the switch's existing rule** (#373 clause 7, "the end it is
+      furthest from"), so the control means ONE thing whether it is holding the add row or a layer. A layer
+      near the top is thrown to the bottom, which is what the test asserts rather than merely "it moved".
+      ✅ **The colour comes from the timeline's own `clipColorOf`, now a single function** rather than the
+      expression being copied into the switch. A second copy is how the switch and the clip would end up
+      disagreeing about which layer you are holding — and that expression has four fallbacks in it.
+      ✅ The drag publishes `FM.dragLayerId` and clears it on cleanup, so the switch returns to its own
+      colour the moment you let go — asserted in both directions.
 
 - [ ] **417 — Redesign the add-layer row: cut it off at the same line as the other rows, + centred on the
       left, text on the right.** (19 Aug, via the phone inbox.) His words, verbatim:

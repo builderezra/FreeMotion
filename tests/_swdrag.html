@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Switch wears the dragged layer's colour (queue 416)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.syncAddSwitch)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(450);
+  FM.scene.layers.length=0;
+  ['#ff3ea5','#29d9bb','#e0653f'].forEach(function(c,i){
+    var L=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:c});
+    L.start=0;L.duration=3;L.clipColorSet=true;L.clipColor=c;FM.scene.layers.push(L);
+  });
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(250);
+  FM.dragLayerId = FM.scene.layers[0].id;      // …as a live reorder drag would
+  FM.syncAddSwitch();
+  await sleep(300);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>
