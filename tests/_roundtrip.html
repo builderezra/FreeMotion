@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Save → load round-trip fidelity</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:1280px;height:800px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:660px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* THE INVARIANT: whatever the app holds in memory must survive a save and a load unchanged. Anything
+   the writer drops, or the loader's sanitisers strip, is work quietly lost on the next refresh. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.storage)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(600);
+  // A scene that exercises as many document features as can be built without media files.
+  FM.scene.layers.length=0;
+  var a=FM.makeLayer('shape',{name:'Star',shape:'star',x:400,y:700,shapeW:320,shapeH:280,fill:'#3a7bd5'});
+  a.start=0.25; a.duration=3.5;
+  a.transform.x={kf:[{t:0,v:0,ease:'easeInOut'},{t:2,v:220}]};
+  a.transform.opacity=0.66; a.transform.rotation=17.5; a.transform.scaleX=1.3;
+  a.stroke={enabled:true,width:9,color:'#ff5fa2',position:'outside',dash:{enabled:true,length:14,gap:6,offset:3}};
+  a.shadow={enabled:true,blur:22,dx:0,dy:0,color:'#001122',alpha:80};
+  a.effects=[{type:'blur',enabled:true,params:{radius:7}},{type:'glow',enabled:true,params:{radius:12,passes:2,color:'#ffcc00'}}];
+  a.blend='screen'; a.locked=true; a.solo=false; a.visible=true;
+  var b=FM.makeLayer('text',{name:'Title',text:'Hello <&> "world"',x:540,y:1300});
+  b.start=0.5; b.duration=2; b.trimPath={enabled:true,start:0.1,end:0.8,offset:0.05};
+  var c=FM.makeLayer('shape',{name:'Ring',shape:'ellipse',x:700,y:900,shapeW:200,shapeH:200,fill:'#29d9bb'});
+  c.start=0; c.duration=4; c.repeater={enabled:true,copies:4,offsetX:30,offsetY:10,rotation:12,scale:0.9,opacity:0.8,anchorX:0.5,anchorY:0.5};
+  c.colorGrade={hue:20,sat:1.3,lift:0.05,gamma:1.1,gain:0.95};
+  FM.scene.layers.push(a,b,c);
+  FM.scene.project.name='Round trip'; FM.scene.project.background='#0a0f14';
+  FM.scene.project.markers=[{t:1.5,name:'beat'},{t:2.75}];
+  FM.scene.project.loopIn=0.5; FM.scene.project.loopOut=3;
+  FM.scene.selectedId=a.id; FM.scene.selectedIds=[a.id,c.id];
+  FM.refreshAll(); if(FM.timeline)FM.timeline.rebuild(); await sleep(300);
+
+  var before=JSON.stringify({p:FM.scene.project,l:FM.scene.layers},FM.jsonReplacer);
+  var wrote=FM.storage.flushSync();
+  await sleep(250);
+  var ok=await FM.storage.load();
+  await sleep(350);
+  var after=JSON.stringify({p:FM.scene.project,l:FM.scene.layers},FM.jsonReplacer);
+
+  o.push('flushSync wrote: '+wrote+'    load returned: '+ok);
+  o.push('document size: '+before.length+' chars');
+  if(before===after){ o.push(''); o.push('✅ the document came back byte-identical.'); }
+  else{
+    var w=0; while(w<before.length&&before[w]===after[w])w++;
+    o.push(''); o.push('❌ DIFFERENT after a save+load, first difference at char '+w+':');
+    o.push('   was:   '+before.slice(Math.max(0,w-90),w+140));
+    o.push('   now:   '+after.slice(Math.max(0,w-90),w+140));
+    // Which top-level keys differ, per layer, to name it rather than just show the offset.
+    try{
+      var B=JSON.parse(before), A=JSON.parse(after);
+      (B.l||[]).forEach(function(L,i){
+        var M=(A.l||[])[i]; if(!M){o.push('   layer '+i+' ('+L.name+') MISSING after load');return;}
+        Object.keys(L).forEach(function(k){
+          if(JSON.stringify(L[k])!==JSON.stringify(M[k])) o.push('   layer '+i+' ('+L.name+') . '+k+':  '+JSON.stringify(L[k]).slice(0,90)+'   →   '+JSON.stringify(M[k]).slice(0,90));
+        });
+        Object.keys(M).forEach(function(k){ if(!(k in L)) o.push('   layer '+i+' ('+L.name+') gained . '+k+' = '+JSON.stringify(M[k]).slice(0,80)); });
+      });
+      Object.keys(B.p||{}).forEach(function(k){ if(JSON.stringify(B.p[k])!==JSON.stringify(A.p[k])) o.push('   project . '+k+':  '+JSON.stringify(B.p[k]).slice(0,90)+'   →   '+JSON.stringify(A.p[k]).slice(0,90)); });
+    }catch(e){ o.push('   (could not diff structurally: '+e.message+')'); }
+  }
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

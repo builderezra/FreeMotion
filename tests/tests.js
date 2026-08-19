@@ -2092,6 +2092,66 @@
     }
   });
 
+  test('storage: a feature-rich project survives a save and a load unchanged', { item: 'roundtrip' }, async function () {
+    /* THE INVARIANT: whatever the app holds in memory must come back identical after a save and a
+       load. Anything the writer omits, or the loader's sanitisers strip, is work quietly lost on the
+       next refresh — and it is lost silently, which is why this is a sweep over a document built to
+       carry as many features at once as can exist without media files: keyframes with eases, stroke
+       with dashes, shadow, two effects (one with a colour param), a repeater, a colour grade, blend,
+       lock, trim path, project markers, a loop region and a multi-selection.
+       The sanitisers are allowed to MATERIALISE a default — writing `enabled: true` onto an effect
+       that omitted it is normalisation, not loss — so the fixture states those explicitly rather than
+       the test having to know which ones they are. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const proj0 = JSON.parse(JSON.stringify(FM.scene.project));
+    try {
+      FM.scene.layers.length = 0;
+      const a = FM.makeLayer('shape', { name: 'Star', shape: 'star', x: 400, y: 700, shapeW: 320, shapeH: 280, fill: '#3a7bd5' });
+      a.start = 0.25; a.duration = 3.5;
+      a.transform.x = { kf: [{ t: 0, v: 0, ease: 'easeInOut' }, { t: 2, v: 220 }] };
+      a.transform.opacity = 0.66; a.transform.rotation = 17.5; a.transform.scaleX = 1.3;
+      a.stroke = { enabled: true, width: 9, color: '#ff5fa2', position: 'outside', dash: { enabled: true, length: 14, gap: 6, offset: 3 } };
+      a.shadow = { enabled: true, blur: 22, dx: 0, dy: 0, color: '#001122', alpha: 80 };
+      a.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }, { type: 'glow', enabled: true, params: { radius: 12, passes: 2, color: '#ffcc00' } }];
+      a.blend = 'screen'; a.locked = true;
+      const b = FM.makeLayer('text', { name: 'Title', text: 'Hello <&> "world"', x: 540, y: 1300 });
+      b.start = 0.5; b.duration = 2; b.trimPath = { enabled: true, start: 0.1, end: 0.8, offset: 0.05 };
+      const c = FM.makeLayer('shape', { name: 'Ring', shape: 'ellipse', x: 700, y: 900, shapeW: 200, shapeH: 200, fill: '#29d9bb' });
+      c.start = 0; c.duration = 4;
+      c.repeater = { enabled: true, copies: 4, offsetX: 30, offsetY: 10, rotation: 12, scale: 0.9, opacity: 0.8, anchorX: 0.5, anchorY: 0.5 };
+      c.colorGrade = { hue: 20, sat: 1.3, lift: 0.05, gamma: 1.1, gain: 0.95 };
+      FM.scene.layers.push(a, b, c);
+      FM.scene.project.background = '#0a0f14';
+      FM.scene.project.markers = [{ t: 1.5, name: 'beat' }, { t: 2.75 }];
+      FM.scene.project.loopIn = 0.5; FM.scene.project.loopOut = 3;
+      FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id, c.id];
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+      await sleep(60);
+
+      const before = JSON.stringify({ p: FM.scene.project, l: FM.scene.layers }, FM.jsonReplacer);
+      if (!FM.storage.flushSync()) throw new Error('the scene would not write at all, so nothing below can be measured');
+      await sleep(80);
+      const ok = await FM.storage.load();
+      await sleep(120);
+      if (!ok) throw new Error('load() refused the document this test had just written');
+      const after = JSON.stringify({ p: FM.scene.project, l: FM.scene.layers }, FM.jsonReplacer);
+      if (after !== before) {
+        let w = 0; while (w < before.length && before[w] === after[w]) w++;
+        throw new Error('the document changed across a save and a load, first difference at char ' + w +
+          ':\n    was: ' + before.slice(Math.max(0, w - 60), w + 110) +
+          '\n    now: ' + after.slice(Math.max(0, w - 60), w + 110));
+      }
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project = proj0;
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // leave the stored doc matching the restored scene
+    }
+  });
+
   test('history: one edit then undo puts the document back exactly, for every kind of edit', { item: 'undo-fidelity' }, async function () {
     /* THE INVARIANT, swept rather than spot-checked: do ONE edit, undo it, and the document must be
        byte-identical to what it was. An operation that fails this is losing or inventing state, and

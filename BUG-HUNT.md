@@ -886,3 +886,17 @@ fails here regardless of which feature added it. Mutation-checked by dropping `p
 during restore, which the sweep reports by name and character offset.
 It also counts how many operations actually CHANGED the document and fails if fewer than eight did:
 an operation that quietly stops doing anything would otherwise turn into silent coverage loss.
+
+## 6. Save → load round-trip — clean, and now a permanent sweep
+Built one document carrying as many features at once as can exist without media files (keyframes with
+eases, stroke with dashes, shadow, two effects including a colour param, a repeater, a colour grade,
+blend, lock, trim path, project markers, a loop region, a multi-selection), wrote it with `flushSync`
+and read it back with `load`. **Byte-identical.**
+One false alarm on the way, worth recording because it would fool the next person too: an effect's
+COLOUR is a `params.color` entry (`js/fx-registry.js:210` turns `def.color` into an ordinary param),
+not a top-level `fx.color`. A probe that put it at the top level saw it stripped and read that as data
+loss — the sanitiser was right and the probe was wrong.
+Kept as `storage: a feature-rich project survives a save and a load unchanged`, mutation-checked by
+making `sceneDoc()` drop `repeater` on the way out. Materialising a default (the loader writing
+`enabled: true` onto an effect that omitted it) is normalisation rather than loss, so the fixture
+states those explicitly instead of the test needing to know which they are.
