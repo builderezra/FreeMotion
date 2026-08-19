@@ -10431,19 +10431,44 @@ wait for them to report back."*
       icon at 380px. Two buttons may not fit beside those, in which case they belong in the multi-select
       bar with the other bulk actions rather than being crammed in. Decide by measuring at 380, not by
       hoping.
+      📐 **MEASURED 19 Aug (`tests/_grouphdr.html`), and it is half an answer — recorded rather than acted
+      on, because the missing half changes the design.**
+      · **The header at 380 is nearly full.** Seven visible controls — back, clip name, version chip, ?,
+        duplicate, delete, ⋯ — total **349px in a 380px bar, leaving 32px**. A 42px button does not fit in
+        that, so "two buttons side by side in the header" is not available at his width without something
+        else moving out.
+      · ⚠️ **BUT #m-group did not appear in that measurement at all**, which means the fixture never reached
+        the real 2+ selected state — and the phone's group button holds its slot with `visibility`, not
+        `display` (js/app.js:774), so in the state he screenshotted the bar's contents may differ from what
+        was measured. **Two attempts did not reproduce it**; the next pass should drive a real multi-select
+        (paint-select two clips in the timeline, or find the call the timeline makes) rather than assigning
+        `scene.selectedIds` and calling syncTopBar, which is what failed here.
+      · **THE GAP APPEARS TO BE ALREADY GONE.** His screenshot is v9.81; measured now at v10.25 the menu is
+        **73px tall with 5px of padding and its first item 1px inside that** — there is no empty band. So
+        clause 2 may need nothing but confirmation from him, and it should NOT be "fixed" by padding
+        something that no longer exists. Ask when he next has that screen open.
 
-- [ ] **377 — Drop the "INSPECTOR" heading and reclaim that space.** (18 Aug, same screen, red line drawn
+- [x] **377 — Drop the "INSPECTOR" heading and reclaim that space.** ✅ **v10.26 — measured at 380: the row goes from 33px to 0.** (18 Aug, same screen, red line drawn
       under the word.) His words, verbatim: *"Also you can crop off all that space, it doesn't need to say
       inspector, look at red line"*.
       The panel currently reads **INSPECTOR** and then **EDIT 4 CLIPS** directly beneath it. The first is a
       label for a panel you are already looking at; the second says what it is actually for. He is right
       that it earns nothing, and on a phone it costs a row at the top of the panel that matters most.
       **Clauses:**
-      1. [ ] Remove the "INSPECTOR" heading.
-      2. [ ] **Reclaim the height** — not just hide the text. He said "crop off all that space", so the
+      1. [x] Remove the "INSPECTOR" heading.
+      2. [x] **Reclaim the height** — not just hide the text. He said "crop off all that space", so the
              row's padding/margin goes with it or the change is invisible.
       ⚠️ Check the heading is not doing double duty as the sheet's drag handle or its accessibility label
       before deleting it — if it is, the handle stays and only the word goes.
+      ✅ **Checked: it is neither.** The drag handle is `#insp-grab`, a separate element, and the row's only
+      other content is the project-name field — which on a phone already lives in the top bar (queue 231),
+      so hiding the row loses nothing there.
+      ✅ **It had ALREADY gone while `m-editing`**, which is exactly why it survived in the state he
+      screenshotted: several clips selected, where the panel reads INSPECTOR and then EDIT 4 CLIPS directly
+      under it. The rule is now every phone state rather than that one, and it is `display: none` on the
+      whole row rather than an emptied label, because "crop off all that space" is clause 2 and a 33px row
+      with no text in it is precisely what he drew the line under. The test asserts the HEIGHT for that
+      reason, and asserts the PC panel keeps its heading, so the change cannot quietly widen.
 
 - [x] **378 — ✅ v9.84. Get rid of the effect explanation blocks — ALL of them — and keep the text somewhere it can
       feed the tutorials.** (18 Aug, phone screenshot at v9.83 of Motion Blur (Object) with its paragraph
@@ -11104,3 +11129,52 @@ wait for them to report back."*
       ⏸️ **HELD AT HIS REQUEST — he re-sent it with an explicit instruction:** *"Log don't do yet"*. So it
       is written down in full and deliberately NOT started; it waits for him to release it rather than
       taking its turn in the queue.
+
+- [ ] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
+      would make things worse.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
+      > Move the two arrow buttons that jump you through the project closer towards the centre, I feel they are too far away from the time play button and too close to the undo redo buttons
+      > With my last request do only slightly tho and take time making sure it just all looks good and polished while ur at it, maybe even skip it if you feel till just make it worse
+      **Clauses:**
+      1. [ ] `btn-tostart` / `btn-toend` move slightly toward the pill.
+      2. [ ] **Only slightly** — and he has explicitly authorised NOT doing it: *"maybe even skip it if you
+             feel till just make it worse"*. So measure, try it, and if it reads worse, say so and leave it.
+      ⚠️ The row is a three-track grid whose side tracks are equal BY CONSTRUCTION (#373 clause 8) — that is
+      what keeps the pill on true screen centre. Move these two with `margin`, not by changing the tracks,
+      or the centring goes with them and `playhead-play-centre` goes red.
+
+- [ ] **421 — Make the Sketching button yellow instead of green.** (19 Aug, via the phone inbox.) His
+      words, verbatim:
+      > Make the sketching button yellow instead of green, I feel yellow reminds me of pencil more
+      **Clauses:**
+      1. [ ] The Sketching tile's glyph/accent goes yellow.
+      ⚠️ It sits in a grid of coloured tiles — check the new yellow is not the same yellow as a neighbour,
+      which is the complaint behind [#413].
+
+- [ ] **422 — The dot in the add-row switch is slightly off centred.** (19 Aug, via the phone inbox.) His
+      words, verbatim:
+      > The dot in the switch is slightly off centred
+      **Clauses:**
+      1. [ ] The knob centres horizontally in its track.
+      🔗 The switch from [#373]. Measure the knob against the track in INK, not boxes — that is what found
+      the real fault in #410, where every box was aligned and the drawing inside was not.
+
+- [ ] **423 — Settings menu: get rid of the random line at the top.** (19 Aug, via the phone inbox.) His
+      words, verbatim:
+      > In the menu settings get rid of the random line at the top
+      **Clauses:**
+      1. [ ] Find what draws it — a stray border, an empty header, or a separator above the first row —
+             and remove the cause rather than hiding it.
+      🔗 Same shape of fault as [#376] clause 2 ("that dreadful gap") and the v10.19 double border.
+
+- [ ] **424 — When the project is empty, the timeline's pattern should run to the bottom of the screen
+      with no cut-off line.** (19 Aug, via the phone inbox, referring to a screenshot.) His words,
+      verbatim:
+      > This line right here should be gone and instead just keep the same pattern going to the bottom of the screen with no cut off, just for when the project is empty like in the screenshot
+      **Clauses:**
+      1. [ ] The line goes.
+      2. [ ] The pattern continues to the bottom of the screen.
+      3. [ ] **Only when the project is empty** — his words. So this is an empty-state rule, not a change
+             to the normal timeline.
+      ⚠️ **THE SCREENSHOT DID NOT COME THROUGH** — the inbox is a text file, so "this line right here" has
+      no picture attached. There is an existing `#timeline-panel.tl-empty-start` empty-state hook in the
+      stylesheet, which is the likely place, but WHICH line is a guess until he sends the shot again.

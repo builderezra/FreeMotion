@@ -57,7 +57,19 @@ fi
 
 if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then echo "inbox empty"; else
   echo "=== UNLOGGED — move these into REQUESTS.md, then run: tools/inbox.sh --done ==="
-  printf '%s\n' "$BODY"
+  # ALREADY-LOGGED DETECTION, and it exists because it happened: a drained file came back with its old
+  # lines still in it (iCloud re-synced an older copy over the drain marker), so nine requests already
+  # written into REQUESTS.md were presented as new. They were caught by reading, which is exactly the
+  # kind of catching that fails on the day someone is tired. A line is flagged if a distinctive run of
+  # its words is already in REQUESTS.md — the file quotes him verbatim, so that is a reliable signal.
+  printf '%s\n' "$BODY" | while IFS= read -r line; do
+    key="$(printf '%s' "$line" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    if [ ${#key} -gt 24 ] && grep -Fq "$(printf '%s' "$key" | cut -c1-40)" REQUESTS.md 2>/dev/null; then
+      printf '  ⚠️ ALREADY LOGGED — do not add again: %s\n' "$key"
+    else
+      printf '%s\n' "$line"
+    fi
+  done
 fi
 # --done draws a line under everything above it. Append-only, so it cannot race the phone.
 if [ "$1" = "--done" ]; then

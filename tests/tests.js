@@ -782,6 +782,29 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
+  test('the phone inspector has no INSPECTOR heading, and gets its height back', { item: 'insp-heading' }, async function () {
+    /* Queue 377. Ezra, with a red line drawn under the word: "Also you can crop off all that space, it
+       doesn't need to say inspector, look at red line."
+       Two clauses in one measurement: the word goes AND the space goes. Asserting the row's HEIGHT rather
+       than its text is what covers the second — emptying the label would leave a 33px empty band, which is
+       the thing he actually drew the line under. It already went while `m-editing`, so the state that
+       mattered was the one he screenshotted: several clips selected, where the panel read INSPECTOR and
+       then EDIT 4 CLIPS underneath it.
+       The desktop half is asserted too, in the other direction: this is a phone rule, and a change that
+       quietly took the heading off the PC panel as well would be a different decision than the one he
+       asked for. */
+    const title = document.querySelector('#inspector-panel .panel-title');
+    if (!title) throw new Error('#inspector-panel .panel-title is missing entirely — the project name field lives in it');
+    const wide = title.getBoundingClientRect().height;
+    if (!(wide > 4)) throw new Error('the panel title row is ' + wide.toFixed(1) + 'px at desktop width — this was only ever meant to go on the phone');
+    let phone = null;
+    await atPhoneWidth(async function () {
+      phone = title.getBoundingClientRect().height;
+    }, 380);
+    if (phone === null) throw new Error('the phone measurement never ran');
+    if (phone > 0.5) throw new Error('at 380 the panel title row is still ' + phone.toFixed(1) + 'px tall — he asked for the space to be cropped off, not just the word hidden');
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

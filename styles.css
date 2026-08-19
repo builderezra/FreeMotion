@@ -2955,7 +2955,16 @@ body.fm-playing #time-readout {
      never covers the clip, on any screen size). */
   body.m-editing { --stage-h: 40vh; }   /* keep the canvas full-size while editing (no resize jump); panel docks below */
   body.m-editing #inspector-panel { overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.5); }
-  body.m-editing .panel-title { display: none; }     /* AM shows no "Inspector" label */
+  /* THE "INSPECTOR" HEADING IS GONE ON THE PHONE — every state, not just single-clip editing (queue 377).
+     Ezra, with a red line drawn under the word: "Also you can crop off all that space, it doesn't need to
+     say inspector, look at red line." It already went while `m-editing`, which is why it only survived in
+     the state he screenshotted — several clips selected, where the panel reads INSPECTOR and then EDIT 4
+     CLIPS directly under it. The first is a label for a panel you are already looking at; the second says
+     what it is for. `display: none` on the whole row rather than emptying the label, because clause 2 is
+     "crop off all that space" and a 33px row with no text in it is exactly the thing he was pointing at.
+     Nothing is lost: the row's only other content is the project-name field, and on a phone the name
+     lives in the top bar already (queue 231). The drag handle is #insp-grab, a separate element. */
+  .panel-title { display: none; }
   /* THE + BUTTON IS GONE (queue 294, clause 1). "I was thinking of a way to get rid of it from being
      there while also keeping functionality" — the Add row in the timeline is that functionality, and it
      opens the same sheet the orb did. The element stays in the DOM: FM.mobile.openAdd() is still what
