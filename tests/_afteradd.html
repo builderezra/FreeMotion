@@ -43,7 +43,10 @@
       } catch (e) { say('setup threw ' + e.message); }
       setTimeout(function () {
         try {
-          /* Drive the REAL tiles rather than an internal seam. There is no _add/_pick/_commit on
+          /* `.fxb-commit` is the BAR — a div with no handler. The button inside it is `.fxb-commit-go`,
+             and clicking the bar committed nothing, which is why the first run of this probe reported
+             `layer.effects = 0` and appeared to contradict a green suite sweep. The probe was wrong.
+             Drive the REAL tiles rather than an internal seam. There is no _add/_pick/_commit on
              FM.fxBrowser, and inventing one to test with would test the seam, not the button. */
           function tiles() { return [].slice.call(d.querySelectorAll('#fx-browser [data-fxid]')); }
           function openCat() { var cats = FM.fxRegistry.categories() || []; FM.fxBrowser._openCategory(cats[0]); }
@@ -59,7 +62,7 @@
                 var picks = FM._fxPicks ? FM._fxPicks() : [];
                 if (picks.length) {
                   // sheet mode: a tap SELECTS. Commit through the real bar.
-                  var done = d.querySelector('#fx-browser .fxb-commit, #fx-browser .fxb-done, #fx-browser .fxb-subdone');
+                  var done = d.querySelector('#fx-browser .fxb-commit-go, #fx-browser .fxb-subdone');
                   say('  (sheet multi-select: ' + picks.length + ' picked, committing via ' + (done ? done.className : 'NO BUTTON') + ')');
                   if (done) done.click();
                 }
@@ -77,9 +80,39 @@
                       ts2.slice(0, 3).forEach(function (el) { el.click(); });
                       var picks2 = FM._fxPicks ? FM._fxPicks() : [];
                       say('  picked ' + picks2.length);
-                      var done2 = d.querySelector('#fx-browser .fxb-commit, #fx-browser .fxb-done, #fx-browser .fxb-subdone');
+                      var done2 = d.querySelector('#fx-browser .fxb-commit-go, #fx-browser .fxb-subdone');
                       if (done2) done2.click(); else say('  NO commit button found');
-                      setTimeout(function () { state('after commit'); window.__done = true; }, 600);
+                      setTimeout(function () {
+                        state('after commit');
+                        /* AND THE PSEUDO TILE. `_mask` is not a registry effect — it changes LAYER state
+                           (layer.masks), so committing it creates no effect row to land on. He raised
+                           Mask and "it doesn't take me to the effect" in the SAME message, and clause 1
+                           of this entry says Mask does not behave like an effect. If adding Mask leaves
+                           you on the category grid, clause 3 IS clause 1 rather than a separate bug. */
+                        say('');
+                        say('PSEUDO TILE (Mask)');
+                        FM.scene.layers[0].effects = [];
+                        FM.scene.layers[0].masks = [];
+                        FM.refreshAll();
+                        FM.fxBrowser.open(FM.scene.layers[0]);
+                        setTimeout(function () {
+                          // Mask sorts into the 'matte' category (js/fx-browser.js:919), not the first one.
+                          try { FM.fxBrowser._openCategory('matte'); } catch (e) { say('  no matte category: ' + e.message); }
+                          setTimeout(function () {
+                            var mt2 = d.querySelector('#fx-browser [data-fxid="_mask"]');
+                            if (!mt2) { say('  Mask tile not found at all'); window.__done = true; return; }
+                            mt2.click();
+                            var go = d.querySelector('#fx-browser .fxb-commit-go, #fx-browser .fxb-subdone');
+                            if (go) go.click(); else say('  no commit button');
+                            setTimeout(function () {
+                              var L0 = FM.scene.layers[0];
+                              say('  masks on layer = ' + ((L0.masks || []).length));
+                              state('after Mask commit');
+                              window.__done = true;
+                            }, 700);
+                          }, 500);
+                        }, 700);
+                      }, 600);
                     }, 500);
                   }, 600);
                 }, 600);

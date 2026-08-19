@@ -9752,6 +9752,23 @@ wait for them to report back."*
          layer state (`layer.masks`), not a registry effect, which is why its row cannot be swiped away or
          collapsed like every other row in the stack. Same root as **335** (Motion Blur), which is the
          other non-effect wearing an effect's clothes.
+         **SIZED, 19 Aug — and the full migration is NOT the right first move.** `.masks` has 30 call
+         sites across 8 files (compositor, storage, scene, timeline, mask-tool, masks, inspector,
+         fx-browser); making it a registry effect is a #335-scale job touching the render path.
+         **His two NAMED symptoms are much smaller and do not need any of that:** *"I can't swipe it away
+         to delete it or minimise it"*. Both are inspector-only.
+         **The plan, ready to execute:**
+         · `attachFxGestures(row, head, layer, fx, idx, stack)` (js/inspector.js:1000) is already the
+           reusable wiring for swipe-to-delete AND hold-to-reorder, and it is generic: it reads the list
+           through `stack.list(layer)` and deletes by OBJECT IDENTITY, not by index. So a mask item can
+           reuse it as-is with a shim — `{ list: l => (Array.isArray(l.masks) ? l.masks : []) }`.
+         · Minimise: `masksBlock` (js/inspector.js:1940) always renders the full body. Make it an
+           accordion on `mask._expanded`, exactly as the fx rows do.
+         · ⚠️ **Check first:** whether `_expanded` survives a save. Effects carry the same flag, so if
+           storage already strips it this is free — and if it does NOT, masks must not start writing a UI
+           flag into his project files.
+         That covers what he asked for. The deeper "make it a real effect" migration stays open under
+         this clause with its size written down, so it is a decision rather than a surprise.
       2. ✅ **DONE — v9.81.** **Done inside a category discards your selection.** Queue 297 added Done to
          every sub-view so you could leave without going backwards first — but with the queue-277
          multi-select, Done CLOSES and the picks go with it. He expects Done to mean "add what I picked".
@@ -9764,8 +9781,22 @@ wait for them to report back."*
          **Clauses 1 and 3 are still open, so this entry stays open.**
       3. **After adding an effect it often does not open that effect.** It should land on the new effect's
          controls; he says it frequently drops him out of the layer entirely.
-         **PARTLY MEASURED, 19 Aug — and the measurement is NOT yet trustworthy, so nothing was shipped
-         on it.** `tests/_afteradd.html` drives the real tiles and the real commit bar at 380px and
+         **SETTLED, 19 Aug — IT DOES NOT REPRODUCE, and the earlier probe was the thing that was wrong.**
+         `.fxb-commit` is the BAR (a div with no handler); the button inside it is `.fxb-commit-go`. The
+         probe was clicking the bar, so nothing ever committed — which is why it reported `layer.effects
+         = 0` and appeared to contradict a green suite sweep. With the right button, at 380px:
+         | path | result |
+         |---|---|
+         | one pick, then Done | 1 effect, its row OPEN and IN VIEW, no category grid |
+         | three picks, then Done | 3 effects, row open and in view, no category grid |
+         | the Mask pseudo-tile | mask added, and it does NOT kick you out either |
+         **So the ordinary add path lands you exactly where it should**, and I am not going to ship a fix
+         for a bug I cannot make happen. ⚠️ **What is still unexplained is your experience of it**, and
+         the useful next thing is one detail from you: does it happen from the **Filters** tab, on **PC**,
+         or after adding **Mask / Motion Blur** specifically? Those are the three paths this probe does
+         not cover, and the third is the likeliest — see clause 1: a mask is not an effect, so there is
+         no effect row to land on, which would feel exactly like being dropped somewhere else.
+         *(Superseded reading, kept because the correction is the lesson.)* `tests/_afteradd.html` drives the real tiles and the real commit bar at 380px and
          reports, for both a single pick and three: **you land on the nine-category grid, not on the new
          effect** — which is his report exactly. But the same probe reads `layer.effects = 0`, i.e. it
          says nothing was added at all, and **that contradicts a green 198-tile sweep in the suite** which
