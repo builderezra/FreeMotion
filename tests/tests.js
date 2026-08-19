@@ -470,6 +470,67 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('transport: the time pill IS the play button, and bookmarks moved to the playhead head', { item: 'pill-play' }, async function () {
+    /* Queue 364. He drew an arrow from the ▶ down to the 00:01:36 pill and scribbled out the empty row
+       either side of it: "Make it so that the play button is now the project time pill and when you
+       press on it it pauses and plays the project… make it so you tap the top of the playhead to add
+       bookmarks, and also make it so the top of the playhead is a bit thicker so it's easier to tap on…
+       now that the pill is moved we can get rid of the whole row that is wasted just for a spot to put
+       the pill on."
+       THESE HAD TO SHIP TOGETHER and the test is written as one for that reason: tapping the pill was
+       the only way to add a bookmark on a phone, so moving that gesture without giving the playhead the
+       new one would have left no route to bookmarks at all. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const pill = document.getElementById('time-readout');
+    const row = document.getElementById('transport');
+    if (!pill) throw new Error('#time-readout is missing');
+
+    // clause 5 — the row that only held the pill is gone
+    if (document.getElementById('tc-bar')) throw new Error('#tc-bar still exists — that row was the height he asked to get back');
+    // clause 1 — and the pill is in the transport row instead
+    const inRow = !!pill.closest('#transport, .transport, #topbar-m, .tl-transport');
+    if (!inRow) throw new Error('the pill is not inside the transport row (parent: ' + (pill.parentElement && (pill.parentElement.id || pill.parentElement.className)) + ')');
+    // clause 6 — the rate chip is not on that row any more
+    const chip = document.getElementById('rate-chip');
+    if (chip && chip.closest('#transport, .transport') && !chip.closest('#transport-extra')) {
+      throw new Error('the speed chip is still in the transport row — he said the 1x stepper in the right rail is enough');
+    }
+
+    // clause 1, the behaviour — spied rather than played, because headless playback is a different
+    // question and this is about what the tap is wired to.
+    const realToggle = FM.togglePlay;
+    let calls = 0;
+    try {
+      FM.togglePlay = function () { calls++; };
+      pill.click();
+      await sleep(320);                     // past the 240ms double-tap discriminator
+      if (calls !== 1) throw new Error('tapping the pill called togglePlay ' + calls + ' times, not once');
+    } finally { FM.togglePlay = realToggle; }
+
+    // clauses 3 + 4 — the playhead's head
+    const head = document.getElementById('tl-headtap');
+    const line = document.getElementById('tl-centerline');
+    if (!line) throw new Error('#tl-centerline is missing');
+    if (!head) throw new Error('#tl-headtap is missing — there is now NO way to add a bookmark on a phone');
+    if (!line.contains(head)) throw new Error('the bookmark tap target is not on the playhead');
+    if (getComputedStyle(head).pointerEvents !== 'auto') {
+      throw new Error('#tl-headtap is pointer-events:' + getComputedStyle(head).pointerEvents + ' — its parent is pointer-events:none, so it must opt back in or the tap never lands');
+    }
+    const thick = parseFloat(getComputedStyle(line, '::before').borderTopWidth) || 0;
+    if (!(thick >= 10)) throw new Error('the playhead head is ' + thick + 'px tall — he asked for it thicker so it is easier to tap');
+
+    // …and the tap really toggles a bookmark, both ways.
+    const P = FM.scene.project;
+    const marks0 = (P.markers || []).slice();
+    try {
+      P.markers = [];
+      head.click(); await sleep(60);
+      if ((P.markers || []).length !== 1) throw new Error('tapping the playhead head added ' + (P.markers || []).length + ' bookmarks, not 1');
+      head.click(); await sleep(60);
+      if ((P.markers || []).length !== 0) throw new Error('tapping it again left ' + (P.markers || []).length + ' — it should remove the one it is parked on');
+    } finally { P.markers = marks0; if (FM.timeline) FM.timeline.rebuild(); }
+  });
+
   test('layers: the Null layer is called Controller, keeps its red, and its saved type is unchanged', { item: 'controller-rename' }, async function () {
     /* Queue 363. Ezra gave me the call rather than a name: "If you can think of another name for null
        that still makes sense and describes what it is then change the name of it to that."
@@ -1494,7 +1555,10 @@
     //     the shift for exactly that reason, so here the requirement is conditional: hit screen centre
     //     when the room exists, and never overlap the panel regardless. Asserting unconditional
     //     centring would have demanded the overlap the cap is there to prevent.
-    var line = document.getElementById('tl-centerline'), play = document.getElementById('btn-play');
+    /* The PILL is the play control since queue 364 — #btn-play still exists but is hidden, so it has no
+       box and this test measured nothing. The requirement is unchanged ("i meant i want the play head
+       and button centred to the screen not the timeline"); what is centred is now the pill. */
+    var line = document.getElementById('tl-centerline'), play = document.getElementById('time-readout');
     var panel = document.getElementById('timeline-panel');
     var first = document.getElementById('btn-undo'), last = document.getElementById('btn-layermenu');
     if (!line || !play || !panel || !first || !last) throw new Error('transport / playhead elements missing');
@@ -1511,7 +1575,7 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
       var where = studio ? 'studio' : 'classic';
       var p = play.getBoundingClientRect();
-      if (!p.width) { bad.push(where + ': play button has no box to measure'); return; }
+      if (!p.width) { bad.push(where + ': the time pill (the play control) has no box to measure'); return; }
       var centre = window.innerWidth / 2;
       var panelLeft = panel.getBoundingClientRect().left;
 

@@ -104,6 +104,12 @@
 }
 
 * { box-sizing: border-box; }
+/* Where the timeline area begins, measured down from the top of #timeline-panel. It is the transport
+   row's height and nothing else since queue 364 removed the timecode row that used to sit under it.
+   Everything anchored to the ruler band derives from this — the playhead, the nudge pair, the trim
+   cluster — so the next change to that row moves them all together instead of leaving two of the three
+   pointing at where the band used to be, which is exactly what happened when the row was deleted. */
+:root { --tl-top: 40px; }
 html, body { margin: 0; height: 100%; }
 /* The document CANVAS, which covers the whole web view — larger than the layout viewport under
    viewport-fit=cover on iOS. Anything the page does not cover shows THIS colour, so it has to be the
@@ -1794,7 +1800,7 @@ html.splash-on, html.splash-on body { background: #000; }
  * inspector (see .qr-nudge below); a floating pair on a 375px timeline would cover the clips. */
 #tl-nudge {
   position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: 67px;
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: calc(var(--tl-top, 40px) + 1px);
   /* +1px, and it is not a fudge (queue 235). #tl-centerline is TWO pixels wide drawn from its left
      edge, so its optical centre is x+1, while translateX(-50%) centres this row on x. Measured before:
      14px of air on the left of the line and 12px on the right — which is exactly his "one is closer to
@@ -1839,7 +1845,7 @@ html.splash-on, html.splash-on body { background: #000; }
    375px timeline would bury the clips. */
 #tl-trim {
   position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: 67px;
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: calc(var(--tl-top, 40px) + 1px);
   transform: translateX(calc(-50% + 1px));   /* see #tl-nudge — the 2px centre line's optical centre is x+1 */
   display: flex; align-items: center; gap: 7px;
   pointer-events: none;
@@ -2001,15 +2007,25 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   #tc-bar { padding-right: max(0px, min(var(--tl-panel-left, 0px), calc(100% - 180px))); }
 }
 /* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
-#tc-bar { display: flex; justify-content: center; align-items: center; }
-#tc-bar #time-readout {
+/* THE PILL LIVES IN THE TRANSPORT ROW NOW (queue 364, clauses 1 + 5) — #tc-bar is gone, so these are
+   no longer scoped to it. It is the play/pause control, so it takes a control's affordances: a real
+   press state, and enough padding to be a thumb target rather than a label. */
+#time-readout {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
-  padding: 2px 12px; border-radius: 7px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
-  transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease;
+  padding: 4px 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
+  cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease, transform .09s ease;
 }
-/* Hovering a benchmark — or parking the playhead on one — lights the timecode chip in marker
-   yellow, so the chip tells you which benchmark you are on. (#61) */
-#tc-bar #time-readout.on-mark, #tc-bar #time-readout.mark-hover {
+#time-readout:active { transform: scale(.94); }
+/* PLAYING reads back on the pill, since the ▶ it replaced is the thing that used to say so. Accent
+   rather than yellow — yellow is the bookmark colour and means something else on this row. */
+body.fm-playing #time-readout {
+  border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 10px rgba(78, 168, 255, .30);
+}
+/* Hovering a benchmark — or parking the playhead on one — lights the chip in marker yellow, so it
+   tells you which benchmark you are on. (#61) */
+#time-readout.on-mark, #time-readout.mark-hover {
   background: var(--kf); border-color: var(--kf); color: #241a02; font-weight: 600;
   box-shadow: 0 0 12px rgba(255, 206, 74, .45);
 }
@@ -2301,7 +2317,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      406px in Studio at 1440 wide. Subtracting the panel's own offset converts panel-space back to
      screen-space. timeline.js publishes --tl-panel-left from a single measurement and derives the
      content's scroll offset from the same number, so the line and the strip beneath it stay locked. */
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: 66px; bottom: 0;   /* 40px transport + 26px timecode row → starts at the timeline */
+  /* ONE NUMBER, NOT THREE (queue 364 clause 5). This was `66px`, written as "40px transport + 26px
+     timecode row" — and #tl-nudge and the trim group each carried their own copy of the same sum at
+     67px. Deleting the timecode row moved the band up 26px and left all three pointing at where it used
+     to be: the nudge pair and the trim cluster measured 25px BELOW the ruler, sitting on the first track
+     row. Two suite tests caught it, which is the only reason this is a variable now instead of a fourth
+     hardcoded copy of a sum that has already drifted once. */
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: var(--tl-top, 40px); bottom: 0;
   border-left: 2px solid #eaf0f8; pointer-events: none;
   box-shadow: 0 0 6px rgba(255,255,255,.45);
 }
@@ -2313,11 +2335,30 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    the old -5px put the triangle's centre on 197 while the line's centre is 196. One pixel right, and
    at DPR 3 that is three device pixels of visible offset. -6px lands both on 196.
    The LINE never moves: it is what every time in the app is measured against. */
+/* THICKER (queue 364 clause 4). Ezra: "make it so the top of the playhead is a bit thicker so it's
+   easier to tap on". 5px half-width and 8px tall became 7 and 11 — half again, which reads as a grip
+   rather than a tick without turning the line into a flag. The -8px left keeps its centre on the line:
+   the line is a 2px LEFT BORDER on a zero-width box, so an absolutely-positioned ::before is offset
+   from the PADDING box, which begins after that border — the arithmetic written up below is why this is
+   -(half-width + 1) and not -half-width. */
 #tl-centerline::before {
-  content: ""; position: absolute; top: 0; left: -6px;
-  border-left: 5px solid transparent; border-right: 5px solid transparent;
-  border-top: 8px solid #eaf0f8;
+  content: ""; position: absolute; top: 0; left: -8px;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-top: 11px solid #eaf0f8;
 }
+/* The tap target, which is deliberately bigger than the triangle it sits on — 11px of ink is still a
+   small thing to hit with a thumb, and this is the only route to a bookmark on a phone now. Transparent
+   and pointer-events:auto inside a pointer-events:none parent, so it takes its own taps and nothing
+   else: a scrub that starts anywhere else on the line still reaches the timeline underneath. */
+#tl-headtap {
+  position: absolute; top: -3px; left: -17px; width: 34px; height: 26px;
+  padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+#tl-headtap:active { transform: scale(.9); }
+/* Parked on a bookmark → the head goes marker-yellow, which is also the affordance saying the tap will
+   REMOVE rather than add. */
+#tl-centerline.on-mark::before { border-top-color: #ffd75e; }
 /* NOT WHILE THE BIG + IS UP (queue 354). Ezra, with a screenshot of the white line running down
    through the + and through "Tap here to start creating": "Hide the player head while the add button
    is big". An empty project has nothing to scrub, so the line is a ruler over a blank page — and it

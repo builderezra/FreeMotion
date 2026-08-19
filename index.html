@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=521">
+<link rel="stylesheet" href="styles.css?v=522">
 <link rel="stylesheet" href="theme-glass.css?v=30">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.09</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.10</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -404,21 +404,33 @@
           <button id="btn-redo" class="tbtn" title="Redo (Cmd+Shift+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v0"/></svg></button>
           <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="5" y2="19"/><polygon points="20 5 9 12 20 19 20 5"/></svg></button>
         </div>
-        <button id="btn-play" class="tbtn tbtn-play" title="Play / Pause (space)"><svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+        <!-- THE PILL IS THE PLAY BUTTON (queue 364, clauses 1 + 5). Ezra drew an arrow from the ▶ down
+             to the 00:01:36 pill and scribbled out the empty row either side of it: "Make it so that the
+             play button is now the project time pill and when you press on it it pauses and plays the
+             project… And also now that the pill is moved we can get rid of the whole row that is wasted
+             just for a spot to put the pill on, giving the timeline more space up."
+             So the readout moves HERE, into the slot the ▶ occupied, and #tc-bar is deleted outright —
+             the row and the button were the two halves of one idea. #btn-play stays in the DOM, hidden,
+             because app.js swaps its icon on every play/pause and four other things read it; the pill
+             mirrors that state instead of duplicating the logic. -->
+        <button id="btn-play" class="tbtn tbtn-play hidden" title="Play / Pause (space)" aria-hidden="true" tabindex="-1"><svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+        <span id="time-readout" role="button" tabindex="0" title="Tap: play / pause · double-click: type a time · hold: set this frame as the project thumbnail">00:00:00</span>
         <div class="t-side t-right">
           <button id="btn-toend" class="tbtn" title="Skip to next benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
           <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom) · hold to review-play"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
         </div>
       </div>
-      <!-- AM-style centred timecode pill, below the transport. -->
-      <!-- The rate chip sits beside the timecode and only appears when playback ISN'T at 1x, or while
-           the jump buttons are in speed mode. Without it, a project left at 0.5x looks like a slow
-           render rather than a deliberate setting. -->
-      <div id="tc-bar"><span id="time-readout">00:00:00</span><span id="rate-chip" class="hidden">1×</span></div>
+      <!-- #tc-bar IS GONE (queue 364 clause 5). It existed only to hold the pill, and the pill is in the
+           transport row now — the timeline gets that height back, which was the whole point of his
+           second paragraph.
+           The rate chip went with it (clause 6): "you can just make the speed modifier pop up not go
+           there anymore since it's sufficient to have it just show in the view menu on the right side".
+           It stays in the DOM, hidden, because app.js writes to it in two places and the 1× stepper in
+           the right-hand rail is the one he is keeping. -->
       <!-- Non-AM controls kept OFF the row (per Ezra) but still in the DOM so app.js/timeline.js keep
            their handlers; reached from the ⋯ More menu. Hidden, never shown directly. -->
-      <div id="transport-extra" style="display:none">
+      <div id="transport-extra" style="display:none"><span id="rate-chip" class="hidden">1×</span>
         <button id="btn-loop" class="tbtn" title="Loop playback"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 2 21 6 17 10"/><path d="M3 11a9 9 0 0 1 15-7"/><polyline points="7 22 3 18 7 14"/><path d="M21 13a9 9 0 0 1-15 7"/></svg></button>
         <button id="btn-split" class="tbtn" title="Split clip at playhead (S)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.5" y2="15.5"/><line x1="8.5" y1="8.5" x2="20" y2="20"/></svg></button>
         <button id="btn-snap" class="tbtn active" title="Snapping (magnet)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v7a6 6 0 0 0 12 0V4"/><line x1="4" y1="4" x2="8" y2="4"/><line x1="16" y1="4" x2="20" y2="4"/></svg></button>
@@ -444,7 +456,16 @@
       </div>
       <!-- Phone only: a fixed-centre playhead that lives OUTSIDE the scroller, so it can never move.
            The timeline content scrolls underneath it (AM behaviour). Positioned by timeline.js. -->
-      <div id="tl-centerline" aria-hidden="true"></div>
+      <!-- THE TOP OF THE PLAYHEAD IS A BUTTON NOW (queue 364, clauses 3 + 4). Ezra: "make it so you tap
+           the top of the playhead to add bookmarks, and also make it so the top of the playhead is a bit
+           thicker so it's easier to tap on."
+           It has to be a real element: #tl-centerline is `pointer-events: none` (it must never eat a
+           scrub) and its triangle is a ::before, which cannot take events at all. This child opts back
+           in for its own small area only.
+           It also has to land in the SAME release as the pill becoming play/pause — tapping the pill was
+           the only way to add a bookmark on a phone, so moving that gesture without this one would leave
+           no route to bookmarks at all. -->
+      <div id="tl-centerline" aria-hidden="true"><button id="tl-headtap" type="button" title="Tap to add or remove a bookmark here" aria-label="Add or remove a bookmark at the playhead"></button></div>
       <!-- The clip-nudge pair (v5.01). Ezra drew an arrow from the inspector's two clip buttons to a
            pair of marks flanking the playhead: "i feel its close the where you will be dragging so
            itll be easy to click, one on each side." They straddle the centre line so the gap between
@@ -879,7 +900,7 @@
   <script src="js/shortcuts.js?v=77"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=309"></script>
+  <script src="js/app.js?v=310"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>
