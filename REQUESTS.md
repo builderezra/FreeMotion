@@ -10634,7 +10634,7 @@ wait for them to report back."*
       during it is cancelled. A mouse-only check passes with his bug fully intact, which is why the second
       half exists.
 
-- [ ] **384 — The home screen's + button needs real colour, specialised for the button.** (18 Aug, phone
+- [x] **384 — The home screen's + button needs real colour, specialised for the button.** ✅ **v10.30.** (18 Aug, phone
       screenshot at v9.83 of the Projects list.) His words, verbatim: *"Make the plus button in this menu an
       array of colours and look pretty like what you did with the background but instead specialised for the
       button. I want things to stand out"*.
@@ -10642,12 +10642,24 @@ wait for them to report back."*
       floating **+** on the home Projects list. Both want colour, and they should be done in one pass so they
       end up looking like siblings rather than two separate attempts.
       **Clauses:**
-      1. [ ] Multi-colour treatment on the home +, in the spirit of the animated background but tuned for a
+      1. [x] Multi-colour treatment on the home +, in the spirit of the animated background but tuned for a
              small round button rather than a full screen.
-      2. [ ] *"I want things to stand out"* — it currently reads as the same dark glass as everything around
+      2. [x] *"I want things to stand out"* — it currently reads as the same dark glass as everything around
              it, which is why it disappears into the list.
       ⚠️ A full-screen gradient scaled down to a 56px circle turns to mud — the #313 lesson. Design it AT
       button size and check it there, not by shrinking the background.
+      ✅ **THE #313 TRAP WAS AVOIDED BY NOT DESIGNING ANYTHING.** Queue 354 already built exactly this disc
+      for the timeline's empty-state + — a conic ramp with a specular highlight and a soft glow, tuned at
+      64px. The home + is 58px, so it took the same treatment unchanged. It is designed at button size
+      because it was copied FROM a button, and the entry's own request that the two "look like siblings
+      rather than two separate attempts" is satisfied by construction rather than by eye.
+      ✅ **The glyph flips to near-black.** A light + on a bright disc is the one combination that would not
+      read; the timeline's + made the same flip for the same reason. The backdrop blur goes with the glass —
+      there is nothing translucent left to blur through.
+      ⚠️ **The test asserts the two ramps are IDENTICAL, not that the home + "has colours"** — a looser check
+      would pass two different rainbows, which is the outcome the entry warned about. *(Its first version was
+      dead and the mutation said so: `getComputedStyle` renders colours as `rgb(...)`, so a
+      `conic-gradient\([^)]*\)` match stopped at the first inner bracket and compared identical prefixes.)*
 
 - [ ] **385 — Should a project unload when you leave it? He is asking for a judgement, not an
       instruction.** (18 Aug.) His words, verbatim: *"I think it may be worth having project not stay open
@@ -11246,6 +11258,15 @@ wait for them to report back."*
       2. [ ] The pattern continues to the bottom of the screen.
       3. [ ] **Only when the project is empty** — his words. So this is an empty-state rule, not a change
              to the normal timeline.
-      ⚠️ **THE SCREENSHOT DID NOT COME THROUGH** — the inbox is a text file, so "this line right here" has
-      no picture attached. There is an existing `#timeline-panel.tl-empty-start` empty-state hook in the
-      stylesheet, which is the likely place, but WHICH line is a guess until he sends the shot again.
+      ✅ **THE SCREENSHOT ARRIVED (19 Aug, v10.28) — "I think this was the line for the screenshot" — so
+      this is no longer a guess.** An EMPTY project: the big empty-state panel carries the rainbow **+** and
+      *"Tap here to start creating"*, and it stops at a hairline roughly 130px above the bottom of the
+      screen. Below that line is a band in a slightly DARKER shade running to the very bottom, and he has
+      circled the line and that band together.
+      **So the two clauses read, precisely:** the hairline at the panel's bottom edge goes, and the panel's
+      own fill continues all the way down instead of handing over to a different shade — one surface to the
+      bottom of the screen, not two with a seam.
+      ⚠️ Still empty-state ONLY (clause 3). `#timeline-panel.tl-empty-start` and `.tl-addrow--empty` are the
+      hooks; the line is most likely the empty add-row's own bottom border or the row's height stopping
+      short of the panel, with the panel's background showing through beneath it — check which before
+      removing a border that turns out not to be the thing in the circle.

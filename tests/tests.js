@@ -954,6 +954,39 @@
     }
   });
 
+  test('the home + and the timeline + are the same coloured disc, not two attempts at one', { item: 'plus-siblings' }, function () {
+    /* Queue 384. Ezra: "Make the plus button in this menu an array of colours and look pretty like what you
+       did with the background but instead specialised for the button. I want things to stand out."
+       The entry asked for this and queue 354's timeline + to "end up looking like siblings rather than two
+       separate attempts", so that is what is asserted: both discs must carry the SAME conic ramp. A check
+       that merely said "the home + has some colours" would pass two different rainbows, which is the exact
+       outcome the entry warned against — and it would also pass a full-screen gradient shrunk onto a 58px
+       circle, which is the queue 313 mud. Sharing one ramp is what makes that impossible. */
+    const fab = document.getElementById('hm-new');
+    if (!fab) throw new Error('#hm-new — the home + — is missing');
+    const probeRow = document.createElement('div');
+    probeRow.className = 'tl-addrow tl-addrow--empty';
+    probeRow.style.cssText = 'position:absolute;left:-9999px;top:0';
+    const probePlus = document.createElement('div');
+    probePlus.className = 'tl-addrow-plus';
+    probeRow.appendChild(probePlus);
+    document.body.appendChild(probeRow);
+    try {
+      /* ⚠️ NOT a `conic-gradient\([^)]*\)` match. getComputedStyle renders every colour as `rgb(...)`, so
+         that stops at the first inner bracket and returns `conic-gradient(from 210deg at 50% 50%,
+         rgb(127, 212, 255)` — identical for both discs no matter what the later stops say. A mutation
+         moving a stop 36° SURVIVED that version; this takes everything from the conic to the end of the
+         layer list instead, which is the whole ramp because the conic is the last layer on both. */
+      const conic = s => { const i = String(s).indexOf('conic-gradient'); return i < 0 ? null : String(s).slice(i).replace(/\s+/g, ' '); };
+      const home = getComputedStyle(fab).backgroundImage;
+      const tl = getComputedStyle(probePlus).backgroundImage;
+      const cHome = conic(home), cTl = conic(tl);
+      if (!cTl) throw new Error('the timeline + no longer has a conic ramp to be a sibling OF — read [' + String(tl).slice(0, 90) + ']');
+      if (!cHome) throw new Error('the home + has no conic ramp — it is back to plain glass and will disappear into the list again: [' + String(home).slice(0, 90) + ']');
+      if (cHome !== cTl) throw new Error('the two + buttons have DIFFERENT colour ramps, which is the "two separate attempts" the entry asked to avoid:\n  home     ' + cHome.slice(0, 120) + '\n  timeline ' + cTl.slice(0, 120));
+    } finally { probeRow.remove(); }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

@@ -5601,15 +5601,32 @@ body.fm-pushing #toast { z-index: 213; }
 #btn-export,
 .m-export,
 #add-fab,
+/* THE HOME + IS A COLOURED DISC NOW, AND DELIBERATELY THE SAME ONE AS THE TIMELINE'S (queue 384).
+   Ezra: "Make the plus button in this menu an array of colours and look pretty like what you did with
+   the background but instead specialised for the button. I want things to stand out."
+   It was the app's neutral glass — `--lg-catch` / `--lg-fill` over a backdrop blur — which is the
+   treatment every other chrome button wears, and that is exactly why it disappeared into the list he
+   screenshotted. **The colours are not new work and that is the point:** queue 354 built this disc for
+   the timeline's empty-state + (`.tl-addrow--empty .tl-addrow-plus`), and the entry asks for the two to
+   end up looking like siblings rather than two separate attempts at "make it colourful". Same conic
+   ramp, same specular highlight, same glow — at 58px against that one's 64px, which is close enough
+   that nothing needed re-tuning. It is designed AT button size by being copied FROM a button, which is
+   the queue 313 trap (a full-screen gradient shrunk to a small disc turns to mud) avoided rather than
+   navigated.
+   The glyph flips to near-black: a light + on a bright disc is the one combination that would not read,
+   and the timeline's + already made the same flip for the same reason. The backdrop blur goes with the
+   glass — there is nothing translucent left to blur through. */
 #hm-new {
-  background-image: var(--lg-catch), var(--lg-fill);
+  background-image:
+    radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%),
+    conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
   background-repeat: no-repeat;
-  background-color: rgba(122, 182, 212, .10);
-  -webkit-backdrop-filter: blur(14px) saturate(1.5);
-          backdrop-filter: blur(14px) saturate(1.5);
-  box-shadow: var(--lg-rim), var(--lg-lift);
+  background-color: transparent;
+  -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+  box-shadow: 0 0 30px rgba(154, 120, 255, .40), 0 0 14px rgba(90, 199, 237, .34), inset 0 0 0 1px rgba(255, 255, 255, .5);
   border: none;
-  color: #eef8ff;
+  color: #06121c;
 }
 /* Export is the app's one primary action, so its glass is tinted rather than neutral — it has to
    read as the button you press, which is the job the mint pill used to do and the crystal took over. */
