@@ -2435,10 +2435,17 @@ window.FM = window.FM || {};
       if (audioOnly) return CATEGORIES.filter(c => ['speed', 'volume', 'effects'].indexOf(c.key) >= 0);
       return CATEGORIES.filter(c => c.key !== 'editgroup');
     }
-    // shape / text / image show the same grid with Volume DISABLED (categoryGrid greys it) because
-    // there is no audio. Speed used to be greyed here too; since v6.39 it re-times the clip and
-    // stretches its keyframes, so it works on these — see viewAllowed.
-    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup');
+    /* shape / text / image DROP Volume entirely (queue 370). Ezra, with a phone shot of a text layer:
+       "In the text edit menu just get rid of the volume button so the effects button can fit."
+       It used to be included and merely greyed, and he is right that this costs real space: ten cards lay
+       out 3+3+3+1, so Effects — the card he uses most — was orphaned alone on a fourth row while a card
+       that can NEVER do anything on a silent layer held its place. Nine is a clean 3x3.
+       DONE FOR ALL THREE, not just the text layer he photographed: shape and image are equally silent and
+       showed the same dead card, and fixing only the type in the screenshot is how this comes back as a
+       second report a week later.
+       Speed STAYS — it used to be greyed here too, but since v6.39 it re-times the clip and stretches its
+       keyframes, so it genuinely works on these (see viewAllowed). Audio and video keep Volume. */
+    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup' && c.key !== 'volume');
     // …and everything else (group, null, camera) keeps Speed for the same reason, losing only Volume.
     return CATEGORIES.filter(c => c.key !== 'volume' && c.key !== 'editgroup');
   }

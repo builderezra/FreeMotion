@@ -7163,6 +7163,34 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
 
+      **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
+      Verbatim:
+      ```
+      FRAMES   10.7 fps average
+               median gap 17.0ms · p95 597.0ms · worst 1666.0ms
+               11 of 114 frames were late (over 42ms)
+      QUALITY  tier 0 (6 available) · mode smooth
+               app-measured render 294.69ms · app-measured gap 311.92ms
+      CANVAS   1458k pixels
+      PROJECT  1080x1350 @60fps · 9 layers (9 shape) · 24 effects
+      DEVICE   screen 440x956 @dpr3 · 4 cores · Safari · iOS
+      ```
+      **Read it against the second report and the difference is the whole finding.** There, render was
+      **0.02ms** and the freezes had to be GPU, decode or GC. Here render is **294.69ms** — seventeen
+      times a 60fps frame budget — so this time it IS our own drawing, measured, on his device.
+      **What changed between the two samples: 3 layers / 0 effects → 9 layers / 24 effects**, and the
+      canvas went 561k → 1458k pixels (he is zoomed in, so the preview rasterises larger).
+      **So there are TWO different lag bugs in this entry and they need opposite work:**
+      · the 2nd report's — average fine, rare 252ms freezes, render ~0 → outside renderScene.
+      · this one — render itself at 294ms with 24 effects on 9 shape layers → inside it, and it is a
+        THROUGHPUT problem, not a hitch.
+      **And the quality ladder is still on tier 0 of 6 in `smooth` mode while dropping to 10.7fps**, which
+      is the part that should not be possible: it can see the gap (311.92ms, so v8.27's fix is live) and it
+      is not acting on it. **That is the first thing to look at** — a ladder that measures correctly and
+      never steps down is worth more than any single effect optimisation.
+      ⚠️ Worth getting from him next time: WHICH effects. 24 across 9 shapes at 1458k pixels could be one
+      expensive type repeated, and the per-effect cost is already measurable in the suite.
+
       **★ HIS SECOND REAL MEASUREMENT, 19 Aug (v10.02) — and it moves this entry on.** Verbatim:
       ```
       FRAMES   53.6 fps average
@@ -10068,7 +10096,7 @@ wait for them to report back."*
       string-only — the `border` key stays, so nothing saved is touched — and they should ship TOGETHER as
       one release rather than three, so the vocabulary changes once instead of three times.
 
-- [ ] **370 — Drop the Volume card from a text layer so Effects fits the grid.** (18 Aug, phone
+- [x] **370 — Drop the Volume card from a text layer so Effects fits the grid.** ✅ **v10.17** — and for shape and image too, since they are equally silent and showed the same dead card. Verified at 380px: a clean 3×3 with Effects at position 9 instead of orphaned on a fourth row. Video and audio keep Volume. (18 Aug, phone
       screenshot at v9.81 of a text layer's card grid.) His words, verbatim: *"In the text edit menu just
       get rid of the volume button so the effects button can fit"*.
       **What the shot shows and why he is right:** the cards run 1 Colouring, 2 Border / Shadow,
@@ -10585,3 +10613,24 @@ wait for them to report back."*
       ⚠️ Cost check: tiles are generated on a queue, one per frame, and there are ~200 of them. Tripling
       the pixels triples that work — measure the generation time at 380px before and after, and keep the
       queue so it stays off the first paint.
+
+- [ ] **401 — Tapping the screen while the effects menu is open should close the MENU, not deselect the
+      layer.** (19 Aug, via the phone inbox.) His words, verbatim:
+      *"Tapping anywhere on the screen when you're in the effects menu should close the effects menu but
+      not the layer."*
+      **Clause:** a tap outside the effects menu dismisses the menu and leaves the layer selected.
+      ⚠️ Today a tap on empty canvas/timeline calls `FM.selectLayer(null)`, which deselects — and the
+      phone's inspector sheet is DERIVED from the selection, so losing the layer closes everything and you
+      have to re-select to get back. That is the "and not the layer" half.
+
+- [ ] **402 — 🔁 The play button (the time pill) should not go yellow, and its text should be whiter.**
+      (19 Aug, via the phone inbox — a reply to what shipped in v10.10/v10.11.) His words, verbatim:
+      *"Stop the play button from going yellow, make the text on it more white than grey also."*
+      **This is a correction to my work and he is right.** v10.10 made the timecode pill the play/pause
+      button but kept its old `on-mark` styling, which turns the whole pill marker-yellow when the
+      playhead is parked on a bookmark. That made sense when the pill was a readout; it does not now —
+      the play button flashing yellow says something about PLAYBACK, which is not what it means.
+      **Clauses:**
+      1. [ ] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
+             which is where it belongs — so this is removing the duplicate, not removing the feature.)
+      2. [ ] Its text is whiter, not grey.

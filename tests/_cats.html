@@ -11,7 +11,7 @@ fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
  var FM=w.FM;
  try{var sp=d.getElementById('splash');if(sp)sp.remove();if(FM.home.isOpen())FM.home.close();
   FM.scene.layers.length=0;
-  var L=FM.makeLayer('shape',{name:'L',shape:'rect',x:540,y:960,shapeW:400,shapeH:400,fill:'#3a7bd5'});
+  var L=q.get('kind')==='text'?FM.makeLayer('text',{name:'T',text:'Hello',x:540,y:960}):FM.makeLayer('shape',{name:'L',shape:'rect',x:540,y:960,shapeW:400,shapeH:400,fill:'#3a7bd5'});
   L.start=0;L.duration=4;FM.scene.layers.push(L);FM.selectLayer(L.id);FM.refreshAll();FM.inspector.refresh();
  }catch(e){}
  setTimeout(function(){window.__done=true;},1800);})();});})();

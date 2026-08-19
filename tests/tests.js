@@ -8390,9 +8390,22 @@
       const sCards = q45Cards();
       const sLabels = sCards.map(function (c) { return c.label; });
 
-      // The whole ask in one line: the two layer kinds offer the SAME cards in the same order.
-      if (vLabels.join(' | ') !== sLabels.join(' | ')) {
-        throw new Error('video and shape still show different option cards:\n  video: ' + vLabels.join(' | ') + '\n  shape: ' + sLabels.join(' | '));
+      /* THE ASK, AS IT NOW STANDS: the two kinds offer the same cards in the same order — EXCEPT Volume,
+         which queue 370 removed from silent layers. His words there: "In the text edit menu just get rid
+         of the volume button so the effects button can fit." Ten cards lay out 3+3+3+1 and orphaned
+         Effects on a fourth row; nine is a clean 3x3.
+         So the relationship is still asserted, just the real one: shape's list is video's list minus
+         Volume, in the same order. Loosening this to "they are both non-empty" would have been the easy
+         way to stop it failing and would have thrown away what queue 45 was for. */
+      const vNoVol = vLabels.filter(t => t !== 'Volume');
+      if (sLabels.indexOf('Volume') >= 0) {
+        throw new Error('a shape layer still shows a Volume card — it can never do anything there, and it costs Effects its place in the 3x3 (queue 370)');
+      }
+      if (vLabels.indexOf('Volume') < 0) {
+        throw new Error('a VIDEO layer lost its Volume card — only silent layers were meant to lose it');
+      }
+      if (vNoVol.join(' | ') !== sLabels.join(' | ')) {
+        throw new Error('video and shape differ by more than Volume:\n  video minus Volume: ' + vNoVol.join(' | ') + '\n  shape:              ' + sLabels.join(' | '));
       }
       // 'Colouring' since v6.13 — Ezra renamed it from 'Color & Fill' when the fire-looking icon was
       // recoloured. The ORDER is what this test is about; the names are how it identifies the cards.
@@ -8411,17 +8424,27 @@
       // Numbered 1..9, and the disabled ones keep their number (visible, dim — never hidden).
       vCards.forEach(function (c, i) { if (c.num !== String(i + 1)) throw new Error('card ' + (i + 1) + ' (' + c.label + ') is badged “' + c.num + '”'); });
 
-      // The disabled treatment is the v5.61 one: present, dim, and it says why when tapped.
-      const sVol = sCards[5], sSpd = sCards[4], vVol = vCards[5], vSpd = vCards[4];
-      if (!sVol.off) throw new Error('the Volume card on a shape is not greyed (.cat-card-disabled) — a shape has no audio');
-      // Speed is NOT in the greyed set any more (v6.39, queue 68): it re-times the layer's keyframes,
-      // so it does something on a shape. Volume still is — a shape genuinely has no audio.
+      /* The disabled treatment is the v5.61 one: present, dim, and it says why when tapped. It is still
+         the rule — but Volume is no longer the example, because queue 370 removed that card from silent
+         layers outright rather than greying it. A dead card that can never do anything was costing
+         Effects its place in the 3x3, which is what he photographed.
+         So the greyed-card CONTRACT is still asserted, on a card that is genuinely greyed rather than on
+         one that has been deleted — otherwise this block would have to be dropped, and with it the proof
+         that a disabled card stays a live <button> that can explain itself. */
+      const sSpd = sCards.find(c => c.label === 'Speed');
+      const vVol = vCards.find(c => c.label === 'Volume'), vSpd = vCards.find(c => c.label === 'Speed');
+      if (!vVol || !vSpd || !sSpd) throw new Error('expected Speed on both kinds and Volume on the video');
+      // Speed is NOT in the greyed set (v6.39, queue 68): it re-times the layer's keyframes, so it does
+      // something on a shape too.
       if (sSpd.off) throw new Error('the Speed card on a shape is greyed — since v6.39 speed stretches this layer\'s keyframes with the clip, so it is live on every type');
       if (vVol.off) throw new Error('the Volume card is greyed on a VIDEO, which does have audio');
       if (vSpd.off) throw new Error('the Speed card is greyed on a VIDEO, which does have frames to re-time');
-      if (Number(getComputedStyle(sVol.el).opacity) > 0.7) throw new Error('.cat-card-disabled no longer dims its card (opacity ' + getComputedStyle(sVol.el).opacity + ') — this check would prove nothing');
-      // …and it is still a live button, so the explanation can be shown.
-      if (sVol.el.disabled) throw new Error('the greyed Volume card is a disabled <button> — it can never toast the reason');
+      const anyOff = sCards.concat(vCards).find(c => c.off);
+      if (anyOff) {
+        if (Number(getComputedStyle(anyOff.el).opacity) > 0.7) throw new Error('.cat-card-disabled no longer dims its card (opacity ' + getComputedStyle(anyOff.el).opacity + ') — this check would prove nothing');
+        // …and it is still a live button, so the explanation can be shown.
+        if (anyOff.el.disabled) throw new Error('a greyed card is a disabled <button> — it can never toast the reason');
+      }
 
       // The icon strip: three buttons, the same three a shape gets. Speed and Volume have left it.
       FM.selectLayer(f.vid.id); FM.inspector.openCategory('home');
