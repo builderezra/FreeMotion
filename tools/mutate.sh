@@ -26,7 +26,11 @@ echo "MUTATION IN PROGRESS on $FILE — do not run a browser check now" > "$LOCK
 # So the tree must be PROVEN GREEN before the mutation is applied. It is cached by a hash of the
 # sources, so the cost is one extra suite run per EDIT, not per mutation — and a session that checks
 # three mutations against one change pays it once.
-BASE_HASH="$(cat index.html styles.css js/*.js tests/tests.js 2>/dev/null | shasum | cut -d' ' -f1)"
+# theme-glass.css joined this list on 20 Aug: it is a real stylesheet the app ships, and leaving it out
+# meant an edit there did NOT invalidate the cached green baseline — so a mutation could be run against a
+# tree whose last proven-green state predated the change being tested. Exactly the hole this gate exists
+# to close, one file wide.
+BASE_HASH="$(cat index.html styles.css theme-glass.css js/*.js tests/tests.js 2>/dev/null | shasum | cut -d' ' -f1)"
 GREEN_FILE="tools/.mutate-green"
 if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
   echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after)…"

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings panel (queue 423)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.settings)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(450);
+  FM.settings.open(); await sleep(700);
+  var d=f.contentDocument, w=f.contentWindow;
+  var out=[];
+  [0,1,2,3,4].forEach(function(y){
+    var e=d.elementFromPoint(60,y);
+    out.push('y='+y+'  <'+(e?e.tagName.toLowerCase()+'.'+(e.className||'') : 'none')+'>');
+  });
+  ['set-scrim','set-panel','set-head'].forEach(function(cls){
+    var e=d.querySelector('.'+cls); if(!e) return;
+    var cs=w.getComputedStyle(e), r=e.getBoundingClientRect();
+    out.push(cls+': top '+r.top.toFixed(1)+' borderTop '+cs.borderTopWidth+' '+cs.borderTopColor+
+             ' bg '+cs.backgroundColor+' shadow '+String(cs.boxShadow).slice(0,44));
+  });
+  var box=document.createElement('pre');
+  box.style.cssText='position:fixed;left:390px;top:0;width:640px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap';
+  box.textContent=out.join('\n');
+  document.body.appendChild(box);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

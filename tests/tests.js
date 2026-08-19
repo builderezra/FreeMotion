@@ -31943,6 +31943,31 @@
     } finally { probe.remove(); }
   });
 
+  test('the settings panel has no lit rim across its top edge', { item: 'settings-top-rim' }, function () {
+    /* Queue 423. Ezra: "In the menu settings get rid of the random line at the top."
+       The glass theme gives every surface a lit top rim — a 1px border plus an `inset 0 1px 0` highlight —
+       which is right for a card that floats. The settings panel does not float: it is pinned to the top and
+       left of the screen and runs full height, so that rim was a bright hairline with nothing above it to
+       be the edge of. Measured before: a line at y=1 in rgba(188,230,239,.08).
+       The RIGHT edge is asserted to survive, because "remove the line" has an over-correction — dropping
+       the whole border leaves the panel with no separation from the app behind it, which is a different
+       complaint arriving later. */
+    if (document.documentElement.getAttribute('data-theme') !== 'glass') throw new Error('the glass theme is not active, so this cannot be checked');
+    const probe = document.createElement('aside');
+    probe.className = 'set-panel';
+    probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:200px;height:200px';
+    document.body.appendChild(probe);
+    try {
+      const cs = getComputedStyle(probe);
+      if (parseFloat(cs.borderTopWidth) > 0.01) throw new Error('the settings panel still has a ' + cs.borderTopWidth + ' top border — that is the line he can see');
+      const sh = String(cs.boxShadow || '');
+      if (/inset/.test(sh) && /\binset\b[^,]*\b0px 1px 0px/.test(sh.replace(/\s+/g, ' '))) {
+        throw new Error('the panel still carries the lit top rim in its box-shadow: [' + sh.slice(0, 90) + ']');
+      }
+      if (!(parseFloat(cs.borderRightWidth) > 0.01)) throw new Error('the RIGHT border went too — the panel now has nothing separating it from the app behind it');
+    } finally { probe.remove(); }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

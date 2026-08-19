@@ -89,6 +89,24 @@ html[data-theme="glass"] .shortcuts-card {
     0 24px 60px rgba(0, 0, 0, .55);
 }
 
+/* …EXCEPT THE SETTINGS PANEL'S TOP EDGE (queue 423). Ezra: "In the menu settings get rid of the random
+   line at the top."
+   The material above gives every surface a lit top rim — `border: 1px` plus `inset 0 1px 0` — and on a
+   floating card that is the light landing on its edge. The settings panel is not floating: it is pinned to
+   the top and left of the screen and runs the full height, so that rim is a bright hairline across the top
+   with nothing above it to be the edge OF. Measured before removing it: a 1px line at y=1 in
+   rgba(188,230,239,.08) with the inset highlight on top of it, which is what he could see.
+   The RIGHT edge keeps its rim — that one separates the panel from the app behind it and is doing real
+   work. #add-sheet deliberately keeps its top rim too: that sheet's top edge sits against the canvas, so
+   there is something there for the light to land on. */
+html[data-theme="glass"] .set-panel {
+  border: none;
+  border-right: 1px solid var(--glass-rim-soft);
+  box-shadow:
+    inset 0 -1px 0 rgba(0, 0, 0, .35),
+    0 24px 60px rgba(0, 0, 0, .55);
+}
+
 /* Cards and rows: a gentler pour of the same material. */
 html[data-theme="glass"] .hm-card,
 html[data-theme="glass"] .set-group,

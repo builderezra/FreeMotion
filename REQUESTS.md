@@ -11665,12 +11665,23 @@ wait for them to report back."*
       ⚠️ The test pins the TECHNIQUE as well as the geometry, because the geometry alone passes at the
       suite's own scale factor whichever method is used — the fault was never visible there.
 
-- [ ] **423 — Settings menu: get rid of the random line at the top.** (19 Aug, via the phone inbox.) His
+- [x] **423 — Settings menu: get rid of the random line at the top.** ✅ **v10.59.** (19 Aug, via the phone inbox.) His
       words, verbatim:
       > In the menu settings get rid of the random line at the top
       **Clauses:**
-      1. [ ] Find what draws it — a stray border, an empty header, or a separator above the first row —
-             and remove the cause rather than hiding it.
+      1. [x] **Found by measurement, not by guessing: it is the GLASS THEME's lit top rim.** Profiling the
+             panel's top rows showed a 1px band at y=1 in `rgba(188,230,239,.08)` against the panel's own
+             `rgb(12,26,34)`, and asking the element directly gave the answer —
+             `borderTop: 1px` **plus** `box-shadow: inset 0 1px 0`.
+      ✅ **CAUSE, and why it is right everywhere else.** The glass theme has one "material" recipe shared by
+      every surface — translucent tint, blur, a lit top rim, a depth shadow — and on a floating card that
+      rim is the light landing on its edge. The settings panel does not float: it is pinned to the top and
+      left of the screen and runs the full height, so the rim was a bright hairline with nothing above it
+      to be the edge OF. Removed for this panel only; `#add-sheet` keeps its top rim deliberately, because
+      that sheet's top edge sits against the canvas and there IS something there.
+      ⚠️ **The RIGHT border is kept, and the test asserts it survives** — "remove the line" has an obvious
+      over-correction where the whole border goes and the panel loses its separation from the app behind
+      it, which is just a different complaint arriving later.
       🔗 Same shape of fault as [#376] clause 2 ("that dreadful gap") and the v10.19 double border.
 
 - [ ] **424 — When the project is empty, the timeline's pattern should run to the bottom of the screen
