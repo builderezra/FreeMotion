@@ -1959,11 +1959,49 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 }
 /* AM transport: all 7 controls spread evenly across the FULL row width (play lands in the middle as the
    4th of 7). The side groups are display:contents so every button is a direct flex child + spreads. */
+/* A GRID, NOT space-between (queue 373 clause 8). Ezra: "Make sure everything aligned perfectly and
+   don't make me have to say it's not right."
+   It used to be `display: flex; justify-content: space-between` with `.t-side { display: contents }`, so
+   all SEVEN controls were siblings spread evenly — and the pill happened to be the 4th of 7, i.e. dead
+   centre, by arithmetic rather than by design. Adding the switch makes eight, and the 4th of 8 is not
+   the middle: the row would have gone subtly lopsided and stayed that way.
+   Two equal `1fr` columns either side of an `auto` centre put the pill on the row's centre line for ANY
+   number of buttons on either side, which is what makes this a decision rather than a coincidence. Each
+   side then spreads its own controls, so the even look is kept. */
 #transport {
-  display: flex; justify-content: space-between; align-items: center;
+  /* minmax(0, 1fr), NOT a bare 1fr. `1fr` means `minmax(auto, 1fr)`, so a side column refuses to shrink
+     below its own content — and with four controls on the right against three on the left, the right
+     column pushed the centre column off true centre. Measured before this: the pill sat 9.24px LEFT of
+     the row's centre, which is exactly the "not right" he asked not to have to report (queue 373). */
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
   padding: 4px 14px; border-bottom: 1px solid var(--line-soft);
 }
-.t-side { display: contents; }
+.t-side { display: flex; align-items: center; }
+.t-left  { justify-content: space-between; padding-right: 10px; }
+.t-right { justify-content: space-between; padding-left: 10px; }
+
+/* THE SWITCH (queue 373, clauses 3-7 and 9). A vertical track with a knob: "if the switch is facing up
+   it's at the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch
+   will gradually move closer from the top to the bottom depending on how far down you've moved the add
+   row button." A vertical slider is the one shape where all three of those are the SAME control — the
+   knob's offset simply IS the proportion — rather than two states with a special case wedged between.
+   `--sw` is that proportion, 0 (top) to 1 (bottom), written by app.js. */
+.tbtn-switch { padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.sw-track {
+  position: relative; display: block; width: 15px; height: 26px; border-radius: 8px;
+  background: var(--panel-3); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.35);
+}
+.sw-knob {
+  position: absolute; left: 50%; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 6px rgba(78,168,255,.55);
+  /* top: 3px … bottom: 3px, interpolated by --sw. calc keeps the knob fully inside the track at both
+     ends instead of clipping at 0 and 1. */
+  top: calc(3px + (100% - 15px) * var(--sw, 0));
+  transform: translateX(-50%);
+  transition: top 220ms cubic-bezier(.22,.8,.3,1), background 160ms ease;   /* clause 9 — the clean animation */
+}
+@media (prefers-reduced-motion: reduce) { .sw-knob { transition: none; } }
 /* DESKTOP transport (v4.96). Ezra: "you can move in all the buttons so they fit, they dont need to
    keep the same spacing anymore, and you can move the view options button to the far right."
    Phone keeps the rule above — seven controls spread edge to edge, which is right on a 375px row.
@@ -1997,8 +2035,8 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     max-width: none; margin-inline: 0; width: auto;
   }
   .t-side { display: flex; align-items: center; gap: 6px; }
-  .t-left  { justify-content: flex-end; }
-  .t-right { justify-content: flex-start; }
+  .t-left  { justify-content: flex-end; padding-right: 0; }
+  .t-right { justify-content: flex-start; padding-left: 0; }
   #btn-play { margin: 0 12px; }
   #btn-amfit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); }
   /* Push the grid's centre column out to TRUE SCREEN CENTRE (v4.97), matching the playhead above it.

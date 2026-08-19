@@ -10667,3 +10667,25 @@ wait for them to report back."*
       1. [ ] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
              which is where it belongs — so this is removing the duplicate, not removing the feature.)
       2. [ ] Its text is whiter, not grey.
+
+- [ ] **403 — The Lightning Bolt effect needs more controls, and it should not cover the whole canvas.**
+      (19 Aug, via the phone inbox.) His words, verbatim:
+      *"Lighting bolt effect could use some other variables and work, also it should only go on top of the
+      layers it's used on and not cover the canvas by default"*
+      **Clauses:**
+      1. [ ] It draws only over the LAYER it is applied to, not across the whole frame.
+      2. [ ] More parameters — "some other variables and work" is an invitation; look at what the effect
+             currently exposes and what a bolt actually has (branching, thickness, glow, jitter, seed).
+      ⚠️ Clause 1 is the bug and it is the same family as several EFFECTS-PLAN findings: an effect that
+      paints in FRAME space rather than in the layer's plate space bleeds outside the layer. Check whether
+      it draws into the layer plate or over the composite before changing any parameters.
+
+- [ ] **404 — "Make these menus the same height."** (19 Aug, via the phone inbox.) His words, verbatim:
+      *"Don't forget to make these menus the same height, very important"*
+      ⚠️ **WHICH menus is not in the message** — it arrived without a screenshot, and the phrase "don't
+      forget" suggests it is a restatement.
+      **The closest match already shipped:** queue 358 clause 3 was exactly this for the ADD sheet, and
+      v10.06 made every Add tab open at the same height (measured spread 0px across all five). So either
+      this is a second surface, or he has not seen v10.06 yet.
+      **Not guessed at.** One line from him — or the next screenshot — settles it, and until then this is
+      logged rather than acted on so it cannot be quietly dropped.

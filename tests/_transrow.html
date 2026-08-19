@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>#373 — the transport row and the add-row switch</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* #373. Clause 8 is "everything aligned perfectly" and he asked not to have to report it, so the pill's
+   centre is measured against the ROW's centre rather than eyeballed. Clauses 5-7 are driven. */
+window.onerror=function(m,f,l){var o=document.getElementById('out'); if(o) o.textContent='PROBE ERROR: '+m+' @'+l;};
+(function(){var q=new URLSearchParams(location.search),W=+q.get('w')||380,H=+q.get('h')||820;
+var fr=document.getElementById('app'),out=document.getElementById('out'),L=[];
+function say(s){L.push(s);out.textContent=L.join('\n');}
+fr.style.width=W+'px';fr.style.height=H+'px';
+fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
+(function wait(){if(++t>300){say('no FM');window.__done=true;return;}
+ if(!w.FM||!w.FM.home||!w.FM.toggleAddSide){ if(t===250) say('still waiting: FM='+(!!w.FM)+' home='+(!!(w.FM&&w.FM.home))+' toggle='+(!!(w.FM&&w.FM.toggleAddSide))); return setTimeout(wait,50); }
+ say('FM ready');
+ var FM=w.FM;
+ try{var sp=d.getElementById('splash');if(sp)sp.remove();if(FM.home.isOpen())FM.home.close();
+  FM.scene.layers.length=0;
+  for(var i=0;i<4;i++){var Lr=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});Lr.start=0;Lr.duration=3;FM.scene.layers.push(Lr);}
+  FM.selectLayer(null);FM.refreshAll();FM.timeline.rebuild();
+ }catch(e){say('setup '+e.message);}
+ setTimeout(function(){
+  try{
+   var row=d.getElementById('transport'), pill=d.getElementById('time-readout'), sw=d.getElementById('btn-addside');
+   var rr=row.getBoundingClientRect(), pr=pill.getBoundingClientRect();
+   var rowMid=rr.left+rr.width/2, pillMid=pr.left+pr.width/2;
+   say('ROW alignment');
+   say('  row centre '+rowMid.toFixed(1)+'   pill centre '+pillMid.toFixed(1)+'   off by '+(pillMid-rowMid).toFixed(2)+'px');
+   say('  order: '+[].slice.call(row.querySelectorAll('button,span#time-readout')).filter(function(e){return e.offsetParent!==null||e.id==='time-readout';}).map(function(e){return e.id||'?';}).join(' ▸ '));
+   say('');
+   say('SWITCH  (4 layers, so addAt 0..4)');
+   say('  addAt   --sw    knob top');
+   /* READ AFTER THE TRANSITION. getComputedStyle().top returns the CURRENT animated value, so reading
+      it immediately after the change reports the value it is moving AWAY from — the first run of this
+      showed 3px at every proportion and looked like the CSS was broken when it was the measurement. */
+   var idx=0;
+   (function step(){
+     if(idx>4){ afterKnob(); return; }
+     var a=idx++;
+     FM.moveAddMarker(a);
+     setTimeout(function(){
+       var k=sw.querySelector('.sw-knob');
+       say('    '+a+'      '+(sw.style.getPropertyValue('--sw')||'?').slice(0,5).padEnd(6)+' '+(k?w.getComputedStyle(k).top:'-'));
+       step();
+     },320);
+   })();
+   function afterKnob(){
+   say('');
+   FM.moveAddMarker(1);  // near the TOP → pressing must send it to the BOTTOM
+   FM.toggleAddSide();
+   say('  from addAt 1 (near top) → tap → addAt '+FM.addAt+'   (expect 4, the far end)');
+   FM.moveAddMarker(3);  // near the BOTTOM → pressing must send it to the TOP
+   FM.toggleAddSide();
+   say('  from addAt 3 (near bottom) → tap → addAt '+FM.addAt+'   (expect 0)');
+   window.__done=true;
+   }
+  }catch(e){say('threw '+e.message);window.__done=true;}
+ },1100);})();});
+})();
+</script></body></html>

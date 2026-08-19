@@ -1866,6 +1866,7 @@ window.FM = window.FM || {};
       addDragging = false;
       row.classList.remove('tl-addrow-dragging');
       FM.addAt = wantAt;
+      if (FM.syncAddSwitch) FM.syncAddSwitch();   // the switch leans with the DRAG too (queue 373 clause 6) — these two paths set addAt directly, not through moveAddMarker
       buildTracks();          // the ONE rebuild of the whole gesture, after the marker has landed
     };
     const end = (e) => {
@@ -2006,6 +2007,7 @@ window.FM = window.FM || {};
       addDragging = false;
       row.classList.remove('tl-addrow-dragging');
       FM.addAt = wantAt;
+      if (FM.syncAddSwitch) FM.syncAddSwitch();   // the switch leans with the DRAG too (queue 373 clause 6) — these two paths set addAt directly, not through moveAddMarker
       buildTracks();          // the ONE rebuild of the whole gesture (queue 307 clause 4)
     };
     const end = () => {
