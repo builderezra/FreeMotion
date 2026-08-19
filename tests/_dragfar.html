@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Dragging a clip far right (queue 394)</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.5 ui-monospace,monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.addEventListener('load',function(){var w=f.contentWindow,d=f.contentDocument;
+ waitFM(w).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(450);
+  var lines=[];
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'Far',shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+  L.start=0;L.duration=3;FM.scene.layers.push(L);
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(200);
+  function snap(tag){
+    var tl=d.getElementById('timeline'), inner=d.getElementById('tl-inner'), ruler=d.getElementById('tl-ruler');
+    var t0=performance.now(); FM.timeline.rebuild(); var ms=performance.now()-t0;
+    lines.push(tag.padEnd(16)
+      +' start '+String(L.start).padEnd(8)
+      +' proj dur '+String(FM.scene.project.duration).padEnd(10)
+      +' scrollW '+String(Math.round(inner?inner.scrollWidth:tl.scrollWidth)).padEnd(9)
+      +' ruler nodes '+String(ruler?ruler.childElementCount:-1).padEnd(8)
+      +' rebuild '+ms.toFixed(1)+'ms');
+  }
+  snap('at rest');
+  [10, 60, 300, 1200, 6000].forEach(function(v){ L.start=v; FM.refreshAll(); snap('start='+v); });
+  lines.push('');
+  lines.push('zoom seam: '+(FM.timeline.zoom?('zoom '+FM.timeline.zoom()):'(none)'));
+  out.textContent=lines.join('\n');
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

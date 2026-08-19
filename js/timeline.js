@@ -620,6 +620,7 @@ window.FM = window.FM || {};
   // to full width) and no divide-by-zero. ~SPAN_AT_ZOOM1 seconds fill the lane at zoom 1; zoom scales it.
   const SPAN_AT_ZOOM1 = 5;
   function pxPerSec() { return (laneViewW() / SPAN_AT_ZOOM1) * zoom; }
+  FM._tlPxPerSec = pxPerSec;   // suite seam, same as FM._tlHeadW: lets a test derive the content width
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
@@ -629,7 +630,18 @@ window.FM = window.FM || {};
     recomputePad();
     if (!innerEl) return;
     const content = viewDur() * pxPerSec();
-    innerEl.style.width = (window.innerWidth + content) + 'px';
+    /* THE TIMELINE'S OWN WIDTH, NOT THE WINDOW'S (queue 396). Ezra: "An issue where the ui thinks it should
+       be the size based on the timeline and not itself" — the same fault from the other side.
+       The pad exists so t=0 AND t=duration can each scroll under the fixed centre line, and the amount
+       needed for that is the SCROLLPORT's width: lead pad + content + trail pad = PAD + content +
+       (scrollport − PAD − HEAD_W) + HEAD_W = content + scrollport. Using `window.innerWidth` is only the
+       same number when the timeline fills the window, which is true on a phone and false on a desktop,
+       where the inspector column sits beside it. Measured at 1440: the scroll range ran **346px too long
+       — exactly the inspector's width** — so the end of the project scrolled well past the centre line and
+       left a screenful of dead space no clip could ever reach.
+       `laneViewW() + HEAD_W` is the scrollport, and it is read through laneViewW deliberately: that helper
+       already freezes its value during a gesture, so a drag cannot make the extent flicker mid-move. */
+    innerEl.style.width = ((laneViewW() + HEAD_W) + content) + 'px';
   }
 
   // Map a clientX to project time, accounting for the head column + the PAD origin shift.
@@ -2248,7 +2260,9 @@ window.FM = window.FM || {};
     if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
     // widen the scroller (current pps — no rescale) so the extending edge + auto-scroll have room
     if (innerEl) {
-      const need = window.innerWidth + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2 + 120;
+      // …and the same scrollport, for the same reason (queue 396): this widens the scroller DURING a trim,
+      // so a window-sized pad here would put the 346px of dead space straight back the moment you dragged.
+      const need = (laneViewW() + HEAD_W) + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2 + 120;
       if ((parseFloat(innerEl.style.width) || 0) < need - 0.5) innerEl.style.width = need + 'px';
     }
     FM.requestRender();

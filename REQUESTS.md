@@ -10928,6 +10928,28 @@ wait for them to report back."*
          which would corrupt every later layout pass.
       ⚠️ Measure it: drag a layer far right in a real browser at 380px and read the scroll extent, the
       project duration and the clip's `start`/`duration` after the drop — do not guess from the symptom.
+      📐 **MEASURED 19 Aug (`tests/_dragfar.html`) — and BOTH candidates in clause 2 are ruled out.**
+      Pushing one clip's start to 10 / 60 / 300 / 1200 / 6000s and rebuilding each time:
+      | start | project duration | scroll extent | ruler nodes | rebuild |
+      |---|---|---|---|---|
+      | 0 | 3s | 565px | 21 | 0.0ms |
+      | 60 | 63s | 4,261px | 61 | 0.0ms |
+      | 1200 | 1203s | 74,485px | 61 | 0.0ms |
+      | 6000 | 6003s | **370,165px** | 61 | 0.0ms |
+      · **The ruler does NOT explode** — nodes cap at 61 and rebuild stays at 0.0ms even on a 100-minute
+        timeline, so the "ruler/scroll extent grows without bound" theory is wrong; it is virtualised.
+      · **Nothing goes NaN** and no layout pass corrupts — `start`/`duration` stay exact numbers throughout.
+      · **What DOES happen is `autoFitDuration` has no upper bound** (js/app.js:565 — "the timeline is only
+        ever as long as its clips"), so one clip dragged right turns a 3-second project into a 6003-second
+        one, and the clip ends up ~370,000px away at a constant ~62px/second. Everything still WORKS; it is
+        just unreachable. That is the best candidate for what "breaks" means, but it is a guess about his
+        experience, not a measurement of it.
+      ⏸️ **STILL BLOCKED ON ONE LINE FROM HIM, and clause 2 is why:** what did "breaks" look like — the
+      timeline went blank, it would not scroll back, the clip vanished, or the app froze? The freeze and the
+      corruption theories are now DISPROVEN, so the answer is one of the others and it changes the fix
+      completely. A bound on the drag is the obvious guard, but the bound itself is a design decision (a
+      clip legitimately belongs at 5 minutes in a long project) and guessing it would trade his bug for a
+      limit he never asked for.
 
 - [ ] **395 — More export formats, MP3 among them.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
@@ -10939,7 +10961,7 @@ wait for them to report back."*
       ⚠️ Check what the exporter already does — GIF and video exist (js/gif-encode.js, js/exporter.js),
       so this may be a third branch of an existing dialog rather than a new feature.
 
-- [ ] **396 — The UI sizes itself from the TIMELINE instead of from itself.** (19 Aug, via the phone inbox.)
+- [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
       not itself"*
       ⚠️ **This is almost certainly the defect already measured on 18 Aug and left un-filed:**
@@ -10948,6 +10970,21 @@ wait for them to report back."*
       scroll range is **346px too long** — exactly the width the inspector column takes — so the
       timeline believes it is as wide as the window. Two widths for one control, and the wrong one wins.
       **Start there and confirm it against what he is seeing before changing it.**
+      ✅ **CONFIRMED AND FIXED v10.35 — it was exactly that, and the arithmetic says why.** The pad exists so
+      t=0 AND t=duration can each scroll under the fixed centre line, and the amount needed for that is the
+      SCROLLPORT's width: lead pad + content + trail pad = `PAD + content + (scrollport − PAD − HEAD_W) +
+      HEAD_W` = **content + scrollport**. `window.innerWidth` is only the same number when the timeline
+      fills the window — true on a phone, false on a desktop where the inspector sits beside it — so the
+      range ran over by exactly the inspector's width and left a screenful of dead space past the end of
+      the project that no clip could reach.
+      ✅ **Both sites fixed**, not just the obvious one: `applyInnerWidth` and the widen-during-trim path,
+      which would have put the dead space straight back the moment you dragged an edge.
+      ✅ It reads the scrollport through `laneViewW()`, which already freezes its value during a gesture, so
+      a drag cannot make the scroll extent flicker mid-move.
+      ⚠️ The test asserts the ARITHMETIC (pad === scrollport) rather than "it is not window.innerWidth" —
+      the latter passes on a phone, where the two are equal, and would prove nothing about the layout that
+      actually had the bug. In the suite the mutation reports *"pads by 900px where the timeline is only
+      600px wide"*.
 
 - [ ] **397 — On PC the effects browser should live in the inspector, not over the screen.** (19 Aug, via
       the phone inbox.) His words, verbatim: *"Make the effects browser on pc only show in the inspector"*

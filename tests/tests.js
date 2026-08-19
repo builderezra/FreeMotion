@@ -30892,6 +30892,30 @@
     });
   });
 
+  test('the timeline sizes its scroll range from itself, not from the window', { item: 'tl-width-self' }, function () {
+    /* Queue 396. Ezra: "An issue where the ui thinks it should be the size based on the timeline and not
+       itself." The scroller padded its inner width by `window.innerWidth`, which is only the same number
+       as its own scrollport when the timeline fills the window — true on a phone, false on a desktop where
+       the inspector column sits beside it. Measured at 1440 before the fix: the scroll range ran 346px too
+       long, exactly the inspector's width, so the end of the project scrolled past the centre line and left
+       a screenful of dead space no clip could reach.
+       The assertion is the ARITHMETIC the pad exists for — lead pad + content + trail pad comes to
+       content + scrollport — rather than "it is not window.innerWidth", which would pass on a phone where
+       the two are equal and prove nothing on the layout that had the bug. */
+    const inner = document.getElementById('tl-inner'), tl = document.getElementById('timeline');
+    if (!inner || !tl) throw new Error('#tl-inner / #timeline missing');
+    const port = tl.clientWidth;
+    if (!(port > 200)) throw new Error('the timeline scrollport measured ' + port + 'px — nothing below this would mean anything');
+    const innerW = parseFloat(inner.style.width) || inner.getBoundingClientRect().width;
+    const content = Math.max(0, FM.scene.project.duration || 0) * (FM._tlPxPerSec ? FM._tlPxPerSec() : 0);
+    const pad = innerW - content;
+    if (!isFinite(pad)) throw new Error('could not read the inner width (' + innerW + ') / content (' + content + ')');
+    if (Math.abs(pad - port) > 3) {
+      throw new Error('the scroll range pads by ' + Math.round(pad) + 'px where the timeline is only ' + Math.round(port) +
+        'px wide — a ' + Math.round(pad - port) + 'px difference' + (Math.abs(pad - window.innerWidth) <= 3 ? ', which is the WINDOW width, so it is still sizing itself from the window' : ''));
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
