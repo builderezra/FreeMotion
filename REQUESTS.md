@@ -9967,18 +9967,19 @@ wait for them to report back."*
       ⚠️ Whatever draws the ▶ inside the pill must be DRAWN, not a font glyph — same reason as
       queue 209/296/331 clause 3.
 
-- [ ] **365 — The camera button in the view rail: tap adds, tap hides, tap unhides, hold opens its
-      settings.** (18 Aug.) His words, verbatim: *"Also the camera button in the view menu works like
+- [x] **365 — The camera button in the view rail: tap adds, tap hides, tap unhides, hold opens its
+      settings.** ✅ **v10.12, all four clauses** — plus the button now shows which of the three states it
+      is in, because a state machine you cannot see is worse than a button that does one thing. (18 Aug.) His words, verbatim: *"Also the camera button in the view menu works like
       this - tap to add camera, tap again to hide camera, tap again to unhide camera, hold to open camera
       settings"*.
       **The button:** the camera icon in the right-hand rail down the side of the canvas — third from the
       top in the #362 screenshot (fullscreen, layers, camera, zoom stepper, speed stepper, loop, magnet).
       **The spec, as a state machine:**
-      1. [ ] **Tap** with no camera in the project → **add** one.
-      2. [ ] **Tap** with a camera present and visible → **hide** it.
-      3. [ ] **Tap** again → **unhide** it. (So after the first tap it is a two-state toggle, and it never
+      1. [x] ✅ **Tap** with no camera in the project → **add** one.
+      2. [x] ✅ **Tap** with a camera present and visible → **hide** it.
+      3. [x] ✅ **Tap** again → **unhide** it. (So after the first tap it is a two-state toggle, and it never
              deletes the camera — nothing here removes one.)
-      4. [ ] **Hold** → open the camera's settings.
+      4. [x] ✅ **Hold** → open the camera's settings (and the click ending the hold is swallowed).
       ✅ **Ambiguity settled the cheap way, before it could cost anything.** *"works like this"* is present
       tense, so this could have been him describing existing behaviour rather than asking for it. It is
       not: `#vb-camera`'s handler is one line — `if (FM.addCameraLayer) FM.addCameraLayer()`

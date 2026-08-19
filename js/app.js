@@ -4181,8 +4181,61 @@ window.FM = window.FM || {};
       FM.setIsolate(cur === 0 ? 1 : cur === 1 ? 2 : 0);
       if (FM.toast) FM.toast(cur === 0 ? 'Only this layer' : cur === 1 ? 'This layer on top' : 'Back to normal', 1200);
     });
+    /* THE CAMERA BUTTON IS A STATE MACHINE (queue 365). His words: "the camera button in the view menu
+       works like this - tap to add camera, tap again to hide camera, tap again to unhide camera, hold to
+       open camera settings."
+       Present tense, but it was a spec rather than a description: this handler was one line that called
+       addCameraLayer, and addCameraLayer REFUSES when a camera already exists and toasts "Scene already
+       has a camera". So the second tap was a dead end with a scolding.
+       The single-camera invariant stays and is exactly why hide is the right second action: a second
+       camera would hijack the view, so the button had no useful second thing to do. Nothing here ever
+       DELETES a camera — hide and unhide are the only states after the first tap. */
     const vbCam = document.getElementById('vb-camera');
-    if (vbCam) vbCam.addEventListener('click', () => { if (FM.addCameraLayer) FM.addCameraLayer(); });
+    if (vbCam) {
+      const cam = () => FM.scene.layers.filter(l => l.type === 'camera')[0] || null;
+      const syncCam = () => {
+        const c = cam();
+        vbCam.classList.toggle('on', !!c && c.visible !== false);
+        vbCam.classList.toggle('cam-off', !!c && c.visible === false);
+        vbCam.title = !c ? 'Add a camera' : (c.visible === false ? 'Camera hidden — tap to show · hold for its settings' : 'Camera on — tap to hide · hold for its settings');
+      };
+      FM._syncCameraBtn = syncCam;
+      syncCam();
+      /* Hold opens the settings. A timer rather than a long-press library, and the click that ENDS the
+         hold has to be swallowed or the release would also toggle visibility — the same guard the
+         timecode's hold uses two hundred lines up. */
+      let camLp = null, camLpFired = false, camDown = null;
+      vbCam.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        camDown = { x: e.clientX, y: e.clientY }; camLpFired = false;
+        clearTimeout(camLp);
+        camLp = setTimeout(() => {
+          camLp = null; camLpFired = true;
+          const c = cam();
+          if (!c) { if (FM.toast) FM.toast('No camera yet — tap to add one'); return; }
+          FM.selectLayer(c.id);
+          if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('cameraopts');
+          else if (FM.inspector) FM.inspector.refresh();
+        }, 550);
+      });
+      vbCam.addEventListener('pointermove', (e) => { if (camDown && Math.hypot(e.clientX - camDown.x, e.clientY - camDown.y) > 8) { clearTimeout(camLp); camLp = null; } });
+      const camEnd = () => { clearTimeout(camLp); camLp = null; camDown = null; };
+      vbCam.addEventListener('pointerup', camEnd);
+      vbCam.addEventListener('pointercancel', camEnd);
+      vbCam.addEventListener('click', () => {
+        if (camLpFired) { camLpFired = false; return; }   // the hold already answered this press
+        const c = cam();
+        if (!c) { if (FM.addCameraLayer) FM.addCameraLayer(); }
+        else {
+          c.visible = c.visible === false;                // hide ⇄ unhide, never delete
+          if (FM.toast) FM.toast(c.visible === false ? 'Camera hidden' : 'Camera shown', 1100);
+          if (FM.timeline) FM.timeline.rebuild();
+          if (FM.requestRender) FM.requestRender();
+          if (FM.history) FM.history.commit();
+        }
+        syncCam();
+      });
+    }
     /* ---- view bar, second group (v5.03) --------------------------------------------------------
      * Ezra: "add the playback speed buttons in the menu that pops up when you press on the view
      * options button, along side loop playback, mark export start and mark export end, clear export

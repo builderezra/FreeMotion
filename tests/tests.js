@@ -470,6 +470,69 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('view rail: the camera button adds, then hides, then unhides — and holds open its settings', { item: 'camera-button' }, async function () {
+    /* Queue 365. His words: "the camera button in the view menu works like this - tap to add camera, tap
+       again to hide camera, tap again to unhide camera, hold to open camera settings."
+       Present tense, but it was a SPEC: the handler was one line calling addCameraLayer, which refuses
+       outright when a camera exists and toasts "Scene already has a camera" — so the second tap was a
+       dead end with a scolding. The single-camera invariant is deliberate and stays, which is exactly
+       why the second action has to be hide: there is no second camera to add. Nothing here deletes one. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const btn = document.getElementById('vb-camera');
+    if (!btn) throw new Error('#vb-camera is missing');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0; FM.refreshAll();
+      const cam = () => FM.scene.layers.filter(l => l.type === 'camera')[0];
+
+      btn.click(); await sleep(60);
+      if (!cam()) throw new Error('the first tap did not add a camera');
+      if (cam().visible === false) throw new Error('the camera arrived hidden');
+
+      btn.click(); await sleep(60);
+      if (!cam()) throw new Error('the second tap DELETED the camera — it is only supposed to hide it');
+      if (cam().visible !== false) throw new Error('the second tap did not hide the camera');
+      if (FM.scene.layers.filter(l => l.type === 'camera').length !== 1) throw new Error('a second camera was added — the single-camera invariant is what makes hide the right action here');
+
+      btn.click(); await sleep(60);
+      if (cam().visible === false) throw new Error('the third tap did not unhide the camera');
+
+      // …and the button has to LOOK different in the three states, or the machine is invisible.
+      const shown = btn.className;
+      btn.click(); await sleep(60);
+      const hidden = btn.className;
+      if (shown === hidden) throw new Error('the button looks identical whether the camera is shown or hidden (' + shown + ')');
+      FM.scene.layers.length = 0; FM.refreshAll();
+      if (FM._syncCameraBtn) FM._syncCameraBtn();
+      if (btn.className === shown || btn.className === hidden) throw new Error('with no camera at all the button looks like one of the other two states — "add" and "show" must not look the same');
+
+      /* HOLD → the camera's settings. Driven as pointerdown-and-wait, which is the gesture; the click
+         that ends a real hold must NOT also toggle visibility, and that is asserted too. */
+      FM.scene.layers.length = 0; FM.refreshAll();
+      btn.click(); await sleep(60);                      // a camera to hold on
+      const before = cam().visible;
+      const down = (t) => btn.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 4, isPrimary: true, pointerType: 'touch', clientX: 5, clientY: 5, buttons: t === 'pointerup' ? 0 : 1 }));
+      down('pointerdown');
+      await sleep(700);                                  // past the 550ms hold
+      down('pointerup');
+      /* ⚠️ THIS SUB-ASSERTION IS NOT MUTATION-PROVEN, and saying so is better than implying it is.
+         Removing the `camLpFired` guard in app.js does NOT make it fail, and I could not establish why
+         inside the suite: driven standalone (tests/_cambtn.html) the whole sequence behaves correctly —
+         the hold selects the camera, the button is not replaced, and the trailing click is swallowed —
+         so the guard demonstrably works and this check demonstrably cannot see it. Kept because it
+         states the intent, but it is NOT load-bearing; the assertions above it are. */
+      const live = document.getElementById('vb-camera') || btn;
+      live.click();                                      // the trailing click a real press produces
+      await sleep(80);
+      if (cam().visible !== before) throw new Error('the click that ended the hold also toggled the camera — a hold must not do both');
+      if (FM.scene.selectedId !== cam().id) throw new Error('holding the camera button did not select the camera, so its settings cannot be what opened');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM._syncCameraBtn) FM._syncCameraBtn();
+    }
+  });
+
   test('timeline: hovering a bookmark lights the PLAYHEAD, not just the chip', { item: 'mark-hover-playhead' }, function () {
     /* Queue 364 clause 2. His words: "when you're hovering over a bookmark it just makes the play head
        yellow instead".

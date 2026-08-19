@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>#365 — the camera button, step by step</title>
+<style>html,body{margin:0;background:#101820;color:#8fa;font:11px ui-monospace,monospace}iframe{border:0}#out{padding:8px;white-space:pre}</style></head>
+<body><iframe id="app" src="index.html" style="width:380px;height:820px"></iframe><div id="out">…</div>
+<script>
+var fr=document.getElementById('app'),out=document.getElementById('out'),L=[];
+function say(s){L.push(s);out.textContent=L.join('\n');}
+fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
+(function wait(){ if(++t>300){say('no FM');window.__done=true;return;}
+ if(!w.FM||!w.FM.home||!w.FM.addCameraLayer)return setTimeout(wait,50);
+ var FM=w.FM;
+ try{ var sp=d.getElementById('splash'); if(sp)sp.remove(); if(FM.home.isOpen())FM.home.close();
+   FM.scene.layers.length=0; FM.refreshAll(); }catch(e){say('setup '+e.message);}
+ setTimeout(async function(){
+  var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+  function btn(){return d.getElementById('vb-camera');}
+  function cam(){return FM.scene.layers.filter(function(l){return l.type==='camera';})[0];}
+  function st(tag){var c=cam(); say('  '+tag.padEnd(30)+'camera='+(c?('visible='+String(c.visible)):'none')+'  btn.class="'+(btn()?btn().className:'-')+'"  btnConnected='+(btn()?btn().isConnected:'-'));}
+  try{
+   var b0=btn(); say('button found: '+!!b0+'  visible='+(b0? w.getComputedStyle(b0).display!=='none':'-'));
+   st('start');
+   btn().click(); await sleep(80); st('after tap 1 (add)');
+   btn().click(); await sleep(80); st('after tap 2 (hide)');
+   btn().click(); await sleep(80); st('after tap 3 (unhide)');
+   say('');
+   say('HOLD:');
+   var el0=btn();
+   function ev(tp){el0.dispatchEvent(new w.PointerEvent(tp,{bubbles:true,cancelable:true,pointerId:4,isPrimary:true,pointerType:'touch',clientX:5,clientY:5,buttons:tp==='pointerup'?0:1}));}
+   ev('pointerdown'); await sleep(700); st('  after 700ms hold');
+   say('  selected == camera? '+(FM.scene.selectedId===(cam()&&cam().id)));
+   ev('pointerup');
+   say('  same element after hold? '+(btn()===el0)+'   el0 still connected? '+el0.isConnected);
+   var beforeV=cam().visible;
+   btn().click(); await sleep(80);
+   say('  trailing click toggled? '+(cam().visible!==beforeV)+'   (false = the guard swallowed it, which is right)');
+  }catch(e){say('threw '+e.message);}
+  window.__done=true;
+ },900);})();});
+</script></body></html>
