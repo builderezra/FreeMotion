@@ -521,7 +521,12 @@ window.FM = window.FM || {};
     // Parked on a benchmark? Light the timecode chip in marker yellow. A phone has no hover, so
     // this is the half that actually reports "you are ON a marker" on device. (#61)
     const mks = FM.scene.project.markers || [], halfF = 0.5 / f;
-    readoutEl.classList.toggle('on-mark', mks.some(mk => Math.abs(mk.t - FM.time) <= halfF));
+    const onMark = mks.some(mk => Math.abs(mk.t - FM.time) <= halfF);
+    readoutEl.classList.toggle('on-mark', onMark);
+    /* …and the PLAYHEAD's head goes yellow with it (queue 364, towards clause 2). The head is where you
+       tap to add or remove a bookmark now, so it has to say which of the two your tap will do. */
+    const _cl = document.getElementById('tl-centerline');
+    if (_cl) _cl.classList.toggle('on-mark', onMark);
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
@@ -1574,6 +1579,7 @@ window.FM = window.FM || {};
     if (FM.audioPlay) FM.audioPlay.start();   // reversed clips: play synthesized reversed audio
     clockAdopt();
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';   // pause icon
+    document.body.classList.add('fm-playing');      // the pill is the play control now (queue 364) — it has to be able to say it is playing
     rafId = requestAnimationFrame(tick);
   };
 
@@ -1608,6 +1614,7 @@ window.FM = window.FM || {};
       if (m && m.el && m.el.pause) { try { m.el.pause(); m.el.muted = true; } catch (e) {} }
     });
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';   // play icon
+    document.body.classList.remove('fm-playing');
     // Stopped = you're looking at a frame, so put every pixel back. This is the visible "it sharpens
     // when you pause" moment, and it's the whole reason dropping quality during motion is acceptable.
     resizeCanvas();
@@ -3771,10 +3778,15 @@ window.FM = window.FM || {};
     readoutEl = document.getElementById('time-readout');
     dropHint = document.getElementById('drop-hint');
     setupTimelineResizer();
-    // Tap the timecode → drop / remove a benchmark at the playhead. Double-tap → type an exact time.
-    // (A short timer distinguishes the two so a double-tap doesn't also leave a stray benchmark.)
+    /* TAP THE TIMECODE → PLAY / PAUSE (queue 364 clause 1). Ezra drew an arrow from the ▶ down to the
+       pill: "Make it so that the play button is now the project time pill and when you press on it it
+       pauses and plays the project."
+       The benchmark gesture this tap used to carry has MOVED to the top of the playhead (clause 3), which
+       had to happen in the same release — it was the only way to add one on a phone.
+       Double-click (type a time) and hold (pin the thumbnail) are unchanged: neither collides with a tap,
+       and both are already how you reach them. */
     readoutEl.style.cursor = 'pointer';
-    readoutEl.title = 'Tap: benchmark · double-click: type a time · hold: set this frame as the project thumbnail';
+    readoutEl.title = 'Tap: play / pause · double-click: type a time · hold: set this frame as the project thumbnail';
     let tcTapTimer = null;
     // HOLD the timecode → pin the current frame as the project thumbnail (suppresses the trailing tap so
     // it doesn't also drop a benchmark).
@@ -3792,11 +3804,25 @@ window.FM = window.FM || {};
     readoutEl.addEventListener('click', () => {
       if (tcLpFired) { tcLpFired = false; return; }   // the hold already handled this press
       if (tcTapTimer) return;                       // second click of a double-tap → ignore here
-      tcTapTimer = setTimeout(() => { tcTapTimer = null; FM.toggleMarkerAtPlayhead(); }, 240);
+      // …and the 240ms wait stays, because a double-click must not also toggle playback on its way past.
+      tcTapTimer = setTimeout(() => { tcTapTimer = null; if (FM.togglePlay) FM.togglePlay(); }, 240);
     });
+    /* THE PLAYHEAD'S TOP IS WHERE BOOKMARKS LIVE NOW (queue 364 clause 3). Its own element, because
+       #tl-centerline is pointer-events:none and its triangle is a ::before that cannot take events.
+       Wired here rather than in timeline.js so it sits beside the gesture it replaced — one place to
+       read if "how do I add a bookmark" is ever asked again. */
+    const headTap = document.getElementById('tl-headtap');
+    if (headTap) {
+      headTap.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();          // never let it fall through to a scrub
+        if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead();
+      });
+      // and it must not start a scrub on the way down, or the line jumps out from under the finger
+      headTap.addEventListener('pointerdown', (e) => e.stopPropagation());
+    }
     // double-click the time readout to type an exact playhead time
     readoutEl.addEventListener('dblclick', () => {
-      if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; }   // cancel the pending benchmark tap
+      if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; }   // cancel the pending play/pause tap
       const input = document.createElement('input');
       input.className = 'time-edit'; input.type = 'text'; input.value = FM.time.toFixed(2);
       readoutEl.style.display = 'none'; readoutEl.parentNode.insertBefore(input, readoutEl);
