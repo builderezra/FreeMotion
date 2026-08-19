@@ -25,11 +25,24 @@ fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
    var rr=row.getBoundingClientRect(), pr=pill.getBoundingClientRect();
    var rowMid=rr.left+rr.width/2, pillMid=pr.left+pr.width/2;
    say('ROW alignment');
-   say('  row centre '+rowMid.toFixed(1)+'   pill centre '+pillMid.toFixed(1)+'   off by '+(pillMid-rowMid).toFixed(2)+'px');
+   /* WHICH CENTRE IS THE TARGET DEPENDS ON THE LAYOUT, and getting that wrong reads as a 150px bug.
+      On a phone the pill centres on the ROW. On desktop the row is the timeline panel's width, offset by
+      the inspector, and v4.97 deliberately pushes the pill out to TRUE SCREEN CENTRE so it lines up with
+      the playhead above it. Measuring desktop against the row reported -152px and nothing was wrong. */
+   var isDesk = w.innerWidth >= 701;
+   var target = isDesk ? w.innerWidth/2 : rowMid;
+   say('  '+(isDesk?'SCREEN':'row')+' centre '+target.toFixed(1)+'   pill centre '+pillMid.toFixed(1)+'   off by '+(pillMid-target).toFixed(2)+'px');
    var doc=d.documentElement;
    say('  viewport '+w.innerWidth+'  row width '+rr.width.toFixed(1)+'  row scrollW '+row.scrollWidth+'  doc overflow '+(doc.scrollWidth-doc.clientWidth)+'px');
    var lg=d.querySelector('.t-left'), rg=d.querySelector('.t-right');
    say('  left group '+lg.getBoundingClientRect().width.toFixed(1)+'  right group '+rg.getBoundingClientRect().width.toFixed(1)+'  pill '+pr.width.toFixed(1));
+   var rcs0=w.getComputedStyle(row);
+   say('  pill rect L='+pr.left.toFixed(2)+' R='+pr.right.toFixed(2)+' W='+pr.width.toFixed(2));
+   say('  row  rect L='+rr.left.toFixed(2)+' R='+rr.right.toFixed(2)+' W='+rr.width.toFixed(2)+'  padL='+rcs0.paddingLeft+' padR='+rcs0.paddingRight+' borderL='+rcs0.borderLeftWidth);
+   var contentL=rr.left+parseFloat(rcs0.paddingLeft)+parseFloat(rcs0.borderLeftWidth||0);
+   var contentR=rr.right-parseFloat(rcs0.paddingRight)-parseFloat(rcs0.borderRightWidth||0);
+   say('  content box '+contentL.toFixed(2)+' .. '+contentR.toFixed(2)+'  centre '+((contentL+contentR)/2).toFixed(2));
+   say('  tracks: '+rcs0.gridTemplateColumns+'   justify-content: '+rcs0.justifyContent+'   gap: '+rcs0.columnGap);
    var rcs=w.getComputedStyle(row);
    say('  row padding '+rcs.paddingLeft+' / '+rcs.paddingRight);
    var btns=[].slice.call(row.querySelectorAll('.tbtn'));

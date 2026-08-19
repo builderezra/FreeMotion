@@ -2054,6 +2054,12 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 @media (min-width: 701px) {
   #transport {
     position: relative;
+    /* LEFT AS A BARE 1fr ON PURPOSE (queue 373 clause 10). The phone rule uses minmax(0, 1fr) so the
+       heavier side cannot push the pill off centre — and copying that here BROKE desktop: this row does
+       not centre on itself, it centres on TRUE SCREEN CENTRE via the calc below (v4.97), and minmax(0,…)
+       redistributes the free space that calc depends on. Measured: the play control went 3px off screen
+       centre and the v4.97 assertion caught it. Desktop is already correct; "the same stuff for pc" means
+       the same swap and the same switch, not the same track sizing. */
     display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
     /* CENTRE THE ROW TRACK, not just the items in it (queue 278). Ezra: "the bar with the bin on it and
        stuff, the darkening of the background… is still off centred, the bar gos lower than it gos
@@ -2105,6 +2111,15 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 #time-readout {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
   padding: 4px 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
+  /* NO PINNED WIDTH. Pinning an even 84px was an attempt to close the last pixel of clause 8 and it did
+     two things, neither good: it did not close it (the grid's side tracks are already exactly equal at
+     135/86/135 and the pill still landed 1.00px right, identically at 320, 380 and 1280), and it made the
+     pill WIDER, which pushed the desktop play control 3px off true screen centre and broke the v4.97
+     assertion that pins it there. The suite caught that; the mutation gate refused to run until it was
+     fixed, which is exactly what that gate is for.
+     The residual 1.00px is stated rather than quietly called "aligned" — one CSS pixel, identical through
+     two different centring mechanisms, and not worth trading a real regression for. */
+
   cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
   transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease, transform .09s ease;
 }
