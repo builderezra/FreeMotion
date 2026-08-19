@@ -18,6 +18,11 @@ fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
   FM.scene.layers.length=0;
   for(var i=0;i<4;i++){var Lr=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});Lr.start=0;Lr.duration=3;FM.scene.layers.push(Lr);}
   FM.selectLayer(null);FM.refreshAll();FM.timeline.rebuild();
+  // ?layout=classic|studio — the test checks BOTH and they behave differently, so the probe must too.
+  var lay=q.get('layout');
+  if(lay==='classic') d.body.classList.remove('layout-studio');
+  if(lay==='studio') d.body.classList.add('layout-studio');
+  if(lay) FM.timeline.rebuild();
  }catch(e){say('setup '+e.message);}
  setTimeout(function(){
   try{
