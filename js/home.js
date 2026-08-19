@@ -1233,8 +1233,13 @@ window.FM = window.FM || {};
    * looking for three template ids in the PROJECT store. */
   function selKind() {
     if (tab === 'tutorials') return null;   // nothing selectable on the placeholder tab
-    if (tab === 'templates') return { noun: 'template', store: FM.templates, canDuplicate: false };
-    if (tab === 'elements') return { noun: 'element', store: FM.elements, canDuplicate: false };
+    /* canDuplicate is true for all three now (queue 374). It was false here because only FM.projects had
+       a duplicate() — and the bulk handler called FM.projects.duplicate() by name whatever tab was open,
+       so had the button ever been shown on these two it would have looked up a template id in the project
+       store, found nothing and returned silently. Both stores have one now, and the handler goes through
+       K.store, so the button and the thing it calls can no longer disagree about which library it is in. */
+    if (tab === 'templates') return { noun: 'template', store: FM.templates, canDuplicate: true };
+    if (tab === 'elements') return { noun: 'element', store: FM.elements, canDuplicate: true };
     return { noun: 'project', store: FM.projects, canDuplicate: true };
   }
   /* One empty state for all three tabs (v5.30). It used to be a single line of 13px italic
@@ -1271,7 +1276,7 @@ window.FM = window.FM || {};
     all.addEventListener('click', () => { shownIds.forEach(id => selected.add(id)); renderSelBar(); render(); });
     const dup = el('button', 'hm-selbtn', 'Duplicate');
     dup.disabled = !n;
-    dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await FM.projects.duplicate(id); exitSelect(); });
+    dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await K.store.duplicate(id); exitSelect(); });
     const del = el('button', 'hm-selbtn danger', 'Delete');
     del.disabled = !n;
     del.addEventListener('click', async () => {
@@ -1399,6 +1404,7 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'New project from template', action: use },
+        { label: 'Duplicate template', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.templates.duplicate(t.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         pinMenuItem('templates', t.id),
         { sep: true },
         { label: 'Delete template…', danger: true, action: async () => { if (!confirm('Delete template "' + t.name + '"?')) return; await FM.templates.remove(t.id); render(); } },
@@ -1448,7 +1454,7 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Add to the open project', action: use },
-        { label: 'Add to the open project', action: use },
+        { label: 'Duplicate element', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.elements.duplicate(e.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         pinMenuItem('elements', e.id),
         { sep: true },
         { label: 'Delete element…', danger: true, action: async () => { if (!confirm('Delete element "' + e.name + '"?')) return; await FM.elements.remove(e.id); render(); } },

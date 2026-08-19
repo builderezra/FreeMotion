@@ -1312,6 +1312,37 @@ window.FM = window.FM || {};
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
       try { const db = await openDB(); await idbDel(db, 'tpl:' + tid); db.close(); } catch (e) {}
     },
+    /* DUPLICATE A TEMPLATE (queue 374). Ezra: "There's no way to duplicate templates or elements".
+       ⚠️ THE ENTRY'S WARNING DOES NOT APPLY HERE, and it is worth saying why rather than re-keying
+       things for the look of it. It warned that a duplicate "MUST re-key pack.media or the copy and the
+       original will share media and deleting one will gut the other" — which is exactly right for a
+       PROJECT, whose media lives in IndexedDB under the layer's own id, so two projects naming the same
+       id really do share one record. A pack does not work that way: it carries its media INSIDE the
+       record (`pack.media[layerId] = {file, kind}`), IndexedDB structured-clones on put, `remove()`
+       deletes only `tpl:<id>`, and the boot sweep keeps or collects a pack by its INDEX id alone —
+       nothing in it ever consults the layer ids inside. So the copy owns its own clone of every File
+       and is independent by construction, and the ids are re-keyed at USE time anyway (`reIdLayers`,
+       in useAsNew and insertInto both). Re-keying at duplicate time would be motion without meaning.
+       The order — pack first, index second, roll the pack back if the index write fails — is `save()`'s,
+       for `save()`'s reason: writeJSON swallows a quota failure, and an index entry pointing at nothing
+       is worse than no entry at all. _mediaBusy holds the boot sweep off in between, because in that
+       window the new pack is referenced by no index and is exactly what the sweep collects. */
+    async duplicate(tid) {
+      const pack = await this.getPack(tid); if (!pack) return false;
+      const meta = this.list().find(t => t.id === tid); if (!meta) return false;
+      const nid = newId('t');
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+      let ok = false;
+      try {
+        const db = await openDB(); await idbPut(db, 'tpl:' + nid, pack); db.close();
+        const idx = this.list();
+        idx.unshift(Object.assign({}, meta, { id: nid, name: (meta.name || 'Template') + ' copy' }));
+        ok = writeJSON(TPL_INDEX, idx);
+        if (!ok) { try { const db2 = await openDB(); await idbDel(db2, 'tpl:' + nid); db2.close(); } catch (e) {} }
+      } catch (e) { ok = false; }
+      FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      return ok;
+    },
     // Start a brand-new project from a template.
     async useAsNew(tid) {
       const pack = await this.getPack(tid); if (!pack) return false;
@@ -1390,6 +1421,24 @@ window.FM = window.FM || {};
     async remove(eid) {
       writeJSON(ELEM_INDEX, this.list().filter(t => t.id !== eid));
       try { const db = await openDB(); await idbDel(db, 'elem:' + eid); db.close(); } catch (e) {}
+    },
+    // Duplicate an element (queue 374) — same construction as templates.duplicate, and the note above
+    // it explains why the pack is copied whole rather than re-keyed.
+    async duplicate(eid) {
+      const pack = await this.getPack(eid); if (!pack) return false;
+      const meta = this.list().find(e => e.id === eid); if (!meta) return false;
+      const nid = newId('e');
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+      let ok = false;
+      try {
+        const db = await openDB(); await idbPut(db, 'elem:' + nid, pack); db.close();
+        const idx = this.list();
+        idx.unshift(Object.assign({}, meta, { id: nid, name: (meta.name || 'Element') + ' copy' }));
+        ok = writeJSON(ELEM_INDEX, idx);
+        if (!ok) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + nid); db2.close(); } catch (e) {} }
+      } catch (e) { ok = false; }
+      FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      return ok;
     },
     // Insert an element's layers into the current project at the playhead.
     async insert(eid) {

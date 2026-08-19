@@ -638,6 +638,59 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
+  test('templates and elements can be duplicated, and the copy survives deleting the original', { item: 'pack-duplicate' }, async function () {
+    /* Queue 374. Ezra: "There's no way to duplicate templates or elements". Projects have had Duplicate
+       for a long time; these two had remove() and nothing else.
+       ⚠️ THE ASSERTION THAT MATTERS IS THE LAST ONE, and the entry named the trap before the code was
+       written: a duplicate that shares media with its original means deleting either one guts the other,
+       and that only shows up later, on the second thing you delete. So this seeds a REAL file into the
+       pack, deletes the ORIGINAL, and then reads the copy's media back — an independence check that is
+       vacuous if the pack carries no media, which is why the file is seeded rather than hoped for.
+       (What the entry warned about turned out not to apply here, and the note above `templates.duplicate`
+       explains why: a pack embeds its media, so the copy owns its own clone. This test is what makes that
+       reasoning safe to rely on rather than merely plausible.) */
+    const layers0 = FM.scene.layers.slice();
+    const madeT = [], madeE = [];
+    try {
+      const L = FM.makeLayer('shape', { name: 'DupProbe', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 2;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, { file: new File([new Uint8Array(64)], 'probe.png', { type: 'image/png' }), kind: 'image' });
+
+      for (const kind of ['templates', 'elements']) {
+        const store = FM[kind], made = (kind === 'templates' ? madeT : madeE);
+        if (typeof store.duplicate !== 'function') throw new Error('FM.' + kind + '.duplicate does not exist — that IS the request');
+        const ok0 = kind === 'templates' ? await store.save('DupProbe ' + kind) : await store.save('DupProbe ' + kind, FM.scene.layers);
+        if (!ok0) throw new Error(kind + ': could not save the probe pack to duplicate from');
+        const src = store.list()[0]; made.push(src.id);
+        const before = (await store.getPack(src.id)) || {};
+        const mediaKeys = Object.keys(before.media || {});
+        if (!mediaKeys.length) throw new Error(kind + ': the probe pack carries no media, so the independence check below would prove nothing');
+
+        if (!(await store.duplicate(src.id))) throw new Error(kind + ': duplicate() reported failure');
+        const copy = store.list().find(x => x.id !== src.id && (x.name || '').indexOf('DupProbe') === 0);
+        if (!copy) throw new Error(kind + ': no copy appeared in the index — list reads [' + store.list().map(x => x.name).join(', ') + ']');
+        made.push(copy.id);
+        if (copy.name !== src.name + ' copy') throw new Error(kind + ': the copy is called "' + copy.name + '" — projects duplicate as "X copy" and these should match that, not invent a second convention');
+
+        // …now delete the ORIGINAL, and the copy must still have its own media
+        await store.remove(src.id);
+        const after = await store.getPack(copy.id);
+        if (!after) throw new Error(kind + ': deleting the original destroyed the copy outright');
+        const keysAfter = Object.keys(after.media || {});
+        if (keysAfter.length !== mediaKeys.length) throw new Error(kind + ': the copy lost media when the original was deleted (' + mediaKeys.length + ' → ' + keysAfter.length + ') — they were sharing records');
+        const f = after.media[keysAfter[0]] && after.media[keysAfter[0]].file;
+        if (!f || !f.size) throw new Error(kind + ": the copy's media record is empty after the original was deleted");
+      }
+    } finally {
+      for (const id of madeT) { try { await FM.templates.remove(id); } catch (e) {} }
+      for (const id of madeE) { try { await FM.elements.remove(id); } catch (e) {} }
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."
@@ -2333,9 +2386,16 @@
       if (ticked !== 2) throw new Error('Select all ticked ' + ticked + ' of ' + cards + ' template cards');
       if (n !== 2) throw new Error('the bar says "' + label + '" — it should count the 2 templates');
       if (n === projectCount && projectCount !== 2) throw new Error('the bar counted the PROJECTS (' + projectCount + '), not the templates');
-      // and Duplicate must not be offered here: neither store has one, so the button would throw
-      if ([].some.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Duplicate')) {
-        throw new Error('Duplicate is offered on the Templates tab, but FM.templates has no duplicate()');
+      /* …and the bulk bar must never offer an action THIS tab's store cannot perform. That used to mean
+         "Duplicate must be absent here", because neither library had one and the handler called
+         FM.projects.duplicate by name whatever tab was open — so on a template id it would have looked in
+         the project store, found nothing and done nothing. Queue 374 gave both stores a duplicate() and
+         pointed the handler at K.store, so the invariant is unchanged and its answer has flipped: the
+         button belongs here now, and it is a bug if it is offered while the store behind it is missing. */
+      const offered = [].some.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Duplicate');
+      if (offered !== (typeof FM.templates.duplicate === 'function')) {
+        throw new Error(offered ? 'Duplicate is offered on the Templates tab, but FM.templates has no duplicate() behind it'
+                                : 'FM.templates.duplicate() exists but the Templates tab does not offer Duplicate (queue 374)');
       }
     } finally {
       localStorage.setItem('fm.templates', JSON.stringify(before));

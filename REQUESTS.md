@@ -10339,7 +10339,7 @@ wait for them to report back."*
       layout that happened to be open.
       ⚠️ The switch must be DRAWN, not a font glyph (queue 209 / 296 / 331 clause 3).
 
-- [ ] **374 — There is no way to duplicate a template or an element.** (18 Aug.) His words, verbatim:
+- [x] **374 — There is no way to duplicate a template or an element.** ✅ **v10.23.** (18 Aug.) His words, verbatim:
       *"There's no way to duplicate templates or elements"*.
       **Confirmed against the code before logging:** PROJECTS have had Duplicate for a long time — it is
       in the home card's ⋯ menu (`js/home.js:1039`, `FM.projects.duplicate(p.id)`) and in the
@@ -10348,8 +10348,8 @@ wait for them to report back."*
       gap in one of three sibling libraries, not a missing feature nobody thought about — which is
       probably why it reads as an oversight.
       **Clauses:**
-      1. [ ] Duplicate an **element**.
-      2. [ ] Duplicate a **template**.
+      1. [x] Duplicate an **element**.
+      2. [x] Duplicate a **template**.
       **Worth reusing rather than reinventing:** `FM.projects.duplicate` already solves the hard half —
       copying the media blobs in IndexedDB under fresh ids so the copy is independent of the original
       rather than sharing records with it. Templates and elements are stored as packs (`tpl:<id>` in
@@ -10358,6 +10358,24 @@ wait for them to report back."*
       and it is the kind that only shows up later, on the second thing you delete.
       Also decide the name: projects duplicate as "X copy" or similar — match whatever that does rather
       than inventing a second convention.
+      ✅ **NAMED "X copy", matching projects — and the test asserts that rather than trusting it.**
+      ✅ **THE TRAP THIS ENTRY WARNED ABOUT DOES NOT APPLY, and the reasoning is written above the code so
+      nobody re-keys things for the look of it.** "A duplicate MUST re-key pack.media or the copy and the
+      original will share media" is exactly right for a PROJECT, whose media lives in IndexedDB under the
+      layer's own id — two projects naming the same id really do share one record. A pack does not work
+      that way: it carries its media INSIDE the record, IndexedDB structured-clones on put, `remove()`
+      deletes only `tpl:<id>`, and the boot sweep keeps or collects a pack by its INDEX id alone — nothing
+      ever consults the layer ids inside one. The copy owns its own clone of every File. **This is proved,
+      not asserted:** the test seeds a real file into the pack, deletes the ORIGINAL, and reads the copy's
+      media back; mutating the copy to be written without its media reports *"the copy lost media when the
+      original was deleted (1 → 0) — they were sharing records"*.
+      ✅ **TWO THINGS FOUND WHILE IN THERE, both real:** the element card's ⋯ menu listed **"Add to the open
+      project" twice**, and the bulk Duplicate button called `FM.projects.duplicate` by name whatever tab
+      was open — so it was hidden on these two libraries by a `canDuplicate: false` flag rather than
+      working. It goes through `K.store` now and the flag is true for all three. The suite test that used
+      to assert *"Duplicate must NOT be offered here, because neither store has one"* now asserts the
+      invariant it was really written for — the bar never offers an action the tab's store cannot perform —
+      so its answer flipped without its meaning changing.
 
 - [ ] **375 — The Template icon is Alight Motion's, just recoloured. Make it our own.** (18 Aug.) His
       words, verbatim: *"Template icon needs to be a little bit different as it's identical to alight
