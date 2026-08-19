@@ -10192,7 +10192,27 @@ wait for them to report back."*
       8. [ ] **Everything aligned perfectly** — his words, and he has asked not to have to report it.
       9. [ ] **The switch animates cleanly.**
       10. [ ] **Same on PC.**
-      🚨 **CLAUSE 6 ASSUMES SOMETHING THAT MAY NOT EXIST — check before designing.** "how far down you've
+      ✅ **CLAUSE 6's QUESTION IS ANSWERED — there IS a real middle, so the switch is not a plain toggle.**
+      `FM.addAt` is a boundary INDEX into the layer stack, clamped 0..layers.length (`FM.clampAddAt`,
+      js/app.js:1707), and the add row can already be dragged to any boundary — the ≡ grip and the PC
+      line both write it (js/timeline.js:1868). So the switch's lean is **`FM.addAt / layers.length`**:
+      0 = hard up, 1 = hard down, anything between is a genuine proportion. Nothing needs inventing.
+
+      📐 **THE LAYOUT, READ OFF THE REAL MARKUP (19 Aug) — and there is a balance problem to solve, which
+      is exactly the "aligned perfectly" clause.** The row is three groups:
+      · `.t-side.t-left` — `btn-undo`, `btn-redo`, `btn-tostart`
+      · centre — the time pill (the play button since v10.10)
+      · `.t-side.t-right` — `btn-toend`, `btn-layermenu`, `btn-amfit`
+      `btn-layermenu` is the ⧉ he calls "copy paste". So the swap he asked for gives:
+      · left — `btn-layermenu`, **switch**, `btn-tostart`  → 3 controls
+      · right — `btn-toend`, `btn-undo`, `btn-redo`, `btn-amfit` → 4 controls
+      **3 against 4 will not centre the pill**, and he has pre-empted exactly that complaint. Decide it
+      deliberately rather than shipping a lopsided row: either the switch is what balances it (and the
+      groups are laid out to weight equally either side of the pill), or `btn-amfit` moves left. Measure
+      the pill's centre against the viewport centre at 380px AND desktop/Studio before signing off — that
+      is what clause 8 actually asks for.
+
+      🚨 **(superseded — kept for the reasoning)** CLAUSE 6 ASSUMES SOMETHING THAT MAY NOT EXIST — check before designing.** "how far down you've
       moved the add row button" implies the add row can already sit at arbitrary positions in the
       timeline. Today it renders as a single row (`.tl-addrow`) and #357 is open about not being able to
       DRAG onto it. **If the add row is only ever top-or-bottom, clause 6 has no middle to represent** and
