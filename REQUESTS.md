@@ -10686,3 +10686,23 @@ wait for them to report back."*
       1. [ ] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
              which is where it belongs — so this is removing the duplicate, not removing the feature.)
       2. [ ] Its text is whiter, not grey.
+
+- [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
+      verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone
+      and I don't want it to change apart from where I've specified but make sure other peoples phones
+      will actually fit everything nicely on screen and format correctly"*
+      **He is right and this is a real gap in how I work.** Every layout check in this file is at **380px**,
+      and his own device reports **440×956 @dpr3**. Neither is the narrow end: an iPhone SE / mini is 375,
+      a lot of Android is 360, and the narrowest still in use is **320**. A row that fits at 380 can overflow
+      at 320 — and the transport row (queue 373) now carries EIGHT controls, which is exactly the shape
+      that breaks first.
+      ⚠️ **Do not change his layout to achieve it** — "I don't want it to change apart from where I've
+      specified". The job is that the SAME design degrades correctly on a narrower screen, not a redesign.
+      **Make it structural rather than a habit** (CLAUDE.md's own rule — a note is a hope, a gate is a
+      guarantee): a suite test that loads the editor at **320 / 360 / 390 / 430** and asserts, at each:
+      1. [ ] no horizontal overflow anywhere (`scrollWidth > clientWidth` on the shell);
+      2. [ ] no two controls in a row overlap;
+      3. [ ] nothing in the transport row or the view rail is clipped or pushed off-screen;
+      4. [ ] the tap targets stay at least ~34px.
+      `atPhoneWidth(fn, w)` already parameterises width, so the harness exists — this is a loop over widths
+      rather than a new mechanism.
