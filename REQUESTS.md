@@ -11684,15 +11684,16 @@ wait for them to report back."*
       it, which is just a different complaint arriving later.
       🔗 Same shape of fault as [#376] clause 2 ("that dreadful gap") and the v10.19 double border.
 
-- [ ] **424 — When the project is empty, the timeline's pattern should run to the bottom of the screen
-      with no cut-off line.** (19 Aug, via the phone inbox, referring to a screenshot.) His words,
+- [x] **424 — When the project is empty, the timeline's pattern should run to the bottom of the screen
+      with no cut-off line.** ✅ **DONE v10.60.** (19 Aug, via the phone inbox, referring to a screenshot.) His words,
       verbatim:
       > This line right here should be gone and instead just keep the same pattern going to the bottom of the screen with no cut off, just for when the project is empty like in the screenshot
       **Clauses:**
-      1. [ ] The line goes.
-      2. [ ] The pattern continues to the bottom of the screen.
-      3. [ ] **Only when the project is empty** — his words. So this is an empty-state rule, not a change
-             to the normal timeline.
+      1. [x] The line goes. ✅ v10.60
+      2. [x] The pattern continues to the bottom of the screen. ✅ v10.60
+      3. [x] **Only when the project is empty** — his words. So this is an empty-state rule, not a change
+             to the normal timeline. ✅ v10.60 — the slim row keeps its wash, its dashed outline and its
+             glow, and a test asserts that with a clip present.
       ✅ **THE SCREENSHOT ARRIVED (19 Aug, v10.28) — "I think this was the line for the screenshot" — so
       this is no longer a guess.** An EMPTY project: the big empty-state panel carries the rainbow **+** and
       *"Tap here to start creating"*, and it stops at a hairline roughly 130px above the bottom of the
@@ -11705,6 +11706,29 @@ wait for them to report back."*
       hooks; the line is most likely the empty add-row's own bottom border or the row's height stopping
       short of the panel, with the panel's background showing through beneath it — check which before
       removing a border that turns out not to be the thing in the circle.
+
+      **What it actually was — two separate things, and the guess above was wrong on both.** Measured at
+      380px before anything was touched:
+      1. **The line was not a border.** The empty state's border is already transparent. It was the row's
+         OWN BACKGROUND: `background-origin` defaults to the padding box while `background-clip` defaults
+         to the border box, so the 1px border ring gets filled by REPEATING the gradient tile — and the
+         row's last pixel therefore showed the tile's opposite, brighter edge. The pixel at y=743 read
+         rgb(14,37,43) against rgb(11,23,30) one pixel above it. Proved by injection: `border: 0` removed
+         it, `border-radius: 0` and `box-shadow: none` did not.
+      2. **The darker band below it was not the timeline at all.** It was `#inspector-panel` — the bottom
+         sheet, parked off-screen with `translateY(100%)`, still throwing `0 -10px 34px rgba(0,0,0,.55)`
+         UP over the bottom ~44px of the app. A transform moves the box, not the shadow. Proved by
+         painting `#timeline-panel` pure red: its bottom row came back rgb(88,1,2) instead of rgb(255,0,0).
+         `#ai-panel` was doing the identical thing. **This was on every phone screen, not just the empty
+         one** — a permanent dark gradient along the bottom of the app whenever the inspector was shut.
+      **Fix:** the empty-state wash moved off the row and onto `#timeline`, which already runs to the
+      bottom of the panel — one painted box, no edge left to seam, and the row's geometry untouched so
+      the **+** did not move. Both sheets got `:not(.open) { box-shadow: none }`, with the transition
+      carrying box-shadow so it fades over the same 220ms as the slide.
+      **Guarded by two tests**, and the second walks EVERY sheet parked below the fold rather than naming
+      those two, so the next one added cannot arrive with the same shadow. It also counts what it looked
+      at and fails if it examined nothing — the first version of it passed vacuously, and a mutation
+      proved the assertion dead before that was fixed.
 
 - [ ] **425 — PC: the trash / copy / parent buttons belong on the RIGHT of the row, not the left, and their
       background is too subtle.** (19 Aug, PC screenshot at v10.31.) His words, verbatim:

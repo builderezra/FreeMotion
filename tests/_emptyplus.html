@@ -10,6 +10,17 @@ f.addEventListener('load',function(){
  waitFM(f.contentWindow).then(async function(FM){
   if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
   FM.scene.layers.length=0; FM.refreshAll(); FM.timeline.rebuild(); await sleep(500);
+  var d=f.contentDocument, w=f.contentWindow, o=[];
+  [['#timeline-panel','p'],['#timeline','s'],['#tl-inner','i'],['#tl-tracks','t'],['.tl-addrow','a']].forEach(function(q){
+    var e=d.querySelector(q[0]); if(!e){o.push(q[0]+': absent');return;}
+    var r=e.getBoundingClientRect(), cs=w.getComputedStyle(e);
+    o.push(q[0]+'  top '+r.top.toFixed(0)+'  bottom '+r.bottom.toFixed(0)+'  h '+r.height.toFixed(0)+
+           '  bg '+cs.backgroundColor.slice(0,22)+'  borderBottom '+cs.borderBottomWidth);
+  });
+  o.push('viewport h '+w.innerHeight+'   empty-start class: '+d.querySelector('#timeline-panel').className);
+  var box=document.createElement('pre');
+  box.style.cssText='position:fixed;left:390px;top:0;width:700px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap';
+  box.textContent=o.join('\n'); document.body.appendChild(box);
   document.title='ready';
  }).catch(function(e){document.title='ERR '+e.message;});
 });

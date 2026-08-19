@@ -2017,6 +2017,115 @@
     }
   });
 
+  test('timeline: an empty project is one surface to the bottom of the screen, with no line across it', { item: '424' }, async function () {
+    /* Queue 424, from a phone screenshot with a line drawn across the bottom of the empty state:
+       "get rid of that line and continue the pattern all the way down". Two separate things made it,
+       both measured at 380px before anything was changed (see the note in styles.css):
+         - the hairline was the big row's own background, repeated into its 1px transparent border ring
+           because `background-origin` is the padding box while `background-clip` is the border box;
+         - the different shade below it was simply where the row's box stopped, ~76px short.
+       So the wash moved onto #timeline, which already reaches the bottom of the panel. This test is
+       about that shape, not about which gradient is used: nothing that ENDS mid-screen may paint, and
+       whatever does paint has to reach the bottom. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const panel = document.getElementById('timeline-panel');
+        const tl = document.getElementById('timeline');
+        const row = document.querySelector('.tl-addrow');
+        if (!panel || !tl || !row) throw new Error('missing the panel, the timeline or the add row');
+        // Control first: without the big state this would be measuring the ordinary slim row.
+        if (!row.classList.contains('tl-addrow--empty')) throw new Error('the add row is not in its big empty state (' + row.className + ')');
+        if (!panel.classList.contains('tl-empty-start')) throw new Error('the panel is missing tl-empty-start, so the empty-state rules are not the ones being measured');
+
+        const rs = getComputedStyle(row);
+        if (rs.backgroundImage !== 'none') throw new Error('the big empty row still paints a background of its own (' + rs.backgroundImage.slice(0, 60) + ') — that is the surface whose bottom edge drew the line');
+        if (rs.boxShadow !== 'none') throw new Error('the big empty row still casts a glow (' + rs.boxShadow + '), which draws the same edge a second time');
+
+        const ts = getComputedStyle(tl);
+        if (ts.backgroundImage === 'none') throw new Error('nothing paints the empty timeline at all now — the wash was removed rather than moved');
+        const tr = tl.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+        if (tr.bottom < pr.bottom - 1) throw new Error('the painted surface stops ' + (pr.bottom - tr.bottom).toFixed(1) + 'px above the bottom of the panel, so a second shade shows below it');
+
+        /* AND THE SLIM ROW IS UNTOUCHED (his clause 3: empty state only). Without this, deleting the
+           row's background everywhere would pass everything above. */
+        const L = FM.makeLayer('shape', { name: 'x', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#fff' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const slim = document.querySelector('.tl-addrow');
+        if (!slim || slim.classList.contains('tl-addrow--empty')) throw new Error('the row did not go back to its slim state with a clip present');
+        if (getComputedStyle(slim).backgroundImage === 'none') throw new Error('the slim add row lost its own wash — this was meant to change the empty state only');
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  test('phone: a bottom sheet parked off the screen casts no shadow back onto the app', { item: '424' }, async function () {
+    /* The other half of queue 424, and the reason his empty screenshot had a darker band along the
+       bottom at all: it was not the timeline. #inspector-panel and #ai-panel are both parked with
+       `transform: translateY(100%)`, and a transform moves the BOX, not the shadow's job — so their
+       `0 -10px 34px` and `0 -12px 40px` black shadows were painting up over the bottom ~44px of the
+       app, permanently, on every phone screen. Measured by painting #timeline-panel pure red: its
+       bottom row came back rgb(88,1,2).
+       WALKS EVERY PARKED SHEET rather than naming those two, because there were two of them and the
+       next one added would arrive with the same shadow and nobody would think to look. */
+    const parkers = [], examined = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    return await atPhoneWidth(async function () {
+      /* SHUT THE SHEETS FIRST, and prove below that something was actually looked at. The first
+         version of this test skipped every sheet and passed anyway — whatever ran before it had left
+         the inspector open, so nothing was parked and the walk examined nothing. A mutation that put
+         the shadow straight back survived it. */
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+      ['inspector-panel', 'ai-panel'].forEach(function (id) {
+        const e = document.getElementById(id); if (e) e.classList.remove('open');
+      });
+      await sleep(80);
+      const H = window.innerHeight;
+      Array.prototype.forEach.call(document.querySelectorAll('*'), function (el) {
+        const cs = getComputedStyle(el);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') return;
+        const r = el.getBoundingClientRect();
+        if (r.height < 40 || r.width < 40) return;
+        if (r.top < H - 1) return;                       // still on screen: its shadow is doing a job
+        /* COUNTED BEFORE THE SHADOW CHECK, not after. Counting it after meant a sheet that had been
+           FIXED — no shadow at all — was never recorded as examined, so the coverage guard below could
+           not tell "this one is clean" from "this one was never reached". */
+        examined.push(el.id ? '#' + el.id : el.className);
+        if (cs.boxShadow === 'none') return;
+        /* Split on commas OUTSIDE the colour functions — `rgba(0, 0, 0, .55)` has three of its own,
+           and splitting on all of them turns one shadow into four unparseable fragments. */
+        let depth = 0, cur = '', parts = [];
+        for (const ch of cs.boxShadow) {
+          if (ch === '(') depth++;
+          else if (ch === ')') depth--;
+          if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; } else cur += ch;
+        }
+        parts.push(cur);
+        parts.forEach(function (sh) {
+          if (sh.indexOf('inset') >= 0) return;          // inset paints inside the parked box: invisible
+          const nums = (sh.replace(/\([^)]*\)/g, '').match(/-?\d*\.?\d+px/g) || []).map(parseFloat);
+          if (nums.length < 2 || !(nums[1] < 0)) return;  // offset-y >= 0 casts down, away from the app
+          parkers.push((el.id ? '#' + el.id : el.className) + ' casts ' + sh.trim());
+        });
+      });
+      /* The coverage guard, before the verdict: an empty walk is not a pass. */
+      if (examined.indexOf('#inspector-panel') < 0) {
+        throw new Error('the walk never reached #inspector-panel parked below the fold (it saw: ' + (examined.join(', ') || 'nothing') + ') — this test would have proved nothing');
+      }
+      if (parkers.length) throw new Error('a sheet parked below the fold is still throwing a shadow up over the app: ' + parkers.join('; '));
+    }, 380);
+  });
+
   test('timeline: a flick that starts ON a clip glides like one that starts on empty lane', { item: 'clip-swipe-fling' }, async function () {
     /* Queue 351. His words: "Timeline doesn't scrub smoothly when you press on a layer when swiping,
        this is annoying please add to list."

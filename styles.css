@@ -2931,10 +2931,21 @@ body.fm-playing #time-readout {
     max-height: 52vh; border-left: none; border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -10px 34px rgba(0,0,0,.55);
     background: var(--panel);
-    transform: translateY(100%); transition: transform .22s ease;
+    transform: translateY(100%); transition: transform .22s ease, box-shadow .22s ease;
     overscroll-behavior: contain;
   }
   #inspector-panel.open { transform: translateY(0); }
+  /* A CLOSED SHEET CASTS NO SHADOW (queue 424). Found while measuring the dark band along the bottom of
+     his empty-project screenshot: it was not the timeline at all. This sheet is parked at `bottom: 0`
+     and slid out of sight with `translateY(100%)` — but a transform moves the box, not its shadow's
+     job, so `0 -10px 34px rgba(0,0,0,.55)` was still painting UP over the bottom ~44px of whatever was
+     on screen, permanently, on every phone screen with the inspector shut. Measured by painting
+     #timeline-panel pure red: the bottom row read rgb(88,1,2) instead of rgb(255,0,0).
+     `:not(.open)` rather than moving the shadow onto `.open`, because `body.m-editing` declares a
+     shadow of its own further down and a second state would have kept the bug alive; at (1,1,0) this
+     outranks that rule's (0,2,1) and any future one shaped like it. The transition above now carries
+     box-shadow too, so it fades over the same 220ms as the slide instead of snapping off. */
+  #inspector-panel:not(.open) { box-shadow: none; }
 
   /* grab/close handle pinned to the top of the sheet — tap to dismiss */
   #insp-grab {
@@ -3227,6 +3238,11 @@ body.fm-playing #time-readout {
     transform: translateY(100%);
   }
   #ai-panel.open { transform: translateY(0); }
+  /* …and the same for this one (queue 424). Identical bug to the inspector sheet above, found by the
+     same measurement: parked below the fold with `translateY(100%)`, still throwing `0 -12px 40px`
+     black up over the bottom of the app. Two sheets doing it is why the test that guards this walks
+     EVERY parked sheet rather than naming these two. */
+  #ai-panel:not(.open) { box-shadow: none; }
   .ai-grab {
     display: flex; align-items: center; justify-content: center;
     width: 100%; padding: 10px 0 6px; margin: 0; border: 0; background: var(--panel);
@@ -6643,6 +6659,29 @@ body.fm-pushing #toast { z-index: 213; }
   border-color: transparent;
   min-height: min(52vh, 300px);
   justify-content: center;
+  /* THE WASH IS NOT PAINTED HERE ANY MORE (queue 424) — see the rule below. The row keeps its box, so
+     the + does not move; it just stops being a surface of its own. */
+  background: none;
+  box-shadow: none;
+}
+/* ONE SURFACE, ALL THE WAY DOWN (queue 424). Ezra circled a hairline across the bottom of the empty
+   state, with a slightly darker band below it running to the bottom of the screen: "get rid of that
+   line and continue the pattern all the way down".
+   TWO causes, both measured, because removing the obvious one would have left the seam:
+   1. THE LINE IS NOT A BORDER. The empty state's border is already transparent. It is the row's own
+      background: `background-origin` defaults to the PADDING box while `background-clip` defaults to
+      the BORDER box, so the 1px border ring is filled by REPEATING the gradient tile — and the row's
+      last pixel therefore shows the tile's opposite, brighter edge. Proved by injection at 380px:
+      `border: 0` removes the line, `border-radius: 0` and `box-shadow: none` both leave it.
+      (Measured: 743px read rgb(14,37,43) against rgb(11,23,30) a pixel above it.)
+   2. THE BAND BELOW is just where the row's box stops. The row is capped at 300px and the tracks list
+      carries 52px of drag room under it (queue 396), so the wash ended ~76px short of the screen.
+   So the wash moves onto #timeline, which already runs to the bottom of the panel: one painted box,
+   no edge left to seam, and the row's own geometry untouched so nothing inside it shifts. The glow
+   goes with it — a halo around a box that no longer paints is the same edge drawn a second time.
+   EMPTY STATE ONLY (his clause 3): the slim row keeps its wash, its dashed outline and its glow, and
+   `.tl-empty-start` is phone-and-no-layers, so the desktop timeline never sees this. */
+#timeline-panel.tl-empty-start #timeline {
   background:
     radial-gradient(90% 70% at 50% 42%, rgba(90, 199, 237, .16), rgba(90, 199, 237, .04) 60%, transparent 100%),
     linear-gradient(160deg, rgba(41, 217, 187, .07), transparent 70%);
