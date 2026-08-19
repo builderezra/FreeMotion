@@ -10377,7 +10377,7 @@ wait for them to report back."*
       invariant it was really written for — the bar never offers an action the tab's store cannot perform —
       so its answer flipped without its meaning changing.
 
-- [ ] **375 — The Template icon is Alight Motion's, just recoloured. Make it our own.** (18 Aug.) His
+- [x] **375 — The Template icon is Alight Motion's, just recoloured. Make it our own.** ✅ **v10.24.** (18 Aug.) His
       words, verbatim: *"Template icon needs to be a little bit different as it's identical to alight
       motions just with colour, should be a simple task just make it look good"*.
       **The icon:** the Template tab in the ADD sheet — the small window/layout glyph beside Elements,
@@ -10390,11 +10390,24 @@ wait for them to report back."*
       **But it should be logged there as it lands**, which is what BEFORE-PUBLISHING.md asks for, and it
       is worth him knowing the same question applies to the other icons in that row.
       **Clauses:**
-      1. [ ] Redraw the Template icon so it is not AM's shape.
-      2. [ ] *"Just make it look good"* — same standard as #367: check it at a large size AND at its real
+      1. [x] Redraw the Template icon so it is not AM's shape.
+      2. [x] *"Just make it look good"* — same standard as #367: check it at a large size AND at its real
              size, and against the four icons it sits beside, not alone. A tab icon that is handsome in
              isolation and wrong next to its neighbours is the #313 mistake.
       ⚠️ Same 24×24 grid and stroke weight as its siblings, or it reads as a different set.
+      ✅ **WHAT CHANGED, and what deliberately did not.** He named the SHAPE — the colours here are already
+      his, from queue 267 and two amendments after it — so the frame and both accent hues stayed. What made
+      it AM's was the arrangement: a full-width crossbar with an upright dropping from its centre, dividing
+      the frame into a band over two panes. The crossbar stays (it is what reads as "a layout"), the upright
+      goes, and one centred rounded content block sits under it instead — a header over a piece of content
+      rather than a header over two panes. Three marks either way, so it holds the same weight beside its
+      four neighbours. **Judged at 88px AND at its real 24px, side by side with all five** (`tests/_tabico.html`
+      renders both rows), which is what clause 2 asked for.
+      ⚠️ **The first version of the test was DEAD and the mutation caught that, not the code.** It asked
+      `getBBox()` on the whole icon and checked that centre against 12 — but the union bbox is the 4..20
+      FRAME whatever the block inside does, so shifting the block 2.4 units off centre passed happily. It
+      measures the block itself now, told apart from the frame by area, and the same mutation reports
+      *"centres on x=14.40, not 12"*.
 
 - [ ] **376 — Group should be two buttons, not one button with a drop-down — and the drop-down has a
       dreadful gap.** (18 Aug, phone screenshot at v9.81 with 4 layers selected and the group menu open.)
@@ -10830,6 +10843,23 @@ wait for them to report back."*
       this is a second surface, or he has not seen v10.06 yet.
       **Not guessed at.** One line from him — or the next screenshot — settles it, and until then this is
       logged rather than acted on so it cannot be quietly dropped.
+      ✅ **SETTLED 19 Aug — he restated it with two screenshots and it is the ADD sheet after all**, plus a
+      second half that was never in the original message. His words, verbatim:
+
+      > Sometime quick and small that annoys me a lot you could fix rn is make all the add menus the same height and also make them full cover all the way up to the canvas.
+
+      > Wait till u finish what ur in then do this
+
+      **So there are TWO clauses, and v10.06 only did the first one — and only within the sheet:**
+      1. [ ] **Every Add tab opens at the same height.** v10.06 measured 0px spread across all five, so if
+             they differ again it has regressed, or it was only ever equal by one measure. His two shots
+             show Media's sheet topping out ABOVE the transport row and Shape's starting BELOW it, which is
+             a real difference he can see.
+      2. [ ] **The sheet covers all the way UP TO THE CANVAS** — in the Shape shot the transport row is
+             still visible above the sheet; in the Media shot it is not. The taller one is what he wants,
+             for all of them.
+      ⚠️ He explicitly asked for this NEXT: *"Wait till u finish what ur in then do this"* — so it jumps
+      the queue by his own instruction, after #375.
 
 - [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
       verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone
@@ -10962,3 +10992,97 @@ wait for them to report back."*
       existed for desktop, from queue 278), and the two arrow glyphs translated +2.5 units to centre in
       their own viewBox. The copy/paste glyph was 0.5 units out as well and went with them — clause 3 says
       all of them, not only the two he named. **Ink spread across the row: 2.25px → 0.00px.**
+
+- [ ] **411 — PC: dragging the add-layer row down does not scroll the timeline with it.** (19 Aug, via
+      the phone inbox.) His words, verbatim:
+      > On pc trying to drag down the add layer doesn't drag the screen down with it so you have to let go and then swipe down then pick it up again which is annoying
+      **Clauses:**
+      1. [ ] Dragging the add row towards the bottom edge auto-scrolls the timeline under it.
+      2. [ ] The same going up, or it is only half a fix.
+      🔗 Same family as [#409] — both are "the add row is hard to reach at the ends".
+
+- [ ] **412 — Rename "empty group" to "new group".** (19 Aug, via the phone inbox.) His words, verbatim:
+      > Rename empty group to new group
+      **Clauses:**
+      1. [ ] Find every place that string appears (menu label, toast, default layer name) and change it —
+             a rename that misses the toast is the half-done kind.
+
+- [ ] **413 — The shape icons' colours repeat and are not pretty.** (19 Aug, via the phone inbox.) His
+      words, verbatim:
+      > Add more colour to the shapes icons, currently the colours repeat and don't have much variety and isn't very pretty
+      **Clauses:**
+      1. [ ] More variety — measure the current palette first and say how many distinct hues there really
+             are across the grid before picking new ones.
+      2. [ ] *"isn't very pretty"* — judged at the real tile size AND against the neighbours, per #313.
+
+- [ ] **414 — The position-number buttons should be tappable and typable.** (19 Aug, via the phone
+      inbox.) His words, verbatim:
+      > The buttons that show a number for the position should be able to be tapped on and customised, so you can type exactly the number you want
+      **Clauses:**
+      1. [ ] Tapping a numeric readout opens an input.
+      2. [ ] Typing an exact value commits it.
+      ⚠️ WHICH readouts is not named — X/Y position is the obvious reading, but the same pattern applies to
+      every numeric chip. Find them all, then decide the scope deliberately rather than doing one.
+
+- [ ] **415 — Vertical timeline scrolling should glide like the horizontal drag does.** (19 Aug, via the
+      phone inbox.) His words, verbatim:
+      > Scrolling up and down on timeline should have some glide to it like dragging left and right
+      **Clauses:**
+      1. [ ] Vertical scroll gets momentum/glide matching the horizontal feel.
+      ⚠️ `#timeline` has `touch-action: none` and JS owns every gesture, so this is a real inertia
+      implementation, not a CSS property — read how the horizontal glide is done and reuse it.
+
+- [ ] **416 — 💡 While dragging a layer, the add-row switch takes that layer's colour, and pressing it
+      jumps THAT layer to the top or bottom.** (19 Aug, via the phone inbox.) His words, verbatim:
+      > Genius idea, make it so when you're dragging a layer the toggle button will change colour to the colour of that layer then when you press the toggle button while dragging a layer it will jump that layer to the top or bottom
+      **Clauses:**
+      1. [ ] While a layer drag is live, the switch takes that layer's colour.
+      2. [ ] Pressing it mid-drag sends THAT LAYER to the top or bottom.
+      3. [ ] Which end? By his existing rule for the switch (#373 clause 7) it should be the end the layer
+             is FURTHEST from — worth confirming, but that is the consistent reading.
+      🔗 Builds directly on [#373]'s switch.
+
+- [ ] **417 — Redesign the add-layer row: cut it off at the same line as the other rows, + centred on the
+      left, text on the right.** (19 Aug, via the phone inbox.) His words, verbatim:
+      > Re design the add layer to make it cut off at the line all the others cut off at and make it so on the left over the line the plus button will be there and centred and on the right will be the text saying tap here to add layer.
+      **Clauses:**
+      1. [ ] The row cuts off at the same vertical line every other row cuts off at (the layer-head
+             column's edge).
+      2. [ ] The + sits LEFT of that line, centred in that column.
+      3. [ ] The text "tap here to add layer" sits to the RIGHT of the line.
+      🔗 Overlaps [#409] — both change the add row; do them together if they land in the same release.
+
+- [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+      (19 Aug, via the phone inbox.) His words, verbatim, both messages:
+      > I want you to try and make the undo and redo buttons look more like this
+      > With the undo and redo buttons request I just did make the lines thinner tho so it matches everything else on that row
+      **Clauses:**
+      1. [ ] Redraw undo/redo to match the reference.
+      2. [ ] **Thinner strokes than the reference**, matching the rest of the row's weight (1.8).
+      ⚠️ **THE REFERENCE IMAGE IS NOT IN THE INBOX — it is a text file, so "this" did not come through.**
+      Ask for it, or catch it in the chat. Do not guess at a shape he has a specific picture of.
+      🔗 v10.22 (#410) has just re-centred these two glyphs; whatever replaces them must stay centred on
+      y=12 in the 24×24 box or the `transport-vcentre` test goes red — which is the point of that test.
+
+- [ ] **419 — Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
+      to be independent.** (19 Aug, phone screenshot at v10.22 with all three readouts circled, plus the
+      ◆ keyframe button on the left rail circled.) His words, verbatim:
+
+      > The key frames for these three things are all interacting with each other and causing issues, make em independent
+
+      **Clauses:**
+      1. [ ] Keyframing **Rotation** does not write or move keyframes for X tilt or Y tilt.
+      2. [ ] The same for **X tilt**, and for **Y tilt** — each of the three keys only itself.
+      3. [ ] Existing projects keep working: whatever these three share today, changing it must not
+             silently re-interpret animation people already have.
+      ⚠️ **Read before assuming a shared ◆ is the whole story.** His screenshot circles the three readouts
+      AND the single diamond on the rail beside them, which strongly suggests one keyframe control is
+      writing one channel for all three — but "causing issues" is a symptom, not a diagnosis, and the
+      three could equally be one property internally (a rotation triple stored as one value) with the
+      diamond correctly reflecting that. Find out which before designing the fix: a shared BUTTON is an
+      inspector change, a shared VALUE is a scene-format change and needs clause 3's migration thought.
+      🔗 Every effect slider already has its own ◆ (the unnumbered "per-effect-slider keyframes" item), so
+      the pattern for per-parameter keyframing exists to copy.
+      ⏸️ **HELD AT HIS REQUEST — he re-sent it with an explicit instruction:** *"Log don't do yet"*. So it
+      is written down in full and deliberately NOT started; it waits for him to release it rather than
+      taking its turn in the queue.

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Add-sheet tab icons (queue 375)</title></head>
+<body style="margin:0;background:#0a141a">
+<iframe id="app" src="../index.html" style="width:380px;height:560px;border:0;display:block"></iframe>
+<div id="big" style="display:flex;gap:18px;padding:18px;background:#0d1a22"></div>
+<script>
+/* Dev-only. Opens the ADD sheet so the five tab icons can be judged at their REAL size, and mirrors
+   them underneath at 4x — queue 375 clause 2 asks for both, and against the neighbours, not alone. */
+function waitFM(w){return new Promise(function(res,rej){var n=0;(function p(){if(w.FM&&w.FM.addMenu&&w.FM.scene)return res(w.FM);if(n++>300)return rej(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+  var w=f.contentWindow;
+  waitFM(w).then(async function(FM){
+    if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+    await sleep(400);
+    FM.addMenu.openTab('template');
+    await sleep(700);
+    // mirror each tab's icon at 4x so the drawing can be judged as a drawing
+    var d=f.contentDocument, big=document.getElementById('big');
+    var tabs=[].slice.call(d.querySelectorAll('svg')).filter(function(s){return s.closest('[class*=tab]');});
+    tabs.forEach(function(sv){
+      var col=document.createElement('div');
+      col.style.cssText='display:grid;gap:10px;justify-items:center';
+      [88, 24].forEach(function(px){                       // large AND real size, which is what clause 2 asks for
+        var box=document.createElement('div');
+        box.style.cssText='width:'+(px+16)+'px;height:'+(px+16)+'px;display:grid;place-items:center;background:#111f28;border-radius:10px';
+        var c=sv.cloneNode(true); c.setAttribute('width',px); c.setAttribute('height',px);
+        box.appendChild(c); col.appendChild(box);
+      });
+      big.appendChild(col);
+    });
+    document.title='ready';
+  }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script>
+</body>
+</html>

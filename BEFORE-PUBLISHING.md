@@ -155,3 +155,13 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
 
 - Any public link Ezra promotes, any store listing, any tutorial or demo video.
 - Not before then — it costs real time and the app should be worth publishing first.
+
+## Icons redrawn away from Alight Motion (log them here as they land)
+- **Add sheet · Template tab — done, v10.24 (queue 375).** He spotted this one himself: *"Template icon
+  needs to be a little bit different as it's identical to alight motions just with colour"*. AM's glyph is
+  a frame divided by a crossbar with an upright dropping from its centre — a band over two panes. Ours is
+  now a crossbar with a single centred content block beneath it: a header over content. Same 24×24 grid,
+  same 1.8 stroke, same palette (his, from queue 267).
+- **The same question applies to the four icons beside it** — Elements, Shape, Media, Audio — and to the
+  rest of the UI this file lists. He asked for one icon, so one icon was done; the others are noted here
+  rather than quietly widened into that request.

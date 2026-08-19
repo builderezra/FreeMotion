@@ -429,14 +429,22 @@ window.FM = window.FM || {};
       + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
       + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
       + '</defs>'
-      /* Paint order, top to bottom: VERTICAL first, then the horizontal over its top end, then the
-         frame over everything. Ezra: "put the bottom straight up line ending under the horizontal
-         line." The vertical starts at y=10, exactly where the horizontal runs, and a round linecap
-         adds half a stroke width beyond that point — so drawn last it poked visibly through the
-         horizontal. Declaring it first lets the horizontal cover that cap, and the join reads as a T
-         with the upright ending beneath the crossbar rather than crossing it. */
-      + '<path d="M10 10v10" stroke="url(#fm-ic-tpV)"/>'
-      + '<path d="M4 10h16" stroke="url(#fm-ic-tpH)"/>'
+      /* NOT ALIGHT MOTION'S SHAPE ANY MORE (queue 375). Ezra: "Template icon needs to be a little bit
+         different as it's identical to alight motions just with colour, should be a simple task just
+         make it look good." He named the SHAPE, not the palette — the colours here are already his, from
+         queue 267 and the two amendments after it — so the frame and both accent hues stay and the
+         division inside changes. What made it identical was the arrangement: a full-width crossbar with
+         an upright dropping from its centre, dividing the frame into a band over two panes, which is
+         exactly AM's glyph. The crossbar stays (it is the thing that reads as "a layout"), the upright
+         goes, and a single rounded content block sits under it instead — a header over a piece of
+         content rather than a header over two panes. Three marks either way, so it carries the same
+         weight beside Shape / Media / Audio / Elements at 24px, and the block is centred so the lower
+         half is not lopsided the way one offset pane would be.
+         Paint order is unchanged and still load-bearing: the block and the crossbar are declared FIRST
+         and the frame LAST, so the frame's rounded corners cover their ends — "make sure the border
+         lines go on top of the middle ones, not how it is currently". */
+      + '<rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4" stroke="url(#fm-ic-tpV)"/>'
+      + '<path d="M4 8.6h16" stroke="url(#fm-ic-tpH)"/>'
       + '<rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#fm-ic-tpB)"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         /* THE TEMPLATE'S OWN PICTURE, not the same little glyph nine times (queue 268, and the last

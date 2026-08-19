@@ -691,6 +691,61 @@
     }
   });
 
+  test('the Add sheet\'s tab icons are one set, and the Template icon is balanced in its box', { item: 'tab-icons' }, function () {
+    /* Queue 375. Ezra: "Template icon needs to be a little bit different as it's identical to alight
+       motions just with colour, should be a simple task just make it look good." He named the SHAPE, so
+       the palette stayed and the division inside the frame changed — a crossbar over one centred content
+       block, instead of AM's crossbar over an upright splitting the lower half into two panes.
+       "Looks good" is a judgement and is not what this asserts. What it asserts is the two things the
+       entry warned would break the SET: the icons must share one grid and one stroke weight, and the new
+       drawing must actually be centred in its own box rather than only looking centred at 88px, which is
+       the size it was drawn at. Both are measured off the real markup the sheet renders. */
+    if (!FM.addMenu || !FM.addMenu._tabs) throw new Error('FM.addMenu._tabs() is missing — the tab list cannot be read');
+    const tabs = FM.addMenu._tabs();
+    if (!tabs.length) throw new Error('no tabs came back');
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:absolute;left:-9999px;top:0;width:200px;height:200px';
+    document.body.appendChild(holder);
+    try {
+      const bad = [];
+      let sawTemplate = false;
+      tabs.forEach(function (t) {
+        if (!t.icon) return;
+        holder.innerHTML = t.icon;
+        const sv = holder.querySelector('svg');
+        if (!sv) { bad.push(t.key + ': its icon is not an svg'); return; }
+        if ((sv.getAttribute('viewBox') || '').trim() !== '0 0 24 24') bad.push(t.key + ' draws on a "' + sv.getAttribute('viewBox') + '" grid, not 0 0 24 24 — it will read as a different set beside the others');
+        if (sv.getAttribute('stroke-width') !== '1.8') bad.push(t.key + ' has stroke-width ' + sv.getAttribute('stroke-width') + ', not 1.8 — same reason');
+        if (t.key !== 'template') return;
+        sawTemplate = true;
+        // …and the drawing itself: centred left-to-right, and inside the frame it is drawn in
+        sv.setAttribute('width', '240'); sv.setAttribute('height', '240');
+        /* ⚠️ MEASURE THE BLOCK, NOT THE WHOLE ICON. The first version of this asked getBBox() on the
+           <svg> and checked that centre against 12 — and a mutation moving the block 2.4 units off
+           centre SURVIVED it, because the union bbox is the 4..20 FRAME whatever the block does. The
+           frame is the biggest rect and the block is the smallest, so they are told apart by area. */
+        const rects = [].slice.call(sv.querySelectorAll('rect'));
+        const bar = sv.querySelector('path');
+        if (rects.length < 2 || !bar) { bad.push('the Template icon is no longer a frame + crossbar + block (' + rects.length + ' rects, ' + (bar ? 1 : 0) + ' path)'); return; }
+        const area = r => parseFloat(r.getAttribute('width')) * parseFloat(r.getAttribute('height'));
+        const sorted = rects.slice().sort((a, b) => area(a) - area(b));
+        const block = sorted[0], frame = sorted[sorted.length - 1];
+        const bx = parseFloat(block.getAttribute('x')), bw = parseFloat(block.getAttribute('width'));
+        const by = parseFloat(block.getAttribute('y')), bh = parseFloat(block.getAttribute('height'));
+        const cx = bx + bw / 2;
+        if (Math.abs(cx - 12) > 0.4) bad.push('the Template icon\'s content block centres on x=' + cx.toFixed(2) + ', not 12 — it is lopsided inside its own frame');
+        const fx = parseFloat(frame.getAttribute('x')), fy = parseFloat(frame.getAttribute('y'));
+        const fw = parseFloat(frame.getAttribute('width')), fh = parseFloat(frame.getAttribute('height'));
+        if (bx < fx || bx + bw > fx + fw || by < fy || by + bh > fy + fh) bad.push('the Template icon\'s block escapes its frame');
+        // and it must sit BELOW the crossbar, or it is not the header-over-content shape at all
+        const barY = parseFloat((bar.getAttribute('d') || '').replace(/^M[\d.]+\s+/, ''));
+        if (!(by > barY)) bad.push('the Template icon\'s block is at y=' + by + ' but the crossbar is at y=' + barY + ' — the block is supposed to sit under the header, which is the whole shape');
+      });
+      if (!sawTemplate) bad.push('there is no tab keyed "template" to check');
+      if (bad.length) throw new Error(bad.join(' | '));
+    } finally { holder.remove(); }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."
