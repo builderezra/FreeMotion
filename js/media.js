@@ -215,10 +215,23 @@ window.FM = window.FM || {};
      * what happened, which is the whole of the complaint: the app knew and did not say. */
     if (rec.el.readyState >= 2) return;
     let settled = false;
+    /* A LATE FRAME STILL COUNTS (queue 399). Ezra: "I add a clip and make an edit but then load it again
+       and it says my browser can't decode the image then the video goes blank."
+       The `if (settled) return` here was the whole bug, and the shape of his report is what points at it:
+       the clip decodes fine when he IMPORTS it and fails when he RELOADS. An unsupported codec would fail
+       both times. What differs on a reload is that every video in the project decodes from cold at once,
+       so one of them can take longer than the 15s budget — and once the timer had fired, `settled` was
+       true, so the `loadeddata` that arrived a moment later hit this early return and `undecodable` stayed
+       set FOREVER. The compositor skips a record marked undecodable, which is the blank video.
+       So the flag is now a verdict that can be overturned by the evidence arriving late: the listeners are
+       still attached (they are `once` per event, and neither has fired yet), and a frame landing at any
+       point clears the mark and asks for a repaint. The toast has already been and gone, which is honest —
+       it said no picture had arrived, and at the time none had. */
     const arrived = () => {
-      if (settled) return;
+      const wasMarked = rec.undecodable === true;
       settled = true; clearTimeout(rec._decodeTimer); rec._decodeTimer = 0;
       rec.undecodable = false;
+      if (wasMarked && FM.requestRender) FM.requestRender();   // it was being skipped; draw it now
     };
     rec.el.addEventListener('loadeddata', arrived, { once: true });
     rec.el.addEventListener('canplay', arrived, { once: true });

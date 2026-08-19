@@ -11036,8 +11036,8 @@ wait for them to report back."*
       the #384 siblings check reads each button's ramp from wherever it now lives, still requiring a match.
       ✅ `prefers-reduced-motion` gets the same colours, standing still.
 
-- [ ] **399 — A clip does not survive a reload: "your browser can't decode the image", then the video goes
-      blank.** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **399 — A clip does not survive a reload: "your browser can't decode the image", then the video goes
+      blank.** ✅ **v10.38 — a real defect found and fixed, and it matches every part of the report.** (19 Aug, via the phone inbox.) His words, verbatim:
       *"I keep getting an issue where I add a clip and make an edit but then load it again and it says my
       browser can't decode the image then the video goes blank. Probably won't be an issue when we make
       it an app so it's not a huge deal for web browser current testing version."*
@@ -11051,6 +11051,25 @@ wait for them to report back."*
       VIDEO itself, because the message says image and the symptom is video.
       **Measure it before theorising:** add a clip, edit, reload, and read what the console says and what
       `FM.media.get(id)` holds afterwards — the app already reports this case and the report is the lead.
+      ✅ **THE SHAPE OF THE REPORT WAS THE DIAGNOSIS, and it is not in any of the three places listed above.**
+      *"Add a clip"* — works. *"Load it again"* — blank. **An unsupported codec fails BOTH times**, so the
+      codec message was a red herring pointing at the real mechanism: `FM.wireVideoRepaint` gives a video
+      15 seconds (`FM.decodeWait`) to produce a frame and then marks the record `undecodable` and toasts
+      *"this browser can't decode it"*. The compositor SKIPS an undecodable record — that is the blank video.
+      **And the mark could never be lifted.** `arrived()` opened with `if (settled) return`, and the timeout
+      sets `settled = true` — so the `loadeddata` that landed a moment after the deadline hit that early
+      return and `undecodable` stayed set for the life of the session. **What is different about a reload is
+      exactly what trips it:** every video in the project decodes from COLD at once (storage.js calls
+      `wireVideoRepaint` per layer on hydrate), so on a phone one of them can outrun a budget that a single
+      warm import never came near.
+      ✅ The verdict can be overturned by evidence arriving late now: the listeners are still attached, a
+      frame at any point clears the mark and asks for a repaint. Mutation-checked — restoring that one line
+      reports *"the frame arrived and the clip is still marked undecodable"*.
+      ⚠️ **If it still happens, say so** — this is a real bug that produces exactly his symptom on exactly
+      his path, but it was found by reading rather than by reproducing HIS clip, and the three places this
+      entry originally listed (hydrate, `pruneOrphans`, the `data:` rejection at storage.js:763) have not
+      been ruled out. **He was also wrong to discount it** and that stands: this was work going blank
+      between sessions, and it would have shipped into the app wrapper unchanged.
 
 - [ ] **400 — The filter thumbnails are low-res and it makes them look unappealing.** (19 Aug, via the
       phone inbox.) His words, verbatim:

@@ -31020,6 +31020,36 @@
     } finally { probeRow.remove(); }
   });
 
+  test('a video that decodes slowly is not written off forever', { item: 'late-decode-recovers' }, async function () {
+    /* Queue 399. Ezra: "I keep getting an issue where I add a clip and make an edit but then load it again
+       and it says my browser can't decode the image then the video goes blank."
+       **The shape of the report is the diagnosis.** An unsupported codec fails on IMPORT and on reload
+       alike; his fails only on reload — and what is different about a reload is that every video in the
+       project decodes from cold at once, so one can outrun the 15s budget. The watcher then marked the
+       record `undecodable`, and the `loadeddata` that landed a moment later hit an `if (settled) return`
+       and never cleared it. The compositor skips an undecodable record: that is the blank video, and it was
+       permanent for the life of the session.
+       Driven on a real <video> element with a stubbed readyState and a 60ms budget, so the whole race runs
+       for real rather than being asserted about. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wait0 = FM.decodeWait;
+    try {
+      FM.decodeWait = 60;
+      const el = document.createElement('video');
+      let rs = 0;
+      Object.defineProperty(el, 'readyState', { get: () => rs, configurable: true });
+      const rec = { kind: 'video', el: el, width: 640, height: 360, file: { name: 'slow-clip.mp4' } };
+      FM.wireVideoRepaint(rec);
+      await sleep(200);                                  // …past the budget, with no frame
+      if (rec.undecodable !== true) throw new Error('the watcher never gave up on a video that produced nothing — this test cannot prove the recovery below');
+      // …and NOW the frame lands, exactly as a slow cold decode does
+      rs = 2;
+      el.dispatchEvent(new Event('loadeddata'));
+      await sleep(60);
+      if (rec.undecodable) throw new Error('the frame arrived and the clip is still marked undecodable — the compositor skips it, which is the blank video he is reporting');
+    } finally { FM.decodeWait = wait0; }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
