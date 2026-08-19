@@ -10711,6 +10711,17 @@ wait for them to report back."*
       1. [ ] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
              which is where it belongs — so this is removing the duplicate, not removing the feature.)
       2. [ ] Its text is whiter, not grey.
+      🔁 **RESTATED AND SHARPENED, 19 Aug** (via the phone inbox, while #373 was in progress). His words,
+      verbatim: *"While ur working on the play menu I want the new play button that says the time I want it
+      to be more white and match the other buttons in that row, it can still change colours when you press
+      on it like it does tho"*.
+      **Three things in that, and the second is new:**
+      a. [ ] The pill's text is **more white**.
+      b. [ ] It **matches the other buttons in that row** — so the target is not "whiter" in the abstract,
+             it is the same treatment the transport icons already have. Read their computed colour and use
+             THAT rather than picking a new one.
+      c. [ ] It **still changes colour when pressed** — the press state stays. So this is the resting
+             colour only; do not flatten the :active feedback while making it match.
 
 - [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
       verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone
