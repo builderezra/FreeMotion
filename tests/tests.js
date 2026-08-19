@@ -23488,7 +23488,10 @@
       if ((live.effects || []).length !== 0) throw new Error('tapping added ' + live.effects.length + ' effect(s) on PC — a tap is supposed to SELECT');
       const badge = t => { const b = t.querySelector('.fxb-pick'); return b ? b.textContent : null; };
       if (badge(pick[0]) !== '1' || badge(pick[1]) !== '2') throw new Error('the order badges read ' + [badge(pick[0]), badge(pick[1])].join('/') + ' on PC');
-      if (!FM.isolate || FM.isolate.id !== L.id) throw new Error('the sheet is not showing only the selected layer — "just playback basically just the layout that you have selected"');
+      // …and NOT soloing, since queue 390 — the same reversal as the phone sheet, and for his same reason:
+      // "sometimes seeing how the other layers will interact with the layer you're adding effects to is
+      // pivotal". PC gets the identical behaviour, which is the whole point of this test's title.
+      if (FM.isolate) throw new Error('the PC sheet is still soloing the selected layer (isolate ' + JSON.stringify(FM.isolate) + ') — queue 390 asked for the whole composition');
       if (!FM._fxPreview || FM._fxPreview.id !== L.id || FM._fxPreview.list.length !== 2) throw new Error('the two picked effects are not being previewed on the layer');
       const bar = root.querySelector('.fxb-commit');
       if (!bar || bar.classList.contains('hidden')) throw new Error('no commit bar on PC, so there is no way to add what you picked');
@@ -23574,7 +23577,7 @@
     }
   });
 
-  test('the sheet previews the picked effects and shows only that layer, and puts it all back (queue 277)', { item: 'fx-sheet' }, async function () {
+  test('the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390)', { item: 'fx-sheet' }, async function () {
     /* Clauses 5 and 7: "when you tap on an effect it doesn't just add it selects it and it will show the
      * layer selected like what the layer will look like with the effect selected", and "it'll just take
      * you back to the start of that layer instead and it will only show that layer".
@@ -23644,9 +23647,14 @@
 
       FM.fxBrowser.open(A);
       await sleep(340);
-      // …only that layer
-      if (!FM.isolate || FM.isolate.id !== A.id || FM.isolate.mode !== 1) throw new Error('opening the sheet did not isolate the selected layer — "it will only show that layer"');
-      if (isB()) throw new Error('the other layer is still on the canvas while the sheet is open — "it will only show that layer"');
+      /* …and the WHOLE COMPOSITION, which reverses what this test used to assert (queue 390). It required
+         the solo, because queue 277 asked for one: *"it will only show that layer which makes sense because
+         you're only seeing the effects for that layer anyways"*. He has since changed his mind, with a
+         reason that outranks it: *"sometimes seeing how the other layers will interact with the layer
+         you're adding effects to is pivotal"* — a blend mode, a glow or a matte means nothing against an
+         empty frame. Both quotes are kept so the flip reads as a decision rather than a weakened test. */
+      if (FM.isolate) throw new Error('the sheet is still soloing the layer (isolate ' + JSON.stringify(FM.isolate) + ') — he asked to see how the other layers interact with it');
+      if (!isB()) throw new Error('the other layer has vanished from the canvas while the sheet is open — "it actually just shows all the layers on the timeline and not just that layer"');
       // …and it loops that layer rather than sitting still
       const t1 = FM.time;
       await sleep(320);

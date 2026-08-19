@@ -297,7 +297,17 @@ window.FM = window.FM || {};
     if (!layer) return;
     FM._fxPreview = { id: layer.id, list: previewStack() };
     if (!_isoHeld) { _isoWas = FM.isolate || null; _isoHeld = true; }
-    FM.isolate = { id: layer.id, mode: 1 };            // draw only this layer
+    /* THE PREVIEW SHOWS THE WHOLE COMPOSITION NOW (queue 390) — and this REVERSES his own earlier words,
+       which is why the old ones are still quoted above rather than deleted. He asked for the solo at queue
+       277 (*"it will only show that layer which makes sense because you're only seeing the effects for that
+       layer anyways"*) and has since changed his mind, with a reason that outranks it: *"sometimes seeing
+       how the other layers will interact with the layer you're adding effects to is pivotal"*. He is right
+       — a blend mode, a glow or a matte means nothing against an empty frame.
+       It CLEARS the isolate rather than simply not setting one, because a solo he switched on himself
+       before opening the sheet would hide exactly the layers he is now asking to see. The save/restore
+       machinery is unchanged, so his own solo comes back the moment the sheet closes — which is what
+       `_isoHeld` is for, and the note above it explains what happens when that restore is got wrong. */
+    FM.isolate = null;                                 // …the whole frame, not just this layer
     if (FM.playing && FM.pause) FM.pause();            // the sheet owns the clock while it is open
     const st = layer.start || 0, du = Math.max(0.25, layer.duration || 0);
     _loopFrom = Date.now();

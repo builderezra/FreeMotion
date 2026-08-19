@@ -10825,18 +10825,30 @@ wait for them to report back."*
       with `remountLive()` made it worse: that calls `stopAll()`, cancelling the decode the later test waits
       on.
 
-- [ ] **390 — While previewing effects, show the WHOLE composition, not just the one layer.** (18 Aug.) His
+- [x] **390 — While previewing effects, show the WHOLE composition, not just the one layer.** ✅ **v10.34.** (18 Aug.) His
       words, verbatim: *"Make it so when you are previewing a layer in the effect menu and adding effects it
       actually just shows all the layers on the timeline and not just that layer, sometimes seeing how the
       other layers will interact with the layer you're adding effects to is pivotal"*.
       The effects sheet currently isolates the layer being edited (an `FM.isolate`-style solo). He wants the
       real frame, because a blend mode, a glow or a matte only means anything against what is behind it.
       **Clauses:**
-      1. [ ] The preview shows every layer, with the effect applied to the selected one.
+      1. [x] The preview shows every layer, with the effect applied to the selected one.
       ⚠️ The solo was almost certainly deliberate — on a busy comp the edited layer can be completely hidden,
       and previewing an effect you cannot see is its own bug. Check why it was added before removing it; if
       the reason was "you can't see the layer", the answer may be showing everything AND marking the layer,
       rather than swapping one problem for the other.
+      ✅ **CHECKED, AND IT WAS DELIBERATE — because HE ASKED FOR IT.** The solo came from queue 277, in his
+      own words: *"it will only show that layer which makes sense because you're only seeing the effects for
+      that layer anyways"*. This entry reverses that, with a reason that outranks it. **Both quotes are kept
+      in the code and in the two tests**, so the flip reads as a decision rather than as a weakened test.
+      ✅ **It CLEARS the isolate rather than merely not setting one** — a solo he switched on himself before
+      opening the sheet would hide exactly the layers he is now asking to see. His own solo is restored when
+      the sheet closes, which the existing save/restore machinery already did and the test still asserts.
+      ⚠️ **NOT built: the "mark the layer" half.** He did not ask for it, and inventing an overlay on top of a
+      reversal is how a second complaint gets created. If a busy comp now makes the edited layer hard to
+      find, that is worth one line from him and it is a small addition on top of this.
+      ⚠️ **Two existing tests asserted the OLD behaviour** (queue 277's sheet test and queue 303's PC one) and
+      were flipped, not deleted — the mutation puts the solo back and both go red.
 
 
       ✅ **ALL FIVE CLAUSES — v9.87.** The palettes are **lifted from each icon's own gradient stops**, not
