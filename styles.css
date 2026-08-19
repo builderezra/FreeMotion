@@ -2005,7 +2005,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    31x40. Gated at 360 so his own 440 phone and the common 375/390 are untouched. */
 @media (max-width: 360px) {
   #transport { padding-left: 6px; padding-right: 6px; }
-  #transport .tbtn { width: 31px; }
+  #transport .tbtn { min-width: 31px; width: 31px; }   /* min-width is what sizes .tbtn (styles.css:2130) — setting `width` alone never shrinks it */
   #transport > #time-readout { padding: 4px 9px; }
   .t-left { padding-right: 4px; }
   .t-right { padding-left: 4px; }
@@ -2015,7 +2015,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    28x40 touch area, which is the smallest this row can honestly go; below that the answer would have to
    be dropping a control, and that is his call, not mine. */
 @media (max-width: 340px) {
-  #transport .tbtn { width: 28px; }
+  #transport .tbtn { min-width: 28px; width: 28px; }
   #transport > #time-readout { padding: 4px 7px; font-size: 12px; }
 }
 
