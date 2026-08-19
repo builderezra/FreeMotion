@@ -57,8 +57,12 @@ window.FM = window.FM || {};
       // Zoomed in = the comp covers more device pixels, so re-rasterise the preview at that
       // resolution rather than letting the browser stretch a project-sized bitmap (soft edges).
       if (FM.refreshPreviewScale) FM.refreshPreviewScale();
-      const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(this.scale * 100) + '%';
-      const cz = document.getElementById('cv-zoom'); if (cz) cz.textContent = Math.round(this.scale * 100) + '%';
+      /* "FULL", NOT "100%" (queue 362). Ezra: "when it's at 100% make it say 'Full'". Rounded, not exact
+         — the scale is a float and a fit can land on 0.99999, which would read as 100% and still print
+         the number he asked to be rid of. `cv-zoom` went with it: that id is in no HTML file in the
+         repo, so the second line only ever wrote to nothing. */
+      const pct = Math.round(this.scale * 100);
+      const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = pct === 100 ? 'Full' : pct + '%';
       update();
     },
     reset() { this.x = 0; this.y = 0; this.scale = 1; this.apply(); },

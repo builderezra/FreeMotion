@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=520">
+<link rel="stylesheet" href="styles.css?v=521">
 <link rel="stylesheet" href="theme-glass.css?v=30">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.07</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.08</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -321,10 +321,17 @@
           <button id="vb-fit" class="vb-btn" title="Fit canvas to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
           <button id="vb-layers" class="vb-btn" title="Layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5zM3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></svg></button>
           <button id="vb-camera" class="vb-btn" title="Add camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM15 10l6-3v10l-6-3z"/></svg></button>
+          <!-- ARROWS, DRAWN (queue 362). Ezra, circling this control: "make it up and down arrows
+               instead of plus and minus and when it's at 100% make it say 'Full'".
+               SVG rather than the ▲ / ▼ characters, deliberately: a glyph's ink sits wherever the font
+               decides to put it inside its em box, and an off-centre glyph in a small round control is
+               the exact defect he has now reported three times (queue 209, 296, 331 clause 3). The two
+               steppers in this rail were also identical apart from their readouts; only the one he
+               circled changes, which now tells them apart as well. -->
           <div id="vb-zoom">
-            <button id="vb-zoomin" class="vb-z" title="Zoom in" aria-label="Zoom in">+</button>
-            <span id="vb-zlabel">100%</span>
-            <button id="vb-zoomout" class="vb-z" title="Zoom out" aria-label="Zoom out">−</button>
+            <button id="vb-zoomin" class="vb-z" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+            <span id="vb-zlabel">Full</span>
+            <button id="vb-zoomout" class="vb-z" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
           </div>
           <!-- Second group (v5.03): the transport extras Ezra wants out of the ⋯ menu — playback speed,
                loop, the export marks, and timeline zoom. They belong together here because every one
@@ -840,7 +847,7 @@
   <script src="js/fx-browser.js?v=52"></script>
   <script src="js/elements-browser.js?v=3"></script>
   <script src="js/color-wheel.js?v=53"></script>
-  <script src="js/canvas-edit.js?v=104"></script>
+  <script src="js/canvas-edit.js?v=105"></script>
   <script src="js/notepad.js?v=4"></script>
   <script src="js/draw-tool.js?v=25"></script>
   <script src="js/point-edit.js?v=14"></script>

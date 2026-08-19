@@ -470,6 +470,45 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('view rail: the canvas zoom stepper uses drawn arrows and says Full at 100%', { item: 'zoom-stepper' }, function () {
+    /* Queue 362, from a screenshot with this control circled: "make it up and down arrows instead of
+       plus and minus and when it's at 100% make it say 'Full'".
+       The arrows are asserted as DRAWN rather than as characters, which is the point of the change and
+       not a detail: a glyph's ink sits wherever the font puts it inside its em box, and an off-centre
+       glyph in a small control is the same defect he has now reported three times (queue 209, 296, 331
+       clause 3). This control is exactly the shape that keeps producing it. */
+    const zin = document.getElementById('vb-zoomin'), zout = document.getElementById('vb-zoomout');
+    const lbl = document.getElementById('vb-zlabel');
+    if (!zin || !zout || !lbl) throw new Error('the view-rail zoom stepper is missing (' + !!zin + '/' + !!zout + '/' + !!lbl + ')');
+    [['zoom in', zin], ['zoom out', zout]].forEach(([what, b]) => {
+      if (!b.querySelector('svg')) throw new Error('the ' + what + ' button has no drawn arrow — a ▲/▼ character sits where the font puts it, which is the off-centre defect he has reported three times');
+      const txt = (b.textContent || '').trim();
+      if (txt) throw new Error('the ' + what + ' button still carries the text "' + txt + '" beside its arrow');
+    });
+    // They must not be the SAME arrow, or the control cannot say which way it goes.
+    const a = zin.querySelector('svg').innerHTML, b2 = zout.querySelector('svg').innerHTML;
+    if (a === b2) throw new Error('both stepper arrows draw the same path — one has to point up and the other down');
+
+    // …and the readout. Driven through the real setter, not by writing the label.
+    /* Driven through FM.viewport.apply(), which is the one place the label is written — writing the
+       label directly would assert nothing about the code that produces it. viewport is pure runtime
+       view state: never in the scene, never in history, never persisted, so moving it here is free. */
+    const vp = FM.viewport;
+    if (!vp || typeof vp.apply !== 'function') throw new Error('FM.viewport.apply is missing — this test cannot drive the readout');
+    const was = vp.scale;
+    try {
+      vp.scale = 1; vp.apply();
+      if ((lbl.textContent || '').trim() !== 'Full') throw new Error('at 100% the readout says "' + lbl.textContent + '", not "Full"');
+      // …and a fit that lands a hair under 1 must still read Full, not "100%" — the rounding is the point.
+      vp.scale = 0.99998; vp.apply();
+      if ((lbl.textContent || '').trim() !== 'Full') throw new Error('at 99.998% the readout says "' + lbl.textContent + '" — a fit lands on floats like this and it would print the number he asked to be rid of');
+      vp.scale = 0.5; vp.apply();
+      const half = (lbl.textContent || '').trim();
+      if (half === 'Full') throw new Error('the readout says "Full" at 50% — it is not following the scale at all');
+      if (!/^\d+%$/.test(half)) throw new Error('away from 100% the readout should still be a percentage, got "' + half + '"');
+    } finally { try { vp.scale = was; vp.apply(); } catch (e) {} }
+  });
+
   test('masks: a mask row minimises, swipes away, and never writes its UI state to the project', { item: 'mask-row-fx' }, async function () {
     /* Queue 360 clause 1. His words: "The mask effect… doesn't work like an effect. I can't swipe it
        away to delete it or minimise it."

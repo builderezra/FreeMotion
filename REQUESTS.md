@@ -9861,7 +9861,7 @@ wait for them to report back."*
       **Also confirmed by this message: #315 clause 1 is FIXED** — he says the multi-stroke case works
       now. That entry was left open because I could not reproduce the failure; his word closes it.
 
-- [ ] **362 — The canvas rail's zoom control: up/down arrows instead of + and −, and say "Full" at 100%.**
+- [x] **362 — The canvas rail's zoom control: up/down arrows instead of + and −, and say "Full" at 100%.** ✅ **v10.08, both clauses.**
       (18 Aug, phone screenshot at v9.81 with the control circled in red.) His words, verbatim:
       *"With the highlighted area make it up and down arrows instead of plus and minus and when it's at
       100% make it say “Full”"*.
@@ -9870,8 +9870,12 @@ wait for them to report back."*
       second stepper (**− / 1× / +**, the playback speed), then loop, then the magnet. So it is the
       **upper** stepper, the one showing a percentage, and NOT the 1× speed one directly under it.
       **Clauses:**
-      1. [ ] The **+ and − become up and down arrows** (▲ / ▼).
-      2. [ ] At exactly 100% the readout says **“Full”** instead of “100%”.
+      1. [x] ✅ **v10.08** — the **+ and − become up and down arrows**, DRAWN as SVG rather than ▲/▼
+             characters, exactly as the warning below this list says — a glyph sits where the font puts
+             it, which is the off-centre defect reported three times already.
+      2. [x] ✅ **v10.08** — at 100% the readout says **“Full”**. Computed from the ROUNDED percentage:
+             the scale is a float and a fit lands on things like 0.99998, which would read as 100% and
+             still print the number you asked to be rid of. That case is a test.
       **Worth settling when this comes up:** the two steppers sit adjacent and currently look identical
       apart from their readouts. Changing only the top one to arrows makes them tell each other apart,
       which is probably part of the point — but if he wants BOTH as arrows it is the same one-line change.
