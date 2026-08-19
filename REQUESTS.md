@@ -10505,7 +10505,7 @@ wait for them to report back."*
              so a full crank smears across four frames of travel instead of one. Default stays 0.5, so
              nothing he has already made changes.
 
-- [ ] **380 — "Paste style" does nothing.** (18 Aug.) His words, verbatim: *"Make sure paste style actually
+- [x] **380 — "Paste style" does nothing.** ✅ **v10.27 — it was doing something, and nothing he could see.** (18 Aug.) His words, verbatim: *"Make sure paste style actually
       works, I just tried pasting style and only selected the position and scale and it didn't do anything"*.
       **Read carefully, his sentence describes the likely cause as well as the symptom:** he *"only selected
       the position and scale"* — so the copy captured a SUBSET, and pasting that subset changed nothing.
@@ -10516,6 +10516,21 @@ wait for them to report back."*
       was deliberately using. Reproduce with exactly his selection (position + scale only) first.
       ⚠️ Position and scale are TRANSFORM properties, and a style paste that silently skips transform would
       look exactly like this. Check whether transform is even in the copied set.
+      ✅ **DIAGNOSED, and neither candidate above was it.** Transform IS in the copied set and the commit
+      path is sound (render, refresh, rebuild, history, toast). The fault is that the branch cloned the
+      source's transform and then **put the target's x, y and anchor back** — a deliberate line, commented
+      *"so Paste Style doesn't teleport the layer onto the source's spot"* — while the tick you have to tick
+      to reach it is labelled **Position / Scale**. So two layers at the same scale, which is most layers,
+      changed by exactly nothing, and the toast said "Pasted style" over the top of it.
+      ✅ **The behaviour changed rather than the label, and that direction was forced.** `transform` is the
+      inspector CARD's own key, and queue 366/369 made this list mirror the cards precisely so the two can
+      never drift; renaming here would put the drift straight back. **Opacity still stays behind** — it
+      belongs to the Mixing card, which is its own tick in the same list, so pasting it here would make one
+      box quietly do another box's job.
+      ⚠️ **The trade-off he can reverse in one word:** ticking Position / Scale onto several layers now
+      stacks them all at the source's spot, which is what the old exclusion was avoiding. That is what the
+      label promises, and it is now deliberate rather than silent — say if you want position split onto its
+      own tick instead, which is the other honest shape.
 
 - [ ] **381 — Hold a layer-edit card to reset just that group's values.** (18 Aug, phone screenshot at
       v9.83 of the nine category cards.) His words, verbatim: *"Make it so if you hold down on any of the

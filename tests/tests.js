@@ -805,6 +805,59 @@
     if (phone > 0.5) throw new Error('at 380 the panel title row is still ' + phone.toFixed(1) + 'px tall — he asked for the space to be cropped off, not just the word hidden');
   });
 
+  test('Paste Style pastes what the tick says: Position / Scale moves the layer', { item: 'paste-style-transform' }, async function () {
+    /* Queue 380. Ezra: "Make sure paste style actually works, I just tried pasting style and only selected
+       the position and scale and it didn't do anything."
+       It WAS doing something, and nothing he could see. The transform branch cloned the source's transform
+       and then put the target's x, y and anchor back — "so Paste Style doesn't teleport the layer" — while
+       the tick he had to tick is labelled **Position / Scale**. Two layers at the same scale changed by
+       exactly nothing, and the toast said "Pasted style" over the top of it.
+       Driven through the real overlay rather than a seam, because the thing under test is what happens
+       when he ticks that box and presses Paste. Every other box is turned OFF first: with all nine on, a
+       colour or effects change could carry the assertion and the transform could still be doing nothing,
+       which is the failure this test exists to catch. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), clip0 = FM.clipboard;
+    try {
+      FM.scene.layers.length = 0;
+      const mk = (name, x, y, sc) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; L.transform.x = x; L.transform.y = y; L.transform.scale = sc;
+        FM.scene.layers.push(L); return L;
+      };
+      const A = mk('Source', 210, 320, 2), B = mk('Target', 800, 910, 1);
+      FM.refreshAll(); FM.timeline.rebuild();
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(A)) }];
+      FM.selectLayer(B.id);
+      FM.openPasteStyle(B);
+      await sleep(120);
+      const card = document.querySelector('.ps-card');
+      if (!card) throw new Error('the Paste Style overlay did not open');
+      const cats = [].slice.call(card.querySelectorAll('.ps-cat'));
+      if (cats.length !== FM._styleCats.length) throw new Error('expected ' + FM._styleCats.length + ' category toggles, saw ' + cats.length);
+      // turn everything OFF, then tick only Position / Scale
+      cats.forEach(function (b, i) {
+        const wantOn = FM._styleCats[i].key === 'transform';
+        if (b.classList.contains('on') !== wantOn && !b.classList.contains('dis')) b.click();
+      });
+      const tr = cats[FM._styleCats.findIndex(c => c.key === 'transform')];
+      if (!tr || !tr.classList.contains('on')) throw new Error('could not tick the Position / Scale toggle');
+      card.querySelector('.ps-paste').click();
+      await sleep(150);
+      const live = FM.layerById(FM.scene, B.id);
+      if (Math.abs(live.transform.scale - 2) > 0.001) throw new Error('scale did not paste: the target is at ' + live.transform.scale + ', the source was 2');
+      if (Math.abs(live.transform.x - 210) > 0.5 || Math.abs(live.transform.y - 320) > 0.5) {
+        throw new Error('the tick says "Position / Scale" but position did not paste — the target sits at ' + Math.round(live.transform.x) + ',' + Math.round(live.transform.y) + ' and the source was at 210,320');
+      }
+    } finally {
+      document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
+      FM.clipboard = clip0;
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

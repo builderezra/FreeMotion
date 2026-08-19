@@ -2093,10 +2093,23 @@ window.FM = window.FM || {};
       if (src.transform && 'opacity' in src.transform) target.transform.opacity = clone(src.transform.opacity);
     }
     if (cats.transform && src.transform) {
-      // Paste the LOOK of the transform (scale / rotation / skew / z) but keep the target's PLACEMENT
-      // (x, y, anchor) and opacity — so Paste Style doesn't teleport the layer onto the source's spot.
+      /* POSITION NOW PASTES TOO, and this is a deliberate reversal — it is queue 380. Ezra: "Make sure
+         paste style actually works, I just tried pasting style and only selected the position and scale
+         and it didn't do anything."
+         It was doing something, and nothing he could see. This branch used to restore the target's x, y
+         and anchor after cloning the source's transform — "so Paste Style doesn't teleport the layer onto
+         the source's spot" — while the tick he had to tick to reach it is labelled **Position / Scale**.
+         Two layers at the same scale (which is to say, most layers) then changed by exactly nothing, and
+         the toast said "Pasted style" over the top of it. A control that names a property and then refuses
+         to paste it is the bug, not the teleport.
+         The label cannot move instead: `transform` is the inspector CARD's own key, and queue 366/369 made
+         the Paste Style list mirror the cards precisely so the two can never drift apart again. So the
+         behaviour is what changes.
+         OPACITY still stays behind, and that is not the same compromise: opacity belongs to the **Mixing**
+         card, which is its own tick in this very list, so pasting it here would make one box quietly do
+         another box's job. */
       const tr = target.transform, t = clone(src.transform);
-      ['x', 'y', 'anchorX', 'anchorY', 'opacity'].forEach(k => { t[k] = tr[k]; });
+      t.opacity = tr.opacity;
       target.transform = t;
     }
     if (cats.text && target.type === 'text' && src.type === 'text') {
