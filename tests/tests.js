@@ -30884,4 +30884,63 @@
     });
   });
 
+  test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
+    /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
+       anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
+       survived the v9.81 fix because that fix only taught DONE to commit. `close()` clears `_picked`, so the
+       X, the PC backdrop and the Visual/Filters/Audio toggle each threw the whole selection away silently.
+       Two exits from one screen disagreeing about what your picks mean is the defect, and the argument that
+       settled it for Done settles it here: a control beside eight numbered badges cannot quietly mean
+       discard. Discarding still exists and now has exactly one affordance — the commit bar's Clear.
+       The layer starts with ZERO effects and the assertion is that they ARRIVE, which is the direction his
+       report is in; a test that only counted "no crash on close" would pass with the bug fully intact.
+       ⚠️ **THIS TEST RUNS LAST ON PURPOSE — do not move it up the file.** Opening the effects browser starts
+       the fx-art photograph decode and fills the tile cache, and the `fx-thumb-visible` test resolves every
+       subject through `FM.fxThumbs.previewScene`, which depends on that same art being ready. With this
+       test earlier in the file, six effects there measured as indistinguishable from their subjects — the
+       suite was green with this test deleted and red with it present, at exactly those six, which is how
+       the coupling was pinned rather than guessed. Trying to tidy up after it with `remountLive()` made it
+       worse: that calls `stopAll()`, which cancels the in-flight decode the later test is waiting on. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Picky', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      FM.fxBrowser.open(L);
+      await sleep(260);
+      /* `.fxb-card` IS the pickable effect card at this width — the featured grid — and picking marks it
+         `is-picked`. An earlier version of this test went looking for `.fxb-tile` inside a category view,
+         found none, and threw with the browser still open on a picked card; that left the thumbnail cache
+         holding tiles rendered against this probe layer, and the later "no thumbnail is a picture of the
+         subject doing nothing" test went red on six effects. Green with this test removed, red with it
+         present, which is how it was pinned — so leaving the browser CLOSED is part of this test's job. */
+      const cards = [].slice.call(document.querySelectorAll('.fxb-card'));
+      if (!cards.length) throw new Error('the effects browser rendered no effect cards');
+      cards[0].click(); await sleep(70);
+      if (cards[1]) { cards[1].click(); await sleep(90); }
+      const picked = document.querySelectorAll('.fxb-card.is-picked').length;
+      if (!picked) throw new Error('tapping cards did not PICK anything — this build is not in the multi-select mode the report is about, so the rest would prove nothing');
+      const x = document.querySelector('.fxb-close');
+      if (!x) throw new Error('no .fxb-close to leave by');
+      x.click();
+      await sleep(220);
+      const live = FM.layerById(FM.scene, L.id);
+      const n = (live.effects || []).length;
+      if (n === 0) throw new Error('closing by the X binned every picked effect — the layer still has none, which is his report exactly');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers = layers0;
+      /* …and put the SELECTION back to nothing. The probe layer is gone from the scene now, so leaving
+         `selectedId` pointing at it hands every later test a dangling selection — which is how the tile
+         subject resolves for the thumbnail test that runs after this one. */
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      if (FM.syncTopBar) FM.syncTopBar();
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
 })();

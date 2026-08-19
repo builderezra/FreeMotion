@@ -10777,7 +10777,8 @@ wait for them to report back."*
       starts on, so this row is the way BACK from another mode. The test puts the layer on `multiply` first
       and requires ONE tap to return it, because a markup-only check would happily pass a dead label.
 
-- [ ] **389 — 🚨 RE-REPORT: the numbered effects STILL do nothing, at v9.83.** (18 Aug, phone screenshot of
+- [x] **389 — 🚨 RE-REPORT: the numbered effects STILL do nothing, at v9.83.** ✅ **v10.33 — found it: every
+      exit EXCEPT Done was binning the picks.** (18 Aug, phone screenshot of
       the Colouring category with EIGHT effects numbered 1-8 and the video behind them visibly unchanged.)
       His words, verbatim: *"The effects selected here still don't do anything at allllllllllllllllll"*.
       **This matters because #333 was closed at v9.81 believing it fixed, and he is on v9.83.** The fix there
@@ -10809,6 +10810,20 @@ wait for them to report back."*
       drive the sheet on a video layer and diff the canvas, which is now a two-line change to the probe.
       ⚠️ The new test asserts the no-op list EXACTLY, so a NEW silent effect fails — and so does fixing one of
       these four, with a message saying to update the list.
+      ✅ **CAUSE FOUND v10.33 — it is the second candidate in this entry, and it was my inconsistency.**
+      `FM.fxBrowser.close()` clears `_picked`, and v9.81 taught only **Done** to commit. So the **X**, the
+      **PC backdrop click**, and the **Visual → Filters / Audio toggle** each threw the entire numbered
+      selection on the floor without a word — while Done applied it. Two exits from one screen disagreeing
+      about what your picks mean is the defect, and closing by the X is the likeliest way he reached
+      *"the effects selected here still don't do anything at allllllllllllllllll"* with eight badges on
+      screen. Every exit commits now; discarding still exists and has exactly ONE affordance, the commit
+      bar's **Clear**, which says what it does.
+      ⚠️ **The test runs LAST in the file on purpose.** Opening the browser starts the fx-art decode, and the
+      `fx-thumb-visible` test resolves its subjects through the same art — with this test earlier, six
+      effects there measured as indistinguishable from their subjects. Pinned by isolation (green with the
+      test deleted, red with it present, at exactly those six) rather than guessed, and tidying up after it
+      with `remountLive()` made it worse: that calls `stopAll()`, cancelling the decode the later test waits
+      on.
 
 - [ ] **390 — While previewing effects, show the WHOLE composition, not just the one layer.** (18 Aug.) His
       words, verbatim: *"Make it so when you are previewing a layer in the effect menu and adding effects it
@@ -11356,3 +11371,22 @@ wait for them to report back."*
       tracks — moving controls between them changes each side's content width. That is fine BY DESIGN now
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
+
+- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** (19 Aug, PC screenshot at
+      v10.32.) His words, verbatim:
+
+      > when extending the add pannel it makes the three dots at the bottom go down
+
+      **What the shot shows:** the PC inspector's Add panel, dragged taller, with the media grid filling it —
+      and the page dots (‹ • • ›) pushed to the very bottom edge, clipped rather than sitting inside the
+      panel.
+      **Clauses:**
+      1. [ ] The dots stay inside the panel at every panel height.
+      2. [ ] They do not move down as the panel grows — they are the panel's own footer, not the last thing
+             in a list that grows past it.
+      🔗 **Exactly the fault v10.19 fixed for the shortcuts panel and queue 275 fixed for the phone sheet**,
+      both times for the same reason: a footer that is a CHILD of the scroller can only ever approximate a
+      pinned one, and a flex child with the default `min-height: auto` refuses to shrink below its content
+      and pushes the footer out. The fix both times was a sibling footer plus `min-height: 0` on the
+      scrolling child. Check the PC path specifically — the phone one already has it (`.addmenu--sheet
+      .addmenu-body > .addmenu-dots`), so this is the panel variant missing the same treatment.

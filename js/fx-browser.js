@@ -1136,7 +1136,8 @@ window.FM = window.FM || {};
     const tg = FM.fxModeToggle(_layer, 'visual', (key) => {
       const layer = _layer;
       if (key === 'visual') return;                 // already here
-      FM.fxBrowser.close();
+      // …and switching side is an exit too: picks made here must not vanish on the way to Audio (queue 389)
+      if (_picked.length) commitPicks(); else FM.fxBrowser.close();
       if (key === 'audio') { if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer); return; }
       // Filters is a list of ready-made looks rather than a grid of tiles, and it lives in the
       // inspector. Hand it back there instead of keeping a second copy of it in here.
@@ -1207,10 +1208,22 @@ window.FM = window.FM || {};
       root = document.getElementById('fx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');
       searchInput = root.querySelector('.fxb-search-input');
-      root.querySelector('.fxb-close').addEventListener('click', () => FM.fxBrowser.close());
+      /* EVERY EXIT NOW MEANS THE SAME THING AS Done (queue 389, and it is queue 333's other half).
+         `close()` clears `_picked`, so leaving by the X, by the PC backdrop, or by switching to Filters /
+         Audio threw every numbered pick on the floor without a word — while Done, fixed in v9.81, applied
+         them. Two exits from one screen disagreeing about what your picks mean is the defect, and it is the
+         same argument #333 settled for Done: *"a button labelled Done, beside a numbered selection, cannot
+         mean discard"*. Neither can an X, once there are eight badges on screen — his re-report is
+         *"The effects selected here still don't do anything at allllllllllllllllll"* with exactly that
+         picture, and closing by the X is the likeliest way to have reached it.
+         Discarding is still one tap away and now has exactly ONE affordance, which is the commit bar's
+         **Clear** — an explicit control that says what it does, rather than three exits that quietly do it. */
+      const exitBrowser = () => { if (_picked.length) commitPicks(); else FM.fxBrowser.close(); };
+      FM._fxExitBrowser = exitBrowser;   // suite seam
+      root.querySelector('.fxb-close').addEventListener('click', exitBrowser);
       // Click the backdrop (outside the centred panel, on PC) → close. The panel's own clicks have
       // target inside .fxb-top / .fxb-scroll etc., so only a hit on the root backdrop itself closes.
-      root.addEventListener('pointerdown', (e) => { if (e.target === root) FM.fxBrowser.close(); });
+      root.addEventListener('pointerdown', (e) => { if (e.target === root) exitBrowser(); });
       /* The commit bar. It only ever shows in sheet mode and only with something picked, so the
          desktop dialog and an untouched sheet look exactly as they did. */
       if (!root.querySelector('.fxb-commit')) {
