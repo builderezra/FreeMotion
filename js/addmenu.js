@@ -779,7 +779,14 @@ window.FM = window.FM || {};
     /* KEYED BY THE VISIBLE LABEL, which is why a rename has to come here too (queue 314/316). A miss
        does not throw — it silently drops the tile's colour, so the tile keeps working and just looks
        wrong, which is the kind of half-rename that survives a release. */
-    'Sketching': '150, 230, 110',        // lime, matching its green pen
+    /* PENCIL YELLOW, not lime (queue 421). Ezra: "Make the sketching button yellow instead of green, I feel
+       yellow reminds me of pencil more."
+       CHOSEN BY MEASUREMENT, because the obvious pencil yellows are all too close to Custom shape's amber:
+       queue 271's rule is that no two vivid cards may sit within 60 in RGB, and every yellow in this app's
+       usual register (L≈65%, S≈85%) came out 43-51 from that amber — the rule was right, a pencil yellow
+       and an amber ARE nearly the same colour. This one is 68.6 from Custom shape and 66.6 from AI Scene,
+       so it clears with headroom while still reading as a true 59° yellow rather than a chartreuse. */
+    'Sketching': '250, 248, 45',         // pencil yellow — see the note above, it is 59° and clears amber by 68
     'Custom shape': '255, 186, 74',      // amber, matching its orange path
     'Camera': '156, 124, 255',           // violet, matching its lens
     'Controller': '255, 118, 140',       // "Null being red is good" — the value it already had, pinned. Keyed by LABEL, so this HAD to be renamed with the tile (queue 363) or the red he asked to keep would have silently fallen back to the generic ring.

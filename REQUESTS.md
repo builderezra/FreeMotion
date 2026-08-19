@@ -11622,13 +11622,24 @@ wait for them to report back."*
       edge-to-edge — **0.0px gaps** — and the row ends exactly at the screen edge, so buying 6px there would
       overflow the very fit #405 gates. Below 400 the arrangement that fits is left alone. His phone is 440.
 
-- [ ] **421 — Make the Sketching button yellow instead of green.** (19 Aug, via the phone inbox.) His
+- [x] **421 — Make the Sketching button yellow instead of green.** ✅ **v10.57.** (19 Aug, via the phone inbox.) His
       words, verbatim:
       > Make the sketching button yellow instead of green, I feel yellow reminds me of pencil more
       **Clauses:**
-      1. [ ] The Sketching tile's glyph/accent goes yellow.
+      1. [x] The Sketching tile's glyph/accent goes yellow — lime 100° → **pencil yellow 59°**.
       ⚠️ It sits in a grid of coloured tiles — check the new yellow is not the same yellow as a neighbour,
       which is the complaint behind [#413].
+      🚨 **THAT WARNING WAS THE WHOLE JOB, and the numbers say so.** Custom shape is already amber, and
+      queue 271's rule is that no two vivid cards may sit within 60 in RGB. **Every yellow in this app's
+      usual register (L≈65%, S≈85%) measured 43–51 from that amber** — so the rule was right: a pencil
+      yellow and an amber really are close to the same colour, and picking one by eye would have produced
+      exactly the #413 complaint again.
+      ✅ **Chosen by search rather than by eye:** the most yellow point that clears the bar with headroom —
+      `rgb(250, 248, 45)`, hue 59°, **68.6 from Custom shape and 66.6 from AI Scene**. A pale yellow and an
+      electric one also cleared; this one is closest to the app's register while still being a true yellow
+      rather than a chartreuse.
+      ⚠️ The new test pins the HUE, which queue 271's palette test does not — that one only enforces
+      distance, so a future repaint could drift this back toward green and still pass everything.
 
 - [ ] **422 — The dot in the add-row switch is slightly off centred.** (19 Aug, via the phone inbox.) His
       words, verbatim:

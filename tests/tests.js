@@ -31880,6 +31880,33 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
+  test('the Sketching tile is yellow, and far enough from the amber beside it', { item: 'sketching-yellow' }, function () {
+    /* Queue 421. Ezra: "Make the sketching button yellow instead of green, I feel yellow reminds me of
+       pencil more."
+       Both halves are asserted, and the second is the entry's own warning: the tile sits in a grid where
+       Custom shape is already amber, and "make it yellow" is exactly how two cards end up reading as the
+       same colour — the complaint behind #413. queue 271's palette test enforces the distance across the
+       whole tab; this one pins the HUE, which that test does not, so a future repaint cannot drift this
+       back toward green while still passing everything else. */
+    if (!FM.addMenu._tileHue) throw new Error('FM.addMenu._tileHue seam is missing');
+    const t = FM.addMenu._tileHue('Sketching');
+    if (!t) throw new Error('the Sketching tile resolves no colour at all');
+    const n = String(t).split(',').map(x => parseFloat(x));
+    const mx = Math.max.apply(null, n), mn = Math.min.apply(null, n);
+    let h;
+    if (mx === n[0]) h = 60 * (((n[1] - n[2]) / (mx - mn)) % 6);
+    else if (mx === n[1]) h = 60 * ((n[2] - n[0]) / (mx - mn) + 2);
+    else h = 60 * ((n[0] - n[1]) / (mx - mn) + 4);
+    h = (h + 360) % 360;
+    if (h < 45 || h > 70) throw new Error('Sketching sits at ' + Math.round(h) + '° — yellow is 45-70°, and it was lime at 100° before he asked for this');
+    const amber = FM.addMenu._tileHue('Custom shape');
+    if (amber) {
+      const a = String(amber).split(',').map(x => parseFloat(x));
+      const d = Math.hypot(n[0] - a[0], n[1] - a[1], n[2] - a[2]);
+      if (d < 62) throw new Error('Sketching is only ' + d.toFixed(0) + ' from Custom shape\'s amber — close enough to read as the same colour, which is the #413 complaint');
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
