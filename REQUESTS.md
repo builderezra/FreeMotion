@@ -10206,7 +10206,18 @@ wait for them to report back."*
         centre on itself, it centres through a calc, and minmax redistributes the free space that calc uses.
       · pinning the pill to an even 84px — did not close it, and made the pill wider, which is its own 3px.
       · `display: inline-flex` on the pill — no effect at all.
-      **So the next attempt starts from the CALC** (inside the `min-width: 701px` block, the "push the
+      **PROGRESS 19 Aug — Studio is solved, classic is not.** The two desktop fixes only work TOGETHER and
+      that is why each looked like a dead end alone:
+      · `minmax(0, 1fr)` tracks — fixes classic's auto-minimum problem, but on its own redistributes the
+        free space the Studio calc depends on (the 3px).
+      · the cap `100% - 290px` → **`330px`** — the switch adds one 34px control plus its 6px gap to the
+        cluster, so the old number started biting 40px early. Fixes Studio; alone it leaves classic broken.
+      With both: **Studio measures 0.99px off screen centre** — the same residual as the phone, i.e. done.
+      **Classic went 27px → 23px and is still out.** The lead: the desktop row carries far more controls
+      than the phone one (back / help / notes / settings / export as well), so its two sides are much more
+      unequal than the swap alone implies — measure the two `.t-side` widths in CLASSIC at 1280 before
+      touching anything else.
+      *(superseded)* **The next attempt starts from the CALC** (inside the `min-width: 701px` block, the "push the
       grid's centre column out to TRUE SCREEN CENTRE" note) rather than from track sizing: the calc assumes
       a left group of a particular width and the switch changed it.
       ⚠️ **Do NOT weaken the v4.97 assertion to make this pass.** It exists because the playhead and the
