@@ -11641,13 +11641,29 @@ wait for them to report back."*
       ⚠️ The new test pins the HUE, which queue 271's palette test does not — that one only enforces
       distance, so a future repaint could drift this back toward green and still pass everything.
 
-- [ ] **422 — The dot in the add-row switch is slightly off centred.** (19 Aug, via the phone inbox.) His
+- [x] **422 — The dot in the add-row switch is slightly off centred.** ✅ **v10.58 — he was right, and it only shows on a 3× screen.** (19 Aug, via the phone inbox.) His
       words, verbatim:
       > The dot in the switch is slightly off centred
       **Clauses:**
-      1. [ ] The knob centres horizontally in its track.
+      1. [x] The knob centres horizontally in its track.
       🔗 The switch from [#373]. Measure the knob against the track in INK, not boxes — that is what found
       the real fault in #410, where every box was aligned and the drawing inside was not.
+      📐 **MEASURED IN INK AT THREE SETTINGS, and only the third one shows it — which is why "slightly" is
+      the right word and why a box check would have called him wrong.**
+      | render | track ink | knob ink | offset |
+      |---|---|---|---|
+      | 380px @2× | 135..164 (centre 149.5) | 141..158 (centre 149.5) | **0.00** |
+      | 440px @2× | 169..198 (centre 183.5) | 175..192 (centre 183.5) | **0.00** |
+      | **440px @3× (his phone)** | 253..297 (centre 275.0) | 262..289 (centre 275.5) | **+0.5 device px** |
+      At dpr 3 the gaps either side of the dot were **9 and 8 device pixels**. After the fix: **9 and 9**.
+      ✅ **CAUSE: a half pixel, twice.** The track's content box is 13px (15 minus its two borders), so
+      `left: 50%` is 6.5px, and `translateX(-50%)` of a 9px knob adds another half. At dpr 2 those resolve
+      to something the renderer can land on; at dpr 3, 6.5px is 19.5 DEVICE pixels, so the dot straddled a
+      device pixel and antialiased wider on one side than the other. `left: 0; right: 0; margin-inline:
+      auto` centres it by the same arithmetic a block uses — (13 − 9) / 2 = 2px — which is whole at every
+      scale factor.
+      ⚠️ The test pins the TECHNIQUE as well as the geometry, because the geometry alone passes at the
+      suite's own scale factor whichever method is used — the fault was never visible there.
 
 - [ ] **423 — Settings menu: get rid of the random line at the top.** (19 Aug, via the phone inbox.) His
       words, verbatim:

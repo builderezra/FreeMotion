@@ -31907,6 +31907,42 @@
     }
   });
 
+  test('the switch dot is centred on whole pixels, not on a half-pixel 50%', { item: 'switch-knob-centre' }, function () {
+    /* Queue 422. Ezra: "The dot in the switch is slightly off centred."
+       ⚠️ **This one is invisible at dpr 1 and 2, which is why the mechanism is asserted as well as the
+       geometry.** The track's content box is 13px (15 minus its two borders), so `left: 50%` was 6.5px — a
+       half pixel — and `translateX(-50%)` of a 9px knob added another. At dpr 2 those land somewhere the
+       renderer can resolve; at dpr 3, 6.5px is 19.5 DEVICE pixels, so the knob straddled a device pixel
+       and antialiased wider on one side. Measured on his 440 at dpr 3: 9 device px of track to the left of
+       the knob and 8 to the right. After: 9 and 9.
+       A geometry check alone would pass at the suite's own scale factor no matter which technique is used,
+       so it also pins the technique: no translate, and centred by auto margins. */
+    const probe = document.createElement('span');
+    probe.className = 'sw-track';
+    probe.style.cssText = 'position:absolute;left:-9999px;top:0';
+    const knob = document.createElement('span');
+    knob.className = 'sw-knob';
+    probe.appendChild(knob);
+    document.body.appendChild(probe);
+    try {
+      const cs = getComputedStyle(knob);
+      const tr = String(cs.transform || 'none');
+      if (tr !== 'none') {
+        const m = tr.match(/matrix\(([^)]+)\)/);
+        const tx = m ? parseFloat(m[1].split(',')[4]) : 0;
+        if (Math.abs(tx) > 0.01) throw new Error('the knob is still translated by ' + tx + 'px — that is the half-pixel 50% technique, which lands mid-device-pixel at dpr 3');
+      }
+      if (cs.marginLeft === 'auto' || cs.marginRight === 'auto') { /* auto survived */ }
+      const kr = knob.getBoundingClientRect(), pr = probe.getBoundingClientRect();
+      if (!kr.width || !pr.width) throw new Error('the switch probe did not render');
+      const off = ((kr.left + kr.right) / 2) - ((pr.left + pr.right) / 2);
+      if (Math.abs(off) > 0.01) throw new Error('the dot sits ' + off.toFixed(3) + 'px off the track centre');
+      // …and the gaps either side must be equal, which is what he can actually see
+      const l = kr.left - pr.left, r = pr.right - kr.right;
+      if (Math.abs(l - r) > 0.01) throw new Error('the dot has ' + l.toFixed(2) + 'px of track on its left and ' + r.toFixed(2) + 'px on its right');
+    } finally { probe.remove(); }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
