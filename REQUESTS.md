@@ -10038,7 +10038,8 @@ wait for them to report back."*
       icons, or it will look wrong next to them however good it is alone. Compare against the row, not
       in isolation — that is the mistake #313 was.
 
-- [ ] **368 — "Edit Points / Edit Shape / Edit Text" become "Customise …".** (18 Aug.) His words,
+- [x] **368 — "Edit Points / Edit Shape / Edit Text" become "Customise …".** ✅ **v10.15** — all three, plus the convert-to-outline toast, which names the feature in prose and would otherwise point at a button that no longer exists.
+      ⚠️ **Still say the word and it is one line each:** `Edit Group` (twice) and `Edit path` on the mask row are unchanged, because you named three and I am not deciding the rest for you. (18 Aug.) His words,
       verbatim: *"Change edit points and edit shape and edit text to replace the work edit with
       customise"* ("the work edit" = the WORD edit).
       **The three he named, all in one list:** `js/inspector.js:1700` `'Edit Text'`, `:1701`

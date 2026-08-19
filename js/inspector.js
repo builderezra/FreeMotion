@@ -1719,13 +1719,20 @@ window.FM = window.FM || {};
     { key: 'cameraopts', label: 'Camera Options', icon: 'M3 8.5 8.5 4v3H14a6 6 0 0 1 0 12H9M3 8.5 8.5 13v-3' },
   ];
 
-  // Alight Motion labels its element category after the layer kind: "Edit Text" for text,
-  // "Edit Points" for point shapes (library shapes + drawn paths — every bend is a point),
-  // "Edit Shape" for parametric shapes (rect/ellipse/…) and media (where it's the crop editor).
+  /* "CUSTOMISE …", not "Edit …" (queue 368). Ezra: "Change edit points and edit shape and edit text to
+     replace the work edit with customise" — "the work edit" being the WORD edit. Australian spelling, as
+     he wrote it.
+     The category is still named after the layer kind, which is the Alight Motion idea this took: Text for
+     text, Points for point shapes (library shapes and drawn paths — every bend is a point), Shape for
+     parametric shapes and media (where it is the crop editor).
+     ⚠️ THREE OTHER "Edit …" LABELS ARE DELIBERATELY UNCHANGED — 'Edit Group' (inspector.js), 'Edit group'
+     (app.js) and 'Edit path' (the mask row). He named three and got three; changing the rest would be me
+     deciding how his app reads. They are one line each and the entry flags them so he can say "those too"
+     in one word. */
   function elementLabel(layer) {
-    if (layer.type === 'text' || layer.type === 'caption') return 'Edit Text';
-    if (FM.isPointShape && FM.isPointShape(layer)) return 'Edit Points';
-    return 'Edit Shape';
+    if (layer.type === 'text' || layer.type === 'caption') return 'Customise Text';
+    if (FM.isPointShape && FM.isPointShape(layer)) return 'Customise Points';
+    return 'Customise Shape';
   }
 
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];

@@ -470,6 +470,52 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('inspector: the element card says Customise, for all three layer kinds', { item: 'customise-label' }, function () {
+    /* Queue 368. Ezra: "Change edit points and edit shape and edit text to replace the work edit with
+       customise" — "the work edit" being the WORD edit. Australian spelling, as he wrote it.
+       All THREE kinds are driven, because the label is chosen per layer type and renaming one branch of
+       a three-branch function is the obvious way to half-do this. */
+    const layers0 = FM.scene.layers.slice();
+    /* ALL THREE BRANCHES, and the third is the reason this list is not two entries: `shape: 'path'` is
+       what makes FM.isPointShape true (a drawn/converted path — every bend is a point), while a plain
+       rect is a PARAMETRIC shape and takes the other branch. A two-entry version of this test never
+       reached the Points branch at all, and mutating it back to "Edit Points" survived. */
+    const want = [
+      ['text',   'Customise Text'],
+      ['points', 'Customise Points'],
+      ['shape',  'Customise Shape'],
+    ];
+    try {
+      want.forEach(([kind, label]) => {
+        FM.scene.layers.length = 0;
+        const L = kind === 'text'
+          ? FM.makeLayer('text', { name: 'T', text: 'hi', x: 540, y: 960 })
+          : FM.makeLayer('shape', { name: 'S', shape: kind === 'points' ? 'path' : 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+        if (kind === 'points') {
+          L.subs = [[[0.1, 0.1], [0.9, 0.2], [0.5, 0.9]]];
+          if (!FM.isPointShape || !FM.isPointShape(L)) throw new Error('the fixture for the Points branch is not a point shape — that branch would go unchecked');
+        }
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+        const labels = [].slice.call(document.querySelectorAll('.cat-card, .insp-cat'))
+          .map(c => (c.textContent || '').trim().replace(/^\d+\s*/, ''));
+        if (labels.length < 4) throw new Error('only ' + labels.length + ' cards rendered for a ' + kind + ' layer — nothing below can mean anything');
+        if (labels.some(t => /^Edit\s+(Text|Points|Shape)\b/.test(t))) {
+          throw new Error('a ' + kind + ' layer still shows an "Edit …" card: ' + labels.join(' | '));
+        }
+        if (!labels.some(t => t === label)) throw new Error('a ' + kind + ' layer shows no "' + label + '" card (got: ' + labels.join(' | ') + ')');
+      });
+      /* And the toast that names the feature in PROSE follows the label, or it sends you looking for a
+         button that no longer exists under that name. */
+      const src = String(FM.convertToOutline || '');
+      if (src && /Edit points to reshape/.test(src)) throw new Error('the convert-to-outline toast still says "Edit points to reshape it" while the card says Customise Points');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('inspector: the Presets icon is a bookmark, in the same colours, and the favourite star is untouched', { item: 'presets-bookmark' }, function () {
     /* Queue 367. Ezra: "Change the presets logo to be a little bookmark flag icon thing instead of a
        star, keep the same colours and put work into making sure it's great looking."
@@ -8309,7 +8355,9 @@
          other title like background and opacity that has the & in it, replace the & with a /". This
          list IS the spec, so it moves with the labels rather than being loosened to stop failing. */
       // 'Mixing' since queue 366 — one word for the mix METHOD (blend mode) and the mix AMOUNT (opacity).
-      const want = ['Colouring', 'Border / Shadow', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
+      // 'Customise Shape' since queue 368 — he asked for the word "edit" to become "customise" on the
+      // three element cards (Text / Points / Shape).
+      const want = ['Colouring', 'Border / Shadow', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Customise Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }

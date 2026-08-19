@@ -703,7 +703,9 @@ window.FM = window.FM || {};
     if (!layer.stroke) layer.stroke = { enabled: true, width: 6, color: '#ffffff' };
     layer.stroke.enabled = true; if (!layer.stroke.width) layer.stroke.width = 6;
     FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
-    if (FM.toast) FM.toast('Converted to outline — Edit points to reshape it');
+    // Follows the label (queue 368): this names the feature in prose, so leaving it as "Edit points"
+    // would send you looking for a button that no longer exists under that name.
+    if (FM.toast) FM.toast('Converted to outline — Customise Points to reshape it');
   };
   FM.toggleClippingMask = function (layer) {   // this layer clips everything below to its silhouette
     layer.blendMode = layer.blendMode === 'mask-include' ? 'normal' : 'mask-include';
