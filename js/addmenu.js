@@ -207,7 +207,16 @@ window.FM = window.FM || {};
       + '<path d="M3.8 7.3L12 12l8.2-4.7M12 12v9.4" stroke="url(#fm-ic-el)"/>'), options: function () {
       var base = INSTANT.concat([
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
-        { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
+        /* "CONTROLLER", not "Null" (queue 363). Ezra: "If you can think of another name for null that
+           still makes sense and describes what it is then change the name of it to that."
+           Null is After Effects' word and it names what the thing is NOT. What it IS: an invisible layer
+           that renders nothing and exists to be parented to — you animate it and everything attached
+           follows. "Controller" says what you use it for, is a real word, and collides with nothing.
+           "Anchor" and "Pivot" were both rejected on purpose: every layer already has an ANCHOR POINT
+           control, so an Anchor layer would collide with an existing, different, visible concept — worse
+           than a vague name. "Empty" (Blender's word) repeats Null's mistake of naming an absence.
+           `layer.type` stays 'null', so every saved project keeps working — this is a string change. */
+        { label: 'Controller', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
         { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
         // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
         // make the container and then fill it. Drag layers onto it, or parent them to it.
@@ -761,7 +770,7 @@ window.FM = window.FM || {};
     'Sketching': '150, 230, 110',        // lime, matching its green pen
     'Custom shape': '255, 186, 74',      // amber, matching its orange path
     'Camera': '156, 124, 255',           // violet, matching its lens
-    'Null': '255, 118, 140',             // "Null being red is good" — the value it already had, pinned
+    'Controller': '255, 118, 140',       // "Null being red is good" — the value it already had, pinned. Keyed by LABEL, so this HAD to be renamed with the tile (queue 363) or the red he asked to keep would have silently fallen back to the generic ring.
     'Adjustment': '84, 226, 190',        // mint
     'Empty group': '150, 165, 190',      // steel — a container, deliberately the quiet one
     'Custom elements': 'MULTI',          // "you could make the custom elements button be multicoloured"

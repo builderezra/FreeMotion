@@ -1857,7 +1857,7 @@ window.FM = window.FM || {};
   // null to drive the whole rig (AM-style). Drawn as nothing; selectable via the timeline/canvas.
   FM.addNullLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('null', { name: 'Null', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });   // empty project (dur 0) → a usable 5s so the layer actually renders
+    const layer = FM.makeLayer('null', { name: 'Controller', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });   // empty project (dur 0) → a usable 5s so the layer actually renders. TYPE stays 'null' (queue 363): the rename is user-facing only, so saved projects keep working.
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
@@ -3877,7 +3877,7 @@ window.FM = window.FM || {};
         { label: 'Ellipse', action: () => FM.addShapeLayer && FM.addShapeLayer('ellipse') },
         { label: 'Camera', action: () => FM.addCameraLayer && FM.addCameraLayer() },
         { label: 'Adjustment layer', action: () => FM.addAdjustmentLayer && FM.addAdjustmentLayer() },
-        { label: 'Null (rig control)', action: () => FM.addNullLayer && FM.addNullLayer() },
+        { label: 'Controller (rig control)', action: () => FM.addNullLayer && FM.addNullLayer() },
       ];
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, items);
     });

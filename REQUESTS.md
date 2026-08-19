@@ -9884,7 +9884,14 @@ wait for them to report back."*
       which is the defect he has now reported three times (queue 209, 296, 331 clause 3). This control is
       the exact shape that keeps producing it.
 
-- [ ] **363 — Rename the "Null" layer to something that actually describes it.** (18 Aug.) His words,
+- [x] **363 — Rename the "Null" layer to something that actually describes it.** ✅ **v10.09 — it is a
+      "Controller".** It says what you use it for; Null is After Effects' word for what the thing is not.
+      Anchor and Pivot were rejected on purpose (every layer already has an anchor POINT, so it would
+      collide with a different visible concept) and Empty repeats Null's mistake.
+      `layer.type` stays `'null'`, so every saved project keeps working — that is a test, not a hope.
+      ⚠️ The hazard was the COLOUR: the tint table is keyed by LABEL and "Null being red is good" was
+      pinned to an exact value, so renaming the tile without its key would have dropped the red silently.
+      Renamed together, asserted twice. (18 Aug.) His words,
       verbatim: *"If you can think of another name for null that still makes sense and describes what it
       is then change the name of it to that,"*.
       He is giving me the call rather than naming one, so the job is to pick well and say why.
@@ -10543,3 +10550,17 @@ wait for them to report back."*
       VIDEO itself, because the message says image and the symptom is video.
       **Measure it before theorising:** add a clip, edit, reload, and read what the console says and what
       `FM.media.get(id)` holds afterwards — the app already reports this case and the report is the lead.
+
+- [ ] **400 — The filter thumbnails are low-res and it makes them look unappealing.** (19 Aug, via the
+      phone inbox.) His words, verbatim:
+      *"The filters could use a quality bump, currently they're very low res and I think that makes them
+      look un appealing"*
+      **Clause:** the filter tiles render at a higher resolution.
+      ⚠️ **Almost certainly a DPR problem, and that is checkable before anything is redesigned:** the
+      tiles are drawn into a canvas whose backing store is sized in CSS pixels, so on his 3× phone every
+      one is upscaled three times. `js/fx-thumbs.js` owns the tile canvases — check whether they multiply
+      by `devicePixelRatio` when sizing, and whether the source photo is downsampled before the effect
+      runs (a 96px source cannot be sharpened by drawing it bigger).
+      ⚠️ Cost check: tiles are generated on a queue, one per frame, and there are ~200 of them. Tripling
+      the pixels triples that work — measure the generation time at 380px before and after, and keep the
+      queue so it stays off the first paint.

@@ -470,6 +470,57 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('layers: the Null layer is called Controller, keeps its red, and its saved type is unchanged', { item: 'controller-rename' }, async function () {
+    /* Queue 363. Ezra gave me the call rather than a name: "If you can think of another name for null
+       that still makes sense and describes what it is then change the name of it to that."
+       Null is After Effects' word and it names what the thing is NOT. It is an invisible layer that
+       renders nothing and exists to be parented to, so "Controller" says what you use it for.
+       SCOPED TO CONTAINERS, never document.body.textContent — the entry warns about this and it has
+       produced a false pass here before, because the suite prints its own test titles into the page and
+       a search for the word then matches itself. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const pin = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(b => b.dataset && b.dataset.key === 'object')[0];
+      if (!pin) throw new Error('no Elements tab to look in');
+      pin.click();
+      await sleep(80);
+      const cards = [].slice.call(host.querySelectorAll('.addmenu-card'));
+      if (cards.length < 4) throw new Error('only ' + cards.length + ' cards in the Elements tab — nothing below can mean anything');
+      const labels = cards.map(c => (c.textContent || '').trim());
+      if (labels.some(t => /^Null\b/.test(t))) throw new Error('the Add menu still offers a "Null" tile: ' + labels.join(', '));
+      const ctrl = cards[labels.findIndex(t => /^Controller\b/.test(t))];
+      if (!ctrl) throw new Error('no "Controller" tile in the Elements tab (found: ' + labels.join(', ') + ')');
+
+      /* THE RED HAD TO COME WITH IT. The tint table is keyed by LABEL — "Null being red is good", his
+         words, pinned to that exact value — so renaming the tile without renaming its key would have
+         silently dropped it to the generic ring. That is the real risk in this change, so it is the
+         assertion that matters most. */
+      /* Read `--am-tint`, which is where the tint actually lives — the icon's computed `color` is not it,
+         and the first version of this assertion checked that and was DEAD. The mutation check said so. */
+      const tint = (ctrl.style.getPropertyValue('--am-tint') || '').split(',').map(n => parseInt(n, 10));
+      if (tint.length !== 3 || !isFinite(tint[0])) throw new Error('the Controller tile has no --am-tint (' + ctrl.style.getPropertyValue('--am-tint') + ')');
+      if (!(tint[0] > tint[1] + 60 && tint[0] > tint[2] + 60)) throw new Error('the Controller tile is rgb(' + tint + ') — "Null being red is good" were his words, and the tint table is keyed by LABEL, so a rename can drop it');
+
+      // …and the DATA is untouched, which is what keeps every saved project working.
+      FM.scene.layers.length = 0;
+      FM.addNullLayer();
+      const L = FM.scene.layers[0];
+      if (!L) throw new Error('addNullLayer created nothing');
+      if (L.type !== 'null') throw new Error('the layer type changed to "' + L.type + '" — this was meant to be a user-facing rename only, and every saved project keys off the type');
+      if (L.name !== 'Controller') throw new Error('a new rig layer is still named "' + L.name + '"');
+    } finally {
+      host.remove();
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('view rail: the canvas zoom stepper uses drawn arrows and says Full at 100%', { item: 'zoom-stepper' }, function () {
     /* Queue 362, from a screenshot with this control circled: "make it up and down arrows instead of
        plus and minus and when it's at 100% make it say 'Full'".
@@ -18432,7 +18483,7 @@
    * This asserts the QUALITIES he asked for rather than my particular hues — a test that hard-coded the
    * palette would fail the next time anyone tunes a colour, and would not have caught the original bug. */
 
-  test('Elements colours are assigned by name, distinct, and Null stays red (queue 271)', { item: 'elem-palette' }, async function () {
+  test('Elements colours are assigned by name, distinct, and the Controller stays red (queue 271)', { item: 'elem-palette' }, async function () {
     const host = document.createElement('div');
     host.style.cssText = 'position:absolute;left:-10000px;top:0;width:460px;height:640px';
     document.body.appendChild(host);
@@ -18470,9 +18521,12 @@
         if (d < 60) throw new Error('"' + a.n + '" and "' + b.n + '" are ' + d.toFixed(0) + ' apart — close enough to read as the same colour');
       }
 
-      /* "Null being red is good" — pinned, so a future repaint cannot quietly take it. */
-      const nul = cards.find(c => label(c) === 'Null');
-      if (!nul) throw new Error('no Null card');
+      /* "Null being red is good" — pinned, so a future repaint cannot quietly take it. The card is
+         called CONTROLLER since queue 363; the colour requirement is unchanged and is the reason this
+         assertion exists, so it is renamed rather than replaced. The tint table is keyed by LABEL, so
+         this is exactly the check that catches a rename dropping the colour on the floor. */
+      const nul = cards.find(c => label(c) === 'Controller');
+      if (!nul) throw new Error('no Controller card (the rig layer, formerly "Null")');
       const nc = rgb(nul);
       if (!nc || !(nc[0] > nc[1] + 60 && nc[0] > nc[2] + 60)) throw new Error('Null is ' + nc + ' — he said its red is good and it is no longer red');
 
