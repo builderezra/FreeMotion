@@ -908,6 +908,52 @@
     }
   });
 
+  test('holding anywhere on an effect row drags it, and the drag survives a finger', { item: 'fx-hold-drag' }, async function () {
+    /* Queue 383. Ezra: "When I grab on a layer and try dragging it up on the effects menu it doesn't work,
+       but if I press on the dots in the side it does … the fact that it kinda works but not fully unless I
+       grab the dots is weird."
+       "Kinda works" is the precise symptom. The press-hold DOES begin a reorder — with a mouse it always
+       has — and then on a phone the browser's vertical pan claims the touch, fires pointercancel, and the
+       drag that just started is aborted. So this checks BOTH halves: that a hold away from the grip enters
+       the drag at all, and that a touchmove during that drag is actually cancelled, which is the thing
+       that stops the sheet scrolling out from under it. The second half is what a mouse-only check misses
+       entirely, and it is the half he is reporting. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Dragy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      L.effects = [{ type: 'blur', enabled: true }, { type: 'shake', enabled: true }];
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('effects');
+      await sleep(200);
+      const rows = [].slice.call(document.querySelectorAll('.fx-row'));
+      if (rows.length < 2) throw new Error('expected 2 effect rows to reorder between, saw ' + rows.length);
+      const row = rows[0], head = row.querySelector('.fx-head');
+      if (!head) throw new Error('the effect row has no .fx-head to press');
+      if (head.querySelector('.fx-grip') === null) throw new Error('no .fx-grip on the row — the control this is meant to match is missing');
+      const r = head.getBoundingClientRect();
+      // press well away from the grip, in the body of the head
+      head.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: Math.round(r.left + r.width * 0.45), clientY: Math.round(r.top + r.height / 2), pointerId: 1, button: 0, isPrimary: true }));
+      await sleep(420);                                   // the hold is 280ms
+      if (!row.classList.contains('fx-dragging')) throw new Error('holding the row away from the grip did not start a drag — he asked for hold-anywhere to do what the dots do');
+      // …and the drag must be able to keep the finger: a touchmove during it has to be cancelled, or
+      // the sheet scrolls, the browser cancels the pointer, and the drag dies the moment it begins.
+      const tm = new TouchEvent('touchmove', { bubbles: true, cancelable: true });
+      head.dispatchEvent(tm);
+      if (!tm.defaultPrevented) throw new Error('a touchmove during the drag was NOT cancelled — on a phone the sheet scrolls and the reorder is aborted by pointercancel, which is "it kinda works but not fully"');
+      head.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 }));
+      await sleep(80);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

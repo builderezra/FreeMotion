@@ -1167,6 +1167,18 @@ window.FM = window.FM || {};
     };
     head.addEventListener('pointerup', finish);
     head.addEventListener('pointercancel', e => finish(e, true));
+    /* THE HOLD-ANYWHERE DRAG NOW SURVIVES ON A PHONE (queue 383). Ezra: "if I press on the dots in the
+       side it does [work] … the fact that it kinda works but not fully unless I grab the dots is weird".
+       "Kinda works" is exactly right, and the comment on the pointerdown above already described the
+       cause without treating it as a fault: the press-hold DOES begin a reorder, and then the browser's
+       own vertical pan claims the touch, fires `pointercancel`, and `finish(e, true)` aborts the drag
+       that had just started. So it works with a mouse and fails under a finger — which is why the grip
+       (touch-action: none, so the browser never takes the gesture) looked like the only path that works.
+       `preventDefault()` inside the pointermove handler cannot fix that: touch scrolling is governed by
+       touch-action, and a pointer event is too late to call it off. A NON-PASSIVE touchmove listener can,
+       and only while a reorder is actually in progress — so a plain scroll over an effect row still
+       scrolls the sheet, a swipe-left still deletes, and a tap still opens the accordion. */
+    head.addEventListener('touchmove', e => { if (mode === 'reorder' && e.cancelable) e.preventDefault(); }, { passive: false });
   }
 
   // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.

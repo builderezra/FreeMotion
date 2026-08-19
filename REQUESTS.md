@@ -10575,8 +10575,37 @@ wait for them to report back."*
         describe, and much dearer: it turns one render per frame into N.
       **Start by checking what v7.50 built for #31b** — if effect-driven motion is already exposed for
       the transform blur, this may be small.
+      📐 **CHECKED, 19 Aug — it is NOT already exposed, so this is the larger job. The diagnosis is now
+      exact, and both routes have their code sites, so the next session starts at the build.**
+      · **Behaviours and wiggle ARE already in the matrix.** `applyLayerTransform` (js/compositor.js:8989)
+        runs `FM.behaviorValue` on x/y/scale/rotation and adds `FM.wiggleOffset`, and `layerCTM` runs that
+        very function into a probe context — so `layerMotionBetween` (js/compositor.js:9131) already sees
+        behaviour-driven motion, and the blur already smears it. That is what v7.50 bought.
+        **So "motion blur ignores effect movement" is not true of everything that moves a layer** — it is
+        true of the seven EFFECTS, which is exactly the set he named.
+      · **Why the effects are different.** `MOVER_FX = { wiggle, shake, swing, spin, pulse, drift, orbit }`
+        already exists (js/compositor.js:2362, added by queue 323 for plate padding). These run as canvas
+        effects ON the plate: `drawMotionBlur` rasterises the layer once at `t` **with its other effects
+        already applied** (the `tmp` layer, js/compositor.js:2098) and then re-projects that one plate
+        through the transform at each sub-time. The shake's displacement is therefore BAKED INTO the plate
+        at time t and is identical in every sub-frame — there is nothing for the re-projection to smear.
+      · **ROUTE 1, the cheap one, and it is viable.** Each mover's displacement is a DETERMINISTIC PURE
+        FUNCTION OF TIME — `shake` computes `disp(u0)` with `u0 = tl * spd`, plus a rotation and a zoom,
+        all from hashed noise (js/compositor.js:8067). So each mover could expose
+        `displace(layer, fx, t) → {dx, dy, rot, scale}`, and the blur would offset sub-frame τ by
+        `displace(τ) − displace(t)`. No extra renders at all. **Cost: a seam through all seven movers**,
+        pulling the displacement out of each render function so it can be asked for without drawing.
+      · **ROUTE 2, complete but dear.** When a mover is present, re-rasterise `tmp` at each sub-time
+        instead of re-projecting one plate — N renders per frame instead of one. Smaller diff, and it
+        cannot drift from the movers the way a duplicated displacement formula could.
+      · ⚠️ **`layerMotionBetween`'s early-out has to change either way**, or it will keep returning
+        "nothing is moving" for a layer that only a shake is moving, and hand the caller straight back to
+        the ordinary single draw before any of the above runs.
+      ⏸️ **Not started deliberately: this is a build, not a polish item**, and it touches the render path of
+      an 11,000-line file. It wants a session of its own rather than the tail of a long one — the trap
+      CLAUDE.md names about #47b. Everything above is the reading that session would otherwise repeat.
 
-- [ ] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** (18 Aug.) His
+- [x] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** ✅ **v10.29.** (18 Aug.) His
       words, verbatim: *"When I grab on a layer and try dragging it up on the effects menu it doesn't work,
       but if I press on the dots in the side it does, and this would make sense but the fact that it kinda
       works but not fully unless I grab the dots is weird, just make it grabbing and holding on an effect
@@ -10584,11 +10613,26 @@ wait for them to report back."*
       He is not asking for the handle to go — he is asking for **hold-anywhere-then-drag** to do the same
       thing, with the dots still working.
       **Clauses:**
-      1. [ ] Hold anywhere on an effect row → it becomes draggable, exactly as the ⠿ handle does.
-      2. [ ] The handle keeps working (immediate drag, no hold).
+      1. [x] Hold anywhere on an effect row → it becomes draggable, exactly as the ⠿ handle does.
+      2. [x] The handle keeps working (immediate drag, no hold).
       ⚠️ The row already has a TAP (expand/collapse) and a SWIPE-LEFT (delete). A hold-to-drag has to
       coexist with both: the tap must still fire when there is no hold, and a horizontal swipe must still
       delete rather than starting a reorder. That three-way split is the whole difficulty here.
+      ✅ **THE THREE-WAY SPLIT WAS ALREADY BUILT AND ALREADY CORRECT — "kinda works but not fully" is the
+      precise symptom and it named the real fault.** A press-hold away from the grip has begun a reorder
+      since v5.52, and it works perfectly with a mouse. Under a finger the browser's own vertical pan then
+      claims the touch, fires `pointercancel`, and `finish(e, true)` aborts the drag that had just started.
+      The comment on the pointerdown handler even described this — *"on a phone a moving finger scrolls the
+      sheet via pan-y, so the grip is the dependable path"* — as a limitation rather than as the bug he
+      would eventually report.
+      ✅ **`preventDefault()` in the pointermove could never have fixed it**: touch scrolling is governed by
+      `touch-action`, and a pointer event is too late to call it off. A **non-passive `touchmove`** listener
+      can, and it only fires while a reorder is actually in progress — so a plain scroll over a row still
+      scrolls the sheet, a swipe-left still deletes, and a tap still opens the accordion. The three-way
+      split is untouched; only the fourth party (the browser) is told to let go.
+      ⚠️ The test asserts BOTH halves — that a hold away from the grip enters the drag, and that a touchmove
+      during it is cancelled. A mouse-only check passes with his bug fully intact, which is why the second
+      half exists.
 
 - [ ] **384 — The home screen's + button needs real colour, specialised for the button.** (18 Aug, phone
       screenshot at v9.83 of the Projects list.) His words, verbatim: *"Make the plus button in this menu an
