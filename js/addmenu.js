@@ -220,7 +220,8 @@ window.FM = window.FM || {};
         { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
         // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
         // make the container and then fill it. Drag layers onto it, or parent them to it.
-        { label: 'Empty group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
+        // "New group", not "Empty group" (queue 412) — his words: "Rename empty group to new group".
+        { label: 'New group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
       ]);
       // "Save selection as element…" is gone from here — it acts on a SELECTION, and this menu only
       // ever appears when nothing is selected, so the one state it needed was the one state it could
@@ -783,7 +784,7 @@ window.FM = window.FM || {};
     'Camera': '156, 124, 255',           // violet, matching its lens
     'Controller': '255, 118, 140',       // "Null being red is good" — the value it already had, pinned. Keyed by LABEL, so this HAD to be renamed with the tile (queue 363) or the red he asked to keep would have silently fallen back to the generic ring.
     'Adjustment': '84, 226, 190',        // mint
-    'Empty group': '150, 165, 190',      // steel — a container, deliberately the quiet one
+    'New group': '150, 165, 190',        // steel — a container, deliberately the quiet one (renamed, queue 412)
     'Custom elements': 'MULTI',          // "you could make the custom elements button be multicoloured"
     /* Empty group and Custom elements are the two quiet ones, and giving them the same neutral put two
        identical plates side by side — the "similar to a lot of them" complaint in miniature. They are a
@@ -895,6 +896,10 @@ window.FM = window.FM || {};
        one instruction in the room pointed at a door that is not there. A test can only catch that if it
        can read what is actually in the menu, rather than being told. */
     _tabs: function () { return TABS; },
+    /* The tile-colour table is keyed BY LABEL, so a rename that misses it leaves the tile looking up a
+       colour that no longer exists and quietly falling back — the comment above BY_LABEL says exactly
+       that. Exposed so a rename test can check the key moved with the label (queue 412). */
+    _tileHue: function (label) { return BY_LABEL[label] || null; },
     // container: where to render. opts: { variant: 'panel' | 'sheet', onAfterAdd, onClose }
     render: function (container, opts) {
       opts = opts || {};

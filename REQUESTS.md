@@ -11446,11 +11446,16 @@ wait for them to report back."*
       test that moved the pointer would pass on the old code too, because moving is exactly the workaround
       he was complaining about.
 
-- [ ] **412 — Rename "empty group" to "new group".** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **412 — Rename "empty group" to "new group".** ✅ **v10.50.** (19 Aug, via the phone inbox.) His words, verbatim:
       > Rename empty group to new group
       **Clauses:**
-      1. [ ] Find every place that string appears (menu label, toast, default layer name) and change it —
-             a rename that misses the toast is the half-done kind.
+      1. [x] **Three places, not the two this clause listed.** The add-menu tile, the toast it fires — and
+             the **tile-colour table, which is keyed BY LABEL**. That third one is the interesting miss:
+             renaming the tile without renaming its key leaves it looking up a colour that no longer exists
+             and silently falling back, so the tile keeps working and just looks wrong. The comment above
+             that table warns about exactly this, which is why a seam was added and the test checks the key
+             moved with the label. *(The default LAYER name was already "Group", not "Empty group", so
+             nothing to change there.)*
 
 - [ ] **413 — The shape icons' colours repeat and are not pretty.** (19 Aug, via the phone inbox.) His
       words, verbatim:

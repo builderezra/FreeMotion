@@ -31599,6 +31599,23 @@
     }
   });
 
+  test('the group tile says New group everywhere it is named', { item: 'new-group-rename' }, function () {
+    /* Queue 412. Ezra: "Rename empty group to new group."
+       The entry's own warning is the test design: a rename that changes the button and forgets the toast
+       is the half-done kind. And there is a THIRD place — the add-menu keeps a colour table keyed BY LABEL,
+       so renaming the tile without renaming its key would leave the tile looking up a colour that no longer
+       exists and quietly falling back. All three are checked here. */
+    const tabs = FM.addMenu._tabs();
+    const all = [];
+    tabs.forEach(t => { const o = typeof t.options === 'function' ? t.options() : (t.options || []); (o || []).forEach(x => x && x.label && all.push(x.label)); });
+    if (all.indexOf('Empty group') >= 0) throw new Error('the add menu still offers "Empty group"');
+    if (all.indexOf('New group') < 0) throw new Error('no "New group" tile in the add menu — have: ' + all.slice(0, 24).join(' | '));
+    // …and the tile still resolves a colour, which it does BY LABEL
+    if (!FM.addMenu._tileHue) throw new Error('FM.addMenu._tileHue seam is missing — the palette half cannot be checked');
+    if (!FM.addMenu._tileHue('New group')) throw new Error('"New group" resolves no colour — the palette is keyed by LABEL and still says "Empty group", so the tile silently falls back');
+    if (FM.addMenu._tileHue('Empty group')) throw new Error('the palette still carries an "Empty group" key — a dead entry that will outlive everyone who remembers why');
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

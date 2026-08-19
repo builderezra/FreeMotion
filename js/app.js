@@ -2262,7 +2262,8 @@ window.FM = window.FM || {};
     // group-context parenting this line used to do by hand, so the two cannot disagree.
     FM.insertLayer(g);
     FM.selectLayer(g.id);
-    if (FM.toast) FM.toast('Empty group — parent layers to it, or drag them under it', 2400);
+    // …and the toast says the same words as the tile that made it (queue 412).
+    if (FM.toast) FM.toast('New group — parent layers to it, or drag them under it', 2400);
     if (FM.history) FM.history.commit();
     return g;
   };
