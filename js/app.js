@@ -1695,12 +1695,47 @@ window.FM = window.FM || {};
     if (FM.groupContext) return;
     FM.addAt = to;
     FM.clampAddAt();
+    if (FM.syncAddSwitch) FM.syncAddSwitch();   // the switch shows WHERE the row is, so it follows every move (queue 373)
     if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     else if (FM.refreshAll) FM.refreshAll();
     const el = document.querySelector('.tl-addrow');
     if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
   }
   FM.moveAddMarker = moveAddMarker;   // exposed so the suite drives the same path the key does
+
+  /* THE ADD-ROW SWITCH (queue 373, clauses 4-7). His words: "if the switch is facing up it's at the top,
+     if it's facing down it's at the bottom, if it's anywhere in the middle the switch will gradually move
+     closer from the top to the bottom depending on how far down you've moved the add row button, and
+     press it while it's mid way just forces it in the direction it's furthest from, so if it's close to
+     the top you press the switch and it goes to the bottom."
+     The proportion is real and needed nothing invented: FM.addAt is a boundary index clamped
+     0..layers.length, and the add row is already draggable to any boundary. So the knob's offset is
+     literally addAt / layers.length — 0 at the top, 1 at the bottom, and every drag position in between
+     lands where it should without a special case.
+     "The direction it's furthest from" is why this is `p < 0.5 ? bottom : top` rather than a flip: at 0.4
+     the far end is the BOTTOM, so it goes down; a plain toggle would send it up. */
+  function addSwitchProportion() {
+    const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
+    if (!n) return 0;                                   // nothing to sit between — it is at the top
+    return Math.max(0, Math.min(1, (FM.clampAddAt ? FM.clampAddAt() : FM.addAt) / n));
+  }
+  FM._addSwitchProportion = addSwitchProportion;        // for the suite
+  function syncAddSwitch() {
+    const b = document.getElementById('btn-addside');
+    if (!b) return;
+    const p = addSwitchProportion();
+    b.style.setProperty('--sw', String(p));
+    b.title = p <= 0.001 ? 'Add row is at the TOP — tap to send it to the bottom'
+            : p >= 0.999 ? 'Add row is at the BOTTOM — tap to send it to the top'
+            : 'Add row is ' + Math.round(p * 100) + '% down — tap to send it to the far end';
+  }
+  FM.syncAddSwitch = syncAddSwitch;
+  FM.toggleAddSide = function () {
+    const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
+    const p = addSwitchProportion();
+    moveAddMarker(p < 0.5 ? n : 0);                     // to the end it is FURTHEST from
+    syncAddSwitch();
+  };
 
   FM.clampAddAt = function () {
     const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
@@ -4192,6 +4227,8 @@ window.FM = window.FM || {};
        The single-camera invariant stays and is exactly why hide is the right second action: a second
        camera would hijack the view, so the button had no useful second thing to do. Nothing here ever
        DELETES a camera — hide and unhide are the only states after the first tap. */
+    const addSide = document.getElementById('btn-addside');
+    if (addSide) { addSide.addEventListener('click', () => FM.toggleAddSide()); syncAddSwitch(); }
     const vbCam = document.getElementById('vb-camera');
     if (vbCam) {
       const cam = () => FM.scene.layers.filter(l => l.type === 'camera')[0] || null;

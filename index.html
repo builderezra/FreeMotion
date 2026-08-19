@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=525">
+<link rel="stylesheet" href="styles.css?v=527">
 <link rel="stylesheet" href="theme-glass.css?v=30">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.19</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.20</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -400,8 +400,16 @@
            Left: undo · redo · jump-to-start.  Right: jump-to-end · layer-menu · fit. -->
       <div id="transport">
         <div class="t-side t-left">
-          <button id="btn-undo" class="tbtn" title="Undo (Cmd+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v0"/></svg></button>
-          <button id="btn-redo" class="tbtn" title="Redo (Cmd+Shift+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v0"/></svg></button>
+          <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
+          <!-- THE ADD-ROW SWITCH (queue 373). Ezra: "on its right put a little switch toggle that moves the
+               add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at
+               the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch will
+               gradually move closer from the top to the bottom depending on how far down you've moved the add
+               row button, and press it while it's mid way just forces it in the direction it's furthest from".
+               A VERTICAL track with a knob, because that is the one shape where "facing up / facing down" and
+               "anywhere in the middle" are the same control rather than two: the knob's position IS
+               FM.addAt / layers.length, so the proportional case needs no special drawing. -->
+          <button id="btn-addside" class="tbtn tbtn-switch" type="button" aria-label="Move the add-layer row to the top or bottom"><span class="sw-track"><span class="sw-knob"></span></span></button>
           <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="5" y2="19"/><polygon points="20 5 9 12 20 19 20 5"/></svg></button>
         </div>
         <!-- THE PILL IS THE PLAY BUTTON (queue 364, clauses 1 + 5). Ezra drew an arrow from the ▶ down
@@ -417,7 +425,8 @@
         <span id="time-readout" role="button" tabindex="0" title="Tap: play / pause · double-click: type a time · hold: set this frame as the project thumbnail">00:00:00</span>
         <div class="t-side t-right">
           <button id="btn-toend" class="tbtn" title="Skip to next benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
-          <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
+          <button id="btn-undo" class="tbtn" title="Undo (Cmd+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v0"/></svg></button>
+          <button id="btn-redo" class="tbtn" title="Redo (Cmd+Shift+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v0"/></svg></button>
           <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom) · hold to review-play"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
         </div>
       </div>
@@ -862,7 +871,7 @@
   <script src="js/filters.js?v=3"></script>
   <script src="js/fx-presets.js?v=6"></script>
   <script src="js/fx-thumbs.js?v=36"></script>
-  <script src="js/timeline.js?v=165"></script>
+  <script src="js/timeline.js?v=167"></script>
   <script src="js/addmenu.js?v=56"></script>
   <script src="js/inspector.js?v=288"></script>
   <script src="js/fx-browser.js?v=52"></script>
@@ -900,7 +909,7 @@
   <script src="js/shortcuts.js?v=78"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=312"></script>
+  <script src="js/app.js?v=314"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>

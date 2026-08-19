@@ -10171,8 +10171,9 @@ wait for them to report back."*
       ⚠️ Verify at ~380px AND scrolled to the very bottom — that is the only state where clause 2 shows,
       and a check at the top of the list would pass while the bug is fully intact.
 
-- [ ] **373 — Swap undo/redo with copy/paste in the transport row, and add a switch that sends the
-      add-layer row to the top or bottom of the timeline.** (18 Aug, phone screenshot at v9.81, annotated
+- [x] **373 — Swap undo/redo with copy/paste in the transport row, and add a switch that sends the
+      add-layer row to the top or bottom of the timeline.** ✅ **v10.20 — all ten clauses, measured in
+      BOTH layouts at phone and desktop width.** (18 Aug, phone screenshot at v9.81, annotated
       "NEW" with arrows showing the swap.) His words, verbatim, in full:
 
       > Move the undo and redo buttons to where to copy paste button is then move the copy paste to where they were on the left side and on its right put a little switch toggle that moves the add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at the top, if it's facing down it's at the bottom, if it's anywhere in the middle the switch will gradually move closer from the top to the bottom depending on how far down you've moved the add row button, and press it while it's mid way just forces it in the direction it's furthest from, so if it's close to the top you press the switch and it goes to the bottom.
@@ -10255,18 +10256,36 @@ wait for them to report back."*
       exactly like broken CSS. Assert `--sw` and the declared geometry; verify the motion by eye.
 
       **His clauses, ticked one at a time — cannot be marked DONE while any is unticked:**
-      1. [ ] **Undo / redo move RIGHT**, to where the copy/paste button is now.
-      2. [ ] **Copy / paste moves LEFT**, to where undo/redo were.
-      3. [ ] **A small switch toggle sits to the RIGHT of copy/paste** in its new left-hand home.
-      4. [ ] The switch **sends the add-layer row to the top or the bottom** of the timeline.
-      5. [ ] **Switch facing UP = add row at the top; facing DOWN = at the bottom.**
-      6. [ ] **Mid positions are shown proportionally** — the switch leans further down the further down
+      1. [x] **Undo / redo move RIGHT**, to where the copy/paste button is now.
+      2. [x] **Copy / paste moves LEFT**, to where undo/redo were.
+      3. [x] **A small switch toggle sits to the RIGHT of copy/paste** in its new left-hand home.
+      4. [x] The switch **sends the add-layer row to the top or the bottom** of the timeline.
+      5. [x] **Switch facing UP = add row at the top; facing DOWN = at the bottom.**
+      6. [x] **Mid positions are shown proportionally** — the switch leans further down the further down
              the add row has been moved.
-      7. [ ] **Pressing it mid-way forces it to the END IT IS FURTHEST FROM.** Near the top → pressing
+      7. [x] **Pressing it mid-way forces it to the END IT IS FURTHEST FROM.** Near the top → pressing
              sends it to the bottom.
-      8. [ ] **Everything aligned perfectly** — his words, and he has asked not to have to report it.
-      9. [ ] **The switch animates cleanly.**
-      10. [ ] **Same on PC.**
+      8. [x] **Everything aligned perfectly** — his words, and he has asked not to have to report it.
+      9. [x] **The switch animates cleanly.**
+      10. [x] **Same on PC.**
+      ✅ **HOW CLAUSE 8 WAS ACTUALLY WON, because the entry above predicted the wrong culprit.** It
+      said "3 against 4 will not centre the pill" and proposed rebalancing the groups. The group counts
+      were never the problem — a `1fr auto 1fr` grid is only equal by construction when there is FREE
+      SPACE to share, and on desktop there is not: the row pads its right edge by the inspector's width
+      to chase true screen centre, which leaves a content box NARROWER than the controls in it (measured
+      at 900px in Studio: 272px of box for 278.5px of controls). A bare `1fr` means `minmax(auto, 1fr)`,
+      so the flanking tracks fell back to their own content widths — 80px against 114px — and half that
+      difference is the drift: **13px**. `minmax(0, 1fr)` keeps them equal even with nothing to share.
+      The residual 3px was the shift's own cap stopping 4px short of the offset it existed to cancel.
+      ✅ **AND THAT IS ALSO WHAT FIXED CLAUSE 10.** The switch had been pulled out of the flow on desktop
+      (`position: absolute; left: 14px`) precisely to stop an eighth control from disturbing that calc —
+      which parked it at the far LEFT of the row, on copy/paste's WRONG side, in the one layout he asked
+      to match. With the group's width no longer feeding the centring it sits where he asked in both.
+      ⚠️ **The order test now measures PIXELS, not just markup.** The DOM check passed the whole time the
+      switch was on the wrong side: absolute positioning lets markup order claim one thing and pixels say
+      another, and "on its right" is something he can see. Both layouts, per the v7.79 / queue 241 lesson.
+      Three separate mutations checked: the track minimum (27px caught), the cap (3px caught), and the
+      in-flow switch (48px caught).
       ✅ **CLAUSE 6's QUESTION IS ANSWERED — there IS a real middle, so the switch is not a plain toggle.**
       `FM.addAt` is a boundary INDEX into the layer stack, clamped 0..layers.length (`FM.clampAddAt`,
       js/app.js:1707), and the add row can already be dragged to any boundary — the ≡ grip and the PC
@@ -10753,6 +10772,27 @@ wait for them to report back."*
              THAT rather than picking a new one.
       c. [ ] It **still changes colour when pressed** — the press state stays. So this is the resting
              colour only; do not flatten the :active feedback while making it match.
+- [ ] **403 — The Lightning Bolt effect needs more controls, and it should not cover the whole canvas.**
+      (19 Aug, via the phone inbox.) His words, verbatim:
+      *"Lighting bolt effect could use some other variables and work, also it should only go on top of the
+      layers it's used on and not cover the canvas by default"*
+      **Clauses:**
+      1. [ ] It draws only over the LAYER it is applied to, not across the whole frame.
+      2. [ ] More parameters — "some other variables and work" is an invitation; look at what the effect
+             currently exposes and what a bolt actually has (branching, thickness, glow, jitter, seed).
+      ⚠️ Clause 1 is the bug and it is the same family as several EFFECTS-PLAN findings: an effect that
+      paints in FRAME space rather than in the layer's plate space bleeds outside the layer. Check whether
+      it draws into the layer plate or over the composite before changing any parameters.
+
+- [ ] **404 — "Make these menus the same height."** (19 Aug, via the phone inbox.) His words, verbatim:
+      *"Don't forget to make these menus the same height, very important"*
+      ⚠️ **WHICH menus is not in the message** — it arrived without a screenshot, and the phrase "don't
+      forget" suggests it is a restatement.
+      **The closest match already shipped:** queue 358 clause 3 was exactly this for the ADD sheet, and
+      v10.06 made every Add tab open at the same height (measured spread 0px across all five). So either
+      this is a second surface, or he has not seen v10.06 yet.
+      **Not guessed at.** One line from him — or the next screenshot — settles it, and until then this is
+      logged rather than acted on so it cannot be quietly dropped.
 
 - [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
       verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Transport row screenshot (queue 373)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="border:0;display:block"></iframe>
+<script>
+/* Dev-only. Shows the transport row with a real scene behind it, at whatever width the shot is taken
+   at, in either layout — because clause 10 is "do the same stuff for pc" and checking only the layout
+   that happened to be open is the mistake queue 241 and v7.79 both made. */
+var Q = new URLSearchParams(location.search);
+var W = parseInt(Q.get('w') || '380', 10), STUDIO = Q.get('studio') === '1';
+var f = document.getElementById('app');
+f.style.width = W + 'px'; f.style.height = (parseInt(Q.get('h') || '820', 10)) + 'px';
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.scene && w.FM.timeline) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+f.addEventListener('load', function () {
+  var w = f.contentWindow;
+  waitFM(w).then(async function (FM) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(400);
+    w.document.body.classList.toggle('layout-studio', STUDIO);
+    FM.scene.layers.length = 0;
+    for (var i = 0; i < 3; i++) {
+      var L = FM.makeLayer('shape', { name: 'Shape ' + (i + 1), shape: 'rect', x: 540, y: 700 + i * 260, shapeW: 420, shapeH: 220, fill: ['#3a7bd5', '#29d9bb', '#e0653f'][i] });
+      L.start = i * 0.6; L.duration = 4; FM.scene.layers.push(L);
+    }
+    FM.refreshAll(); FM.timeline.rebuild();
+    if (FM.moveAddMarker) FM.moveAddMarker(1);   // a genuine mid position, so the switch's lean shows
+    await sleep(600);
+    document.title = 'ready';
+  }).catch(function (e) { document.title = 'ERR ' + e.message; });
+});
+</script>
+</body>
+</html>

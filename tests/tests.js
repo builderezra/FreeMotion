@@ -470,6 +470,90 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('transport: undo/redo and copy/paste are swapped, and the add-row switch tracks the row', { item: 'transport-swap' }, async function () {
+    /* Queue 373. His words: "Move the undo and redo buttons to where to copy paste button is then move the
+       copy paste to where they were on the left side and on its right put a little switch toggle that
+       moves the add menu button to the top of to the bottom of the timeline… press it while it's mid way
+       just forces it in the direction it's furthest from."
+       The switch's lean needed nothing invented: FM.addAt is a boundary index clamped 0..layers.length and
+       the add row is already draggable to any boundary, so the proportion is real. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const row = document.getElementById('transport');
+    const sw = document.getElementById('btn-addside');
+    if (!row) throw new Error('#transport is missing');
+    if (!sw) throw new Error('#btn-addside — the add-row switch — is missing');
+
+    // clauses 1-3: the order, read off the DOM rather than assumed
+    const ids = [].slice.call(row.querySelectorAll('button, #time-readout'))
+      .filter(e => e.id && (e.id === 'time-readout' || e.offsetParent !== null || getComputedStyle(e).display !== 'none'))
+      .map(e => e.id);
+    const iCopy = ids.indexOf('btn-layermenu'), iSw = ids.indexOf('btn-addside');
+    const iPill = ids.indexOf('time-readout'), iUndo = ids.indexOf('btn-undo'), iRedo = ids.indexOf('btn-redo');
+    if (iCopy < 0 || iSw < 0 || iPill < 0 || iUndo < 0 || iRedo < 0) throw new Error('missing a control: ' + ids.join(' '));
+    if (!(iCopy < iPill)) throw new Error('copy/paste is not on the LEFT of the pill: ' + ids.join(' '));
+    if (!(iUndo > iPill && iRedo > iPill)) throw new Error('undo/redo are not on the RIGHT of the pill: ' + ids.join(' '));
+    if (iSw !== iCopy + 1) throw new Error('the switch is not immediately right of copy/paste: ' + ids.join(' '));
+
+    /* …AND THE SAME ORDER IN PIXELS, IN BOTH LAYOUTS. The DOM check above is not enough on its own, and
+       it proved that by passing while the switch sat at the far LEFT of the desktop row: it was
+       absolutely positioned, so its markup position claimed "right of copy/paste" and its pixels said
+       the opposite. "on its right" is something he can SEE, so measure where it actually lands. Both
+       layouts because clause 10 is "do the same stuff for pc", and because checking only the layout that
+       happened to be open is the v7.79 / queue 241 mistake. */
+    const bodyEl = document.body, wasStudio = bodyEl.classList.contains('layout-studio');
+    const wrong = [];
+    try {
+      [false, true].forEach(function (studio) {
+        bodyEl.classList.toggle('layout-studio', studio);
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        const where = studio ? 'studio' : 'classic';
+        const box = id => document.getElementById(id).getBoundingClientRect();
+        const copy = box('btn-layermenu'), knob = box('btn-addside'), pill = box('time-readout');
+        const undo = box('btn-undo'), redo = box('btn-redo');
+        if (!knob.width) { wrong.push(where + ': the add-row switch has no box to measure'); return; }
+        if (knob.left < copy.right - 0.5) wrong.push(where + ': the switch sits ' + Math.round(copy.right - knob.left) + 'px to the LEFT of copy/paste\'s right edge — he asked for it on its right');
+        if (copy.right > pill.left + 0.5) wrong.push(where + ': copy/paste is not left of the play pill');
+        if (undo.left < pill.right - 0.5) wrong.push(where + ': undo is not right of the play pill');
+        if (redo.left < pill.right - 0.5) wrong.push(where + ': redo is not right of the play pill');
+      });
+    } finally {
+      bodyEl.classList.toggle('layout-studio', wasStudio);
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+    if (wrong.length) throw new Error(wrong.join(' | '));
+
+    const layers0 = FM.scene.layers.slice(), addAt0 = FM.addAt;
+    try {
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.refreshAll(); FM.timeline.rebuild();
+
+      /* Clauses 4-6 — the LEAN. Asserted on `--sw`, the value that drives the knob, NOT on the knob's
+         computed `top`: it carries a CSS transition, and getComputedStyle returns the value it is moving
+         AWAY from, so reading it straight after a change reports the previous position. A first probe did
+         exactly that and showed 3px at every proportion, which looks precisely like broken CSS. */
+      const lean = () => parseFloat(sw.style.getPropertyValue('--sw'));
+      [[0, 0], [1, 0.25], [2, 0.5], [3, 0.75], [4, 1]].forEach(([at, want]) => {
+        FM.moveAddMarker(at);
+        const got = lean();
+        if (Math.abs(got - want) > 0.001) throw new Error('with the add row at ' + at + ' of 4 the switch leans ' + got + ', not ' + want);
+      });
+
+      // clause 7 — pressing mid-way sends it to the end it is FURTHEST from, which is not a plain flip
+      FM.moveAddMarker(1); sw.click(); await sleep(40);
+      if (FM.addAt !== 4) throw new Error('from position 1 (near the top) the switch sent the row to ' + FM.addAt + ', not the bottom (4)');
+      FM.moveAddMarker(3); sw.click(); await sleep(40);
+      if (FM.addAt !== 0) throw new Error('from position 3 (near the bottom) the switch sent the row to ' + FM.addAt + ', not the top (0)');
+    } finally {
+      FM.scene.layers = layers0; FM.addAt = addAt0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."
