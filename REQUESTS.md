@@ -10197,7 +10197,22 @@ wait for them to report back."*
       28px of the eight controls is already out of view on the narrowest phones. That predates this change
       and is the first thing #405's width sweep should catch.
       | 9 clean animation | ⚠️ built, NOT verifiable headlessly |
-      | 10 same on PC | ❌ not started |
+      | 10 same on PC | 🚨 **BLOCKED — the switch shifts desktop centring 3px, see below** |
+      🚨 **THE SWITCH BREAKS DESKTOP CENTRING, and three attempted fixes each failed differently.** The
+      v4.97 rule pins the play control to TRUE SCREEN CENTRE (matching the playhead above it) and the suite
+      asserts it. Adding an eighth control to the left group moves it **3px off**, and that assertion
+      catches it. Tried and rejected, each measured:
+      · `minmax(0, 1fr)` tracks — the fix that works on the phone. Still 3px off: the desktop row does not
+        centre on itself, it centres through a calc, and minmax redistributes the free space that calc uses.
+      · pinning the pill to an even 84px — did not close it, and made the pill wider, which is its own 3px.
+      · `display: inline-flex` on the pill — no effect at all.
+      **So the next attempt starts from the CALC** (inside the `min-width: 701px` block, the "push the
+      grid's centre column out to TRUE SCREEN CENTRE" note) rather than from track sizing: the calc assumes
+      a left group of a particular width and the switch changed it.
+      ⚠️ **Do NOT weaken the v4.97 assertion to make this pass.** It exists because the playhead and the
+      play control drifting apart is something he reported twice.
+      ✅ **The phone side is done and measured**: order correct, switch leans 0/.25/.5/.75/1 with the row,
+      pressing mid-way goes to the far end, and 320px now fits exactly (was clipping 28px).
       **The alignment fix worth knowing:** a bare `1fr` is `minmax(auto, 1fr)`, so a side column refuses to
       shrink below its content — four controls on the right against three on the left shoved the centre
       column 9.24px left. `minmax(0, 1fr)` on both sides fixes it to within a pixel. **The last 0.99px is
