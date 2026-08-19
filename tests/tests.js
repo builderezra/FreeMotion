@@ -31553,6 +31553,52 @@
     }
   });
 
+  test('dragging the add row into the edge scrolls the timeline with it', { item: 'addrow-autoscroll' }, async function () {
+    /* Queue 411. Ezra: "On pc trying to drag down the add layer doesn't drag the screen down with it so you
+       have to let go and then swipe down then pick it up again which is annoying."
+       Every other vertical drag here already scrolls at the edges — the reorder handle and paint-select
+       both do — and this one, the newest, never got it. The test holds the pointer still INSIDE the bottom
+       edge zone and requires the list to move on its own: a check that moved the pointer would pass on the
+       old code too, because moving is what he had to do to get around this. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    try {
+      FM.scene.layers.length = 0;
+      for (let i2 = 0; i2 < 20; i2++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i2, shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.moveAddMarker(0);
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(160);
+      const scroller = document.getElementById('timeline');
+      const row = document.querySelector('.tl-addrow');
+      if (!scroller || !row) throw new Error('#timeline / .tl-addrow missing');
+      if (scroller.scrollHeight <= scroller.clientHeight + 10) throw new Error('the timeline does not overflow, so there is nothing to auto-scroll (' + scroller.scrollHeight + ' vs ' + scroller.clientHeight + ')');
+      scroller.scrollTop = 0;
+      await sleep(40);
+      const vr = scroller.getBoundingClientRect();
+      const rr = row.getBoundingClientRect();
+      const at = { bubbles: true, button: 0, pointerId: 11, isPrimary: true, clientX: Math.round(rr.left + 30) };
+      row.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, at, { clientY: Math.round(rr.top + rr.height / 2) })));
+      // …drag down INTO the bottom edge zone, then hold still
+      const deep = Math.round(vr.bottom - 8);
+      window.dispatchEvent(new PointerEvent('pointermove', Object.assign({}, at, { clientY: Math.round(rr.top + rr.height / 2 + 12) })));
+      window.dispatchEvent(new PointerEvent('pointermove', Object.assign({}, at, { clientY: deep })));
+      const before = scroller.scrollTop;
+      await sleep(420);                                  // hold, and let the rAF loop run
+      const after = scroller.scrollTop;
+      window.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, at, { clientY: deep })));
+      await sleep(120);
+      if (!(after > before + 4)) throw new Error('holding the add row at the bottom edge scrolled the list by ' + Math.round(after - before) + 'px — it should follow the drag instead of making you let go and swipe');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 11 })); } catch (e) {}
+      FM.scene.layers = layers0; FM.addAt = at0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

@@ -11425,13 +11425,26 @@ wait for them to report back."*
       their own viewBox. The copy/paste glyph was 0.5 units out as well and went with them — clause 3 says
       all of them, not only the two he named. **Ink spread across the row: 2.25px → 0.00px.**
 
-- [ ] **411 — PC: dragging the add-layer row down does not scroll the timeline with it.** (19 Aug, via
+- [x] **411 — PC: dragging the add-layer row down does not scroll the timeline with it.** ✅ **v10.49.** (19 Aug, via
       the phone inbox.) His words, verbatim:
       > On pc trying to drag down the add layer doesn't drag the screen down with it so you have to let go and then swipe down then pick it up again which is annoying
       **Clauses:**
-      1. [ ] Dragging the add row towards the bottom edge auto-scrolls the timeline under it.
-      2. [ ] The same going up, or it is only half a fix.
+      1. [x] Dragging the add row towards the bottom edge auto-scrolls the timeline under it.
+      2. [x] The same going up — one symmetric zone, so both directions came together.
       🔗 Same family as [#409] — both are "the add row is hard to reach at the ends".
+      ✅ **EVERY OTHER VERTICAL DRAG IN THIS TIMELINE ALREADY DID THIS.** The reorder handle and paint-select
+      both arm an eased, time-based edge scroll; the add-row drag is the newest gesture and simply never got
+      one. It now uses the same numbers as its two siblings — 44px zone, 520px/s top speed, eased by depth²,
+      `dt` clamped so a stalled frame cannot lurch — so all three feel identical under the finger.
+      ✅ **The drop boundary is recomputed on every scrolled frame, not only on pointermove.** With a still
+      finger at the edge the rows travel underneath it, and a marker that updated only on movement would sit
+      frozen while the list slid past — which would have looked like a second bug.
+      ⚠️ **There are now THREE local copies of this loop in js/timeline.js.** Extracting one helper is the
+      right follow-up; doing it here would have meant rewriting two working gestures while fixing a third,
+      which is a worse trade than one more copy. Recorded rather than left to be discovered.
+      ⚠️ The test HOLDS THE POINTER STILL inside the edge zone and requires the list to move on its own — a
+      test that moved the pointer would pass on the old code too, because moving is exactly the workaround
+      he was complaining about.
 
 - [ ] **412 — Rename "empty group" to "new group".** (19 Aug, via the phone inbox.) His words, verbatim:
       > Rename empty group to new group

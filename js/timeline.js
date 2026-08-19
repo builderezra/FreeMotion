@@ -1863,8 +1863,46 @@ window.FM = window.FM || {};
   function attachLineDrag(row, open) {
     const SLOP = 4;
     let down = false, moved = false, y0 = 0, motion = null, wantAt = 0;
+    /* THE LIST SCROLLS WITH YOU (queue 411). Ezra: "On pc trying to drag down the add layer doesn't drag
+       the screen down with it so you have to let go and then swipe down then pick it up again which is
+       annoying."
+       Every other vertical drag in this timeline already does this — the reorder handle and paint-select
+       both arm an eased, time-based edge scroll — and this one, the newest, simply never got it. Same
+       shape and the same numbers as those two (44px zone, 520px/s top speed, eased by depth², clamped dt
+       so a stalled frame cannot lurch), so the three feel identical under the finger.
+       The drop boundary is recomputed on every scrolled frame, not just on pointermove: with a still
+       finger at the edge the rows travel underneath it, and a marker that only updated on movement would
+       sit frozen while the list slid past.
+       ⚠️ This is the THIRD local copy of this loop in the file. Extracting one helper is the right
+       follow-up; doing it here would mean rewriting two working gestures at the same time as fixing a
+       third, which is a worse trade than one more copy. */
+    const EDGE = 44;
+    let autoRAF = 0, lastEv = null, lastT = 0, scrollAcc = 0;
+    const stopAuto = () => { if (autoRAF) cancelAnimationFrame(autoRAF); autoRAF = 0; lastT = 0; scrollAcc = 0; };
+    function autoScroll(now) {
+      autoRAF = 0;
+      if (!down || !moved || !lastEv || !timelineEl || !motion) return;
+      const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY;
+      let dir = 0, depth = 0;
+      if (y < vr.top + EDGE) { dir = -1; depth = (vr.top + EDGE - y) / EDGE; }
+      else if (y > vr.bottom - EDGE) { dir = 1; depth = (y - (vr.bottom - EDGE)) / EDGE; }
+      if (!dir) { lastT = 0; scrollAcc = 0; return; }
+      depth = Math.min(1, depth); depth *= depth;
+      const t = now || performance.now();
+      const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0.016;
+      lastT = t;
+      scrollAcc += dir * 520 * depth * dt;
+      const step = Math.trunc(scrollAcc);
+      if (step) {
+        scrollAcc -= step;
+        const b = timelineEl.scrollTop; timelineEl.scrollTop = b + step;
+        if (timelineEl.scrollTop !== b) { wantAt = motion.boundaryAt(y); motion.to(wantAt, y - y0); }
+      }
+      autoRAF = requestAnimationFrame(autoScroll);
+    }
     const move = (e) => {
       if (!down) return;
+      lastEv = e;
       if (!moved && Math.abs(e.clientY - y0) < SLOP) return;
       if (!moved) {
         moved = true; addDragging = true; row.classList.add('tl-addrow-dragging');
@@ -1873,6 +1911,10 @@ window.FM = window.FM || {};
       e.preventDefault();
       wantAt = motion.boundaryAt(e.clientY);
       motion.to(wantAt, e.clientY - y0);
+      if (timelineEl) {
+        const vr = timelineEl.getBoundingClientRect();
+        if ((e.clientY < vr.top + EDGE || e.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(autoScroll); }
+      }
     };
     const finish = () => {
       addDragging = false;
@@ -1884,6 +1926,7 @@ window.FM = window.FM || {};
     const end = (e) => {
       if (!down) return;
       down = false;
+      stopAuto();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
