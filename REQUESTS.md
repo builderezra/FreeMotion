@@ -10792,6 +10792,23 @@ wait for them to report back."*
         sweep drove shape layers).
       ⚠️ The v9.81 sweep asserts every tile PICKS and reaches `FM._fxPreview`. It does not assert the canvas
       changes. That gap is exactly the shape of this report, and it is the first thing to close.
+      ✅ **GAP CLOSED v10.32 — and the loudest theory is now RULED OUT, with numbers.** Every effect in the
+      Colouring category was rendered at the params `makeInstance` gives it and its changed pixels counted
+      against the same layer with no effect (`tests/_fxnoop.html`, now a suite test):
+      **39 of 43 change ~50% of the frame — which is the whole layer — so the render path applies picked
+      effects correctly and "they do nothing" is not true of the effects themselves.**
+      🚨 **FOUR ARE GENUINELY INVISIBLE at their own defaults, and this is a real finding of its own:**
+      **`darkglow`, `replacecolor`, `hslbands`, `matchgrade`** — 0 changed pixels each. Every one needs an
+      input the default does not supply (a colour to replace, a grade to match, a band to move, a threshold
+      to cross). **If his eight picks included any of these, those ones really did nothing**, and the app
+      gave him no way to tell that apart from being ignored. That is the same subject as the held
+      *"most of our filters I kind of just like basic when you first add them"* note under #277 — which he
+      asked me not to start — so it is recorded here rather than acted on.
+      **What is still NOT explained** is his full report on a VIDEO layer. The three candidates in this entry
+      stand, minus the render path: the Back-vs-Done exit, and video-specific preview. The next pass should
+      drive the sheet on a video layer and diff the canvas, which is now a two-line change to the probe.
+      ⚠️ The new test asserts the no-op list EXACTLY, so a NEW silent effect fails — and so does fixing one of
+      these four, with a message saying to update the list.
 
 - [ ] **390 — While previewing effects, show the WHOLE composition, not just the one layer.** (18 Aug.) His
       words, verbatim: *"Make it so when you are previewing a layer in the effect menu and adding effects it
@@ -11318,3 +11335,24 @@ wait for them to report back."*
       hooks; the line is most likely the empty add-row's own bottom border or the row's height stopping
       short of the panel, with the panel's background showing through beneath it — check which before
       removing a border that turns out not to be the thing in the circle.
+
+- [ ] **425 — PC: the trash / copy / parent buttons belong on the RIGHT of the row, not the left, and their
+      background is too subtle.** (19 Aug, PC screenshot at v10.31.) His words, verbatim:
+
+      > THE three buttons on pc with trash copy and parent need to be on the right side not left and also the background they have is too subtle
+
+      **What the shot shows:** on a desktop width the transport row reads, left to right — back ‹, copy ⧉,
+      parent, trash 🗑, ⋯ — and then the play cluster. So the layer-action group sits immediately left of the
+      transport controls, and he wants it moved to the right-hand end.
+      **Clauses:**
+      1. [ ] The three layer-action buttons (copy / parent / trash, and the ⋯ that travels with them) move to
+             the RIGHT side of the row.
+      2. [ ] **Their background is stronger** — they currently read as bare glyphs on the row's own surface.
+      ⚠️ **The right side already carries a cluster** (`#t-far`: version chip, ?, notes, cog, export, view
+      options), so "the right side" means deciding where these sit RELATIVE to that group — outside it, or
+      between it and the play controls. Measure at a desktop width before moving anything.
+      ⚠️ **Do not disturb the centring.** The pill sits on true screen centre because the two flanking grid
+      tracks are equal by construction (#373 clause 8), and `#t-sel`/`#t-far` are in-flow members of those
+      tracks — moving controls between them changes each side's content width. That is fine BY DESIGN now
+      (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
+      proves it and must stay green.

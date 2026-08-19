@@ -1030,6 +1030,52 @@
     }
   });
 
+  test('no Colouring effect is a silent no-op at its own defaults', { item: 'fx-defaults-do-something' }, function () {
+    /* Queue 389, and this is the gap that entry named: "The v9.81 sweep asserts every tile PICKS and reaches
+       FM._fxPreview. It does not assert the canvas changes. That gap is exactly the shape of this report."
+       So this renders each Colouring effect at the params `makeInstance` gives it and counts changed pixels.
+       **Measured before it was written**: 39 of 43 change roughly half the frame — the whole layer — so the
+       render path is NOT the cause of "they still don't do anything", and that rules out the loudest theory
+       rather than leaving it to be re-argued. FOUR are genuinely invisible at their defaults, and they are
+       listed rather than skipped: each needs an input the default does not supply (a colour to replace, a
+       grade to match, a band to move, a threshold to cross).
+       The list is asserted EXACTLY. A new silent effect fails, and so does FIXING one of these four — with
+       a message saying to update the list, which is the point: this file should never quietly disagree with
+       what the app does. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade'];
+    const P = { width: 200, height: 200, fps: 30, duration: 6 };
+    const scene = fx => {
+      const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
+      L.start = 0; L.duration = 6; L.effects = fx ? [fx] : [];
+      return { project: P, layers: [L] };
+    };
+    const shot = sc => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, 1.0);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) { if (Math.abs(a[i] - b[i]) > 6 || Math.abs(a[i + 1] - b[i + 1]) > 6 || Math.abs(a[i + 2] - b[i + 2]) > 6 || Math.abs(a[i + 3] - b[i + 3]) > 6) n++; } return n; };
+    const cat = (FM.FX_CATEGORIES || []).find(c => /colou?r/i.test(c.label) || /colou?r/i.test(c.key));
+    if (!cat) throw new Error('no Colouring category in FM.FX_CATEGORIES');
+    const list = FM.fxRegistry.byCategory(cat.key);
+    if (list.length < 20) throw new Error('only ' + list.length + ' Colouring effects — the category did not resolve properly, so this would prove almost nothing');
+    const base = shot(scene(null));
+    const dead = [];
+    list.forEach(e => {
+      const inst = FM.fxRegistry.makeInstance(e.type);
+      if (!inst) return;
+      let n = 0;
+      try { n = diff(base, shot(scene(inst))); } catch (err) { n = -1; }
+      if (n === 0) dead.push(e.type);
+    });
+    const missing = KNOWN_NOOP.filter(t => dead.indexOf(t) < 0 && list.some(e => e.type === t));
+    const fresh = dead.filter(t => KNOWN_NOOP.indexOf(t) < 0);
+    if (fresh.length) throw new Error('these Colouring effects change NOTHING at their own defaults, so picking them looks exactly like the app ignoring you: ' + fresh.join(', '));
+    if (missing.length) throw new Error('these were silent at their defaults and now are not — good, but update KNOWN_NOOP in this test so it keeps meaning something: ' + missing.join(', '));
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."
