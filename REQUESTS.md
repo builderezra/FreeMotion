@@ -10709,8 +10709,8 @@ wait for them to report back."*
       saying that exclusion is wrong: a video should be outline-able like anything else.
       **Clauses:**
       1. [ ] **Outline works on video and image layers**, as a toggle, like it does on shapes and text.
-      2. [ ] **A normal shadow** as well as the long drop shadow — a soft shadow hugging the layer, rather
-             than the offset one that is the only option today.
+      2. [x] ✅ **v10.61 — A normal shadow** as well as the long drop shadow — a soft shadow hugging the
+             layer, rather than the offset one that is the only option today.
       ⚠️ An outline on a VIDEO means stroking the layer's rectangle (or its crop/rounded-corner shape), not
       an alpha silhouette the way it works on a shape — check which the existing stroke code assumes before
       wiring it up, or it will do nothing on media and look "still broken".
@@ -10729,7 +10729,25 @@ wait for them to report back."*
       reachable TODAY by setting both to 0. What makes it feel like "only the long drop one" is that they
       DEFAULT to 8/8, so every shadow anyone enables starts offset. So the fix here is a default and a
       discoverable choice — a Soft/Drop style pair that writes (0,0) or (8,8) — not new rendering.
-      ⏸️ Held on clause 1's shape question; clause 2 is ready to build the moment the entry is picked up.
+      ✅ **CLAUSE 2 SHIPPED v10.61.** Three things, and the middle one is the whole fix:
+      · A new shadow now starts at dx/dy **0** instead of 8/8, so the plain shadow is what you get when you
+        switch one on. Only NEW ones — a layer that already carries a shadow keeps the offsets saved in it,
+        so nothing in an existing project moves.
+      · A **Style** row — Soft | Drop — sits directly under the toggle, so the other kind is one tap away
+        and visible rather than something you discover by zeroing two sliders. Tapping Drop when you have
+        set your own offsets leaves them alone; it only writes 8/8 from a standing start. It hides itself
+        while either offset is KEYFRAMED, because writing a plain number over a keyframed property would
+        throw the keyframes away.
+      · The toggle is **"Shadow"**, not "Drop shadow" — that label was half of why the offset one looked
+        like all there was.
+      **The test measures the picture, not the labels**: it renders a layer against white and sums the ink
+      in bands outside its box on all four sides. A 0,0 shadow has to be *present* (a symmetric result is
+      also true of no shadow at all — that trap is asserted against explicitly) and even within 18%, while
+      8/8 still has to land down-and-right. Five mutations, each caught: the Soft action, the default, the
+      renderer's X offset, the shadow render itself, and the Style row's existence.
+      ⏸️ **Clause 1 is still open and still held on his answer** — what should a video's outline follow:
+      its rectangle, its crop box, or its alpha silhouette? There is no media stroke code at all, so this
+      is a build, not a flag flip.
       **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 

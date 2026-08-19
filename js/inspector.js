@@ -4865,11 +4865,35 @@ window.FM = window.FM || {};
         }
       }
       // ===== SHADOW (AM parity, keyframeable) =====
-      if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000', alpha: 100 };
+      /* dx/dy DEFAULT TO 0 (queue 386 clause 2). Ezra: "there needs to be a normal shadow not just the
+         long drop one". Nothing was missing from the renderer — a shadow hugging the layer has always
+         been one offset away — the problem was that every shadow anyone switched on STARTED at 8/8, so
+         the only shadow the app ever showed you was the offset one. A new shadow is now the plain kind
+         and the offset one is a tap away in the Style row below.
+         Only NEW shadows: a layer that already carries a shadow object keeps the offsets saved in it,
+         so nothing in an existing project moves. */
+      if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 0, dy: 0, color: '#000000', alpha: 100 };
       const sh = layer.shadow;
       if (sh.alpha == null) sh.alpha = 100;
-      body.appendChild(checkRow('Drop shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+      /* "Shadow", not "Drop shadow" — the toggle now turns on either kind, and the old label was half of
+         why he thought the offset one was all there was. */
+      body.appendChild(checkRow('Shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
       if (sh.enabled) {
+        /* THE CHOICE, MADE VISIBLE. Position X/Y are still right there below and still keyframeable —
+           this row does not replace them, it just means you do not have to know that a shadow becomes
+           the normal kind by zeroing two sliders that are already at 8.
+           Hidden while either offset is ANIMATED: writing a plain number over a keyframed property
+           would silently throw the keyframes away, and someone animating the shadow's position has
+           already answered the question this row asks. */
+        const animated = p => p != null && typeof p === 'object';
+        if (!animated(sh.dx) && !animated(sh.dy)) {
+          body.appendChild(segRow('Style', [['soft', 'Soft'], ['drop', 'Drop']],
+            () => ((sh.dx || 0) === 0 && (sh.dy || 0) === 0) ? 'soft' : 'drop',
+            v => {
+              if (v === 'soft') { sh.dx = 0; sh.dy = 0; }
+              else if (!(sh.dx || sh.dy)) { sh.dx = 8; sh.dy = 8; }   // keep offsets the user chose himself
+            }));
+        }
         body.appendChild(kfColorRow(sh, 'color', 'Color', sh.color || '#000000'));
         body.appendChild(kfNumRow(sh, 'blur', 'Size', 0, 100, 1, 16, ''));
         body.appendChild(kfNumRow(sh, 'alpha', 'Alpha', 0, 100, 1, 100, '%'));

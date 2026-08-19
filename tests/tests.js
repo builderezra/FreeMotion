@@ -1155,6 +1155,78 @@
     }
   });
 
+  test('inspector: a shadow can hug the layer instead of being thrown down and right', { item: '386' }, function () {
+    /* Queue 386 clause 2. Ezra: "there needs to be a normal shadow not just the long drop one".
+       Nothing was missing from the RENDERER — `applyShadow` has always read dx/dy — the problem was
+       that a new shadow started at 8/8, so the offset one was the only shadow the app ever showed.
+       So this measures the PICTURE, not the labels: a "normal shadow" that is only a renamed control
+       would pass any check of the UI and still look exactly like the thing he is complaining about. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const P = { width: 200, height: 200, fps: 30, duration: 3, background: '#ffffff' };
+      const shot = (dx, dy) => {
+        const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#3388ff' });
+        L.start = 0; L.duration = 3;
+        L.shadow = { enabled: true, blur: 18, dx: dx, dy: dy, color: '#000000', alpha: 100 };
+        const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        FM.renderScene(g, { project: P, layers: [L] }, 1.0);
+        return g.getImageData(0, 0, P.width, P.height).data;
+      };
+      /* Darkness against the white page, summed over a band OUTSIDE the layer's own box (which runs
+         60…140). Reading one pixel would be at the mercy of where the blur happens to fall. */
+      const band = (d, x0, x1, y0, y1) => {
+        let sum = 0;
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = (y * 200 + x) * 4;
+          sum += 255 - Math.round((d[i] + d[i + 1] + d[i + 2]) / 3);
+        }
+        return sum;
+      };
+      const soft = shot(0, 0);
+      const left = band(soft, 44, 58, 80, 120), right = band(soft, 142, 156, 80, 120);
+      const above = band(soft, 80, 120, 44, 58), below = band(soft, 80, 120, 142, 156);
+      // It has to BE there — "symmetric" is also true of no shadow at all, which is the trap here.
+      if (!(left > 400)) throw new Error('a shadow at 0,0 puts no ink beside the layer at all (left band ' + left + ') — the plain shadow renders as nothing');
+      const worst = Math.max(Math.abs(left - right) / Math.max(left, right), Math.abs(above - below) / Math.max(above, below));
+      if (worst > 0.18) throw new Error('a shadow at 0,0 is not centred on the layer: left ' + left + ' vs right ' + right + ', above ' + above + ' vs below ' + below);
+
+      // The control: the offset kind still works, and looks completely different.
+      const drop = shot(8, 8);
+      const dl = band(drop, 44, 58, 80, 120), dr = band(drop, 142, 156, 80, 120);
+      if (!(dr > dl * 1.5)) throw new Error('the offset shadow no longer lands down-and-right (left ' + dl + ', right ' + dr + ') — this change was meant to add a kind, not replace one');
+
+      /* AND THE UI OFFERS BOTH, with the plain one as what you get by default. */
+      FM.scene.layers.length = 0;
+      const L2 = FM.makeLayer('shape', { name: 'S2', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L2.start = 0; L2.duration = 3; FM.scene.layers.push(L2);
+      FM.selectLayer(L2.id); FM.refreshAll(); FM.inspector.refresh();
+      FM.inspector.openCategory('border');
+      if (!L2.shadow) throw new Error('opening the card did not create a shadow to read');
+      if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('a brand-new shadow still starts offset (' + L2.shadow.dx + ',' + L2.shadow.dy + '), so the plain shadow is still the one you have to go and find');
+      L2.shadow.enabled = true; FM.inspector.refresh(); FM.inspector.openCategory('border');
+      const rows = [].slice.call(document.querySelectorAll('#inspector .prop-row, .insp-body .prop-row'));
+      const styleRow = rows.filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))[0];
+      if (!styleRow) throw new Error('no Style row on an enabled shadow — nothing tells you the other kind exists (rows: ' + rows.map(r => ((r.querySelector('label') || {}).textContent || '').trim()).join(', ').slice(0, 160) + ')');
+      const btns = [].slice.call(styleRow.querySelectorAll('button'));
+      const byName = n => btns.filter(b => new RegExp('^' + n + '$', 'i').test((b.textContent || '').trim()))[0];
+      if (!byName('Soft') || !byName('Drop')) throw new Error('the Style row does not offer both kinds: ' + btns.map(b => b.textContent).join('/'));
+      byName('Drop').click();
+      if (!(L2.shadow.dx > 0 && L2.shadow.dy > 0)) throw new Error('tapping Drop did not offset the shadow (' + L2.shadow.dx + ',' + L2.shadow.dy + ')');
+      FM.inspector.openCategory('border');
+      const soft2 = [].slice.call(document.querySelectorAll('#inspector .prop-row, .insp-body .prop-row'))
+        .filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))[0];
+      const softBtn = [].slice.call((soft2 || styleRow).querySelectorAll('button')).filter(b => /^soft$/i.test((b.textContent || '').trim()))[0];
+      softBtn.click();
+      if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('tapping Soft did not bring the shadow back under the layer (' + L2.shadow.dx + ',' + L2.shadow.dy + ')');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('inspector: the border card is Outline & Shadows, and says Outline inside it too', { item: 'outline-rename' }, function () {
     /* Queue 369. Ezra: "Change border and shadow to outline add shadows then in the actual menu change
        anything saying border to outline."
@@ -1179,10 +1251,13 @@
       const panel = ((document.getElementById('inspector-panel') || document.body).textContent || '').replace(/\s+/g, ' ');
       /* PROVE IT OPENED WITH SOMETHING THE CLOSED STATE CANNOT SHOW. Checking for "Outline" was
          self-satisfying: the CARD is called "Outline & Shadows", so the grid alone passes it and the
-         assertions below then run against a panel that never opened — both vacuously true. "Drop shadow"
+         assertions below then run against a panel that never opened — both vacuously true. "Trim path"
          is a row inside the card and appears nowhere else. (Measured: the open card reads
-         "‹ Outline & Shadows · Outline · Trim path · Dashes · Drop shadow · Repeater".) */
-      if (!/Drop shadow/i.test(panel)) throw new Error('openCategory("border") did not open the card — the key changed, and saved projects key off it. Panel: ' + panel.slice(0, 140));
+         "‹ Outline & Shadows · Outline · Trim path · Dashes · Shadow · Repeater".)
+         It used to check for "Drop shadow", which stopped existing at v10.61 when that toggle was
+         renamed to "Shadow" — and "Shadow" alone would be a WEAKER canary than the one this comment
+         warns about, because the card is called "Outline & Shadows" and the grid alone would satisfy it. */
+      if (!/Trim path/i.test(panel)) throw new Error('openCategory("border") did not open the card — the key changed, and saved projects key off it. Panel: ' + panel.slice(0, 140));
       /* NO \b ANCHORS. textContent concatenates with no separators — the open card reads
          "…Outline & ShadowsBorderTrim path…" — so \bBorder\b finds no word boundary between "s" and "B"
          and silently matches nothing. The mutation check caught that; a plain substring is what this

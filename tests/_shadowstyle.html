@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Shadow Soft/Drop row (queue 386 clause 2)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.inspector)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:540,y:960,shapeW:400,shapeH:400,fill:'#3a7bd5'});
+  L.start=0; L.duration=3; FM.scene.layers.push(L);
+  FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+  FM.inspector.openCategory('border'); await sleep(200);
+  L.shadow.enabled=true; FM.inspector.refresh(); FM.inspector.openCategory('border');
+  await sleep(400);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>
