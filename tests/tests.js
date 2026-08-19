@@ -470,6 +470,64 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('inspector: the blend card is called Mixing, in both lists, and its key is unchanged', { item: 'mixing-rename' }, function () {
+    /* Queue 366. Ezra handed me the call, same as #363: "if you can think of a rename for blending and
+       opacity that describes what it does just as well then change that name too."
+       The slash in "Blending / Opacity" was the tell — it read as two settings when it is one idea. Blend
+       mode is the mix METHOD, opacity the mix AMOUNT.
+       The label lives in TWO lists in inspector.js and they have to agree; a rename that caught one would
+       show a different name depending on which surface you opened, which is the failure worth guarding. */
+    const cats = (FM.inspector && FM.inspector._categories) ? FM.inspector._categories() : null;
+    const lists = [];
+    if (cats) lists.push(cats);
+    // Fall back to reading the rendered cards if no seam exists — the requirement is what he SEES.
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'L', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+      const cards = [].slice.call(document.querySelectorAll('.cat-card, .insp-cat'));
+      if (cards.length < 4) throw new Error('only ' + cards.length + ' inspector cards rendered — nothing below can mean anything');
+      /* STRIP THE SHORTCUT DIGIT. Each inspector card's text begins with its 1-9 keyboard number, so
+         the raw content is "3Mixing" and an anchored /^Mixing/ fails on CORRECT code. That is worse than
+         a plain bug: the test then fails for its OWN reason, and a mutation run against it reports
+         CAUGHT while proving nothing — which is exactly what happened here twice before this was fixed. */
+      const labels = cards.map(c => (c.textContent || '').trim().replace(/^\d+\s*/, ''));
+      if (labels.some(t => /Blending\s*\/\s*Opacity/i.test(t))) throw new Error('a card still reads "Blending / Opacity": ' + labels.join(' | '));
+      if (!labels.some(t => /^Mixing\b/.test(t))) throw new Error('no "Mixing" card in the inspector (found: ' + labels.join(' | ') + ')');
+
+      /* AND THE KEY IS UNTOUCHED, which is what keeps saved projects working — the rename is a string
+         change only. Driven through the real opener: if the key had moved, this would throw or land
+         somewhere else. */
+      FM.inspector.openCategory('blend');
+      /* Assert what the opened card CONTAINS, measured rather than guessed: the panel reads
+         "‹ Mixing · Opacity · Basic/Normal…". Two earlier versions of this line looked for container
+         classes that do not exist (.insp-cat-open, .cat-open, .insp-section all render zero elements),
+         so the assertion failed on correct code — and a mutation run against a test that is already red
+         reports CAUGHT while proving nothing, which is how this got past me twice. */
+      const panelTxt = ((document.getElementById('inspector-panel') || document.body).textContent || '').replace(/\s+/g, ' ');
+      if (!/Mixing/.test(panelTxt)) throw new Error('openCategory("blend") did not open the Mixing card — the key changed, and every saved project keys off it. Panel read: ' + panelTxt.slice(0, 120));
+      if (!/Opacity/i.test(panelTxt)) throw new Error('the Mixing card opened without its Opacity control — it is the half people use most. Panel read: ' + panelTxt.slice(0, 120));
+
+      /* THE SECOND LIST IS THE PASTE STYLE MENU, and it has to carry the same name. This is not a
+         hypothetical drift: the comment above STYLE_CATS records Ezra photographing both icon sets on
+         screen at once when that table fell out of step with the cards — "Paste style menu needs to
+         reflect the current icons that have since changed."
+         Asserted through FM._styleCats rather than through the cards, because the mutation check proved
+         the rendered grid does NOT come from this list: reverting it alone changed nothing on screen and
+         the test passed. A claim of "both lists" that only ever checked one is worth less than no claim. */
+      const style = (FM._styleCats || []).filter(c => c.key === 'blend')[0];
+      if (!style) throw new Error('no blend entry in the Paste Style list — its key must match the card');
+      if (/Blending\s*\/\s*Opacity/i.test(style.label || '')) throw new Error('the Paste Style menu still says "' + style.label + '" while the card says Mixing — the two lists have drifted, which is the exact failure written up above STYLE_CATS');
+      if (!/Mixing/.test(style.label || '')) throw new Error('the Paste Style menu calls it "' + style.label + '", not Mixing');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('view rail: the camera button adds, then hides, then unhides — and holds open its settings', { item: 'camera-button' }, async function () {
     /* Queue 365. His words: "the camera button in the view menu works like this - tap to add camera, tap
        again to hide camera, tap again to unhide camera, hold to open camera settings."
@@ -8185,7 +8243,8 @@
       /* Renamed for queue 287 — "Change the name of move and transform to position / Scale. And any
          other title like background and opacity that has the & in it, replace the & with a /". This
          list IS the spec, so it moves with the labels rather than being loosened to stop failing. */
-      const want = ['Colouring', 'Border / Shadow', 'Blending / Opacity', 'Position / Scale', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
+      // 'Mixing' since queue 366 — one word for the mix METHOD (blend mode) and the mix AMOUNT (opacity).
+      const want = ['Colouring', 'Border / Shadow', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }

@@ -1678,7 +1678,17 @@ window.FM = window.FM || {};
   const CATEGORIES = [
     { key: 'color', label: 'Colouring', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     { key: 'border', label: 'Border / Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
-    { key: 'blend', label: 'Blending / Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
+    /* "MIXING", not "Blending / Opacity" (queue 366). Ezra: "if you can think of a rename for blending
+       and opacity that describes what it does just as well then change that name too."
+       The slash was the tell: it read as a list of two settings when it is one idea. Blend mode is HOW
+       this layer's pixels combine with what is under it; opacity is HOW MUCH of it combines. Mix METHOD
+       and mix AMOUNT — so one plain word covers both honestly.
+       Rejected, with reasons, so this is not re-litigated: "Compositing" is exactly right and exactly the
+       wrong register (it is the word a manual uses); "Transparency" names only the opacity half and says
+       nothing about blend modes; "Blend & Fade" reads well but "fade" implies change over TIME and this
+       card is static values; "Blending" alone drops opacity, which is the more used of the two.
+       The `blend` KEY is untouched, so every saved project and every lookup keeps working. */
+    { key: 'blend', label: 'Mixing', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Position / Scale', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },
@@ -2024,7 +2034,7 @@ window.FM = window.FM || {};
   const STYLE_CATS = [
     { key: 'color',     label: 'Colouring' },
     { key: 'border',    label: 'Border / Shadow' },
-    { key: 'blend',     label: 'Blending / Opacity' },
+    { key: 'blend',     label: 'Mixing' },   // must stay in step with the card above (queue 366)
     { key: 'transform', label: 'Position / Scale' },
     { key: 'text',      label: 'Text', textOnly: true },
     /* Ezra: "this section when pasting a style probably needs other options because there's 9

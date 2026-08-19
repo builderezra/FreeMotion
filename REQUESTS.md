@@ -9994,7 +9994,7 @@ wait for them to report back."*
       trap applies: the tap that ENDS a hold must not also fire the tap action, or holding to open the
       settings would toggle the camera's visibility on the way.
 
-- [ ] **366 — Rename "Blending / Opacity" to something that describes it just as well.** (18 Aug.) His
+- [x] **366 — Rename "Blending / Opacity" to something that describes it just as well.** ✅ **v10.13 — it is "Mixing".** Blend mode is the mix METHOD, opacity the mix AMOUNT; one word covers both and drops the slash that made it read as a list of two settings. The `blend` key is untouched, and both lists that carry the label are mutation-checked separately so they cannot drift apart. (18 Aug.) His
       words, verbatim: *"Also if you can think of a rename for blending and opacity that describes what it
       does just as well then change that name too"*.
       Same shape as **#363** (renaming Null) — he is handing me the call, so the job is to pick well and
