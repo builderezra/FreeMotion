@@ -11123,7 +11123,7 @@ wait for them to report back."*
       complaint intact, because the menu closed either way; the mutation that removes `stopPropagation()`
       reports *"the tap closed the menu AND dropped the layer"*.
 
-- [ ] **402 — 🔁 The play button (the time pill) should not go yellow, and its text should be whiter.**
+- [x] **402 — 🔁 The play button (the time pill) should not go yellow, and its text should be whiter.** ✅ **v10.41.**
       (19 Aug, via the phone inbox — a reply to what shipped in v10.10/v10.11.) His words, verbatim:
       *"Stop the play button from going yellow, make the text on it more white than grey also."*
       **This is a correction to my work and he is right.** v10.10 made the timecode pill the play/pause
@@ -11131,20 +11131,36 @@ wait for them to report back."*
       playhead is parked on a bookmark. That made sense when the pill was a readout; it does not now —
       the play button flashing yellow says something about PLAYBACK, which is not what it means.
       **Clauses:**
-      1. [ ] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
+      1. [x] The pill never goes yellow. (v10.11 already moved the bookmark signal onto the PLAYHEAD,
              which is where it belongs — so this is removing the duplicate, not removing the feature.)
-      2. [ ] Its text is whiter, not grey.
+      2. [x] Its text is whiter, not grey.
       🔁 **RESTATED AND SHARPENED, 19 Aug** (via the phone inbox, while #373 was in progress). His words,
       verbatim: *"While ur working on the play menu I want the new play button that says the time I want it
       to be more white and match the other buttons in that row, it can still change colours when you press
       on it like it does tho"*.
       **Three things in that, and the second is new:**
-      a. [ ] The pill's text is **more white**.
-      b. [ ] It **matches the other buttons in that row** — so the target is not "whiter" in the abstract,
+      a. [x] The pill's text is **more white**.
+      b. [x] It **matches the other buttons in that row** — so the target is not "whiter" in the abstract,
              it is the same treatment the transport icons already have. Read their computed colour and use
              THAT rather than picking a new one.
-      c. [ ] It **still changes colour when pressed** — the press state stays. So this is the resting
+      c. [x] It **still changes colour when pressed** — the press state stays. So this is the resting
              colour only; do not flatten the :active feedback while making it match.
+      ✅ **BOTH HALVES WERE DUPLICATE RULES, which is why "make it whiter" was a deletion rather than a new
+      colour.** The yellow came from a #61 rule that painted the chip marker-yellow when the playhead was
+      parked on a benchmark — written when this was a passive TIMECODE readout, and superseded when v10.11
+      moved that signal onto the PLAYHEAD and v10.10 made the chip the play button. The grey came from a
+      stale `#time-readout { color: var(--text-dim) }` left over from when the pill lived in a different bar
+      beside `#tl-zoom-label`; being later in the file it quietly beat the block that already said
+      `color: var(--text)` — **the exact colour `.tbtn` uses**, so "more white" and "match the other buttons
+      in that row" turned out to be one fix. Two rules for one control is what caused this, so the answer
+      was to delete one rather than add a third.
+      ⚠️ **The test matches the pill AGAINST THE ROW rather than against a hex I chose** — he said "match the
+      other buttons in that row", so it reads what `.tbtn` resolves to and requires equality. A hard-coded
+      colour would let the two drift apart again the next time the row is restyled, which is the complaint.
+      ⚠️ **Clause (c) is asserted as the :active rule surviving**, not as "it goes accent while playing" —
+      because `body.fm-playing #time-readout` turns out to match the pill and not apply at all. That is a
+      measured anomaly, is not caused by anything here, and is written up as [#427] instead of being
+      papered over.
 - [ ] **403 — The Lightning Bolt effect needs more controls, and it should not cover the whole canvas.**
       (19 Aug, via the phone inbox.) His words, verbatim:
       *"Lighting bolt effect could use some other variables and work, also it should only go on top of the
@@ -11520,3 +11536,24 @@ wait for them to report back."*
       and pushes the footer out. The fix both times was a sibling footer plus `min-height: 0` on the
       scrolling child. Check the PC path specifically — the phone one already has it (`.addmenu--sheet
       .addmenu-body > .addmenu-dots`), so this is the panel variant missing the same treatment.
+
+- [ ] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
+      (19 Aug, found while doing #402 — not reported by Ezra.)
+      **What was measured**, by enumerating every rule in the document that matches the pill and sets a
+      colour, with `fm-playing` on the body:
+      · exactly two rules match — `#time-readout { color: var(--text) }` and, LATER in the file and with
+        HIGHER specificity, `body.fm-playing #time-readout { color: var(--accent) }`;
+      · `pill.matches('body.fm-playing #time-readout')` is **true**, `document.body` really has the class,
+        there is no inline colour (the style attribute is just `cursor: pointer`), neither rule carries
+        `!important`, and neither sits in a media query;
+      · `--accent` resolves to `#5ac7ed` **at the pill itself** and all the way up the chain;
+      · and the computed colour is `rgb(233, 244, 247)` — `--text`. The rule's `border-color` and
+        `box-shadow` do not land either, so the whole declaration block is being skipped.
+      **That should not be possible**, which is exactly why it is written down rather than explained away.
+      The likely candidates, in order: the class is being removed again before the style resolves (a sync
+      loop reading `FM.playing`), a second `#time-readout` element exists and the wrong one is measured, or
+      a stylesheet is being re-inserted after load in a way that reorders the cascade.
+      ⚠️ **It means the pill probably does not visibly change while playing**, which is a real (small) bug
+      and NOT the one he reported — #402 was about yellow and about grey text, both of which are fixed.
+      **Do not "fix" it by adding `!important`** — that hides the cause, and the cause is the interesting
+      part here. Reproduce it in the live app first and find out which of the three it is.

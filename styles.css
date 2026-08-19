@@ -2163,12 +2163,13 @@ body.fm-playing #time-readout {
   border-color: var(--accent); color: var(--accent);
   box-shadow: 0 0 10px rgba(78, 168, 255, .30);
 }
-/* Hovering a benchmark — or parking the playhead on one — lights the chip in marker yellow, so it
-   tells you which benchmark you are on. (#61) */
-#time-readout.on-mark, #time-readout.mark-hover {
-  background: var(--kf); border-color: var(--kf); color: #241a02; font-weight: 600;
-  box-shadow: 0 0 12px rgba(255, 206, 74, .45);
-}
+/* THE PILL NO LONGER GOES YELLOW (queue 402). Ezra: "the play button that says the time… I want it to be
+   more white and match the other buttons in that row, it can still change colours when you press on it
+   like it does tho" — and, in the original: the pill should not go yellow.
+   This rule is from #61, when the pill was a passive TIMECODE chip and yellow was how it told you which
+   benchmark you were parked on. v10.11 moved that signal onto the PLAYHEAD, which is where it belongs,
+   and v10.10 turned this chip into the play button — so the yellow was a second, older answer to a
+   question something else now answers, painted over the control you press most. The playhead keeps it. */
 .tl-marker { transition: transform .12s ease, filter .12s ease; }
 .tl-marker:hover { transform: scale(1.3); filter: drop-shadow(0 0 5px rgba(255, 206, 74, .95)); }
 .tl-marker:hover::after { background: rgba(255, 206, 74, .8); }
@@ -2194,7 +2195,13 @@ body.fm-playing #time-readout {
 }
 .prate { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); height: 30px; border-radius: 6px; font-size: 11.5px; padding: 0 4px; cursor: pointer; }
 .tbtn.active { color: var(--accent); }
-#time-readout { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 12px; margin-left: 2px; }
+/* …and this stale duplicate is why the text was grey (queue 402). It dates from when the pill lived in a
+   different bar beside #tl-zoom-label, and being LATER in the file it quietly beat the block above, which
+   already says `color: var(--text)` — the very colour the row's other buttons use (`.tbtn`). So "more
+   white" and "match the other buttons in that row" are the same fix, and it is a deletion: two rules for
+   one control is what caused this, and adding a third would only postpone it.
+   The press colour is untouched — `body.fm-playing #time-readout` turns it accent, and pressing the pill
+   is what starts playback, which is the colour change he asked to keep. */
 #tl-zoom-label { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 11.5px; min-width: 30px; text-align: center; }
 .time-edit { width: 64px; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 6px; font-size: 12px; font-variant-numeric: tabular-nums; margin-left: 2px; }
 

@@ -31112,6 +31112,55 @@
     }
   });
 
+  test('the play pill is the row\'s own white, never yellow, and still lights when playing', { item: 'pill-colour' }, function () {
+    /* Queue 402, restated by him a second time: "While ur working on the play menu I want the new play
+       button that says the time I want it to be more white and match the other buttons in that row, it can
+       still change colours when you press on it like it does tho" — plus the original "should not go
+       yellow".
+       Three clauses, three assertions, and the middle one is asserted AGAINST THE ROW rather than against
+       a colour I picked: he said "match the other buttons in that row", so the test reads what `.tbtn`
+       actually resolves to and requires the pill to equal it. Hard-coding a hex here would let the two
+       drift apart the next time the row is restyled, which is the whole complaint. */
+    const pill = document.getElementById('time-readout');
+    if (!pill) throw new Error('#time-readout is missing');
+    const sib = document.querySelector('#transport .tbtn');
+    if (!sib) throw new Error('no .tbtn in the transport row to match against');
+    const rowColour = getComputedStyle(sib).color;
+    const pillColour = getComputedStyle(pill).color;
+    if (pillColour !== rowColour) throw new Error('the pill is ' + pillColour + ' but the rest of the row is ' + rowColour + ' — "more white and match the other buttons in that row"');
+
+    // …and parking on a benchmark must not paint it marker-yellow any more: the PLAYHEAD carries that now
+    const had = { m: pill.classList.contains('on-mark'), h: pill.classList.contains('mark-hover') };
+    try {
+      pill.classList.add('on-mark');
+      const onMark = getComputedStyle(pill);
+      if (onMark.color !== rowColour) throw new Error('parked on a benchmark the pill turns ' + onMark.color + ' — it should stay the row\'s colour, the playhead is what marks benchmarks now');
+      const bg = onMark.backgroundColor;
+      const m = bg.match(/\d+/g);
+      if (m && +m[0] > 180 && +m[1] > 140 && +m[2] < 120) throw new Error('the pill still goes yellow on a benchmark (' + bg + ')');
+    } finally {
+      pill.classList.toggle('on-mark', had.m);
+      pill.classList.toggle('mark-hover', had.h);
+    }
+
+    /* …and the PRESS feedback is still there, which is the clause he asked to KEEP: "it can still change
+       colours when you press on it like it does tho". Asserted as the :active rule existing rather than as
+       "it goes accent while playing" — `body.fm-playing #time-readout` turns out to match the pill and not
+       apply at all, which is a real anomaly, is NOT caused by anything here, and is written up as its own
+       queue item rather than quietly asserted around. */
+    let activeRule = null;
+    for (const sh of Array.from(document.styleSheets)) {
+      let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of Array.from(rules)) {
+        if (r.selectorText && r.selectorText.replace(/\s+/g, '') === '#time-readout:active') activeRule = r;
+      }
+    }
+    if (!activeRule) throw new Error('#time-readout:active is gone — the press feedback he asked to keep has been removed');
+    if (!activeRule.style.transform && !activeRule.style.getPropertyValue('background') && !activeRule.style.color) {
+      throw new Error('#time-readout:active no longer changes anything: [' + activeRule.style.cssText + ']');
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —
