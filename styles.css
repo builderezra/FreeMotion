@@ -1976,6 +1976,18 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
   padding: 4px 14px; border-bottom: 1px solid var(--line-soft);
 }
+/* A GRID WITH SHRINKABLE SIDES, and the alternative is written down because it LOOKED better and was
+   worse (queue 373 clause 8 + queue 405). Centring the pill absolutely — `position: absolute; left: 50%`
+   with a half-width translate, the technique the playhead already uses — gives 0.00px at every width and
+   is exact by arithmetic rather than by luck. But taking it out of the flow means the two button groups
+   have to RESERVE its width with padding, and `flex: 1 1 0` keeps each group's content width as its
+   minimum: measured, the row then sized itself to **386px whatever the viewport was**, so on a 320px
+   phone it was 66px too wide — and because #app is overflow:hidden that is CLIPPED, not scrollable. The
+   view-options button would simply have been cut off, which is exactly what Ezra asked me to stop doing
+   on other people's phones.
+   The grid keeps the row inside the viewport at every width. `minmax(0, 1fr)` on both sides is what lets
+   them shrink — a bare `1fr` is `minmax(auto, 1fr)` and refuses to go below its content, which is what
+   pushed the pill 9.24px off centre before. The residual is 0.99px of odd-remainder rounding at 380. */
 .t-side { display: flex; align-items: center; }
 .t-left  { justify-content: space-between; padding-right: 10px; }
 .t-right { justify-content: space-between; padding-left: 10px; }
