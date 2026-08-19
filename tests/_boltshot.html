@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Lightning on a layer (queue 403)</title></head>
+<body style="margin:0;background:#0a0f14;display:flex;gap:14px;padding:14px">
+<div><div style="color:#9fb4c2;font:12px ui-monospace;padding-bottom:6px">lightning on a circle</div><canvas id="a" width="260" height="260" style="background:#000"></canvas></div>
+<iframe id="app" src="../index.html" style="width:400px;height:300px;border:0;position:absolute;left:-9999px"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.renderScene&&w.FM.fxRegistry)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(function(FM){
+  var P={width:260,height:260,fps:30,duration:4};
+  var L=FM.makeLayer('shape',{name:'B',shape:'circle',x:130,y:130,shapeW:150,shapeH:150,fill:'#2b6cb0'});
+  L.start=0;L.duration=4;
+  var inst=FM.fxRegistry.makeInstance('lightning');
+  inst.params.intensity=1; inst.params.count=5;
+  L.effects=[inst];
+  var g=document.getElementById('a').getContext('2d');
+  g.setTransform(1,0,0,1,0,0);
+  FM.renderScene(g,{project:P,layers:[L]},0.4);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

@@ -31161,6 +31161,94 @@
     }
   });
 
+  test('Lightning strikes the layer it is on, not the whole canvas', { item: 'lightning-bounded' }, function () {
+    /* Queue 403 clause 1. Ezra: "it should only go on top of the layers it's used on and not cover the
+       canvas by default."
+       It ran from y=0 to y=H across the whole plate, and `stamp` ADDED alpha where the layer had none — so
+       a bolt lit up empty frame. The assertion is therefore about the TRANSPARENT part of the frame: a
+       small shape in the middle, and every pixel outside it must be exactly as transparent after the
+       effect as before. Counting lit pixels inside the shape too, because an effect that draws nothing at
+       all would pass the first half perfectly. */
+    const P = { width: 200, height: 200, fps: 30, duration: 4 };
+    const mk = fx => {
+      /* A CIRCLE, not a rectangle, and that is the difference between this test working and not. A
+         rectangular layer FILLS its own alpha box, so confining the bolts to that box is enough and the
+         per-pixel alpha gate has nothing left to catch — a mutation removing the gate survived exactly
+         that fixture. A circle leaves its box's corners transparent, so an ungated bolt paints them, which
+         is the "strikes the shape rather than its bounding square" half of the fix. */
+      const L = FM.makeLayer('shape', { name: 'Bolt', shape: 'circle', x: 100, y: 100, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4; L.effects = fx ? [fx] : [];
+      return { project: P, layers: [L] };
+    };
+    const shot = sc => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, 0.5);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+    const inst = FM.fxRegistry.makeInstance('lightning');
+    if (!inst) throw new Error('the lightning effect is not in the registry');
+    inst.params.intensity = 1; inst.params.count = 6;
+    const off = shot(mk(null)), on = shot(mk(inst));
+
+    /* ⚠️ COUNT RGB LEAKS, NOT JUST ALPHA ONES. The first version only asked whether a previously
+       transparent pixel had gained alpha — and a mutation that removed the alpha GATE survived it,
+       because the fix also stopped the effect adding alpha, so painting outside the layer became
+       invisible rather than absent. Invisible is not the same as not happening: it is wasted work, and
+       one composite change away from being visible again. Both are counted now. */
+    let leaked = 0, lit = 0;
+    for (let i = 0; i < off.length; i += 4) {
+      const wasEmpty = off[i + 3] === 0;
+      const rgbMoved = on[i] !== off[i] || on[i + 1] !== off[i + 1] || on[i + 2] !== off[i + 2];
+      if (wasEmpty) { if (on[i + 3] > 8 || rgbMoved) leaked++; }
+      else if (Math.abs(on[i] - off[i]) > 10 || Math.abs(on[i + 1] - off[i + 1]) > 10 || Math.abs(on[i + 2] - off[i + 2]) > 10) lit++;
+    }
+    if (leaked) throw new Error(leaked + ' pixels OUTSIDE the layer were painted by Lightning — it is drawing across the frame, which is "covering the canvas"');
+    if (!lit) throw new Error('Lightning changed nothing inside the layer either — bounding it must not mean drawing nothing');
+
+    /* …and the per-pixel gate, which the composited frame CANNOT see. Alpha-0 pixels come out (0,0,0,0)
+       whatever RGB the plate held, so an ungated bolt painting the transparent corners of a round layer is
+       invisible in the output — a mutation removing the gate survived the check above three times, on a
+       rectangle and then on a circle, before that was the explanation rather than a guess. So it is asked
+       of the RENDERER directly, the way the queue-320 test does: a buffer with an opaque middle and
+       transparent margins, and nothing outside the opaque part may move. */
+    const T = FM._FX_TABLES || {};
+    const fn = T.PIXEL_FX && T.PIXEL_FX.lightning;
+    if (!fn) throw new Error('the lightning renderer is not reachable');
+    const W2 = 120, H2 = 160;
+    const buf = new Uint8ClampedArray(W2 * H2 * 4);
+    const opaque = (x, y) => x >= 30 && x < 90 && y >= 40 && y < 120;
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+      const i = (y * W2 + x) * 4;
+      buf[i] = 8; buf[i + 1] = 10; buf[i + 2] = 16; buf[i + 3] = opaque(x, y) ? 255 : 0;
+    }
+    const before = buf.slice();
+    fn(buf, W2, H2, { count: 6, intensity: 1, color: '#96c8ff' }, 0.3);
+    let outside = 0;
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+      if (opaque(x, y)) continue;
+      const i = (y * W2 + x) * 4;
+      if (buf[i] !== before[i] || buf[i + 1] !== before[i + 1] || buf[i + 2] !== before[i + 2] || buf[i + 3] !== before[i + 3]) outside++;
+    }
+    if (outside) throw new Error(outside + ' pixels with no layer alpha under them were written by Lightning — it must only light what the layer covers');
+  });
+
+  test('Lightning\'s new controls exist and default to the old look', { item: 'lightning-params' }, function () {
+    /* Queue 403 clause 2 — "some other variables and work". The defaults are asserted as well as the
+       presence, because a new parameter that changes the look at its default silently restyles every
+       project that already uses this effect. */
+    const reg = FM.fxRegistry.get('lightning');
+    if (!reg) throw new Error('no lightning in the registry');
+    const want = { thickness: 1, jitter: 1, forks: 3, flicker: 8, seed: 0 };
+    Object.keys(want).forEach(k => {
+      const p = (reg.params || []).find(x => x.key === k);
+      if (!p) throw new Error('Lightning has no "' + k + '" control — clause 2 asked for more to turn');
+      const d = (p.def != null ? p.def : p.default);
+      if (d !== want[k]) throw new Error('"' + k + '" defaults to ' + d + ', not ' + want[k] + ' — a new control must not restyle projects that already use this effect');
+    });
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

@@ -910,9 +910,18 @@ window.FM = window.FM || {};
       { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4 },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
+    /* MORE TO TURN (queue 403 clause 2). Ezra: "Lighting bolt effect could use some other variables and
+       work". Every default below reproduces the previous look EXACTLY — thickness 1, jitter 1, three
+       forks is the old `2 + rnd*3` midpoint, flicker 8/sec was hard-coded, seed 0 — so nothing anyone has
+       already made moves. */
     { type: 'lightning', label: 'Lightning', params: [
       { key: 'count', label: 'Bolts', min: 1, max: 8, step: 1, def: 3 },
       { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.02, def: 0.8 },
+      { key: 'thickness', label: 'Thickness', min: 0.2, max: 4, step: 0.05, def: 1 },
+      { key: 'jitter', label: 'Jaggedness', min: 0, max: 3, step: 0.05, def: 1 },
+      { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
     ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
@@ -5063,11 +5072,22 @@ window.FM = window.FM || {};
       let intensity = FM.evalProp(p.intensity, t); if (intensity == null) intensity = 0.8;
       intensity = Math.max(0, Math.min(1, intensity));
       if (intensity <= 0) return;
+      /* `v == null` FIRST, before evalProp — which is the idiom the rest of this file uses (`p.lift==null
+         ? 26 : …`) and it is not decoration: evalProp on an absent param yields 0, not null, so reading
+         the default through it turned thickness, jaggedness, branches and flicker all to zero the moment
+         the effect was rendered by anything that predates these controls. The queue-320 test calls this
+         renderer directly with no params and caught it immediately — 121 lit pixels instead of thousands. */
+      const _num = (v, d0) => { if (v == null) return d0; const q = FM.evalProp(v, t); return (q == null || !isFinite(q)) ? d0 : q; };
+      const thick = Math.max(0.2, Math.min(4, _num(p.thickness, 1)));
+      const jag = Math.max(0, Math.min(3, _num(p.jitter, 1)));
+      const forkN = Math.max(0, Math.min(8, Math.round(_num(p.forks, 3))));
+      const flick = Math.max(0, Math.min(24, Math.round(_num(p.flicker, 8))));
+      const seed0 = Math.round(_num(p.seed, 0)) | 0;
       const col = hexToRGB(p.color) || [150, 200, 255];
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
       const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
-      const phase = Math.floor(t * 8);   // 8 flickers/sec, quantised so a frame's bolt holds still
+      const phase = flick > 0 ? Math.floor(t * flick) : 0;   // quantised so a frame's bolt holds still
 
       /* Hashed, not random. Same integer mix the noise effect uses. */
       const rnd = (a, b) => {
@@ -5076,7 +5096,18 @@ window.FM = window.FM || {};
         return ((h >>> 0) % 100000) / 100000;
       };
 
-      const unit = Math.max(1, Math.min(W, H));
+      /* ONLY ON TOP OF THE LAYER (queue 403 clause 1). Ezra: "it should only go on top of the layers it's
+         used on and not cover the canvas by default." It ran from y=0 to y=H across the whole plate and,
+         worse, `stamp` ADDED alpha where the layer had none — so a bolt lit up empty frame and the effect
+         read as covering the canvas rather than striking the thing it was applied to.
+         Two changes, and both are needed: the bolts are placed inside the layer's own alpha box, and every
+         pixel is scaled by the alpha ALREADY THERE, so nothing is painted outside the layer's coverage.
+         Scaling by the existing alpha (rather than merely clipping to the box) is what makes it strike the
+         SHAPE — a bolt across a circle stops at the circle, not at its bounding square. */
+      const bb = alphaBBox(d, W, H);
+      const BX = bb.w > 2 ? bb.x : 0, BY = bb.h > 2 ? bb.y : 0;
+      const BW = bb.w > 2 ? bb.w : W, BH = bb.h > 2 ? bb.h : H;
+      const unit = Math.max(1, Math.min(BW, BH));
       const stamp = (cx, cy, rad, amp, rgb) => {
         if (rad < 0.4 || amp <= 0.004) return;
         const r = Math.ceil(rad);
@@ -5089,13 +5120,15 @@ window.FM = window.FM || {};
             const dx = x - cx;
             const q = (dx * dx + dy * dy) * inv;
             if (q > 1) continue;
-            const g = (1 - q) * (1 - q) * amp;      // smooth to zero at the rim, no hard disc edge
+            let g = (1 - q) * (1 - q) * amp;       // smooth to zero at the rim, no hard disc edge
             if (g <= 0.004) continue;
             const i = (y * W + x) * 4;
+            const a0 = d[i + 3];
+            if (!a0) continue;                     // outside the layer: not ours to light (queue 403)
+            g *= a0 / 255;                         // …and fade with the layer's own edge, so it strikes the SHAPE
             d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
             d[i + 1] = 255 - (255 - d[i + 1]) * (1 - rgb[1] / 255 * g);
             d[i + 2] = 255 - (255 - d[i + 2]) * (1 - rgb[2] / 255 * g);
-            if (d[i + 3] < 255) d[i + 3] = Math.min(255, d[i + 3] + g * 255);
           }
         }
       };
@@ -5112,27 +5145,27 @@ window.FM = window.FM || {};
             const taper = 1 - f * 0.75;
             const x = a[0] + (b[0] - a[0]) * (k / steps);
             const y = a[1] + (b[1] - a[1]) * (k / steps);
-            stamp(x, y, unit * 0.016 * wScale * taper, 0.16 * intensity * aScale * taper, col);
-            stamp(x, y, unit * 0.0035 * wScale * taper + 0.6, 0.95 * intensity * aScale * taper, core);
+            stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
+            stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
         }
       };
 
       for (let b = 0; b < n; b++) {
-        const seed = (b * 131 + phase * 977) | 0;
-        const startX = (0.12 + 0.76 * rnd(seed, 1)) * W;
-        const lean = (rnd(seed, 2) - 0.5) * W * 0.4;
+        const seed = (b * 131 + phase * 977 + seed0 * 7919) | 0;
+        const startX = BX + (0.12 + 0.76 * rnd(seed, 1)) * BW;
+        const lean = (rnd(seed, 2) - 0.5) * BW * 0.4;
         const SEGS = 20;
         const main = [];
         for (let s = 0; s <= SEGS; s++) {
           const f = s / SEGS;
-          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * W * 0.1, H * f]);
+          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
         }
         draw(main, 1, 1);
 
         /* FORKS. Two to four per bolt, leaving the channel partway down, running shorter and at a
            steeper angle, and drawn at under half the width — the taper in `draw` finishes them off. */
-        const forks = 2 + ((rnd(seed, 3) * 3) | 0);
+        const forks = forkN;
         for (let k = 0; k < forks; k++) {
           const at = 2 + ((rnd(seed, 40 + k) * (SEGS - 5)) | 0);
           const dir = rnd(seed, 60 + k) < 0.5 ? -1 : 1;
@@ -5140,8 +5173,8 @@ window.FM = window.FM || {};
           const fp = [main[at]];
           for (let s = 1; s <= len; s++) {
             const prev = fp[s - 1];
-            fp.push([prev[0] + dir * W * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05),
-                     prev[1] + (H / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
+            fp.push([prev[0] + dir * BW * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag,
+                     prev[1] + (BH / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
           }
           draw(fp, 0.45, 0.6);
         }

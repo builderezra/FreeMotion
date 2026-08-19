@@ -11161,17 +11161,34 @@ wait for them to report back."*
       because `body.fm-playing #time-readout` turns out to match the pill and not apply at all. That is a
       measured anomaly, is not caused by anything here, and is written up as [#427] instead of being
       papered over.
-- [ ] **403 — The Lightning Bolt effect needs more controls, and it should not cover the whole canvas.**
+- [x] **403 — The Lightning Bolt effect needs more controls, and it should not cover the whole canvas.** ✅ **v10.42.**
       (19 Aug, via the phone inbox.) His words, verbatim:
       *"Lighting bolt effect could use some other variables and work, also it should only go on top of the
       layers it's used on and not cover the canvas by default"*
       **Clauses:**
-      1. [ ] It draws only over the LAYER it is applied to, not across the whole frame.
-      2. [ ] More parameters — "some other variables and work" is an invitation; look at what the effect
+      1. [x] It draws only over the LAYER it is applied to, not across the whole frame.
+      2. [x] More parameters — "some other variables and work" is an invitation; look at what the effect
              currently exposes and what a bolt actually has (branching, thickness, glow, jitter, seed).
       ⚠️ Clause 1 is the bug and it is the same family as several EFFECTS-PLAN findings: an effect that
       paints in FRAME space rather than in the layer's plate space bleeds outside the layer. Check whether
       it draws into the layer plate or over the composite before changing any parameters.
+      ✅ **IT DREW INTO THE PLATE, AND THEN INVENTED ALPHA — that second half is what "covers the canvas"
+      really was.** Bolts ran y=0→H across the entire plate, and `stamp` ended with
+      `d[i+3] = min(255, d[i+3] + g*255)` — so a bolt crossing empty frame CREATED opacity there. Two
+      changes: the bolts are placed inside the layer's own alpha box, and every pixel is scaled by the
+      alpha already present (and none is added), so it strikes the SHAPE rather than its bounding square.
+      ✅ **Five new controls — Thickness, Jaggedness, Branches, Flicker, Seed — every default reproducing
+      the old look exactly** (branches 3 is the old `2 + rnd*3` midpoint; flicker 8/s was hard-coded), so
+      nothing already made moves.
+      🚨 **A DEFAULTS TRAP, caught by the queue-320 test on the first run:** `FM.evalProp` on an ABSENT
+      param returns 0, not null — so reading a default through it set thickness, jaggedness, branches and
+      flicker all to zero for every render that predates these controls. The file's own idiom
+      (`p.lift == null ? 26 : …`) exists for exactly this; it checks `v == null` first now.
+      ⚠️ **The alpha gate took FOUR mutation rounds to prove, and the reason is worth keeping.** It is
+      invisible from the composited frame: alpha-0 pixels come out (0,0,0,0) whatever RGB the plate holds,
+      so an ungated bolt painting outside the layer is wasted work rather than a visible mark — a rectangle
+      fixture, then a circle fixture, both survived. It is asked of the RENDERER directly now, the way the
+      queue-320 test does, and the mutation reports 159 leaked pixels.
 
 - [x] **404 — "Make these menus the same height."** ✅ **v10.25 — measured across all five tabs at 380: top 380.0, height 440.0, gap to the canvas 0.0, spread 0.00px.** (19 Aug, via the phone inbox.) His words, verbatim:
       *"Don't forget to make these menus the same height, very important"*
