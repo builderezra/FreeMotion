@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Duplicate copies every property</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:1280px;height:800px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:660px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.duplicateLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(600);
+  FM.scene.layers.length=0;
+  var a=FM.makeLayer('shape',{name:'Star',shape:'star',x:400,y:700,shapeW:320,shapeH:280,fill:'#3a7bd5'});
+  a.start=0.25; a.duration=3.5;
+  a.transform.x={kf:[{t:0,v:0,ease:'easeInOut'},{t:2,v:220}]};
+  a.transform.opacity=0.66; a.transform.rotation=17.5; a.transform.scaleX=1.3;
+  a.stroke={enabled:true,width:9,color:'#ff5fa2',position:'outside',dash:{enabled:true,length:14,gap:6,offset:3}};
+  a.shadow={enabled:true,blur:22,dx:0,dy:0,color:'#001122',alpha:80};
+  a.effects=[{type:'blur',enabled:true,params:{radius:7}},{type:'glow',enabled:true,params:{radius:12,passes:2,color:'#ffcc00'}}];
+  a.blend='screen'; a.locked=true; a.repeater={enabled:true,copies:4,offsetX:30,offsetY:10,rotation:12,scale:0.9,opacity:0.8,anchorX:0.5,anchorY:0.5};
+  a.colorGrade={hue:20,sat:1.3,lift:0.05,gamma:1.1,gain:0.95};
+  a.trimPath={enabled:true,start:0.1,end:0.8,offset:0.05};
+  a.volume=0.7; a.fadeIn=0.3; a.fadeOut=0.4; a.clipColor='#abcdef'; a.reversed=false;
+  FM.scene.layers.push(a); FM.refreshAll(); await sleep(300);
+  var before=JSON.parse(JSON.stringify(a, FM.jsonReplacer));
+  await FM.duplicateLayer(a.id, true);   // inPlace: a plain copy, so nothing is deliberately renamed or moved
+  await sleep(400);
+  var copy=FM.scene.layers.filter(function(L){return L.id!==a.id;})[0];
+  if(!copy){ o.push('no copy was produced'); }
+  else {
+    var after=JSON.parse(JSON.stringify(copy, FM.jsonReplacer));
+    var IGNORE={id:1,name:1,clipColor:1,parent:1,zIndex:1};
+    var diffs=[];
+    Object.keys(before).forEach(function(k){
+      if(IGNORE[k])return;
+      if(JSON.stringify(before[k])!==JSON.stringify(after[k])) diffs.push('  . '+k+':  '+JSON.stringify(before[k]).slice(0,110)+'\n       copy:  '+JSON.stringify(after[k]).slice(0,110));
+    });
+    Object.keys(after).forEach(function(k){ if(!IGNORE[k]&&!(k in before)) diffs.push('  copy GAINED . '+k+' = '+JSON.stringify(after[k]).slice(0,90)); });
+    o.push('original has '+Object.keys(before).length+' properties; ignoring id/name/clipColor/parent/zIndex');
+    o.push('');
+    if(!diffs.length) o.push('✅ the copy carries every property of the original.');
+    else { o.push('❌ '+diffs.length+' property(ies) did not copy:'); diffs.forEach(function(x){o.push(x);}); }
+    // …and they must not SHARE objects: mutating the copy must not touch the original.
+    if(copy.stroke) copy.stroke.width=999;
+    if(copy.effects&&copy.effects[0]) copy.effects[0].params.radius=999;
+    if(copy.transform) copy.transform.rotation=999;
+    var shared=[];
+    if(a.stroke&&a.stroke.width===999) shared.push('stroke');
+    if(a.effects&&a.effects[0]&&a.effects[0].params.radius===999) shared.push('effects[0].params');
+    if(a.transform&&a.transform.rotation===999) shared.push('transform');
+    o.push('');
+    o.push(shared.length ? '❌ the copy SHARES these objects with the original (editing one edits the other): '+shared.join(', ')
+                         : '✅ the copy is a deep copy — editing it does not touch the original.');
+  }
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

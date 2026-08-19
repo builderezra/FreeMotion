@@ -900,3 +900,14 @@ Kept as `storage: a feature-rich project survives a save and a load unchanged`, 
 making `sceneDoc()` drop `repeater` on the way out. Materialising a default (the loader writing
 `enabled: true` onto an effect that omitted it) is normalisation rather than loss, so the fixture
 states those explicitly instead of the test needing to know which they are.
+
+## 7. Duplicate fidelity — clean, and now a permanent sweep
+One layer carrying 34 properties at once (keyframes, stroke + dashes, shadow, two effects, repeater,
+colour grade, trim path, blend, lock, volume/fades), duplicated with `inPlace` so nothing is
+deliberately renamed or recoloured. **Every property carried, and it is a genuine deep copy** —
+editing the copy's stroke, effect params or transform does not reach back into the original.
+Kept as `layers: duplicating one copies every property, and copies it deeply`. Mutation-checked by
+making `FM.cloneLayer` drop `colorGrade`, and that check earned its keep twice: the first run caught
+the mutation but reported `Cannot read properties of undefined (reading 'slice')` instead of naming
+the field, because a LOST property comes back undefined. A test whose failure message breaks in the
+one case it exists for is half a test; it names the property now.

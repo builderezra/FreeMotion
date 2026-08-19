@@ -2092,6 +2092,70 @@
     }
   });
 
+  test('layers: duplicating one copies every property, and copies it deeply', { item: 'dup-fidelity' }, async function () {
+    /* Third invariant of the same family as the undo and save/load sweeps, and the same failure mode:
+       a property the duplicator forgets is silently missing from the copy, and nobody notices until
+       they duplicate a layer they spent an hour styling. Swept over one layer carrying everything at
+       once rather than spot-checking a field, so a NEW property added years from now is covered by
+       this test the day it exists.
+       The second half matters as much as the first: a copy that SHARES its sub-objects with the
+       original is worse than a missing field, because editing the copy silently edits the original. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const a = FM.makeLayer('shape', { name: 'Star', shape: 'star', x: 400, y: 700, shapeW: 320, shapeH: 280, fill: '#3a7bd5' });
+      a.start = 0.25; a.duration = 3.5;
+      a.transform.x = { kf: [{ t: 0, v: 0, ease: 'easeInOut' }, { t: 2, v: 220 }] };
+      a.transform.opacity = 0.66; a.transform.rotation = 17.5; a.transform.scaleX = 1.3;
+      a.stroke = { enabled: true, width: 9, color: '#ff5fa2', position: 'outside', dash: { enabled: true, length: 14, gap: 6, offset: 3 } };
+      a.shadow = { enabled: true, blur: 22, dx: 0, dy: 0, color: '#001122', alpha: 80 };
+      a.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }, { type: 'glow', enabled: true, params: { radius: 12, passes: 2, color: '#ffcc00' } }];
+      a.blend = 'screen'; a.locked = true;
+      a.repeater = { enabled: true, copies: 4, offsetX: 30, offsetY: 10, rotation: 12, scale: 0.9, opacity: 0.8, anchorX: 0.5, anchorY: 0.5 };
+      a.colorGrade = { hue: 20, sat: 1.3, lift: 0.05, gamma: 1.1, gain: 0.95 };
+      a.trimPath = { enabled: true, start: 0.1, end: 0.8, offset: 0.05 };
+      a.volume = 0.7; a.fadeIn = 0.3; a.fadeOut = 0.4;
+      FM.scene.layers.push(a); FM.refreshAll();
+      await sleep(60);
+      const before = JSON.parse(JSON.stringify(a, FM.jsonReplacer));
+      /* inPlace, so nothing is DELIBERATELY changed: an ordinary duplicate renames to " copy" and takes
+         a new clip colour, and this is about the properties that must be carried, not those. */
+      await FM.duplicateLayer(a.id, true);
+      await sleep(150);
+      const copy = FM.scene.layers.filter(L => L.id !== a.id)[0];
+      if (!copy) throw new Error('duplicateLayer produced no copy at all');
+      const after = JSON.parse(JSON.stringify(copy, FM.jsonReplacer));
+      const IGNORE = { id: 1, name: 1, clipColor: 1, parent: 1, zIndex: 1 };
+      const missing = [];
+      Object.keys(before).forEach(k => {
+        if (IGNORE[k]) return;
+        /* String() around the stringify: a property the copy LOST comes back undefined, and calling
+           .slice on that threw — so the one case this test exists to catch reported a TypeError
+           instead of naming the missing property. Caught by the mutation check, which is exactly what
+           it is for. */
+        const show = v => String(JSON.stringify(v)).slice(0, 60);
+        if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) missing.push(k + ' (was ' + show(before[k]) + ', copy has ' + show(after[k]) + ')');
+      });
+      if (Object.keys(before).length < 25) throw new Error('the fixture layer only carries ' + Object.keys(before).length + ' properties — it is not exercising enough of the document to be worth running');
+      if (missing.length) throw new Error(missing.length + ' propert(ies) did not survive the duplicate: ' + missing.join('; ').slice(0, 400));
+
+      // …and it must be a DEEP copy: editing the copy must not reach back into the original.
+      copy.stroke.width = 999;
+      copy.effects[0].params.radius = 999;
+      copy.transform.rotation = 999;
+      const shared = [];
+      if (a.stroke.width === 999) shared.push('stroke');
+      if (a.effects[0].params.radius === 999) shared.push('effects[0].params');
+      if (a.transform.rotation === 999) shared.push('transform');
+      if (shared.length) throw new Error('the copy shares these objects with the original, so editing one edits the other: ' + shared.join(', '));
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('storage: a feature-rich project survives a save and a load unchanged', { item: 'roundtrip' }, async function () {
     /* THE INVARIANT: whatever the app holds in memory must come back identical after a save and a
        load. Anything the writer omits, or the loader's sanitisers strip, is work quietly lost on the
