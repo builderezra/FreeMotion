@@ -9773,9 +9773,12 @@ wait for them to report back."*
          that is now a test rather than an assumption.
          ⚠️ **STILL OPEN under this clause:** making a mask a REAL registry effect. Sized above at
          #335-scale. Your call whether it is worth it now that it behaves like one.
-         ⚠️ **One loose end, recorded not glossed:** the mutation check caught the change only through
-         this test, but fired on the *open* assertion rather than the swipe one. The head's click handler
-         is attached independently of the gestures, so I cannot account for the coupling.
+         **The loose end resolved, and it is worth knowing:** the test kept failing on "tapping a mask
+         head did not open its controls" — inside the SUITE only, while the same probe opened the row
+         fine at 380 and at 1280 on its own. Not a width problem and not a code bug: `_justReordered()`
+         swallows any tap within 400ms of a drop (so a row does not open when you let go of a drag on
+         it), and this test was running milliseconds after the suite's effect-reorder tests. It waits
+         past that window now. It presented as both of the things it was not.
       2. ✅ **DONE — v9.81.** **Done inside a category discards your selection.** Queue 297 added Done to
          every sub-view so you could leave without going backwards first — but with the queue-277
          multi-select, Done CLOSES and the picks go with it. He expects Done to mean "add what I picked".
