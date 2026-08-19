@@ -2092,6 +2092,75 @@
     }
   });
 
+  test('clipboard: paste reproduces the layer exactly, and independently', { item: 'paste-fidelity' }, async function () {
+    /* Same family as the duplicate sweep: a property the clipboard forgets is silently missing from
+       what you paste. Two things are deliberately NOT differences and would otherwise make this test
+       impossible to write honestly — paste lands the clip at the PLAYHEAD, and shifts its keyframe
+       times by exactly that delta so the animation stays aligned to the clip. So the playhead is
+       parked on the layer's own start, which makes the delta zero and lets everything else be compared
+       exactly, rather than the test carrying a model of the shift that could agree with a broken one. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const a = FM.makeLayer('shape', { name: 'Star', shape: 'star', x: 400, y: 700, shapeW: 320, shapeH: 280, fill: '#3a7bd5' });
+      /* FRAME-ALIGNED TIMES, and that is not cosmetic: paste SNAPS the pasted clip to a frame boundary,
+         so a start of 0.25s at 30fps (frame 7.5) comes back as 0.2667 and reads as a lost property when
+         it is the editor doing its job. 0.5s is frame 15 exactly, so the snap is a no-op and the
+         comparison below is measuring the clipboard rather than the grid. */
+      a.start = 0.5; a.duration = 3.5;
+      a.transform.x = { kf: [{ t: 0.5, v: 0, e: 'easeInOut' }, { t: 2, v: 220 }] };
+      a.transform.opacity = 0.66; a.transform.rotation = 17.5;
+      a.stroke = { enabled: true, width: 9, color: '#ff5fa2', position: 'outside', dash: { enabled: true, length: 14, gap: 6, offset: 3 } };
+      a.shadow = { enabled: true, blur: 22, dx: 0, dy: 0, color: '#001122', alpha: 80 };
+      a.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }, { type: 'glow', enabled: true, params: { radius: 12, passes: 2, color: '#ffcc00' } }];
+      a.blend = 'screen';
+      a.repeater = { enabled: true, copies: 4, offsetX: 30, offsetY: 10, rotation: 12, scale: 0.9, opacity: 0.8, anchorX: 0.5, anchorY: 0.5 };
+      a.colorGrade = { hue: 20, sat: 1.3, lift: 0.05, gamma: 1.1, gain: 0.95 };
+      a.volume = 0.7; a.fadeIn = 0.3; a.fadeOut = 0.4;
+      FM.scene.layers.push(a); FM.selectLayer(a.id); FM.refreshAll();
+      FM.time = a.start;                       // …so paste's reposition is a no-op and nothing has to be modelled
+      await sleep(60);
+      const before = JSON.parse(JSON.stringify(a, FM.jsonReplacer));
+      const n = FM.copySelection();
+      if (!n) throw new Error('copySelection put nothing on the clipboard');
+      await FM.pasteClipboard(0);
+      await sleep(150);
+      const pasted = FM.scene.layers.filter(L => L.id !== a.id)[0];
+      if (!pasted) throw new Error('paste produced no layer at all');
+      const after = JSON.parse(JSON.stringify(pasted, FM.jsonReplacer));
+      const IGNORE = { id: 1, name: 1, clipColor: 1, parent: 1, zIndex: 1 };
+      const show = v => String(JSON.stringify(v)).slice(0, 60);
+      const missing = [];
+      Object.keys(before).forEach(k => {
+        if (IGNORE[k]) return;
+        if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) missing.push(k + ' (was ' + show(before[k]) + ', pasted ' + show(after[k]) + ')');
+      });
+      if (Object.keys(before).length < 25) throw new Error('the fixture layer only carries ' + Object.keys(before).length + ' properties — not enough of the document to be worth running');
+      if (missing.length) throw new Error(missing.length + ' propert(ies) did not survive copy→paste: ' + missing.join('; ').slice(0, 400));
+
+      // Independent of BOTH the original and the clipboard entry — otherwise editing what you pasted
+      // reaches back into what you copied, and every later paste inherits the change.
+      pasted.stroke.width = 999;
+      pasted.effects[0].params.radius = 999;
+      const shared = [];
+      if (a.stroke.width === 999) shared.push('the original layer');
+      if (a.effects[0].params.radius === 999) shared.push("the original's effect params");
+      if (FM.clipboard && FM.clipboard[0] && FM.clipboard[0].stroke && FM.clipboard[0].stroke.width === 999) shared.push('the clipboard entry itself');
+      if (shared.length) throw new Error('the pasted layer shares objects with ' + shared.join(' and ') + ', so editing it edits them too');
+
+      // …and pasting twice gives two distinct layers, not two references to one.
+      await FM.pasteClipboard(0); await sleep(120);
+      const copies = FM.scene.layers.filter(L => L.id !== a.id);
+      if (copies.length < 2 || copies[0].id === copies[1].id) throw new Error('a second paste did not produce a second, distinct layer (' + copies.length + ' found)');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('keyframes: every ease lands exactly on the value you set, at every keyframe', { item: 'kf-land' }, function () {
     /* The property a keyframe is FOR: at its own time it must give back exactly the number you typed,
        whatever easing is on it. This is not obvious from the code — a MIDDLE keyframe is reached as

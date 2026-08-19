@@ -920,3 +920,23 @@ cyclic, random, steps) have no particular reason to. **All twelve presets land e
 Kept as `keyframes: every ease lands exactly on the value you set, at every keyframe`, read from
 `FM.EASE_FAMILIES` so an ease added later is covered the day it is added. Mutation-checked by scaling
 the segment fraction by 0.999, which puts all twelve a hair off and is reported per ease.
+
+## 9. Copy → paste fidelity — clean, and now a permanent sweep
+Same family as the duplicate sweep. A layer carrying 33 properties, copied and pasted: **every property
+reproduced**, the pasted layer is independent of both the original AND the clipboard entry (editing it
+reaches neither), and a second paste makes a second distinct layer rather than another view of one.
+**Two deliberate behaviours had to be understood before this could be written honestly**, and both
+looked exactly like lost data on the first run:
+- Paste lands the clip at the PLAYHEAD and shifts its keyframe times by the same delta, so the
+  animation stays aligned to the clip. The test parks the playhead on the layer's own start, making
+  that delta zero — rather than carrying a model of the shift that could happily agree with a broken one.
+- Paste SNAPS the start to a frame boundary. A start of 0.25s at 30fps is frame 7.5 and comes back as
+  0.2667. The fixture uses 0.5s (frame 15 exactly) so the snap is a no-op.
+Mutation-checked by making `FM.copySelection` drop `repeater` from its snapshot.
+
+### ⚠️ A lead, not yet chased: a possibly order-sensitive test
+During that mutation run, `a vertical flick on the timeline keeps gliding, like a horizontal one` also
+went red ("the list stopped dead when the finger lifted, 150 → 150") — while the mutation only removed
+`repeater` from clipboard snapshots, which cannot affect flinging. The baseline immediately before was
+green. So that test is likely sensitive to timing or to what ran before it. Worth confirming with an
+isolation run; a test that fails for reasons unrelated to what it asserts costs more than it protects.

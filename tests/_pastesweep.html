@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Copy → paste fidelity</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:1280px;height:800px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:680px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.copySelection&&w.FM.pasteClipboard)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(600);
+  FM.scene.layers.length=0;
+  var a=FM.makeLayer('shape',{name:'Star',shape:'star',x:400,y:700,shapeW:320,shapeH:280,fill:'#3a7bd5'});
+  a.start=0.25; a.duration=3.5;
+  a.transform.x={kf:[{t:0,v:0,e:'easeInOut'},{t:2,v:220}]};
+  a.transform.opacity=0.66; a.transform.rotation=17.5;
+  a.stroke={enabled:true,width:9,color:'#ff5fa2',position:'outside',dash:{enabled:true,length:14,gap:6,offset:3}};
+  a.shadow={enabled:true,blur:22,dx:0,dy:0,color:'#001122',alpha:80};
+  a.effects=[{type:'blur',enabled:true,params:{radius:7}},{type:'glow',enabled:true,params:{radius:12,passes:2,color:'#ffcc00'}}];
+  a.blend='screen'; a.repeater={enabled:true,copies:4,offsetX:30,offsetY:10,rotation:12,scale:0.9,opacity:0.8,anchorX:0.5,anchorY:0.5};
+  a.colorGrade={hue:20,sat:1.3,lift:0.05,gamma:1.1,gain:0.95};
+  a.volume=0.7; a.fadeIn=0.3; a.fadeOut=0.4;
+  FM.scene.layers.push(a); FM.selectLayer(a.id); FM.refreshAll(); await sleep(300);
+  var before=JSON.parse(JSON.stringify(a,FM.jsonReplacer));
+  var n=FM.copySelection();
+  o.push('copySelection() reported '+n+' layer(s) on the clipboard');
+  await FM.pasteClipboard(0);
+  await sleep(400);
+  var pasted=FM.scene.layers.filter(function(L){return L.id!==a.id;})[0];
+  if(!pasted){ o.push('❌ paste produced no layer'); }
+  else{
+    var after=JSON.parse(JSON.stringify(pasted,FM.jsonReplacer));
+    var IGNORE={id:1,name:1,clipColor:1,parent:1,zIndex:1};
+    var diffs=[];
+    Object.keys(before).forEach(function(k){
+      if(IGNORE[k])return;
+      if(JSON.stringify(before[k])!==JSON.stringify(after[k])) diffs.push('  . '+k+':  '+String(JSON.stringify(before[k])).slice(0,100)+'\n       pasted:  '+String(JSON.stringify(after[k])).slice(0,100));
+    });
+    Object.keys(after).forEach(function(k){ if(!IGNORE[k]&&!(k in before)) diffs.push('  pasted GAINED . '+k+' = '+String(JSON.stringify(after[k])).slice(0,80)); });
+    o.push('original carries '+Object.keys(before).length+' properties');
+    o.push('');
+    o.push(diffs.length ? ('❌ '+diffs.length+' property(ies) did not survive copy→paste:') : '✅ paste reproduced every property.');
+    diffs.forEach(function(x){o.push(x);});
+    // independence: the pasted layer must not share objects with the clipboard OR the original
+    if(pasted.stroke) pasted.stroke.width=999;
+    if(pasted.effects&&pasted.effects[0]) pasted.effects[0].params.radius=999;
+    var shared=[];
+    if(a.stroke&&a.stroke.width===999) shared.push('original.stroke');
+    if(a.effects&&a.effects[0]&&a.effects[0].params.radius===999) shared.push('original.effects[0].params');
+    if(FM.clipboard&&FM.clipboard[0]&&FM.clipboard[0].stroke&&FM.clipboard[0].stroke.width===999) shared.push('the CLIPBOARD entry');
+    o.push('');
+    o.push(shared.length ? ('❌ the pasted layer shares objects with: '+shared.join(', ')+'  — editing it edits them')
+                         : '✅ the pasted layer is independent of both the original and the clipboard.');
+    // …and pasting TWICE must give two independent layers, not two views of one.
+    await FM.pasteClipboard(0); await sleep(300);
+    var all=FM.scene.layers.filter(function(L){return L.id!==a.id;});
+    o.push('');
+    o.push(all.length>=2 && all[0].id!==all[1].id ? '✅ a second paste made a second, distinct layer.' : '❌ a second paste did not produce a distinct layer ('+all.length+' found)');
+  }
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>
