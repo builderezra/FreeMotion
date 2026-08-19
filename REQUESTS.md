@@ -10179,6 +10179,25 @@ wait for them to report back."*
 
       > Make sure everything aligned perfectly and don't make me have to say it's not right, make sure the switch has a clean animation, do the same stuff for pc, and make sure everything perfect before you sign off on it
 
+      🔧 **BUILT AND MEASURED, NOT SHIPPED — branch `wip/373-transport-row` (19 Aug).**
+      | clause | state |
+      |---|---|
+      | 1,2,3 the swap + the switch | ✅ order is `copy/paste · switch · ⏮ \| pill \| ⏭ · undo · redo · view` |
+      | 4,5,6 switch reflects the row's position | ✅ `--sw` reads 0 / .25 / .5 / .75 / 1 across addAt 0..4 |
+      | 7 press mid-way → the far end | ✅ from addAt 1 → tap → 4; from 3 → tap → 0 |
+      | 8 aligned perfectly | ⚠️ **0.99px off**, down from 9.24 |
+      | 9 clean animation | ⚠️ built, NOT verifiable headlessly |
+      | 10 same on PC | ❌ not started |
+      **The alignment fix worth knowing:** a bare `1fr` is `minmax(auto, 1fr)`, so a side column refuses to
+      shrink below its content — four controls on the right against three on the left shoved the centre
+      column 9.24px left. `minmax(0, 1fr)` on both sides fixes it to within a pixel. **The last 0.99px is
+      an odd-remainder rounding**; if that is not good enough, centre the pill on the VIEWPORT the way the
+      playhead already does (`left: calc(50vw - var(--tl-panel-left))`) rather than on the row.
+      ⚠️ **Clause 9 cannot be proven in the suite and the test must not pretend otherwise.** CSS
+      transitions do not advance under `--virtual-time-budget`, so `getComputedStyle().top` returns the
+      value the knob is moving AWAY from — a first measurement read 3px at every proportion and looked
+      exactly like broken CSS. Assert `--sw` and the declared geometry; verify the motion by eye.
+
       **His clauses, ticked one at a time — cannot be marked DONE while any is unticked:**
       1. [ ] **Undo / redo move RIGHT**, to where the copy/paste button is now.
       2. [ ] **Copy / paste moves LEFT**, to where undo/redo were.
