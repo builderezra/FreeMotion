@@ -10186,6 +10186,16 @@ wait for them to report back."*
       | 4,5,6 switch reflects the row's position | ✅ `--sw` reads 0 / .25 / .5 / .75 / 1 across addAt 0..4 |
       | 7 press mid-way → the far end | ✅ from addAt 1 → tap → 4; from 3 → tap → 0 |
       | 8 aligned perfectly | ⚠️ **0.99px off**, down from 9.24 |
+      🚨 **A REAL FIND FOR #405, from trying to close that last 0.99px.** Centring the pill ABSOLUTELY
+      (`left: 50%` + a half-width translate, the technique the playhead uses) gives **0.00px at every
+      width** — exact by arithmetic instead of by luck. But out of the flow, the two button groups have to
+      RESERVE the pill's width with padding, and `flex: 1 1 0` keeps each group's content as its minimum:
+      measured, **the row then sized itself to 386px whatever the viewport was**, so a 320px phone was
+      66px too narrow — and because `#app` is `overflow: hidden` that is CLIPPED, not scrollable. The
+      view-options button would simply have been cut off. Reverted to the grid.
+      ⚠️ **The grid is not clean at 320 either**: the row's own `scrollWidth` is **348 in a 320 box**, so
+      28px of the eight controls is already out of view on the narrowest phones. That predates this change
+      and is the first thing #405's width sweep should catch.
       | 9 clean animation | ⚠️ built, NOT verifiable headlessly |
       | 10 same on PC | ❌ not started |
       **The alignment fix worth knowing:** a bare `1fr` is `minmax(auto, 1fr)`, so a side column refuses to
