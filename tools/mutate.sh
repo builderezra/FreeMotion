@@ -43,6 +43,10 @@ if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
     echo "   Fix these first, then mutation-check."
     exit 5
   fi
+  # A baseline of ZERO tests is not a baseline. Same hole as ship.sh had, and the more dangerous half:
+  # caching an empty run as "proven green" would bless every mutation checked against it afterwards.
+  . tools/_testfloor.sh
+  test_floor_check "$BASE_OUT" || { echo "   Fix that before mutation-checking anything."; exit 6; }
   printf '%s' "$BASE_HASH" > "$GREEN_FILE"
   echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
 fi

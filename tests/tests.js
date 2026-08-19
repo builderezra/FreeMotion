@@ -2092,6 +2092,75 @@
     }
   });
 
+  test('effects: a slider at 0 means zero, it does not quietly become the default', { item: 'zero-jump' }, function () {
+    /* THE QUEUE 403 CLASS, swept rather than spot-checked. `FM.evalProp` returns 0 for an ABSENT
+       parameter, never null, so `FM.evalProp(p.size, t) || 16` cannot tell "no value" from "the user
+       dialled it to zero" — it hands 16 to both. That was found once by accident, in Lightning, where
+       it collapsed every new default to zero. The file's own idiom is `p.x == null ?`, and this is what
+       keeps the next effect honest.
+       THE FINGERPRINT, and it took two attempts to get right. The first version compared the picture at
+       0 with the picture a hair above 0 and called any big difference a bug — but plenty of effects draw
+       on a WHOLE-PIXEL grid, so a sub-pixel nudge legitimately moves the pattern to different rows, and
+       WHICH ones tripped depended on the canvas size. That is a test that rots.
+       What `|| N` actually does is make the dial at 0 render as if it were N. So: render at 0 and at the
+       parameter's own default, and if those two are IDENTICAL while the dial demonstrably changes the
+       picture elsewhere, the zero was swallowed. Quantisation cannot produce that — it moves a pattern,
+       it does not make 0 a synonym for the default. */
+    if (!FM.EFFECTS || !FM.renderScene) throw new Error('no effect table or renderer to sweep');
+    const S = 64, P = { width: S, height: S, fps: 30, duration: 4, background: '#101018' };
+    const c = document.createElement('canvas'); c.width = S; c.height = S;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    /* THE SUBJECT MUST BE ASYMMETRIC, and getting this wrong produced three false hits before it was
+       fixed. An effect only ever sees the layer it is ON, so a flat SQUARE is invisible to anything
+       that moves pixels rather than recolours them: mirroring a uniform square returns the same square,
+       stretching a region of one flat colour returns the same pixels, and spinning one by 90° lands it
+       exactly on itself. `mirror.position`, `stretchseg.y` and `spin.speed` were all reported as "0
+       renders exactly as the default" with nothing wrong with any of them.
+       A star with a thick contrasting outline has edges everywhere, no 90° symmetry, and is off-centre
+       in the frame — so any geometric change to it shows up somewhere. */
+    const shot = function (fx) {
+      const L = FM.makeLayer('shape', {
+        name: 'S', shape: 'star', x: S * 0.46, y: S * 0.54, shapeW: S * 0.78, shapeH: S * 0.66, fill: '#7fd6ff'
+      });
+      L.start = 0; L.duration = 4; L.effects = [fx];
+      L.stroke = { enabled: true, width: 3, color: '#ff5fa2', position: 'center' };
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S);
+      FM.renderScene(g, { project: P, layers: [L] }, 1.0);
+      return g.getImageData(0, 0, S, S).data;
+    };
+    const diff = function (a, b) {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (Math.abs(a[i] - b[i]) > 10 || Math.abs(a[i + 1] - b[i + 1]) > 10 || Math.abs(a[i + 2] - b[i + 2]) > 10 || Math.abs(a[i + 3] - b[i + 3]) > 10) n++;
+      }
+      return n;
+    };
+    const swallowed = [];
+    let tested = 0;
+    FM.EFFECTS.forEach(function (def) {
+      if (!def.params) return;
+      def.params.forEach(function (prm) {
+        if (prm.options || prm.min == null || prm.min > 0) return;   // 0 is not reachable, or it is a choice
+        if (prm.def == null || prm.def === 0) return;                // nothing for a fallback to substitute
+        const at = function (v) {
+          const params = {};
+          def.params.forEach(function (q) { if (q.def != null) params[q.key] = q.def; });
+          params[prm.key] = v;
+          return shot({ type: def.type, params: params });
+        };
+        let zero, dflt, other;
+        try { zero = at(0); dflt = at(prm.def); other = at(prm.def / 2); } catch (e) { return; }
+        tested++;
+        if (diff(dflt, other) < 6) return;    // control: this dial does nothing visible here, so it cannot answer
+        if (diff(zero, dflt) === 0) swallowed.push(def.type + '.' + prm.key + ' (0 renders exactly as ' + prm.def + ')');
+      });
+    });
+    /* The coverage guard, because a sweep that swept nothing is the failure mode here — 200+ parameters
+       qualified when this was written. */
+    if (tested < 150) throw new Error('only ' + tested + ' parameters were swept — FM.EFFECTS is not being read the way this expects, so a pass would prove nothing');
+    if (swallowed.length) throw new Error(swallowed.length + ' effect parameter(s) treat a dial at 0 as their default, which is exactly what `evalProp(p.x, t) || N` does: ' + swallowed.slice(0, 8).join('; '));
+  });
+
   test('PC: the layer actions sit on the right of the transport row, in one pill you can see', { item: '425' }, function () {
     /* Queue 425, from a desktop screenshot. Ezra: "THE three buttons on pc with trash copy and parent
        need to be on the right side not left and also the background they have is too subtle". */

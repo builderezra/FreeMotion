@@ -57,6 +57,9 @@ if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
   printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | head -6
   exit 1
 fi
+# …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
+. tools/_testfloor.sh
+test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
 echo "✅ $SUM"
 
 git add -A

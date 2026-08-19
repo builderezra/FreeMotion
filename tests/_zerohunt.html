@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Falsy-zero sweep: a slider at 0 must not jump</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:900px;height:600px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;right:0;top:0;width:820px;max-height:100vh;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* THE PROPERTY, and it needs no knowledge of any effect's implementation: a parameter is a CONTINUOUS
+   dial, so evaluating it at 0 and at a hair above 0 must produce almost the same picture. A
+   `FM.evalProp(p.x, t) || 16` substitutes a completely different value the instant the dial reaches 0
+   — the exact defect queue 403 found once already — and that shows up here as a large jump between two
+   neighbouring values. Params whose declared minimum is above 0 are skipped: 0 is not reachable there. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.renderScene&&w.FM.EFFECTS)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument, o=[], S=96;
+  var P={width:S,height:S,fps:30,duration:4,background:'#101018'};
+  var c=d.createElement('canvas'); c.width=S; c.height=S;
+  var g=c.getContext('2d',{willReadFrequently:true});
+  function shot(fx){
+    var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:S/2,y:S/2,shapeW:S*0.62,shapeH:S*0.62,fill:'#7fd6ff'});
+    L.start=0; L.duration=4; L.effects=fx?[fx]:[];
+    g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,S,S);
+    FM.renderScene(g,{project:P,layers:[L]},1.0);
+    return g.getImageData(0,0,S,S).data;
+  }
+  function diff(a,b){var n=0;for(var i=0;i<a.length;i+=4){if(Math.abs(a[i]-b[i])>10||Math.abs(a[i+1]-b[i+1])>10||Math.abs(a[i+2]-b[i+2])>10||Math.abs(a[i+3]-b[i+3])>10)n++;}return n;}
+  var tested=0, skipped=0, jumps=[];
+  for (var ei=0; ei<FM.EFFECTS.length; ei++){
+    var def=FM.EFFECTS[ei]; if(!def.params) continue;
+    for (var pi=0; pi<def.params.length; pi++){
+      var prm=def.params[pi];
+      if(prm.options||prm.min==null||prm.min>0) { skipped++; continue; }
+      var eps=Math.max(1e-4,(prm.step||0.01)/50);
+      var base={}, hair={};
+      def.params.forEach(function(q){ if(q.def!=null){ base[q.key]=q.def; hair[q.key]=q.def; } });
+      base[prm.key]=0; hair[prm.key]=eps;
+      var a,b;
+      try { a=shot({type:def.type,params:base}); b=shot({type:def.type,params:hair}); }
+      catch(e){ continue; }
+      tested++;
+      var n=diff(a,b);
+      if(n > S*S*0.04) jumps.push({fx:def.type, p:prm.key, px:n, pct:(100*n/(S*S)).toFixed(1)});
+    }
+    if(ei%20===0) await sleep(0);
+  }
+  o.push('SWEEP: '+tested+' parameters where 0 is a legal value, across '+FM.EFFECTS.length+' effects  ('+skipped+' skipped: min>0 or a choice)');
+  o.push('A JUMP = the picture at 0 differs from the picture at a hair above 0 by more than 4% of the frame.');
+  o.push('');
+  if(!jumps.length) o.push('no discontinuities at 0.');
+  jumps.sort(function(x,y){return y.px-x.px;}).slice(0,25).forEach(function(j){ o.push('  '+j.fx+' . '+j.p+'   '+j.pct+'% of the frame changes between 0 and '+'~0'); });
+  o.push(''); o.push('total jumps: '+jumps.length);
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

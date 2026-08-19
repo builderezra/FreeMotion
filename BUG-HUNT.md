@@ -811,3 +811,50 @@ still correct, and the row handles still sit at the right edge where it used to 
 - **Trigger:** Select a video clip → Replace media… → pick a different file. Repeat (e.g. auditioning several takes for the same slot).
 - **Costs:** Each replace permanently pins the previous file's blob URL, media element and decoded audio. Doing it a handful of times on a phone with multi-minute clips is hundreds of MB of unreleasable memory, which is what OOM-kills mobile Safari mid-edit. Nothing ever frees it — not deleting the layer, not switching projects, not closing the project.
 - **Fix:** Make `set()` release whatever it displaces: `set(id, rec) { const p = store[id]; if (p && p !== rec && p.url) { try { URL.revokeObjectURL(p.url); } catch (e) {} if (p.el) { try { p.el.pause(); p.el.removeAttribute('src'); p.el.load(); } catch (e) {} } p.audioBuffer = null; } store[id] = rec; }`. That fixes replaceMediaWith without touching any caller.
+
+---
+
+# Bug hunt — 2026-08-20 (v10.63), two sweeps and one hole in the safety net
+
+Run when REQUESTS.md had no actionable item left. Both sweeps came back with **no product defects**,
+which is worth writing down as plainly as a list of bugs would be — and one of them found a real fault
+in the tooling that is supposed to catch bugs.
+
+## 1. The border-ring artefact (queue 424's cause) — no second instance
+`background-origin` defaults to the padding box while `background-clip` defaults to the border box, so
+a box with a gradient background and a see-through border paints its border ring by REPEATING the
+gradient tile, showing the tile's opposite edge as a hairline. That is what the line under the empty
+timeline turned out to be.
+Swept for it live rather than by reading CSS (the empty add-row's two declarations sit in different
+rules, so a static scan misses exactly the case that started this): every element on four screens,
+flagged when it had a gradient background, default origin/clip, and a border under 0.35 alpha. **Five
+candidates, all `.addmenu-card--soft` and `#cv-go`.** Measured the cards by screenshotting with and
+without `background-origin: border-box` injected: **the pixels are identical**, so their gradients do
+not differ enough across the tile for the repeat to show. Nothing to fix.
+
+## 2. A slider at 0 becoming a default — none left, and now gated
+`FM.evalProp` returns 0 for an ABSENT parameter, never null, so `FM.evalProp(p.size, t) || 16` cannot
+tell "no value" from "the user dialled it to zero". Queue 403 found one of those by accident.
+Swept all 199 effects: for every parameter where 0 is a legal, reachable value, rendered at 0 and at
+the parameter's own default. **No parameter treats 0 as its default.** The class is clean.
+Kept as a test rather than a paragraph, so the next `|| N` is caught: `effects: a slider at 0 means
+zero, it does not quietly become the default`.
+**Two false-hit lessons are baked into that test, both of which cost a run to find:**
+- Comparing 0 against *a hair above 0* flags QUANTISATION, not substitution — effects that draw on a
+  whole-pixel grid legitimately jump when nudged, and which ones tripped depended on the canvas size.
+  Comparing 0 against the DEFAULT is the actual fingerprint of `|| N`.
+- The subject has to be ASYMMETRIC and detailed. A flat square is invisible to anything that moves
+  pixels: mirroring it, stretching a uniform region of it, or spinning it 90° all return the identical
+  picture, which reads as "0 renders exactly as the default". An outlined star, off-centre, does not.
+
+## 3. 🚨 THE REAL FIND: a suite that never ran was reported as GREEN
+`ship.sh` refused to commit on a red suite and `mutate.sh` refused to mutate against a red tree — but
+**neither asked whether any test had actually run.** A `tests/tests.js` with a syntax error registers
+ZERO tests, so nothing fails, so both called it green. Demonstrated deliberately: an unbalanced brace
+spliced into the file came back *"every test still passed"*. ship.sh would have committed and pushed
+it while printing a tick; mutate.sh cached the empty run as a proven-green baseline, which would then
+have blessed every mutation checked against it.
+**Closed structurally** (`tools/_testfloor.sh`, sourced by both): the suite's registered test count is
+recorded in `tools/.test-floor` and only ever allowed to rise. Zero tests, no summary line at all, or a
+count below the floor each refuse and say why. Deliberately removing a test is the one case that trips
+it, and the message gives the one line that lowers the number.
