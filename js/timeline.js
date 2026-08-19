@@ -2227,8 +2227,41 @@ window.FM = window.FM || {};
     momentumRAF = requestAnimationFrame(step);
   }
 
+  /* VERTICAL GLIDE (queue 415). Ezra: "Scrolling up and down on timeline should have some glide to it
+     like dragging left and right."
+     "Like dragging left and right" is the specification, so this shares the horizontal fling's CONSTANTS
+     rather than getting its own — `MOM_FRICTION` is the same lever queue 103 tuned by feel, and a second
+     number here would drift from it exactly the way the effect sliders did (see the note above those
+     constants, which exists because that already happened once).
+     It has to be written at all because `#timeline` is `touch-action: none` and JS owns every gesture, so
+     there is no native scroll inertia to inherit — the vertical branch panned `scrollTop` directly and
+     stopped dead on release while the horizontal branch flung. */
+  let scrollMomRAF = 0;
+  function stopScrollMomentum() { if (scrollMomRAF) { cancelAnimationFrame(scrollMomRAF); scrollMomRAF = 0; } }
+  let _lastScrollFling = null;
+  FM._tlLastScrollFling = function () { return _lastScrollFling; };   // suite seam: did the release FLING?
+  function startScrollMomentum(vPxPerMs) {
+    _lastScrollFling = { v: vPxPerMs, at: performance.now() };
+    stopScrollMomentum();
+    let v = vPxPerMs;
+    if (!timelineEl || !isFinite(v) || Math.abs(v) < 0.02) return;     // too gentle to bother
+    v = Math.max(-4.2, Math.min(4.2, v));                             // px/ms cap ≈ a hard flick
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(48, now - last); last = now;
+      v *= Math.pow(MOM_FRICTION, dt / 16.67);                        // the SAME friction as the horizontal fling
+      const b = timelineEl.scrollTop;
+      timelineEl.scrollTop = b + v * dt;
+      if (timelineEl.scrollTop === b) { scrollMomRAF = 0; return; }   // hit an end — stop rather than spin
+      if (Math.abs(v) > 0.01) scrollMomRAF = requestAnimationFrame(step);
+      else scrollMomRAF = 0;
+    };
+    scrollMomRAF = requestAnimationFrame(step);
+  }
+
   function beginScrub(e) {
     stopMomentum();                                     // a fresh grab kills any in-flight glide
+    stopScrollMomentum();                               // …the vertical one too (queue 415)
     dragging = true;
     try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
     if (FM.playing) FM.pause();
@@ -2890,6 +2923,12 @@ window.FM = window.FM || {};
           if (!scrub.axis && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) scrub.axis = (Math.abs(dy) > Math.abs(dx) + 4) ? 'y' : 'x';
           if (scrub.axis === 'y') {
             scrub.moved = true;   // a vertical PAN is not a tap — releasing it must never deselect (it wiped painted multi-selections)
+            // sample the release velocity, same smoothing as the horizontal branch below (queue 415)
+            {
+              const nowY = e.timeStamp || performance.now(), ddy = nowY - (scrub.lastTY || nowY);
+              if (ddy > 0) { const vy = (e.clientY - (scrub.lastY != null ? scrub.lastY : e.clientY)) / ddy; scrub.vY = (scrub.vY || 0) * 0.35 + (-vy) * 0.65; }
+              scrub.lastY = e.clientY; scrub.lastTY = nowY;
+            }
             timelineEl.scrollTop = scrub.startScrollTop - dy;                                  // vertical pan
           } else if (Math.abs(dx) > 3) {
             scrub.moved = true;
@@ -2923,6 +2962,11 @@ window.FM = window.FM || {};
           // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
           // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
           if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+        } else if (dragging && scrub && scrub.axis === 'y' && scrub.moved) {
+          // released a vertical pan → keep gliding, on the same "did the finger stop first" rule as the
+          // horizontal fling: a deliberate settle (>90ms since the last move) must not throw the list.
+          const upY = (e && e.timeStamp) || performance.now();
+          startScrollMomentum(((upY - (scrub.lastTY || 0)) < 90) ? (scrub.vY || 0) : 0);
         } else if (dragging && scrub && scrub.axis === 'x' && scrub.moved && !FM.playing) {
           // released a horizontal grab → keep gliding with the release velocity (momentum), unless the
           // finger had already STOPPED before lifting (last move >90ms ago = a deliberate settle, no fling).

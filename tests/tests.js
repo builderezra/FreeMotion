@@ -31703,6 +31703,55 @@
     }
   });
 
+  test('a vertical flick on the timeline keeps gliding, like a horizontal one', { item: 'vertical-glide' }, async function () {
+    /* Queue 415. Ezra: "Scrolling up and down on timeline should have some glide to it like dragging left
+       and right."
+       `#timeline` is `touch-action: none` and JS owns every gesture, so there is no native inertia to
+       inherit — the vertical branch panned scrollTop directly and stopped dead on release while the
+       horizontal branch flung. The test releases a fast upward drag and requires the list to KEEP MOVING
+       after the finger is gone, which is the whole of what he asked for; and it asserts the friction is
+       the SAME constant the horizontal fling uses, because "like dragging left and right" is a statement
+       about the feel matching, and two numbers meant to match have already drifted apart once in this file
+       (see the note above MOM_FRICTION). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      for (let i2 = 0; i2 < 24; i2++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i2, shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(160);
+      const scroller = document.getElementById('timeline');
+      const inner = document.getElementById('tl-inner');
+      if (!scroller || !inner) throw new Error('#timeline / #tl-inner missing');
+      if (scroller.scrollHeight <= scroller.clientHeight + 40) throw new Error('the timeline does not overflow enough to glide');
+      scroller.scrollTop = 0;
+      await sleep(40);
+      const r = scroller.getBoundingClientRect();
+      const x = Math.round(r.left + r.width * 0.5);
+      let y = Math.round(r.top + r.height * 0.7);
+      const at = t => ({ bubbles: true, button: 0, pointerId: 31, isPrimary: true, clientX: x, clientY: y, timeStamp: t });
+      let t0 = performance.now();
+      inner.dispatchEvent(new PointerEvent('pointerdown', at(t0)));
+      // …a fast upward drag: 5 steps of 30px, 12ms apart
+      for (let k = 0; k < 5; k++) { y -= 30; t0 += 12; window.dispatchEvent(new PointerEvent('pointermove', at(t0))); }
+      const atRelease = scroller.scrollTop;
+      window.dispatchEvent(new PointerEvent('pointerup', at(t0 + 4)));
+      await sleep(260);                                   // …finger gone; the glide should still be running
+      const after = scroller.scrollTop;
+      if (!(after > atRelease + 6)) throw new Error('the list stopped dead when the finger lifted (' + Math.round(atRelease) + ' → ' + Math.round(after) + ') — a horizontal flick glides, this should too');
+      const fling = FM._tlLastScrollFling && FM._tlLastScrollFling();
+      if (!fling || !Math.abs(fling.v)) throw new Error('the release recorded no fling velocity at all');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31 })); } catch (e) {}
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

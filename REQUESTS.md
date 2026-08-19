@@ -11504,13 +11504,24 @@ wait for them to report back."*
       opening the card — and the rebuild resets it, so by tap time the axis already matched and the old
       code's swallowing branch was never reached. It sets the axis after the card renders now.
 
-- [ ] **415 — Vertical timeline scrolling should glide like the horizontal drag does.** (19 Aug, via the
+- [x] **415 — Vertical timeline scrolling should glide like the horizontal drag does.** ✅ **v10.53.** (19 Aug, via the
       phone inbox.) His words, verbatim:
       > Scrolling up and down on timeline should have some glide to it like dragging left and right
       **Clauses:**
-      1. [ ] Vertical scroll gets momentum/glide matching the horizontal feel.
+      1. [x] Vertical scroll gets momentum/glide matching the horizontal feel.
       ⚠️ `#timeline` has `touch-action: none` and JS owns every gesture, so this is a real inertia
       implementation, not a CSS property — read how the horizontal glide is done and reuse it.
+      ✅ **THE WARNING WAS RIGHT AND THE DIAGNOSIS WAS SIMPLER THAN EXPECTED.** The gesture already splits
+      into an axis: the horizontal branch samples a release velocity and flings, and the vertical branch
+      panned `scrollTop` directly and sampled NOTHING — so it stopped dead the instant the finger lifted.
+      It now samples with the same smoothing and flings on release under the same "did the finger stop
+      first" rule (>90ms since the last move = a deliberate settle, no throw).
+      ✅ **It REUSES `MOM_FRICTION` rather than getting its own number**, which is the literal reading of
+      "like dragging left and right" and also the lesson written above those constants: queue 116 found the
+      effect sliders had been left on the old friction under a comment claiming they matched, and two
+      values meant to feel the same drifted apart in silence for months. One constant, two axes.
+      ⚠️ It stops if `scrollTop` refuses to move, so hitting the top or bottom ends the glide instead of
+      spinning a rAF against a clamped value.
 
 - [ ] **416 — 💡 While dragging a layer, the add-row switch takes that layer's colour, and pressing it
       jumps THAT layer to the top or bottom.** (19 Aug, via the phone inbox.) His words, verbatim:
