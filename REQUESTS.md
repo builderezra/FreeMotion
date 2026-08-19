@@ -10213,6 +10213,15 @@ wait for them to report back."*
       · the cap `100% - 290px` → **`330px`** — the switch adds one 34px control plus its 6px gap to the
         cluster, so the old number started biting 40px early. Fixes Studio; alone it leaves classic broken.
       With both: **Studio measures 0.99px off screen centre** — the same residual as the phone, i.e. done.
+      ⚠️ **AND MY PROBE CANNOT REPRODUCE THE SUITE'S CLASSIC CASE — do not trust `tests/_transrow.html`
+      on this.** Toggling `layout-studio` off (both at setup and again immediately before measuring, the
+      way the suite test does) still leaves `--tl-panel-left` at 321px, so BOTH probe runs measure Studio
+      and report a healthy 0.99px while the suite reports classic 23px. That is three separate measurement
+      tools that have now misled me on this one clause — the row-centre-vs-screen-centre mix-up, the
+      transition-frozen knob reading, and this.
+      **Next pass: drive the suite test's own sequence** (it closes/opens what it needs before toggling)
+      rather than a hand-rolled fixture, or add the assertion to the suite and read its numbers directly.
+
       🔬 **AND IT IS NOT THE SWITCH — ruled out by measurement.** Taking the switch out of the desktop flow
       entirely (absolutely positioned, exactly as `#btn-amfit` already is) left classic just as far off.
       **What actually moves it is the SWAP.** The in-flow counts change: left goes 3 → 2 (undo+redo out,
