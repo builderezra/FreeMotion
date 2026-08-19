@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Shape tints (queue 413)</title></head>
+<body style="margin:0;background:#0a1016;color:#cfe0ea;font:12px ui-monospace,monospace;padding:12px">
+<div id="out"></div>
+<iframe id="app" src="../index.html" style="width:400px;height:300px;border:0;position:absolute;left:-9999px"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM._addTints)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+document.getElementById('app').addEventListener('load',function(){
+ waitFM(this.contentWindow).then(function(FM){
+  var t=FM._addTints(), o=document.getElementById('out');
+  o.innerHTML='<div style="padding-bottom:8px">shape tints — '+t.length+' hues, in the order tiles use them</div>';
+  var row=document.createElement('div'); row.style.cssText='display:flex;flex-wrap:wrap;gap:6px';
+  t.forEach(function(c,i){
+    var d=document.createElement('div');
+    d.style.cssText='width:74px;height:56px;border-radius:10px;display:grid;place-items:center;'+
+      'background:rgba('+c+',.10);border:1px solid rgba('+c+',.5);color:rgb('+c+');font-weight:700';
+    d.textContent=(i+1);
+    row.appendChild(d);
+  });
+  o.appendChild(row);
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message;});
+});
+</script></body></html>

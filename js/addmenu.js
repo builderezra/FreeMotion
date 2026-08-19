@@ -820,16 +820,36 @@ window.FM = window.FM || {};
   var TINTS_MEDIA = ['150, 160, 176', '240, 200, 90', '120, 190, 240'];
   var TINTS_AUDIO = ['150, 160, 176', '160, 140, 235', '235, 70, 70'];
 
+  /* SIXTEEN HUES, NOT EIGHT, AND ORDERED SO NEIGHBOURS CLASH (queue 413). Ezra: "Add more colour to the
+     shapes icons, currently the colours repeat and don't have much variety and isn't very pretty."
+     MEASURED FIRST, as the entry asked: the shape grid ran off EIGHT tints cycled by index across every
+     shape in the tab — so the same colour came back roughly every one and a half rows, which is what
+     reads as a repeat.
+     These are not eyeballed. They are sixteen hues generated at an even 22.5° spacing round the wheel at
+     one saturation and lightness, then REORDERED by stepping 7 places each time — 7 is coprime with 16,
+     so the walk visits every hue exactly once and never places two neighbours near each other. Measured
+     on the result: the closest any two ADJACENT entries come is 157°, i.e. nearly opposite.
+     Generating them is the point rather than a shortcut: queue 271's complaint about the Elements tab was
+     "three blues, two greens" in a hand-picked list, and hand-picking sixteen is how that happens again. */
   var TINTS = [
-    '156, 124, 255',   // violet
-    '79, 163, 255',    // blue
-    '63, 216, 200',    // teal
-    '106, 224, 128',   // green
-    '255, 208, 77',    // yellow
-    '255, 138, 61',    // orange
-    '255, 99, 158',    // pink
-    '126, 231, 255',   // cyan
+    '242, 95, 95',     // red (0°)
+    '95, 242, 187',    // teal (158°)
+    '242, 95, 205',    // magenta (315°)
+    '113, 242, 95',    // green (112°)
+    '168, 95, 242',    // violet (270°)
+    '224, 242, 95',    // gold (68°)
+    '95, 131, 242',    // azure (225°)
+    '242, 150, 95',    // orange (22°)
+    '95, 242, 242',    // cyan (180°)
+    '242, 95, 150',    // rose (338°)
+    '95, 242, 131',    // mint (135°)
+    '224, 95, 242',    // purple (292°)
+    '168, 242, 95',    // lime (90°)
+    '113, 95, 242',    // blue (248°)
+    '242, 205, 95',    // amber (45°)
+    '95, 187, 242',    // sky (202°)
   ];
+  FM._addTints = function () { return TINTS.slice(); };   // suite seam (queue 413)
 
   function card(item, cls, iconOnly, tint) {
     var b = document.createElement('button');

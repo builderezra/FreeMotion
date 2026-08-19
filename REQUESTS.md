@@ -11457,13 +11457,31 @@ wait for them to report back."*
              moved with the label. *(The default LAYER name was already "Group", not "Empty group", so
              nothing to change there.)*
 
-- [ ] **413 — The shape icons' colours repeat and are not pretty.** (19 Aug, via the phone inbox.) His
+- [x] **413 — The shape icons' colours repeat and are not pretty.** ✅ **v10.51 — 8 hues → 16.** (19 Aug, via the phone inbox.) His
       words, verbatim:
       > Add more colour to the shapes icons, currently the colours repeat and don't have much variety and isn't very pretty
       **Clauses:**
-      1. [ ] More variety — measure the current palette first and say how many distinct hues there really
-             are across the grid before picking new ones.
-      2. [ ] *"isn't very pretty"* — judged at the real tile size AND against the neighbours, per #313.
+      1. [x] **MEASURED FIRST, as asked: EIGHT.** The shape tab ran off eight tints cycled by index across
+             every shape in it, so the same colour came back roughly every one and a half rows — which is
+             exactly what reads as "the colours repeat". It is **sixteen** now.
+      ✅ **THE SIXTEEN ARE GENERATED, NOT PICKED.** Even 22.5° spacing round the wheel at one saturation and
+      lightness, then reordered by stepping 7 places each time — 7 is coprime with 16, so the walk visits
+      every hue exactly once and never seats two neighbours near each other. **Measured on the result: the
+      closest any two ADJACENT entries come is 157°**, and no two anywhere in the list are within 12°.
+      ⚠️ **Generating them IS the fix, not a shortcut.** Queue 271's complaint about the Elements tab was
+      "three blues, two greens" in a hand-picked list — picking sixteen by eye is how that happens again,
+      and the test asserts the spacing rather than the count for the same reason: a count alone would pass
+      a longer list of blues.
+      ⚠️ **An existing test pinned Shape's opening colour** because #210/#258 treated Shape as the reference
+      the other tabs were told not to copy. He has now said the opposite about Shape itself, so that pin was
+      replaced by the rule it stood for — the tabs must not open on the SAME colour as each other, which is
+      still checked.
+      ⚠️ **The Shape TAB could not be screenshotted headlessly** — `openTab` and a synthetic tab click both
+      fail to switch the rendered sheet in the fixture, twice. The palette is verified numerically by the
+      test and visually as swatches at tile size in tile order; that is stated rather than dressed up as a
+      screenshot of the real grid.
+      2. [x] **Judged as swatches at tile size, in tile order** (`tests/_tintstrip.html`), which is the
+             honest version of "against the neighbours" — see the note below about the tab screenshot.
 
 - [ ] **414 — The position-number buttons should be tappable and typable.** (19 Aug, via the phone
       inbox.) His words, verbatim:

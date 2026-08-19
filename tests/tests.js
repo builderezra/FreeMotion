@@ -17716,9 +17716,16 @@
         if (seen['Elements'] && seen['Shape'] && seen['Elements'].length && seen['Shape'].length) {
           if (seen['Elements'][0] === seen['Shape'][0]) throw new Error('Elements still opens on the same colour as Shape — the copy-paste feel he described');
         }
-        // Shape is the reference for "done right" and must not have moved.
-        if (seen['Shape'] && seen['Shape'][0] && seen['Shape'][0] !== '156, 124, 255') {
-          throw new Error('Shape\'s palette changed to ' + seen['Shape'][0] + ' — he said Shape is the one that is already right');
+        /* SHAPE IS NO LONGER PINNED TO ONE OPENING COLOUR (queue 413). It used to be, because #210/#258
+           treated Shape as the reference the other tabs were told not to copy — "we don't want it the
+           exact same as the shape menu". He has since said the opposite about Shape ITSELF: "Add more
+           colour to the shapes icons, currently the colours repeat and don't have much variety and isn't
+           very pretty", and the palette went from 8 hues to 16.
+           What this test is really for still holds and is still checked above: the tabs must not open on
+           the SAME colour as each other. Pinning Shape to a specific triple was a way of saying that, and
+           it stopped being true the moment Shape was the thing being changed. */
+        if (seen['Shape'] && seen['Shape'][0] && seen['Elements'] && seen['Elements'][0] === seen['Shape'][0]) {
+          throw new Error('Shape and Elements now open on the same colour (' + seen['Shape'][0] + ') — the copy-paste feel he described');
         }
       } finally {
         /* The sheet is driven by an `open` class, NOT `hidden` — adding `hidden` left it open, and the
@@ -31614,6 +31621,43 @@
     if (!FM.addMenu._tileHue) throw new Error('FM.addMenu._tileHue seam is missing — the palette half cannot be checked');
     if (!FM.addMenu._tileHue('New group')) throw new Error('"New group" resolves no colour — the palette is keyed by LABEL and still says "Empty group", so the tile silently falls back');
     if (FM.addMenu._tileHue('Empty group')) throw new Error('the palette still carries an "Empty group" key — a dead entry that will outlive everyone who remembers why');
+  });
+
+  test('the shape palette has real variety and never puts two near-identical hues side by side', { item: 'shape-palette' }, function () {
+    /* Queue 413. Ezra: "Add more colour to the shapes icons, currently the colours repeat and don't have
+       much variety and isn't very pretty."
+       Measured before the change: EIGHT tints cycled by index across the whole shape tab, so the same
+       colour returned about every one and a half rows. Both halves of his sentence are asserted — enough
+       hues that the cycle is not obvious, and no two ADJACENT entries close enough to read as the same
+       colour twice.
+       ⚠️ The second half is what stops this being fixed with a longer list of blues: queue 271's complaint
+       about the Elements tab was "three blues, two greens" in a hand-picked palette, and a count alone
+       would pass exactly that. */
+    if (!FM._addTints) throw new Error('FM._addTints seam is missing');
+    const tints = FM._addTints();
+    if (tints.length < 14) throw new Error('only ' + tints.length + ' shape tints — the cycle repeats about every ' + tints.length + ' tiles, which is what he can see');
+    const hueOf = t => {
+      const n = String(t).split(',').map(x => parseFloat(x) / 255);
+      const mx = Math.max.apply(null, n), mn = Math.min.apply(null, n);
+      if (mx - mn < 0.02) return null;                       // grey: no hue
+      let h;
+      if (mx === n[0]) h = 60 * (((n[1] - n[2]) / (mx - mn)) % 6);
+      else if (mx === n[1]) h = 60 * ((n[2] - n[0]) / (mx - mn) + 2);
+      else h = 60 * ((n[0] - n[1]) / (mx - mn) + 4);
+      return (h + 360) % 360;
+    };
+    const hs = tints.map(hueOf);
+    if (hs.some(h => h == null)) throw new Error('a shape tint has no hue at all (a grey in the rotation)');
+    const sep = (a, b) => { const d = Math.abs(a - b); return Math.min(d, 360 - d); };
+    // …distinct: no two entries anywhere in the list within 12°
+    for (let a = 0; a < hs.length; a++) for (let b = a + 1; b < hs.length; b++) {
+      if (sep(hs[a], hs[b]) < 12) throw new Error('tints ' + a + ' and ' + b + ' are ' + Math.round(sep(hs[a], hs[b])) + '° apart (' + tints[a] + ' vs ' + tints[b] + ') — that is the same colour twice, which is the "not much variety" he reported');
+    }
+    // …and never two similar ones side by side, which is what the eye actually catches
+    for (let a = 0; a + 1 < hs.length; a++) {
+      const d = sep(hs[a], hs[a + 1]);
+      if (d < 40) throw new Error('tints ' + a + ' and ' + (a + 1) + ' sit next to each other only ' + Math.round(d) + '° apart — adjacent tiles will read as the same colour');
+    }
   });
 
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {

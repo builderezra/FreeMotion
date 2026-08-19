@@ -13,7 +13,11 @@ f.addEventListener('load',function(){
     if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
     await sleep(450);
     FM.mobile.openAdd(); await sleep(350);
-    FM.addMenu.openTab(TAB); await sleep(500);
+    FM.addMenu.openTab(TAB); await sleep(400);
+  // …and click the tab itself, because openTab alone has not been switching the rendered sheet
+  var d=f.contentDocument;
+  var want=[].slice.call(d.querySelectorAll('.addmenu-tab')).filter(function(b){return (b.textContent||'').trim().toLowerCase()===TAB;})[0];
+  if (want) { want.click(); await sleep(500); }
     FM.mobile.syncAddSheetTop();
     document.title='ready';
   }).catch(function(e){document.title='ERR '+e.message;});
