@@ -1902,9 +1902,18 @@ input[type=range]::-webkit-slider-thumb {
 #timeline-panel {
   background: var(--panel);
   border-top: 1px solid var(--line);
-  /* 3 rows: transport · centred timecode pill · timeline. (Was 40px 1fr — adding the timecode as a
-     grid child with only 2 rows dumped it into the 1fr row, ballooning it and squashing the timeline.) */
-  display: grid; grid-template-rows: 40px 26px 1fr;
+  /* 2 rows: transport · timeline. It was `40px 26px 1fr` for three — the middle 26px held the centred
+     timecode pill, and queue 364 moved that pill INTO the transport row and deleted its row outright.
+     Leaving the third track behind was the whole bug: with only two children left, the timeline landed
+     in the 26px slot and its 1fr row sat empty, so the scroller was 26px tall with `overflow: auto` and
+     every clip, cue chip and track head below the first 26px was CLIPPED — laid out, reported by
+     getBoundingClientRect, and not hit-testable. Two suite tests caught it as "the press point is not on
+     a cue chip" and "the centre of the eye does not even hit the eye", which is what being clipped looks
+     like from outside. It was invisible in a screenshot because the fixture had no clips to clip.
+     The comment this replaces warned about the exact mirror image — adding the pill as a grid child
+     without adding a row — so this row count has now been wrong in both directions. --tl-top (see the
+     top of this file) is the same 40px, and everything anchored to the ruler band derives from it. */
+  display: grid; grid-template-rows: 40px 1fr;
   position: relative;   /* anchors the fixed-centre #tl-centerline (phone) + the drag-resizer */
   /* A grid TRACK has an implicit minimum of auto, so a 1fr row refuses to shrink below its content.
      With enough layers the panel grew past #app (which is height:100vh; overflow:hidden), the rows

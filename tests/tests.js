@@ -470,6 +470,33 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('timeline: the scroller fills the panel below the transport row', { item: 'timeline-fills-panel' }, function () {
+    /* THE GUARD FOR A BUG THAT HAS NOW HAPPENED IN BOTH DIRECTIONS. #timeline-panel is a grid, and its
+       `grid-template-rows` has to agree with how many children it actually has. Adding the timecode pill
+       as a child WITHOUT adding a row dumped it into the 1fr track and squashed the timeline (that is
+       written up in the stylesheet). Queue 364 then deleted the pill's row's CHILD and left the row
+       behind, so the timeline landed in the 26px slot instead: the scroller was 26px tall with
+       `overflow: auto`, and every clip, cue chip and track head below the first 26px was clipped — still
+       laid out, still reported by getBoundingClientRect, and completely unhittable.
+       That is why this asserts the scroller's HEIGHT rather than the row template: a template can be
+       written any number of ways, and what actually matters is that the thing you scroll fills the space
+       under the transport. It is also why the two tests that caught it did so as "the press point is not
+       on a cue chip" — being clipped looks like being covered, from outside. */
+    const panel = document.getElementById('timeline-panel');
+    const tl = document.getElementById('timeline');
+    const transport = document.getElementById('transport');
+    if (!panel || !tl || !transport) throw new Error('#timeline-panel / #timeline / #transport missing');
+    const p = panel.getBoundingClientRect(), t = tl.getBoundingClientRect(), tr = transport.getBoundingClientRect();
+    // Control: a collapsed panel would make the comparison meaningless.
+    if (p.height < 120) throw new Error('#timeline-panel is only ' + Math.round(p.height) + 'px tall — nothing below can mean anything');
+    const expected = p.height - tr.height;
+    if (t.height < expected - 4) {
+      throw new Error('the timeline scroller is ' + Math.round(t.height) + 'px inside a ' + Math.round(p.height) +
+        'px panel whose transport row is ' + Math.round(tr.height) + 'px — it should be about ' + Math.round(expected) +
+        '. Everything below that height is clipped and unhittable, which reads as "the tap does not land" rather than as a layout bug');
+    }
+  });
+
   test('transport: the time pill IS the play button, and bookmarks moved to the playhead head', { item: 'pill-play' }, async function () {
     /* Queue 364. He drew an arrow from the ▶ down to the 00:01:36 pill and scribbled out the empty row
        either side of it: "Make it so that the play button is now the project time pill and when you

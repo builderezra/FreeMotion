@@ -9921,15 +9921,18 @@ wait for them to report back."*
       > And also now that the pill is moved we can get rid of the whole row that is wasted just for a spot to put the pill on, giving the timeline more space up.
 
       **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
-      1. [ ] **The time pill IS the play button.** Tapping `00:01:36` plays and pauses. The separate ▶ in
+      1. [x] ✅ **v10.10** — **The time pill IS the play button.** Tapping `00:01:36` plays and pauses. The separate ▶ in
              the transport row goes (that is what his arrow means — the ▶ moving *into* the pill).
-      2. [ ] **Hovering a bookmark turns the PLAYHEAD yellow**, instead of whatever it does today.
-      3. [ ] **Tap the top of the playhead to add a bookmark.**
-      4. [ ] **The top of the playhead gets thicker**, so it is easier to hit.
-      5. [ ] **Delete the ruler row that exists only to hold the pill**, giving the timeline that height
+      2. [ ] **Hovering a bookmark turns the PLAYHEAD yellow.** ⚠️ **Half done in v10.10:** the playhead's
+             head already goes marker-yellow when the playhead is PARKED on a bookmark, which is also how
+             it says a tap will remove rather than add. The HOVER half is desktop-only and still open —
+             it is the one clause of this entry left, which is why the entry stays open.
+      3. [x] ✅ **v10.10** — **Tap the top of the playhead to add a bookmark** (tap again removes it).
+      4. [x] ✅ **v10.10** — **The top of the playhead gets thicker** (5→7 half-width, 8→11 tall) with a 34x26 tap area.
+      5. [x] ✅ **v10.10** — **Delete the ruler row that exists only to hold the pill**, giving the timeline that height
              back. This is the payoff for clause 1 and should land in the same release, or he gets the
              cost without the benefit.
-      6. [ ] **The speed-modifier popup stops appearing on that row.** Added minutes later, verbatim:
+      6. [x] ✅ **v10.10** — **The speed-modifier popup stops appearing on that row.** Added minutes later, verbatim:
              *"Also on that row the speed modifier would pop up but you can just make the speed modifier
              pop up not go there anymore since it's sufficient to have it just show in the view menu on
              the right side"*. So the row has a SECOND occupant, and it does not need rehousing — the
