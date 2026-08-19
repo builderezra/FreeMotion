@@ -6217,6 +6217,11 @@ better still, keep working inside the turn rather than parking work for a later 
       third time he has had to say it, and a repeated instruction that lives only in a chat log is one
       more thing to forget. The structural version already exists (`tools/next.sh`, and the rules at the
       top of CLAUDE.md); this is the receipt.
+      🔁 **Said again, 19 Aug, mid-session:** *"Make sure you're logging everything"*. Everything he has
+      said this session is in here before the work started on it — **406**, **407**, **408** (the three
+      that came in through the phone inbox), **409** (both ends of the add-row switch), **410** (the row's
+      vertical alignment), and the toggle-not-updating report, which is quoted verbatim at the top of
+      **373** because it reopened that entry's own clause 6 rather than being a new subject.
 
 
 - [x] **329 — Two save buttons in the Presets card: what is the difference?** ✅ **v9.75.** Not the
@@ -10827,6 +10832,15 @@ wait for them to report back."*
       4. [ ] the tap targets stay at least ~34px.
       `atPhoneWidth(fn, w)` already parameterises width, so the harness exists — this is a loop over widths
       rather than a new mechanism.
+      ⚠️ **FOUND WHILE DOING #410, AND IT LIMITS THIS ITEM'S HARNESS — read before writing the sweep.**
+      `atPhoneWidth` narrows the frame but CANNOT produce the row a phone actually renders. The desktop
+      transport is built by physically MOVING five controls into it (help, notes, cog, export, view
+      options) behind a one-way `t._pcBuilt` guard in js/app.js, and nothing moves them back when the
+      window narrows. So a resized-from-desktop frame at 380 shows a thirteen-control row wrapped onto two
+      lines — which will read as "overflow at 380" in any width sweep and is an artefact of the resize, not
+      of the phone. **Either the sweep needs a fresh narrow LOAD per width, or `_pcBuilt` needs to become
+      reversible.** The second is the better fix and is a real (if unreported) bug in its own right: anyone
+      who narrows a desktop window past 700px gets that wrapped row for real.
 
 - [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
@@ -10898,3 +10912,35 @@ wait for them to report back."*
       (queue 405), and "the last row is at the dead bottom" is a viewport-height question.
       🔗 Caused by, and completes, **#373** clauses 4/5 — the switch does send the row to both ends; both
       ends are just not usable when it gets there.
+
+- [x] **410 — The transport row's controls are not vertically aligned: the undo/redo arrows sit off, and
+      the play/time pill sits WAY too low.** ✅ **v10.22 — measured in INK, not boxes, which is the only
+      reason the second fault was found. Spread across the row went 2.25px → 0.00px.** (19 Aug, phone screenshot at v10.20 with red lines drawn
+      across the row's top and bottom edges.) His words, verbatim, in full:
+
+      > As you can see by the red lines the undoredo arrows are off and so is the time / play button. Make sure it just all looks good. The play button is really off in total, like way too low down
+
+      **Clauses:**
+      1. [x] The undo/redo arrows sit on the row's centre line.
+      2. [x] The play/time pill sits on the row's centre line — he says it is *"really off in total, like
+             way too low down"*, so this is the loud one.
+      3. [x] *"Make sure it just all looks good"* — EVERY control in the row, not only the two he named.
+      🔗 **This is #373 clause 8 in the other axis, and it is mine.** v10.20 fixed the horizontal centring
+      and never checked the vertical. The likely cause is written down already: queue 278 found that a
+      grid lays its single row track from the TOP of the content box, so a 34px button in a 32px content
+      box overflows downward — and it fixed that with `align-content: center` **inside the desktop media
+      query only**. The phone row was `display: flex` at the time, which does not have the fault. #373
+      turned the phone row into a GRID and inherited it.
+      ✅ **WHAT THE MEASUREMENT ACTUALLY SAID, because my first reading of it was wrong.** Reading the
+      BOXES said every control was a uniform +1px low — real, but nothing like *"way too low down"*. So I
+      measured the rendered INK instead, per control, off a 2x screenshot: pill **+4.25px**, undo/redo
+      **−1.50px**. The pill's figure was contamination — the playhead line sits directly under the row and
+      leaked into its column band — and the honest number for the pill is +0.75px like everything else.
+      **The real outlier was undo/redo, and it is not a layout fault at all:** those two glyphs are drawn
+      spanning y 4..15 inside a 24×24 viewBox, a visual centre of 9.5 where every sibling icon spans 5..19
+      and centres on 12. So they sat 1.5px HIGH inside boxes that were themselves 1px LOW — a 2.25px
+      spread across one row, which is exactly what his red lines bracket. **Three fixes, all measured:**
+      `align-content: center` and the border-for-inset-shadow trade on the phone rule (both already
+      existed for desktop, from queue 278), and the two arrow glyphs translated +2.5 units to centre in
+      their own viewBox. The copy/paste glyph was 0.5 units out as well and went with them — clause 3 says
+      all of them, not only the two he named. **Ink spread across the row: 2.25px → 0.00px.**

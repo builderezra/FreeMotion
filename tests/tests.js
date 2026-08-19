@@ -585,6 +585,59 @@
     }
   });
 
+  test('transport: every glyph is centred in its own box, and the phone row centres its grid track', { item: 'transport-vcentre' }, async function () {
+    /* Queue 410. Ezra, with red lines drawn across the row's top and bottom edges: "the undoredo arrows
+       are off and so is the time / play button… The play button is really off in total, like way too low
+       down." TWO independent faults, and only measuring the rendered INK found the second one.
+       ⚠️ **WHAT THIS TEST CANNOT DO, AND WHY, so nobody re-writes it into a lie.** The obvious assertion —
+       every control's box centre against the row's centre, at 380 — cannot be made in the suite. The app
+       builds the DESKTOP transport by physically MOVING five more controls into the row (#t-far: help,
+       notes, cog, export, view options) behind a one-way `t._pcBuilt` guard, and narrowing the frame does
+       not move them back. The suite boots at 900, so at 380 it is measuring a thirteen-control row that
+       wraps onto two lines — every control then reads ~18px off centre and it looks exactly like the bug.
+       That is not the row a phone ever renders. So the phone half is asserted on the PROPERTY that was
+       wrong, and the box geometry is asserted at the width the suite can genuinely build. */
+    const bad = [];
+    const row = document.getElementById('transport');
+    if (!row) throw new Error('#transport is missing');
+
+    /* (a) THE GLYPHS — pure geometry, so this is true at any width and in any app state. Every icon is a
+       24×24 viewBox, so "centred" means ink centred on y=12, and undo/redo were drawn spanning y 4..15 —
+       a visual centre of 9.5, where every sibling spans 5..19. Their BOXES were always perfectly aligned,
+       which is exactly why a box check passes with his complaint intact: the arrows sat 1.5px HIGH inside
+       boxes that were themselves 1px LOW, and that 2.25px spread is what his red lines bracket. */
+    row.querySelectorAll('svg').forEach(function (sv) {
+      let bb; try { bb = sv.getBBox(); } catch (e) { return; }
+      if (!bb || !bb.height) return;                       // not rendered, or nothing drawn in it
+      const vb = (sv.getAttribute('viewBox') || '0 0 24 24').split(/[\s,]+/).map(Number);
+      const want = vb[1] + vb[3] / 2, got = bb.y + bb.height / 2;
+      const who = (sv.closest('button') || {}).id || 'an icon';
+      if (Math.abs(got - want) > 0.6) bad.push(who + "'s glyph is centred on " + got.toFixed(2) + ' in a viewBox whose centre is ' + want + ', so it sits ' + (got < want ? 'HIGH' : 'LOW') + ' however well the button itself is aligned');
+    });
+
+    /* (b) THE PHONE ROW'S TRACK. Queue 278 wrote this down for desktop and the reasoning transfers whole:
+       a grid lays its single row track from the TOP of the content box, and `align-items: center` cannot
+       fix it, because it centres each item WITHIN the track while the track itself sits high. The phone
+       row did not have the fault when 278 was written — it was `display: flex` — and inherited it the
+       moment queue 373 made it a grid. The desktop block has carried `align-content: center` since 278,
+       so this is checked at 380 where only the base rule can supply it. */
+    await atPhoneWidth(async function () {
+      const cs = getComputedStyle(document.getElementById('transport'));
+      if (cs.alignContent !== 'center') bad.push('at 380 the transport row lays its grid track with align-content: ' + cs.alignContent + ' — 34px buttons in a 31px content box then sit low however align-items is set (queue 278 / 410)');
+      if (cs.borderBottomWidth !== '0px') bad.push('at 380 the row still has a ' + cs.borderBottomWidth + ' bottom border — it lives inside the row\'s 40px, so the box the track centres in is odd and the result lands half a pixel low; an inset shadow draws the same hairline and takes no height');
+    }, 380);
+
+    // …and the boxes really do sit on the centre line in the layout the suite CAN build — the desktop row
+    const r = row.getBoundingClientRect(), mid = r.top + r.height / 2;
+    if (r.height) ['btn-layermenu', 'btn-addside', 'btn-tostart', 'time-readout', 'btn-toend', 'btn-undo', 'btn-redo'].forEach(function (id) {
+      const e = document.getElementById(id); if (!e) return;
+      const b = e.getBoundingClientRect(); if (!b.height) return;
+      const off = (b.top + b.height / 2) - mid;
+      if (Math.abs(off) > 0.5) bad.push(id + ' sits ' + off.toFixed(2) + 'px off the row\'s centre line');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

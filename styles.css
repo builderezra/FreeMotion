@@ -1974,7 +1974,21 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      column pushed the centre column off true centre. Measured before this: the pill sat 9.24px LEFT of
      the row's centre, which is exactly the "not right" he asked not to have to report (queue 373). */
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
-  padding: 4px 14px; border-bottom: 1px solid var(--line-soft);
+  /* align-content, and the border traded for an inset shadow — BOTH of these already existed in the
+     desktop block below, and #373 is why the phone needs them too (queue 410). Ezra, with red lines drawn
+     across the row: "the undoredo arrows are off and so is the time / play button… The play button is
+     really off in total, like way too low down."
+     Queue 278 wrote this down for desktop and the reasoning transfers exactly: a grid lays its single row
+     track from the TOP of the content box, and `align-items: center` cannot fix that because it centres
+     each item WITHIN the track while the track itself sits high. The row is 40px with 4px of padding and
+     a 1px border, so the content box is 31px and the buttons in it are 34 — measured before this, every
+     control in the row sat +0.75px below the row's true centre. The phone row did not have the fault when
+     that was written because it was `display: flex`; #373 made it a grid and inherited it.
+     The border goes the same way and for the same reason: it lives INSIDE the row's 40px, so the box the
+     track centres in is odd-numbered and the result lands half a pixel low however it is aligned. An
+     inset shadow draws the identical hairline in the identical place and takes no height. */
+  align-content: center;
+  padding: 4px 14px; border-bottom: none; box-shadow: inset 0 -1px 0 var(--line-soft);
 }
 /* A GRID WITH SHRINKABLE SIDES, and the alternative is written down because it LOOKED better and was
    worse (queue 373 clause 8 + queue 405). Centring the pill absolutely — `position: absolute; left: 50%`
