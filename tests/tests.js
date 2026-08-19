@@ -470,6 +470,51 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('inspector: the border card is Outline & Shadows, and says Outline inside it too', { item: 'outline-rename' }, function () {
+    /* Queue 369. Ezra: "Change border and shadow to outline add shadows then in the actual menu change
+       anything saying border to outline."
+       BOTH HALVES, because the second is the one a rename usually misses: the card's own toggle and the
+       two hints that tell you to "turn on Border above" — a hint naming a control that no longer exists
+       under that name is worse than the old name was. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+
+      const labels = [].slice.call(document.querySelectorAll('.cat-card, .insp-cat'))
+        .map(c => (c.textContent || '').trim().replace(/^\d+\s*/, ''));
+      if (labels.length < 4) throw new Error('only ' + labels.length + ' cards rendered — nothing below can mean anything');
+      if (labels.some(t => /Border\s*\/\s*Shadow/i.test(t))) throw new Error('a card still reads "Border / Shadow": ' + labels.join(' | '));
+      if (!labels.some(t => /^Outline & Shadows$/.test(t))) throw new Error('no "Outline & Shadows" card (got: ' + labels.join(' | ') + ')');
+
+      // …and inside the card. The `border` key is untouched, which is what keeps saved projects working.
+      FM.inspector.openCategory('border');
+      const panel = ((document.getElementById('inspector-panel') || document.body).textContent || '').replace(/\s+/g, ' ');
+      /* PROVE IT OPENED WITH SOMETHING THE CLOSED STATE CANNOT SHOW. Checking for "Outline" was
+         self-satisfying: the CARD is called "Outline & Shadows", so the grid alone passes it and the
+         assertions below then run against a panel that never opened — both vacuously true. "Drop shadow"
+         is a row inside the card and appears nowhere else. (Measured: the open card reads
+         "‹ Outline & Shadows · Outline · Trim path · Dashes · Drop shadow · Repeater".) */
+      if (!/Drop shadow/i.test(panel)) throw new Error('openCategory("border") did not open the card — the key changed, and saved projects key off it. Panel: ' + panel.slice(0, 140));
+      /* NO \b ANCHORS. textContent concatenates with no separators — the open card reads
+         "…Outline & ShadowsBorderTrim path…" — so \bBorder\b finds no word boundary between "s" and "B"
+         and silently matches nothing. The mutation check caught that; a plain substring is what this
+         needs, and it is safe because "Outline & Shadows" contains no "Border". */
+      if (/Border/.test(panel)) throw new Error('the card still says "Border" somewhere inside it: ' + panel.slice(0, 160));
+
+      // The Paste Style list carries the same label and must not drift from the card (same trap as #366).
+      const style = (FM._styleCats || []).filter(c => c.key === 'border')[0];
+      if (!style) throw new Error('no border entry in the Paste Style list');
+      if (!/Outline/.test(style.label || '')) throw new Error('the Paste Style menu still calls it "' + style.label + '"');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('inspector: the element card says Customise, for all three layer kinds', { item: 'customise-label' }, function () {
     /* Queue 368. Ezra: "Change edit points and edit shape and edit text to replace the work edit with
        customise" — "the work edit" being the WORD edit. Australian spelling, as he wrote it.
@@ -8357,7 +8402,8 @@
       // 'Mixing' since queue 366 — one word for the mix METHOD (blend mode) and the mix AMOUNT (opacity).
       // 'Customise Shape' since queue 368 — he asked for the word "edit" to become "customise" on the
       // three element cards (Text / Points / Shape).
-      const want = ['Colouring', 'Border / Shadow', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Customise Shape', 'Presets', 'Effects'];
+      // 'Outline & Shadows' since queue 369 — his words, "change border and shadow to outline add shadows".
+      const want = ['Colouring', 'Outline & Shadows', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Customise Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }

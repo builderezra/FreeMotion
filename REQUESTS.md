@@ -10055,8 +10055,8 @@ wait for them to report back."*
       the feature in prose and should follow whatever the label does, or the toast sends you looking for a
       button that no longer exists.
 
-- [ ] **369 — "Border / Shadow" becomes "Outline & Shadows", and every "Border" inside it becomes
-      "Outline".** (18 Aug.) His words, verbatim: *"Change border and shadow to outline add shadows then
+- [x] **369 — "Border / Shadow" becomes "Outline & Shadows", and every "Border" inside it becomes
+      "Outline".** ✅ **v10.16 — five sites**: the card label (twice, grid + Paste Style), the toggle inside it, and the two hints that said "turn on Border above". The `border` key is untouched. (18 Aug.) His words, verbatim: *"Change border and shadow to outline add shadows then
       in the actual menu change anything saying border to outline"*.
       Reading *"outline add shadows"* as dictation for **"Outline and Shadows"** — plural shadows, as he
       said it. If he meant something else it is one word to change.

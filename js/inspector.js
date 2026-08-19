@@ -1677,7 +1677,11 @@ window.FM = window.FM || {};
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
     { key: 'color', label: 'Colouring', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
-    { key: 'border', label: 'Border / Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
+    /* "OUTLINE & SHADOWS" (queue 369). Ezra: "Change border and shadow to outline add shadows then in
+       the actual menu change anything saying border to outline." Read as dictation for "Outline and
+       Shadows" — plural, as he said it. The `border` KEY is untouched, so nothing saved is affected; this
+       is a string change, the third in a row after Null → Controller and Blending / Opacity → Mixing. */
+    { key: 'border', label: 'Outline & Shadows', icon: 'M4 4h12v12H4zM9 20h11V9' },
     /* "MIXING", not "Blending / Opacity" (queue 366). Ezra: "if you can think of a rename for blending
        and opacity that describes what it does just as well then change that name too."
        The slash was the tell: it read as a list of two settings when it is one idea. Blend mode is HOW
@@ -2050,7 +2054,7 @@ window.FM = window.FM || {};
      below must resolve there — the suite asserts it. */
   const STYLE_CATS = [
     { key: 'color',     label: 'Colouring' },
-    { key: 'border',    label: 'Border / Shadow' },
+    { key: 'border',    label: 'Outline & Shadows' },   // the Paste Style list — must match the card (queue 369)
     { key: 'blend',     label: 'Mixing' },   // must stay in step with the card above (queue 366)
     { key: 'transform', label: 'Position / Scale' },
     { key: 'text',      label: 'Text', textOnly: true },
@@ -4685,7 +4689,7 @@ window.FM = window.FM || {};
         if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;
         if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
-        body.appendChild(checkRow('Border', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+        body.appendChild(checkRow('Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
         if (stk.enabled) {
           if (layer.type !== 'group') body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
           body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
@@ -4709,7 +4713,7 @@ window.FM = window.FM || {};
           body.appendChild(kfScaledRow(tp, 'start', 'Start', 0, 100, 1, 0, '%', 100));
           body.appendChild(kfScaledRow(tp, 'end', 'End', 0, 100, 1, 100, '%', 100));
           body.appendChild(kfScaledRow(tp, 'offset', 'Offset', 0, 100, 1, 0, '%', 100));
-          body.appendChild(el('div', 'insp-hint', hasStroke ? 'Keyframe End 0→100% to draw the stroke on.' : 'Trim shows on the stroke — turn on Border above.'));
+          body.appendChild(el('div', 'insp-hint', hasStroke ? 'Keyframe End 0→100% to draw the stroke on.' : 'Trim shows on the stroke — turn on Outline above.'));
         }
         // Dashes live inside the stroke object (created lazily on first enable).
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
@@ -4724,7 +4728,7 @@ window.FM = window.FM || {};
           body.appendChild(rangeRow('Length', () => dh.length, v => { dh.length = Math.max(0, v); }, 0, 100, 1));
           body.appendChild(rangeRow('Gap', () => dh.gap, v => { dh.gap = Math.max(0, v); }, 0, 100, 1));
           body.appendChild(kfNumRow(dh, 'offset', 'Offset', -200, 200, 1, 0, ''));
-          if (!hasStroke) body.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Border above.'));
+          if (!hasStroke) body.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Outline above.'));
         }
       }
       // ===== SHADOW (AM parity, keyframeable) =====
