@@ -3446,9 +3446,19 @@ body.fm-playing #time-readout {
   #insp-toggle { display: none; }
 
   /* Add bottom sheet (opened by the + FAB) */
+  /* THE SHEET NOW STATES ITS TOP EDGE, and that single change answers both halves of queue 404.
+     Ezra: "make all the add menus the same height and also make them full cover all the way up to the
+     canvas." It was `bottom: 0` with no height at all, so it was CONTENT-sized — and a tab carrying an
+     extra row (Media's Import / Sample clip / AI Scene rail) simply stood taller than one that does not.
+     v10.06 made every tab's BODY the same height and measured 0px spread, which was true and still left
+     this visible, because the body is only part of the sheet.
+     `--add-sheet-top` is the bottom of #stage, published by mobile.js when the sheet opens and on resize.
+     Top and bottom both pinned means the height is stated, so every tab is identical by construction
+     rather than by matching one inner number, and the sheet reaches the canvas exactly as he asked.
+     The `auto` fallback keeps the old content-sized behaviour if the variable is ever missing. */
   #add-sheet {
     display: flex; flex-direction: column;
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 63;
+    position: fixed; left: 0; right: 0; bottom: 0; top: var(--add-sheet-top, auto); z-index: 63;
     background: var(--panel); border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.55);
     transform: translateY(100%); transition: transform .22s ease;
@@ -3557,6 +3567,19 @@ body.fm-playing #time-readout {
   flex-direction: column;
 }
 .addmenu--sheet .addmenu-body > .addmenu-pager { height: auto; flex: 1 1 auto; min-height: 0; }
+/* THE CHAIN, and every link needs `min-height: 0` (queue 404). A flex child defaults to min-height:auto,
+   which refuses to shrink below its content — one link missing it and the whole column overflows the
+   sheet instead of the body scrolling inside it, which is the same trap queue 372's footer hit. */
+#add-sheet > #add-grid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#add-sheet .addmenu { flex: 1 1 auto; min-height: 0; }
+#add-sheet .addmenu-main { min-height: 0; }
+/* …and only INSIDE the sheet does the body stop stating its own height and take what is left instead.
+   Scoped deliberately rather than changed on `.addmenu--sheet` itself: that class is also rendered
+   standalone (the v5.46 test builds two menus in a bare div to compare a 1-card tab against a 20-card
+   one), and outside #add-sheet there is no stated height above it — so a bare `min-height` let those
+   content-size again and put back the exact 249px jump v5.46 removed. The suite caught that, which is
+   the whole point of it. The clamp stays as the floor here, so nothing can collapse if the chain breaks. */
+#add-sheet .addmenu--sheet .addmenu-body { height: auto; flex: 1 1 auto; min-height: clamp(170px, 32vh, 260px); }
 .addmenu--sheet .addmenu-body > .addmenu-dots { flex: 0 0 auto; }
 /* TWO ROWS OF RECENT CLIPS, NOT THREE (queue 299) — and it SCROLLS past them, so nothing is lost.
    Media and Audio only: they are the two tabs whose body is a growing library of past imports, which

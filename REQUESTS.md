@@ -10403,6 +10403,11 @@ wait for them to report back."*
       rather than a header over two panes. Three marks either way, so it holds the same weight beside its
       four neighbours. **Judged at 88px AND at its real 24px, side by side with all five** (`tests/_tabico.html`
       renders both rows), which is what clause 2 asked for.
+      ⚠️ **A SECOND SITE WAS MISSED IN v10.24 and fixed in v10.25.** The same AM shape is drawn twice: the
+      TAB icon, and the fallback glyph for a template card with no thumb (js/addmenu.js, the "No templates
+      yet"/untumbed path). v10.24 changed only the tab, so the old shape was still on screen while this
+      entry said it was gone — the queue 367 lesson exactly, where the mutation was applied to the wrong
+      one of two drawing sites.
       ⚠️ **The first version of the test was DEAD and the mutation caught that, not the code.** It asked
       `getBBox()` on the whole icon and checked that centre against 12 — but the union bbox is the 4..20
       FRAME whatever the block inside does, so shifting the block 2.4 units off centre passed happily. It
@@ -10834,7 +10839,7 @@ wait for them to report back."*
       paints in FRAME space rather than in the layer's plate space bleeds outside the layer. Check whether
       it draws into the layer plate or over the composite before changing any parameters.
 
-- [ ] **404 — "Make these menus the same height."** (19 Aug, via the phone inbox.) His words, verbatim:
+- [x] **404 — "Make these menus the same height."** ✅ **v10.25 — measured across all five tabs at 380: top 380.0, height 440.0, gap to the canvas 0.0, spread 0.00px.** (19 Aug, via the phone inbox.) His words, verbatim:
       *"Don't forget to make these menus the same height, very important"*
       ⚠️ **WHICH menus is not in the message** — it arrived without a screenshot, and the phrase "don't
       forget" suggests it is a restatement.
@@ -10851,15 +10856,28 @@ wait for them to report back."*
       > Wait till u finish what ur in then do this
 
       **So there are TWO clauses, and v10.06 only did the first one — and only within the sheet:**
-      1. [ ] **Every Add tab opens at the same height.** v10.06 measured 0px spread across all five, so if
+      1. [x] **Every Add tab opens at the same height.** v10.06 measured 0px spread across all five, so if
              they differ again it has regressed, or it was only ever equal by one measure. His two shots
              show Media's sheet topping out ABOVE the transport row and Shape's starting BELOW it, which is
              a real difference he can see.
-      2. [ ] **The sheet covers all the way UP TO THE CANVAS** — in the Shape shot the transport row is
+      2. [x] **The sheet covers all the way UP TO THE CANVAS** — in the Shape shot the transport row is
              still visible above the sheet; in the Media shot it is not. The taller one is what he wants,
              for all of them.
       ⚠️ He explicitly asked for this NEXT: *"Wait till u finish what ur in then do this"* — so it jumps
       the queue by his own instruction, after #375.
+      ✅ **ONE CHANGE ANSWERED BOTH CLAUSES, and it is not where v10.06 was looking.** `#add-sheet` was
+      `bottom: 0` with no height at all, so it was CONTENT-sized — a tab carrying an extra row (Media's
+      Import / Sample clip / AI Scene rail) simply stood taller than one that does not. v10.06 made every
+      tab's BODY the same height and measured 0px spread; that was true, and he could still see the
+      difference, because the body is only part of the sheet. The sheet now pins its TOP to the bottom of
+      `#stage` (published as `--add-sheet-top` by mobile.js on open and on resize), so top and bottom are
+      both fixed: every tab is identical by construction, and it reaches the canvas because the canvas is
+      literally what it is pinned to.
+      ⚠️ **The suite caught a real regression in the first attempt and it is worth keeping.** Letting the
+      body take `min-height` instead of `height` made it content-size again wherever the menu is rendered
+      OUTSIDE the sheet — v5.46's test builds two menus in a bare div to compare a 1-card tab with a
+      20-card one, and it reported the exact 249px jump that test was written to remove. The fill is scoped
+      to `#add-sheet` now, so both guarantees hold at once.
 
 - [ ] **405 — 🔁 STANDING: it has to fit on OTHER people's phones, not just his.** (19 Aug.) His words,
       verbatim: *"Just a note that while it's good you're making all of this fit really nicely on my phone

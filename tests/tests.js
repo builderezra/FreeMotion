@@ -746,6 +746,42 @@
     } finally { holder.remove(); }
   });
 
+  test('the Add sheet is the same height on every tab, and reaches the canvas', { item: 'add-sheet-height' }, async function () {
+    /* Queue 404. His words: "make all the add menus the same height and also make them full cover all the
+       way up to the canvas."
+       ⚠️ v10.06 ALREADY made every tab's BODY the same height and measured 0px spread — and he could still
+       see the difference, because the body is only part of the sheet. `#add-sheet` was `bottom: 0` with no
+       height at all, so it was CONTENT-sized, and a tab carrying an extra row (Media's Import / Sample clip
+       / AI Scene rail) simply stood taller. So this measures the SHEET, not the body, which is the mistake
+       the earlier test made — and it measures it against the canvas, because "the same as each other" and
+       "up to the canvas" are two different claims and he asked for both. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const bad = [];
+    await atPhoneWidth(async function () {
+      if (!FM.mobile || !FM.mobile.openAdd) throw new Error('FM.mobile.openAdd is missing — the phone Add sheet cannot be opened');
+      const sheet = document.getElementById('add-sheet'), stage = document.getElementById('stage');
+      if (!sheet || !stage) throw new Error('#add-sheet / #stage missing');
+      FM.mobile.openAdd();
+      await sleep(140);
+      const tops = [];
+      for (const k of FM.addMenu.TAB_KEYS) {
+        FM.addMenu.openTab(k);
+        await sleep(90);
+        if (FM.mobile.syncAddSheetTop) FM.mobile.syncAddSheetTop();
+        const r = sheet.getBoundingClientRect(), sb = stage.getBoundingClientRect().bottom;
+        if (!r.height) { bad.push(k + ': the sheet has no box to measure'); continue; }
+        tops.push(r.top);
+        if (Math.abs(r.top - sb) > 1) bad.push(k + ': the sheet starts ' + (r.top - sb).toFixed(1) + 'px away from the canvas bottom — he asked for it to cover all the way up to the canvas');
+      }
+      if (tops.length > 1) {
+        const spread = Math.max.apply(null, tops) - Math.min.apply(null, tops);
+        if (spread > 1) bad.push('the sheet is a different height depending on the tab — ' + spread.toFixed(1) + 'px spread across ' + FM.addMenu.TAB_KEYS.join(' / '));
+      }
+      FM.mobile.closeAdd();
+    }, 380);
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

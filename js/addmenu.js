@@ -457,7 +457,10 @@ window.FM = window.FM || {};
            the home screen shows. The tiles simply were not asking for it. The glyph stays as the
            fallback for a template saved before thumbs existed, or one whose capture failed. */
         return { label: t.name, thumb: t.thumb || null,
-          icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
+          // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
+          // template saved before thumbs existed, and changing only one of the two would have left AM's
+          // glyph on screen while the entry claimed it was gone.
+          icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.6h16"/><rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
       if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });

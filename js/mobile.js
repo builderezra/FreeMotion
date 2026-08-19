@@ -298,7 +298,17 @@ window.FM = window.FM || {};
        its tab and page, so a redraw returns to where you were — only the CONTENT is re-derived. */
     var addOpts = { variant: 'sheet', onAfterAdd: closeAdd, onClose: closeAdd };
     function redrawAdd() { if (addGrid && FM.addMenu) FM.addMenu.render(addGrid, addOpts); }
-    function openAdd() { close(); redrawAdd(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
+    /* Publish the canvas's bottom edge as the sheet's top (queue 404). Measured rather than derived from
+       a constant, because the stage's height depends on the project's aspect and on whether the layout is
+       phone or PC — the same reason js/timeline.js measures its own panel instead of reading a variable. */
+    function syncAddSheetTop() {
+      var stage = document.getElementById('stage');
+      if (!addSheet) return;
+      if (!stage || !isPhone()) { addSheet.style.removeProperty('--add-sheet-top'); return; }
+      var b = stage.getBoundingClientRect().bottom;
+      addSheet.style.setProperty('--add-sheet-top', Math.max(0, Math.round(b)) + 'px');
+    }
+    function openAdd() { close(); redrawAdd(); syncAddSheetTop(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
     function closeAdd() { addSheet.classList.remove('open'); document.body.classList.remove('add-open'); }
     if (addFab) addFab.addEventListener('click', function () { addSheet.classList.contains('open') ? closeAdd() : openAdd(); });
     if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
@@ -313,9 +323,9 @@ window.FM = window.FM || {};
     }
 
     // Returning to desktop width must never strand the drawer off-screen.
-    window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } });
+    window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } else { syncAddSheetTop(); } });
 
-    FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd };
+    FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd, syncAddSheetTop: syncAddSheetTop };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

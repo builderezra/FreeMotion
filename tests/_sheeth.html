@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Add-sheet height per tab (queue 404)</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:13px/1.5 -apple-system,system-ui,sans-serif">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:14px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(res,rej){var n=0;(function p(){if(w.FM&&w.FM.addMenu&&w.FM.mobile)return res(w.FM);if(n++>400)return rej(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.addEventListener('load',function(){
+  var w=f.contentWindow, d=f.contentDocument;
+  waitFM(w).then(async function(FM){
+    if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+    await sleep(500);
+    var lines=[], tops=[], sheet=d.getElementById('add-sheet'), stage=d.getElementById('stage');
+    FM.mobile.openAdd(); await sleep(500);
+    for (var i=0;i<FM.addMenu.TAB_KEYS.length;i++){
+      var k=FM.addMenu.TAB_KEYS[i];
+      FM.addMenu.openTab(k); await sleep(400);
+      FM.mobile.syncAddSheetTop();
+      var r=sheet.getBoundingClientRect(), sb=stage.getBoundingClientRect().bottom;
+      tops.push(r.top);
+      lines.push(k.padEnd(10)+' sheet top '+r.top.toFixed(1)+'  height '+r.height.toFixed(1)+'  stage bottom '+sb.toFixed(1)+'  gap '+(r.top-sb).toFixed(1));
+    }
+    var spread=Math.max.apply(null,tops)-Math.min.apply(null,tops);
+    lines.push('');
+    lines.push('HEIGHT SPREAD ACROSS TABS: '+spread.toFixed(2)+'px');
+    lines.push('viewport '+w.innerWidth+'x'+w.innerHeight);
+    out.textContent=lines.join('\n');
+    document.title='ready';
+  }).catch(function(e){out.textContent='ERR '+e.message;document.title='ERR';});
+});
+</script>
+</body>
+</html>

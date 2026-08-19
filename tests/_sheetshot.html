@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Add sheet, one tab (queue 404)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+var TAB = new URLSearchParams(location.search).get('tab') || 'shape';
+function waitFM(w){return new Promise(function(res,rej){var n=0;(function p(){if(w.FM&&w.FM.addMenu&&w.FM.mobile)return res(w.FM);if(n++>400)return rej(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+  waitFM(f.contentWindow).then(async function(FM){
+    if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+    await sleep(450);
+    FM.mobile.openAdd(); await sleep(350);
+    FM.addMenu.openTab(TAB); await sleep(500);
+    FM.mobile.syncAddSheetTop();
+    document.title='ready';
+  }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script>
+</body>
+</html>
