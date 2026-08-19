@@ -52,8 +52,17 @@ window.FM = window.FM || {};
     const card = document.createElement('div'); card.className = 'shortcuts-card';
     const h = document.createElement('div'); h.className = 'shortcuts-title'; h.textContent = 'Shortcuts / tips';
     card.appendChild(h);
-    section(card, 'Keyboard', SHORTCUTS, 'shortcut-key');
-    section(card, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    /* ONLY THE SHORTCUTS SCROLL (queue 372 clause 2). Ezra: "when you swipe down the menu it should only
+       swipe the shortcuts not the close and tutorials buttons like it does now when you reach the bottom
+       of the scroll."
+       The card itself used to be the scroller with the footer sticky inside it — and sticky at
+       `bottom: -22px`, a NEGATIVE offset, which is precisely why the buttons drift out of view exactly
+       at the end of the scroll and nowhere else. A sticky footer inside the scroller can only ever
+       approximate a pinned one; a footer that is a SIBLING of the scroller cannot move at all. */
+    const scroll = document.createElement('div'); scroll.className = 'shortcuts-scroll';
+    section(scroll, 'Keyboard', SHORTCUTS, 'shortcut-key');
+    section(scroll, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    card.appendChild(scroll);
     /* A WAY OUT TO THE TUTORIALS (queue 274). Ezra: "At the bottom of the keyboard shortcuts menu when
        you press the ? Icon it should show a button that takes you straight to the tutorial section and
        it should also the button should just say like tutorials here or whatever and then you click on

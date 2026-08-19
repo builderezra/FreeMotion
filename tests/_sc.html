@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>#372 — the shortcuts panel, scrolled to the bottom</title>
+<style>html,body{margin:0;background:#060c0f}iframe{border:0;display:block}</style></head>
+<body><iframe id="app" src="index.html"></iframe>
+<script>
+/* #372. ⚠️ The entry is explicit: this only shows scrolled to the VERY BOTTOM, and a check at the top
+   of the list would pass while the bug is fully intact. So the fixture scrolls it there. */
+(function(){var q=new URLSearchParams(location.search),W=+q.get('w')||380,H=+q.get('h')||820;
+var fr=document.getElementById('app');fr.style.width=W+'px';fr.style.height=H+'px';
+fr.addEventListener('load',function(){var w=fr.contentWindow,d=w.document,t=0;
+(function wait(){if(++t>300){window.__done=true;return;}
+ if(!w.FM||!w.FM.shortcuts||!w.FM.home)return setTimeout(wait,50);
+ var FM=w.FM;
+ try{var sp=d.getElementById('splash');if(sp)sp.remove();if(FM.home.isOpen())FM.home.close();
+  FM.shortcuts.toggle();}catch(e){}
+ setTimeout(function(){
+  try{var sc=d.querySelector('.shortcuts-scroll')||d.querySelector('.shortcuts-card');
+   if(sc) sc.scrollTop = sc.scrollHeight;}catch(e){}
+  setTimeout(function(){window.__done=true;},600);
+ },700);})();});})();
+</script></body></html>

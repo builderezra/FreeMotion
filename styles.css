@@ -2598,16 +2598,25 @@ body.fm-playing #time-readout {
    So the row is the bar, and the buttons inside it are ordinary buttons again. The reset is written at
    (0,3,0) because `.shortcuts-card .btn` is (0,2,0) — the same specificity trap theme-glass.css sets
    for the add-menu cards. */
+/* PINNED, NOT STICKY (queue 372 clause 2). It was `position: sticky; bottom: -22px` inside the
+   scrolling card — and the negative offset is exactly why the buttons only misbehave at the very bottom
+   of the scroll, which is the one place he noticed them. The footer is a SIBLING of the scroller now, so
+   it cannot move at all: a sticky footer inside a scroller can only approximate a pinned one. */
 .shortcuts-foot {
-  position: sticky; bottom: -22px; align-self: stretch; z-index: 1;
+  flex: 0 0 auto; align-self: stretch;
   display: flex; gap: 10px;
   margin: 6px -24px -22px; padding: 13px 24px;
   border-top: 1px solid var(--line); border-radius: 0 0 13px 13px;
   background: var(--panel-2);
 }
+/* THE DOUBLE BORDER IS GONE (queue 372 clause 1). Ezra: "The close buttons outline is glitched."
+   Measured rather than guessed: this rule set `border` AND then `border-top` again to the same value,
+   so the top edge was declared twice — harmless on its own, but it sat directly under the bar's own
+   `border-top`, and with the footer drifting (see above) the two 1px lines landed on and off each other
+   as you scrolled. One border, one line. */
 .shortcuts-card .shortcuts-foot .btn {
   position: static; flex: 1 1 0; margin: 0; padding: 11px 14px;
-  border: 1px solid var(--line); border-radius: 10px; border-top: 1px solid var(--line);
+  border: 1px solid var(--line); border-radius: 10px;
   background: var(--panel-3); text-align: center;
 }
 /* `.btn.shortcuts-tut` — TWO classes on the same element, so this is (0,4,0). It has to be, because
@@ -2618,7 +2627,13 @@ body.fm-playing #time-readout {
 .shortcuts-card .shortcuts-foot .btn.shortcuts-tut {
   background: var(--accent); color: #06231d; border-color: var(--accent); font-weight: 700;
 }
-.shortcuts-card { display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; width: min(440px, calc(100vw - 24px)); min-width: min(360px, calc(100vw - 24px)); max-width: 440px; max-height: min(86vh, 86dvh); overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+/* The CARD no longer scrolls — .shortcuts-scroll inside it does (queue 372). overflow: hidden rather
+   than visible, so the rounded corners still clip the list at the top. */
+.shortcuts-card { display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; width: min(440px, calc(100vw - 24px)); min-width: min(360px, calc(100vw - 24px)); max-width: 440px; max-height: min(86vh, 86dvh); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+/* min-height: 0 is load-bearing — a flex child's default min-height is auto, so without it the list
+   refuses to shrink below its content and pushes the footer off the bottom of the card, which is the
+   same bug in a new place. */
+.shortcuts-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 /* Close stays reachable without scrolling to the end of a long list. It's a full-width sticky
    footer with its own surface — as a bare sticky button, the list scrolled visibly underneath it. */
 .shortcuts-card .btn { flex: none; position: sticky; bottom: -22px; align-self: stretch; text-align: center; margin: 6px -24px -22px; padding: 13px 24px; border: none; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: var(--panel-2); }

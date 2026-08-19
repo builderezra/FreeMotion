@@ -10151,17 +10151,21 @@ wait for them to report back."*
       it is not a new request, it is a defect I shipped this morning, it is a five-line table, and the
       alternative is leaving wrong art in his app for the length of the #335 compositor migration.
 
-- [ ] **372 — The help panel: the Close button's outline is glitched, and the footer scrolls with the
-      shortcuts when it should stay put.** (18 Aug, phone screenshot at v9.81 of the ? / keyboard-shortcuts
+- [x] **372 — The help panel: the Close button's outline is glitched, and the footer scrolls with the
+      shortcuts when it should stay put.** ✅ **v10.19 — and both faults were the same footer.** It was
+      `position: sticky; bottom: -22px` inside the scrolling card; the NEGATIVE offset is why the buttons
+      only misbehaved at the very bottom of the scroll. It is a sibling of the scroller now, so it cannot
+      move. The outline was a duplicated `border-top` sitting under the bar's own border — two 1px lines
+      landing on and off each other as the footer drifted. (18 Aug, phone screenshot at v9.81 of the ? / keyboard-shortcuts
       overlay, scrolled to the bottom.) His words, verbatim: *"The close buttons outline is glitched and
       when you swipe down the menu it should only swipe the shortcuts not the close and tutorials buttons
       like it does now when you reach the bottom of the scroll"*.
       **Clauses:**
-      1. [ ] **The Close button's outline is wrong.** In the shot, Tutorials is a solid filled button and
+      1. [x] ✅ **The Close button's outline is wrong.** In the shot, Tutorials is a solid filled button and
              Close is an outlined one whose border does not read cleanly. Measure it before guessing —
              likely a border on a container that also has a radius/overflow, or a double border from two
              rules both applying. Compare the two buttons' computed styles rather than eyeballing.
-      2. [ ] **Pin the footer.** Tutorials and Close must NOT move with the shortcut list; only the
+      2. [x] ✅ **Pin the footer.** Tutorials and Close must NOT move with the shortcut list; only the
              shortcuts scroll. He is describing them being dragged up as the scroll bottoms out, which
              means the buttons are inside the scrolling element instead of beside it.
       ⚠️ Verify at ~380px AND scrolled to the very bottom — that is the only state where clause 2 shows,

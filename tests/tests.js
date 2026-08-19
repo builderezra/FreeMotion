@@ -470,6 +470,50 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
+    /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
+       tutorials buttons like it does now when you reach the bottom of the scroll."
+       ⚠️ THE ENTRY'S OWN WARNING IS THE TEST DESIGN: this only shows at the very bottom of the scroll, so
+       a check at the top would pass with the bug fully intact. The footer's position is therefore compared
+       BEFORE and AFTER scrolling the list all the way down. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.shortcuts.isOpen();
+    try {
+      if (!wasOpen) FM.shortcuts.toggle();
+      await sleep(120);
+      const card = document.querySelector('.shortcuts-card');
+      const scroll = document.querySelector('.shortcuts-scroll');
+      const foot = document.querySelector('.shortcuts-foot');
+      if (!card || !foot) throw new Error('the shortcuts panel did not build (card ' + !!card + ', foot ' + !!foot + ')');
+      if (!scroll) throw new Error('there is no separate scrolling list — the footer is inside the scroller again, which is the bug');
+      if (scroll.contains(foot)) throw new Error('the footer is inside the scrolling list, so it must move with it');
+
+      // Control: if the list cannot scroll, scrolling it proves nothing about a pinned footer.
+      if (scroll.scrollHeight <= scroll.clientHeight + 4) {
+        throw new Error('the shortcut list does not overflow (' + scroll.scrollHeight + ' in ' + scroll.clientHeight + ') — this test cannot exercise the bug');
+      }
+      const before = foot.getBoundingClientRect().top;
+      scroll.scrollTop = scroll.scrollHeight;          // all the way to the bottom, where he saw it
+      await sleep(120);
+      const after = foot.getBoundingClientRect().top;
+      if (Math.abs(after - before) > 1) {
+        throw new Error('the footer moved ' + (after - before).toFixed(1) + 'px when the list was scrolled to the bottom — Tutorials and Close are being dragged with the shortcuts');
+      }
+
+      /* Clause 1 — the Close button's outline. Asserted as "one uniform border", because the fault was a
+         rule that declared `border` and then `border-top` again to the same value, sitting directly under
+         the bar's own border-top: two 1px lines landing on and off each other as the footer drifted. */
+      const close = [].slice.call(foot.querySelectorAll('.btn')).filter(b => /Close/.test(b.textContent || ''))[0];
+      if (!close) throw new Error('no Close button in the footer');
+      const cs = getComputedStyle(close);
+      const w = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth];
+      if (new Set(w).size !== 1) throw new Error('the Close button\u2019s border is uneven (' + w.join(' / ') + ') — that is the glitched outline');
+      if (parseFloat(cs.borderTopWidth) <= 0) throw new Error('the Close button has no outline at all');
+    } finally {
+      if (!wasOpen && FM.shortcuts.isOpen()) FM.shortcuts.toggle();
+    }
+  });
+
   test('what\u2019s slow: the report says the EFFECTIVE scale and whether the ladder even ran', { item: 'perf-report-tier' }, async function () {
     /* Queue 202, from his third measurement. It read "QUALITY tier 0 (6 available) · mode smooth" beside
        a 294ms render — which looks exactly like a quality ladder frozen at full resolution. Two things
