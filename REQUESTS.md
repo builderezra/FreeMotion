@@ -9920,6 +9920,23 @@ wait for them to report back."*
 
       > And also now that the pill is moved we can get rid of the whole row that is wasted just for a spot to put the pill on, giving the timeline more space up.
 
+      🔧 **BUILT AND NOT SHIPPED — on the branch `wip/364-pill-play` (19 Aug).** Clauses 1, 3, 4, 5 and 6
+      are written and verified by screenshot at 380px: the pill sits in the transport row where the ▶ was,
+      `#tc-bar` is deleted and the timeline visibly gains that height, the playhead's top is thicker and
+      is a real button, and the rate chip has left the row.
+      **It is not on main because two suite tests are red and I had not finished diagnosing them:**
+      *"caption cues do not swallow the row — the press point is not on a cue chip"* and *"mobile: the
+      timeline visibility eye is not a 15px tap target"*. Both are hit-testing.
+      **Two things already ruled out, so the next attempt does not repeat them:**
+      · **Not the new `#tl-headtap`** — hiding it entirely changes neither failure.
+      · **Not pre-existing** — v10.09 runs fully green, checked by stashing the work and re-running.
+      So it is fallout from the **26px** the deleted row used to occupy: something computes a press point
+      from a y-offset that assumed the old band position. Three other offsets that encoded the same 26px
+      were found and fixed on the branch, and are now ONE `--tl-top` variable rather than three hardcoded
+      copies of the same sum — which is what let this drift in the first place.
+      **Next step: find the fourth.** Look for a y-offset in those two tests (or in the code they drive)
+      that is derived from a constant rather than from a measured rect.
+
       **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
       1. [ ] **The time pill IS the play button.** Tapping `00:01:36` plays and pauses. The separate ▶ in
              the transport row goes (that is what his arrow means — the ▶ moving *into* the pill).
