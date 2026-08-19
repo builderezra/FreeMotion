@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What leaving a project releases (queue 385)</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.6 ui-monospace,monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.home)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.addEventListener('load',function(){var w=f.contentWindow,d=f.contentDocument;
+ waitFM(w).then(async function(FM){
+  if(FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  var lines=[];
+  function snap(tag){
+    var vids=[].slice.call(d.querySelectorAll('video'));
+    var withSrc=vids.filter(function(v){return v.src||v.currentSrc;}).length;
+    var mediaN=0; try{ FM.scene.layers.forEach(function(l){ if(FM.media.get(l.id)) mediaN++; }); }catch(e){}
+    lines.push(tag.padEnd(22)+' layers '+String(FM.scene.layers.length).padEnd(4)
+      +' media recs '+String(mediaN).padEnd(4)+' <video> in DOM '+String(vids.length).padEnd(4)
+      +' with src '+withSrc+'  rAF loop '+(FM._rafId!=null?'running':'(no _rafId seam)')
+      +'  home '+(FM.home.isOpen&&FM.home.isOpen()?'open':'shut'));
+  }
+  // build a scene with a couple of shape layers (no real media available headlessly)
+  FM.scene.layers.length=0;
+  for(var i=0;i<3;i++){var L=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});L.start=0;L.duration=3;FM.scene.layers.push(L);}
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(200);
+  snap('in the project');
+  FM.home.open(); await sleep(700);
+  snap('after home.open()');
+  FM.home.close(); await sleep(700);
+  snap('after home.close()');
+  lines.push('');
+  lines.push('scene still resident after leaving: '+(FM.scene.layers.length>0?'YES':'no'));
+  lines.push('curId kept: '+(FM.projects.currentId?String(FM.projects.currentId()).slice(0,18):'?'));
+  out.textContent=lines.join('\n');
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

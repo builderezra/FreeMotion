@@ -987,6 +987,49 @@
     } finally { probeRow.remove(); }
   });
 
+  test('a blend group with one mode is a plain row you can tap, not a dropdown', { item: 'blend-single-row' }, async function () {
+    /* Queue 388. Ezra: "make it so that the basic tab with normal as an option is just normal with no tab,
+       it's a waste of time to open a tap when there's only one choice in it."
+       Asserted as the GENERAL rule the entry asked for — every single-member group, not "Basic" by name —
+       so a family that is trimmed to one later cannot quietly go back to being a dropdown.
+       The tap is the half worth testing hardest, and it is the entry's own warning: Normal is the default
+       every layer starts on, so this row is how you come BACK from another mode. The layer is therefore put
+       on `multiply` first and the row has to return it to `normal` in ONE tap — a check that only looked at
+       the markup would pass a label that does nothing. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Blendy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; L.blendMode = 'multiply';
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('blend');
+      await sleep(180);
+      const rows = [].slice.call(document.querySelectorAll('.blend-cat'));
+      if (!rows.length) throw new Error('the blend card rendered no groups');
+      const flat = rows.filter(r => r.classList.contains('blend-cat-single'));
+      if (!flat.length) throw new Error('no single-member group rendered as a plain row — every group is still a dropdown');
+      flat.forEach(function (r) {
+        if (r.querySelector('.blend-arrow')) throw new Error('a one-mode group still draws the ▸ dropdown arrow: [' + (r.textContent || '').trim() + ']');
+        if (r.querySelector('.blend-list')) throw new Error('a one-mode group still builds a dropdown list');
+      });
+      const normal = flat.find(r => /Normal/.test(r.textContent || ''));
+      if (!normal) throw new Error('the Normal row is not among the flat rows — [' + flat.map(r => (r.textContent || '').trim()).join(', ') + ']');
+      const btn = normal.querySelector('.blend-cat-head');
+      if (!btn) throw new Error('the flat row has no button to tap');
+      btn.click();
+      await sleep(120);
+      const live = FM.layerById(FM.scene, L.id);
+      if (live.blendMode !== 'normal') throw new Error('tapping the Normal row left the layer on "' + live.blendMode + '" — it has to be the way back to Normal, not a caption');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('shortcuts: only the list scrolls — the Tutorials/Close footer stays put', { item: 'shortcuts-foot' }, async function () {
     /* Queue 372. Ezra: "when you swipe down the menu it should only swipe the shortcuts not the close and
        tutorials buttons like it does now when you reach the bottom of the scroll."

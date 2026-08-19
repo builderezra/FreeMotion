@@ -4403,13 +4403,29 @@ window.FM = window.FM || {};
       const activeCat = catOf(cur);
       if (!FM._blendOpen) FM._blendOpen = {};
       CATS.forEach(([name, modes]) => {
-        const row = el('div', 'blend-cat' + (activeCat === name ? ' active' : ''));
+        /* A GROUP WITH ONE MEMBER IS A ROW, NOT A DROPDOWN (queue 388). Ezra: "make it so that the basic
+           tab with normal as an option is just normal with no tab, it's a waste of time to open a tab when
+           there's only one choice in it."
+           Written as the general rule rather than as `name === 'Basic'`, which the entry asked for and which
+           costs nothing here: the next single-member group — a legacy mode that lands alone in its family,
+           or a family trimmed to one — behaves correctly without anyone remembering this. The row shows the
+           MODE's name ("Normal"), not the group's ("Basic"): with the tab gone the group name is a label for
+           a set you can no longer see, and the thing you are tapping is the mode.
+           It stays a real button, which is clause 2's warning: Normal is the default every layer starts on,
+           so this row is how you come BACK from another mode and must not degrade into a caption. */
+        const single = modes.length === 1;
+        const row = el('div', 'blend-cat' + (activeCat === name ? ' active' : '') + (single ? ' blend-cat-single' : ''));
         const head = el('button', 'blend-cat-head');
-        const open = !!FM._blendOpen[name];
+        const open = !single && !!FM._blendOpen[name];
         const curIn = modes.find(m => m[0] === cur);
+        if (single) {
+          head.innerHTML = '<span class="blend-cat-name">' + modes[0][1] + '</span>' + (curIn ? '<span class="blend-check">✓</span>' : '');
+          head.addEventListener('click', () => { layer.blendMode = modes[0][0]; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+        } else {
         head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
           (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
         head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) FM._blendOpen[name] = true; FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
+        }
         row.appendChild(head);
         if (open) {
           const list = el('div', 'blend-list');

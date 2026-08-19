@@ -10676,6 +10676,29 @@ wait for them to report back."*
       glint and does not pay for it.
       ⚠️ Measure before building — if leaving a project already tears most of this down, the fix is small or
       already done, and saying so is worth more than a rebuild.
+      📐 **MEASURED 19 Aug (`tests/_leavecost.html`) — it tears down NOTHING, so his diagnosis is right and
+      the hopeful reading above is wrong.** Across `home.open()`: layers 3 → 3, the scene fully resident,
+      `curId` kept, and a `<video>` element still attached with its `src` intact. `home.open()` pauses
+      playback, resets the viewport, exits a group and saves metadata — and releases no heavy state at all.
+      🔧 **THE DESIGN, ready to build.** The hydrate loop already exists but is INLINE inside the project-open
+      path (js/storage.js:243-256): per layer, `idbGet` → `loadVideoFile`/`loadImageFile` → `FM.media.set`,
+      plus the `seeked` repaint wiring. Extract it as `FM.storage.hydrateSceneMedia()`, add a
+      `releaseSceneMedia()` that walks the scene calling `FM.media.remove(id)` — which already detaches the
+      element's `src`, the thing that actually frees the decode buffers (queue v8.44) — then call release
+      from `home.open()` and hydrate from `home.close()`. The scene document and `curId` STAY, so the OPEN
+      glint he likes costs nothing, which is the whole point of the answer above.
+      🚨 **THE ORDERING HAZARD THAT STOPPED THIS SHIPPING TODAY, and it is the reason to read this before
+      writing any code.** `home.open()` ends with `captureThumbSoon()` — the project's card thumbnail is
+      captured LATE and ASYNCHRONOUSLY, deliberately, so the 62ms capture does not stutter the slide. That
+      capture renders the canvas. **Release the media before it runs and every project card silently
+      re-captures itself blank**, on the way out, with nothing on screen to say so — the same family as #399
+      ("a clip does not survive a reload") and far harder to notice. So the release must be sequenced after
+      the capture resolves, not simply added to `open()`.
+      ⚠️ **Three more guards, all cheap and all required:** skip ids the Media library has PINNED
+      (`FM.media.isPinned`) or the library grid rots to broken tiles; stand down entirely while
+      `FM._mediaBusy` is set (a pack hydration/duplicate is writing); and never release during an export.
+      ⏸️ **Not built today on purpose.** Everything above is measured and settled — what is left is the
+      careful part, and the honest place for it is the start of a session rather than the end of a long one.
 
 - [ ] **386 — Videos and clips lost the Outline toggle, and there is no plain shadow — only the long drop
       one.** (18 Aug, phone screenshot at v9.83: a video layer's Border / Shadow card containing ONE control,
@@ -10691,6 +10714,22 @@ wait for them to report back."*
       ⚠️ An outline on a VIDEO means stroking the layer's rectangle (or its crop/rounded-corner shape), not
       an alpha silhouette the way it works on a shape — check which the existing stroke code assumes before
       wiring it up, or it will do nothing on media and look "still broken".
+      📐 **CHECKED 19 Aug, and it is worse than "it assumes the wrong thing": there is NO media stroke code
+      at all.** The draw path branches `text` → `shape` → media, and only the first two ever read
+      `layer.stroke` (js/compositor.js:10838 for text, :10869 for shape). So flipping `canBorder` on its own
+      would put a toggle on the card that does exactly nothing — which is the "still broken" the warning
+      predicted, reached by a different road.
+      **The open question is therefore a design one, and it is recorded rather than guessed:** what should a
+      video's outline FOLLOW? Its layer rectangle, its crop box when cropped, or its alpha (so a clip with
+      transparency gets a silhouette like a shape does)? The rect is cheapest and matches "outline the
+      clip"; the alpha is what "outline" means everywhere else in this app. **They look completely different
+      on a cropped or rounded clip, so it is worth one sentence from him** — and it does not hold the queue.
+      ✅ **CLAUSE 2 IS NOT A MISSING CAPABILITY — it is a default.** The shadow already carries `dx`/`dy`
+      ("Position X" / "Position Y", js/inspector.js:4814-4815), so a plain soft shadow hugging the layer is
+      reachable TODAY by setting both to 0. What makes it feel like "only the long drop one" is that they
+      DEFAULT to 8/8, so every shadow anyone enables starts offset. So the fix here is a default and a
+      discoverable choice — a Soft/Drop style pair that writes (0,0) or (8,8) — not new rendering.
+      ⏸️ Held on clause 1's shape question; clause 2 is ready to build the moment the entry is picked up.
       **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
@@ -10715,7 +10754,7 @@ wait for them to report back."*
       that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
       asymmetry is the control that makes such a profile meaningful.
 
-- [ ] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.**
+- [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
       to open a tab when there's only one choice in it."*
@@ -10723,11 +10762,20 @@ wait for them to report back."*
       and the rule generalises: **any blend group with one member should render as a plain row.** Build it as
       the general rule rather than special-casing "Basic", or the next single-member group repeats this.
       **Clauses:**
-      1. [ ] "Basic" no longer renders as a collapsible group — Normal appears directly.
-      2. [ ] It still shows as SELECTED the way it does now (the ✓ and the accent).
+      1. [x] "Basic" no longer renders as a collapsible group — Normal appears directly.
+      2. [x] It still shows as SELECTED the way it does now (the ✓ and the accent).
       ⚠️ Normal is the DEFAULT blend mode, so this row is the one every layer starts on — it must still be
       tappable to return to Normal from another mode, not just a label.
-      **Ships with #366**, which renames this card to "Mixing" — same card, one release.
+      **Ships with #366**, which renames this card to "Mixing" — same card, one release. *(#366 landed
+      earlier, so this is the same card one release later; the screenshot shows it titled Mixing.)*
+      ✅ **Built as the GENERAL rule, as the entry asked:** any group with one member renders flat, rather
+      than `name === 'Basic'`. It costs nothing here and means the next single-member family — a legacy mode
+      that lands alone, or a family trimmed to one — behaves correctly without anyone remembering this.
+      ✅ **The row shows the MODE's name, not the group's.** With the tab gone, "Basic" would be a label for
+      a set you can no longer see; the thing you are tapping is Normal.
+      ✅ **It is still a real button**, which is the entry's own warning — Normal is the default every layer
+      starts on, so this row is the way BACK from another mode. The test puts the layer on `multiply` first
+      and requires ONE tap to return it, because a markup-only check would happily pass a dead label.
 
 - [ ] **389 — 🚨 RE-REPORT: the numbered effects STILL do nothing, at v9.83.** (18 Aug, phone screenshot of
       the Colouring category with EIGHT effects numbered 1-8 and the video behind them visibly unchanged.)

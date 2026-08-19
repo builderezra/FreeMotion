@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Blend card (queue 388)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.inspector)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(450);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'Blendy',shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+  L.start=0;L.duration=3;FM.scene.layers.push(L);
+  FM.refreshAll(); FM.timeline.rebuild(); FM.selectLayer(L.id);
+  await sleep(250);
+  FM.inspector.openCategory('blend');
+  await sleep(500);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>
