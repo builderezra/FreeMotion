@@ -11595,17 +11595,32 @@ wait for them to report back."*
       is written down in full and deliberately NOT started; it waits for him to release it rather than
       taking its turn in the queue.
 
-- [ ] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
-      would make things worse.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
+- [x] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
+      would make things worse.** ✅ **v10.56 — measured at his own 440 first, and it was worth doing.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
       > Move the two arrow buttons that jump you through the project closer towards the centre, I feel they are too far away from the time play button and too close to the undo redo buttons
       > With my last request do only slightly tho and take time making sure it just all looks good and polished while ur at it, maybe even skip it if you feel till just make it worse
       **Clauses:**
-      1. [ ] `btn-tostart` / `btn-toend` move slightly toward the pill.
-      2. [ ] **Only slightly** — and he has explicitly authorised NOT doing it: *"maybe even skip it if you
-             feel till just make it worse"*. So measure, try it, and if it reads worse, say so and leave it.
+      1. [x] `btn-tostart` / `btn-toend` move slightly toward the pill.
+      2. [x] **Only slightly**, and the measurement is what settled whether to do it at all.
+      📐 **MEASURED AT 440 — HIS OWN WIDTH — BEFORE TOUCHING ANYTHING**, because he authorised skipping it:
+      | gap | before | after |
+      |---|---|---|
+      | left arrow → pill | 10.0px | **6.0px** |
+      | pill → right arrow | 10.0px | **6.0px** |
+      | right arrow → undo | 6.6px | **11.9px** |
+      **His sentence is the measurement:** the arrow really was closer to the group it does not belong to
+      (6.6) than to the play control it does (10.0). That relationship is now reversed, and it is the
+      RELATIONSHIP the test asserts rather than the pixel values, which would go stale the first time
+      anything else in the row moves.
       ⚠️ The row is a three-track grid whose side tracks are equal BY CONSTRUCTION (#373 clause 8) — that is
       what keeps the pill on true screen centre. Move these two with `margin`, not by changing the tracks,
       or the centring goes with them and `playhead-play-centre` goes red.
+      ✅ **Margins only, exactly as that warning says** — a negative margin on the pill side pulls the arrow
+      toward it (each group is packed against the pill) and a positive one on the far side pushes its
+      neighbours away. The tracks are untouched and `playhead-play-centre` is still green.
+      ⚠️ **GUARDED AT 400px, and that is measured too.** At 380 and below the right group is already
+      edge-to-edge — **0.0px gaps** — and the row ends exactly at the screen edge, so buying 6px there would
+      overflow the very fit #405 gates. Below 400 the arrangement that fits is left alone. His phone is 440.
 
 - [ ] **421 — Make the Sketching button yellow instead of green.** (19 Aug, via the phone inbox.) His
       words, verbatim:

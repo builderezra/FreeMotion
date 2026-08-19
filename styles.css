@@ -2243,6 +2243,23 @@ body.fm-playing #time-readout {
 /* THE SWITCH WEARS THE DRAGGED LAYER'S COLOUR (queue 416). Ezra: "when you're dragging a layer the toggle
    button will change colour to the colour of that layer". The knob and the track both take it, so it reads
    as the control having picked the layer up rather than as a stray highlight. */
+/* THE SKIP ARROWS SIT NEARER THE PILL THAN THE GROUP (queue 420). Ezra: "Move the two arrow buttons that
+   jump you through the project closer towards the centre, I feel they are too far away from the time play
+   button and too close to the undo redo buttons."
+   MEASURED at his own 440 before touching anything, because he also said to skip it if it would make
+   things worse: the arrow sat **10.0px from the pill and 6.6px from undo** — nearer the group than the
+   thing it belongs with, which is his sentence exactly. Now ~6 to the pill and ~12.6 to undo.
+   Margins only, never the grid tracks: the two flanking tracks are `minmax(0, 1fr)` and equal BY
+   CONSTRUCTION, which is what holds the pill on true screen centre (#373 clause 8) — changing a track
+   would take the centring with it. A negative margin on the pill side pulls the arrow toward it (each
+   group is packed against the pill), and a positive one on the far side pushes its neighbours away.
+   ⚠️ GUARDED at 400px. At 380 and below the right group is already edge-to-edge with 0.0px gaps and the
+   row ends exactly at the screen edge — measured — so buying 6px there would overflow the very fit #405
+   gates. His phone is 440. Below 400 the row keeps the arrangement that fits. */
+@media (min-width: 400px) {
+  #transport #btn-tostart { margin-right: -4px; }
+  #transport #btn-toend { margin-left: -4px; margin-right: 6px; }
+}
 #btn-addside.sw-dragging .sw-knob { background: var(--sw-colour, var(--accent)); }
 #btn-addside.sw-dragging .sw-track { border-color: var(--sw-colour, var(--accent)); box-shadow: 0 0 8px -1px var(--sw-colour, var(--accent)); }
 

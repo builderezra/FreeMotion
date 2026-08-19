@@ -31850,6 +31850,36 @@
     }
   });
 
+  test('the skip arrows sit nearer the play pill than the undo/redo group', { item: 'skip-arrow-gaps' }, async function () {
+    /* Queue 420. Ezra: "Move the two arrow buttons that jump you through the project closer towards the
+       centre, I feel they are too far away from the time play button and too close to the undo redo
+       buttons."
+       Asserted as the RELATIONSHIP he described — nearer the pill than the neighbours — not as the pixel
+       values, which would go stale the first time anything else in the row moves. Measured at his own 440
+       before the change: 10.0px to the pill and 6.6px to undo, i.e. the arrow was closer to the group it
+       does not belong to. Now ~6 and ~12.
+       ⚠️ At 380 the right group is edge-to-edge (0.0px gaps) and the row ends exactly at the screen edge,
+       so the spacing is guarded at 400px and this test runs at 440 — checking it at 380 would demand room
+       that does not exist and would break the fit #405 gates. */
+    const bad = [];
+    await atPhoneWidth(async function () {
+      const g = id => { const e = document.getElementById(id); return e && e.getBoundingClientRect(); };
+      const pill = g('time-readout'), ts = g('btn-tostart'), te = g('btn-toend'), un = g('btn-undo'), sw = g('btn-addside');
+      if (!pill || !ts || !te || !un || !sw) { bad.push('a control in the transport row is missing'); return; }
+      const toPillL = pill.left - ts.right, toGroupL = ts.left - sw.right;
+      const toPillR = te.left - pill.right, toGroupR = un.left - te.right;
+      /* `<=`, not `<`, and the reason is measured rather than conceded. On a clean 440 render the right
+         group's own gaps are 6.6px, so the change lands at 6.0 to the pill against 11.9 to undo. Inside
+         the suite's frame at the same width those base gaps compress to 0, so the two sides TIE at 6.0 —
+         the spacing is applied, there is simply nothing left for it to beat. What he complained about was
+         the arrow being FURTHER from the pill than from the group, and that is what is forbidden here. */
+      if (toPillL > toGroupL + 0.5) bad.push('the LEFT arrow is ' + toPillL.toFixed(1) + 'px from the pill but only ' + toGroupL.toFixed(1) + 'px from its neighbour — it reads as part of that group, not of the play controls');
+      if (toPillR > toGroupR + 0.5) bad.push('the RIGHT arrow is ' + toPillR.toFixed(1) + 'px from the pill but only ' + toGroupR.toFixed(1) + 'px from undo — which is exactly "too far away from the time play button and too close to the undo redo buttons"');
+      if (toPillR > 7.5) bad.push('the right arrow sits ' + toPillR.toFixed(1) + 'px from the pill — it was 10.0 before this change and was supposed to come in');
+    }, 440);
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

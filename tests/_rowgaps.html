@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Transport gaps (queue 420)</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.6 ui-monospace,monospace">
+<iframe id="app" src="../index.html" style="height:900px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.style.width=(new URLSearchParams(location.search).get('w')||'380')+'px';
+f.addEventListener('load',function(){var w=f.contentWindow,d=f.contentDocument;
+ waitFM(w).then(async function(FM){
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(500);
+  var ids=['btn-layermenu','btn-addside','btn-tostart','time-readout','btn-toend','btn-undo','btn-redo','btn-amfit'];
+  var r=ids.map(function(i){var e=d.getElementById(i);return {id:i,b:e?e.getBoundingClientRect():null};}).filter(function(x){return x.b&&x.b.width;});
+  var lines=['width '+f.style.width+''];
+  for(var k=1;k<r.length;k++) lines.push((r[k-1].id+' → '+r[k].id).padEnd(34)+' gap '+(r[k].b.left-r[k-1].b.right).toFixed(1)+'px');
+  out.textContent=lines.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message;});
+});
+var out=document.getElementById('out');
+</script></body></html>
