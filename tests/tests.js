@@ -31444,6 +31444,58 @@
     }
   });
 
+  test('a template can be opened, edited, and written back over itself', { item: 'template-roundtrip' }, async function () {
+    /* Queue 408. Ezra: "And templates need to be editable as well, currently they ain't."
+       Opening one ALREADY forks a real, fully editable project — clause 1 was never missing. What was
+       missing is the way back: nothing recorded which template a project came from, so there was nothing
+       to update. The whole trip is asserted here — make a template, open it, change the project, write it
+       back — plus the two things that quietly go wrong with an in-place update: the list must not grow a
+       duplicate, and the projects pointing at the old template must follow it to the new record. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const made = [];
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'TplProbe', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll();
+      if (!(await FM.templates.save('rt-tpl'))) throw new Error('could not save the probe template');
+      const t0 = FM.templates.list()[0]; made.push(t0.id);
+      const before = await FM.templates.getPack(t0.id);
+      if (!before || (before.layers || []).length !== 1) throw new Error('the probe template did not capture the scene');
+
+      // …open it: this forks a project, which is clause 1
+      const pid = await FM.templates.useAsNew(t0.id);
+      if (!pid) throw new Error('useAsNew did not produce a project — a template cannot be opened at all');
+      await sleep(120);
+      const entry = FM.projects.list().find(x => x.id === pid);
+      if (!entry || entry.fromTemplate !== t0.id) throw new Error('the new project does not record which template it came from — there is nothing to update');
+
+      // …edit it
+      const extra = FM.makeLayer('shape', { name: 'Added', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#ff0000' });
+      extra.start = 0; extra.duration = 2;
+      FM.scene.layers.push(extra);
+      FM.storage.flushSync();
+
+      const nTpl = FM.templates.list().length;
+      if (!(await FM.templates.updateFrom(t0.id, pid))) throw new Error('updateFrom refused to write the project back over its template');
+      const list = FM.templates.list();
+      const now = list.find(t => t.name === 'rt-tpl');
+      if (!now) throw new Error('the template lost its name on update');
+      made.push(now.id);
+      if (list.length !== nTpl) throw new Error('updating made a SECOND template (' + nTpl + ' → ' + list.length + ') instead of replacing the one it came from');
+      const after = await FM.templates.getPack(now.id);
+      if (!after || (after.layers || []).length !== 2) throw new Error('the template still holds ' + ((after && after.layers) || []).length + ' layer(s), not the edited 2 — the round trip did not close');
+      const p2 = FM.projects.list().find(x => x.id === pid);
+      if (p2 && p2.fromTemplate !== now.id) throw new Error('the project still points at the OLD template id, so its Update button would vanish after one use');
+    } finally {
+      for (const id of made) { try { await FM.templates.remove(id); } catch (e) {} }
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

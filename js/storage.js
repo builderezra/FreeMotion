@@ -1282,6 +1282,9 @@ window.FM = window.FM || {};
        * and means nothing in the next). Stripped at SAVE, so templates already on disk are cleaned as
        * they are re-saved and nothing has to be migrated. */
       delete pack.project.notes;
+      delete pack.project.fromTemplate;   // …and never inherit the "came from" pointer (queue 408): a
+                                          // template made from a project is its own thing, not that
+                                          // project's parent, and carrying it would make an update loop.
       try {
         const db = await openDB();
         for (const l of pack.layers) {
@@ -1350,15 +1353,50 @@ window.FM = window.FM || {};
       const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height });
       /* …and again on the way OUT, for templates saved before v8.22. Stripping only at save would
          leave every existing template still handing its notes to new projects. */
-      FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name, notes: [] });
+      /* REMEMBER WHICH TEMPLATE THIS CAME FROM (queue 408). Ezra: "templates need to be editable as well,
+         currently they ain't." Opening one already forks a real, fully editable project — what was missing
+         is the way BACK, and there was nothing recording where the project came from to go back to.
+         Kept on the project object, so it saves and reloads with the doc, AND mirrored onto the index entry
+         so the Home card can offer the update without reading every project's document to find out. */
+      FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name, notes: [], fromTemplate: tid });
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
       await hydratePack(re.layers, pack.media, re.map);
+      try { const idx = FM.projects.list(); const e = idx.find(x => x.id === pid); if (e) { e.fromTemplate = tid; FM.projects.saveIndex(idx); } } catch (e) {}
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.reset();
       FM.storage.autosave();
       return pid;
+    },
+    /* WRITE A PROJECT BACK OVER THE TEMPLATE IT CAME FROM (queue 408 clause 2). Same shape as the preset
+       round trip in queue 407, and the same judgement: ONE TAP rather than automatic. A template is a
+       starting point other projects were built from; silently rewriting it whenever one of its children
+       changed would be a change nobody asked for and nobody could see. It keeps the template's NAME and
+       its place in the list — only the contents are replaced. */
+    async updateFrom(tid, projectId) {
+      const meta = this.list().find(t => t.id === tid);
+      if (!meta) return false;
+      const ok = await this.save(meta.name, projectId || curId());
+      if (!ok) return false;
+      /* save() unshifts a NEW entry, so the old one has to go or the list grows a duplicate every time
+         you press update. The fresh entry inherits the name; this drops the previous id and keeps the
+         new one where the old one sat, so the card does not jump to the top of the list under your finger. */
+      const idx = this.list();
+      const fresh = idx[0];
+      const rest = idx.filter(t => t.id !== tid && t !== fresh);
+      const at = Math.max(0, idx.findIndex(t => t.id === tid));
+      rest.splice(Math.min(at, rest.length), 0, fresh);
+      writeJSON(TPL_INDEX, rest);
+      try { const db = await openDB(); await idbDel(db, 'tpl:' + tid); db.close(); } catch (e) {}
+      // …and every project that pointed at the old id now points at the new one
+      try {
+        const pidx = FM.projects.list(); let moved = false;
+        pidx.forEach(p => { if (p.fromTemplate === tid) { p.fromTemplate = fresh.id; moved = true; } });
+        if (moved) FM.projects.saveIndex(pidx);
+      } catch (e) {}
+      if (FM.scene && FM.scene.project && FM.scene.project.fromTemplate === tid) FM.scene.project.fromTemplate = fresh.id;
+      return true;
     },
     // Insert a template's layers INTO the current project at the playhead.
     async insertInto(tid) {

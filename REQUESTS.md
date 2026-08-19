@@ -11326,15 +11326,30 @@ wait for them to report back."*
       meanings, both visible at once.
       🔗 Related to [#406] — both are about presets meaning two different things at once.
 
-- [ ] **408 — Templates need to be editable, and currently are not.** (19 Aug, via the phone inbox.)
+- [x] **408 — Templates need to be editable, and currently are not.** ✅ **v10.47.** (19 Aug, via the phone inbox.)
       His words, verbatim, in full:
 
       > And templates need to be editable as well, currently they ain't
 
       **Clauses:**
-      1. [ ] **A saved template can be opened and edited.**
-      2. [ ] **The edit persists** — same question as [#407] clause 2: does editing update the template in
-             place, or fork a copy? Answer it deliberately rather than by accident.
+      1. [x] **A saved template can be opened and edited.** ⚠️ **This already worked** — "New project from
+             template" forks a real, fully editable project, and always has. Nothing was missing here, and
+             saying so is worth more than a change: what was missing is clause 2.
+      2. [x] **The edit persists — v10.47, IN PLACE, by one tap.** Opening a template now records its id on
+             the project (on the doc AND mirrored to the index entry, so Home can offer the action without
+             reading every project's document), and the project card's ⋯ grows **Update template “X”**
+             whenever it came from one that still exists. It sits directly above "Save as template…" —
+             overwrite where you came from, or make a new one, the same pair as Update/Save on presets.
+             **Answered deliberately, not by accident: IN PLACE, and one tap rather than automatic.** A
+             template is a starting point other projects were built from, so rewriting it silently whenever
+             a child changed would be a change nobody asked for and nobody could see. It also confirms
+             first, because this one replaces something other projects came from.
+             ⚠️ **Two things that quietly go wrong with an in-place update, both now tested:** `save()`
+             unshifts a NEW entry, so without removing the old one the list grows a duplicate on every
+             press (the mutation reports "1 → 2"); and every project pointing at the old template id has to
+             follow it to the new record, or its Update button vanishes after a single use.
+             ⚠️ A template saved FROM a project no longer inherits that project's `fromTemplate` pointer —
+             it is its own thing, not that project's parent, and carrying it would make an update loop.
 
 - [ ] **409 — Both ENDS of the add-row switch land somewhere you cannot properly see or use: the top
       crops the add row, and the bottom pins the last layer to the dead edge of the screen — which on

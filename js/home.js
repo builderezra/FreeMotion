@@ -1068,6 +1068,23 @@ window.FM = window.FM || {};
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
         // pair. It was buried below Select… (a mode, not a creation) and Ezra asked for a feature that
         // was already here — which is a findability problem, not a missing one.
+        /* UPDATE THE TEMPLATE THIS PROJECT CAME FROM (queue 408 clause 2). Ezra: "templates need to be
+           editable as well, currently they ain't."
+           Opening a template already forks a real, fully editable project — the missing half was the way
+           back. It shows only when this project came from a template that still exists, so it is never a
+           dead entry, and it sits directly above "Save as template…" because the two are the same pair as
+           Update/Save on presets: one overwrites where you came from, the other makes a new one. */
+        ...(function () {
+          const src = p.fromTemplate && (FM.templates.list() || []).find(t => t.id === p.fromTemplate);
+          if (!src) return [];
+          return [{ label: 'Update template “' + src.name + '”', action: async () => {
+            if (!confirm('Replace the “' + src.name + '” template with this project as it is now?')) return;
+            if (FM.toast) FM.toast('Updating template…', 1200);
+            const ok = await FM.templates.updateFrom(src.id, p.id);
+            if (FM.toast) FM.toast(ok ? 'Updated “' + src.name + '”' : 'Could not update the template');
+            render();
+          } }];
+        })(),
         { label: 'Save as template…', action: async () => {
           const n = prompt('Template name:', p.name || 'My template'); if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
