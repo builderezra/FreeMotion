@@ -2225,7 +2225,21 @@ body.fm-playing #time-readout {
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
 .tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */
 .marker-edit { position: absolute; top: 1px; transform: translateX(-50%); width: 88px; z-index: 12; background: var(--panel-3); border: 1px solid var(--kf); color: var(--text); border-radius: 5px; padding: 1px 5px; font-size: 11px; }
-#tl-tracks { position: relative; }
+/* ROOM UNDER THE LAST ROW (queue 409 clauses 2-4). Ezra: "there should be some space at the bottom just
+   to push up the last layer and not have it at the dead bottom, only if you're at the bottom of the screen
+   tho" — and, crucially: "if you try to drag something from the dead bottom rn it just makes you close the
+   app on iPhone because swiping from the bottom of ur screen does that lol".
+   Padding is exactly the "only when you are at the bottom" he asked for, and it needs no state to be:
+   it adds scrollable length rather than a permanent gap, so mid-scroll nothing looks different and the
+   space only appears once you have reached the end. The safe-area inset is what lifts the last row clear
+   of the iOS home-indicator band, which is the strip that swallows a drag and closes the app. */
+#tl-tracks { position: relative; padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+/* …and the sticky ruler must not eat the top of a row scrolled into view (queue 409 clause 1). Ezra:
+   "when you press the toggle to make it go to the top… it doesn't take you fully see the add layer the top
+   bit is cropped off." moveAddMarker already calls scrollIntoView, and scrollIntoView aligns to the
+   SCROLLPORT's top edge — which sits UNDER #tl-rulerrow, a 22px sticky header. So the row landed correctly
+   and the ruler covered its top. scroll-margin is the one thing scrollIntoView does respect. */
+.tl-addrow { scroll-margin-top: 24px; scroll-margin-bottom: 12px; }
 
 /* AM-style: each layer is a timeline row — head (eye/thumb/name/lock) + clip lane. No separate panel. */
 .track-row { display: flex; height: 42px; border-bottom: 1px solid var(--line-soft); }

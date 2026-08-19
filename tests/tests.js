@@ -31496,6 +31496,63 @@
     }
   });
 
+  test('both ends of the add-row switch land somewhere you can see and use', { item: 'addrow-ends' }, async function () {
+    /* Queue 409. His words: "when you press the toggle to make it go to the top… the top bit is cropped
+       off", and "there should be some space at the bottom just to push up the last layer and not have it
+       at the dead bottom", and "if you try to drag something from the dead bottom rn it just makes you
+       close the app on iPhone".
+       TOP: moveAddMarker already scrolled the row into view — the fault was that scrollIntoView aligns to
+       the SCROLLPORT's top, which sits under a 22px sticky ruler, so the row landed right and the ruler
+       covered it. Asserted against the ruler's bottom edge rather than the scroller's top, because the
+       scroller's top is exactly the measurement that looked fine while he was looking at a sliced row.
+       BOTTOM: asserted as real scrollable space after the last row, which is what lifts it out of the
+       iOS home-indicator band that swallows a drag. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    try {
+      FM.scene.layers.length = 0;
+      for (let i2 = 0; i2 < 12; i2++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i2, shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(140);
+      const scroller = document.getElementById('timeline');
+      const ruler = document.getElementById('tl-rulerrow');
+      const tracks = document.getElementById('tl-tracks');
+      if (!scroller || !tracks) throw new Error('#timeline / #tl-tracks missing');
+
+      // …send it to the top from a scrolled-down position, the way the switch does
+      scroller.scrollTop = scroller.scrollHeight;
+      await sleep(60);
+      FM.moveAddMarker(0);
+      await sleep(160);
+      const row = document.querySelector('.tl-addrow');
+      if (!row) throw new Error('no add row rendered');
+      const rr = row.getBoundingClientRect();
+      const guard = ruler ? ruler.getBoundingClientRect().bottom : scroller.getBoundingClientRect().top;
+      if (rr.top < guard - 0.5) {
+        throw new Error('the add row starts at ' + Math.round(rr.top) + ' but the ruler covers down to ' + Math.round(guard) + ' — its top is cropped, which is exactly what he screenshotted');
+      }
+
+      // …and there is real room under the last row once you reach the end
+      const pad = parseFloat(getComputedStyle(tracks).paddingBottom) || 0;
+      if (pad < 24) throw new Error('there is only ' + Math.round(pad) + 'px under the last row — not enough to lift it out of the iPhone edge-swipe band');
+      scroller.scrollTop = scroller.scrollHeight;
+      await sleep(80);
+      const rows = [].slice.call(tracks.querySelectorAll('.track-row, .tl-addrow'));
+      if (rows.length) {
+        const last = rows[rows.length - 1].getBoundingClientRect();
+        const floor = scroller.getBoundingClientRect().bottom;
+        if (last.bottom > floor - 12) throw new Error('scrolled to the end, the last row still sits ' + Math.round(floor - last.bottom) + 'px from the bottom edge — it is in the dead band');
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.addAt = at0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('closing the effects browser by the X applies your picks, it does not bin them', { item: 'fx-exit-commits' }, async function () {
     /* Queue 389, and the second half of queue 333. His re-report — "The effects selected here still don't do
        anything at allllllllllllllllll", with a screenshot of eight numbered picks and an unchanged canvas —

@@ -11351,7 +11351,7 @@ wait for them to report back."*
              ⚠️ A template saved FROM a project no longer inherits that project's `fromTemplate` pointer —
              it is its own thing, not that project's parent, and carrying it would make an update loop.
 
-- [ ] **409 — Both ENDS of the add-row switch land somewhere you cannot properly see or use: the top
+- [x] **409 — Both ENDS of the add-row switch land somewhere you cannot properly see or use: the top
       crops the add row, and the bottom pins the last layer to the dead edge of the screen — which on
       iPhone is where the system's close-the-app swipe lives.** (19 Aug, three phone screenshots at
       v10.20.) His words, verbatim, in full:
@@ -11361,16 +11361,16 @@ wait for them to report back."*
       > Also if you try to drag something from the dead bottom rn it just makes you close the app on iPhone because swiping from the bottom of ur screen does that lol
 
       **Clauses:**
-      1. [ ] **Toggling to the TOP shows the add row in full** — his second screenshot has "Tap to add a
+      1. [x] **Toggling to the TOP shows the add row in full** — ✅ v10.48 — his second screenshot has "Tap to add a
              layer" sliced through the middle by the top edge of the scroller. Moving the row there and
              leaving it half off screen is the switch failing at the one job it has.
-      2. [ ] **There is space below the LAST row**, so it is pushed up off the dead bottom edge — and he
+      2. [x] **There is space below the LAST row** — ✅ v10.48, so it is pushed up off the dead bottom edge — and he
              is explicit this is *"bad for any layer"*, not just the add row, so it belongs to the
              scroller, not to the switch.
-      3. [ ] **Only when you are actually at the bottom of the scroll** — his words: *"only if you're at
+      3. [x] **Only when you are actually at the bottom of the scroll** — ✅ v10.48, and for free — his words: *"only if you're at
              the bottom of the screen tho"*. So this is trailing space at the end of the content, not a
              permanent gap that shows at every scroll position.
-      4. [ ] **It has to be draggable from there.** On iPhone a drag starting at the very bottom edge is
+      4. [x] **It has to be draggable from there.** — ✅ v10.48 by consequence of clause 2 On iPhone a drag starting at the very bottom edge is
              swallowed by iOS's own home/close gesture, so a row sitting in that band cannot be picked up
              at all. Clause 2's space is what makes the last row reachable, which is why he reported them
              together.
@@ -11378,6 +11378,20 @@ wait for them to report back."*
       (queue 405), and "the last row is at the dead bottom" is a viewport-height question.
       🔗 Caused by, and completes, **#373** clauses 4/5 — the switch does send the row to both ends; both
       ends are just not usable when it gets there.
+      ✅ **THE TOP WAS NOT A SCROLL BUG — it was a STICKY RULER.** `moveAddMarker` has always called
+      `scrollIntoView` after moving the row, and it worked: the row landed exactly at the top of the
+      scrollport. `#tl-rulerrow` is a 22px `position: sticky` header sitting over that same top edge, and
+      scrollIntoView knows nothing about it — so the row was correctly placed and covered. `scroll-margin`
+      is the one thing scrollIntoView does respect. **The mutation reports a 22px crop, which is the
+      ruler's exact height.**
+      ✅ **THE BOTTOM IS PADDING, and that answers clause 3 for free.** Padding adds scrollable LENGTH
+      rather than a permanent gap — mid-scroll nothing looks different, and the space only exists once you
+      have reached the end, which is precisely "only if you're at the bottom of the screen tho". The
+      `env(safe-area-inset-bottom)` term is what lifts the last row clear of the iOS home-indicator band,
+      which is the strip that swallows a drag and closes the app (clause 4).
+      ⚠️ **Clause 4 is fixed by consequence, not directly tested** — the iOS edge gesture cannot be
+      reproduced in a headless browser. What IS asserted is the thing that causes it: scrolled to the end,
+      the last row must sit clear of the scroller's bottom edge.
 
 - [x] **410 — The transport row's controls are not vertically aligned: the undo/redo arrows sit off, and
       the play/time pill sits WAY too low.** ✅ **v10.22 — measured in INK, not boxes, which is the only
