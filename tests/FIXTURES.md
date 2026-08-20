@@ -91,6 +91,8 @@ transition is meaningless there.
   draws outside its tile (queue 445). Its overflow check tests BOTH axes — the first version compared
   widths only and reported "none" while a label was spilling out of the top of its tile.
   `_fxcatshot.html` is the same view, for a picture.
+- `_railhide.html` — the canvas rail across a full open/close of the effects browser (queue 447). The
+  suite toggles the class instead; this drives the real thing, which is what proves the rail comes BACK.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

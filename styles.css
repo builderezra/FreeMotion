@@ -7314,3 +7314,22 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
 }
 .flt-fave:hover { color: #fff; background: rgba(8, 12, 18, .75); }
 .flt-fave.on { color: #ffd54a; }
+
+/* THE CANVAS RAIL STANDS DOWN WHILE A BROWSER IS OVER THE CANVAS (queue 447). Ezra, circling the
+   floating column of controls down the right of the preview with the effects browser open: "Make this
+   menu close when you open the effect menu."
+   DERIVED, NOT SET. The obvious version is a line in the browser's open() and another in its close(),
+   and the entry's own warning is what that costs: "It must come BACK when the browser closes — a rail
+   that only reappears on a rebuild would read as the buttons disappearing", which is a worse bug than
+   the one being fixed. A JS pair can get out of step (an early return, a throw between the two, a close
+   by some path that does not call close()); a selector that asks "is the overlay on screen right now"
+   cannot. `#fx-browser` carries `.hidden` when it is shut, so this is the same question the app already
+   answers everywhere else.
+   ALL THREE BROWSERS, not just the one he circled: the audio-effect and element browsers are the same
+   markup at the same size over the same canvas, and fixing only the one named would leave two doors
+   into the identical complaint.
+   ⚠️ `:has()` is Safari 15.4+ and Chrome 105+. Where it is missing the rule is simply ignored and the
+   rail behaves as it does today — a no-op, never a broken layout. */
+body:has(#fx-browser:not(.hidden)) #view-bar,
+body:has(#afx-browser:not(.hidden)) #view-bar,
+body:has(#el-browser:not(.hidden)) #view-bar { display: none; }

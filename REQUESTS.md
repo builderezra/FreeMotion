@@ -12848,7 +12848,7 @@ wait for them to report back."*
       release, and #445's square tiles have to fit "Repetition" and "Generative", both longer than what
       they replace.
 
-- [ ] **447 — The canvas tool rail should close when the effects browser opens.** (20 Aug, phone
+- [x] **447 — The canvas tool rail should close when the effects browser opens.** ✅ **DONE v10.85.** (20 Aug, phone
       screenshot at v10.71 with the right-hand vertical rail circled.) His words, verbatim: *"Make this
       menu close when you open the effect menu"*.
       **What is circled:** the floating tool rail down the right of the canvas — 1×, +, loop, magnet,
@@ -12859,6 +12859,19 @@ wait for them to report back."*
       ⚠️ Check what else opens over the canvas (the Add sheet, the inspector sheet, the colour picker):
       if they all want the same behaviour, it belongs in one place keyed on "a full-height sheet is open",
       not a special case for the effects browser alone.
+      ✅ **v10.85 — and it is DERIVED rather than set**, which is the answer to this entry's own warning
+      about the rail having to come back. A line in `open()` and another in `close()` can get out of step
+      (an early return, a throw between the two, a close by a path that does not call `close()`); a
+      `:has()` selector asking whether the overlay is on screen cannot. `#fx-browser` already carries
+      `.hidden` when it is shut, so this asks the question the app already answers everywhere else.
+      ✅ **All three browsers** — effects, audio effects and elements. Same markup, same size, same
+      canvas; fixing only the one he circled would have left two more doors into the same complaint.
+      ⚠️ The inspector sheet and the Add sheet are deliberately NOT included: on a phone the inspector
+      docks BELOW the timeline and does not cover the preview, and the Add sheet is a half-height sheet
+      the rail sits clear of. If either turns out to bother him too, it is one more selector.
+      ⚠️ `:has()` is Safari 15.4+ / Chrome 105+. Missing it, the rule is ignored and the rail behaves as
+      before — a no-op, never a broken layout — and the test REFUSES to run rather than passing vacuously
+      on an engine that cannot evaluate it.
 
 - [ ] **448 — Import Audio → pick a video from the camera roll → extract its audio as an audio layer.**
       (20 Aug.) His words, verbatim: *"When you press import audio then choose from camera role it should

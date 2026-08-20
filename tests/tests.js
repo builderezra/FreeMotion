@@ -2759,6 +2759,55 @@
     if (!/'New'/.test(src)) throw new Error('the featured row builder no longer names its title, so this cannot tell what it says');
   });
 
+  test('447: the canvas rail stands down while a browser covers the canvas, and comes back after', { item: '447' }, async function () {
+    /* Queue 447. Ezra, circling the floating column of controls down the right of the preview with the
+       effects browser open: "Make this menu close when you open the effect menu."
+       The rule is DERIVED — a `:has()` selector asking whether the overlay is on screen — rather than a
+       line in open() and another in close(). The entry's own warning is what that buys: "It must come
+       BACK when the browser closes; a rail that only reappears on a rebuild would read as the buttons
+       disappearing", which is a worse bug than the one being fixed. A JS pair can get out of step; a
+       selector cannot.
+       ⚠️ THE CLASS IS TOGGLED HERE RATHER THAN THE BROWSER OPENED, and that is deliberate: opening the
+       real browser mounts every effect thumbnail and makes a LATER test measure six effects as
+       indistinguishable from their subjects (see the note on the 445 test). `.hidden` is exactly what
+       the rule keys on, so toggling it tests the rule and nothing else. The full open/close round trip
+       is driven by `tests/_railhide.html`. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const rail = document.getElementById('view-bar');
+    const fxb = document.getElementById('fx-browser');
+    if (!rail) throw new Error('#view-bar is missing — there is no canvas rail to stand down');
+    if (!fxb) throw new Error('#fx-browser is missing');
+    if (!(window.CSS && CSS.supports && CSS.supports('selector(body:has(div))'))) {
+      throw new Error('this browser has no :has() support, so the rule cannot be evaluated here at all — the assertion would be vacuous');
+    }
+    const railWas = rail.className, fxbWas = fxb.className;
+    try {
+      // The rail is only on screen once it has been switched on; force that state so "hidden" means
+      // the rule, not the toggle.
+      rail.classList.remove('hidden');
+      fxb.classList.add('hidden');
+      await sleep(60);
+      if (getComputedStyle(rail).display === 'none') throw new Error('the rail is not on screen with every browser shut, so this test cannot tell the rule from the ordinary hidden state');
+      fxb.classList.remove('hidden');
+      await sleep(60);
+      if (getComputedStyle(rail).display !== 'none') throw new Error('the canvas rail is still drawn over the preview while the effects browser is open — that is the column he circled');
+      /* AND IT COMES BACK, which is the half that would turn this fix into a worse bug. */
+      fxb.classList.add('hidden');
+      await sleep(60);
+      if (getComputedStyle(rail).display === 'none') throw new Error('the rail did not come back when the browser closed — the buttons would read as having disappeared');
+      /* …and its siblings get the same treatment, or there are two more doors into one complaint. */
+      ['afx-browser', 'el-browser'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const was = el.className;
+        el.classList.remove('hidden');
+        const gone = getComputedStyle(rail).display === 'none';
+        el.className = was;
+        if (!gone) throw new Error('#' + id + ' covers the canvas the same way and the rail stays drawn over it — the same complaint by another door');
+      });
+    } finally { rail.className = railWas; fxb.className = fxbWas; }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
