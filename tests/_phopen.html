@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Is the playhead there when a project opens?</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:900px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.projects)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  function look(tag){
+    var line=d.getElementById('tl-centerline');
+    var panel=d.getElementById('timeline-panel');
+    if(!panel){o.push(tag+': NO PANEL');return;}
+    var pr=panel.getBoundingClientRect();
+    if(!line){o.push(tag+': ❌ #tl-centerline is NOT IN THE DOM');return;}
+    var cs=W.getComputedStyle(line), r=line.getBoundingClientRect();
+    var inside = r.left >= pr.left - 1 && r.right <= pr.right + 1 && r.height > 10;
+    o.push(tag+':  display '+cs.display+'  opacity '+cs.opacity
+      +'  x '+r.left.toFixed(1)+'  h '+r.height.toFixed(0)
+      +'  panel '+pr.left.toFixed(0)+'-'+pr.right.toFixed(0)
+      +'   '+(cs.display==='none' ? '(hidden by the empty state)' : (inside ? '✅ present and inside the panel' : '❌ OFF THE PANEL')));
+  }
+  // a project with a clip, so the empty state does not legitimately hide the line
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+  L.start=0;L.duration=4;FM.scene.layers.push(L);
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  look('before any switch ');
+  // …now open a SECOND project and come back, which is the path he reported
+  var id=null;
+  try { id = await FM.projects.create({name:'probe B'}); } catch(e){ o.push('create failed: '+e.message); }
+  await sleep(900); look('after create+open');
+  var first = FM.projects.list().filter(function(p){return p.id!==id;})[0];
+  if(first){ try { await FM.projects.open(first.id); } catch(e){ o.push('open failed: '+e.message); } }
+  await sleep(1000); look('after opening back');
+  // …and once more, since he says it needs a RESTART to come back
+  if(id){ try { await FM.projects.open(id); } catch(e){} }
+  await sleep(1000); look('after a 2nd switch');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

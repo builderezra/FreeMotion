@@ -2775,6 +2775,22 @@ better still, keep working inside the turn rather than parking work for a later 
       **Left open on purpose:** Ezra reported this AFTER the first fix, so if it happens again it is a
       third cause and these two are ruled out. Worth knowing next time: does the playhead ELEMENT
       exist and is it just mispositioned, or is it missing from the DOM entirely?
+
+      📐 **THAT QUESTION IS NOW ANSWERED, 20 Aug at v10.66 (`tests/_phopen.html`).** Driven through the
+      exact path he described — a project with a clip, then create-and-open a second, then open the first
+      back, then switch again — the element is **always in the DOM**, never mispositioned, and never off
+      the panel:
+      · with content: `display block`, x 190.0 in a 0–380 panel, height 399 — dead centre, correct;
+      · empty project: `display: none`, and that is the ONLY state where it disappears.
+      So "missing from the DOM entirely" is ruled out, and so is "mispositioned". A third cause, if there
+      is one, has to be something that sets `display: none` or removes it later — not the open path.
+      🔎 **AND A LIKELIER EXPLANATION FOR ANY FRESH SIGHTING, which did not exist when this was written:**
+      queue 354 (v10.x) deliberately HIDES the playhead whenever the project is empty, because the big
+      **+** fills the timeline and a ruler over a blank page is pointing at nothing. So opening an EMPTY
+      project now shows no playhead ON PURPOSE, and it comes back the moment a clip exists — no restart
+      needed. If he sees it missing again, the first question is whether that project had any clips.
+      ⚠️ Still open rather than closed, because his original report said a RESTART was needed to get it
+      back, and nothing measured here needs one. That detail is the part still unexplained.
 - [ ] **Editing lags, and gets bad fast.** *Status (v6.33):* the two measured causes are fixed —
       playback went 95.09 → 17.43 ms/frame on a 6-layer comp (5.5x, dropped frames 191 → 3) and
       forced layouts per tap are now FLAT with layer count instead of linear (211 → 5 at 80 layers).
