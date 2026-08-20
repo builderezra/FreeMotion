@@ -1062,3 +1062,28 @@ never failing is the same mistake with a tidier face: it makes the suite look sa
 nothing, and it moves a number someone chose for a reason.
 **The rule this leaves:** widen a fixture's margins when a failure shows you it is too narrow, not when a
 sibling test turned out to be.
+
+## 13. Audited the suite for traps 4 and 5 — one real fix, one deliberate no-change
+Having been caught by both on 20 Aug, the useful move was to ask whether they were live anywhere else.
+
+**Trap 4 (a persistent element checked for EXISTENCE rather than visibility) — one real instance, fixed.**
+`#ctx-menu` survives in the DOM with its old items after any earlier test uses it. Six places in
+`tests.js` touch it; five guard properly (by `getBoundingClientRect().width` or the `hidden` class) and
+one — the hold-to-reset check — read `.ctx-item`s straight out of it. That could have found a stale
+"Reset…" from an earlier menu and passed while the hold did nothing. Now guarded, and stated in the code
+as a TIGHTENING rather than a new claim: the assertion under it is unchanged, it just cannot be answered
+by a menu nobody opened.
+
+**Trap 5 (asserting a word that the container's own TITLE contains) — two candidates, both sound.**
+- `inspector: the blend card is called Mixing` searches the panel for "Mixing", which the closed card
+  GRID also contains — so on its own that line proves nothing about the card opening. But the next line
+  requires "Opacity", a control that only exists inside the OPEN card, and that is a real canary. The
+  pair holds, so **nothing was changed.**
+- The shortcuts-sheet check opens the overlay and reads its own text; the string cannot appear unless the
+  sheet lists those keys. Sound.
+
+**Why one was fixed and the other left alone**, since the two look similar: the context-menu case is a
+demonstrated fault (it caught me in this same file the same day) and the guard can only ever remove a
+false pass — it cannot make a test flakier. The Mixing case is a weak line with a strong neighbour, and
+rewriting it would be changing a test that is not wrong. *Widen on evidence, not on resemblance* — the
+rule from section 12, applied to the next thing that resembled a bug.
