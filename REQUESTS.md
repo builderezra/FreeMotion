@@ -12209,6 +12209,12 @@ wait for them to report back."*
              still and the band's top edge stops moving, so nothing in it slides" is measured, not argued.
              What remains assumed is only that `svh` does not move when iOS hides its chrome — which is
              the definition of the unit rather than a guess about this app.
+             ✅ **AND `--stage-h` WAS THE ONLY PATH — all 37 other `vh` uses in styles.css were checked and
+             none can shift the timeline mid-swipe:** the empty row's `min(52vh, 300px)` is capped at 300
+             at both heights, the square-sizing `min(100vw, 100vh)` pins to 380 on a phone (vw is the
+             smaller side there), and the remaining `--tl-h` fallback belongs to the desktop `#app` rule.
+             So the fix covers the mechanism completely rather than one instance of it — recorded so the
+             next session does not repeat the grep.
              ⚠️ **A MEASUREMENT TRAP FOUND ON THE WAY, worth more than the fix:** the timeline REBUILDS on
              resize, replacing the add row and its +. The first version of this probe held element
              REFERENCES across the resize and measured a detached node as all-zeros, reporting the + as
