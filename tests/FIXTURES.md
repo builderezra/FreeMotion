@@ -71,6 +71,10 @@ transition is meaningless there.
   the ONLY way the shoulder notch in queue 435 was visible; row widths cannot see it.
   `_pictolegible.html` is the numeric half: neck gap, leg gap, open armpits and where each figure is
   widest, at every size — it is what found the pair measuring identically at 24px.
+- `_switchlive.html` — does `#btn-addside` move while you drag, for BOTH drags (queue 438)? **Read its
+  header before writing any drag probe:** the layer reorder binds its pointermove to the drag HANDLE and
+  relies on pointer capture, the add row's grip binds to WINDOW, and dispatching at the wrong one makes
+  the gesture silently not happen.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

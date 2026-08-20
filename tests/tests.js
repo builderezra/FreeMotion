@@ -2255,6 +2255,90 @@
     }
   });
 
+  test('438: the add-row switch moves WHILE you drag, both kinds of drag', { item: '438' }, async function () {
+    /* Queue 438. His words: "The switch doesn't update live when dragging layers or the main create
+       layer. Make it update as ur dragging."
+       #btn-addside reports where the add row sits as the CSS var --sw (0 = top, 1 = bottom), and it
+       read `FM.addAt` — which neither gesture writes until the DROP. A layer reorder is deferred on
+       purpose (`reorderActive` holds off every rebuild), and the add row's own drag settles with an
+       animation and only then commits, because a cancelled drag must leave the index alone. So the row
+       slid on screen for the whole gesture and the control reporting its position sat still.
+       Measured at 380px before the fix (tests/_switchlive.html): dragging the grip the length of the
+       list left --sw on 0.50 throughout and snapped it to 1.00 on release.
+
+       ⚠️ TWO DRAGS, TWO LISTENER HOMES, and getting it wrong proves nothing rather than failing: the
+       LAYER reorder binds pointermove/up to the drag HANDLE and leans on setPointerCapture (which a
+       synthetic pointerId cannot have — the call throws and is guarded), while the ADD ROW's grip binds
+       them to WINDOW. Dispatched to the wrong target the gesture simply does not happen: the first run
+       of this probe reported the bug as still present against code that was already fixed, and the
+       give-away was the CONTROL — the layer order had not changed either. Both are asserted here. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 6; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 6;
+        FM.addAt = 3;   // the MIDDLE: from the top or the bottom, --sw is 0 or 1 whichever way you drag
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(160);
+        const sw = document.getElementById('btn-addside');
+        if (!sw) throw new Error('#btn-addside is not on screen, so there is no switch to watch');
+        const swv = () => parseFloat(getComputedStyle(sw).getPropertyValue('--sw')) || 0;
+        if (Math.abs(swv() - 0.5) > 0.02) throw new Error('the switch did not start in the middle (' + swv() + '), so a move in either direction cannot be told from a no-op');
+        const pe = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, pointerId: 55, pointerType: 'touch', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+
+        const run = async (handle, moveTarget, dy) => {
+          const r = handle.getBoundingClientRect();
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const seen = [swv()];
+          handle.dispatchEvent(pe('pointerdown', x, y));
+          await sleep(40);
+          for (let k = 1; k <= 8; k++) {
+            await sleep(28);
+            (moveTarget || handle).dispatchEvent(pe('pointermove', x, y + dy * k / 8));
+            await sleep(28);
+            seen.push(swv());
+          }
+          (moveTarget || handle).dispatchEvent(pe('pointerup', x, y + dy));
+          await sleep(420);
+          return { seen: seen, spread: Math.max.apply(null, seen) - Math.min.apply(null, seen) };
+        };
+
+        // --- his first case: dragging a LAYER ---
+        const handle = document.querySelector('#tl-tracks .track-row .row-drag');
+        if (!handle) throw new Error('no .row-drag handle on a track row to grab');
+        const orderBefore = FM.scene.layers.map(l => l.name).join(',');
+        const a = await run(handle, null, 170);
+        if (FM.scene.layers.map(l => l.name).join(',') === orderBefore) throw new Error('the layer order did not change (' + orderBefore + '), so the drag never happened and the switch reading proves nothing — see the note about listener homes above');
+        if (a.spread < 0.05) throw new Error('dragging a LAYER left the switch on ' + a.seen[0].toFixed(2) + ' for the whole gesture (' + a.seen.map(v => v.toFixed(2)).join(' ') + ') — it only catches up when you let go');
+
+        // --- his second case: dragging the ADD ROW itself ---
+        FM.addAt = 3; FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(160);
+        const grip = document.querySelector('#tl-tracks .tl-addrow .tl-addrow-grip');
+        if (!grip) throw new Error('the add row has no .tl-addrow-grip to drag');
+        const atBefore = FM.addAt;
+        const b = await run(grip, window, 170);
+        if (FM.addAt === atBefore) throw new Error('FM.addAt did not change (' + atBefore + '), so the add-row drag never happened and its switch reading proves nothing');
+        if (b.spread < 0.05) throw new Error('dragging the ADD ROW left the switch on ' + b.seen[0].toFixed(2) + ' for the whole gesture (' + b.seen.map(v => v.toFixed(2)).join(' ') + ') — this is the half of his report about "the main create layer"');
+      }, 380);
+    } finally {
+      FM.dragAddAt = null; FM.dragLayerId = null;
+      FM.scene.layers = layers0; FM.addAt = at0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

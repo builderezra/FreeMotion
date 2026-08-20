@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does the add-row switch move while you drag? (queue 438)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* ⚠️ THE MOVES GO TO THE HANDLE, NOT TO WINDOW. js/timeline.js binds the reorder's pointermove/up to
+   the drag handle itself and relies on setPointerCapture to keep receiving them — and a SYNTHETIC
+   pointerId cannot be captured (the call throws and is guarded). Dispatched on window, every move
+   sailed past: the layer order did not change, the switch did not move, and the probe reported the bug
+   as still present against code that was already fixed.
+   Queue 438: "The switch doesn't update live when dragging layers or the main create layer."
+   The switch is #btn-addside; how far along it sits is the CSS var --sw (0 = top, 1 = bottom). So the
+   question is simply whether --sw changes DURING a drag or only after the drop. Both drags he named
+   are driven: a LAYER dragged by its ≡ handle, and the add row dragged by its own. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+
+  FM.scene.layers.length=0;
+  for(var i=0;i<6;i++){
+    var L=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+    L.start=0; L.duration=3; FM.scene.layers.push(L);
+  }
+  FM.scene.project.duration=6;
+  FM.addAt=3;   // the row starts in the MIDDLE, or --sw is 0 whichever way the drag goes and the probe proves nothing
+  FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(500);
+
+  var sw=d.getElementById('btn-addside');
+  if(!sw){ say('no #btn-addside on screen at this width'); document.title='ready'; return; }
+  function swv(){ return parseFloat(W.getComputedStyle(sw).getPropertyValue('--sw'))||0; }
+  function pe(type,x,y,id){return new W.PointerEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,pointerId:id,pointerType:'touch',isPrimary:true,button:0,buttons:type==='pointerup'?0:1});}
+
+  /* TWO DRAGS, TWO DIFFERENT LISTENER HOMES, and getting it wrong silently proves nothing. The LAYER
+     reorder binds pointermove/up to the drag HANDLE and leans on pointer capture; the ADD ROW's grip
+     binds them to WINDOW. Dispatching to the wrong one just does nothing at all. */
+  async function dragBy(tag, handle, dy, moveTarget){
+    if(!handle){ say(tag+'  ✗ no handle to grab'); return; }
+    var r=handle.getBoundingClientRect();
+    var x=r.left+r.width/2, y=r.top+r.height/2;
+    var before=swv(), seen=[before];
+    say('   (control) layer order before: '+FM.scene.layers.map(function(l){return l.name;}).join(',')+'   FM.addAt '+FM.addAt+'   --sw '+before.toFixed(2));
+    handle.dispatchEvent(pe('pointerdown',x,y,55));
+    await sleep(40);
+    for(var k=1;k<=8;k++){
+      await sleep(30);
+      (moveTarget||handle).dispatchEvent(pe('pointermove',x,y+dy*k/8,55));
+      await sleep(30);
+      seen.push(swv());
+    }
+    var duringMax=Math.max.apply(null,seen), duringMin=Math.min.apply(null,seen);
+    (moveTarget||handle).dispatchEvent(pe('pointerup',x,y+dy,55));
+    await sleep(500);
+    var after=swv();
+    var movedDuring=(duringMax-duringMin)>0.02;
+    say('   (control) layer order after: '+FM.scene.layers.map(function(l){return l.name;}).join(',')+'   FM.addAt '+FM.addAt);
+    say(tag);
+    say('   --sw during the drag: '+seen.map(function(v){return v.toFixed(2);}).join(' '));
+    say('   before '+before.toFixed(2)+'  →  after the drop '+after.toFixed(2)
+        +'   moved DURING? '+(movedDuring?'✅ yes':'❌ NO — it only catches up on release')
+        +'   moved at all? '+(Math.abs(after-before)>0.02?'yes':'no'));
+  }
+
+  var heads=[].slice.call(d.querySelectorAll('.track-row .row-drag, .track-row .th-drag, .track-row [class*="drag"]'));
+  say('drag handles found on layer rows: '+heads.length+(heads.length?('  ('+(heads[0].className||'')+')'):''));
+  await dragBy('A. dragging a LAYER by its handle', heads[0], 170);
+
+  var addRow=d.querySelector('.tl-addrow');
+  var addHandle=addRow?addRow.querySelector('.tl-addrow-grip'):null;
+  say('');
+  say('add-row grip found: '+(addHandle?'yes':'NO — the probe was grabbing the row, whose pointerdown is not the grip\'s'));
+  await dragBy('B. dragging the ADD ROW by its grip', addHandle, 170, W);
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

@@ -1728,7 +1728,14 @@ window.FM = window.FM || {};
   function addSwitchProportion() {
     const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
     if (!n) return 0;                                   // nothing to sit between — it is at the top
-    return Math.max(0, Math.min(1, (FM.clampAddAt ? FM.clampAddAt() : FM.addAt) / n));
+    /* MID-DRAG, THE LIVE INDEX WINS (queue 438). A layer reorder is deferred — nothing is committed
+       until the drop — so `FM.addAt` is stale for the whole gesture while the add row is visibly
+       sliding on screen. js/timeline.js publishes where the row currently SITS as `FM.dragAddAt`, on
+       the same lifetime as `FM.dragLayerId`, and this prefers it while it exists. Reading it rather
+       than writing addAt is what keeps a cancelled drag from leaving a half-applied index behind. */
+    const live = (typeof FM.dragAddAt === 'number') ? FM.dragAddAt
+               : (FM.clampAddAt ? FM.clampAddAt() : FM.addAt);
+    return Math.max(0, Math.min(1, live / n));
   }
   FM._addSwitchProportion = addSwitchProportion;        // for the suite
   function syncAddSwitch() {

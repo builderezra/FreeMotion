@@ -12601,7 +12601,7 @@ wait for them to report back."*
       ⚠️ Ships alongside **#436**, which removes an item from this same menu — one release, or the two will
       fight over the item list.
 
-- [ ] **438 — The layer switch does not update while you drag.** (20 Aug.) His words, verbatim: *"The
+- [x] **438 — The layer switch does not update while you drag.** ✅ **BOTH DRAGS — v10.78.** (20 Aug.) His words, verbatim: *"The
       switch doesn't update live when dragging layers or the main create layer. Make it update as ur
       dragging"*.
       **Read as:** the thing that shows which layer/slot you are on does not follow a drag in progress —
@@ -12610,6 +12610,29 @@ wait for them to report back."*
       ⚠️ Which "switch" needs confirming from the code, not guessed: the candidates are the add-row's own
       label (`addRowLabel()` in js/timeline.js, which names where the next layer will land) and the track
       head's state. The add-row one is the likelier reading of "the main create layer".
+
+      📐 **CONFIRMED FROM THE CODE: it is `#btn-addside`**, the switch from queue 373/416 that shows where
+      the add row sits (`--sw`, 0 = top, 1 = bottom). **Both halves of his sentence reproduced at 380px**
+      (`tests/_switchlive.html`): dragging a LAYER and dragging the ADD ROW both left it frozen for the
+      whole gesture and snapped it into place on release — the grip drag sat on 0.50 the length of the
+      list and then jumped to 1.00.
+      **Why, and it is the same reason twice:** the switch reads `FM.addAt`, and neither gesture writes
+      that until the DROP. A layer reorder is deferred on purpose — `reorderActive` holds off every
+      rebuild, because a mid-drag rebuild would destroy the captured handle — and the add row's own drag
+      settles with an animation and commits after it, because a cancelled drag must not leave a
+      half-applied index behind. So the row was sliding and the thing reporting its position was not.
+      ✅ **v10.78 — neither path writes `addAt` now either.** The live position is published as
+      `FM.dragAddAt`, on the same lifetime as `FM.dragLayerId` (which already existed for exactly this
+      job), and the switch prefers it while it exists. ONE channel for "where is the add row right now",
+      so the two gestures cannot disagree about it. Measured after: 0.50 → 0.33 during a layer drag,
+      0.50 → 0.67 → 0.83 → 1.00 during an add-row drag.
+      ⚠️ **THE PROBE LIED TWICE BEFORE IT WAS BELIEVED, and both traps are now written into the test.**
+      The layer reorder binds pointermove/up to the drag HANDLE and leans on `setPointerCapture` — which
+      a synthetic pointerId cannot have, since the call throws and is guarded — while the add row's grip
+      binds them to WINDOW. Dispatched at the wrong target the gesture does not happen at all, so the
+      first run reported the bug as still present against code that was already fixed. The give-away was
+      the CONTROL: the layer order had not changed either. Both are asserted now, so a run that did not
+      actually drag says so instead of producing a number.
 
 - [ ] **439 — 🚨 HE NAMES THIS AS THE OLDEST THING STILL NOT DONE: the text bar hides under the keyboard.**
       (20 Aug, phone screenshot at v10.71 with the keyboard up.) His words, verbatim: *"The longest issue

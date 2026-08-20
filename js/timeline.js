@@ -1122,6 +1122,22 @@ window.FM = window.FM || {};
         let tgt = g;
         while (statics[tgt] && statics[tgt].isAdd) tgt++;
         dropBeforeId = statics[tgt] ? statics[tgt].id : bottomBefore;
+        /* THE SWITCH FOLLOWS THE DRAG, NOT THE DROP (queue 438). Ezra: "The switch doesn't update live
+           when dragging layers or the main create layer. Make it update as ur dragging."
+           He is right and the reason is structural: the switch reads `FM.addAt`, and a reorder is
+           DEFERRED — `reorderActive` holds off every rebuild and the real `moveLayers` does not run
+           until the drop — so `addAt` cannot change while your finger is down. Meanwhile the add row is
+           one of the `statics` above and is visibly sliding, so the row moved and the control that
+           reports where it is did not.
+           `addAt` itself must NOT be written here: the drag can still be cancelled, and a half-applied
+           index would survive it. So the live value is published beside `FM.dragLayerId` — same
+           lifetime, same reason, cleared by the same line — and the switch prefers it while it exists.
+           The arithmetic: every static before the add row is a layer row, so its index among statics IS
+           its layer index; if the dragged block has opened its gap at or above it, the block is now
+           above it too and its index rises by the block's size. */
+        const ai = statics.findIndex(sr => sr.isAdd);
+        FM.dragAddAt = ai < 0 ? null : (ai + (g <= ai ? dragged.length : 0));
+        if (FM.syncAddSwitch) FM.syncAddSwitch();
         if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
@@ -1164,6 +1180,7 @@ window.FM = window.FM || {};
       const cleanup = () => {
         reorderActive = false;
         FM.dragLayerId = null;                                  // the switch goes back to its own colour (queue 416)
+        FM.dragAddAt = null;                                    // …and back to the real index (queue 438)
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
         // `.tl-addrow` too — it is a slot in the model now (queue 357), so it also carries row-part and
@@ -2108,11 +2125,21 @@ window.FM = window.FM || {};
       e.preventDefault();
       wantAt = motion ? motion.boundaryAt(e.clientY) : boundaryFor(e.clientY);
       if (motion) motion.to(wantAt, e.clientY - y0);
+      /* AND THE SWITCH COMES WITH IT (queue 438, his second case: "or the main create layer").
+         `wantAt` is already the live answer — the row is drawn at it on every move — but `FM.addAt` is
+         not written until `finish`, deliberately: the drop settles with an animation and a cancelled
+         drag must leave the index alone. Measured before this line: dragging the grip the length of the
+         list left the switch on 0.50 for the whole gesture and then snapped it to 1.00 on release.
+         Published on the same channel the layer reorder uses, so there is ONE rule for "where is the
+         add row right now" rather than two that can disagree. */
+      FM.dragAddAt = wantAt;
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
     };
     const finish = () => {
       addDragging = false;
       row.classList.remove('tl-addrow-dragging');
       FM.addAt = wantAt;
+      FM.dragAddAt = null;                        // the real index is authoritative again
       if (FM.syncAddSwitch) FM.syncAddSwitch();   // the switch leans with the DRAG too (queue 373 clause 6) — these two paths set addAt directly, not through moveAddMarker
       buildTracks();          // the ONE rebuild of the whole gesture (queue 307 clause 4)
     };
@@ -2123,7 +2150,7 @@ window.FM = window.FM || {};
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
       if (motion) { const m = motion; motion = null; m.settle(wantAt, finish); }
-      else { addDragging = false; row.classList.remove('tl-addrow-dragging'); }
+      else { addDragging = false; row.classList.remove('tl-addrow-dragging'); FM.dragAddAt = null; if (FM.syncAddSwitch) FM.syncAddSwitch(); }
     };
     grip.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
