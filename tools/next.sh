@@ -94,3 +94,53 @@ printf 'open: %s unnumbered + %s numbered = %s total\n' \
   "$(grep -c '^- \[ \] \*\*' "$F")"
 echo
 echo "Blocked on a decision from Ezra? It does NOT hold the queue — note it and take the next one."
+echo
+
+# ---------------------------------------------------------------------------------------------------
+# WHICH OF THOSE CAN ACTUALLY BE WORKED ON — because the list above never said, and every session paid
+# for that. A session on 20 Aug re-derived it by reading entries one at a time, called far too many of
+# them "blocked", and fell back to bug hunts while buildable items sat there. The entries already SAY
+# which is which in prose; nothing here changes REQUESTS.md, it just reads what is written.
+# Deliberately conservative: anything it cannot classify is ACTIONABLE, so the failure mode is being
+# handed work rather than being told there is none.
+python3 - "$F" <<'PY'
+import re, sys
+lines = open(sys.argv[1]).read().split('\n')
+starts = [i for i, l in enumerate(lines) if re.match(r'^- \[[ x]\] ', l)]
+HELD    = re.compile(r'⚠️ *HELD|Held because|Log don.t do yet|held at (his|your) request|deliberately not being done', re.I)
+BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line from (him|you)|your call|your word|'
+                     r'needs? (his|your) (decision|word|call)|decision for you|say the word|Ask him|'
+                     r'would settle it|from you would close it|LEFT OPEN for your eye|still worth your ears|'
+                     r'waiting on (his|your)|ASKED HIM|STAYS OPEN|is his call|his call alone|'
+                     # …and the big one the first version missed: items that are FIXED and left open only
+                     # until he confirms on his own device. They read as actionable and are not — there is
+                     # nothing to build, only something for him to look at.
+                     r'Left OPEN rather than ticked|left open until|until (he|you) confirm|say so and (it|this) is live|'
+                     r'if it still|next time it happens|one line from (him|you)|REAL-DEVICE report', re.I)
+BIG     = re.compile(r'wants a session of its own|Not started deliberately|days of work', re.I)
+buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': []}
+for n, i in enumerate(starts):
+    if not lines[i].startswith('- [ ] '): continue
+    end = starts[n + 1] if n + 1 < len(starts) else len(lines)
+    body = '\n'.join(lines[i:end])
+    m = re.match(r'- \[ \] \*\*(\d+[a-z]?)', lines[i])
+    tag = m.group(1) if m else '(unnumbered)'
+    title = re.sub(r'\*\*', '', lines[i][6:])[:64]
+    key = ('held by Ezra' if HELD.search(body) else
+           'blocked on Ezra' if BLOCKED.search(body) else
+           'needs its own session' if BIG.search(body) else 'ACTIONABLE')
+    buckets[key].append((tag, title, i + 1))
+for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session'):
+    print('%-22s %d' % (k + ':', len(buckets[k])))
+act = buckets['ACTIONABLE']
+if act:
+    print('\nSTART HERE (oldest first):')
+    def key(t):
+        mm = re.match(r'(\d+)', t[0])
+        return (0, 0) if not mm else (1, int(mm.group(1)))
+    for tag, title, ln in sorted(act, key=key)[:5]:
+        print('  %-6s line %-6d %s' % (tag, ln, title))
+else:
+    print('\nNothing classified as actionable — bug hunts are the fallback (his explicit instruction).')
+print('\n(A guess from the prose. If one is wrong, the entry is what to fix, not this script.)')
+PY
