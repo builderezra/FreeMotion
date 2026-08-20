@@ -1087,3 +1087,23 @@ demonstrated fault (it caught me in this same file the same day) and the guard c
 false pass — it cannot make a test flakier. The Mixing case is a weak line with a strong neighbour, and
 rewriting it would be changing a test that is not wrong. *Widen on evidence, not on resemblance* — the
 rule from section 12, applied to the next thing that resembled a bug.
+
+## 14. Audited trap 3 across the whole suite — and found the distinction that decides whether it matters
+Scanned all 741 test blocks: 17 touch a scroll position, 6 assert that one MOVED, and three of those six
+carry no guard proving the fixture could move at all (`add panel: pages can be turned with a mouse`,
+`timeline: a clip name stays at the clip start`, `both ends of the add-row switch land somewhere you can
+see`). The other three guard properly.
+**But a missing room guard is only dangerous in one DIRECTION, and that is the useful finding:**
+- **Asserting something MOVED, with no room:** the test FAILS. Costly — the vertical-glide test burned
+  three wrong diagnoses before its `150 → 150` was traced to the drag eating the whole range — but it is
+  a loud, honest failure. The guard's job there is to make the failure explain itself.
+- **Asserting something did NOT move (jitter, stiffness, "stays put"), with no room:** the test PASSES,
+  and proves nothing. That is the lie. It is exactly what my own queue 429 probe did: four layers, no
+  overflow, `scrollTop` stuck at 0, and "the + never moved sideways" was true of a list that never
+  scrolled.
+**So the three unguarded tests above are the safe kind** — all assert movement — and they were left
+alone, on the same rule as section 13: widen on evidence, not on resemblance. What IS worth doing is
+noting them here, so that if one of them ever fails mysteriously the first question is already written
+down: *did the fixture have room to move?*
+**And the rule for anything NEW:** a test asserting that something stays still must prove the thing had
+the opportunity to move. Otherwise it is measuring nothing and reporting success.
