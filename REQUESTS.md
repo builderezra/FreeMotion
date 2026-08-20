@@ -12760,23 +12760,42 @@ wait for them to report back."*
       line, **survived** — the gap reading came back null and both checks were written as
       `if (gapBefore …)`, so a run that saw nothing reported success. A null reading fails outright now.
 
-- [ ] **444 — Tuff catalogue: one more filter, more filter categories, and favouriting.** (20 Aug.) His
+- [x] **444 — Tuff catalogue: one more filter, more filter categories, and favouriting.** ✅ **ALL FIVE
+      CLAUSES — v10.83.** (20 Aug.) His
       words, verbatim: *"Add to the bottom of the list to make it so the tuff catalogue has one extra
       filter and also make more categories for filters, and make it so you can fave them and they go to
       the top when you do, not the categories but each individual. And it doesn't take it away from its
       group when you do so"*.
       **Clauses:**
-      1. [ ] **One extra filter** in the Tuff catalogue (the section shipped in v9.99).
-      2. [ ] **More categories** for filters.
-      3. [ ] **Favourite an individual filter** — a fave, not a category-level thing.
-      4. [ ] **Faves rise to the top** of the browser.
-      5. [ ] **…and it stays in its own group too** — favouriting must not MOVE it out of its category, it
-             appears in both.
+      1. [x] ✅ **v10.83 — Whiteout**, the eighth Tuff filter. Deliberately the one thing the other seven
+             do not do: they all pull the picture DOWN (crushed, cold, dirty, dark) and this one blows it
+             out, which is the other half of the TikTok look the section was built for.
+      2. [x] ✅ **v10.83 — two: Black / White and Punchy**, three filters each. Not slices of the four
+             that existed: mono is the family the list had no home for at all (Ash is near-monochrome but
+             lives in Tuff because it is a scene, not a treatment), and Punchy is the social look
+             Cinematic deliberately is not.
+      3. [x] ✅ **v10.83 — a star on each tile**, per filter, tapped in the grid rather than buried in a
+             menu.
+      4. [x] ✅ **v10.83 — a Favourites row above the categories**, newest fave first.
+      5. [x] ✅ **v10.83 — and it stays in its category, in its original order.**
       ⚠️ Clause 5 is the design constraint that makes this more than a sort: the same filter has to render
       in two places at once, so whatever backs the list has to allow a duplicate entry without duplicating
       the identity (picking it from either place is the same filter, and un-faving must not leave a ghost).
       ⚠️ Faves are per-user state, so they belong in localStorage next to the other preferences — NOT in
       the project document, or a project shared or re-imported would carry someone else's faves.
+      ✅ **Done that way, and asserted:** the test checks the favourited id does not appear anywhere in
+      the project document.
+      🧱 **Clause 5 is what shaped the build.** A favourite is a SECOND PLACE the filter appears, not a
+      move — so the Favourites row and the category rows are drawn by ONE tile builder from the same
+      definitions, and nothing reorders the master list. Two builders would have been two chances for a
+      fave tile and its twin in the category below to drift apart.
+      🔎 **THREE EXISTING GUARDS CAUGHT REAL GAPS before this shipped**, which is the system working:
+      every filter must name a preview SUBJECT (the seven new ones had none, so they previewed on
+      `null`), a Tuff filter must preview on one of the car photos, and a category title uses "/" not
+      "&" — "Black & White" was rejected outright (queue 287/288).
+      🧪 **And one new assertion was DEAD until it was fixed.** "Goes to the top" cannot be told from
+      "goes to the end" on an EMPTY favourites list — both put the new entry at index 0 — so a mutation
+      swapping `unshift` for `push` survived. The test seeds an existing favourite first now.
 
 - [ ] **445 — Effects menu: rename "Featured" to "New", and make the category tiles SQUARE.** (20 Aug.)
       His words, verbatim: *"Also in the effects menu change the featured row to New and also make each

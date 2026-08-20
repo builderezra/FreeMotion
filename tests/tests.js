@@ -2596,6 +2596,74 @@
     }
   });
 
+  test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
+    /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
+       categories but each individual. And it doesn't take it away from its group when you do so."
+       That last sentence is the design and it is what this mostly asserts: a favourite is a SECOND
+       PLACE the filter appears, not a move. A build that reordered FILTERS would satisfy "goes to the
+       top" and fail him. */
+    if (!FM.filters || !FM.filters.toggleFave) throw new Error('the filter favourites API is missing');
+    const before = (FM.filters.faves() || []).map(f => f.id);
+    const all = FM.filters.all();
+    if (all.length < 4) throw new Error('only ' + all.length + ' filters, so this proves little');
+    // pick one that is NOT already a favourite, and remember which category it belongs to
+    const pick = all.filter(f => !FM.filters.isFave(f.id))[0];
+    if (!pick) throw new Error('every filter is already a favourite, so the toggle cannot be tested');
+    const sec = pick.section;
+    const inSectionBefore = FM.filters.bySection(sec).map(f => f.id);
+    /* THERE HAS TO BE A FAVOURITE ALREADY, or "goes to the top" cannot be told from "goes to the end":
+       on an empty list both put it at index 0, and a mutation swapping unshift for push survived this
+       test until the seed was added. */
+    const seed = all.filter(f => f.id !== pick.id && !FM.filters.isFave(f.id))[0];
+    if (!seed) throw new Error('need a second unfavourited filter to seed the list with');
+    try {
+      FM.filters.toggleFave(seed.id);
+      if (FM.filters.faves()[0].id !== seed.id) throw new Error('the seed favourite did not take, so the ordering below proves nothing');
+      const on = FM.filters.toggleFave(pick.id);
+      if (!on) throw new Error('toggling an unfavourited filter reported it as removed');
+      if (!FM.filters.isFave(pick.id)) throw new Error('the filter did not stick as a favourite');
+      const faves = FM.filters.faves().map(f => f.id);
+      if (faves.length < 2) throw new Error('only ' + faves.length + ' favourite(s) — with one entry every ordering looks identical, so this assertion would be blind');
+      if (faves[0] !== pick.id) throw new Error('the newly favourited filter is at position ' + faves.indexOf(pick.id) + ' of ' + faves.length + ', not the top — "they go to the top when you do"');
+      /* HIS CLAUSE 5, and the one that matters most. */
+      const inSectionAfter = FM.filters.bySection(sec).map(f => f.id);
+      if (inSectionAfter.indexOf(pick.id) < 0) throw new Error('favouriting "' + pick.name + '" took it OUT of its ' + sec + ' category — he asked specifically that it does not');
+      if (inSectionAfter.join(',') !== inSectionBefore.join(',')) throw new Error('the ' + sec + ' category was re-ordered by a favourite (' + inSectionBefore.join(',') + ' → ' + inSectionAfter.join(',') + ') — a fave is a second place it appears, not a move');
+      /* …and it is per-person state, so it must not be able to reach the project document. */
+      const doc = JSON.stringify(FM.scene.project || {});
+      if (doc.indexOf(pick.id) >= 0) throw new Error('the favourite was written into the project document — it would travel with a shared or re-imported project and make someone else’s list wrong');
+      // off again
+      if (FM.filters.toggleFave(pick.id)) throw new Error('toggling a favourite a second time reported it as added');
+      if (FM.filters.isFave(pick.id)) throw new Error('the favourite did not come off');
+      if (FM.filters.bySection(sec).indexOf(pick) < 0 && FM.filters.bySection(sec).map(f => f.id).indexOf(pick.id) < 0) throw new Error('un-favouriting removed it from its category');
+    } finally {
+      // put the list back exactly as it was
+      FM.filters.faves().forEach(f => { if (before.indexOf(f.id) < 0) FM.filters.toggleFave(f.id); });
+      before.slice().reverse().forEach(id => { if (!FM.filters.isFave(id)) FM.filters.toggleFave(id); });
+    }
+  });
+
+  test('444: the Tuff section grew, and every new category arrived with filters in it', { item: '444' }, function () {
+    /* Clauses 1 and 2: "the tuff catalogue has one extra filter" and "make more categories for filters".
+       `sections()` already hides a category with nothing in it, so a heading added without filters
+       would vanish silently and the request would look done while nothing had changed — which is why
+       the count is asserted per section rather than just the number of sections. */
+    if (!FM.filters) throw new Error('FM.filters is missing');
+    const tuff = FM.filters.bySection('tuff');
+    if (tuff.length < 8) throw new Error('the Tuff section has ' + tuff.length + ' filters — it had 7 when he asked for "one extra"');
+    const secs = FM.filters.sections();
+    if (secs.length < 7) throw new Error('there are ' + secs.length + ' filter categories — there were 5 when he asked for more');
+    secs.forEach(sc => {
+      const n = FM.filters.bySection(sc.key).length;
+      if (n < 3) throw new Error('the "' + sc.label + '" category has only ' + n + ' filter(s) — a category is a place to look, and one with nothing much in it is a heading rather than a category');
+    });
+    // every filter must still build, new ones included — the same rule the Tuff section is held to
+    FM.filters.all().forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      if (!box || !box.effects || !box.effects.length) throw new Error('filter "' + f.id + '" builds nothing — a definition with a mistyped effect type or param silently produces an empty container');
+    });
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

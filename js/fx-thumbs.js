@@ -451,6 +451,20 @@ window.FM = window.FM || {};
        down, at four columns or at two. */
     blackout:   'mclaren', coldsteel: 'tesla',   bloodline: 'revuelto', static: 'huracan',
     nightdrive: 'revuelto', overdrive: 'huracan', ash:     'mclaren',
+    /* The eighth Tuff filter (queue 444). Whiteout is the only one that blows the picture OUT, so it
+       gets `tesla` — the one car shot with real bright surfaces to lose — rather than another dark
+       frame where an overexposure has nothing to overexpose. Still no two cars touching at four
+       columns or at two: the section reads mclaren · tesla · revuelto · huracan · revuelto · huracan ·
+       mclaren · tesla. */
+    whiteout:   'tesla',
+    /* THE TWO NEW CATEGORIES (queue 444, clause 2), and the cars are deliberately NOT used — his
+       correction in v9.82 was "I didn't want the car images as the main images for any of the groups
+       but the tuff group", and that still holds for anything added later.
+       Chosen for what each grade needs something to bite on:
+       · a black-and-white treatment needs COLOUR to remove, and a range of tones to redistribute;
+       · a punchy grade needs mid-saturation to push — a photo that is already vivid shows nothing. */
+    silver:     'pair',    noir:   'figures',  newsprint: 'dog',
+    poppy:      'bay',     candy:  'shore',    sunbaked:  'city',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

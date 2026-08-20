@@ -84,6 +84,9 @@ transition is meaningless there.
 - `_adddrop.html` — drags one layer to every slot around the add row and reports, for each, where the
   gap OPENED against where the layer LANDED (queue 443). The landing order alone cannot see that bug: the
   collapse of two slots onto one target is unavoidable, and what was wrong was the preview.
+- `_fltfave.html` — the Filters tab with two favourites set, so the Favourites row and the stars on the
+  category tiles can be looked at (queue 444). The tab buttons are `.fxmode-btn` — a probe guessing at
+  `.fx-tab` silently photographs the Visual tab instead.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

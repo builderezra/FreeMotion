@@ -43,6 +43,16 @@ window.FM = window.FM || {};
        Last, because it is the newest and the most specific — the other four are general grades and this
        one is a scene. */
     { key: 'tuff', label: 'Tuff' },
+    /* MORE CATEGORIES (queue 444, clause 2). Ezra: "make more categories for filters". Two, chosen so
+       they are not slices of the four above: MONO is the only family the list had no home for at all
+       (Ash is near-monochrome but lives in Tuff because it is a scene, not a black-and-white treatment),
+       and VIVID is the punchy social look that Cinematic deliberately is not. A category with nothing in
+       it is worse than no category — `sections()` already filters those out — so each arrives with
+       three filters rather than as a heading waiting to be filled. */
+    /* "Black / White", not "Black & White": queue 287/288 established that a category title uses a
+       slash rather than an ampersand, and the suite holds every browser to it. Caught there first. */
+    { key: 'mono', label: 'Black / White' },
+    { key: 'vivid', label: 'Punchy' },
   ];
 
   /* e(type, params) — one child effect. Params are only the ones being moved off their default, so a
@@ -186,6 +196,49 @@ window.FM = window.FM || {};
                 e('lightglow', { amount: 0.6, radius: 12, threshold: 60 }),
                 e('vignette', { amount: 0.35, size: 38 }),
                 e('flashdark', { amount: 0.3, speed: 14, soft: 0.15, floor: 0.35 })] },
+    /* THE EXTRA TUFF FILTER (queue 444, clause 1). Deliberately the one thing the other seven do not
+       do: they all pull the picture DOWN — crushed, cold, dirty, dark. This one blows it out instead,
+       which is the other half of the TikTok look he described. Same `flashdark` pulse as its siblings,
+       because that beat is what makes the section a section. */
+    { id: 'whiteout', name: 'Whiteout', section: 'tuff',
+      desc: 'Blown highlights and a hard white bloom — the overexposed flash-photo edit.',
+      effects: [e('brightness', { amount: 1.16 }), e('contrast', { amount: 1.34 }), e('saturate', { amount: 0.68 }),
+                e('highlightsshadows', { highlights: 30, shadows: -30 }),
+                e('lightglow', { amount: 0.7, radius: 18, threshold: 40 }),
+                e('vignette', { amount: 0.3, size: 40 }),
+                e('flashdark', { amount: 0.3, speed: 11, soft: 0.25, floor: 0.38 })] },
+    // ---- Black & White ------------------------------------------------------------------------
+    { id: 'silver', name: 'Silver', section: 'mono',
+      desc: 'A gentle black and white — full range, nothing crushed, a little lift in the shadows.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.08 }),
+                e('highlightsshadows', { highlights: -8, shadows: 14 })] },
+    { id: 'noir', name: 'Noir', section: 'mono',
+      desc: 'Hard black and white — deep shadows, bright highlights and a heavy corner fall-off.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.42 }),
+                e('highlightsshadows', { highlights: 12, shadows: -40 }),
+                e('vignette', { amount: 0.5, size: 30 })] },
+    { id: 'newsprint', name: 'Newsprint', section: 'mono',
+      desc: 'Grey, grainy and slightly soft — a photograph that has been through a printing press.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.14 }),
+                e('brightness', { amount: 0.96 }),
+                e('filmgrain', { amount: 42, size: 2 })] },
+    // ---- Punchy -------------------------------------------------------------------------------
+    { id: 'poppy', name: 'Poppy', section: 'vivid',
+      desc: 'Saturation up, contrast up, everything a shade brighter — the straight-to-feed look.',
+      effects: [e('saturate', { amount: 1.45 }), e('contrast', { amount: 1.14 }),
+                e('brightness', { amount: 1.04 }),
+                e('highlightsshadows', { highlights: -10, shadows: 10 })] },
+    { id: 'candy', name: 'Candy', section: 'vivid',
+      desc: 'Bright and cool-leaning, with the highlights glowing — sweet rather than cinematic.',
+      effects: [e('saturate', { amount: 1.35 }), e('brightness', { amount: 1.08 }),
+                e('temperature', { amount: -14, tint: 8 }),
+                e('lightglow', { amount: 0.35, radius: 12, threshold: 62 })] },
+    { id: 'sunbaked', name: 'Sunbaked', section: 'vivid',
+      desc: 'Warm, strong and a little hazy — midday sun with the colour pushed.',
+      effects: [e('saturate', { amount: 1.3 }), e('contrast', { amount: 1.16 }),
+                e('temperature', { amount: 24, tint: -4 }),
+                e('lightglow', { amount: 0.4, radius: 14, threshold: 55 }),
+                e('vignette', { amount: 0.22, size: 46 })] },
     { id: 'ash', name: 'Ash', section: 'tuff',
       desc: 'Near-monochrome with a faint warm cast and no mercy in the contrast.',
       effects: [e('contrast', { amount: 1.3 }), e('grayscale', { amount: 0.82 }),
@@ -222,11 +275,46 @@ window.FM = window.FM || {};
   }
 
   FM.FILTERS = FILTERS;
+  /* ---- FAVOURITES (queue 444, clauses 3-5) -----------------------------------------------------
+   * Ezra: "make it so you can fave them and they go to the top when you do, not the categories but each
+   * individual. And it doesn't take it away from its group when you do so."
+   * Clause 5 is the one that shapes this: a favourite is not a MOVE, it is a second place the same
+   * filter appears. So nothing here reorders FILTERS — the browser draws an extra section from this
+   * list, and every category still draws its own members, unchanged.
+   *
+   * localStorage, NOT the project document. A fave is about the person, not the edit: putting it in the
+   * project would carry one person's favourites into any project they shared or re-imported and
+   * silently make someone else's list wrong. Same reasoning as the other preferences.
+   * Ids are filtered against the live FILTERS on read, so a filter removed by a later build cannot
+   * leave a dead entry drawing an empty tile forever. */
+  const FAVE_KEY = 'fm.filterFaves';
+  function readFaves() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAVE_KEY) || '[]');
+      if (!Array.isArray(raw)) return [];
+      return raw.filter(function (id) { return typeof id === 'string' && FILTERS.some(function (f) { return f.id === id; }); });
+    } catch (e) { return []; }
+  }
+  function writeFaves(ids) { try { localStorage.setItem(FAVE_KEY, JSON.stringify(ids)); } catch (e) {} }
+
   FM.filters = {
     sections: function () {
       // Only sections that actually have something in them — an empty banner is worse than no banner.
       return SECTIONS.filter(s => FILTERS.some(f => f.section === s.key));
     },
+    isFave: function (id) { return readFaves().indexOf(id) >= 0; },
+    /* Newest fave FIRST, so the thing you just starred is the thing at the top — "they go to the top"
+       is the order he asked for, and appending would put it at the bottom of the favourites. */
+    toggleFave: function (id) {
+      if (!this.get(id)) return false;
+      const cur = readFaves(), at = cur.indexOf(id);
+      if (at >= 0) cur.splice(at, 1); else cur.unshift(id);
+      writeFaves(cur);
+      return at < 0;
+    },
+    // The favourite filters as DEFINITIONS, in fave order. The browser draws these as an extra section
+    // above the categories, and every one of them still appears in its own category as well.
+    faves: function () { return readFaves().map(id => this.get(id)).filter(Boolean); },
     all: function () { return FILTERS.slice(); },
     bySection: function (key) { return FILTERS.filter(f => f.section === key); },
     get: function (id) { return FILTERS.filter(f => f.id === id)[0] || null; },

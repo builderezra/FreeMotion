@@ -1420,12 +1420,16 @@ window.FM = window.FM || {};
       afterFx();
     });
     s.appendChild(mkEmpty);
-    (FM.filters.sections() || []).forEach(sec => {
-      const list = FM.filters.bySection(sec.key);
-      if (!list.length) return;
-      s.appendChild(el('div', 'insp-sub-label', sec.label));
-      const wrap = el('div', 'flt-grid');
-      list.forEach(f => {
+    /* ONE TILE BUILDER, USED TWICE (queue 444, clause 5). Ezra: "make it so you can fave them and they
+       go to the top when you do, not the categories but each individual. And it doesn't take it away
+       from its group when you do so."
+       That last sentence is the whole design: a favourite is not a MOVE, it is a SECOND PLACE the same
+       filter appears. So the favourites row and the category rows are drawn by the same function from
+       the same definitions — nothing is reordered and nothing is removed from its section. Two calls to
+       one builder rather than two builders, because two would be two chances for a fave tile and its
+       twin in the category below to stop behaving the same way. */
+    const mkTile = (f) => {
+
         /* A TILE, matching the effects and audio browsers (queue 220). He asked for the section to work
            "like how effects and audio does", and those are grids of pictures — a picture is how you
            choose a LOOK, which is the one thing a sentence is bad at.
@@ -1467,8 +1471,45 @@ window.FM = window.FM || {};
               : 'Added “' + f.name + '”');
           }
         });
-        wrap.appendChild(row);
+      /* THE STAR (clauses 3 and 4). On the tile rather than in a menu: it is a per-filter thing he can
+         change while looking at the grid, and a menu would be two taps to express a preference.
+         It stops propagation, or starring a filter would also ADD it — the tile's own click is the
+         "use this look" action and the star sits inside it. */
+      const star = el('button', 'flt-fave');
+      const paintStar = () => {
+        const on = FM.filters.isFave(f.id);
+        star.classList.toggle('on', on);
+        star.textContent = on ? '\u2605' : '\u2606';
+        star.title = on ? 'Remove \u201c' + f.name + '\u201d from favourites' : 'Add \u201c' + f.name + '\u201d to favourites';
+        star.setAttribute('aria-label', star.title);
+      };
+      paintStar();
+      star.addEventListener('click', (ev) => {
+        ev.stopPropagation(); ev.preventDefault();
+        FM.filters.toggleFave(f.id);
+        // Redraw the whole browser: the favourites row above has to gain or lose this filter, and the
+        // twin tile in the category has to relight its star. Repainting only this one would leave the
+        // other showing the opposite state.
+        afterFx();
       });
+      row.appendChild(star);
+      return row;
+    };
+
+    /* FAVOURITES FIRST — and every one of these still appears in its own category below. */
+    const favs = (FM.filters.faves && FM.filters.faves()) || [];
+    if (favs.length) {
+      s.appendChild(el('div', 'insp-sub-label', 'Favourites'));
+      const fwrap = el('div', 'flt-grid');
+      favs.forEach(f => fwrap.appendChild(mkTile(f)));
+      s.appendChild(fwrap);
+    }
+    (FM.filters.sections() || []).forEach(sec => {
+      const list = FM.filters.bySection(sec.key);
+      if (!list.length) return;
+      s.appendChild(el('div', 'insp-sub-label', sec.label));
+      const wrap = el('div', 'flt-grid');
+      list.forEach(f => wrap.appendChild(mkTile(f)));
       s.appendChild(wrap);
     });
     return s;
