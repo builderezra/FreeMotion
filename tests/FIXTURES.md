@@ -79,6 +79,8 @@ transition is meaningless there.
   actually painted, and whether a short cue keeps a middle to grab (queue 441). Note that
   `FM.addCaptionLayer()` jumps straight into the TEXT EDITOR — a fixture about the timeline chip has to
   call `FM.textEdit.stop()` first, or it photographs the wrong screen.
+- `_headgap.html` — the track head measured WITH a group in the project and without, so the chevron
+  column's cost can be told apart from plain padding (queue 442).
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

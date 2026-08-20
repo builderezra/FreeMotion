@@ -2439,6 +2439,81 @@
     }
   });
 
+  test('442: the track head hugs the wall, and the saving does not come out of the thumbnail', { item: '442' }, async function () {
+    /* Queue 442. Ezra, with the left edge of the timeline scribbled down its whole height: "Still a bunch
+       of wasted space here, move it more towards the wall so you don't have that gap for no reason."
+       Measured at 380px WITH a group in the project — which his has — before the change: 7px padding +
+       a 16px chevron + a 6px gap put the eye at x=27 on every row, including the ones with no chevron to
+       show. Without a group it was at x=7.
+       ⚠️ The chevron COLUMN is not the fault and is deliberately kept: #191 was "the arrow pushes the ui
+       over making it ugly" and #295 already narrowed it to projects that contain a group at all. A row
+       with children and a row without must line up, so something has to be reserved — what shrank is the
+       size of it, because the glyph is an 11px triangle that was sitting in a 16px box.
+       Both directions are asserted, because a "closer to the wall" that came out of the thumbnail would
+       satisfy the first half and break the picture he asked for in #295. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atPhoneWidth(async function () {
+        const seed = async () => {
+          FM.scene.layers.length = 0;
+          for (let i = 0; i < 3; i++) {
+            const L = FM.makeLayer('shape', { name: 'S' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+            L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+          }
+          FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+          await sleep(150);
+        };
+        const read = () => {
+          const head = document.querySelector('#tl-tracks .track-head');
+          if (!head) throw new Error('no .track-head on the timeline');
+          const hr = head.getBoundingClientRect();
+          const eye = head.querySelector('.th-eye'), thumb = head.querySelector('.th-thumb-wrap');
+          if (!eye) throw new Error('the track head has no .th-eye to measure against the wall');
+          const er = eye.getBoundingClientRect();
+          const tr = thumb ? thumb.getBoundingClientRect() : { width: 0, right: hr.right };
+          return { headW: hr.width, wall: er.left - hr.left, thumbW: tr.width, spare: hr.right - tr.right };
+        };
+
+        await seed();
+        const noGrp = read();
+        if (noGrp.wall > 8) throw new Error('with NO group in the project the eye still sits ' + noGrp.wall.toFixed(1) + 'px from the wall — nothing is being reserved, so that is plain padding');
+
+        // …now the state his screenshot is in: a group exists, so the chevron column is held open.
+        FM.scene.selectedIds = [FM.scene.layers[0].id, FM.scene.layers[1].id];
+        FM.scene.selectedId = FM.scene.layers[0].id;
+        if (FM.groupSelection) FM.groupSelection();
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(220);
+        const inner = document.getElementById('tl-inner');
+        if (inner && inner.classList.contains('tl-no-groups')) throw new Error('the project still reports no groups after grouping, so the chevron column is not open and this measures the wrong case');
+        const grp = read();
+        if (grp.wall > 20) throw new Error('with a group in the project the eye sits ' + grp.wall.toFixed(1) + 'px from the wall — that is the dead strip he scribbled down the whole left edge');
+        /* …AND THE SAVING MUST NOT HAVE COME OUT OF THE PICTURE. #295 is the entry that asked for a real
+           thumbnail; shrinking it would satisfy the assertion above and break that one. */
+        if (grp.thumbW < 30) throw new Error('the layer thumbnail is down to ' + grp.thumbW.toFixed(1) + 'px — the room came out of the picture, which is what #295 asked to keep');
+        if (grp.spare < 0) throw new Error('the head is ' + grp.headW.toFixed(1) + 'px and its contents overflow it by ' + (-grp.spare).toFixed(1) + 'px');
+        /* THE OTHER HALF OF THE SAVING, and it needs its own assertion: the eye's distance from the wall
+           is padding + chevron + gap, while the head's WIDTH is what the lane gets back. Changing one
+           does not move the other — a mutation putting --head-w back to 90 sailed past the wall check,
+           because the eye genuinely had not moved. Both are asserted so both are guarded. */
+        if (grp.headW > 84) throw new Error('the track head is ' + grp.headW.toFixed(1) + 'px wide with a group in the project — every pixel of that is taken off the lane on every row, and it was 90 before he complained');
+        if (noGrp.headW > 68) throw new Error('with no group the head is still ' + noGrp.headW.toFixed(1) + 'px — the narrow case has to come down with the wide one or the two disagree about what the column costs');
+        if (!(grp.wall > noGrp.wall)) throw new Error('the eye sits at the same offset with and without a group (' + grp.wall + ' vs ' + noGrp.wall + ') — the chevron column is not being reserved at all, which is the alignment #191 asked for');
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.selectedIds = []; 
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

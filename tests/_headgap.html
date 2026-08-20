@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What is the dead strip on the left of the track head? (queue 442)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 442: "Still a bunch of wasted space here, move it more towards the wall so you don't have that
+   gap for no reason", with the LEFT EDGE of the timeline scribbled down its whole height.
+   His project HAS a group, and queue 295 reserves a 22px chevron column whenever one exists — so the
+   first question is whether that is the strip he is pointing at, or whether there is padding on top of
+   it. Measured with a group and without, so the two can be told apart. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+
+  async function look(tag){
+    FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(350);
+    var head=d.querySelector('#tl-tracks .track-head');
+    if(!head){ say(tag+'  no .track-head'); return; }
+    var hr=head.getBoundingClientRect();
+    var inner=d.getElementById('tl-inner');
+    var noGroups=inner&&inner.classList.contains('tl-no-groups');
+    var cs=W.getComputedStyle(head);
+    var hw=W.getComputedStyle(inner).getPropertyValue('--head-w').trim();
+    say(tag);
+    say('   --head-w '+hw+'   .tl-no-groups '+noGroups+'   head box '+hr.left.toFixed(0)+'..'+hr.right.toFixed(0)+'  (w '+hr.width.toFixed(0)+')');
+    say('   head padding L/R '+cs.paddingLeft+'/'+cs.paddingRight+'   gap '+cs.gap+'   justify '+cs.justifyContent);
+    var kids=[].slice.call(head.children).filter(function(k){return W.getComputedStyle(k).display!=='none';});
+    kids.forEach(function(k){
+      var r=k.getBoundingClientRect(), ks=W.getComputedStyle(k);
+      say('     · '+(k.className||k.tagName)+'  x '+r.left.toFixed(0)+'..'+r.right.toFixed(0)+'  w '+r.width.toFixed(1)
+          +(ks.visibility==='hidden'?'   (visibility:hidden — holding a column open)':''));
+    });
+    var firstInk=null;
+    kids.forEach(function(k){ if(W.getComputedStyle(k).visibility==='hidden') return; var r=k.getBoundingClientRect(); if(firstInk===null||r.left<firstInk) firstInk=r.left; });
+    say('   ⇒ dead strip before the first VISIBLE thing: '+(firstInk===null?'?':(firstInk-hr.left).toFixed(1)+'px'));
+  }
+
+  FM.scene.layers.length=0;
+  for(var i=0;i<3;i++){
+    var L=FM.makeLayer('shape',{name:'S'+i,shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+    L.start=0;L.duration=3;FM.scene.layers.push(L);
+  }
+  await look('A. no group in the project');
+
+  // …now group two of them, which is the state his screenshot is in
+  FM.scene.selectedIds=[FM.scene.layers[0].id, FM.scene.layers[1].id];
+  FM.scene.selectedId=FM.scene.layers[0].id;
+  if(FM.groupSelection) FM.groupSelection();
+  await sleep(400);
+  say('');
+  await look('B. WITH a group (his project)');
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

@@ -3020,7 +3020,11 @@ body.fm-playing #time-readout {
      and letting the thumbnail absorb the whole 17px deficit on its own shrank it to 5px, which is not
      a picture. Measured at 375px with 90: every row clears by 8px, an ordinary row keeps the full 34px
      thumbnail, and the timeline is not squeezed — it scrolls, so the clip width is unchanged at 308px. */
-  :root { --head-w: 90px; }
+  /* 82, not 90 (queue 442): 4 padding + 12 chevron + 2 gap + 15 eye + 6 gap + 34 thumb + 4 = 77, so
+     every row still clears by 5px and the thumbnail keeps its full 34px. Eight pixels off every row,
+     handed to the lane — and the eye starts at x=18 instead of x=27, which is the "towards the wall"
+     he asked for without giving up the alignment #191 was about. */
+  :root { --head-w: 82px; }
   /* ...but 90 is only needed to hold the chevron column, and that is only held open when the project
      HAS a group (see buildTracks). With no group there is nothing to align with, so the column goes and
      the head goes back to 72 — which fits comfortably: 7 padding + 15 eye + 6 gap + 34 thumb + 7 = 69.
@@ -3030,11 +3034,11 @@ body.fm-playing #time-readout {
      cascades downwards — declared on #tl-tracks the ruler kept the 90px default while the lanes
      rendered at 72, so every tick and benchmark pin sat 18px right of the clips and the playhead.
      Same defect as v9.29 seen from the CSS side; see the note at buildTracks in js/timeline.js. */
-  #tl-inner.tl-no-groups { --head-w: 72px; }
+  #tl-inner.tl-no-groups { --head-w: 66px; }   /* 4 + 15 + 6 + 34 + 4 = 63, clearing by 3 (queue 442) */
   .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
-    justify-content: flex-start; padding: 0 7px; gap: 6px; margin: 0;
+    justify-content: flex-start; padding: 0 4px; gap: 6px; margin: 0;   /* 7 → 4: the last 3px to the wall (queue 442) */
     background: var(--panel); border-radius: 0;
     border-right: 1px solid var(--line); box-shadow: none;
   }
@@ -4299,7 +4303,19 @@ body.hm-selecting .hm-pin { display: none; }
 #topbar .brand { cursor: pointer; }   /* desktop: brand click goes Home */
 
 /* ---- Grouping / multi-select (v2.26) ---- */
-.th-chevron { background: none; border: none; color: var(--text-dim); font-size: 11px; width: 16px; padding: 0; margin-right: -2px; cursor: pointer; flex: none; }
+/* THE CHEVRON SLOT IS 16px OF COLUMN, AND MOST ROWS NEVER DRAW IN IT (queue 442). Ezra, with the left
+   edge of the timeline scribbled down its whole height: "Still a bunch of wasted space here, move it more
+   towards the wall so you don't have that gap for no reason."
+   Measured at 380px, with a group in the project — which his has: 7px padding + a 16px chevron + a 6px
+   gap put the eye at x=27 on EVERY row, including the six that have no chevron to show. Without a group
+   the eye is at x=7.
+   ⚠️ The column itself is not the mistake and is deliberately kept: #191 was "the arrow pushes the ui
+   over making it ugly", and #295 already narrowed it to projects that contain a group at all. A row with
+   children and a row without have to line up, so SOMETHING has to be reserved. What can go is the size of
+   it — the glyph inside is a 11px triangle in a 16px box with a 6px gap after it. 12px and a 2px gap
+   holds the same triangle and costs 8px less on every row, which comes straight off --head-w and goes to
+   the lane. */
+.th-chevron { background: none; border: none; color: var(--text-dim); font-size: 11px; width: 12px; padding: 0; margin-right: -4px; cursor: pointer; flex: none; }
 /* The same slot on a non-group row: holds the width so every head lines up, draws nothing, takes no
    taps. See the note in buildHead (queue 191). */
 /* THE CHEVRON KEEPS ITS BOX ON PURPOSE — and that is why the thumbnail has to be the one that gives.

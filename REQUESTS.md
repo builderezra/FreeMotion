@@ -12707,7 +12707,7 @@ wait for them to report back."*
       honest behaviour for something that small, and the test asserts it so the fix cannot trade one dead
       control for another.
 
-- [ ] **442 — Wasted space in the track-head column: push it to the wall.** (20 Aug, phone screenshot at
+- [x] **442 — Wasted space in the track-head column: push it to the wall.** ✅ **DONE v10.81.** (20 Aug, phone screenshot at
       v10.71 with the left edge of the timeline scribbled down its whole height.) His words, verbatim:
       *"Still a bunch of wasted space here, move it more towards the wall so you don't have that gap for no
       reason"*.
@@ -12717,6 +12717,22 @@ wait for them to report back."*
       and his project DOES have one (there is a Group row at the bottom), so the 22px is being held open
       legitimately by the current rule. That may be exactly the gap he is pointing at, in which case the
       question is whether a group deep in the list should widen every row above it.
+
+      📐 **THAT GUESS WAS RIGHT, and measured at 380px (`tests/_headgap.html`) both ways:** with a group in
+      the project the eye sat at **x=27 on every row** (4+16+6: padding, chevron, gap) including the six
+      that have no chevron to show; with no group it sat at **x=7**. That difference is what makes the
+      strip read as being there for nothing.
+      ⚖️ **THE COLUMN ITSELF IS KEPT, and that is a decision rather than an omission.** #191 was *"the
+      arrow pushes the ui over making it ugly"* and #295 already narrowed the column to projects that
+      contain a group at all. A row with children and a row without have to line up, so SOMETHING has to
+      be reserved — removing it would answer this entry by re-opening his own older one.
+      ✅ **v10.81 — the SIZE of it shrank instead.** The glyph is an 11px triangle that was in a 16px box
+      with a 6px gap; it is 12px with a 2px gap now, and the head's padding came down 7 → 4. **Eye at x=18
+      instead of 27, `--head-w` 82 instead of 90** (66 instead of 72 with no group) — so eight pixels a
+      row also go back to the lane. The thumbnail keeps its full 34px, asserted, because a "closer to the
+      wall" taken out of the picture would break #295.
+      ⚠️ **If 18px is still too much for him, the only lever left is the column itself** — and that is the
+      #191 trade, so it is his call rather than a build decision.
 
 - [ ] **443 — The Add-layer row still does not behave like a layer when you drag around it.** (20 Aug.)
       His words, verbatim: *"Also the add layer is still not acting like a layer in the sense when I try to
