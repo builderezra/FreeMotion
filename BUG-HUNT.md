@@ -947,6 +947,22 @@ stopped dead when the finger lifted", so nothing was weakened to buy the stabili
 **The general lesson, and it applies to every timing assertion in this suite:** wait for the CONDITION,
 never for a duration. A fixed sleep in a test that measures animation is a bet on the machine.
 
+**SWEPT for others, and the criterion is worth keeping because the obvious search over-flags badly.**
+62 tests sleep 150ms or more and then assert on a comparison — but almost none of them are at risk, and
+the distinction is what drives the thing being measured:
+- **CLOCK-driven is safe.** Playback reads `FM.clockNow()` rather than accumulating rAF deltas (the
+  comment above `tick()` says so deliberately), so "the playhead advanced after 500ms" holds even when
+  frames are dropped. Every playback/audio-context test in that list is fine.
+- **DOM-refresh sleeps are safe.** Waiting 150ms for `refreshAll()` to land is deterministic work, not
+  animation.
+- **rAF-driven MOTION is the risky class** — momentum, glides, edge auto-scroll — because there the
+  assertion is really counting frames.
+Narrowing to that class leaves 11 tests, and reading the top candidates shows most are still safe: the
+clip-flick test's sleep sits BETWEEN two gestures and its assertions compare fling VELOCITIES recorded
+at pointerup (deterministic), and the edge-scroll test's sleeps are setup settles before the gesture.
+**Only the vertical-glide test actually asserted "it moved far enough inside a fixed window", and it is
+fixed.** If another timing failure ever appears, this is the criterion to apply — not "find the sleeps".
+
 ### ⚠️ The original lead, kept for the record
 During that mutation run, `a vertical flick on the timeline keeps gliding, like a horizontal one` also
 went red ("the list stopped dead when the finger lifted, 150 → 150") — while the mutation only removed
