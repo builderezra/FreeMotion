@@ -3530,6 +3530,66 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: cutting an animated PARENT does not strand the layers parented to it', { item: 'split-parent' }, async function () {
+    /* BUG HUNT (21 Aug), fourth of the split family. A split divides the parent's keyframes so each half
+       owns only its own window — right, and the reason stray diamonds stopped appearing outside a clip.
+       But a child resolves its parent at any absolute time whether or not that parent is on screen, and
+       FM.evalProp clamps to the last keyframe, so the child kept following the HEAD half after it had
+       stopped moving: measured, the child froze at the cut and was 80px out of place by the end
+       (tests/_splitparent.html) while the tail half carried on across the screen in plain sight.
+       CONTROL: the child must actually travel with its parent BEFORE the split. Without that, "nothing
+       changed at the cut" would also be the reading if parenting had never applied at all — which is
+       exactly how the effect-clock probe (`split-fxclock`) produced a false clean on its first run. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 320, H = 180;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const cx = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0, sx = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 120 && d[i + 1] > 120 && d[i + 2] > 120) { n++; sx += (i / 4) % W; }
+        return n ? sx / n : null;
+      };
+      FM.scene.layers.length = 0;
+      // The parent is painted near-black so it does not pollute the white-ink centroid: what is being
+      // measured is where the CHILD ends up, not where the parent is.
+      const P = FM.makeLayer('shape', { name: 'parent', shape: 'rect', x: 0, y: 0, shapeW: 6, shapeH: 6, fill: '#050505' });
+      P.start = 0; P.duration = 10;
+      P.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 10, v: 200, e: 'linear' }] };
+      FM.scene.layers.push(P);
+      const C = FM.makeLayer('shape', { name: 'child', shape: 'rect', x: 40, y: H / 2 - 10, shapeW: 20, shapeH: 20, fill: '#ffffff' });
+      C.start = 0; C.duration = 10; C.parent = P.id;
+      FM.scene.layers.push(C);
+
+      const times = [1, 3, 4.5, 5, 5.5, 6, 7, 8, 9];
+      const before = times.map(cx);
+      const seen = before.filter(v => v !== null);
+      if (seen.length !== times.length) throw new Error('the child was not on screen at every sample — ' + before.join(','));
+      const spread = Math.max(...seen) - Math.min(...seen);
+      if (!(spread > 5)) throw new Error('CONTROL FAILED: the child never travelled with its parent (spread ' + spread.toFixed(2) + 'px), so "it did not move at the cut" proves nothing — parenting is not applying');
+
+      FM.time = 5;
+      await FM.splitLayer(P.id);
+      if (FM.scene.layers.length !== 3) throw new Error('expected two parent halves plus the child, got ' + FM.scene.layers.length);
+      const after = times.map(cx);
+      let worst = 0, worstT = null;
+      times.forEach((t, i) => {
+        const d = (before[i] === null || after[i] === null) ? 999 : Math.abs(after[i] - before[i]);
+        if (d > worst) { worst = d; worstT = t; }
+      });
+      if (worst > 2) throw new Error('splitting the parent moved the child by ' + worst.toFixed(1) + 'px at t=' + worstT +
+        ' (was ' + before[times.indexOf(worstT)] + ', now ' + after[times.indexOf(worstT)] + ')');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: cutting a clip does not restart its time-driven effects', { item: 'split-fxclock' }, async function () {
     /* BUG HUNT (21 Aug), third of the same family and the biggest. Every canvas effect is handed
        "seconds since THIS CLIP began" (FM.fxLocalTime), so a split gave the tail half a fresh clock and

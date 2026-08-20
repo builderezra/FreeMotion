@@ -1749,7 +1749,7 @@ window.FM = window.FM || {};
     let pid = layer.parent;
     while (pid && !seen.has(pid)) {
       seen.add(pid);
-      const pl = scene.layers.find(l => l.id === pid);
+      const pl = FM.parentAt(scene, pid, t);   // the half that actually covers t, if this parent was split
       if (!pl) break;
       chain.push(pl);
       pid = pl.parent;
@@ -7168,7 +7168,7 @@ window.FM = window.FM || {};
     let pid = layer.parent, depth = 0;
     while (pid && scene && !seen.has(pid) && depth++ < 16) {
       seen.add(pid);
-      const pl = scene.layers.find(l => l.id === pid);
+      const pl = FM.parentAt(scene, pid, bt);   // the half that actually covers bt, if this parent was split
       if (!pl || !pl.transform) break;
       const pr = ev(pl, 'rotation', 0) * Math.PI / 180;
       const ps = Math.max(0.001, ev(pl, 'scale', 1));

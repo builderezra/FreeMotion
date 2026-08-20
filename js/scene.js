@@ -565,6 +565,31 @@ window.FM = window.FM || {};
    * Coerced exactly the way FM.speedAt and FM.fadeWindows are, and for the same reason: a saved document
    * the UI did not write can carry a string or an Infinity here, and Infinity puts every one of those
    * effects at a non-finite phase for the rest of the render. */
+  /* WHICH HALF OF A SPLIT PARENT DOES A CHILD FOLLOW? (bug hunt, 21 Aug.)
+   * A split divides the parent's keyframes so each half owns only its own window — correct, and the
+   * reason stray diamonds stopped being drawn outside a clip. But a child resolves its parent at any
+   * absolute time regardless of whether that parent is on screen, and FM.evalProp clamps to the last
+   * keyframe. So the child kept following the HEAD half, which had stopped moving: measured, a child
+   * froze at the cut and drifted 80px out of place by the end (tests/_splitparent.html), while the
+   * tail half carried on across the screen in plain sight.
+   * The halves therefore carry a shared `splitOf` lineage, and a parent lookup picks the half that
+   * actually covers the time being asked about.
+   * COST: `!p.splitOf` is the first thing tested, so a project that has never split a parent pays one
+   * property read per lookup and never scans. That matters — this is called per parented layer per
+   * frame, and slow playback is an open complaint. */
+  FM.parentAt = function (scene, pid, t) {
+    const p = FM.layerById(scene, pid);
+    if (!p || !p.splitOf) return p;
+    const covers = l => t >= (l.start || 0) - 1e-9 && t <= (l.start || 0) + (l.duration || 0) + 1e-9;
+    if (covers(p)) return p;
+    const ls = scene.layers;
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (l !== p && l.splitOf === p.splitOf && covers(l)) return l;
+    }
+    return p;
+  };
+
   FM.fxLocalTime = function (layer, t) {
     if (!layer) return t;
     const base = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);

@@ -1732,3 +1732,89 @@ This came from a 27-agent fan-out over seven lenses. It returned **20 candidate 
 which is itself a warning: a refutation stage that kills nothing is not doing its job. Every one of them is
 being treated as an unproven claim and measured individually. This one was real. The remaining nineteen are
 listed in §34 as leads, not findings.
+
+## 34. Nineteen UNVERIFIED leads from the 21 Aug fan-out — read this before trusting any of them
+
+A 27-agent sweep over seven lenses returned **20 candidate findings and refuted zero**. Zero refutations is
+not a sign of a good hunt; it is a sign the adversarial stage rubber-stamped. One of the twenty (the effect
+clock, §33) has since been measured and was real — and even that one produced a **false clean** on its first
+probe. So these are LEADS. None of them is a known bug until it has its own measurement.
+
+They are recorded because losing them would be worse than listing them, and because they cluster: most are
+the same root shape as §31–§33 — *an edit maintains the thing it edits, but not the things that REFERENCE it*
+(parent links, behavior `sourceId`, effect-source layer ids) or *a clip-relative clock/offset that is not
+re-based*. Verify oldest-highest-impact first; delete any that measurement refutes.
+
+- [ ] **Splitting a parent clip freezes every layer parented to it**  
+      `app.js:2916` — Parent a text/shape layer to an animated video or shape clip (Inspector > Parent), keyframe the parent moving across the whole 8s, park the playhead at 4s and press Split (S / the transport split button, or Cut-at-playhead which splits every clip under the playhead). Before the split the child rides
+- [ ] **Splitting a clip re-scales and then kills every audio-driven behavior reading from it**  
+      `audio-react.js:175` — Put an Audio Drive behavior on a shape or logo, source = the music video clip, prop = scale. Play: it pulses to the beat for the whole clip. Now split ONLY the music clip at its midpoint. The logo now pulses at a visibly different depth for the whole first half (renormalised to that half's peak) and
+- [ ] **Split silences and then shrinks a Bounce behavior at and after the cut**  
+      `behaviors.js:126` — Give a layer position keyframes at 0s, 1s and 4s (0 -> 100 -> 400) and add a Bounce behavior on that prop with a low Decay (0.5) so the ring is long. Scrub 2s-4s and watch it wobble. Split at 2s: the wobble vanishes instantly at the cut, and the bounce at the 4s landing is noticeably smaller than be
+- [ ] **Splitting the audio source of an Audio-drive behavior kills the behavior from the cut onward**  
+      `audio-react.js:296` — Import a music track and a logo. On the logo add a behavior -> Audio drive, pick the music layer as 'Audio from' (the picker at js/inspector.js:3959 / js/behaviors.js:66), set it to pump scale. Play: the logo pumps for the whole song. Now select the music clip, park the playhead halfway and Split at
+- [ ] **Split inserts a 90ms dip to silence at the cut in preview — the 45ms de-click envelope is measured from each clip's own edges**  
+      `app.js:1266` — Drop a continuous music track (or a video with continuous room tone) on the timeline, play it and hear it run smoothly. Park the playhead mid-clip and Split at playhead, then play across the cut. You hear a short dip/blip — a ~90ms V-shaped duck all the way to silence straddling the cut — that was n
+- [ ] **Head-trimming a speed-RAMPED clip moves the picture: trimStart is advanced by the instantaneous rate at the new head instead of the integral of the ramp**  
+      `timeline.js:2438` — Drop a 4s video at t=0. In Speed, keyframe 0.5x at t=0 and 2.0x at t=4 (a linear ramp). Grab the clip's LEFT trim grip and drag it 2.0s to the right. Expected: the frame now at the head is the one that was at project t=2, i.e. 1.75s into the source (the integral). Actual: trimStart becomes 2 x speed
+- [ ] **FM.extendClipTo does not re-base caption cues, so extending a caption track's head slides every caption earlier and out of sync**  
+      `app.js:2841` — Make a caption track over a voice-over — say the clip starts at 1.0s and a cue sits at local 1.2-1.5, i.e. on screen from project 2.2s to 2.5s, matching the words. Park the playhead at 0.0s (before the clip, so the quick row swaps to the Move/Extend pair) and press 'Extend the start of the clip to t
+- [ ] **FM.moveClipTo abandons a group's members: the bar and the group's own keyframes move, the layers inside do not**  
+      `app.js:2792` — Group three layers that span 2-5s, then keyframe the group's X so it slides in from t=2 to t=3. Select the GROUP bar, park the playhead at 8s and press the 'Move clip right to the playhead' quick-row button (or the right tl-nudge). The group bar jumps to 5-8s and its two position keyframes move to 5
+- [ ] **Multi-layer Duplicate leaves every copy's cross-layer link pointing at the ORIGINALS (no idMap)**  
+      `app.js:2586` — Add a shape ("Box") and a text layer ("Title"). On Title, layer menu → Parent → Box. Select both rows, then ⋯ → "Duplicate 2 layers" (js/app.js:4376, or the keyboard shortcut at js/app.js:5340). Since queue 156 a duplicate lands exactly on its original, so nothing looks wrong yet. Now drag "Box copy
+- [ ] **Copied effects / saved layer presets carry a layer id across projects; the effect then silently renders nothing**  
+      `inspector.js:341` — In project A, put Luma Matte on a clip and pick "Logo" as its source; the clip is cut to the logo's luma. Press Copy in the effects header. Open project B, select any clip, press Paste. The toast says "Pasted 1 effect", the Luma Matte row appears in the stack — and the clip renders as the full uncut
+- [ ] **Head-trimming a speed-ramped clip uses a flat multiply where the ramp needs integrating — the remaining footage jumps**  
+      `timeline.js:2434` — Put a video clip on the timeline, keyframe its Speed to ramp from 25% at the clip start to 400% at the clip end (Speed panel ◆ button at each end). Park the playhead 2s into the 6s clip and note the frame on canvas. Now drag the clip's LEFT grip to that same playhead position. The frame at the new h
+- [ ] **On a reversed + speed-ramped clip the tail grip treats the ramp as 1×, so extending the tail shifts every frame already on screen**  
+      `timeline.js:2410` — Video clip, tick 'Reverse (video + audio)', then keyframe Speed to ramp 100%→400% across the clip. Note the very first frame the clip shows. Drag the clip's RIGHT grip out by one second. The first frame changes — the entire clip's content slides through the footage — even though you only touched the
+- [ ] **maxDurForSource is the one speed site still doing raw `|| 1` division — a malformed imported speed prop writes NaN straight into layer.duration on media replace**  
+      `scene.js:693` — Load a `.fmotion.json` whose video layer has `"speed": {"keys":[{"t":0,"v":1}]}` (the load path deliberately does not re-sanitise, per the note at js/scene.js:680-683). Right-click the clip → Replace media, pick any video: the clip's duration becomes NaN and the clip disappears from the timeline / t
+- [ ] **Preview resolution change wipes Time Warp's frozen frame but not its progress marker — the scanned band turns into a hole**  
+      `compositor.js:7071` — Add Time Warp Scan (defaults: Freeze, duration 2.5s) to a video layer. Scrub to about half way through the scan so the top half of the frame is visibly frozen. Press Play. The frozen half instantly goes transparent — a hole showing whatever is beneath the layer — and it stays a hole for the rest of
+- [ ] **A layer used as a Luma Matte source renders twice per frame, and Temporal Denoise silently degrades to no denoising on the second render**  
+      `compositor.js:7268` — Layer A = grainy video with Temporal Denoise (strength 0.85). Layer B = a shape, positioned BELOW A in the timeline stack, with Luma Matte pointing at A as its matte source. Scrub or play: A's grain comes back on screen — the denoiser stops visibly doing anything — and moving B above A in the stack
+- [ ] **Grouping a group with another layer silently re-stacks the scene — the member group's children are left behind in the layer array**  
+      `app.js:2366` — Put a photo/background shape at the bottom of the stack and two shapes above it that overlap it. Select the two shapes and tap Group (they now sit inside a group). Now multi-select the group row and the background layer and tap Group again. Nothing about either layer's transform changed, but the bac
+- [ ] **Ungroup carries the group's position but throws away its opacity, hidden state, effects, blend, fill and border**  
+      `app.js:2418` — Group three shapes, drag the group's opacity down to 30% (the whole group dims, because it now renders as a unit). Right-click the group row → Ungroup. The three shapes snap back to 100% opacity. Same with an effect: put a Gaussian blur on the group, ungroup, the blur is gone. Most striking version:
+- [ ] **Duplicating a group with a nested group inside it can hand you a copy stacked in a different order than the original**  
+      `app.js:2531` — With a group G2 containing a nested group G1 (holding shapes A and B) plus a loose overlapping shape C, arranged so C draws above A and B, duplicate G2 from the layer menu. The duplicate lands exactly on the original, but in the copy C is drawn BEHIND A and B — the copy and the original overlap diff
+
+Two of these (the Audio Drive behavior dying after a split) were reported INDEPENDENTLY by two
+different lenses, which is the only cross-check any of them got. That makes it the one to measure first.
+
+
+## 35. Splitting an animated parent stranded its children (21 Aug, v11.05) — REAL BUG, first verified lead from §34
+
+First of the nineteen §34 leads to be measured. **It was real, and it measured exactly as claimed** — which
+is a point in the fan-out's favour, but does not retire the other eighteen.
+
+A split truncates the parent's keyframes so each half owns only its own window (right — it is why stray
+diamonds stopped being drawn outside a clip). But `applyParentChain` resolves a child's parent at ANY absolute
+time with no regard to whether that parent is on screen, and `FM.evalProp` clamps past the last keyframe. So
+the child went on following the head half after it had stopped moving.
+
+**Measured** (`tests/_splitparent.html`, child's ink centroid; the parent painted near-black so only the child
+is counted). Control first: the child travels 160 px with its parent, so parenting is definitely applying.
+
+| t | before the split | after |
+|---|---|---|
+| 4.5 | 129.5 | 129.5 |
+| 5.0 | 139.5 | 139.5 |
+| 5.5 | 149.5 | **139.5** |
+| 7.0 | 179.5 | **139.5** |
+| 9.0 | 219.5 | **139.5** |
+
+Frozen dead at the cut; 80 px out of place by the end.
+
+**Fix:** the halves share a `splitOf` lineage, and one new seam — `FM.parentAt(scene, pid, t)` — returns the
+half that actually covers the time being asked about. Both parent walks in the compositor (js/compositor.js:1750
+and :7170) go through it.
+
+**Performance was a design constraint, not an afterthought.** This runs for every parented layer on every frame,
+and timeline lag is an open complaint (#95, #125, #202). `!p.splitOf` is the FIRST test, so a project that has
+never split a parent pays one property read and never scans the layer list. Both halves are stamped at split
+time precisely so that gate stays cheap — stamping only the tail half would have made every child of an
+unsplit head layer fall through to the scan.

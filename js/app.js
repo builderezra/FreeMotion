@@ -2890,6 +2890,10 @@ window.FM = window.FM || {};
      * this the tail half restarts them at the cut — Drift jumped 211px of a 320px canvas. Chains, so
      * splitting an already-split half stays correct. */
     B.fxTimeOffset = (parseFloat(layer.fxTimeOffset) || 0) + into;
+    /* Children resolve their parent at any absolute time, so without a shared lineage they keep
+     * following the HEAD half — which has just had its keyframes truncated at the cut and therefore
+     * stops moving. Both halves are stamped, so `!p.splitOf` stays the cheap gate in FM.parentAt. */
+    { const lineage = layer.splitOf || layer.id; layer.splitOf = lineage; B.splitOf = lineage; }
     if (layer.textAnim) layer.textAnim.durOut = 0;
     if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
     if (Array.isArray(layer.captions)) {
