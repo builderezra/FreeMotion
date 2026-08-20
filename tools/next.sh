@@ -152,7 +152,11 @@ for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own sessio
     print('%-22s %d' % (k + ':', len(buckets[k])))
 act = buckets['ACTIONABLE']
 if act:
-    print('\nSTART HERE (oldest first):')
+    print('\nSTART HERE (oldest first) — but READ THE CODE BEFORE YOU BUILD:')
+    print('  On 20 Aug THREE open entries turned out to be already done — 395 (audio export shipped')
+    print('  under 216), 277 (nine of ten clauses), 418 clause 2 (already at 1.8). Each was found by')
+    print('  opening the file the entry names. An entry is a record of what was ASKED, not of what is')
+    print('  still missing, and nothing keeps the two in step automatically.')
     def key(t):
         mm = re.match(r'(\d+)', t[0])
         return (0, 0) if not mm else (1, int(mm.group(1)))
