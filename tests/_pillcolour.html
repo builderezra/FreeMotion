@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Why does the playing pill not go accent? (queue 427)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:920px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.play)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+  L.start=0;L.duration=6;FM.scene.layers.push(L);
+  FM.scene.project.duration=6; FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  var pill=d.getElementById('time-readout');
+  if(!pill){o.push('no #time-readout');document.getElementById('out').textContent=o.join('\n');document.title='ready';return;}
+  function snap(tag){
+    var cs=W.getComputedStyle(pill);
+    return tag+'  body.fm-playing '+(d.body.classList.contains('fm-playing')?'YES':'no ')
+      +'  FM.playing '+(FM.playing?'YES':'no ')
+      +'  colour '+cs.color
+      +'  accent '+cs.getPropertyValue('--accent').trim()
+      +'  inline "'+(pill.getAttribute('style')||'')+'"';
+  }
+  o.push(snap('paused    '));
+  FM.play();
+  for(var i=0;i<6;i++){ await sleep(150); o.push(snap('playing +'+((i+1)*150)+'ms')); }
+  FM.pause(); await sleep(150); o.push(snap('paused    '));
+  // …and ask the cascade directly, at a moment we KNOW the class is on
+  FM.play(); await sleep(200);
+  var cs2=W.getComputedStyle(pill);
+  o.push('');
+  o.push('with the class definitely on: matches selector = '+pill.matches('body.fm-playing #time-readout')
+    +'   computed colour = '+cs2.color+'   border = '+cs2.borderColor);
+  try{
+    var hits=[];
+    [].forEach.call(d.styleSheets, function(ss){
+      var rules; try{ rules=ss.cssRules; }catch(e){ return; }
+      [].forEach.call(rules||[], function(r){
+        if(r.selectorText && /time-readout/.test(r.selectorText) && /color/.test(r.cssText))
+          hits.push((ss.href||'inline').split('/').pop()+'  {'+r.selectorText+'}  '+(r.style.color||'(no color)'));
+      });
+    });
+    o.push(''); o.push('every rule setting a colour on the pill, in cascade order:');
+    hits.forEach(function(h){o.push('  '+h);});
+  }catch(e){ o.push('rule walk failed: '+e.message); }
+  FM.pause();
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

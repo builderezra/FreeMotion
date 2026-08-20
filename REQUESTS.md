@@ -11990,7 +11990,21 @@ wait for them to report back."*
       nobody can construct on demand — which is exactly why this stayed open.
       ⚠️ **So if you still see the dots pushed off, it is NOT this.** Tell me the window height and it goes
       back on the list with a real reproduction to work from.
-- [ ] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
+- [x] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
+      ✅ **CLOSED 20 Aug at v10.66 — THE ANOMALY IS NOT REAL, AND THE ORIGINAL MEASUREMENT WAS WRONG.**
+      Re-measured live across a real play (`tests/_pillcolour.html`), sampling every 150ms: paused, the
+      pill is `rgb(233,244,247)` (`--text`); **the instant playback starts it is `rgb(90,199,237)`, which
+      is `#5ac7ed` — `--accent`, exactly what the rule asks for** — and it goes back on pause. Border too.
+      Walking `document.styleSheets` at a moment the class is definitely on returns exactly two colour
+      rules for the pill, in the expected order, with the accent one last and winning.
+      **So the rule applies and always did.** The original reading recorded the computed colour as
+      `--text` while the selector matched, which cannot both be true — most likely it was taken either
+      side of a play/pause rather than during one, or before queue 402 landed (this was found *while*
+      doing 402, and 402 rewrote this control's colours).
+      ⚠️ **Kept rather than deleted, because the lesson is the useful part:** "that should not be possible"
+      is much more often a broken measurement than a broken browser, and this entry spent a fortnight
+      asserting a cascade bug that a 900ms sample disproves. Re-measure before theorising — the three
+      candidates it listed were all elaborate explanations for something that was never happening.
       (19 Aug, found while doing #402 — not reported by Ezra.)
       **What was measured**, by enumerating every rule in the document that matches the pill and sets a
       colour, with `fm-playing` on the body:
