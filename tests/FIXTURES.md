@@ -59,6 +59,10 @@ transition is meaningless there.
   it:** the first version reported "cues stayed put" against a clip that had never been trimmed, and
   `FM.timeline._trimming()` is what turned that false clean into a known unknown.
 
+- `_groupxform.html` — does grouping or ungrouping MOVE anything? Renders the scene and compares the ink
+  box. **Two traps in its header:** measure the shapes BY COLOUR (an alpha box is the whole canvas,
+  because the project draws its own background), and a layer's position is `transform.x`, not `x`.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

@@ -2372,10 +2372,55 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(opts.mask ? 'Masking group — its top layer clips the rest' : 'Grouped ' + members.length + ' layers');
     if (FM.history) FM.history.commit();
   };
+  /* BAKE THE GROUP'S TRANSFORM INTO ITS MEMBERS ON THE WAY OUT (bug hunt, 21 Aug).
+   * `groupSelection` is careful on the way IN — the group is created with a neutral (0,0) transform,
+   * because "any x/y here would instantly displace every member the moment they're grouped". Ungroup
+   * did not have the matching care on the way OUT: it re-parented the members and deleted the group,
+   * transform and all. So if you had MOVED the group, every layer snapped back.
+   * Measured by rendering (tests/_groupxform.html): three shapes at ink box 44,89..155,199, grouped and
+   * the group moved to 74,54..185,194, then ungrouped — **back to 44,89..155,199**, exactly where they
+   * were before the move. A positioning decision silently thrown away.
+   * The maths is the same composition `applyParentChain` does: the parent's rotate/scale act on the
+   * child's local position, its rotation adds, its scale multiplies.
+   * ⚠️ ANIMATED group transforms are NOT baked, and that is deliberate rather than an oversight: a
+   * keyframed group position cannot be folded into a child without resampling the child's own curve,
+   * and a silent approximation of someone's animation is worse than saying so. Those keep the old
+   * behaviour and SAY it, which is the one thing the old behaviour never did. */
+  function bakeGroupTransform(g) {
+    const gt = g.transform || {};
+    const anim = ['x', 'y', 'rotation', 'scale'].some(k => FM.isAnimated && FM.isAnimated(gt[k]));
+    const gx = FM.evalProp(gt.x, 0) || 0, gy = FM.evalProp(gt.y, 0) || 0;
+    const grot = FM.evalProp(gt.rotation, 0) || 0, gsc = FM.evalProp(gt.scale, 0);
+    const sc = (typeof gsc === 'number' && isFinite(gsc) && gsc !== 0) ? gsc : 1;
+    const identity = !gx && !gy && !grot && sc === 1;
+    if (identity) return { baked: 0, skipped: 0 };
+    if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
+    const rad = grot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+    let baked = 0;
+    FM.scene.layers.forEach(l => {
+      if (l.parent !== g.id) return;
+      const t = l.transform; if (!t) return;
+      // A member with its OWN animated position cannot be shifted by editing one number either.
+      if (FM.isAnimated && (FM.isAnimated(t.x) || FM.isAnimated(t.y))) return;
+      const lx = FM.evalProp(t.x, 0) || 0, ly = FM.evalProp(t.y, 0) || 0;
+      t.x = gx + (cos * lx - sin * ly) * sc;
+      t.y = gy + (sin * lx + cos * ly) * sc;
+      if (grot && !(FM.isAnimated && FM.isAnimated(t.rotation))) t.rotation = (FM.evalProp(t.rotation, 0) || 0) + grot;
+      if (sc !== 1 && !(FM.isAnimated && FM.isAnimated(t.scale))) {
+        const ls = FM.evalProp(t.scale, 0);
+        t.scale = ((typeof ls === 'number' && isFinite(ls)) ? ls : 1) * sc;
+      }
+      baked++;
+    });
+    return { baked: baked, skipped: 0 };
+  }
+
   FM.ungroup = function (id) {
     const g = FM.scene.layers.find(l => l.id === id);
     if (!g || g.type !== 'group') return;
     if (FM.groupContext === id) FM.exitGroup(true);
+    const bake = bakeGroupTransform(g);                     // BEFORE the members are re-parented
+    if (bake.skipped === -1 && FM.toast) FM.toast('This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions', 6000);
     FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);

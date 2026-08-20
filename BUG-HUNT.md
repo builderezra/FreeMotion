@@ -1300,3 +1300,39 @@ PROJECT times now, which is the actual question.
 
 **And the fix wrote the rule twice.** A mutation in the grip's copy SURVIVED, because the suite drives
 the seam rather than the grip. One `shiftCues` writer, two callers, mutation now caught.
+
+
+## 21. 🚨 Ungrouping discarded the group's transform — FIXED v10.92
+
+**The asymmetry that gives it away.** `groupSelection` creates the group with a NEUTRAL (0,0) transform
+and says why: *"any x/y here would instantly displace every member the moment they're grouped."* That is
+exactly the right care on the way IN. `FM.ungroup` was three lines — re-parent the members, drop the
+group — and never looked at the transform at all.
+
+**Measured by rendering**, not by reasoning about the transform stack:
+
+    three shapes, ink box     44,89..155,199
+    grouped, group moved      74,54..185,194
+    ungrouped                 44,89..155,199   ← exactly the pre-move position
+
+Arrange a group, position it, ungroup to tweak one member, and everything jumps back. A positioning
+decision discarded in silence.
+
+**Fixed** by composing the group's transform into each member the way `applyParentChain` composes it at
+render time — the parent's rotate/scale act on the child's local position, its rotation adds, its scale
+multiplies. The test moves, rotates AND scales the group at once, so a translate-only bake fails.
+
+**Animated group transforms are deliberately not baked, and now say so.** A keyframed group position
+cannot be folded into a child without resampling the child's own curve; a silent approximation of
+someone's animation is worse than a sentence. The old behaviour said nothing at all.
+
+### Two false cleans on the way in — both were the probe
+
+1. **The ink box was measured by ALPHA, and the project draws its own background.** Every state read
+   `0,0..199,199` with the full 40000 pixels of ink, which "proves" nothing moved whatever happened.
+   Matching the shapes BY COLOUR is what made the measurement mean anything.
+2. **The fixture wrote `grp.x`** — a layer's position lives at `transform.x`, which is what
+   `applyParentChain` reads. So the "moved" group had not moved, and the row compared two identical
+   states and called it a pass. A control line (*this MUST differ*) is what caught it.
+
+Same lesson as section 20, in a different subsystem: **a sweep is only as good as its controls.**

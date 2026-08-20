@@ -2992,6 +2992,80 @@
     }
   });
 
+  test('ungrouping leaves the layers where the group put them', { item: 'ungroup-bake' }, function () {
+    /* BUG HUNT (21 Aug), and it found one. `groupSelection` is careful on the way IN — the group is
+       created with a neutral (0,0) transform, because "any x/y here would instantly displace every
+       member the moment they're grouped". `FM.ungroup` had no matching care on the way OUT: it
+       re-parented the members and deleted the group, transform and all. Move a group, ungroup it, and
+       every layer snapped back to where it was before the move — a positioning decision thrown away
+       silently.
+       MEASURED BY RENDERING rather than by reasoning about the transform stack (tests/_groupxform.html):
+       three shapes at ink box 44,89..155,199 → grouped and moved → 74,54..185,194 → ungrouped →
+       **44,89..155,199**, exactly the pre-move position.
+       ⚠️ The ink is matched BY COLOUR, not by alpha: the project draws its own background, so an alpha
+       box is the whole canvas in every state and "proves" nothing moved whatever happened. That was the
+       probe's first false clean. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const P = FM.scene.project, PX = 160;
+      const shot = () => {
+        const c = document.createElement('canvas'); c.width = PX; c.height = PX;
+        const g = c.getContext('2d');
+        g.clearRect(0, 0, PX, PX);
+        g.save(); g.scale(PX / P.width, PX / P.height);
+        FM.renderScene(g, FM.scene, FM.time);
+        g.restore();
+        const d = g.getImageData(0, 0, PX, PX).data;
+        let t = -1, b = -1, l = PX, r = -1, n = 0;
+        for (let y = 0; y < PX; y++) for (let x = 0; x < PX; x++) {
+          const i = (y * PX + x) * 4;
+          if (d[i + 3] > 24 && Math.abs(d[i] - 0x4a) < 40 && Math.abs(d[i + 1] - 0x9e) < 40 && Math.abs(d[i + 2] - 0xff) < 40) {
+            n++; if (t < 0) t = y; b = y; if (x < l) l = x; if (x > r) r = x;
+          }
+        }
+        return n ? { l: l, t: t, r: r, b: b, n: n } : null;
+      };
+      const near = (a, b) => a && b && Math.abs(a.l - b.l) <= 1 && Math.abs(a.t - b.t) <= 1 && Math.abs(a.r - b.r) <= 1 && Math.abs(a.b - b.b) <= 1;
+      const str = a => a ? (a.l + ',' + a.t + '..' + a.r + ',' + a.b) : '(nothing drawn)';
+
+      FM.scene.layers.length = 0;
+      [[0.3, 0.3], [0.5, 0.45], [0.7, 0.6]].forEach((p, i) => {
+        const L = FM.makeLayer('shape', { name: 'S' + i, shape: 'rect', x: P.width * p[0], y: P.height * p[1], shapeW: P.width * 0.16, shapeH: P.height * 0.10, fill: '#4a9eff' });
+        L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+      });
+      FM.time = 1; FM.selectLayer(null); FM.refreshAll();
+      const atRest = shot();
+      if (!atRest) throw new Error('the shapes did not render at all, so nothing below is measuring anything');
+
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      FM.groupSelection();
+      const g = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!g) throw new Error('grouping made no group');
+      if (!near(atRest, shot())) throw new Error('GROUPING moved the layers (' + str(atRest) + ' → ' + str(shot()) + ')');
+
+      // move · rotate · scale the group, all three, so the bake is not just a translate
+      g.transform.x = (FM.evalProp(g.transform.x, 0) || 0) + P.width * 0.15;
+      g.transform.y = (FM.evalProp(g.transform.y, 0) || 0) - P.height * 0.10;
+      g.transform.rotation = (FM.evalProp(g.transform.rotation, 0) || 0) + 12;
+      g.transform.scale = (FM.evalProp(g.transform.scale, 0) || 1) * 1.2;
+      FM.refreshAll();
+      const moved = shot();
+      if (!moved) throw new Error('the shapes vanished when the group was moved');
+      // CONTROL: the move has to have done something, or "it stayed put" is 0 === 0.
+      if (near(atRest, moved)) throw new Error('moving the group changed nothing on screen (' + str(atRest) + ') — this run cannot tell a preserved transform from a discarded one');
+
+      FM.ungroup(g.id);
+      FM.refreshAll();
+      const after = shot();
+      if (!near(moved, after)) throw new Error('ungrouping moved the layers: ' + str(moved) + ' → ' + str(after) + ' — the group\'s transform was discarded, so everything you had positioned snaps back');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

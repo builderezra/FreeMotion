@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does ungrouping move your layers? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — grouping and ungrouping must not MOVE anything.
+   `groupSelection` is careful about this on the way in: the group is created with a neutral (0,0)
+   transform, with a comment saying any x/y "would instantly displace every member the moment they're
+   grouped". `FM.ungroup` is three lines: re-parent the members, drop the group, done — and it does not
+   look at the group's transform at all. So the question is what happens when the group has been MOVED
+   before you ungroup it.
+   MEASURED BY RENDERING, not by reasoning about the transform stack: the scene is drawn to a canvas and
+   the ink's bounding box is compared. That is immune to my model of how parenting composes, which is
+   the part I would otherwise be assuming. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.renderScene&&w.FM.groupSelection)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  var W=f.contentWindow;
+  var PX=200;
+  function inkBox(){
+    var c=document.createElement('canvas'); c.width=PX; c.height=PX;
+    var g=c.getContext('2d');
+    g.clearRect(0,0,PX,PX);
+    var P=FM.scene.project;
+    g.save(); g.scale(PX/P.width, PX/P.height);
+    try { FM.renderScene(g, FM.scene, FM.time); } catch(e){ g.restore(); return {err:e.message}; }
+    g.restore();
+    /* MATCH THE SHAPES BY COLOUR, not by alpha. The project draws its own BACKGROUND, so an alpha box is
+       the whole canvas every time — the first run reported 0,0..199,199 with 40000 ink for every state,
+       which "proves" nothing moved no matter what happened. The shapes are #4a9eff; anything near it is
+       theirs and the backdrop is not. */
+    var d=g.getImageData(0,0,PX,PX).data;
+    var t=-1,b=-1,l=PX,r=-1,n=0;
+    for(var y=0;y<PX;y++)for(var x=0;x<PX;x++){
+      var i=(y*PX+x)*4;
+      if(d[i+3]>24 && Math.abs(d[i]-0x4a)<40 && Math.abs(d[i+1]-0x9e)<40 && Math.abs(d[i+2]-0xff)<40){
+        n++; if(t<0)t=y; b=y; if(x<l)l=x; if(x>r)r=x;
+      }
+    }
+    return n? {l:l,t:t,r:r,b:b,n:n} : {empty:true};
+  }
+  function fmt(B){ return B.empty?'(nothing drawn)':(B.err?('ERR '+B.err):(B.l+','+B.t+'..'+B.r+','+B.b+'  ink '+B.n)); }
+  function same(a,b){ return !a.empty && !b.empty && !a.err && !b.err && Math.abs(a.l-b.l)<=1 && Math.abs(a.t-b.t)<=1 && Math.abs(a.r-b.r)<=1 && Math.abs(a.b-b.b)<=1; }
+
+  function build(){
+    FM.scene.layers.length=0;
+    var P=FM.scene.project;
+    [[0.3,0.3],[0.5,0.45],[0.7,0.6]].forEach(function(p,i){
+      var L=FM.makeLayer('shape',{name:'S'+i,shape:'rect',x:P.width*p[0],y:P.height*p[1],shapeW:P.width*0.16,shapeH:P.height*0.10,fill:'#4a9eff'});
+      L.start=0;L.duration=5;FM.scene.layers.push(L);
+    });
+    FM.scene.project.duration=5; FM.time=1;
+    FM.selectLayer(null); FM.refreshAll();
+  }
+
+  // ---- A. group then ungroup, with the group left alone ----
+  build(); await sleep(200);
+  var A0=inkBox();
+  FM.scene.selectedIds=FM.scene.layers.map(function(l){return l.id;});
+  FM.scene.selectedId=FM.scene.layers[0].id;
+  FM.groupSelection(); await sleep(200);
+  var A1=inkBox();
+  var grp=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+  FM.ungroup(grp.id); await sleep(200);
+  var A2=inkBox();
+  say('A. group, then ungroup — nothing else touched');
+  say('   before group : '+fmt(A0));
+  say('   grouped      : '+fmt(A1)+'   '+(same(A0,A1)?'✅ nothing moved':'❌ GROUPING MOVED THE LAYERS'));
+  say('   ungrouped    : '+fmt(A2)+'   '+(same(A0,A2)?'✅ back exactly':'❌ UNGROUPING MOVED THE LAYERS'));
+
+  // ---- B. group, MOVE the group, then ungroup ----
+  say('');
+  build(); await sleep(200);
+  FM.scene.selectedIds=FM.scene.layers.map(function(l){return l.id;});
+  FM.scene.selectedId=FM.scene.layers[0].id;
+  FM.groupSelection(); await sleep(200);
+  grp=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+  /* A LAYER'S POSITION IS `transform.x/y`, NOT `x/y` — `applyParentChain` reads `pl.transform`. Writing
+     `grp.x` set a field nothing reads, so the first run "moved" the group and measured no change, which
+     reads exactly like a group transform that does not reach its children. It was the fixture. */
+  grp.transform.x=(FM.evalProp(grp.transform.x,0)||0)+FM.scene.project.width*0.15;
+  grp.transform.y=(FM.evalProp(grp.transform.y,0)||0)-FM.scene.project.height*0.10;
+  FM.refreshAll(); await sleep(200);
+  var B1=inkBox();
+  FM.ungroup(grp.id); await sleep(200);
+  var B2=inkBox();
+  say('B. group, MOVE the group, then ungroup');
+  say('   group moved  : '+fmt(B1)+'   (control: this MUST differ from A — group.transform.x='+FM.evalProp(grp.transform.x,0).toFixed(1)+')');
+  if(same(A0,B1)) say('   ⚠️ moving the group changed nothing on screen — the rest of this row proves nothing');
+  say('   ungrouped    : '+fmt(B2)+'   '+(same(B1,B2)?'✅ stayed where they were':'❌ UNGROUPING SNAPPED THEM BACK — the group’s transform had nowhere to go'));
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>
