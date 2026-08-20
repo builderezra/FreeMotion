@@ -624,7 +624,11 @@ window.FM = window.FM || {};
   const _spInt = {};   // layerId -> { sig, tab, SR } (module cache; never serialized with the layer)
   FM.layerSourceAdvance = function (layer, into) {
     const sp = layer.speed;
-    if (!isAnimated(sp)) return Math.max(0, into) * (sp || 1);
+    // THROUGH speedAt, for the reason written on it: `sp || 1` returns an OBJECT for a malformed
+    // animated prop, and this multiply then yields NaN — the same hole, in the function that sizes the
+    // clip's whole source window. Caught by the source-time sweep, which asserts this total is finite
+    // BEFORE it uses it; the probe version had a fallback here and missed it entirely.
+    if (!isAnimated(sp)) return Math.max(0, into) * FM.speedAt(layer, layer.start);
     const sig = JSON.stringify(sp.kf) + '|' + (sp.loopMode || '') + '|' + layer.start + '|' + layer.duration;
     let c = _spInt[layer.id];
     if (!c || c.sig !== sig) {
@@ -650,7 +654,24 @@ window.FM = window.FM || {};
    * via a trim). Every call site that needs a number must come through here. */
   FM.speedAt = function (layer, t) {
     const sp = layer.speed;
-    if (!isAnimated(sp)) return sp || 1;
+    /* …AND IT NOW ACTUALLY RETURNS A NUMBER, which the comment above has always promised and this line
+       did not deliver. `sp || 1` hands back whatever truthy thing is on the layer — including an OBJECT.
+       A well-formed animated prop is caught by `isAnimated`, but a MALFORMED one is not: `{ keys: [...] }`
+       instead of `{ kf: [...] }` is truthy, fails `Array.isArray(p.kf)`, and sails out of here as an
+       object. The caller then multiplies by it and gets NaN.
+       Found by sweeping FM.layerLocalTime (tests/_srctime.html): every valid combination of reversed ×
+       speed × trim × duration holds, and a malformed speed produces NaN source time at every sample —
+       silently, in the function every frame read goes through. NaN in, no picture out, and the exporter
+       does the same.
+       Reachable, not hypothetical: `.fmotion.json` is untrusted input, the load path deliberately does
+       NOT re-run most sanitisers ("anything an import once let through has been autosaved back into
+       localStorage and comes in unchecked here forever after"), and this app has already been bitten by
+       exactly this — the comment above records a ramped speed collapsing the whole timeline via a trim.
+       Behaviour for every VALID input is unchanged: 0 and undefined still become 1, as `|| 1` did. */
+    if (!isAnimated(sp)) {
+      const n = (typeof sp === 'number') ? sp : parseFloat(sp);
+      return (isFinite(n) && n !== 0) ? n : 1;
+    }
     return Math.max(0.05, evalProp(sp, t == null ? (FM.time || 0) : t) || 1);
   };
   /* Longest clip duration whose consumed source stays within availSrc source-seconds.
@@ -670,7 +691,7 @@ window.FM = window.FM || {};
     if (t < layer.start || t >= layer.start + layer.duration) return null;
     const into = t - layer.start;                       // seconds into the clip
     if (!isAnimated(layer.speed)) {                      // fast path — unchanged behaviour
-      const sp = layer.speed || 1;                       // source advances sp× wall time
+      const sp = FM.speedAt(layer, t);                   // source advances sp× wall time — THROUGH speedAt, which is the only thing that guarantees a number
       const adv = into * sp;
       const src = layer.reversed ? (layer.duration * sp - adv) : adv;
       return layer.trimStart + src;

@@ -2867,6 +2867,60 @@
     }
   });
 
+  test('source time: every clip maps project time into its own source window, whatever its speed', { item: 'srctime-sweep' }, function () {
+    /* BUG HUNT (21 Aug), and it found one. FM.layerLocalTime is the map from project time to SOURCE
+       time, and everything that reads a frame goes through it — the compositor, the reverse cache,
+       seekVideosToTime, the exporter. Its history here is edge cases: the comment above FM.speedAt
+       records a ramped speed collapsing the entire timeline via a trim.
+       Five invariants, swept over reversed × speed × trimStart × duration (tests/_srctime.html runs the
+       same sweep at 2600+ samples; this is the gate):
+         1. finite for every t inside the clip;   2. inside [trimStart, trimStart + total advance];
+         3. monotonic — forward increases, reversed decreases;   4. the ends land on the window's ends;
+         5. null outside the clip.
+       WHAT IT FOUND: `FM.speedAt` did not return a number. Its own doc-comment says every call site
+       needing one must come through it, and its non-animated branch was `return sp || 1` — which hands
+       back whatever truthy thing is on the layer, INCLUDING an object. A well-formed animated prop is
+       caught by `isAnimated`; a malformed one (`{keys:[…]}` rather than `{kf:[…]}`) is truthy, fails
+       that check, and escapes. The caller multiplies by it and gets NaN source time at every sample —
+       no picture, no error, and the same in the export.
+       Reachable rather than hypothetical: .fmotion.json is untrusted input and the load path
+       deliberately does not re-run most sanitisers.
+       ⚠️ The malformed case is in the table on purpose. Without it this sweep is 2600 green samples that
+       prove the happy path and would have shipped the hole. */
+    if (!FM.layerLocalTime || !FM.speedAt) throw new Error('FM.layerLocalTime / FM.speedAt missing');
+    const ramp = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2.5, v: 2, e: 'linear' }] };
+    const malformed = { keys: [{ t: 0, v: 0.5 }] };
+    const SPEEDS = [['1', 1], ['0.5', 0.5], ['2', 2], ['ramp', ramp], ['0', 0], ['undefined', undefined], ['malformed', malformed]];
+    let checked = 0, sawMalformed = false;
+    [false, true].forEach(rev => SPEEDS.forEach(sp => [0, 1.5].forEach(trim => [2, 5].forEach(dur => {
+      const L = FM.makeLayer('video', { name: 'V' });
+      L.start = 1; L.duration = dur; L.trimStart = trim; L.reversed = rev;
+      if (sp[1] !== undefined) L.speed = sp[1];
+      if (sp[0] === 'malformed') sawMalformed = true;
+      const tag = (rev ? 'reversed' : 'forward') + ' speed=' + sp[0] + ' trim=' + trim + ' dur=' + dur;
+      const total = FM.layerSourceAdvance ? FM.layerSourceAdvance(L, L.duration) : L.duration * FM.speedAt(L, L.start);
+      if (!isFinite(total)) throw new Error(tag + ': the total source advance is ' + total + ' — the clip has no window to map into');
+      const lo = Math.min(trim, trim + total), hi = Math.max(trim, trim + total);
+      let prev = null, dir = 0;
+      for (let k = 0; k <= 24; k++) {
+        const t = L.start + (L.duration * k / 25);
+        const v = FM.layerLocalTime(L, t);
+        checked++;
+        if (v === null || !isFinite(v)) throw new Error(tag + ': source time is ' + v + ' at t=' + t.toFixed(3) + ' — NaN here means no picture and no error, in the export as well as the preview');
+        if (v < lo - 1e-6 || v > hi + 1e-6) throw new Error(tag + ': source time ' + v.toFixed(4) + ' at t=' + t.toFixed(3) + ' is outside the clip\'s own window [' + lo.toFixed(3) + ', ' + hi.toFixed(3) + ']');
+        if (prev !== null) {
+          const d = v - prev;
+          if (Math.abs(d) > 1e-9) { const s = d > 0 ? 1 : -1; if (dir && s !== dir) throw new Error(tag + ': the source time changes direction at t=' + t.toFixed(3) + ' — a clip plays one way'); dir = s; }
+        }
+        prev = v;
+      }
+      if (FM.layerLocalTime(L, L.start - 0.01) !== null) throw new Error(tag + ': returns a source time BEFORE the clip starts');
+      if (FM.layerLocalTime(L, L.start + L.duration) !== null) throw new Error(tag + ': returns a source time AT the clip end, which belongs to whatever follows');
+    }))));
+    if (!sawMalformed) throw new Error('the malformed-speed case was not in the sweep — without it this is a happy-path check that would have shipped the very hole it found');
+    if (checked < 500) throw new Error('only ' + checked + ' samples swept');
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

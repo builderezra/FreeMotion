@@ -1203,3 +1203,41 @@ feature the cache exists for. Two designs, and the second is the one to build:
    conservative by construction: anything the live page names is kept.
 ⚠️ **Whoever builds it: verify offline still works afterwards.** Load, go offline, reload — the app must
 still come up. That is the assertion this change can break, and nothing currently covers it.
+
+## 19. 🚨 `FM.speedAt` never actually returned a number — FIXED v10.89
+
+**How it was found.** The queue's actionable items were all waiting on Ezra, so: a sweep of
+`FM.layerLocalTime`, the map from project time to SOURCE time. Everything that reads a frame goes
+through it — the compositor, the reverse cache, `seekVideosToTime`, the exporter — and its history in
+this repo is edge cases: the comment above `FM.speedAt` records a ramped speed collapsing the entire
+timeline via a trim.
+
+Five invariants, swept over reversed × speed × trimStart × duration (`tests/_srctime.html`):
+finite · inside `[trimStart, trimStart + total advance]` · monotonic · the ends land on the window's
+ends · null outside the clip. **2,624 samples, and every valid combination held.** That is a real
+clearance for the ramped path.
+
+**The find.** `FM.speedAt`'s own doc-comment says *"Every call site that needs a number must come
+through here"* — and its non-animated branch was `return sp || 1`, which hands back whatever truthy
+thing is on the layer, **including an object**. A well-formed animated prop is caught by `isAnimated`;
+a malformed one (`{keys:[…]}` rather than `{kf:[…]}`) is truthy, fails `Array.isArray(p.kf)`, and
+escapes. The caller multiplies by it: **NaN source time at every sample — no picture, no error, and
+the same in the export.**
+
+Reachable rather than hypothetical: `.fmotion.json` is untrusted input, and the load path deliberately
+does not re-run most sanitisers — *"anything an import once let through has been autosaved back into
+localStorage and comes in unchecked here forever after."*
+
+**Two lessons worth more than the fix.**
+
+1. **The probe missed the second instance and the SUITE TEST caught it.** `FM.layerSourceAdvance` has
+   the identical hole, and the probe had a `? :` fallback for it that quietly papered over the NaN. The
+   suite version asserts the total source window is finite *before* it uses it, and went red on the
+   first run. A fallback in a probe is a place a bug can hide.
+2. **The malformed case had to be IN the table.** Without it the sweep is 2,600 green samples proving
+   the happy path, and it would have shipped the hole it was written to find. A sweep is only as good
+   as its worst row.
+
+⚠️ The same raw `layer.speed || 1` idiom survives in about ten other call sites (audio-play,
+audio-react, captions, exporter, app.js). Logged as **REQUESTS 451** rather than swept in silently —
+several of them deliberately want the STATIC value and are not a find-and-replace.

@@ -49,6 +49,11 @@ transition is meaningless there.
 - `_expfmt.html` — the export dialog at 380px with a format pre-chosen. Built for queue 395's M4A option;
   it caught the first label ("Audio only (M4A — smaller)") truncating in the select at that width.
 
+- `_srctime.html` — sweeps `FM.layerLocalTime` over reversed × speed × trim × duration against five
+  invariants (finite, in-window, monotonic, ends land, null outside). Found that `FM.speedAt` returned
+  an OBJECT for a malformed speed prop. **Note the lesson in its header:** the probe had a fallback for
+  `layerSourceAdvance` and missed the second instance that the suite version caught.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

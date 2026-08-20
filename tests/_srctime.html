@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Source-time mapping sweep (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.5 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">sweeping…</pre>
+<script>
+/* BUG HUNT — FM.layerLocalTime, the map from project time to SOURCE time.
+   Everything that reads a frame goes through it: the compositor, the reverse cache, seekVideosToTime,
+   the exporter. Its history in this repo is edge cases (a trim on a ramped clip once produced NaN and
+   collapsed the timeline), so the invariants are worth sweeping rather than spot-checked.
+   FIVE INVARIANTS, over reversed x speed x trimStart x duration:
+     1. finite for every t inside the clip;
+     2. inside [trimStart, trimStart + total advance];
+     3. monotonic — forward increases, reversed decreases;
+     4. the ends land on the ends of the source window;
+     5. null outside the clip. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.layerLocalTime&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(300);
+  /* THE REAL SHAPE IS `kf`, NOT `keys` — `isAnimated` asks for `Array.isArray(p.kf)`. The first run of
+     this sweep used `keys` and every ramped case came back NaN, which looked like a product bug and was
+     the fixture. It is KEPT as a case below, deliberately: a malformed speed is exactly what a
+     hand-edited or legacy .fmotion.json can carry, and what the fast path does with one is worth
+     knowing. */
+  var ramp = { kf: [ { t: 0, v: 0.5, e: 'linear' }, { t: 2.5, v: 2, e: 'linear' } ] };
+  var malformed = { keys: [ { t: 0, v: 0.5 } ] };   // an object that is NOT a valid animated prop
+  var SPEEDS = [
+    ['1 (default)', 1], ['0.5', 0.5], ['2', 2],
+    ['ramp 0.5→2', ramp],
+    ['0 (degenerate)', 0], ['-1 (degenerate)', -1], ['undefined', undefined],
+    ['malformed obj', malformed]
+  ];
+  var bad = [], checked = 0;
+  [false, true].forEach(function(rev){
+    SPEEDS.forEach(function(sp){
+      [0, 1.5].forEach(function(trim){
+        [2, 5].forEach(function(dur){
+          var L = FM.makeLayer('video', { name: 'V' });
+          L.start = 1; L.duration = dur; L.trimStart = trim; L.reversed = rev;
+          if (sp[1] !== undefined) L.speed = sp[1];
+          var tag = (rev?'reversed ':'forward  ') + 'speed ' + sp[0].padEnd(14) + ' trim ' + trim + ' dur ' + dur;
+          var total = 0;
+          try { total = FM.layerSourceAdvance ? FM.layerSourceAdvance(L, L.duration) : L.duration * (L.speed||1); } catch(e){ total = NaN; }
+          var lo = trim, hi = trim + total;
+          var prev = null, dir = 0, vals = [];
+          for (var k = 0; k <= 40; k++) {
+            var t = L.start + (L.duration * k / 41);       // strictly inside the clip
+            var v = FM.layerLocalTime(L, t);
+            checked++;
+            vals.push(v);
+            if (v === null || !isFinite(v)) { bad.push(tag + '  → NOT A NUMBER at t=' + t.toFixed(3) + ': ' + v); prev = null; break; }
+            if (v < Math.min(lo,hi) - 1e-6 || v > Math.max(lo,hi) + 1e-6) { bad.push(tag + '  → OUT OF THE SOURCE WINDOW at t=' + t.toFixed(3) + ': ' + v.toFixed(4) + ' not in [' + Math.min(lo,hi).toFixed(3) + ',' + Math.max(lo,hi).toFixed(3) + ']'); break; }
+            if (prev !== null) {
+              var d = v - prev;
+              if (Math.abs(d) > 1e-9) { var s = d > 0 ? 1 : -1; if (dir && s !== dir) { bad.push(tag + '  → NOT MONOTONIC at t=' + t.toFixed(3)); break; } dir = s; }
+            }
+            prev = v;
+          }
+          // ends
+          var v0 = FM.layerLocalTime(L, L.start);
+          var vE = FM.layerLocalTime(L, L.start + L.duration - 1e-4);
+          if (v0 !== null && isFinite(v0)) {
+            var wantStart = rev ? trim + total : trim;
+            if (Math.abs(v0 - wantStart) > 1e-3) bad.push(tag + '  → the FIRST frame is ' + v0.toFixed(4) + ', want ' + wantStart.toFixed(4));
+          }
+          if (FM.layerLocalTime(L, L.start - 0.01) !== null) bad.push(tag + '  → returns a value BEFORE the clip starts');
+          if (FM.layerLocalTime(L, L.start + L.duration) !== null) bad.push(tag + '  → returns a value AT/AFTER the clip end');
+        });
+      });
+    });
+  });
+  say('samples checked: ' + checked);
+  say('');
+  if (!bad.length) say('✅ every combination held all five invariants');
+  else { say('❌ ' + bad.length + ' failure(s):'); bad.forEach(function(b){ say('   ' + b); }); }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

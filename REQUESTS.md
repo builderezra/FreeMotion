@@ -12966,3 +12966,19 @@ wait for them to report back."*
       🔁 **Same trap as queue 351, by the other door:** that entry recorded "synthetic pointer events
       dispatched in one tick all carry the same timeStamp". This fixture had not forgotten to space
       them — it believed it had.
+
+- [ ] **451 — Sweep the remaining raw `layer.speed || 1` sites.** (21 Aug, found by the v10.89 bug hunt.)
+      Not his words — a follow-up to a fix, filed rather than done silently.
+      v10.89 made `FM.speedAt` actually return a number and routed `FM.layerLocalTime` and
+      `FM.layerSourceAdvance` through it, because a malformed speed prop was producing **NaN source time
+      with no picture and no error, in the export as well as the preview**.
+      **The same idiom is still raw in about ten places**, each with the identical hole:
+      `js/audio-play.js:57`, `js/audio-react.js:117`, `js/captions.js:129`, `js/exporter.js:225`,
+      and several in `js/app.js` (1603, 2455, 2671, 2764, 2818-2819, 3034-3036).
+      ⚠️ **Not a mechanical find-and-replace.** Several of those deliberately read the STATIC value with
+      `ramped ? 1 : (layer.speed || 1)` — they want the un-ramped number, not `speedAt`'s value at a
+      time — so each needs reading before it is changed. The audio ones matter most: a NaN rate there is
+      a silent wrong-pitch or a dropped clip in the export mix.
+      ✅ **Worth doing as one sweep with the source-time test extended to cover each site**, rather than
+      one at a time — the value of the v10.89 fix is that there is now a single function that cannot
+      return junk, and these are the callers still not using it.
