@@ -5678,6 +5678,24 @@ better still, keep working inside the turn rather than parking work for a later 
       you meant the project's CONTENT even then, I closed it on the wrong reading and this went
       unaddressed for weeks as a result.
 
+      🔎 **A PATH NOBODY HAD CONSIDERED, found 20 Aug while auditing the service worker — and it explains
+      why the offline warning has NEVER appeared while the glitch has.** The navigation branch did a plain
+      `fetch(req)`, which is allowed to be answered from the BROWSER's HTTP cache. GitHub Pages serves HTML
+      with `Cache-Control: max-age=600`, so **for ten minutes after a deploy a refresh can return the
+      PREVIOUS index.html without touching the network** — and that response is `ok`, so nothing in the
+      stale-detection machinery fires. Every `?v=` inside that old page then names an old asset URL, which
+      the asset branch answers CACHE-FIRST. The result is a complete older build, arriving silently, on a
+      perfectly good connection.
+      ✅ **v10.68 — the navigation fetch now passes `cache: 'no-cache'`**, so the page always revalidates
+      with the server. It still uses the network and still allows a 304, so the cost is one revalidation
+      round trip. The blip retry is unchanged.
+      ⚠️ **Stated honestly: this is a mechanism that FITS his description, not a reproduction.** It cannot
+      be reproduced here because it needs GitHub Pages' own cache headers — the dev server does not send
+      them. But it is the only path found so far that produces the exact symptom (a whole older build)
+      WITHOUT tripping the warning that was built to catch it, which is the detail that has never fitted.
+      **Next time it happens the question is unchanged and now sharper:** does the offline-copy message
+      appear? If NO — as before — this is now the leading suspect and v10.68 should have removed it.
+
 - [x] **307 — Four things about the Add-layer row (PC and mobile).** ✅ **v9.55 + v9.56 — all four.** (17 Aug.) His words, verbatim:
       *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
       page for it's like a little plus button to come back like it's a small non-issue really but

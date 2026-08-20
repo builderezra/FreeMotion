@@ -91,10 +91,22 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       const c = await caches.open(CACHE);
       let fresh = null;
+      /* REVALIDATE — do not accept the browser's own HTTP cache for the page (queue 306).
+       *
+       * A plain `fetch(req)` for a navigation is allowed to be answered from the HTTP cache, and GitHub
+       * Pages serves HTML with `Cache-Control: max-age=600`. So for TEN MINUTES after a deploy, a refresh
+       * can return the PREVIOUS index.html without ever touching the network — and that response is `ok`,
+       * so none of the machinery below fires: no stale marker, no warning, nothing to see. Every `?v=`
+       * inside that old page then names an old asset URL, which the asset branch answers CACHE-FIRST.
+       * The result is a complete older build of the app, arriving silently, on a perfectly good
+       * connection. That matches his report better than the offline path does — and it explains why the
+       * offline warning has never appeared while the glitch has.
+       * `cache: 'no-cache'` still uses the network and still allows a 304, so it costs a revalidation
+       * round trip and nothing more. The blip retry is unchanged. */
       try {
-        fresh = await fetch(req);
+        fresh = await fetch(req, { cache: 'no-cache' });
       } catch (_) {
-        try { fresh = await fetch(req); } catch (_2) { fresh = null; }   // the blip retry
+        try { fresh = await fetch(req, { cache: 'no-cache' }); } catch (_2) { fresh = null; }   // the blip retry
       }
       // Only keep a good response; a 404 or an opaque error cached here would BE the offline page.
       if (fresh && fresh.ok) {
