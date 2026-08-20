@@ -11744,6 +11744,13 @@ wait for them to report back."*
       the big centred + from #354, which he asked for and likes.
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+      🚨 **20 Aug — HIS IMAGES ARE NOT REACHING ME AT ALL. This is not one lost attachment.** In his own
+      words while answering 429: *"maybe my images arent going through"*. That explains this entry, and the
+      missing screenshots on 428 and 429 too. **The phone inbox is a TEXT file** (iCloud/GitHub), so an
+      image pasted there cannot survive by design — and it looks to him like it sent.
+      **The workaround, until something better exists: paste images straight into the CHAT, not the inbox
+      file.** A description in words also works far better than nothing — "thinner, squarer, more like the
+      arrows in Alight Motion" would have been buildable weeks ago.
       (19 Aug, via the phone inbox.) His words, verbatim, both messages:
       > I want you to try and make the undo and redo buttons look more like this
       > With the undo and redo buttons request I just did make the lines thinner tho so it matches everything else on that row
@@ -12136,6 +12143,19 @@ wait for them to report back."*
                as a jump rather than a wobble, and is worth counting rebuilds during a swipe to rule out;
              · the wrong `+` entirely: there are three — the add-row's small one, the empty-state disc,
                and the floating `#add-fab`. This probe measured the first.
-             ⚠️ **Worth one line from him: WHICH + and is the timeline empty or full when it happens.**
+             ✅ **ANSWERED 20 Aug, his words verbatim:**
+             > i think what you mean by which plus wobbles was the plus to add button on phone when you scroll the timeline, not the row just the plus, maybe my images arent going through.
+             So it is **the + DISC ITSELF** (`.tl-addrow-plus`), on the phone, while the timeline scrolls —
+             not the row it sits in. That rules out the row's sticky positioning as the whole story: the
+             row and the + are in the same sticky container, so if the CONTAINER lagged the label would
+             smear too, and he is pointing at the + alone.
+             🔎 **Which makes the EMPTY state the first suspect, and it is a deliberate feature:** v10.37
+             (queue 398) gave the big empty-state + a slowly rotating conic gradient — "the big +'s colours
+             move, slowly" — via `.tl-addrow--empty .tl-addrow-plus::before { animation }`. On an empty
+             project that + is genuinely in motion by design. If that is what he is seeing, "should be
+             stiff" is a request to stop that animation while scrolling, or to drop it, not a bug fix.
+             ⚠️ **Still to determine: is his timeline EMPTY when it happens?** The slim row's small + has
+             no animation, so the answer picks between "undo a deliberate effect" and "hunt a real lag".
+             ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
              That decides between the three, and this could not be narrowed further without guessing.
 

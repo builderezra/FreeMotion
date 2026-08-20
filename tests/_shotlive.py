@@ -52,11 +52,53 @@ def shoot(path, out, w=400, h=840, wait=120):
         proc.terminate()
 
 
+def read(path, wait=180, throttle=0, w=400, h=840):
+    """Run a fixture in REAL TIME and return whatever it wrote into `#out` — the measurement half.
+
+    Most probes in tests/ report NUMBERS, not pictures: they build a scene, measure something, write the
+    result into a `<pre id="out">` and set `document.title = 'ready'`. Eight were written that way on
+    20 Aug alone (playback cost, the video play/scrub comparison, add-menu tabs, the + under scroll, the
+    pill's colour across a play, audio codec support, the playhead across project opens). Every one of
+    them needed this launcher, and it lived in a scratchpad that does not survive the session — so the
+    next person rebuilds it before they can run any of them.
+
+    `throttle` maps to `Emulation.setCPUThrottlingRate`: pass 4-6 to approximate a phone. That is the
+    ONLY honest way to get phone-ish timings out of this harness, and it is why `_shot.sh` cannot be used
+    for them — see the note at the top of this file about virtual time.
+    """
+    port = C.free_port()
+    prof = tempfile.mkdtemp()
+    proc = C.launch(port, w, h, prof)
+    try:
+        cdp = C.CDP(C.ws_url(port))
+        cdp.send("Page.enable")
+        if throttle and throttle > 1:
+            cdp.send("Emulation.setCPUThrottlingRate", rate=throttle)
+        cdp.send("Page.navigate", url="http://localhost:8777" + path)
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            t = cdp.eval("document.title") or ""
+            if "ready" in t or "ERR" in t:
+                break
+            time.sleep(0.5)
+        out = cdp.eval("(document.getElementById('out')||{}).textContent") or ""
+        title = cdp.eval("document.title") or ""
+        cdp.close()
+        return out if out.strip() else "(no #out content; title: %s)" % title
+    finally:
+        proc.terminate()
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(2)
-    p, o = sys.argv[1], sys.argv[2]
-    W = int(sys.argv[3]) if len(sys.argv) > 3 else 400
-    H = int(sys.argv[4]) if len(sys.argv) > 4 else 840
-    print("wrote %s   (fixture title: %s)" % (o, shoot(p, o, W, H)))
+    # `--read [throttle]` runs a measuring probe and prints its #out; otherwise it screenshots.
+    if sys.argv[2] == "--read":
+        thr = float(sys.argv[3]) if len(sys.argv) > 3 else 0
+        print(read(sys.argv[1], throttle=thr))
+    else:
+        p, o = sys.argv[1], sys.argv[2]
+        W = int(sys.argv[3]) if len(sys.argv) > 3 else 400
+        H = int(sys.argv[4]) if len(sys.argv) > 4 else 840
+        print("wrote %s   (fixture title: %s)" % (o, shoot(p, o, W, H)))
