@@ -3302,6 +3302,67 @@
     }
   });
 
+  test('the export range never runs outside the project, whichever branch it takes', { item: 'export-range-clamp' }, function () {
+    /* BUG HUNT (21 Aug). `exportRange()` decides what actually lands in the file, and its two branches
+       were not equally careful: 'clip' clamps to [0, P.duration] with Math.max/Math.min AND refuses an
+       empty span, while 'loop' returned `{ from: P.loopIn, to: P.loopOut }` RAW.
+       `autoFitDuration` does tidy a stale region — measured (tests/_looprange.html), loopOut 999 on a 4s
+       project comes back from a save-and-reopen as 4 — but it only ever looks UPWARD (`loopOut > end`).
+       A NEGATIVE loopIn reached exportRange untouched: `{from: -5, to: 3}`, which would start the render
+       before the project does.
+       ⚠️ Honest about reach: the UI cannot write that (`markRegionIn` stores `FM.time`, never negative),
+       so this is document-level hardening like the load sanitisers, not something reachable by hand
+       today. The value is the symmetry — two branches of one function disagreeing about whether to
+       clamp is how the next one gets written wrong. */
+    if (!FM.exportRange) throw new Error('FM.exportRange is not exposed');
+    const el = document.getElementById('exp-range');
+    if (!el) throw new Error('#exp-range is missing, so the loop branch cannot be selected');
+    const P = FM.scene.project;
+    const was = el.value, li = P.loopIn, lo = P.loopOut, dur = P.duration;
+    try {
+      P.duration = 4;
+      el.value = 'loop';
+
+      // CONTROL: a legitimate region must come back untouched, or "clamped" could just mean "broken".
+      P.loopIn = 1; P.loopOut = 3;
+      let r = FM.exportRange();
+      if (!r || r.from !== 1 || r.to !== 3) throw new Error('a legitimate loop region 1–3 came back as ' + JSON.stringify(r) + ' — the clamp is eating valid ranges');
+
+      // …the fault itself
+      P.loopIn = -5; P.loopOut = 3;
+      r = FM.exportRange();
+      if (r && r.from != null && r.from < -1e-6) throw new Error('the export range starts at ' + r.from + ', before the project does — the clip branch clamps with Math.max(0, …) and this one did not');
+
+      // …and past the end, in case autoFitDuration is not the thing standing in the way
+      P.loopIn = 1; P.loopOut = 999;
+      r = FM.exportRange();
+      if (r && r.to != null && r.to > P.duration + 1e-6) throw new Error('the export range ends at ' + r.to + ' on a ' + P.duration + 's project — that is a tail of blank frames rendered into the file');
+
+      // …a nonsense span must fall through to the whole project, not export backwards
+      P.loopIn = 3; P.loopOut = 1;
+      r = FM.exportRange();
+      if (r && r.from != null && r.to != null && !(r.to > r.from)) throw new Error('exportRange returned an empty or backwards span ' + JSON.stringify(r));
+
+      /* AND THE CLIP BRANCH STILL CLAMPS — it is the half that was already right, and a refactor that
+         made them symmetric by loosening the wrong one would pass everything above. */
+      const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+      try {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'C', shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#fff' });
+        L.start = -2; L.duration = 20; FM.scene.layers.push(L);
+        FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+        el.value = 'clip';
+        const c = FM.exportRange();
+        if (c && !c.stop) {
+          if (c.from < -1e-6) throw new Error('the clip branch let the range start at ' + c.from);
+          if (c.to > P.duration + 1e-6) throw new Error('the clip branch let the range end at ' + c.to + ' on a ' + P.duration + 's project');
+        }
+      } finally { FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : []; }
+    } finally {
+      el.value = was; P.loopIn = li; P.loopOut = lo; P.duration = dur;
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

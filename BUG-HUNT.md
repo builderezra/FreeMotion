@@ -1463,3 +1463,29 @@ invariant is asserted on the source instead, and mutation-proved.
 ⚠️ And the probe's render check counted ALPHA, which is the whole canvas because the project paints its
 own background — the same trap as section 21. Corrected to count the shape's colour, and to report the
 render TIME, which is the thing the DoS claim is actually about.
+
+
+## 26. The two branches of exportRange did not agree about clamping — FIXED v10.97
+
+**Found by the same smell as section 21** (group vs ungroup): one function, two branches, only one of
+them careful.
+
+    'clip'  →  Math.max(0, start) … Math.min(P.duration, start + duration), and refuses an empty span
+    'loop'  →  { from: P.loopIn, to: P.loopOut }        ← raw
+
+`autoFitDuration` DOES tidy a stale region, and load's `refreshAll` runs it — measured, a `loopOut` of
+999 on a 4s project comes back from a save-and-reopen as **4**. So the obvious attack is already
+covered. But it only ever looks UPWARD (`loopOut > end`), and a **negative** `loopIn` walked straight
+through:
+
+    negative loopIn (-5), duration 4 : {"from":-5,"to":3}   ❌ the render would start before the project
+
+⚠️ **Honest about reach.** The UI cannot write that — `markRegionIn` stores `FM.time`, never negative —
+so this is document-level hardening of the same class as the load sanitisers, not something he can hit
+by hand today. It is worth doing anyway for the symmetry: two branches of one function disagreeing
+about whether to clamp is how the NEXT branch gets written wrong.
+
+**The test guards the half that was already right, too.** A refactor that made the two symmetric by
+loosening the CLIP branch would pass every assertion about the loop one, so both are mutation-proved —
+and a legitimate 1–3 region is asserted to come back untouched, because a clamp that ate valid ranges
+would also pass "nothing is out of bounds".

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does a stale loop region survive a reload and skew the export? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — `exportRange()` decides what actually lands in his file, and its two branches are not
+   equally careful:
+     · 'clip'  clamps to [0, P.duration] AND refuses an empty range;
+     · 'loop'  returns { from: P.loopIn, to: P.loopOut } RAW — no clamp, no finiteness check.
+   `autoFitDuration` does clamp a stale region, but it only runs from refreshAll. So the question is
+   whether a region can reach `exportRange` un-clamped — in particular straight off a LOAD, which runs
+   only sanitizeEffects and sanitizeUnsafeValues and touches neither field.
+   Same asymmetry-between-two-branches smell as the group/ungroup find. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.projects&&w.FM.exportRange)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  await sleep(500);
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(400);
+  var made=[];
+  function setRange(v){ var el=d.getElementById('exp-range'); if(el) el.value=v; return !!el; }
+  try{
+    var id=await FM.projects.create({name:'ZZ-loop', width:640, height:640});
+    made.push(id); await sleep(400);
+    var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:320,y:320,shapeW:200,shapeH:200,fill:'#4a9eff'});
+    L.start=0;L.duration=4;FM.scene.layers.push(L);
+    FM.refreshAll(); await sleep(200);
+    var P=FM.scene.project;
+    say('project duration after fit: '+P.duration);
+    // a legitimate region, then a document that has gone stale (saved, then the project got shorter)
+    P.loopIn=1; P.loopOut=3;
+    FM.storage.markDirty(); FM.storage.flushSync(); await FM.storage.save(); await sleep(300);
+    if(!setRange('loop')) { say('no #exp-range control'); document.title='ready'; return; }
+    say('legit region, exportRange   : '+JSON.stringify(FM.exportRange()));
+
+    // …now make the document stale the way a saved project can be: region past the end
+    P.loopIn=1; P.loopOut=999;
+    FM.storage.markDirty(); FM.storage.flushSync(); await FM.storage.save(); await sleep(300);
+    say('planted loopOut=999, duration='+P.duration);
+
+    var other=await FM.projects.create({name:'ZZ-loop-other'}); made.push(other); await sleep(400);
+    await FM.projects.open(id); await sleep(900);
+    setRange('loop');
+    var P2=FM.scene.project;
+    var r=FM.exportRange();
+    say('after save + reopen          : duration '+P2.duration+'   loopIn '+P2.loopIn+'  loopOut '+P2.loopOut);
+    say('   exportRange()             : '+JSON.stringify(r));
+    var bad = r && r.to != null && isFinite(P2.duration) && r.to > P2.duration + 0.01;
+    say('   ⇒ ' + (bad
+      ? '❌ THE EXPORT RANGE RUNS PAST THE END OF THE PROJECT by ' + (r.to - P2.duration).toFixed(1) + 's — that is a tail of blank frames rendered into his file'
+      : '✅ clamped to the project'));
+    /* The reopen clamped loopOut, because load's refreshAll runs autoFitDuration — which only clamps
+       values ABOVE the end (`loopOut > end`) and clears a loopIn at/past it. Nothing looks at the other
+       direction, and exportRange's loop branch does no clamping of its own. */
+    P2.loopIn = -5; P2.loopOut = 3;
+    setRange('loop');
+    var r2 = FM.exportRange();
+    say('');
+    say('negative loopIn (-5), duration '+P2.duration+' : '+JSON.stringify(r2));
+    say('   ⇒ ' + ((r2 && r2.from != null && r2.from < -0.001)
+      ? '❌ THE EXPORT WOULD START BEFORE THE PROJECT DOES — the clip branch clamps with Math.max(0, …), this one does not'
+      : '✅ clamped'));
+    // …and the empty-range case the clip branch refuses outright
+    P2.loopIn = 2; P2.loopOut = 2.005;
+    var r3 = FM.exportRange();
+    say('near-empty region (5ms)      : '+JSON.stringify(r3)+'   hasLoopRegion '+FM.hasLoopRegion());
+  } catch(e){ say('ERR '+e.message); }
+  finally { for(var i=0;i<made.length;i++){ try{ FM.projects.remove && FM.projects.remove(made[i]); }catch(e){} } }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

@@ -80,6 +80,9 @@ transition is meaningless there.
   RENDERS it, reporting shape ink and render time (bug-hunt 25). The values survive the load and the
   frame is fine: the compositor's clamp is what saves it. Counts the shape by COLOUR, not alpha.
 
+- `_looprange.html` — what `exportRange()` returns for a loop region that has gone stale: past the end
+  (clamped by autoFitDuration on reopen) and negative (was not clamped at all, bug-hunt 26).
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

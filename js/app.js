@@ -3507,7 +3507,22 @@ window.FM = window.FM || {};
       return { from: f, to: t };
     }
     if (rangeEl && rangeEl.value === 'loop') {
-      if (FM.hasLoopRegion && FM.hasLoopRegion()) return { from: P.loopIn, to: P.loopOut };
+      /* CLAMPED, exactly like the clip branch above — the two were not equally careful, and the loop
+         one returned `{ from: P.loopIn, to: P.loopOut }` RAW (bug hunt, 21 Aug).
+         `autoFitDuration` does tidy a stale region, so a loopOut past the end is corrected by the next
+         refreshAll and a reopen comes back clamped — measured (tests/_looprange.html): loopOut 999 with
+         a 4s project came back as 4. But it only ever looks UPWARD (`loopOut > end`), so a NEGATIVE
+         loopIn reaches here untouched: measured `{from: -5, to: 3}`, which would start the render
+         before the project does.
+         Reaching that needs a document the UI did not write — `markRegionIn` stores `FM.time`, which is
+         never negative — so this is hardening of the same class as the load-path sanitisers, not
+         something he can hit today. It costs one line and removes the asymmetry that made it possible. */
+      if (FM.hasLoopRegion && FM.hasLoopRegion()) {
+        const lf = Math.max(0, Math.min(P.duration, +P.loopIn));
+        const lt = Math.max(0, Math.min(P.duration, +P.loopOut));
+        if (isFinite(lf) && isFinite(lt) && lt > lf) return { from: lf, to: lt };
+        // Fall through to the whole project rather than export a nonsense span.
+      }
       if (FM.toast) FM.toast('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
     }
     return { from: null, to: null };
