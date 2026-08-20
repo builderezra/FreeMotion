@@ -887,7 +887,14 @@
       colour.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       await sleep(700);                      // the hold is 480ms
       colour.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));   // release it, or the page is left mid-gesture for every test after this one
-      const menu = document.getElementById('ctx-menu');
+      /* THE MENU HAS TO BE ON SCREEN, not merely present. `#ctx-menu` survives in the DOM after any
+         earlier test used one, keeping its old items — so reading `.ctx-item`s out of it without this
+         check can find a stale "Reset…" from a previous menu and pass while the hold did nothing at all.
+         The other five places this file touches #ctx-menu already guard it, by geometry or by the
+         `hidden` class; this one did not. A tightening, not a new claim: the assertion below is
+         unchanged, it just cannot be answered by a menu nobody opened. */
+      const menuEl = document.getElementById('ctx-menu');
+      const menu = (menuEl && !menuEl.classList.contains('hidden') && menuEl.getBoundingClientRect().width > 10) ? menuEl : null;
       const items = menu ? [].slice.call(menu.querySelectorAll('.ctx-item')) : [];
       const reset = items.find(i => /^Reset/.test((i.textContent || '').trim()));
       if (!reset) throw new Error('holding the Colouring card offered no Reset — menu reads [' + items.map(i => (i.textContent || '').trim()).join(', ') + ']');
