@@ -1147,3 +1147,19 @@ was written into the playhead work at v6.31). Two samples is not a proof, and it
 the remaining 22 are worth a pass one day, at LOW priority, and the check is the one written above.
 The reason to keep this section at all is the direction rule in section 14 — it is what any NEW
 "stays put" test must satisfy, and that is where the next false pass would come from, not from here.
+
+## 16. Does a resize storm rebuild the timeline? No — measured, and it clears a suspect
+Found while fixing queue 429: the timeline REBUILDS on resize (that is what detached the probe's element
+references). On iOS the chrome sliding away fires resize repeatedly during a swipe, so the obvious worry
+is a rebuild storm on every scroll — which would be a real contributor to the standing phone-lag items
+(95, 125, 387).
+**Measured (`tests/_resizecost.html`, 12 clips):**
+- ONE resize (820→880): `timeline.rebuild()` once, **6.3ms**; `FM.refreshAll()` **zero** times.
+- EIGHT resizes in ~250ms, which is what the chrome animating actually looks like: `rebuild()` still
+  **once**, 1.7ms total; `refreshAll()` **zero** times.
+**So the resizes are already coalesced** and the cost is a couple of milliseconds, not a storm. That
+suspect is out of the phone-lag hunt, and saying so is worth as much as a fix — it is one fewer place
+for the next round to spend a night.
+⚠️ Note the asymmetry worth remembering: the FIRST resize cost 6.3ms and the batch of eight cost 1.7ms
+total. The first one lands on a cold layout; repeats are cheap. So a single rotation is dearer than a
+whole toolbar animation.

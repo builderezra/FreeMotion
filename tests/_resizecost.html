@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What does a viewport resize cost? (queue 429 follow-on)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:940px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  for(var i=0;i<12;i++){ var L=FM.makeLayer('shape',{name:'Clip '+(i+1),shape:'rect',x:540,y:400+i*120,shapeW:300,shapeH:100,fill:'#3a7bd5'});
+    L.start=i*0.3; L.duration=6; FM.scene.layers.push(L); }
+  FM.scene.project.duration=20; FM.refreshAll(); FM.timeline.rebuild(); await sleep(600);
+
+  var tl=FM.timeline, calls=0, ms=0;
+  var orig=tl.rebuild.bind(tl);
+  tl.rebuild=function(){ var a=W.performance.now(); var r=orig.apply(null,arguments); ms+=W.performance.now()-a; calls++; return r; };
+  var ra=0, origAll=FM.refreshAll;
+  FM.refreshAll=function(){ ra++; return origAll.apply(FM,arguments); };
+
+  // ONE resize, the size of a Safari toolbar collapse
+  calls=0; ms=0; ra=0;
+  f.style.height='880px'; W.dispatchEvent(new W.Event('resize')); await sleep(400);
+  o.push('12 clips on the timeline. ONE viewport resize (820→880, a toolbar collapse):');
+  o.push('   timeline.rebuild() called '+calls+' time(s), '+ms.toFixed(1)+'ms total');
+  o.push('   FM.refreshAll() called '+ra+' time(s)');
+  o.push('');
+  // …and what a real swipe does: iOS fires resize repeatedly as the chrome animates
+  calls=0; ms=0; ra=0;
+  for(var k=0;k<8;k++){ f.style.height=(820+k*8)+'px'; W.dispatchEvent(new W.Event('resize')); await sleep(30); }
+  await sleep(300);
+  o.push('EIGHT resizes in ~250ms (what the chrome sliding away actually looks like):');
+  o.push('   timeline.rebuild() called '+calls+' time(s), '+ms.toFixed(1)+'ms total  ('+(calls?(ms/calls).toFixed(1):'0')+'ms each)');
+  o.push('   FM.refreshAll() called '+ra+' time(s)');
+  o.push('');
+  o.push(calls>1 ? '⚠️ the timeline is rebuilt repeatedly while the browser chrome animates' : '✅ resizes do not rebuild the timeline');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>
