@@ -1,3 +1,34 @@
+# ⚠️ READ FIRST — seven ways a measurement lied, all on 20 Aug 2026
+
+Every one of these produced a confident WRONG answer that survived until something forced a second look.
+They are listed by SYMPTOM, because that is how you meet them.
+
+1. **"The screen renders nothing / the sheet is empty."** `tests/_shot.sh` uses `--virtual-time-budget`,
+   under which a CSS transition never completes — so a sheet that slides up is photographed still parked
+   off-screen. Use `tests/_shotlive.py` for anything that animates. *(Cost: an hour on queue 428, and a
+   report that the Media and Audio tabs were broken when they were fine.)*
+2. **"Every tab shows the same thing."** There are TWO add-menu instances in the DOM — the phone sheet
+   and the parked PC panel. A document-wide `querySelector` drives the wrong one. Scope to `#add-sheet`.
+3. **"Nothing moved, so the feature is dead."** Check the fixture could move at ALL first: a timeline
+   with four layers does not overflow, so `scrollTop` stays 0 and a broken feature and a working one look
+   identical. *(Cost: three wrong diagnoses of a flaky test, plus a near-miss on queue 429 an hour after
+   fixing the same trap elsewhere.)*
+4. **"The menu is still open."** `#ctx-menu` persists in the DOM after any earlier use. Asking whether it
+   EXISTS fails against correct code; ask whether it is visible.
+5. **"The control is there."** Searching a panel's text for "Outline" passes on the CARD TITLE
+   ("Outline & Shadows"). Assert the actual control — a `label.chk-row` with a checkbox — not a word.
+6. **"The colour did not change back."** Sampling 120ms after a pause catches the transition mid-flight:
+   rgb(230,243,247) vs rgb(233,244,247) is correct behaviour and an impatient test.
+7. **"This entry says it is missing."** THREE open entries were already shipped (395 in full, 277 nine of
+   ten clauses, 418 clause 2). An entry records what was ASKED, not what is still missing, and nothing
+   keeps the two in step. Read the file the entry names before building.
+
+**The one rule underneath all seven:** a measurement that CANNOT fail is not evidence. Before believing
+a probe, ask what it would have shown if the thing were broken — and if the answer is "the same", the
+probe is the bug. Every new sweep in `tests.js` now carries a coverage guard for exactly this reason.
+
+---
+
 # Bug hunt — v4.70 (2026-08-09)
 
 Full report (same data, browsable): https://claude.ai/code/artifact/982670b6-f36f-406e-98f5-613a92190595
