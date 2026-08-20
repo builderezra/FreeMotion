@@ -2873,6 +2873,14 @@ window.FM = window.FM || {};
       B.trimStart = origTrim + advInto;                          // B resumes where A left off in the source (ramp-aware)
     }
     layer.duration = into;                                      // A = first half
+    /* FADES BELONG TO THE OUTER EDGES ONLY (bug hunt, 21 Aug). `FM.fadeMul` measures from each clip's
+     * OWN start and end, so leaving both halves holding both fades makes the cut fade the picture to
+     * black and the sound to silence and back — measured at a full 1.0 deviation right at the split
+     * (tests/_splitfade.html). A split is meant to be invisible. The head half keeps the fade-IN, the
+     * tail half keeps the fade-OUT, and the two together reproduce the original curve exactly.
+     * Unconditional on `reversed`: reversal swaps which part of the SOURCE each half plays, but the
+     * fades are timeline-local, and A is still the half at the head of the timeline. */
+    B.fadeIn = 0; layer.fadeOut = 0;
     if (Array.isArray(layer.captions)) {
       // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
       const orig = layer.captions;

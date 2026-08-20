@@ -1605,3 +1605,39 @@ inflating a defensive nicety into a fix is how a hunt starts lying about its own
 
 **Guard:** 186 of the combinations now run in the suite (`movelayers-sweep`). Mutation-checked twice —
 reversing the moved block, and removing the new null guard — both caught.
+
+## 31. Splitting a clip faded it to black and silent at the cut (21 Aug, v11.02) — REAL BUG
+
+Same coverage-driven method as §30, next name down the list of 76 untested exports: **`FM.splitLayer`**,
+picked because a split is destructive, he uses it constantly, and it has to divide media in/out points,
+keyframes, captions and speed ramps all at once.
+
+The function does all of those carefully. It got the one thing nobody had thought about: **fades**.
+
+`FM.fadeMul` measures the fade from **each clip's own start and end**. The split cloned the layer and left
+both halves holding both `fadeIn` and `fadeOut` — so the first half now faded OUT at the split point, and
+the second half faded IN from it. A cut in the middle of a clip that had fades produced a dip to black and
+to silence and back.
+
+**Measured, not argued** (`tests/_splitfade.html`): a 10s clip with a 1s fade at each end, sampled every
+0.25s across the whole timeline before and after a split at t=5.
+
+| t | before | after |
+|---|---|---|
+| 4.00 | 1.000 | 1.000 |
+| 4.50 | 1.000 | **0.500** |
+| 5.00 | 1.000 | **0.000** |
+| 5.50 | 1.000 | **0.500** |
+| 6.00 | 1.000 | 1.000 |
+
+**A full 1.0 deviation at the seam** — and because the same `fadeWindows`/`fadeMul` pair drives
+`js/scene.js` (picture), `js/audio-play.js` (sound) and `js/exporter.js` (the render), an exported file
+carried the dip too. It would have looked like the footage itself was faulty.
+
+**Fix:** one line. The head half keeps the fade-in, the tail half keeps the fade-out; together they
+reproduce the original curve exactly. Unconditional on `reversed` — reversal swaps which part of the
+SOURCE each half plays, but fades are timeline-local and A is still the half at the head.
+
+**Guard:** `split-fade` samples the entire timeline either side of the cut, not just the seam, and
+separately asserts the real fades survive. Mutation-checked BOTH ways — restoring the bug, and clearing
+every fade instead — because a seam-only assertion would have called the second one a pass.

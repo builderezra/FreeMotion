@@ -3530,6 +3530,56 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: cutting a clip does not fade it to black and silent at the cut', { item: 'split-fade' }, async function () {
+    /* BUG HUNT (21 Aug). A split is meant to be INVISIBLE — two halves end to end should look and sound
+       exactly like the one clip did. They did not. `FM.fadeMul` measures the fade from each clip's OWN
+       start and end, and the split handed BOTH halves BOTH fades, so a clip with a fade-in and a
+       fade-out dipped all the way to black and to silence at the cut and came back: measured deviation
+       1.000 at the split point (tests/_splitfade.html). It hits picture (js/scene.js), audio
+       (js/audio-play.js) and the exported file (js/exporter.js) alike, so a render carried it too.
+       This samples the WHOLE timeline before and after the cut and demands the curve be unchanged —
+       not just at the seam, because a fix that dropped the wrong fade would flatten the real ones. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const gainAt = t => {
+        let g = null;
+        FM.scene.layers.forEach(l => {
+          if (t >= l.start - 1e-9 && t <= l.start + l.duration + 1e-9) {
+            const v = FM.fadeMul(l, t - l.start, l.duration);
+            g = (g === null) ? v : Math.max(g, v);
+          }
+        });
+        return g === null ? 0 : g;
+      };
+      const times = []; for (let t = 0; t <= 10.0001; t += 0.25) times.push(+t.toFixed(3));
+
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'clip', shape: 'rect', x: 10, y: 10, shapeW: 40, shapeH: 40, fill: '#fff' });
+      A.start = 0; A.duration = 10; A.fadeIn = 1; A.fadeOut = 1;
+      FM.scene.layers.push(A);
+      const before = times.map(gainAt);
+      FM.time = 5;
+      await FM.splitLayer(A.id);
+      if (FM.scene.layers.length !== 2) throw new Error('the split did not produce two halves (' + FM.scene.layers.length + ')');
+      const after = times.map(gainAt);
+
+      let worst = 0, worstT = null;
+      times.forEach((t, i) => { const d = Math.abs(after[i] - before[i]); if (d > worst) { worst = d; worstT = t; } });
+      if (worst > 0.01) throw new Error('the split changed the picture/sound by ' + worst.toFixed(3) + ' at t=' + worstT +
+        ' — was ' + before[times.indexOf(worstT)].toFixed(3) + ', now ' + after[times.indexOf(worstT)].toFixed(3));
+
+      /* And the fades that SHOULD survive must still be there — a fix that simply cleared both would
+         pass a seam-only check while silently deleting his fade in and out of the clip. */
+      if (!(after[0] < 0.01)) throw new Error('the fade-IN at the head of the clip was lost (gain ' + after[0].toFixed(3) + ' at t=0)');
+      if (!(after[times.length - 1] < 0.01)) throw new Error('the fade-OUT at the tail was lost (gain ' + after[times.length - 1].toFixed(3) + ' at t=10)');
+      const mid = after[times.indexOf(5)];
+      if (!(mid > 0.99)) throw new Error('the cut is still dipping — gain ' + mid.toFixed(3) + ' at the split');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('moveLayers: every subset lands where it was asked, and nothing is lost', { item: 'movelayers-sweep' }, function () {
     /* BUG HUNT (21 Aug), picked by COVERAGE rather than by guessing: of 232 exported FM functions, 76
        were never mentioned in this file, and `FM.moveLayers` is the highest-stakes of them — it is the

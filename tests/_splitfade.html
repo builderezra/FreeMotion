@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>split x fade (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — does SPLITTING a clip change what you SEE and HEAR either side of the cut?
+   A split is supposed to be invisible: two halves end to end should look and sound exactly like the
+   one clip did. `FM.fadeMul` is the multiplier applied to picture (scene.js), audio (audio-play.js)
+   and export (exporter.js), and it is measured from EACH CLIP'S OWN start and end — so this samples
+   the same absolute timeline before and after the split and compares. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.splitLayer&&w.FM.makeLayer&&w.FM.fadeMul)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message;});};
+// gain at absolute project time t, from whichever clip covers it
+function gainAt(FM,t){
+  var g=null;
+  FM.scene.layers.forEach(function(l){
+    if(t>=l.start-1e-9 && t<=l.start+l.duration+1e-9){
+      var v=FM.fadeMul(l,t-l.start,l.duration);
+      g=(g===null)?v:Math.max(g,v);
+    }
+  });
+  return g;
+}
+async function run(FM){
+  var L=[];
+  FM.scene.layers.length=0;
+  var A=FM.makeLayer('shape',{name:'clip',shape:'rect',x:10,y:10,shapeW:40,shapeH:40,fill:'#fff'});
+  A.start=0; A.duration=10; A.fadeIn=1; A.fadeOut=1;
+  FM.scene.layers.push(A);
+  var times=[]; for(var t=0;t<=10.0001;t+=0.25) times.push(+t.toFixed(3));
+  var before=times.map(function(t){return gainAt(FM,t);});
+  FM.time=5;
+  await FM.splitLayer(A.id);
+  var after=times.map(function(t){return gainAt(FM,t);});
+  L.push('layers after split: '+FM.scene.layers.length);
+  FM.scene.layers.forEach(function(l){L.push('  '+l.name+'  start='+l.start.toFixed(2)+' dur='+l.duration.toFixed(2)+'  fadeIn='+l.fadeIn+' fadeOut='+l.fadeOut);});
+  L.push('');
+  L.push('  t     before   after');
+  var worst=0, worstT=null;
+  times.forEach(function(t,i){
+    var b=before[i], a=after[i];
+    var d=Math.abs((a===null?0:a)-(b===null?0:b));
+    if(d>worst){worst=d;worstT=t;}
+    var mark=(d>0.01)?'   <-- CHANGED by '+d.toFixed(3):'';
+    L.push('  '+String(t).padEnd(6)+String(b===null?'-':b.toFixed(3)).padEnd(9)+String(a===null?'-':a.toFixed(3))+mark);
+  });
+  L.push('');
+  L.push(worst>0.01
+    ? '❌ the split CHANGED the picture/sound: worst deviation '+worst.toFixed(3)+' at t='+worstT
+    : '✅ the split is invisible — gain identical either side');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>
