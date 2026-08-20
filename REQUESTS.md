@@ -12934,7 +12934,8 @@ wait for them to report back."*
       its VERDICT from the app's numbers now, printing the transform reading as information only: a probe
       whose own noise reads as a bug is worse than no probe at all.
 
-- [ ] **450 — FLAKY TEST: "a vertical flick on the timeline keeps gliding, like a horizontal one".**
+- [x] **450 — FLAKY TEST: "a vertical flick on the timeline keeps gliding, like a horizontal one".**
+      ✅ **FIXED v10.88 — the fixture, not the app.**
       (20 Aug, found by the ship gate.) Not his words — a finding, not a request.
       It went red on one `tools/ship.sh` run and green on the very next suite run with no change in
       between: *"a fling WAS armed (v=229.125) but the list did not move: 150 → 150"*. It had also
@@ -12951,3 +12952,17 @@ wait for them to report back."*
       ⚠️ **Do not "fix" it by loosening the assertion.** If the momentum genuinely does not start when
       the machine is busy, that is the bug on his phone too — the exact class of thing #387 is about.
       Measure which of the three it is before changing anything.
+
+      ✅ **NONE OF THE THREE — it was a fourth thing, and the assertion was not touched.**
+      **`Event.timeStamp` is READ-ONLY.** The fixture passed `timeStamp: t` in the event init dict; the
+      browser ignored it and assigned its own, so all five pointer moves landed in ONE tick. The velocity
+      sampler divides by dt, so dt was 0 or 1ms at random — the failing run recorded **229 px/ms for a
+      gesture that travels 2.5** — and when dt was exactly 0 the value was not finite, so
+      `startScrollMomentum` returned at its own `isFinite` guard AFTER `_lastScrollFling` had already
+      been recorded. "Armed but did not move", intermittently, on a machine that was not busy.
+      ✅ **v10.88 — the moves are spaced with real awaits**, and the test now asserts the sampled velocity
+      is a PLAUSIBLE one before asserting movement, so a future occurrence names the fixture instead of
+      looking like a product bug. Confirmed with three consecutive full-suite runs, all green.
+      🔁 **Same trap as queue 351, by the other door:** that entry recorded "synthetic pointer events
+      dispatched in one tick all carry the same timeStamp". This fixture had not forgotten to space
+      them — it believed it had.

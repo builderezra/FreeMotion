@@ -33828,13 +33828,25 @@
       const r = scroller.getBoundingClientRect();
       const x = Math.round(r.left + r.width * 0.5);
       let y = Math.round(r.top + r.height * 0.7);
-      const at = t => ({ bubbles: true, button: 0, pointerId: 31, isPrimary: true, clientX: x, clientY: y, timeStamp: t });
-      let t0 = performance.now();
-      inner.dispatchEvent(new PointerEvent('pointerdown', at(t0)));
-      // …a fast upward drag: 5 steps of 30px, 12ms apart
-      for (let k = 0; k < 5; k++) { y -= 30; t0 += 12; window.dispatchEvent(new PointerEvent('pointermove', at(t0))); }
+      /* THE MOVES ARE SPACED IN REAL TIME, and this is queue 450 — the flake that took the ship gate red.
+         The old fixture passed `timeStamp: t` in the event init dict. **`Event.timeStamp` is read-only**:
+         the browser assigns its own, the init value is ignored, and all five moves therefore landed in
+         ONE tick. The velocity sampler divides by dt, so dt was 0 or 1ms at random and the sampled
+         velocity came out as garbage — the failing run recorded v=229 px/ms against a gesture that is
+         2.5 — and when dt was exactly 0 the value was not finite, so `startScrollMomentum` returned at
+         its own `isFinite` guard AFTER `_lastScrollFling` had already been recorded. That is precisely
+         the reported symptom: "a fling WAS armed but the list did not move", intermittently, on a
+         machine that was not busy.
+         So nothing about the glide was ever wrong. The fixture was measuring a velocity it had invented.
+         This is the SAME trap queue 351 recorded in this file — "synthetic pointer events dispatched in
+         one tick all carry the same timeStamp" — arriving by the other door: not forgetting to space
+         them, but believing they had been spaced. */
+      const at = () => ({ bubbles: true, button: 0, pointerId: 31, isPrimary: true, clientX: x, clientY: y });
+      inner.dispatchEvent(new PointerEvent('pointerdown', at()));
+      for (let k = 0; k < 5; k++) { await sleep(14); y -= 30; window.dispatchEvent(new PointerEvent('pointermove', at())); }
       const atRelease = scroller.scrollTop;
-      window.dispatchEvent(new PointerEvent('pointerup', at(t0 + 4)));
+      await sleep(8);
+      window.dispatchEvent(new PointerEvent('pointerup', at()));
       /* WAIT FOR THE CONDITION, NOT A FIXED 260ms. The glide advances on requestAnimationFrame, so a
          fixed window asks "did enough frames run in a quarter of a second" — which is a question about
          the MACHINE, not about the code. It went red once during a mutation run whose mutation
@@ -33857,6 +33869,14 @@
       const armed = FM._tlLastScrollFling && FM._tlLastScrollFling();
       if (!armed || !Math.abs(armed.v)) {
         throw new Error('the release recorded no fling velocity at all (' + JSON.stringify(armed) + ') — the gesture never armed, so this is not a slow glide, it is a dead one');
+      }
+      /* AND THE VELOCITY HAS TO BE A REAL ONE. A non-finite or absurd value means the fixture's own
+         timing broke, not the app's glide — `startScrollMomentum` bails at its `isFinite` guard after
+         the fling has already been recorded, which reads as "armed but did not move" and sent the ship
+         gate red for a reason that had nothing to do with the code (queue 450). Named here so the next
+         occurrence cannot be mistaken for a product bug. */
+      if (!isFinite(armed.v) || Math.abs(armed.v) > 40) {
+        throw new Error('the release sampled v=' + armed.v + ' px/ms from a gesture that travels 2.5 — the fixture\'s pointer moves were not spaced in real time, so this run measured its own timing rather than the glide');
       }
       if (!(after > atRelease + 6)) throw new Error('a fling WAS armed (v=' + armed.v.toFixed(3) + ') but the list did not move: ' + Math.round(atRelease) + ' → ' + Math.round(after) + ') — a horizontal flick glides, this should too');
       // (the velocity is asserted above, before the movement, so an intermittent failure is diagnostic)
