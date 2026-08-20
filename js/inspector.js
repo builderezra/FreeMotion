@@ -2177,10 +2177,12 @@ window.FM = window.FM || {};
     target = target || FM.selectedLayer(FM.scene);
     const src = (FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot) || null;
     if (!target) { if (FM.toast) FM.toast('Select a layer to paste onto'); return; }
-    if (!src) { if (FM.toast) FM.toast('Copy a layer first, then Paste Style'); return; }
+    if (!src) { if (FM.toast) FM.toast('Copy a layer first, then Paste look'); return; }
     const overlay = el('div', 'ps-overlay');
     const card = el('div', 'ps-card');
-    card.appendChild(el('div', 'ps-title', 'Paste Style'));
+    /* "Paste look" (queue 437) — the overlay's own title has to agree with the menu entry that opens
+       it, or the app calls one action two names. Renamed with the menu, not after a bug report. */
+    card.appendChild(el('div', 'ps-title', 'Paste look'));
     const grid = el('div', 'ps-grid');
     const sel = {};
     STYLE_CATS.forEach(c => {

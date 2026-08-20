@@ -2202,6 +2202,59 @@
     }
   });
 
+  test('the ⧉ menu is ours, not Alight Motion’s — wording and order', { item: '437' }, async function () {
+    /* Queue 437, and he raised it unprompted: "With this drop down menu also re order the buttons in it
+       because it's the same layout and wording as alight motion, if you can come up with different
+       wording as well, like instead of paste layer just paste on timeline. And copy selected instead of
+       copy layer."
+       His two examples are taken as the RULE rather than as two edits: name the object the way the app
+       already talks about it ("selected", which is what the top bar says), and say WHERE a thing lands.
+       This is BEFORE-PUBLISHING.md work arriving early — that file records the UI is modelled on AM and
+       has to be made ours before any public release — so the AM strings are asserted GONE, not merely
+       the new ones present. A rename that left a synonym behind would read as done and would not be. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'M', shape: 'rect', x: 300, y: 400, shapeW: 200, shapeH: 160, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      await sleep(80);
+      const btn = document.getElementById('btn-layermenu');
+      if (!btn) throw new Error('#btn-layermenu is gone');
+      const onScreen = el => !!(el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0);
+      if (onScreen(document.getElementById('ctx-menu'))) { FM.contextMenu.hide(); await sleep(100); }
+      btn.click(); await sleep(150);
+      const menu = document.getElementById('ctx-menu');
+      if (!onScreen(menu)) throw new Error('the ⧉ menu did not open');
+      // The row labels, in the order they are drawn.
+      const rows = Array.prototype.map.call(menu.querySelectorAll('.ctx-item, [role="menuitem"], button, div'), n => (n.textContent || '').trim())
+        .filter(t => t && t.length < 40);
+      const has = re => rows.some(t => re.test(t));
+      try {
+        if (!has(/^select all layers$/i)) throw new Error('no "Select all layers" row (read: ' + rows.slice(0, 10).join(' | ') + ')');
+        // his two examples, verbatim
+        if (!has(/^copy selected$/i)) throw new Error('"Copy selected" is missing — that is one of the two rewordings he gave by name');
+        if (!has(/^paste on timeline$/i)) throw new Error('"Paste on timeline" is missing — that is the other rewording he gave by name');
+        // …and AM's words must be GONE, not merely joined by ours
+        if (has(/^copy layer$/i)) throw new Error('"Copy Layer" is still there — he asked for "copy selected" INSTEAD of it');
+        if (has(/^paste layer$/i)) throw new Error('"Paste Layer" is still there — he asked for "paste on timeline" INSTEAD of it');
+        if (has(/^paste style/i)) throw new Error('"Paste Style…" is still AM’s wording, and it now disagrees with the overlay it opens');
+        if (has(/^duplicate layer$/i)) throw new Error('"Duplicate Layer" still says "Layer" about a selection that is often several — the same fault as Copy Layer');
+        /* THE ORDER, which is the other half of his sentence. Clipboard actions in the order they are
+           used, and the two save-for-later entries together at the end rather than splitting them. */
+        const at = re => rows.findIndex(t => re.test(t));
+        const copy = at(/^copy selected$/i), dup = at(/^duplicate/i), paste = at(/^paste on timeline$/i), preset = at(/^save look as preset$/i);
+        if (!(copy < dup && dup < paste)) throw new Error('the clipboard rows are ordered copy=' + copy + ' duplicate=' + dup + ' paste=' + paste + ' — they should read in the order they are used');
+        if (!(preset > paste)) throw new Error('"Save look as preset" sits above the paste rows — the save-for-later pair belongs together at the end, which is the re-order he asked for');
+      } finally { FM.contextMenu.hide(); await sleep(80); }
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

@@ -4187,7 +4187,8 @@ window.FM = window.FM || {};
       const r = moreLayerBtn.getBoundingClientRect();
       FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.layerMenuItems(L));
     });
-    // ⧉ Layer-actions menu (AM): Select All / Duplicate / Copy / Save Preset / Paste / Paste Style.
+    // ⧉ Layer-actions menu. Re-ordered and re-worded away from AM's list at queue 437 — see the note
+    // on the item array below for the rule his two examples imply.
     const layerMenuBtn = document.getElementById('btn-layermenu');
     if (layerMenuBtn) layerMenuBtn.addEventListener('click', () => {
       if (!FM.contextMenu) return;
@@ -4196,7 +4197,7 @@ window.FM = window.FM || {};
       const hasClip = !!(FM.clipboard && FM.clipboard.length);
       const hasStyle = !!(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot);
       const selN = FM.selectionIds ? FM.selectionIds().length : 0;
-      // The ▸ arrow on Paste Layer opens a position picker so you can drop the copy ABOVE a chosen
+      // The ▸ arrow on "Paste on timeline" opens a position picker so you can drop the copy ABOVE a chosen
       // layer (or top / bottom) instead of always on top. (Ezra)
       const openPastePos = () => {
         const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
@@ -4208,8 +4209,30 @@ window.FM = window.FM || {};
         items.push({ label: 'At the bottom', iconEl: mkGlyph('⤓'), action: () => FM.pasteClipboard(FM.scene.layers.length) });
         FM.contextMenu.show(Math.max(8, r.right - 240), r.bottom + 4, items);
       };
+      /* ---- OUR OWN MENU, NOT ALIGHT MOTION'S (queue 437) --------------------------------------
+       * Ezra, unprompted: "With this drop down menu also re order the buttons in it because it's the
+       * same layout and wording as alight motion, if you can come up with different wording as well,
+       * like instead of paste layer just paste on timeline. And copy selected instead of copy layer."
+       * This is BEFORE-PUBLISHING.md work arriving early — that file records that the UI is modelled
+       * on AM and has to be made ours before any public release — and it is worth taking his two
+       * examples as the rule rather than as two one-off edits.
+       *
+       * THE RULE HIS EXAMPLES IMPLY: name the OBJECT the way the app talks about it, and say WHERE a
+       * thing lands. AM's list says "Layer" five times about a selection that is often several layers;
+       * "selected" is what the rest of this app already calls it (the top bar says "4 selected"). And
+       * "Paste Layer" does not say where the paste goes, while "Paste on timeline" does — which also
+       * distinguishes it from Paste look, the other paste in the same menu.
+       *
+       * THE ORDER IS BY JOB, not AM's interleave. Selection first, then the clipboard trio in the
+       * order you actually use it (copy → duplicate → paste), then the two SAVE-for-later entries,
+       * which are a different kind of act and now sit together instead of splitting the pastes.
+       * Separators carry that grouping so it reads as three families rather than seven rows.
+       *
+       * "Paste look…" rather than "Paste Style…" pairs it with "Save look as preset" — one word for
+       * one idea, where AM had two. */
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
-        { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
+        { label: 'Select all layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
+        { sep: true },
         /* GROUPING IS NOT IN THIS MENU ANY MORE (queue 436). Ezra, with "Group Selection" circled:
            "Remove the group selection button from this menu, and also I wanted the ability to group
            every layer selected in the top right with an icon for the two options." Both entries go,
@@ -4217,12 +4240,13 @@ window.FM = window.FM || {};
            whose other half had moved, which is the sort of split that gets reported later as "why is
            this here". Both are buttons in the top bar now — #m-group / #m-maskgroup on a phone,
            #btn-group / #btn-maskgroup on desktop — so nothing has lost a door. */
-        { label: (selN > 1 ? 'Duplicate ' + selN + ' Layers' : 'Duplicate Layer'), disabled: !hasSel, action: () => FM.duplicateSelection() },
-        { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
-        { label: 'Save whole look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
-        { label: 'Save Selection as Element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
-        { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); }, arrow: hasClip, arrowTitle: 'Choose where to paste', arrowAction: openPastePos },
-        { label: 'Paste Style…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
+        { label: 'Copy selected', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
+        { label: (selN > 1 ? 'Duplicate ' + selN + ' layers' : 'Duplicate selected'), disabled: !hasSel, action: () => FM.duplicateSelection() },
+        { label: 'Paste on timeline', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); }, arrow: hasClip, arrowTitle: 'Choose where to paste', arrowAction: openPastePos },
+        { label: 'Paste look…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
+        { sep: true },
+        { label: 'Save look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
+        { label: 'Save as element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
       ]);
     });
     // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).

@@ -12572,17 +12572,29 @@ wait for them to report back."*
       drop-down appeared" assertion had been passing without ever seeing a menu at all. It measures the
       rect now, and that is how the ⧉ check could be written against the real menu instead of its source.
 
-- [ ] **437 — Re-order and re-word the ⧉ drop-down; it is Alight Motion's menu.** (20 Aug, phone
+- [x] **437 — Re-order and re-word the ⧉ drop-down; it is Alight Motion's menu.** ✅ **DONE v10.77.** (20 Aug, phone
       screenshot at v10.71.) His words, verbatim: *"With this drop down menu also re order the buttons in
       it because it's the same layout and wording as alight motion, if you can come up with different
       wording as well, like instead of paste layer just paste on timeline. And copy selected instead of
       copy layer."*
       **Clauses:**
-      1. [ ] **Re-order** the items — the current order is AM's.
-      2. [ ] **Re-word** them in our own language. His two examples, to use as given: "Paste Layer" →
-             **"Paste on timeline"**, "Copy Layer" → **"Copy selected"**.
-      3. [ ] Apply the same thinking to the rest: Select All Layers, Masking Group, Duplicate Layer,
-             Save whole look as preset, Save Selection as Element…, Paste Style…
+      1. [x] ✅ **v10.77 — by job, not AM's interleave:** selection · [sep] · the clipboard trio in the
+             order you use it (copy → duplicate → paste) · [sep] · the two save-for-later entries
+             together at the end, instead of being split apart by the pastes.
+      2. [x] ✅ **v10.77 — both of his examples, verbatim:** "Paste on timeline" and "Copy selected".
+      3. [x] ✅ **v10.77 — and the rest on the rule his examples imply:** name the object the way the app
+             already talks about it, and say where a thing lands. *Select all layers · Copy selected ·
+             Duplicate selected (or "Duplicate 3 layers") · Paste on timeline · Paste look… · Save look
+             as preset · Save as element…*. **"Paste look…" replaces "Paste Style…" and the OVERLAY it
+             opens was renamed with it** — an action called two names in two places is exactly the drift
+             this rename exists to remove.
+      ⚠️ **Deliberately NOT touched: the ⋯ layer menu**, which still says "Group selection" and "Masking
+      group". He circled the ⧉ menu; the ⋯ menu is a different door (right-click a clip) and he has not
+      complained about it. Recorded here rather than quietly widened, so it is visible if he wants the
+      same pass over it.
+      ✅ **LOGGED IN [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md), as its own entry** — and worth noting
+      there for a second reason: this is **the first time the AM resemblance has been reported by HIM**
+      rather than found by that file.
       📌 **This is [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) work arriving early** — that file records
       that the UI is modelled on Alight Motion and must be made our own before any public release. Add this
       menu to its list, and note there that he has started asking for it unprompted.

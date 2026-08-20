@@ -54,6 +54,18 @@ saying so it is still missing here. The two worth Ezra's own eye are the **effec
 (v4.50, the press-and-hold description/tag card) and the **preset sheet** (v4.59) — neither log entry
 claims an AM origin, and I can't tell from the code whether one was used._
 
+- **The ⧉ layer-actions drop-down — DONE, v10.76/v10.77 (queue 436 + 437).** ✅ Its item list, order and
+  wording were AM's: *Select All Layers / Group Selection / Masking Group / Duplicate Layer / Copy Layer /
+  … / Paste Layer / Paste Style…*. **Ezra spotted this one himself and unprompted** — *"re order the
+  buttons in it because it's the same layout and wording as alight motion, if you can come up with
+  different wording as well"* — which is the first time the AM-resemblance came from him rather than from
+  this file. Grouping left the menu entirely (it is two buttons in the top bar now), and the rest was
+  renamed on a rule his own two examples imply: name the object the way the app already talks about it
+  ("selected", which is what the top bar says), and say WHERE a thing lands. It reads *Select all layers ·
+  Copy selected · Duplicate selected · Paste on timeline · Paste look… · Save look as preset · Save as
+  element…*, in three families rather than one AM-ordered list. Guarded by a test that asserts the AM
+  strings are GONE, not merely that the new ones are present.
+
 ## Progress
 
 - **v4.71 — the desktop Studio layout is ours.** The editing panel sits down beside the timeline and the
