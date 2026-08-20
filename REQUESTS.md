@@ -3316,7 +3316,14 @@ better still, keep working inside the turn rather than parking work for a later 
       colour, so restyling the surface later cannot fail it for the wrong reason.
 
 - [ ] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
-      spec + a screenshot he drew on.)** ⚠️ **BIG — design work, and he says himself it is experimental.**
+      spec + a screenshot he drew on.)** ✅ **NINE OF HIS TEN CLAUSES ARE SHIPPED (v8.68–v8.70 and the
+      v10.32–v10.40 follow-ups). The only thing left is clause 10, which he wrote as an IDEA — "potentially"
+      — not a request, and half of it already exists.** So this entry is effectively done and should not be
+      read as a big open build: what remains is choosing which PRESET a plain tap spawns (holding an effect
+      already opens its presets). Left open rather than ticked because it is his idea to want or drop, and
+      quietly closing a clause he wrote is the failure this file exists to prevent — but nothing here is
+      waiting on a build decision, and it should not be near the top of anyone's list.
+      ⚠️ **BIG — design work, and he says himself it is experimental.**
       His words, verbatim and in full:
       > *"Also now to be more specific on how I want the effects menu to be reworked basically what I
       > want is the following so let's say you click on a clip. It shows up all the different editing
