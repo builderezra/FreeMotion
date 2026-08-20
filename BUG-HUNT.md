@@ -1336,3 +1336,31 @@ someone's animation is worse than a sentence. The old behaviour said nothing at 
    states and called it a pass. A control line (*this MUST differ*) is what caught it.
 
 Same lesson as section 20, in a different subsystem: **a sweep is only as good as its controls.**
+
+
+## 22. Duplicating a group — CLEAN, and a permanent orphan-parent sweep came out of it (21 Aug)
+
+**Hunted because it is the same family as section 21:** parenting is by ID, and duplicating a group has
+to re-point the COPIES of its members at the NEW group. If any of them still pointed at the original,
+the two groups would share children and moving one would move the other — the kind of thing you only
+notice after building something on top of it.
+
+**Measured, and it is clean.** 4 layers → 8 on duplicate; the copy has its own 3 members; moving the
+copy leaves the original's members exactly where they were.
+
+⚠️ **One wrong expectation in the probe, corrected rather than left.** It asserted the ink should DOUBLE
+after a duplicate. `duplicateSelection` places the copy IN PLACE, exactly over the original, so the ink
+box is identical by design — the probe was reading correct behaviour as a failure. The real question is
+independence, which is the block that follows it.
+
+### The sweep that came out of it — `no operation leaves a layer parented to something that no longer exists`
+
+A layer's `parent` is an ID, and several operations remove layers: delete (which cascades into a group's
+members), ungroup, split, duplicate, undo. A `parent` left pointing at a layer that is gone breaks that
+layer's chain silently — `applyParentChain` walks until it cannot find the id and stops, so the layer
+renders as if it were at the root and **jumps**, with nothing said. That is corruption which surfaces
+three operations later as "my layer moved" and cannot be traced back.
+
+So it is a permanent suite sweep over delete-a-group, ungroup, duplicate-then-delete-the-original, and
+undo-a-group-delete — each step asserting the operation DID something first, because a sweep over
+operations that silently no-op is a green run that proves nothing. Both removal paths mutation-proved.

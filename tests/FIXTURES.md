@@ -63,6 +63,10 @@ transition is meaningless there.
   box. **Two traps in its header:** measure the shapes BY COLOUR (an alpha box is the whole canvas,
   because the project draws its own background), and a layer's position is `transform.x`, not `x`.
 
+- `_groupdup.html` — duplicating a moved group: does the copy get its own members, and is it independent
+  of the original? Measured clean. **Note the corrected expectation in it:** an in-place duplicate does
+  NOT double the ink, because the copy sits exactly on top.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

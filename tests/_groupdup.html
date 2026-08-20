@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Duplicating a moved group (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — duplicating a GROUP. The sharp edge is parenting: the copies of the members must point at
+   the NEW group. If any of them still points at the original, the two groups share children — and
+   moving one moves the other, which is the kind of thing you only notice after you have built something.
+   Measured by RENDERING and by counting parents, not by reading the copy code.
+   ⚠️ Ink is matched BY COLOUR (the project paints its own background, so an alpha box is the whole
+   canvas), and a layer's position is `transform.x` (not `x`) — both traps cost a false clean in the
+   previous hunt. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.renderScene&&w.FM.groupSelection&&w.FM.duplicateSelection)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  var PX=200;
+  function ink(){
+    var c=document.createElement('canvas'); c.width=PX; c.height=PX;
+    var g=c.getContext('2d'); g.clearRect(0,0,PX,PX);
+    var P=FM.scene.project;
+    g.save(); g.scale(PX/P.width, PX/P.height);
+    try { FM.renderScene(g, FM.scene, FM.time); } catch(e){ g.restore(); return {err:e.message}; }
+    g.restore();
+    var d=g.getImageData(0,0,PX,PX).data, t=-1,b=-1,l=PX,r=-1,n=0;
+    for(var y=0;y<PX;y++)for(var x=0;x<PX;x++){ var i=(y*PX+x)*4;
+      if(d[i+3]>24 && Math.abs(d[i]-0x4a)<40 && Math.abs(d[i+1]-0x9e)<40 && Math.abs(d[i+2]-0xff)<40){ n++; if(t<0)t=y;b=y; if(x<l)l=x; if(x>r)r=x; } }
+    return n?{l:l,t:t,r:r,b:b,n:n}:{empty:true};
+  }
+  function fmt(B){ return B.empty?'(nothing)':(B.err?('ERR '+B.err):(B.l+','+B.t+'..'+B.r+','+B.b+'  ink '+B.n)); }
+
+  var P=FM.scene.project;
+  FM.scene.layers.length=0;
+  [[0.30,0.30],[0.42,0.42],[0.54,0.54]].forEach(function(p,i){
+    var L=FM.makeLayer('shape',{name:'S'+i,shape:'rect',x:P.width*p[0],y:P.height*p[1],shapeW:P.width*0.14,shapeH:P.height*0.09,fill:'#4a9eff'});
+    L.start=0;L.duration=5;FM.scene.layers.push(L);
+  });
+  FM.scene.project.duration=5; FM.time=1; FM.selectLayer(null); FM.refreshAll(); await sleep(200);
+
+  FM.scene.selectedIds=FM.scene.layers.map(function(l){return l.id;});
+  FM.scene.selectedId=FM.scene.layers[0].id;
+  FM.groupSelection(); await sleep(250);
+  var g1=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+  g1.transform.x=(FM.evalProp(g1.transform.x,0)||0)+P.width*0.12;
+  g1.transform.y=(FM.evalProp(g1.transform.y,0)||0)-P.height*0.08;
+  FM.refreshAll(); await sleep(200);
+  var one=ink();
+  say('one group, moved      : '+fmt(one)+'   layers '+FM.scene.layers.length);
+
+  FM.scene.selectedIds=[g1.id]; FM.scene.selectedId=g1.id;
+  await FM.duplicateSelection();
+  await sleep(500);
+  var two=ink();
+  var groups=FM.scene.layers.filter(function(l){return l.type==='group';});
+  say('after duplicating it  : '+fmt(two)+'   layers '+FM.scene.layers.length+'   groups '+groups.length);
+  if(groups.length<2){ say('❌ duplicating the group produced no second group'); document.title='ready'; return; }
+  var g2=groups.filter(function(g){return g.id!==g1.id;})[0];
+  var kids1=FM.scene.layers.filter(function(l){return l.parent===g1.id;}).length;
+  var kids2=FM.scene.layers.filter(function(l){return l.parent===g2.id;}).length;
+  say('members: original '+kids1+'   copy '+kids2 + (kids2===0?'   ❌ THE COPY HAS NO MEMBERS — its children still point at the original':''));
+  /* NOT an ink-doubling check: `duplicateSelection` places the copy IN PLACE, exactly over the
+     original, so the ink box is identical by design and doubling it would be the bug. The real question
+     is whether the two are INDEPENDENT, which is the block below. An earlier version of this line read
+     the correct behaviour as a failure. */
+  say('ink after an in-place duplicate: '+one.n+' → '+two.n+'   (the copy sits exactly on the original, so this SHOULD be about the same)');
+
+  // INDEPENDENCE: move the COPY and check the original stays put
+  var before=ink();
+  g2.transform.x=(FM.evalProp(g2.transform.x,0)||0)+P.width*0.25;
+  FM.refreshAll(); await sleep(200);
+  var after=ink();
+  say('');
+  say('moved the COPY only   : '+fmt(before)+'  →  '+fmt(after));
+  say('   (control) the picture MUST change: '+(before.l!==after.l||before.r!==after.r?'it did ✅':'it did NOT — this row proves nothing ⚠️'));
+  // the ORIGINAL's own members should not have shifted: check their raw transforms
+  var origKids=FM.scene.layers.filter(function(l){return l.parent===g1.id;});
+  say('   original members still at their own x: '+origKids.map(function(l){return (FM.evalProp(l.transform.x,0)||0).toFixed(0);}).join(','));
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

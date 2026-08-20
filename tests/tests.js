@@ -3066,6 +3066,86 @@
     }
   });
 
+  test('no operation leaves a layer parented to something that no longer exists', { item: 'orphan-parent' }, async function () {
+    /* BUG HUNT (21 Aug), the permanent sweep that came out of the group work. A layer's `parent` is an
+       ID, and several operations remove layers: delete (which cascades into a group's members), ungroup,
+       split, duplicate, undo. If any of them leaves a `parent` pointing at a layer that is gone, that
+       layer's parent chain silently breaks — `applyParentChain` walks until it cannot find the id and
+       stops, so the layer renders as if it were at the root and JUMPS, with nothing said.
+       Cheap to check and it covers a whole class rather than one bug, which is the point: this is the
+       kind of corruption that shows up three operations later as "my layer moved" and is impossible to
+       trace back.
+       ⚠️ Every step asserts the operation DID something first. A sweep over operations that silently no-op
+       is a green run that proves nothing — the exact failure the last two hunts kept producing. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const orphans = (tag) => {
+      const live = new Set(FM.scene.layers.map(l => l.id));
+      const bad = FM.scene.layers.filter(l => l.parent && !live.has(l.parent));
+      if (bad.length) throw new Error('after ' + tag + ', ' + bad.length + ' layer(s) are parented to a layer that no longer exists (' + bad.map(l => (l.name || l.type) + '→' + l.parent).join(', ') + ') — their parent chain is broken, so they render as if at the root and jump, silently');
+    };
+    const seed = () => {
+      FM.scene.layers.length = 0;
+      const P = FM.scene.project;
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { name: 'S' + i, shape: 'rect', x: P.width * 0.3, y: P.height * 0.3, shapeW: 200, shapeH: 200, fill: '#4a9eff' });
+        L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+      }
+      FM.time = 1; FM.selectLayer(null); FM.refreshAll();
+    };
+    const groupAll = () => {
+      FM.scene.selectedIds = FM.scene.layers.filter(l => l.type !== 'group').map(l => l.id);
+      FM.scene.selectedId = FM.scene.selectedIds[0];
+      FM.groupSelection();
+      const g = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!g) throw new Error('grouping produced no group, so the rest of this sweep has no parents to break');
+      if (!FM.scene.layers.some(l => l.parent === g.id)) throw new Error('the group has no members, so nothing below is testing a parent chain');
+      return g;
+    };
+    try {
+      // 1. DELETE a group — its members must go with it, not be left pointing at it
+      seed(); let g = groupAll();
+      const n0 = FM.scene.layers.length;
+      FM.deleteLayer(g.id);
+      if (FM.scene.layers.length >= n0) throw new Error('deleting the group removed nothing (' + n0 + ' → ' + FM.scene.layers.length + ')');
+      orphans('deleting a group');
+
+      // 2. UNGROUP
+      seed(); g = groupAll();
+      FM.ungroup(g.id);
+      if (FM.scene.layers.some(l => l.id === g.id)) throw new Error('ungroup left the group in the scene, so it did nothing');
+      orphans('ungrouping');
+
+      // 3. DUPLICATE a group, then delete the ORIGINAL — the copy's members must not follow it
+      seed(); g = groupAll();
+      FM.scene.selectedIds = [g.id]; FM.scene.selectedId = g.id;
+      await FM.duplicateSelection();
+      await sleep(120);
+      const groups = FM.scene.layers.filter(l => l.type === 'group');
+      if (groups.length < 2) throw new Error('duplicating the group produced no second group (' + groups.length + ')');
+      const copy = groups.filter(x => x.id !== g.id)[0];
+      if (!FM.scene.layers.some(l => l.parent === copy.id)) throw new Error('the duplicated group has no members of its own — its children still point at the original, so the two groups share layers');
+      FM.deleteLayer(g.id);
+      orphans('duplicating a group and deleting the original');
+      if (!FM.scene.layers.some(l => l.parent === copy.id)) throw new Error('deleting the ORIGINAL group took the copy\'s members with it');
+
+      // 4. UNDO, which restores whole snapshots and is the easiest way to resurrect half a tree
+      if (FM.history && FM.history.undo) {
+        seed(); g = groupAll();
+        FM.history.commit();
+        FM.deleteLayer(g.id);
+        FM.history.commit();
+        FM.history.undo();
+        await sleep(120);
+        orphans('undoing a group delete');
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
