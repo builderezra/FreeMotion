@@ -1429,3 +1429,37 @@ would pass a naive check and quietly delete real work — the failure mode of a 
 that it eats something legitimate. `javascript:`, protocol-relative `//host` and `data:text/html` are
 covered too. Both the check and the load path's CALL to it are mutation-proved: a correct sanitiser
 nobody calls is worth nothing.
+
+
+## 25. The v10.95 deferral, checked — NOT a bug, and the thing that saves it is now guarded (21 Aug)
+
+Section 24 pulled the VALUE-level checks onto the load path and deliberately left `sanitizeTrimRepeater`
+import-only. Rather than take that on trust, this asks whether the deferral hides anything as bad as the
+fillImage beacon. The sanitiser's own comment is the lead:
+
+> Trim Path / dashed stroke / Repeater are drawn straight into canvas path + transform + setLineDash —
+> a NaN/Infinity would throw and kill the frame, and copies feeds a render loop (uncapped = DoS).
+
+**Measured end to end** (`tests/_loadnan.html`) — plant, save, reopen, render:
+
+    repeater.copies  : 100000        ← survived the load
+    repeater.offsetX : null          ← NaN, via JSON
+    render           : ok in 0.7ms, shape ink 14400
+
+So the hostile values DO survive the load, and the frame is fine anyway: the compositor does
+`copies = Math.max(1, Math.min(50, c))` ("cap for perf/safety") and `isFinite`-guards every other field.
+**Not a bug — the deferral holds, and the DRAW PATH is what makes it hold.**
+
+That makes the clamp load-bearing, so it is asserted now: nothing on the load path will clean a
+corrupted document, and removing the cap turns one into an unopenable project.
+
+### The assertion had to be rewritten before it was worth anything
+
+A time limit **could not see it**. With the cap removed, 5000 copies of a small rect still drew inside
+400ms, so the test passed against the broken code. Tightening the number would only have asked a
+question about the MACHINE — the exact mistake behind the flaky vertical-glide test in section 10. The
+invariant is asserted on the source instead, and mutation-proved.
+
+⚠️ And the probe's render check counted ALPHA, which is the whole canvas because the project paints its
+own background — the same trap as section 21. Corrected to count the shape's colour, and to report the
+render TIME, which is the thing the DoS claim is actually about.

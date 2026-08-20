@@ -3245,6 +3245,63 @@
     if (!/sanitizeUnsafeValues/.test(src)) throw new Error('FM.storage.load does not call the value-level sanitiser, so a remote fill URL still survives a reopen however correct the function is');
   });
 
+  test('a hostile repeater renders fast and finite — the draw-path clamp is load-bearing', { item: 'repeater-clamp' }, function () {
+    /* BUG HUNT (21 Aug), following bug-hunt 24's deferral. That fix put the VALUE-level checks on the
+       load path and deliberately left `sanitizeTrimRepeater` import-only. This asks whether that is
+       safe, and the answer is yes — but only because of the DRAW path, which makes its clamp
+       load-bearing and therefore worth a test.
+       Measured (tests/_loadnan.html): a project saved with `repeater.copies = 100000`, NaN offsets and
+       string rotations comes back from a reopen with those values INTACT — only the value-level
+       sanitiser runs on load — and the frame still renders in 0.7ms, because js/compositor.js does
+       `copies = Math.max(1, Math.min(50, c))` ("cap for perf/safety") and falls back on `isFinite` for
+       every other field.
+       Its own sanitiser comment is what makes this worth pinning: "a NaN/Infinity would throw and kill
+       the frame, and copies feeds a render loop (uncapped = DoS)". That is true of the maths; it is the
+       clamp that stops it being true of the app. Remove the clamp and a hostile or corrupted document
+       becomes an unopenable project, with no sanitiser on the load path to catch it. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { name: 'R', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#4a9eff' });
+      L.start = 0; L.duration = 3;
+      // 5000, not 100000: enough that an UNCLAMPED build is unmistakably slow, without hanging the suite.
+      L.repeater = { enabled: true, copies: 5000, offsetX: NaN, offsetY: Infinity, rotation: 'x', scale: -5, opacity: 9, anchorX: NaN, anchorY: NaN };
+      L.trimPath = { enabled: true, start: NaN, end: Infinity, offset: 'x' };
+      L.stroke = { enabled: true, width: 3, color: '#fff', dash: { enabled: true, length: NaN, gap: -Infinity, offset: 'x' } };
+      FM.scene.layers.push(L);
+
+      const c = document.createElement('canvas'); c.width = 120; c.height = 120;
+      const g = c.getContext('2d');
+      const t0 = performance.now();
+      try { g.save(); g.scale(120 / P.width, 120 / P.height); FM.renderScene(g, FM.scene, 1); g.restore(); }
+      catch (e) { throw new Error('a hostile repeater/trim/dash THREW during the draw (' + e.message + ') — with no sanitiser on the load path, that is a project that cannot be opened'); }
+      const ms = performance.now() - t0;
+      /* A TIME LIMIT ALONE CANNOT SEE THIS. Removing the clamp and re-running, 5000 copies of a small
+         rect still drew inside 400ms on this machine — so the assertion passed against the broken code.
+         Tightening the number would just make it a question about the MACHINE, which is precisely what
+         made the vertical-glide test flaky (queue 450). Kept as a generous canary for a real hang, with
+         the invariant itself asserted below. */
+      if (ms > 2000) throw new Error('drawing one shape took ' + ms.toFixed(0) + 'ms with copies=5000 — the draw path is honouring the count, so a corrupted document is a hang');
+
+      const d = g.getImageData(0, 0, 120, 120).data;
+      let ink = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8 && Math.abs(d[i] - 0x4a) < 48 && Math.abs(d[i + 1] - 0x9e) < 48 && Math.abs(d[i + 2] - 0xff) < 48) ink++;
+      if (!ink) throw new Error('the shape did not draw at all, so this run cannot tell a clamp from a layer that silently vanished');
+
+      /* THE INVARIANT, ON THE SOURCE — machine-independent, and the only form of this that a mutation
+         can actually see. The draw path must CAP the copy count rather than trust the document, because
+         nothing on the load path will clean it: `sanitizeTrimRepeater` is import-only by design
+         (bug-hunt 24), which is what makes this clamp load-bearing. */
+      const src = String(FM.renderScene && FM._drawShapeSrc ? FM._drawShapeSrc() : '');
+      if (!src) throw new Error('the shape-draw source is not exposed, so the copy cap cannot be checked');
+      if (!/Math\.min\(\s*\d+\s*,\s*c\s*\)/.test(src)) throw new Error('the repeater no longer caps its copy count against a constant — a document carrying copies=100000 reaches the draw loop, and nothing on the load path will clean it');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

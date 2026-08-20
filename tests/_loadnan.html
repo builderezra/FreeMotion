@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does a hostile repeater survive a reopen and kill the frame? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT, following bug-hunt 24's deferral. That fix pulled the VALUE-level checks onto the load path
+   and left the heavier sanitisers import-only, on the grounds that rewriting them across existing
+   projects is a much larger change. This asks whether that deferral is safe — i.e. whether any of them
+   guards something as bad as the fillImage beacon.
+   `sanitizeTrimRepeater`'s own comment is the lead: "Trim Path / dashed stroke / Repeater are drawn
+   straight into canvas path + transform + setLineDash — a NaN/Infinity would throw and kill the frame,
+   and copies feeds a render loop (uncapped = DoS)."
+   So: plant a hostile repeater/trimPath in a REAL project, save, reopen it the ordinary way, and try to
+   RENDER. If the frame dies, the project cannot be opened. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.projects&&w.FM.storage&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(500);
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(400);
+  var made=[];
+  function renderOK(){
+    var c=document.createElement('canvas'); c.width=120; c.height=120;
+    var g=c.getContext('2d');
+    var P=FM.scene.project;
+    var t0=performance.now(), ms=0;
+    try { g.save(); g.scale(120/P.width,120/P.height); FM.renderScene(g, FM.scene, 1); g.restore(); }
+    catch(e){ return 'THREW: '+e.message; }
+    ms=performance.now()-t0;
+    /* COUNT THE SHAPE, NOT THE BACKGROUND — the project paints its own, so an alpha count is the whole
+       canvas in every state and says nothing (the same trap as the group hunt). And TIME it: the risk
+       named in sanitizeTrimRepeater's comment is "copies feeds a render loop (uncapped = DoS)", which a
+       pass/fail cannot see. */
+    var d=g.getImageData(0,0,120,120).data, n=0;
+    for(var i=0;i<d.length;i+=4){ if(d[i+3]>8 && Math.abs(d[i]-0x4a)<48 && Math.abs(d[i+1]-0x9e)<48 && Math.abs(d[i+2]-0xff)<48) n++; }
+    return 'ok in '+(ms.toFixed(1))+'ms, shape ink '+n;
+  }
+  try{
+    var id=await FM.projects.create({name:'ZZ-nan', width:640, height:640});
+    made.push(id); await sleep(400);
+    var L=FM.makeLayer('shape',{name:'R',shape:'rect',x:320,y:320,shapeW:200,shapeH:200,fill:'#4a9eff'});
+    L.start=0;L.duration=3;
+    // hostile values of exactly the shapes sanitizeTrimRepeater rebuilds
+    L.repeater={ enabled:true, copies:100000, offsetX:NaN, offsetY:1/0, rotation:'x', scale:-5, opacity:9, anchorX:NaN, anchorY:NaN };
+    L.trimPath={ enabled:true, start:NaN, end:1/0, offset:'x' };
+    L.stroke={ enabled:true, width:3, color:'#fff', dash:{ enabled:true, length:NaN, gap:-1/0, offset:'x' } };
+    FM.scene.layers.push(L);
+    FM.storage.markDirty(); FM.storage.flushSync(); await FM.storage.save();
+    await sleep(400);
+    say('planted, before any reload : ' + renderOK());
+
+    var other=await FM.projects.create({name:'ZZ-nan-other'}); made.push(other); await sleep(400);
+    await FM.projects.open(id); await sleep(900);
+    var back=FM.scene.layers.filter(function(l){return l.name==='R';})[0];
+    say('after save + reopen        : ' + renderOK());
+    if(back){
+      say('   repeater.copies  : '+JSON.stringify(back.repeater&&back.repeater.copies));
+      say('   repeater.offsetX : '+JSON.stringify(back.repeater&&back.repeater.offsetX));
+      say('   trimPath.start   : '+JSON.stringify(back.trimPath&&back.trimPath.start));
+      say('   dash.length      : '+JSON.stringify(back.stroke&&back.stroke.dash&&back.stroke.dash.length));
+      var clean = back.repeater && typeof back.repeater.copies==='number' && back.repeater.copies<=50
+               && typeof back.repeater.offsetX==='number' && isFinite(back.repeater.offsetX);
+      /* BOTH FACTS, because either alone misleads. The values DO survive the load — only the value-level
+         sanitiser runs there (v10.95), not this one. And the frame renders fine and fast anyway, because
+         the compositor clamps `copies` to 50 and falls back on `isFinite` for every field. So the
+         deferral in bug-hunt 24 is safe, and the RENDERER is what makes it safe — which is why that
+         clamp is now guarded by the suite. */
+      say('   ⇒ survived the load: ' + (clean ? 'no' : 'YES') + '   ·   frame still renders: see the timing above');
+      say('   ⇒ verdict: not a bug — the compositor clamps copies to 50 and isFinite-guards every field.');
+    }
+  } catch(e){ say('ERR '+e.message); }
+  finally { for(var i=0;i<made.length;i++){ try{ FM.projects.remove && FM.projects.remove(made[i]); }catch(e){} } }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

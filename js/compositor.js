@@ -9959,6 +9959,14 @@ window.FM = window.FM || {};
    * LAST parameter and optional on purpose: every existing caller keeps working, and one that does not
    * know the time falls back to the playhead rather than freezing the path at frame 0. For a static
    * shape FM.evalShapeSubs hands back the very same array, so the hot path allocates nothing. */
+  /* Seam: the shape-draw source, so the suite can assert the repeater's copy CAP still exists.
+   * That cap is load-bearing — `sanitizeTrimRepeater` is import-only by design, so a document carrying
+   * `copies: 100000` reaches this loop and nothing on the load path will have cleaned it (bug-hunt 24).
+   * Asserted on the source because a timing test cannot see it: with the cap removed, 5000 copies of a
+   * small rect still drew inside 400ms here, and tightening the limit would only ask a question about
+   * the machine — the mistake that made the vertical-glide test flaky (queue 450). */
+  FM._drawShapeSrc = function () { return String(drawLayer); };
+
   FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh, t) {
     const kind = layer.shape || 'rect';
     const P = (u, v) => [ox + u * sw, oy + v * sh];

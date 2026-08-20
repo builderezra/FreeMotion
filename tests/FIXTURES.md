@@ -76,6 +76,10 @@ transition is meaningless there.
   reopens it through `FM.projects.open`, and reports what survived (bug-hunt 24). The end-to-end proof
   that the load path was not running the security sanitisers.
 
+- `_loadnan.html` — plants a hostile repeater / trim path / dash in a real project, saves, reopens and
+  RENDERS it, reporting shape ink and render time (bug-hunt 25). The values survive the load and the
+  frame is fine: the compositor's clamp is what saves it. Counts the shape by COLOUR, not alpha.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.
