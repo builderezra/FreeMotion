@@ -12263,3 +12263,30 @@ wait for them to report back."*
              ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
              That decides between the three, and this could not be narrowed further without guessing.
 
+- [ ] **430 — 🚨 The offline cache grows forever, and it shares a storage budget with his media.**
+      (20 Aug, found while auditing the service worker for #306 — not reported by Ezra, and he has not
+      hit it yet as far as anyone knows.)
+      **What is true today.** `sw.js` caches versioned assets (`?v=`) cache-first, keyed on the full URL —
+      correct, those bytes are immutable for that URL. But **nothing ever removes the old ones**:
+      `activate` only deletes caches whose NAME differs from `CACHE`, and `CACHE` is the constant
+      `'freemotion-v1'`, so there is never another name to delete. The only other `delete` in the file is
+      the stale marker. Every release's copy of every changed file therefore stays cached permanently.
+      **Scale:** this session alone shipped 50+ versions; `js/compositor.js` is ~11,000 lines and
+      `styles.css` is large, so the accumulation is tens of megabytes rather than a rounding error.
+      **Why it matters more than wasted space, and why it is 🚨:** on a phone the origin's storage is ONE
+      budget shared with IndexedDB — which is where his imported media lives. Under pressure a browser
+      evicts the WHOLE ORIGIN, not the tidy parts of it. So this is a slow path to losing project media.
+      It also squeezes the export crash-resume store (#47), which needs room for up to 512MB of chunks.
+      **Clauses:**
+      1. [ ] Old versioned assets are removed when they stop being referenced.
+      2. [ ] Offline still works afterwards — load, go offline, reload, the app comes up.
+      🔧 **THE DESIGN, with one option already rejected so nobody re-derives it:**
+      · *Prune on `activate`* — simple and WRONG: `activate` only fires when `sw.js` itself changes
+        byte-wise, which is not most releases. It would prune rarely and unpredictably. **Rejected.**
+      · *Prune after a successful navigation* — the response IS the current index.html, and the
+        stale-marker path already parses that text. Collect the `?v=` URLs it references, walk
+        `cache.keys()`, delete versioned entries not among them. Self-maintaining, runs at most once per
+        navigation, conservative by construction: anything the live page names is kept.
+      ⚠️ **Clause 2 is the one that can be broken by clause 1**, and nothing in the suite covers offline
+      boot today. Whoever builds this should add that check first, so the prune has something to fail.
+
