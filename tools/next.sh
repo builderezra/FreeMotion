@@ -124,7 +124,13 @@ BIG     = re.compile(r'wants a session of its own|Not started deliberately|days 
 # that sends the next session to read a reminder instead of building something.
 STANDING = re.compile(r'Nothing to build|this is the receipt|Standing reminder|no longer holds the queue|'
                       r'standing instruction', re.I)
-buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': [], 'standing note (no build)': []}
+# …and entries whose REMAINING clauses are all marked by him as ideas rather than requests. #277 had
+# nine of ten clauses shipped with the last one written "potentially"; #343's two open clauses both say
+# "(long term)". Both were topping the actionable list looking like days of work. If every unticked
+# clause is hedged that way, the entry is not queued work — the ticked ones are the real state.
+CLAUSE  = re.compile(r'^\s*\d+\. \[ \]')
+HEDGED  = re.compile(r'\(long term\)|\(Idea|potentially|eventually|one day', re.I)
+buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': [], 'standing note (no build)': [], 'only long-term ideas left': []}
 for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
@@ -132,12 +138,15 @@ for n, i in enumerate(starts):
     m = re.match(r'- \[ \] \*\*(\d+[a-z]?)', lines[i])
     tag = m.group(1) if m else '(unnumbered)'
     title = re.sub(r'\*\*', '', lines[i][6:])[:64]
-    key = ('standing note (no build)' if STANDING.search(body) else
+    open_clauses = [l for l in body.split('\n') if CLAUSE.match(l)]
+    hedged_only = bool(open_clauses) and all(HEDGED.search(l) for l in open_clauses)
+    key = ('only long-term ideas left' if hedged_only else
+           'standing note (no build)' if STANDING.search(body) else
            'held by Ezra' if HELD.search(body) else
            'blocked on Ezra' if BLOCKED.search(body) else
            'needs its own session' if BIG.search(body) else 'ACTIONABLE')
     buckets[key].append((tag, title, i + 1))
-for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)'):
+for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
     print('%-22s %d' % (k + ':', len(buckets[k])))
 act = buckets['ACTIONABLE']
 if act:
