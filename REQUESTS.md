@@ -11843,7 +11843,7 @@ wait for them to report back."*
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
 
-- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** (19 Aug, PC screenshot at
+- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
       v10.32.) His words, verbatim:
 
       > when extending the add pannel it makes the three dots at the bottom go down
@@ -11852,7 +11852,7 @@ wait for them to report back."*
       and the page dots (‹ • • ›) pushed to the very bottom edge, clipped rather than sitting inside the
       panel.
       **Clauses:**
-      1. [ ] The dots stay inside the panel at every panel height.
+      1. [ ] The dots stay inside the panel at every panel height. *(v10.65 makes it structurally impossible; unticked until he confirms.)*
       2. [ ] They do not move down as the panel grows — they are the panel's own footer, not the last thing
              in a list that grows past it.
       🔗 **Exactly the fault v10.19 fixed for the shortcuts panel and queue 275 fixed for the phone sheet**,
@@ -11862,6 +11862,23 @@ wait for them to report back."*
       scrolling child. Check the PC path specifically — the phone one already has it (`.addmenu--sheet
       .addmenu-body > .addmenu-dots`), so this is the panel variant missing the same treatment.
 
+
+      ✅ **FIXED STRUCTURALLY v10.65, WITHOUT A REPRODUCTION — stated plainly rather than dressed up as a
+      diagnosis.** Measured at v10.63 across three panel heights and the raised/floating state: the dots
+      sat inside the panel every time, and on the fit panel the body is not even a scroller
+      (`overflow-y: visible`, `max-height: none`), so the sibling-footer theory above does not apply to it.
+      **But the SHAPE of the fault is real**: the dots are a CHILD of `.addmenu-body`, and that body DOES
+      become a scroller whenever the fit planner cannot plan
+      (`.addmenu--panel:not(.addmenu--fit) .addmenu-body { max-height: 128px; overflow-y: auto }`). A footer
+      inside a scroller travels with the content, and that is not something to keep measuring for.
+      `.addmenu-dots` is now `position: sticky; bottom: 0`. Chosen over restructuring the DOM because it is
+      exact and costs nothing: where the body scrolls the row is welded to its bottom edge; where it does
+      not — the fit panel and the phone sheet, which is every case anyone sees today — sticky has nothing
+      to stick to and the rule is a no-op. Verified at 380px: the Shape tab's grid and its five page dots
+      are unchanged. Guarded by a test that reads the rule itself, because the case that bites is the one
+      nobody can construct on demand — which is exactly why this stayed open.
+      ⚠️ **So if you still see the dots pushed off, it is NOT this.** Tell me the window height and it goes
+      back on the list with a real reproduction to work from.
 - [ ] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
       (19 Aug, found while doing #402 — not reported by Ezra.)
       **What was measured**, by enumerating every rule in the document that matches the pill and sets a

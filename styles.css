@@ -4364,7 +4364,18 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
    .addmenu-card. Tinting the button itself needs no exception for the dense Shape grid, which is one
    more reason it was the right shape for this: the first version had to special-case these tiles
    twice and still squeezed their art from 34px to 22px.) */
-.addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
+/* PINNED TO THE BOTTOM OF WHATEVER HOLDS IT (queue 426). Ezra: "when extending the add pannel it makes
+   the three dots at the bottom go down".
+   Measured at v10.63 and NOT reproduced — see the entry — but the shape of it is real and is the same
+   fault v10.19 fixed for the shortcuts panel and queue 275 for the phone sheet: the dots are a CHILD of
+   `.addmenu-body`, and that body becomes a scroller in the non-fit case
+   (`.addmenu--panel:not(.addmenu--fit) .addmenu-body { max-height: 128px; overflow-y: auto }`). A footer
+   inside a scroller scrolls away with the content; that is not a bug you fix by measuring harder.
+   `sticky` rather than restructuring the DOM, because it is exact and costs nothing: where the body
+   scrolls, the row stays welded to its bottom edge; where it does not — the fit panel and the phone
+   sheet, which is every case anyone sees today — `sticky` has nothing to stick to and this is a no-op.
+   So the reported behaviour becomes impossible without changing a single layout that currently works. */
+.addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; position: sticky; bottom: 0; z-index: 2; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }
 /* ---- PC ONLY: the dot row becomes a real pager (QUEUE 50, v5.70) --------------------------------

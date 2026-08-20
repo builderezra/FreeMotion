@@ -2092,6 +2092,27 @@
     }
   });
 
+  test('add menu: the page dots are pinned to the bottom, not carried by the scroll', { item: '426' }, function () {
+    /* Queue 426. Ezra: "when extending the add pannel it makes the three dots at the bottom go down".
+       It could not be reproduced at v10.63 (the entry records what was measured and why the theory in it
+       was wrong), but the SHAPE of the fault is real and has been fixed twice before in this app: a
+       footer that is a child of a scroller scrolls away with the content. The add menu's dots are a
+       child of `.addmenu-body`, and that body becomes a scroller whenever the fit planner cannot plan.
+       Asserted as a property of the rule rather than by dragging a panel taller, because the case that
+       bites is the one nobody can construct on demand — which is exactly why it stayed open. */
+    const probe = document.createElement('div');
+    probe.className = 'addmenu-dots';
+    probe.style.position = '';                 // let the stylesheet answer, not this element
+    document.body.appendChild(probe);
+    try {
+      const cs = getComputedStyle(probe);
+      if (cs.position !== 'sticky') throw new Error('.addmenu-dots is position:' + cs.position + ' — inside a scrolling body that footer travels with the content');
+      if (cs.bottom !== '0px') throw new Error('.addmenu-dots is sticky but pinned to bottom:' + cs.bottom + ', so it does not sit on the panel edge');
+    } finally {
+      probe.remove();
+    }
+  });
+
   test('media: a video can carry an Outline, and it never leaks into the effects list', { item: '386' }, function () {
     /* Queue 386 clause 1. Ezra: "Outlines should still be a toggle option on videos and clips, not just
        shadow". The entry recorded "there is no media stroke code at all", which was true of
