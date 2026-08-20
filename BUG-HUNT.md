@@ -1179,3 +1179,27 @@ having audited rather than assumed. Traced the key from entry to transmission:
   `sceneDoc()` is `{project, layers, selectedId, selectedIds}` and the key is not reachable from any of
   them.
 **Nothing to fix.** Recorded because the alternative is re-auditing it every time the rule is read.
+
+## 18. 🚨 THE SERVICE WORKER CACHE GROWS FOREVER — found 20 Aug, NOT fixed, and it touches his media
+**What is true today.** Versioned assets (`?v=`) are cached CACHE-FIRST and keyed on the full URL, which
+is correct — those bytes are immutable for that URL. But nothing ever removes the OLD ones:
+- `activate` deletes caches whose NAME differs from `CACHE`, and `CACHE` is the constant
+  `'freemotion-v1'` — so there is never another name to delete;
+- the only other `delete` in the file is the stale-marker key.
+So every release's copy of every changed file stays cached permanently. This session alone shipped 50+
+versions; `js/compositor.js` is ~11,000 lines and `styles.css` is large, so the accumulation is tens of
+megabytes rather than a rounding error.
+**Why it matters more than "wasted space":** on a phone the origin's storage is ONE budget shared with
+IndexedDB — which is where his imported media lives. Under pressure a browser evicts the whole origin,
+not the tidy parts of it. So an unbounded asset cache is a slow path to losing project media, and it also
+squeezes the export crash-resume store (#47) which needs room for up to 512MB of chunks.
+**Why it is recorded rather than fixed tonight:** a careless prune breaks offline use, which is the
+feature the cache exists for. Two designs, and the second is the one to build:
+1. *Prune on activate* — simple, but `activate` only fires when `sw.js` itself changes byte-wise, and it
+   does not change on most releases. So it would prune rarely and unpredictably. **Rejected.**
+2. *Prune after a successful navigation* — the response IS the current index.html, and the stale-marker
+   path already parses that text. Collect the `?v=` URLs it references, walk `cache.keys()`, and delete
+   versioned entries that are not among them. Self-maintaining, runs at most once per navigation, and
+   conservative by construction: anything the live page names is kept.
+⚠️ **Whoever builds it: verify offline still works afterwards.** Load, go offline, reload — the app must
+still come up. That is the assertion this change can break, and nothing currently covers it.
