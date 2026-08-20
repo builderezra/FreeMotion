@@ -1163,3 +1163,19 @@ for the next round to spend a night.
 ⚠️ Note the asymmetry worth remembering: the FIRST resize cost 6.3ms and the batch of eight cost 1.7ms
 total. The first one lands on a cold layout; repeats are cheap. So a single rotation is dearer than a
 whole toolbar animation.
+
+## 17. BYOK API key handling — audited, clean
+`CLAUDE.md` names this explicitly ("his apps handle real sensitive data — BYOK AI keys"), so it is worth
+having audited rather than assumed. Traced the key from entry to transmission:
+- **Storage:** `js/ai-key.js` (38 lines) keeps it in memory and, only when "remember" is ticked, in
+  localStorage under its own key `fm.anthropic.key`. There is a `forget()` that clears both.
+- **Display:** never shown in full — `masked()` renders `sk-ant-…` plus a tail.
+- **Transmission:** HTTPS only (`https://api.anthropic.com/v1/messages`), and the key travels in the
+  `x-api-key` HEADER — not in a URL, not in a query string, not in the request body.
+- **Error paths:** the failure branch builds its message from the response JSON and carries an explicit
+  comment that it "never logs the request body or key". No `console.log` of the request anywhere.
+- **The leak that would matter most — the key ending up in a SAVED PROJECT** and therefore in anything he
+  shares or exports — does not happen: nothing writes it onto a layer, the scene or the project index.
+  `sceneDoc()` is `{project, layers, selectedId, selectedIds}` and the key is not reachable from any of
+  them.
+**Nothing to fix.** Recorded because the alternative is re-auditing it every time the rule is read.
