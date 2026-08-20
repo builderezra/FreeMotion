@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Scrub that starts ON a clip vs on empty lane (queue 387 clause 1)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1020px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* #387 clause 1 restates #351 — "you need to be careful where you place ur finger on the timeline to
+   avoid slowness" — and #351's fix (v10.01) shipped AFTER the v9.83 he reported this on. So: is the
+   asymmetry gone, and if not, which side is wrong?
+
+   THREE WAYS THIS PROBE LIED BEFORE IT WAS TRUSTED, all now closed, because each produced a confident
+   and completely wrong reading:
+     1. synthetic pointer events dispatched in one tick share a timeStamp, so dt is 0, no velocity is
+        sampled and BOTH paths look broken (queue 351's own warning). Every move here is spaced with a
+        real await.
+     2. the element was located ONCE, minutes before use. The fling at the end of a gesture rebuilds the
+        timeline, so the node was detached, the event bubbled to nothing, no gesture ever started — and
+        what got measured was the previous fling decaying. It read as "empty lane travels half as far",
+        which is a plausible bug and was not one.
+     3. the COORDINATES are not stable either: the timeline scrolls during a gesture, so the x that was
+        over a clip is over bare lane the next time. A run labelled "on a clip" reported itself landing
+        on a track-lane.
+   So each gesture now settles the timeline to a known state, re-locates its own target from the live
+   DOM, and REPORTS what it actually pressed. A run that pressed the wrong thing says so instead of
+   producing a number. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+function raf(w){return new Promise(function(r){w.requestAnimationFrame(function(){r();});});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+var PID=100;
+
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  say('phone? '+(FM.mobile&&FM.mobile.isPhone?FM.mobile.isPhone():'?')+'   innerWidth '+W.innerWidth);
+
+  FM.scene.layers.length=0;
+  for(var i=0;i<4;i++){
+    var L=FM.makeLayer('shape',{name:'C'+i,shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+    L.start=i*3; L.duration=2.6; FM.scene.layers.push(L);
+  }
+  FM.scene.project.duration=20;
+  FM.scene.selectedId=null; FM.scene.selectedIds=[];
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(500);
+
+  var tlEl=d.getElementById('timeline');
+  function pps(){ var c=d.querySelector('.clip'), L0=FM.scene.layers[0]; return c&&L0?c.getBoundingClientRect().width/L0.duration:0; }
+  function pe(type,x,y,id){
+    return new W.PointerEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,
+      pointerId:id,pointerType:'touch',isPrimary:true,button:0,buttons:type==='pointerup'?0:1});
+  }
+  // Park the timeline in a KNOWN state and wait until nothing is still moving on its own.
+  async function settle(){
+    FM.time=6; FM.refreshAll(); FM.timeline.rebuild();
+    for(var i=0;i<24;i++){
+      var t0=FM.time, s0=tlEl.scrollLeft;
+      await sleep(90);
+      if(FM.time===t0 && tlEl.scrollLeft===s0) return true;
+    }
+    return false;
+  }
+  // Where is a clip right now, and where is bare lane on the same row right now?
+  function findPoints(){
+    /* THE CLIP HAS TO BE ON SCREEN. At t=6 the timeline is scrolled 370px, so `querySelector('.clip')`
+       returns clip 0 — sitting at x=-84, off the left edge — and every "on a clip" press landed on bare
+       lane instead. The probe caught it and refused, which is the point of the check, but the fix is to
+       pick a clip the finger could actually reach. */
+    var tr=tlEl.getBoundingClientRect();
+    var c=[].slice.call(d.querySelectorAll('.clip')).filter(function(el){
+      var r=el.getBoundingClientRect();
+      return r.left>tr.left+70 && r.right<tr.right-8 && r.width>40;
+    })[0];
+    if(!c) return null;
+    var cr=c.getBoundingClientRect();
+    var y=cr.top+cr.height/2;
+    var OWNS='.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, .marker-edit, .tl-addrow, input, button, select, textarea';
+    var lanes=[cr.left-24, cr.left-40, cr.right+24, cr.right+40];
+    var laneX=null;
+    for(var i=0;i<lanes.length;i++){
+      var x=lanes[i]; if(x<tr.left+6||x>tr.right-6) continue;
+      var el=d.elementFromPoint(x,y);
+      if(el && el.closest && !el.closest(OWNS) && el.closest('#timeline')){ laneX=x; break; }
+    }
+    return { clipX: cr.left+cr.width*0.6, clipY: y, laneX: laneX, laneY: y };
+  }
+  async function swipe(tag, want){
+    var ok=await settle();
+    var pts=findPoints();
+    if(!pts){ say(tag+'  ✗ no clip on screen'); return null; }
+    var x0 = want==='clip' ? pts.clipX : pts.laneX, y0 = want==='clip' ? pts.clipY : pts.laneY;
+    if(x0==null){ say(tag+'  ✗ no usable '+want+' point on screen'); return null; }
+    var target=d.elementFromPoint(x0,y0);
+    var isClip = !!(target && target.closest && target.closest('.clip'));
+    if((want==='clip') !== isClip){ say(tag+'  ✗ point at '+x0.toFixed(0)+','+y0.toFixed(0)+' is '+(isClip?'a CLIP':'bare lane')+', not '+want+' — refusing to report a number'); return null; }
+    var base=FM.time, id=++PID, P=pps();
+    var samples=[], costs=[], raw=[];
+    say(tag+'   settled '+(ok?'yes':'NO — something was still moving')+'   down on '+(target.className||target.tagName)+' at '+x0.toFixed(0)+','+y0.toFixed(0)+'   t0 '+base.toFixed(3)+'  scrollLeft '+tlEl.scrollLeft.toFixed(0));
+    target.dispatchEvent(pe('pointerdown',x0,y0,id));
+    await raf(W);
+    var DX=6, STEPS=8;
+    for(var k=1;k<=STEPS;k++){
+      await sleep(16);
+      var t0=W.performance.now();
+      W.dispatchEvent(pe('pointermove',x0-DX*k,y0,id));
+      await raf(W);
+      costs.push(W.performance.now()-t0);
+      samples.push(+((FM.time-base).toFixed(4)));
+      raw.push(FM.time.toFixed(3));
+    }
+    W.dispatchEvent(pe('pointerup',x0-DX*STEPS,y0,id));
+    await sleep(60);
+    var settled=+((FM.time-base).toFixed(4));
+    var want48=48/P;
+    var firstMove=0; for(var j=0;j<samples.length;j++){ if(Math.abs(samples[j])>0.0005){ firstMove=j+1; break; } }
+    var mean=costs.reduce(function(a,b){return a+b;},0)/costs.length, worst=Math.max.apply(null,costs);
+    say('   Δt per move: '+samples.join('  '));
+    say('   48px of finger travelled '+samples[samples.length-1]+'s;  at '+P.toFixed(2)+' px/s it SHOULD be '+want48.toFixed(4)+'s'
+        +'   → '+(Math.abs(samples[samples.length-1]-want48)<0.05?'✅ tracks the finger':'❌ off by '+(samples[samples.length-1]-want48).toFixed(4)+'s'));
+    say('   first move that shifted the playhead: '+(firstMove?('#'+firstMove+' = '+(firstMove*DX)+'px'):'NONE'));
+    say('   after release: Δ '+settled+'s  '+(Math.abs(settled)>Math.abs(samples[samples.length-1])+0.0005?'glided ✅':'stopped dead ❌'));
+    say('   per-move cost: mean '+mean.toFixed(2)+'ms  worst '+worst.toFixed(2)+'ms');
+    return {last:samples[samples.length-1], want:want48, firstMove:firstMove, settled:settled, mean:mean, worst:worst};
+  }
+
+  var runs=[];
+  for(var round=0;round<2;round++){
+    runs.push(['clip', await swipe('ON A CLIP  (round '+(round+1)+')','clip')]); say('');
+    runs.push(['lane', await swipe('ON BARE LANE (round '+(round+1)+')','lane')]); say('');
+  }
+  var clip=runs.filter(function(r){return r[0]==='clip'&&r[1];}).map(function(r){return r[1];});
+  var lane=runs.filter(function(r){return r[0]==='lane'&&r[1];}).map(function(r){return r[1];});
+  function avg(a,k){return a.length?a.reduce(function(s,x){return s+x[k];},0)/a.length:NaN;}
+  say('=== the comparison #351 says IS the bug ===');
+  say('runs that produced a number:  clip '+clip.length+'/2   lane '+lane.length+'/2');
+  say('48px of finger →             clip '+avg(clip,'last').toFixed(4)+'s   lane '+avg(lane,'last').toFixed(4)+'s   (want '+avg(clip,'want').toFixed(4)+'s)');
+  say('responds after               clip '+(avg(clip,'firstMove')*6).toFixed(1)+'px    lane '+(avg(lane,'firstMove')*6).toFixed(1)+'px');
+  say('per-move cost                clip '+avg(clip,'mean').toFixed(2)+'ms   lane '+avg(lane,'mean').toFixed(2)+'ms');
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

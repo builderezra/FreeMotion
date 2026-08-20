@@ -10915,8 +10915,12 @@ wait for them to report back."*
       and it is now confirmed still live at v9.83 — he has learned to avoid where he puts his finger, which
       is the sort of workaround that means a bug has been open too long.
       **Clauses:**
-      1. [ ] Scrubbing by pressing ON a layer is laggy (same as #351, confirmed still present).
+      1. [x] ✅ **Scrubbing by pressing ON a layer is laggy** (same as #351). **CLOSED by measurement at
+             v10.71 — see the reading below.** #351's fix shipped at v10.01, after the v9.83 he reported
+             this on, and the two gesture paths now measure identical.
       2. [ ] Playback is buggy on mobile where scrubbing is not — chase the PLAYBACK path, not the renderer.
+             ⏸️ **Blocked on Ezra:** profiled at v10.62 and does not reproduce in Chrome at any throttle;
+             it needs a clip off his own phone or a screen recording.
       ⚠️ Previous rounds measured desktop timings and found nothing, repeatedly (#95, #125, #202). Do not do
       that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
       asymmetry is the control that makes such a profile meaningful.
@@ -10949,6 +10953,28 @@ wait for them to report back."*
       **What would actually move this:** one clip off his phone that misbehaves, or a screen recording of
       the play. Failing that, the next thing worth trying is a Safari-specific decode path check, not more
       Chrome timing.
+
+      📐 **CLAUSE 1 MEASURED 20 Aug at v10.71 and it is CLOSED — the asymmetry is gone** (`tests/_scrubstart.html`,
+      380px, real-timed pointer events). The same 48px drag moves the playhead **0.7667s from a clip and
+      0.7667s from bare lane**, both respond at the **first 6px**, both glide on release, and the per-move
+      cost is 16.4ms vs 16.3ms. His report was filed at v9.83 — **#351's fix shipped at v10.01, AFTER it**,
+      so what he was feeling was real and had already been fixed by the time he wrote this down.
+      Now guarded by a suite test, so the two paths cannot drift apart again; the existing #351 test only
+      covered the RELEASE VELOCITY, and a path that tracked the finger at the wrong RATE would have flung
+      identically while feeling slow. Mutation-proved by halving the clip path's rate: caught.
+      ⚠️ **THREE WAYS THIS MEASUREMENT LIED BEFORE IT WAS BELIEVED**, all now guarded in the probe and the
+      test, because each produced a confident and completely wrong reading:
+      · the element was located ONCE, and the fling at the end of a gesture REBUILDS the timeline — so the
+        node was detached, the event bubbled to nothing, no gesture started, and what got measured was the
+        previous fling decaying. It read as "bare lane travels half as far", which is a plausible bug and
+        was not one. (Same trap as the -453.5px reading in BUG-HUNT.)
+      · the COORDINATES do not survive either: at t=6 the timeline is scrolled, so the x that was over a
+        clip is over bare lane next time. One run labelled "on a clip" was pressing a track-lane.
+      · in the suite the HOME overlay can be open, and `#hm-scroll` covers the app — every point across
+        the clip resolved to it. The test shuts home, and refuses to report a number if the press did not
+        land on what it says it did.
+      ⏭️ **Clause 2 remains the open half, and it is blocked on Ezra**, exactly as the v10.62 round said: it
+      needs one clip off his phone, or a screen recording of the playback.
 
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
@@ -12341,3 +12367,170 @@ wait for them to report back."*
       **deleted**, an unrelated `/js/nosuchfile.js?v=1` was **kept**, the current app.js survived, and
       `tests/_offlineboot.py` still reports the app coming up with the network off.
 
+
+- [ ] **431 — The Media and Audio panels squash the buttons above them.** (20 Aug, phone screenshot at
+      v10.71 of the ADD sheet on the Media tab.) His words, verbatim: *"Media and audio panels now make
+      the top bottoms too small"*.
+      **Read as: "top buttons", not "bottoms".** In the screenshot the Media tab shows the five tab icons,
+      then the Import / Sample clip / AI Scene row, then a six-tile grid of his own media filling the rest
+      of the sheet — and it is the row ABOVE the grid that has lost height to it. The Audio tab has the
+      same shape (a library grid under its action row), which is why he named both.
+      **Almost certainly the same thing as [#428](#) ("The Media and Audio sections are broken"), which is
+      still waiting on him to say what "broken" meant — this may BE the answer to that question.** Keep
+      both open until he confirms; do not quietly merge them, because #428 might also mean a tile that does
+      not work.
+      ⚠️ Measure the two tabs against a tab with NO grid (Shape, Object) at 380px before changing anything:
+      the question is whether the action row is genuinely shorter on Media/Audio or whether it only looks
+      it next to a dense grid. His screenshot is the layout to measure — v10.71, 6 media tiles.
+
+- [ ] **432 — The template icon looks bad.** (20 Aug.) His words, verbatim: *"Reminder to log things -
+      including template icon looks shit"*.
+      Two things in one message, and both are recorded rather than one:
+      1. [ ] **The standing instruction, restated:** log everything he says, as he says it. Already the
+             rule (see the file header and CLAUDE.md); he is telling me it slipped, which is worth a line
+             here rather than a promise in a chat reply.
+      2. [ ] **The template icon** — the fifth tab icon in the phone ADD sheet, the orange window-ish mark
+             beside the music note in his v10.71 screenshot. He does not like how it looks.
+      ⚠️ **Ask nothing, but note what is unsaid:** he has not said what he wants instead. Redraw it to read
+      clearly at the ~24px it is actually used at and show him, rather than guessing at a style. The other
+      four marks in that row (cube, shapes, picture, music note) are the family it has to sit in.
+
+- [ ] **433 — Wasted space under the clip in the solo view, and a press that did not open the edit menu.**
+      (20 Aug, phone screenshot at v10.71 with the empty band circled in orange.) His words, verbatim:
+      *"Wasted space here and also I had a glitch where I pressed on a layer and the edit menu didn't load"*.
+      **Clauses:**
+      1. [ ] **The wasted space** — in the phone solo view (one clip selected, its options docked below),
+             there is a full empty row's worth of band between the clip's row and the `[| <|> |]` action
+             row. He has circled exactly that band. Measured from his screenshot: the clip row ends around
+             y=1250 and the action row starts around y=1360 — roughly a whole row of nothing.
+      2. [ ] **The glitch: pressing a layer did not load the edit menu.** Intermittent, and he says so
+             ("I had a glitch"), so it is a race rather than a dead path — most likely the same family as
+             `FM._sheetSuppressFor`, the stamp that stops a clip GRAB from throwing the sheet over the
+             timeline (js/timeline.js). If that stamp survives a gesture that ends by an unusual path, the
+             next legitimate tap is swallowed. That mechanism has already been got wrong twice — a polled
+             "drag in progress" predicate left the sheet closed for a whole session, and a bare boolean
+             one-shot leaked across a desktop/phone sync — so check it before looking anywhere else.
+      ⚠️ Clause 2 has no reproduction yet. Do not close it on "cannot reproduce": find the paths that can
+      leave the suppression stamped, and make it impossible by construction rather than by timing.
+
+- [ ] **434 — The shapes-menu colours are ugly and still repetitive.** (20 Aug.) His words, verbatim:
+      *"The colours you chose for the shapes menu are ugly and still repetitive. Come on man put some
+      effort in"*.
+      **"Still" matters** — this is a re-report, so whatever was done last time did not fix it, and the
+      job is not another pass of the same idea. Find the earlier attempt first and say what it actually
+      did before changing anything.
+      ⚠️ He is judging this by eye on a phone, so the deliverable is a SCREENSHOT of the real menu at
+      380px, not a palette in a comment.
+
+- [ ] **435 — The people shapes look awful — give them arms, and use a workflow with real references.**
+      (20 Aug.) His words, verbatim: *"The people shapes look awful, make sure when you try and fix them
+      you use a workflow, and make sure they actually have arms, reference photos online"*.
+      **Clauses:**
+      1. [ ] The people shapes (`person`, `woman` in FM.traceShapePath) look bad and need redrawing.
+      2. [ ] **They must actually have ARMS** — his specific complaint, so this is the acceptance test.
+      3. [ ] **Use a WORKFLOW** for it — he asked for this explicitly, which is the opt-in the tool needs.
+      4. [ ] **Reference real pictures online** rather than drawing from memory.
+      ⚠️ Deliverable is a picture at the size they are actually used — the add-menu icon is ~24px and the
+      canvas shape is large — because a silhouette that reads at one and not the other is not fixed.
+
+- [ ] **436 — Group belongs in the TOP RIGHT, not the bottom sheet — and the top icons are still badly
+      placed with a multi-selection.** (20 Aug, two phone screenshots at v10.71: the ⧉ drop-down with
+      "Group Selection" circled, and the "3 layers selected" screen showing a "GROUP 3 CLIPS" row in the
+      bottom sheet.) His words, verbatim: *"Two - 3 things.\n\nRemove the group selection button from this
+      menu, and also I wanted the ability to group every layer selected in the top right with an icon for
+      the two options, not in the bottom menu. Also the icons are in bad spots at the top when you have
+      multiple layers selected still"*.
+      **Clauses:**
+      1. [ ] **Remove "Group Selection" from the ⧉ drop-down** (the menu in his first screenshot).
+      2. [ ] **Put grouping in the TOP RIGHT as two icons** — one for Group, one for Masking group.
+      3. [ ] **Take them OUT of the bottom sheet** — the "GROUP 3 CLIPS" row shipped in v10.66 is exactly
+             what he is saying he did not want.
+      4. [ ] **The top-bar icons are still in bad spots** with several layers selected — his second
+             screenshot has `?`, the bin and one group icon strung across a mostly empty bar.
+      ⚠️ **This partly REVERSES [#376](#), shipped v10.66.** That entry's measurement said the phone header
+      had no room, so the pair went into the sheet. He is now saying the header is where he wanted them and
+      the sheet is wrong. Re-measure the header at 380px with 3+ layers selected BEFORE moving anything —
+      the earlier reading was that its five controls used every pixel of a 370px content box — and if it
+      genuinely does not fit, say so with the number rather than shipping something cramped.
+      ⚠️ Also check "Masking Group" in the drop-down: he named only Group Selection for removal, so leave
+      Masking Group there unless clause 2 puts both in the header, which it appears to.
+
+- [ ] **437 — Re-order and re-word the ⧉ drop-down; it is Alight Motion's menu.** (20 Aug, phone
+      screenshot at v10.71.) His words, verbatim: *"With this drop down menu also re order the buttons in
+      it because it's the same layout and wording as alight motion, if you can come up with different
+      wording as well, like instead of paste layer just paste on timeline. And copy selected instead of
+      copy layer."*
+      **Clauses:**
+      1. [ ] **Re-order** the items — the current order is AM's.
+      2. [ ] **Re-word** them in our own language. His two examples, to use as given: "Paste Layer" →
+             **"Paste on timeline"**, "Copy Layer" → **"Copy selected"**.
+      3. [ ] Apply the same thinking to the rest: Select All Layers, Masking Group, Duplicate Layer,
+             Save whole look as preset, Save Selection as Element…, Paste Style…
+      📌 **This is [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) work arriving early** — that file records
+      that the UI is modelled on Alight Motion and must be made our own before any public release. Add this
+      menu to its list, and note there that he has started asking for it unprompted.
+      ⚠️ Ships alongside **#436**, which removes an item from this same menu — one release, or the two will
+      fight over the item list.
+
+- [ ] **438 — The layer switch does not update while you drag.** (20 Aug.) His words, verbatim: *"The
+      switch doesn't update live when dragging layers or the main create layer. Make it update as ur
+      dragging"*.
+      **Read as:** the thing that shows which layer/slot you are on does not follow a drag in progress —
+      both when dragging a LAYER to reorder it and when dragging the main "add layer" row. It presumably
+      only catches up on release. He wants it live.
+      ⚠️ Which "switch" needs confirming from the code, not guessed: the candidates are the add-row's own
+      label (`addRowLabel()` in js/timeline.js, which names where the next layer will land) and the track
+      head's state. The add-row one is the likelier reading of "the main create layer".
+
+- [ ] **439 — 🚨 HE NAMES THIS AS THE OLDEST THING STILL NOT DONE: the text bar hides under the keyboard.**
+      (20 Aug, phone screenshot at v10.71 with the keyboard up.) His words, verbatim: *"The longest issue
+      you still haven't done I can remember is edit text. The bar that shows the text you're typing still
+      is hidden below the keyboard. Fix it"*.
+      **What the screenshot shows:** with the iOS keyboard up, the row above it holds only ˄ ˅ and a ✓ —
+      the field with the text you are actually typing is not on screen. You type blind.
+      ⚠️ **This is the same complaint as [#391](#) ("The Edit Text menu is still a bit broken") and part of
+      [#98](#).** It is NOT a duplicate to be merged away: he has singled out one sentence of it as the
+      thing that matters most, so this entry is the one to work, and 391/98 point here.
+      ⚠️ Reproducing it needs the REAL iOS keyboard — `visualViewport` is what moves, and headless Chrome
+      has no software keyboard. Drive `window.visualViewport` resize/offset by hand in the probe (and say
+      in the entry that it is a simulation), or this will read as "cannot reproduce" the way it has before.
+
+- [ ] **440 — Move the colour button in the text toolbar.** (20 Aug, phone screenshot at v10.71 with an
+      arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
+      move the colouring button from there to there"*.
+      **From:** the white rounded swatch, currently 4th of six (☰ · Inter ▾ · 160 pt ▾ · ⬜ · Aa · ✓).
+      **To:** the far LEFT of the bar — the arrow lands at the ☰ end, before "Inter".
+      ⚠️ His arrow starts under "Inter" and curves to the swatch, so the two readings are "put the colour
+      first" or "swap the colour and the font". The drawn line ends at the LEFT EDGE, so it is being built
+      as "colour goes first"; if that is wrong it is one line to change, and say so when showing him.
+
+- [ ] **441 — Captions need a corner drag handle to extend them.** (20 Aug, phone screenshot at v10.71 of
+      a caption cue selected on the timeline.) His words, verbatim: *"Make the captions ur hovering over
+      have their own little corner drag arrow you can hold on to extend"*.
+      **Read as:** the caption CUE you are on (the chip inside the caption clip) should carry its own small
+      corner grip, held to lengthen that cue — rather than only being retimeable from the numeric
+      start/end fields in the Captions panel.
+      ⚠️ The cue drag machinery already exists (`cueDrag` in js/timeline.js has `move` / `trimL` / `trimR`
+      modes), so this is likely an AFFORDANCE problem, not a missing feature: the grips are invisible.
+      Check what actually exists before building anything new.
+
+- [ ] **442 — Wasted space in the track-head column: push it to the wall.** (20 Aug, phone screenshot at
+      v10.71 with the left edge of the timeline scribbled down its whole height.) His words, verbatim:
+      *"Still a bunch of wasted space here, move it more towards the wall so you don't have that gap for no
+      reason"*.
+      **What the screenshot shows:** the eye and the layer-type chip sit in a head column whose left ~28px
+      is empty, all the way down. "Still" again — so an earlier pass did not fix it.
+      ⚠️ Related to the chevron column (queue 295), which is only reserved when the project HAS a group —
+      and his project DOES have one (there is a Group row at the bottom), so the 22px is being held open
+      legitimately by the current rule. That may be exactly the gap he is pointing at, in which case the
+      question is whether a group deep in the list should widen every row above it.
+
+- [ ] **443 — The Add-layer row still does not behave like a layer when you drag around it.** (20 Aug.)
+      His words, verbatim: *"Also the add layer is still not acting like a layer in the sense when I try to
+      drag a layer below it it doesn't let me and stuff, just a bit buggy"*.
+      **Read as:** dragging a real layer PAST / BELOW the add row is refused or behaves oddly. The row is
+      deliberately not a `.track-row` (it has no layer, no clip, no index — see the comment in
+      `buildAddRow`), and every reorder walks `.track-row`, so the drop targets around it are probably
+      simply missing rather than wrong.
+      ⚠️ Ships near **#438** (the add row not updating live during a drag) — same row, same gesture, and
+      fixing one without the other will look like it half-works.

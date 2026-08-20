@@ -3094,6 +3094,133 @@
     }
   });
 
+  test('timeline: a drag from a clip moves the playhead exactly as far as one from bare lane', { item: '387' }, async function () {
+    /* THE OTHER HALF OF QUEUE 351, and what queue 387 clause 1 is actually complaining about:
+       *"you need to be careful where you place ur finger on the timeline to avoid slowness"*.
+       The existing test above guards the RELEASE VELOCITY — that both paths fling. It does not guard
+       the drag itself, and a path that tracked the finger at a different rate would feel exactly like
+       "slow" while flinging identically. Measured at 380px on v10.71 (tests/_scrubstart.html): 48px of
+       finger moves the playhead 0.7667s from both, first response at 6px from both.
+
+       THE THREE WAYS THE PROBE LIED BEFORE IT WAS BELIEVED are all guarded here, because each produced
+       a confident wrong answer:
+         · events dispatched in one tick share a timeStamp -> no velocity, both paths look broken;
+         · the clip element is re-located AFTER the settle, because a fling rebuilds the timeline and a
+           detached node swallows the gesture entirely (that read as "lane travels half as far");
+         · at t=6 the timeline is scrolled, so the first .clip is OFF SCREEN — the press landed on bare
+           lane and the run compared lane against lane. The clip must be visible, and the lane point must
+           not be inside anything that owns its own pointer, or the test refuses rather than reporting. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, t0 = FM.time;
+    const OWNS = '.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, .marker-edit, .tl-addrow, input, button, select, textarea';
+    /* THE HOME OVERLAY EATS THE GESTURE. Whatever ran before this can leave home open, and #hm-scroll
+       covers the whole app — every elementFromPoint across the clip came back 'hm-scroll'. The test
+       caught it and refused rather than reporting a number from a press that never reached the timeline,
+       which is the whole design; but it has to shut it to run at all. */
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { name: 'C' + i, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+          L.start = i * 3; L.duration = 2.6; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 20;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(120);
+
+        const tl = document.getElementById('timeline');
+        const ppsNow = () => {
+          const c = document.querySelector('.clip'), L0 = FM.scene.layers[0];
+          return c && L0 ? c.getBoundingClientRect().width / L0.duration : 0;
+        };
+        // A clip the finger could actually reach, re-read from the live DOM every time.
+        const visibleClip = () => {
+          const tr = tl.getBoundingClientRect();
+          return Array.prototype.slice.call(document.querySelectorAll('.clip')).filter(function (el) {
+            const r = el.getBoundingClientRect();
+            return r.left > tr.left + 70 && r.right < tr.right - 8 && r.width > 40;
+          })[0] || null;
+        };
+        const drag = async function (want) {
+          FM.setTime(6); FM.refreshAll(); FM.timeline.rebuild();
+          await sleep(140);
+          const c = visibleClip();
+          if (!c) throw new Error('no clip is on screen to press on, so the comparison cannot be made');
+          const cr = c.getBoundingClientRect(), y = cr.top + cr.height / 2;
+          /* SCAN ACROSS THE CLIP rather than trusting one fraction of it. The fixed-centre playhead and
+             its nudge buttons are drawn OVER the lane at screen centre, so a single point can resolve to
+             the overlay instead of the clip — which is not a bug, it is just not the thing being pressed. */
+          let x = null, el = c; const seen = [];
+          [0.2, 0.35, 0.5, 0.65, 0.8].forEach(function (fr) {
+            if (x != null) return;
+            const cx = cr.left + cr.width * fr;
+            const hit = document.elementFromPoint(cx, y);
+            seen.push(fr + '->' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing'));
+            if (hit && hit.closest && hit.closest('.clip') === c) { x = cx; el = hit; }
+          });
+          if (want === 'clip' && x == null) throw new Error('every point across the clip resolves to something drawn over it (clip rect ' + cr.left.toFixed(0) + '-' + cr.right.toFixed(0) + ' y ' + y.toFixed(0) + '; hits: ' + seen.join(', ') + ')');
+          if (want === 'lane') {
+            x = null;
+            const tr = tl.getBoundingClientRect();
+            [cr.left - 24, cr.left - 40, cr.right + 24, cr.right + 40].forEach(function (cx) {
+              if (x != null || cx < tr.left + 6 || cx > tr.right - 6) return;
+              const hit = document.elementFromPoint(cx, y);
+              if (hit && hit.closest && !hit.closest(OWNS) && hit.closest('#timeline')) { x = cx; el = hit; }
+            });
+            if (x == null) throw new Error('no bare lane on screen beside the clip, so there is nothing to compare the clip path against');
+          }
+          const hit = document.elementFromPoint(x, y);
+          const onClip = !!(hit && hit.closest && hit.closest('.clip'));
+          if ((want === 'clip') !== onClip) throw new Error('the ' + want + ' probe point landed on ' + (onClip ? 'a CLIP' : 'bare lane') + ' — refusing to report a number from the wrong path');
+          const base = FM.time, id = want === 'clip' ? 21 : 22;
+          const ev = (type, cx, tgt) => (tgt || el).dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: id, isPrimary: true, pointerType: 'touch',
+            clientX: cx, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+          ev('pointerdown', x);
+          let first = 0;
+          for (let i = 1; i <= 8; i++) {
+            await sleep(16);
+            ev('pointermove', x - i * 6, window);
+            // A frame between the move and the read. Without it the first-response number is sampled
+            // before the scrub has landed, and a mutation that delays the commit survives unseen.
+            await new Promise(r => requestAnimationFrame(r));
+            if (!first && Math.abs(FM.time - base) > 0.0005) first = i * 6;
+          }
+          const moved = FM.time - base;
+          ev('pointerup', x - 48, window);
+          try { FM.timeline._abortGestures(); } catch (e) {}
+          await sleep(80);
+          return { moved: moved, first: first };
+        };
+
+        const pps = ppsNow();
+        if (!pps) throw new Error('could not read px-per-second off the timeline');
+        const want48 = 48 / pps;
+        const fromClip = await drag('clip');
+        const fromLane = await drag('lane');
+
+        // Control: the reference path must actually have moved, or the equality below is 0 === 0.
+        if (Math.abs(fromLane.moved) < 0.05) throw new Error('the bare-lane drag barely moved the playhead (' + fromLane.moved.toFixed(4) + 's for 48px) — the fixture is not producing a real gesture, so this test proves nothing');
+        if (Math.abs(fromClip.moved) < 0.05) throw new Error('a 48px drag that started ON A CLIP moved the playhead ' + fromClip.moved.toFixed(4) + 's, against ' + fromLane.moved.toFixed(4) + 's from bare lane — the same swipe, two different speeds depending only on where the finger landed');
+        const gap = Math.abs(Math.abs(fromClip.moved) - Math.abs(fromLane.moved));
+        if (gap > 0.05) throw new Error('48px of finger moved the playhead ' + fromClip.moved.toFixed(4) + 's from a clip and ' + fromLane.moved.toFixed(4) + 's from bare lane (' + gap.toFixed(4) + 's apart) — that is the "be careful where you put your finger" complaint');
+        // …and both should be tracking the finger, not merely agreeing with each other on a wrong number.
+        if (Math.abs(Math.abs(fromClip.moved) - want48) > 0.08) throw new Error('both paths agree, but neither tracks the finger: 48px at ' + pps.toFixed(1) + 'px/s should move ' + want48.toFixed(4) + 's and it moved ' + fromClip.moved.toFixed(4) + 's');
+        if (Math.abs(fromClip.first - fromLane.first) > 6) throw new Error('the playhead answers a clip drag after ' + fromClip.first + 'px and a lane drag after ' + fromLane.first + 'px — the first millimetres of the swipe do nothing on one of them');
+        if (!fromClip.first || !fromLane.first) throw new Error('one of the paths never moved the playhead at all during the drag (clip ' + fromClip.first + 'px, lane ' + fromLane.first + 'px), so the equality above compared two zeroes');
+      }, 380);
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0; FM.setTime(t0);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
     /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
        actually move in a cool way and not just a drag it up and down, like they're alive. Because

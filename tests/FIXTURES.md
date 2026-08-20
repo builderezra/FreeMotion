@@ -53,6 +53,11 @@ transition is meaningless there.
   every tab renders, or tap each tile and see what happens. **Scope every query to `#add-sheet`**: there
   are TWO add-menu instances in the DOM and a document-wide selector drives the parked PC one.
 - `_plusstiff.html` — does the add-row `+` hold still while the timeline scrolls? (queue 429)
+- `_scrubstart.html` — a drag that starts ON a clip against the identical drag on bare lane: how far the
+  playhead travels, which pixel it first answers at, whether it glides, and what each move costs (queue
+  387 clause 1). **Read its header before writing any gesture probe** — it lists the three ways this
+  measurement lied first: a stale element ref across a rebuild, coordinates that move when the timeline
+  scrolls, and the home overlay swallowing the press. Each produced a confident wrong answer.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).
