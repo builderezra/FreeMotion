@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Document fuzz: does a corrupted field kill the frame? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">fuzzing…</pre>
+<script>
+/* BUG HUNT — the CLASS, not another instance.
+   Seven hunts in, the pattern is consistent: this app is well defended at the DRAW layer (clamps,
+   isFinite fallbacks, a copy cap) and trusting at the DOCUMENT layer. Four of the five real finds came
+   from a value that a saved project can carry and no load-time check removes — a speed prop that is an
+   object, an unsorted keyframe list, a remote fillImage URL, an unclamped loop region.
+   So rather than hunt an eighth instance: corrupt EVERY scalar on a layer in turn and require the frame
+   to survive. One sweep, whole class.
+   The assertion is deliberately weak and therefore honest: rendering must not THROW and must not hang.
+   It is not "the picture is right" — a corrupted document has no right answer — it is "the app still
+   opens the project", which is the thing that actually matters to him. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.renderScene&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  var P=FM.scene.project;
+  var HOSTILE=[['NaN',NaN],['Infinity',Infinity],['-Infinity',-Infinity],['null',null],['string',"x"],['object',{}],['array',[]],['huge',1e12],['negative',-1e6],['true',true]];
+  var FIELDS=['start','duration','trimStart','speed','opacity','fadeIn','fadeOut','shapeW','shapeH','rotation'];
+  var TFIELDS=['x','y','scale','rotation','opacity','anchorX','anchorY'];
+
+  function fresh(){
+    FM.scene.layers.length=0;
+    var L=FM.makeLayer('shape',{name:'Z',shape:'rect',x:P.width/2,y:P.height/2,shapeW:200,shapeH:200,fill:'#4a9eff'});
+    L.start=0;L.duration=4;FM.scene.layers.push(L);
+    return L;
+  }
+  function render(){
+    var c=document.createElement('canvas'); c.width=100; c.height=100;
+    var g=c.getContext('2d');
+    var t0=performance.now();
+    try { g.save(); g.scale(100/P.width,100/P.height); FM.renderScene(g, FM.scene, 1); g.restore(); }
+    catch(e){ return {err:e.message}; }
+    return {ms:performance.now()-t0};
+  }
+
+  var bad=[], slow=[], n=0;
+  FIELDS.forEach(function(key){
+    HOSTILE.forEach(function(h){
+      var L=fresh(); L[key]=h[1]; n++;
+      var r=render();
+      if(r.err) bad.push('layer.'+key+' = '+h[0]+'  → THREW: '+r.err);
+      else if(r.ms>300) slow.push('layer.'+key+' = '+h[0]+'  → '+r.ms.toFixed(0)+'ms');
+    });
+  });
+  TFIELDS.forEach(function(key){
+    HOSTILE.forEach(function(h){
+      var L=fresh(); L.transform[key]=h[1]; n++;
+      var r=render();
+      if(r.err) bad.push('transform.'+key+' = '+h[0]+'  → THREW: '+r.err);
+      else if(r.ms>300) slow.push('transform.'+key+' = '+h[0]+'  → '+r.ms.toFixed(0)+'ms');
+    });
+  });
+  /* THE STRUCTURED CONTAINERS, which is where the risk actually is. A scalar that goes NaN is caught
+     by an isFinite fallback; an `effects` that is suddenly a string, or a `masks` holding one number,
+     reaches code that expects to iterate it. Every one of these is a shape a saved document can carry
+     and no load-time check removes. */
+  var CONTAINERS=['effects','masks','behaviors','captions','audioFx','repeater','trimPath','stroke','fillGradient'];
+  var CJUNK=[['string',"x"],['number',7],['true',true],['array of junk',[1,'x',null,{}]],['object',{a:1}],['array of empties',[{},{},{}]],['null',null],['nested null',[null]]];
+  CONTAINERS.forEach(function(key){
+    CJUNK.forEach(function(h){
+      var L=fresh(); L[key]=h[1]; n++;
+      var r=render();
+      if(r.err) bad.push('layer.'+key+' = '+h[0]+'  → THREW: '+r.err);
+      else if(r.ms>300) slow.push('layer.'+key+' = '+h[0]+'  → '+r.ms.toFixed(0)+'ms');
+    });
+  });
+  // …and the layer's own TYPE, which is a bare key into several dispatch tables
+  [['string','nope'],['number',7],['object',{}],['null',null],['proto','constructor'],['toString','toString']].forEach(function(h){
+    var L=fresh(); L.type=h[1]; n++;
+    var r=render();
+    if(r.err) bad.push('layer.type = '+h[0]+'  → THREW: '+r.err);
+  });
+  say('combinations rendered: '+n);
+  say('');
+  if(!bad.length) say('✅ no corrupted field threw during the draw');
+  else { say('❌ '+bad.length+' threw:'); bad.forEach(function(b){ say('   '+b); }); }
+  if(slow.length){ say(''); say('⏱ slow (>300ms):'); slow.forEach(function(b){ say('   '+b); }); }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

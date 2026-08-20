@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What does sanitizeEffects do with a hostile effects array?</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">…</pre>
+<script>
+/* The load path's ONE sanitiser, asked directly. `_docfuzz.html` showed that a bad `effects` throws the
+   moment anything touches the layer — so whether it is reachable comes down to what this removes. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.storage&&w.FM.storage._sanitizeEffects)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(function(FM){
+  var san=FM.storage._sanitizeEffects;
+  var CASES=[
+    ['"x"', 'x'], ['7', 7], ['{}', {}], ['true', true],
+    ['[null]', [null]], ['[1,"x",null]', [1,'x',null]], ['[{},{}]', [{},{}]],
+    ['[{type:"nope"}]', [{type:'nope'}]], ['[{type:"constructor"}]', [{type:'constructor'}]]
+  ];
+  CASES.forEach(function(C){
+    var L={ type:'shape', effects: JSON.parse(JSON.stringify(C[1]===undefined?null:C[1])) };
+    try{ L.effects = C[1]; san(L); }catch(e){ say(String(C[0]).padEnd(22)+' → sanitiser THREW: '+e.message); return; }
+    var e=L.effects;
+    var shape = e===undefined ? '(deleted ✅)'
+      : (Array.isArray(e) ? 'array['+e.length+']'+(e.some(function(x){return !x || typeof x!=='object';})?'  ❌ STILL HOLDS A NON-OBJECT':'  ✅')
+         : '❌ STILL '+JSON.stringify(e));
+    say(String(C[0]).padEnd(22)+' → '+shape);
+  });
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message;document.title='ERR';});
+});
+</script></body></html>

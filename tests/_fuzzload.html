@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Are the fuzz shapes reachable through a real save+reopen? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — `_docfuzz.html` found seven shapes that THROW during the draw and therefore make a project
+   unopenable: `layer.effects` as a string/number/object, `layer.effects` containing null, and
+   `layer.masks` as a string. But it sets them in memory, which proves the DRAW is fragile, not that the
+   state is reachable.
+   `sanitizeEffects` runs on load and does `if (!Array.isArray(l.effects)) { delete l.effects; return; }`,
+   so the question is which of the seven actually survives a real save and reopen. That is the difference
+   between "harden the renderer" and "a project he cannot open". */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.projects&&w.FM.storage&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(500);
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(400);
+  var made=[];
+  function render(){
+    var c=document.createElement('canvas'); c.width=100; c.height=100;
+    var g=c.getContext('2d'); var P=FM.scene.project;
+    try { g.save(); g.scale(100/P.width,100/P.height); FM.renderScene(g, FM.scene, 1); g.restore(); }
+    catch(e){ return 'THREW: '+e.message; }
+    return 'ok';
+  }
+  var CASES=[
+    ['effects = "x"',        function(L){ L.effects='x'; }],
+    ['effects = 7',          function(L){ L.effects=7; }],
+    ['effects = {}',         function(L){ L.effects={}; }],
+    ['effects = [null]',     function(L){ L.effects=[null]; }],
+    ['effects = [1,"x",null]',function(L){ L.effects=[1,'x',null]; }],
+    ['masks = "x"',          function(L){ L.masks='x'; }]
+  ];
+  for (var i=0;i<CASES.length;i++){
+    var name=CASES[i][0], mut=CASES[i][1];
+    try{
+      var id=await FM.projects.create({name:'ZZ-fz'+i, width:640, height:640});
+      made.push(id); await sleep(350);
+      var L=FM.makeLayer('shape',{name:'Z',shape:'rect',x:320,y:320,shapeW:200,shapeH:200,fill:'#4a9eff'});
+      L.start=0;L.duration=4;FM.scene.layers.push(L);
+      mut(L);
+      FM.storage.markDirty(); FM.storage.flushSync(); await FM.storage.save(); await sleep(300);
+      var other=await FM.projects.create({name:'ZZ-fz'+i+'b'}); made.push(other); await sleep(350);
+      await FM.projects.open(id); await sleep(700);
+      var back=FM.scene.layers.filter(function(l){return l.name==='Z';})[0];
+      var got = back ? (Array.isArray(back.effects)?('array['+back.effects.length+']'+(back.effects.some(function(e){return !e;})?' WITH NULLS':'')):JSON.stringify(back.effects)) : '(no layer)';
+      say(name.padEnd(24)+' after reopen: effects '+String(got).padEnd(22)+'  render '+render());
+    } catch(e){ say(name+'  ERR '+e.message); }
+  }
+  for(var j=0;j<made.length;j++){ try{ FM.projects.remove && FM.projects.remove(made[j]); }catch(e){} }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

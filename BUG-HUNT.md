@@ -1489,3 +1489,38 @@ about whether to clamp is how the NEXT branch gets written wrong.
 loosening the CLIP branch would pass every assertion about the loop one, so both are mutation-proved —
 and a legitimate 1–3 region is asserted to come back untouched, because a clamp that ate valid ranges
 would also pass "nothing is out of bounds".
+
+
+## 27. Fuzzed the whole document — CLEAN, and it corrected the generalisation (21 Aug)
+
+Four of the five real finds in sections 19–26 had one shape: **a value a saved project can carry that no
+load-time check removes.** So rather than hunt an eighth instance, corrupt everything.
+
+**Scalars — the draw path survives them.** Ten hostile values (NaN, ±Infinity, null, string, object,
+array, 1e12, -1e6, true) across ten layer fields and seven transform channels: **170 combinations, zero
+throws.** That is the `isFinite` discipline working, and it is now pinned by the suite.
+
+**Containers — the draw path does NOT survive them, and does not have to.** `layer.effects` as a string,
+number or object throws `.some is not a function`; an array holding `null` throws reading `.type`. But
+asked directly, `sanitizeEffects` — the one sanitiser that DOES run on load — neutralises all nine
+shapes tested: non-arrays deleted, every hostile entry filtered out.
+
+    "x" → (deleted)   7 → (deleted)   {} → (deleted)   true → (deleted)
+    [null] → array[0]   [1,"x",null] → array[0]   [{type:"constructor"}] → array[0]
+
+**So this is a clean clearance — and it corrects my own summary.** "Trusting at the document layer" was
+too broad: `effects` is covered. The earlier finds were specific FIELDS the sanitiser does not reach
+(`speed`, keyframe order, `fillImage`, the loop region), not a blanket absence of protection.
+
+⚠️ **Guarded where the protection actually is.** The renderer is asserted against scalars, the SANITISER
+against containers. Adding container checks to hot draw code for a state that cannot occur would be cost
+without benefit — and if the sanitiser ever stops removing them, the test goes red before the renderer
+does.
+
+### The ship gate flaked a second time on the way — a SECOND cause
+
+`v=1.772` this time, a perfectly plausible velocity, where section 10's cause produced a nonsensical
+229. So that fix held. The remaining cause is that the test polled **1.5s of wall time** while the glide
+advances on `requestAnimationFrame` — a question about the MACHINE — and a new 250-render fuzz test had
+just finished. It counts FRAMES now, and distinguishes "the tab was throttled to a standstill" from "the
+glide is dead" instead of reporting the second when it means the first. Three consecutive suite runs green.

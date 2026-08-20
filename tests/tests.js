@@ -3363,6 +3363,70 @@
     }
   });
 
+  test('a corrupted document neither throws in the draw nor survives the load', { item: 'doc-fuzz' }, function () {
+    /* BUG HUNT (21 Aug) — the CLASS rather than another instance. Seven hunts in, four of the five real
+       finds had the same shape: a value a saved project can carry that no load-time check removes. So
+       instead of hunting an eighth, corrupt everything and see what holds.
+       TWO HALVES, because the app defends in two different places and both are load-bearing:
+         1. SCALARS — the DRAW path survives them. 170 combinations of ten hostile values across the
+            layer's own numbers and its transform: nothing throws. That is the isFinite discipline
+            working, and this pins it.
+         2. CONTAINERS — the draw path does NOT survive these (`layer.effects.some is not a function`,
+            and a null entry gives "Cannot read properties of null"), so what protects the app is
+            `sanitizeEffects` on the LOAD. Measured: it deletes a non-array outright and filters every
+            hostile entry to an empty array.
+       ⚠️ Written this way on purpose. Guarding the containers in the renderer would mean adding checks
+       to hot draw code for a state that cannot occur — cost without benefit. Guarding them at the
+       sanitiser is where the protection actually is, so that is what is asserted. If the sanitiser ever
+       stops removing them, this goes red before the renderer does. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const P = FM.scene.project;
+      const HOSTILE = [NaN, Infinity, -Infinity, null, 'x', {}, [], 1e12, -1e6, true];
+      const FIELDS = ['start', 'duration', 'trimStart', 'speed', 'opacity', 'fadeIn', 'fadeOut', 'shapeW', 'shapeH', 'rotation'];
+      const TFIELDS = ['x', 'y', 'scale', 'rotation', 'opacity', 'anchorX', 'anchorY'];
+      const fresh = () => {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'Z', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#4a9eff' });
+        L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        return L;
+      };
+      const draw = () => {
+        const c = document.createElement('canvas'); c.width = 80; c.height = 80;
+        const g = c.getContext('2d');
+        g.save(); g.scale(80 / P.width, 80 / P.height); FM.renderScene(g, FM.scene, 1); g.restore();
+      };
+      let n = 0;
+      FIELDS.forEach(k => HOSTILE.forEach(h => {
+        const L = fresh(); L[k] = h; n++;
+        try { draw(); } catch (e) { throw new Error('layer.' + k + ' = ' + JSON.stringify(h) + ' threw during the draw (' + e.message + ') — a document carrying that is a project that cannot be opened'); }
+      }));
+      TFIELDS.forEach(k => HOSTILE.forEach(h => {
+        const L = fresh(); L.transform[k] = h; n++;
+        try { draw(); } catch (e) { throw new Error('transform.' + k + ' = ' + JSON.stringify(h) + ' threw during the draw (' + e.message + ')'); }
+      }));
+      if (n < 150) throw new Error('only ' + n + ' combinations swept');
+
+      /* HALF TWO — the containers, at the sanitiser, which is where they are actually stopped. */
+      const san = FM.storage && FM.storage._sanitizeEffects;
+      if (typeof san !== 'function') throw new Error('FM.storage._sanitizeEffects is not exposed, so the half that actually protects the containers cannot be checked');
+      [['a string', 'x'], ['a number', 7], ['an object', {}], ['a boolean', true]].forEach(([what, v]) => {
+        const L = { type: 'shape', effects: v };
+        san(L);
+        if (L.effects !== undefined) throw new Error('sanitizeEffects left layer.effects as ' + what + ' — the draw path does `layer.effects.some(...)` on it, so the project cannot be opened');
+      });
+      [['a null entry', [null]], ['mixed junk', [1, 'x', null]], ['empty objects', [{}, {}]], ['an unknown type', [{ type: 'nope' }]], ['a prototype key', [{ type: 'constructor' }]]].forEach(([what, v]) => {
+        const L = { type: 'shape', effects: v };
+        san(L);
+        if (!Array.isArray(L.effects)) throw new Error('sanitizeEffects turned an effects array containing ' + what + ' into ' + JSON.stringify(L.effects));
+        if (L.effects.some(e => !e || typeof e !== 'object')) throw new Error('sanitizeEffects kept ' + what + ' in the effects array — the draw path reads `.type` off every entry');
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
@@ -34349,12 +34413,24 @@
          (removing a field from clipboard snapshots) cannot affect flinging at all: the box was simply
          busy. Polling keeps the assertion identical in meaning — the list kept moving after the finger
          lifted — while a slow frame costs time instead of a false failure. */
-      let after = scroller.scrollTop;
-      const glideBy = performance.now() + 1500;
-      while (performance.now() < glideBy) {
-        await sleep(30);
+      /* WAIT IN FRAMES, NOT IN WALL TIME (queue 450, second cause). The glide advances on
+         requestAnimationFrame, so a wall-clock poll asks "did enough frames run in 1.5 SECONDS" — a
+         question about the MACHINE. It went red a second time inside the ship gate, with a perfectly
+         plausible velocity (v=1.772, where the first cause produced a nonsensical 229), on a run where
+         a new 250-render fuzz test had just finished: the frames simply had not been served yet.
+         Counting frames keeps the assertion identical in meaning — the list kept moving after the finger
+         lifted — while a busy box costs time instead of a false failure. The wall-clock cap stays as a
+         backstop for a tab that is throttled to no frames at all, and it SAYS which of the two happened. */
+      let after = scroller.scrollTop, frames = 0;
+      const hardStop = performance.now() + 4000;
+      while (frames < 90 && performance.now() < hardStop) {
+        await new Promise(r => requestAnimationFrame(r));
+        frames++;
         after = scroller.scrollTop;
         if (after > atRelease + 6) break;
+      }
+      if (frames < 5 && !(after > atRelease + 6)) {
+        throw new Error('only ' + frames + ' animation frames were served in 4s — the tab was throttled to a standstill, so this run could not evaluate the glide at all (it is not a dead glide)');
       }
       /* THE VELOCITY IS CHECKED FIRST, ON PURPOSE. This test has failed intermittently with `150 → 150`
          — zero movement inside a 1.5s poll, which no slow machine explains — and the useful question is

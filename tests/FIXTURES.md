@@ -83,6 +83,10 @@ transition is meaningless there.
 - `_looprange.html` — what `exportRange()` returns for a loop region that has gone stale: past the end
   (clamped by autoFitDuration on reopen) and negative (was not clamped at all, bug-hunt 26).
 
+- `_docfuzz.html` — corrupts every scalar and container on a layer and renders (bug-hunt 27). 248
+  combinations. `_saneff.html` asks `sanitizeEffects` directly what it removes, which is what settled
+  whether the container throws are reachable (they are not).
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.
