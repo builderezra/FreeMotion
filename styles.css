@@ -3060,7 +3060,7 @@ body.fm-playing #time-readout {
   body.m-editing #inspector { padding-top: 12px; }
 
   /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
-  #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-more { display: none; }
+  #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-maskgroup, #m-more { display: none; }
   body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more, body.m-editing #m-notes { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
@@ -3084,9 +3084,12 @@ body.fm-playing #time-readout {
   body.sel-mode #m-proj-more, body.sel-mode #m-settings, body.sel-mode #m-export, body.sel-mode #m-notes,
   body.sel-mode #m-dup, body.sel-mode #m-more { display: none; }
   body.sel-mode #m-selcount { display: block; }
-  body.sel-mode #m-group, body.sel-mode #m-del { display: flex; }
-  body.sel-mode #m-group { visibility: hidden; }    /* slot held open at 1 selected… */
-  body.sel-multi #m-group { visibility: visible; }  /* …and filled at 2+, without moving the bin */
+  body.sel-mode #m-group, body.sel-mode #m-maskgroup, body.sel-mode #m-del { display: flex; }
+  /* Both grouping slots are held open at 1 selected and filled at 2+, so nothing moves under the thumb
+     when a second layer joins the selection — the same trick #m-group has used since queue 71, applied
+     to its new twin. ONE writer for both, or they can disagree about whether they are on screen. */
+  body.sel-mode #m-group, body.sel-mode #m-maskgroup { visibility: hidden; }
+  body.sel-multi #m-group, body.sel-multi #m-maskgroup { visibility: visible; }
   /* Group and the bin sit on the RIGHT (v6.22, queue 71 — Ezra circled them on a screenshot and drew
      an arrow across the bar). They used to be anchored LEFT, tucked against the back arrow, which put
      the most destructive button in the app about 90px from the control that means "leave". Two taps
@@ -3106,6 +3109,16 @@ body.fm-playing #time-readout {
   #m-del { color: #ff6b7a; }
   #m-del:active { background: rgba(255, 107, 122, .16); }
   body.sel-mode #m-group    { order: 2; }
+  body.sel-mode #m-maskgroup { order: 3; }
+  /* THE PAIR SITS TOGETHER IN THE CORNER AND THE BIN KEEPS ITS DISTANCE (queue 436). Measured at 380px
+     with four layers selected BEFORE this: back 2..44, the count to 184.5, help to 230.5, the bin
+     232..274, then a 56px hole, then group 330..372 — which is his "the icons are in bad spots"
+     exactly: one icon marooned in the corner with a gap in front of it. The hole is the bin's 52px
+     mis-tap margin, and that margin is not slack to be reclaimed (see the note above it), so the
+     second grouping button goes on the FAR side of it, beside its twin. The bin still lands outside
+     the 298..382 band where project mode puts the cog and Export.
+     What pays for it is the count: `flex: 1` means it absorbs the 46px, and "4 layers selected" does
+     not fit in what is left. It says "4 selected" on a phone now — see js/app.js. */
   /* That 52px gap is the safety, not a spacing accident, and it is why the bin is NOT flush right.
      Measured at 390px, project mode packs the right-hand side solid: the cog holds 298..340 and
      Export 344..382. A thumb learns those two positions and goes there without looking. Dropping the

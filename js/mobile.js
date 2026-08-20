@@ -213,15 +213,21 @@ window.FM = window.FM || {};
     // FM.settings used to be reachable from the home screen only, so on a phone this menu really was
     // the one door to snapping, onion skin, guides and save/reset. It is two taps from the cog now.
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
-    /* ONE TAP, NO MENU (queue 376) — and on the phone that is all this button can be. Measured at 380px
-       with four layers selected: the header's five visible controls plus their gaps use every pixel of
-       its 370px content box, and the 56px hole beside the bin is `#m-del { margin-right: 52px }`, a
-       deliberate mis-tap guard for the red button. A second icon here would come straight out of
-       "4 layers selected", so Masking Group lives in the multi-select sheet below instead, where there
-       is room for both as full-width buttons. It is also still on the ⧉ layer-actions menu and the
-       timeline right-click, so nothing was taken away. */
+    /* ONE TAP, NO MENU (queue 376) — AND NOW A PAIR OF THEM (queue 436).
+       Queue 376's note said a second icon here "would come straight out of 4 layers selected", and put
+       Masking Group in the multi-select sheet instead. Ezra came back and said that is not what he
+       wanted: *"I wanted the ability to group every layer selected in the top right with an icon for
+       the two options, not in the bottom menu."*
+       So it was re-measured rather than re-argued, at the same 380px with four layers selected: the
+       header reports **49.5px spare** and a 56px hole beside the bin. The earlier reading counted the
+       hole as "full" — it is `#m-del { margin-right: 52px }`, a deliberate mis-tap guard, so it is not
+       slack to be reclaimed, but it is not the header being out of room either. The twin goes on the
+       far side of that guard, beside this button, and the count label pays the 46px by saying
+       "4 selected" instead. */
     var mGroup = document.getElementById('m-group');
     if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection(); });
+    var mMask = document.getElementById('m-maskgroup');
+    if (mMask) mMask.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection({ mask: true }); });
 
     // Anchor the docked sheet's top just below the single selected-clip row so the property
     // options never cover the clip — clamped so the panel always keeps a usable height.

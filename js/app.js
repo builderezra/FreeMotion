@@ -633,7 +633,12 @@ window.FM = window.FM || {};
     document.body.classList.toggle('m-editing', phone && n === 1 && !selOwns);
     // JS supplies the NUMBER; the stylesheet decides whether the label is on screen.
     const cnt = document.getElementById('m-selcount');
-    if (cnt) cnt.textContent = n + (n === 1 ? ' layer selected' : ' layers selected');
+    /* "4 selected", not "4 layers selected", and it is a measurement rather than a style preference
+       (queue 436). The phone header is a flex row where this label is the only `flex: 1` item, so it
+       pays for every button beside it. Adding the masking-group twin he asked for costs 46px, and at
+       380px that leaves this ~88px — "4 layers selected" measured 136.5px and would have truncated
+       mid-word. The desktop is untouched: it has room, and the longer phrase reads better there. */
+    if (cnt) cnt.textContent = phone ? (n + ' selected') : (n + (n === 1 ? ' layer selected' : ' layers selected'));
   };
 
   // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
@@ -4205,8 +4210,13 @@ window.FM = window.FM || {};
       };
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
-        { label: 'Group Selection', disabled: selN < 2, action: () => FM.groupSelection() },
-        { label: 'Masking Group', disabled: selN < 2, action: () => FM.groupSelection({ mask: true }) },
+        /* GROUPING IS NOT IN THIS MENU ANY MORE (queue 436). Ezra, with "Group Selection" circled:
+           "Remove the group selection button from this menu, and also I wanted the ability to group
+           every layer selected in the top right with an icon for the two options." Both entries go,
+           not just the one he circled: leaving Masking Group behind would keep a half-family in a menu
+           whose other half had moved, which is the sort of split that gets reported later as "why is
+           this here". Both are buttons in the top bar now — #m-group / #m-maskgroup on a phone,
+           #btn-group / #btn-maskgroup on desktop — so nothing has lost a door. */
         { label: (selN > 1 ? 'Duplicate ' + selN + ' Layers' : 'Duplicate Layer'), disabled: !hasSel, action: () => FM.duplicateSelection() },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
         { label: 'Save whole look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },

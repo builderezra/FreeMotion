@@ -10473,6 +10473,7 @@ wait for them to report back."*
       measures the block itself now, told apart from the frame by area, and the same mutation reports
       *"centres on x=14.40, not 12"*.
 
+- [x] ⚠️ **PARTLY REVERSED BY #436 (v10.76) — the pair is in the TOP BAR now, not this sheet.**
 - [x] **376 — Group should be two buttons, not one button with a drop-down — and the drop-down has a
       dreadful gap.** ✅ **DONE v10.66 — with one thing to check, at the bottom.** (18 Aug, phone screenshot at v9.81 with 4 layers selected and the group menu open.)
       His words, verbatim: *"When group together, instead of one button with a drop down, make it two
@@ -12528,20 +12529,21 @@ wait for them to report back."*
       differs. So the notch is verified by RENDER (`tests/_people.html`), the suite holds everything that
       is measurable, and the test file says which is which.
 
-- [ ] **436 — Group belongs in the TOP RIGHT, not the bottom sheet — and the top icons are still badly
-      placed with a multi-selection.** (20 Aug, two phone screenshots at v10.71: the ⧉ drop-down with
+- [x] **436 — Group belongs in the TOP RIGHT, not the bottom sheet — and the top icons are still badly
+      placed with a multi-selection.** ✅ **ALL FOUR CLAUSES DONE — v10.76.** (20 Aug, two phone screenshots at v10.71: the ⧉ drop-down with
       "Group Selection" circled, and the "3 layers selected" screen showing a "GROUP 3 CLIPS" row in the
       bottom sheet.) His words, verbatim: *"Two - 3 things.\n\nRemove the group selection button from this
       menu, and also I wanted the ability to group every layer selected in the top right with an icon for
       the two options, not in the bottom menu. Also the icons are in bad spots at the top when you have
       multiple layers selected still"*.
       **Clauses:**
-      1. [ ] **Remove "Group Selection" from the ⧉ drop-down** (the menu in his first screenshot).
-      2. [ ] **Put grouping in the TOP RIGHT as two icons** — one for Group, one for Masking group.
-      3. [ ] **Take them OUT of the bottom sheet** — the "GROUP 3 CLIPS" row shipped in v10.66 is exactly
-             what he is saying he did not want.
-      4. [ ] **The top-bar icons are still in bad spots** with several layers selected — his second
-             screenshot has `?`, the bin and one group icon strung across a mostly empty bar.
+      1. [x] ✅ **v10.76 — and BOTH entries went, not just the one he circled.** Leaving "Masking Group"
+             behind would keep half a family in a menu whose other half had moved.
+      2. [x] ✅ **v10.76 — `#m-group` and `#m-maskgroup` on the phone**, beside `#btn-group` /
+             `#btn-maskgroup` which the desktop already had. Different marks and different labels, since
+             two group icons side by side with no captions cannot be told apart.
+      3. [x] ✅ **v10.76 — the "GROUP N CLIPS" row is gone from the sheet.**
+      4. [x] ✅ **v10.76 — the bar reads back · "4 selected" · ? · 🗑 · [gap] · group · masking group.**
       ⚠️ **This partly REVERSES [#376](#), shipped v10.66.** That entry's measurement said the phone header
       had no room, so the pair went into the sheet. He is now saying the header is where he wanted them and
       the sheet is wrong. Re-measure the header at 380px with 3+ layers selected BEFORE moving anything —
@@ -12549,6 +12551,26 @@ wait for them to report back."*
       genuinely does not fit, say so with the number rather than shipping something cramped.
       ⚠️ Also check "Masking Group" in the drop-down: he named only Group Selection for removal, so leave
       Masking Group there unless clause 2 puts both in the header, which it appears to.
+
+      📐 **RE-MEASURED BEFORE MOVING ANYTHING, and the earlier reading was wrong** (`tests/_multihdr.html`,
+      380px, four layers selected). #376's note said the header's controls "use every pixel of its 370px
+      content box". They do not: it reports **49.5px spare**, plus a **56px hole** beside the bin. The hole
+      is `#m-del { margin-right: 52px }`, a deliberate mis-tap guard for the red button — so it is not
+      slack to reclaim — but the header was never out of room either. That one mistaken reading is why the
+      pair went into the sheet at v10.66 and had to come back out.
+      ✅ **v10.76 — the twin sits on the FAR side of that guard**, beside its brother, so the bin still
+      lands outside the 298..382 band where project mode puts the cog and Export. Before: back 2..44,
+      count to 184.5, help to 230.5, bin 232..274, a 56px hole, group marooned at 330..372 — which is his
+      "bad spots" exactly. After: back 2..44, "4 selected" to 138.5, help to 184.5, bin 186..228, the
+      guard, then group 284..326 and masking group 330..372.
+      ⚠️ **One thing changed that he did not ask for, and it is the price of what he did:** the count label
+      is the only `flex: 1` item in that row, so it pays for every button beside it. "4 layers selected"
+      measured 136.5px and there is ~90px left, so it now reads **"4 selected"** on a phone. Desktop is
+      untouched. If he wants the longer wording back, something else has to leave the bar.
+      🧪 **And the test guarding the old arrangement was blind.** Its "is a menu open" helper asked
+      `offsetParent !== null` — which is ALWAYS null for a `position: fixed` element — so every "no
+      drop-down appeared" assertion had been passing without ever seeing a menu at all. It measures the
+      rect now, and that is how the ⧉ check could be written against the real menu instead of its source.
 
 - [ ] **437 — Re-order and re-word the ⧉ drop-down; it is Alight Motion's menu.** (20 Aug, phone
       screenshot at v10.71.) His words, verbatim: *"With this drop down menu also re order the buttons in
