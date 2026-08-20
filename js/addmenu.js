@@ -25,7 +25,13 @@ window.FM = window.FM || {};
   // accept list also carries image/* and video/*. Explicit EXTENSIONS go in beside the wildcard because
   // mobile pickers match those far more reliably than they map audio/* onto a UTI (.m4a in particular).
   var ACCEPT_ALL = 'video/*,image/*,audio/*';
-  var ACCEPT_AUDIO = 'audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.amr';
+  /* VIDEO IS IN THE AUDIO PICKER ON PURPOSE (queue 448). Ezra: "When you press import audio then choose
+     from camera role it should auto extract the audio from the video and make it like an audio layer."
+     Narrowing this to audio alone is what made a video un-pickable from the Audio tab in the first place
+     — so the extensions stay (see the note above about iOS and UTIs) and video joins them. What arrives
+     is not treated as a video: `FM._wantAudioOnly` tells the importer that this batch was asked for from
+     the Audio tab, and a video picked here has its SOUND taken out. */
+  var ACCEPT_AUDIO = 'audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.amr,.mp4,.mov,.m4v';
   function pickFiles(accept) {
     var fi = document.getElementById('file-input');
     if (!fi) return;
@@ -35,8 +41,15 @@ window.FM = window.FM || {};
     // leaving it narrowed would silently break the next Import media
     setTimeout(function () { fi.setAttribute('accept', ACCEPT_ALL); }, 0);
   }
+  FM._audioAccept = function () { return ACCEPT_AUDIO; };   // seam: the suite checks a video is reachable from the Audio tab
   function fileImport() { pickFiles(ACCEPT_ALL); }
-  function audioImport() { pickFiles(ACCEPT_AUDIO); }
+  function audioImport() {
+    /* Stamped for ONE batch and consumed by handleFiles, not cleared on a timer: a picker can sit open
+       for as long as the user likes, so anything time-based would either expire mid-choice or leak into
+       the next ordinary import and silently turn a video into a sound file. */
+    FM._wantAudioOnly = true;
+    pickFiles(ACCEPT_AUDIO);
+  }
 
   function shp(kind, opts) { return function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; }
 

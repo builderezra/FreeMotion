@@ -12873,7 +12873,8 @@ wait for them to report back."*
       before — a no-op, never a broken layout — and the test REFUSES to run rather than passing vacuously
       on an engine that cannot evaluate it.
 
-- [ ] **448 — Import Audio → pick a video from the camera roll → extract its audio as an audio layer.**
+- [x] **448 — Import Audio → pick a video from the camera roll → extract its audio as an audio layer.**
+      ✅ **DONE v10.86.**
       (20 Aug.) His words, verbatim: *"When you press import audio then choose from camera role it should
       auto extract the audio from the video and make it like an audio layer"*.
       **Read as:** on the Audio tab, Import opens the picker; the iOS picker offers videos too, and if he
@@ -12888,6 +12889,19 @@ wait for them to report back."*
       and why). A big clip also takes real time to decode, so it needs the loading dot.
       ⚠️ Decide what the layer is CALLED — "IMG_4350 (audio)" reads better than the bare filename, since
       the timeline will otherwise show something identical to the video layer beside it.
+      ✅ **Done exactly that** — the extracted file is named `<original> (audio).wav`, and the test asserts
+      the name carries "audio" for precisely this reason.
+      ✅ **v10.86 — and the picker had to change first.** The Audio tab narrowed the file input to audio
+      only, which is what made a camera-roll video un-pickable there at all; video is in the accept list
+      now, extensions as well as the wildcard.
+      ✅ **Three honest failures, never a silent one:** no audio track, a codec the browser cannot decode,
+      or a decode that throws. In every case the video is imported AS A VIDEO and the toast says why — an
+      import that quietly does nothing is worse, and a SILENT layer is worse still, because it looks
+      exactly like the feature working.
+      🧷 **The sharp edge was the flag.** `FM._wantAudioOnly` is stamped when the Audio tab opens the
+      picker, and a picker can sit open indefinitely — so anything time-based would either expire
+      mid-choice or leak into the NEXT ordinary import and silently turn a video into a sound file. It is
+      consumed by the batch, asserted in both directions, and mutation-proved.
       ⚠️ WAV is uncompressed: a 3-minute clip is ~30MB in IndexedDB. Worth checking against #430's
       storage-budget work before shipping — M4A/AAC (v10.72) is now available as an encoder if the size
       turns out to matter.
@@ -12906,3 +12920,21 @@ wait for them to report back."*
       itself rather than inferring the gap from transforms, and see whether they agree at slots 0 and 1.
       Do not "fix" this on the strength of the current reading — it is exactly the shape of the three
       lies `_scrubstart.html` told before it was believed.
+
+- [ ] **450 — FLAKY TEST: "a vertical flick on the timeline keeps gliding, like a horizontal one".**
+      (20 Aug, found by the ship gate.) Not his words — a finding, not a request.
+      It went red on one `tools/ship.sh` run and green on the very next suite run with no change in
+      between: *"a fling WAS armed (v=229.125) but the list did not move: 150 → 150"*. It had also
+      appeared once during an unrelated mutation run at v=65.000.
+      **Why this matters more than one red line:** the ship gate is the thing standing between a broken
+      build and `main`, and a test that fails at random teaches everyone to re-run it — which is exactly
+      how a REAL failure gets waved through. A flaky gate is worse than a missing one.
+      🔎 **The shape of it, from the two sightings:** the fling is ARMED (a velocity is sampled, and a
+      large one) but `scrollTop` does not move. So the momentum loop either never ran a frame or its
+      first frame found nothing to scroll. Candidates worth measuring, in order: the list is not
+      scrollable at that instant (content shorter than the viewport — a rebuild landing mid-test), the
+      rAF the momentum needs is starved because the run is CPU-bound behind another test, or the
+      assertion reads `scrollTop` before the first frame lands.
+      ⚠️ **Do not "fix" it by loosening the assertion.** If the momentum genuinely does not start when
+      the machine is busy, that is the bug on his phone too — the exact class of thing #387 is about.
+      Measure which of the three it is before changing anything.

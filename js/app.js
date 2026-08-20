@@ -3165,10 +3165,55 @@ window.FM = window.FM || {};
   }
   FM.mediaKind = mediaKind;
 
+  /* TAKE THE SOUND OUT OF A VIDEO (queue 448). Ezra: "When you press import audio then choose from
+   * camera role it should auto extract the audio from the video and make it like an audio layer."
+   * Nothing new is needed to do it: FM.decodeAudio already turns any file the browser can read into an
+   * AudioBuffer, FM.audioBufferToWav already writes one back out as a File (js/audio-tools.js does this
+   * exact round trip for "remove vocals"), and addMediaLayer takes it from there. So it is
+   * decode → WAV → import, with no new dependency.
+   *
+   * THREE HONEST FAILURES rather than one silent one, because each is a different thing to tell him:
+   *   · the clip has NO audio track — adding a silent layer would look like the feature working;
+   *   · the browser cannot decode that audio — #215's lesson, say which file and why;
+   *   · the decode threw part-way.
+   * In every case the video is imported AS A VIDEO instead, which is the nearest useful thing to what
+   * he asked for and better than an import that does nothing.
+   * ⚠️ WAV is uncompressed — roughly 10MB a minute in IndexedDB. Named in queue 448 against #430's
+   * storage work; if that turns out to matter, FM.exporter.encodeM4A (v10.72) is now a real alternative. */
+  async function audioFromVideo(file) {
+    let buf = null;
+    try { buf = await FM.decodeAudio(file); }
+    catch (e) { console.warn('[import] could not decode the audio of ' + file.name, e); buf = null; }
+    if (!buf || !buf.length) return null;
+    const base = String(file.name || 'clip').replace(/\.[^.]+$/, '');
+    return new File([FM.audioBufferToWav(buf)], base + ' (audio).wav', { type: 'audio/wav' });
+  }
+
+  // Seams for the suite (queue 448): the import decision and the extraction itself. Without them the
+  // only way to test this is a real file picker, which no test can drive.
+  FM._handleFiles = function (files) { return handleFiles(files); };
+  FM._audioFromVideo = function (file) { return audioFromVideo(file); };
+
   async function handleFiles(files) {
+    // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
+    const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
     for (const file of files) {
       try {
         const kind = mediaKind(file);
+        if (wantAudio && kind === 'video') {
+          if (FM.loadingDot) FM.loadingDot.check();
+          if (FM.toast) FM.toast('Taking the audio out of “' + (file.name || 'that clip') + '”…', 2200);
+          const wav = await audioFromVideo(file);
+          if (wav) {
+            FM.addMediaLayer(await FM.loadVideoFile(wav));
+            if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
+          } else {
+            // Say what happened and still do the useful thing, rather than importing nothing.
+            if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
+            FM.addMediaLayer(await FM.loadVideoFile(file));
+          }
+          continue;
+        }
         if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
         else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
         // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a

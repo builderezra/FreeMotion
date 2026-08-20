@@ -2808,6 +2808,65 @@
     } finally { rail.className = railWas; fxb.className = fxbWas; }
   });
 
+  test('448: Import Audio takes the SOUND out of a video, and says so when it cannot', { item: '448' }, async function () {
+    /* Queue 448. Ezra: "When you press import audio then choose from camera role it should auto extract
+       the audio from the video and make it like an audio layer."
+       Nothing new was needed to do it — FM.decodeAudio turns a file into an AudioBuffer and
+       FM.audioBufferToWav writes one back out as a File, which is the round trip "remove vocals" already
+       uses — so what is worth guarding is the DECISION and the FAILURES, not the codec.
+       The flag is the sharp edge: `FM._wantAudioOnly` is stamped when the Audio tab opens the picker,
+       and a picker can sit open for as long as the user likes. Anything time-based would either expire
+       mid-choice or leak into the NEXT ordinary import and silently turn a video into a sound file. So
+       it is consumed by the batch, and that is asserted in both directions. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const was = FM._wantAudioOnly;
+    try {
+      if (typeof FM._handleFiles !== 'function') throw new Error('FM._handleFiles is not exposed, so the import decision cannot be driven at all');
+      if (typeof FM._audioFromVideo !== 'function') throw new Error('FM._audioFromVideo is not exposed');
+      if (!FM.decodeAudio || !FM.audioBufferToWav) throw new Error('the decode/WAV pair this feature is built on is missing');
+
+      /* THE EXTRACTION ITSELF, on a file the browser really can decode: a WAV written from a tone. It
+         goes in as a "video" by name so the importer takes the video branch, which is exactly what an
+         .mp4 off the camera roll does. */
+      const rate = 44100, n = rate / 4;
+      const ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, n, rate);
+      const ab = ctx.createBuffer(1, n, rate);
+      const ch = ab.getChannelData(0);
+      for (let i = 0; i < n; i++) ch[i] = Math.sin(2 * Math.PI * 440 * i / rate) * 0.4;
+      const wavBlob = FM.audioBufferToWav(ab);
+      const asVideo = new File([wavBlob], 'IMG_1234.mp4', { type: 'audio/wav' });
+      const out = await FM._audioFromVideo(asVideo);
+      if (!out) throw new Error('the extractor returned nothing for a file whose audio decodes — that is the feature not working at all');
+      if (!/\.wav$/i.test(out.name)) throw new Error('the extracted file is named "' + out.name + '" — it should be a .wav');
+      if (!/audio/i.test(out.name)) throw new Error('the extracted layer would be called "' + out.name + '", which reads identically to the video beside it on the timeline');
+      if (out.size < 1000) throw new Error('the extracted audio is ' + out.size + ' bytes for a quarter-second tone — that is an empty file');
+
+      /* A CLIP WITH NOTHING TO EXTRACT must not produce a silent layer that looks like success. */
+      const junk = new File([new Uint8Array(64)], 'IMG_9999.mp4', { type: 'video/mp4' });
+      const none = await FM._audioFromVideo(junk);
+      if (none) throw new Error('a file with no readable audio still produced a ' + none.size + '-byte sound file — a silent layer looks exactly like the feature working');
+
+      /* THE FLAG IS CONSUMED BY ONE BATCH. */
+      FM._wantAudioOnly = true;
+      await FM._handleFiles([]);
+      if (FM._wantAudioOnly) throw new Error('the audio-only flag survived an import — the NEXT ordinary video import would silently be turned into a sound file');
+      // …and an ordinary import never sets it
+      await FM._handleFiles([]);
+      if (FM._wantAudioOnly) throw new Error('an ordinary import set the audio-only flag');
+
+      /* AND THE PICKER LETS YOU REACH A VIDEO FROM THE AUDIO TAB, which is where his sentence starts.
+         Narrowed to audio alone, a camera-roll video is not selectable and none of the above can happen. */
+      const src = String((FM._audioAccept && FM._audioAccept()) || '');
+      if (!src) throw new Error('FM._audioAccept is not exposed, so whether a video can be picked from the Audio tab cannot be checked');
+      if (src && !/video/.test(src)) throw new Error('the Audio tab’s picker still accepts "' + src + '" — a video cannot be chosen from the camera roll, so the extraction can never be reached');
+    } finally {
+      FM._wantAudioOnly = was;
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
