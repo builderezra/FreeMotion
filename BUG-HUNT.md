@@ -1014,3 +1014,20 @@ against `rgb(233,244,247)`: the colour transition is still in flight 120ms after
 apart, and correct behaviour. It needs to poll until the colour settles, or compare with a tolerance,
 rather than sampling once — the same lesson as section 9, in a place I did not expect it.
 It was reverted rather than shipped red; re-adding it with that fix is a five-minute job.
+
+## 12. Swept the other gesture fixtures for the same fault — and deliberately changed nothing
+Having found that the vertical-glide fixture let its own drag eat the scroll range, the obvious next move
+is to "harden" every other gesture test the same way. Checked them instead:
+- **`dragging the add row into the edge scrolls the timeline` (the closest match)** guards on 10px of
+  overflow and asserts 5px of movement — tight. But its drag does NOT consume the range: the pointer is
+  held still at the edge and the AUTO-SCROLL does the moving, from `scrollTop = 0`. Different shape,
+  sound as written.
+- **`a flick that starts ON a clip glides like one on empty lane`** compares recorded fling VELOCITIES
+  captured at pointerup, never a distance, so range cannot affect it.
+**So nothing was changed**, and that is the point of the entry. Three of tonight's diagnoses were
+pattern-matched rather than measured — the sibling-footer theory for queue 426, and two of the three
+wrong causes for the glide — and each cost a build or a false "fixed". A guard raised on a test that was
+never failing is the same mistake with a tidier face: it makes the suite look safer while proving
+nothing, and it moves a number someone chose for a reason.
+**The rule this leaves:** widen a fixture's margins when a failure shows you it is too narrow, not when a
+sibling test turned out to be.
