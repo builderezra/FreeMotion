@@ -1107,3 +1107,26 @@ noting them here, so that if one of them ever fails mysteriously the first quest
 down: *did the fixture have room to move?*
 **And the rule for anything NEW:** a test asserting that something stays still must prove the thing had
 the opportunity to move. Otherwise it is measuring nothing and reporting success.
+
+## 15. The dangerous class, scanned — and an HONEST partial result
+Section 14 established which direction lies: a test asserting something **stayed still** passes when the
+fixture could never have moved. So the whole suite was scanned for that class. 741 blocks; **24 assert
+that something did not move, shift, drift or jump.**
+⚠️ **What I cannot honestly tell you is how many of those 24 are unguarded.** The automated check for
+"does it prove the thing COULD have moved" flags 18 — and that number is wrong, demonstrably:
+- Many are STATIC layout assertions ("the help button sits to the RIGHT of the version chip") where the
+  word "moved" appears in an error message and nothing is expected to move at all. They need no control.
+- And `the playhead survives a rebuild that lands mid project-open` is flagged as unguarded when the
+  v6.31 work on it explicitly added *"a control assertion proving the panel really was moving so the test
+  cannot pass vacuously"*. The regex simply does not recognise how that control is written.
+**So: a class worth auditing, a scan that finds the candidates, and no trustworthy verdict on them.**
+Saying "18 tests are unguarded" would be exactly the kind of confident wrong number this file's opening
+section is about. The 24 are listed by running the scan again — it is six lines of python over
+`tests.js`, splitting on `\n  test('` and looking for a "did not move" error message beside a
+`getBoundingClientRect`/`scrollTop` read.
+**The check to apply by hand, one test at a time:** does this test PERFORM AN ACTION and then assert
+something did not move? If yes, ask what happens when the action silently no-ops — if the answer is
+"it passes", it needs a control that proves the action happened. If the assertion is about static
+layout, it needs nothing.
+**Unfinished on purpose.** Judging 24 tests properly is a session's work, and doing it badly would
+replace a real question with a false all-clear.
