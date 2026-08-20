@@ -525,7 +525,7 @@ window.FM = window.FM || {};
       panel = elc('div', 'te-panel');
       document.body.appendChild(panel);
 
-      // ---- top toolbar: Align · Font · Size · Colour · Done ----
+      // ---- top toolbar: Colour · Align · Font · Size · Aa · Done ----
       bar = elc('div', 'te-bar');
       const alignBtn = elc('button', 'te-btn te-align'); alignBtn.type = 'button'; alignBtn.title = 'Alignment';
       const fontBtn = elc('button', 'te-btn te-font', '<span class="te-font-lbl"></span><span class="te-caret">▾</span>'); fontBtn.type = 'button';
@@ -533,7 +533,14 @@ window.FM = window.FM || {};
       const colorBtn = elc('button', 'te-btn te-color', '<span class="te-swatch"></span>'); colorBtn.type = 'button'; colorBtn.title = 'Colour';
       const extrasBtn = elc('button', 'te-btn te-extras', 'Aa'); extrasBtn.type = 'button'; extrasBtn.title = 'Text options (style, spacing, animation…)';
       const doneBtn = elc('button', 'te-btn te-done', '✓'); doneBtn.type = 'button'; doneBtn.title = 'Done';
-      bar.append(alignBtn, fontBtn, sizeBtn, colorBtn, extrasBtn, doneBtn);
+      /* COLOUR GOES FIRST (queue 440). Ezra sent the toolbar with an arrow drawn from the white swatch
+         — which sat fourth of six, between the size box and Aa — round to the far LEFT of the bar:
+         *"As per image, move the colouring button from there to there"*.
+         ⚠️ His arrow starts under "Inter" and ends at the left edge, so it can be read as "put colour
+         first" or as "swap colour and the font". The line ENDS at the edge, so it is built as colour
+         first; if that is not what he meant it is one word here. Recorded in REQUESTS 440 either way.
+         Nothing else moves: Done stays in the far corner, which is where every commit in this app is. */
+      bar.append(colorBtn, alignBtn, fontBtn, sizeBtn, extrasBtn, doneBtn);
       panel.appendChild(bar);
       alignBtn.addEventListener('click', () => { closePop(); cycleAlign(); });
       fontBtn.addEventListener('click', () => openPop('font', buildFontRail, fontBtn));

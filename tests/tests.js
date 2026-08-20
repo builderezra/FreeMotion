@@ -2339,6 +2339,40 @@
     }
   });
 
+  test('440: the colour swatch is the FIRST control in the text toolbar', { item: '440' }, async function () {
+    /* Queue 440. Ezra sent the toolbar with an arrow drawn from the white swatch — fourth of six,
+       between the size box and Aa — round to the far LEFT: "As per image, move the colouring button
+       from there to there". Asserted on ORDER rather than on pixels so it holds at any width, and the
+       Done button is checked as still last, because "move one control to the front" is the kind of edit
+       that quietly reshuffles the rest. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { name: 'T', text: 'Hi', x: 300, y: 400, fontSize: 80 });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit.start is missing');
+      FM.textEdit.start(L.id, {});
+      await sleep(200);
+      const bar = document.querySelector('.te-bar');
+      if (!bar) throw new Error('the text toolbar did not open');
+      const btns = [].slice.call(bar.querySelectorAll('.te-btn'));
+      if (btns.length < 4) throw new Error('the toolbar has only ' + btns.length + ' controls, so this is not the bar he photographed');
+      const idx = btns.findIndex(b => b.classList.contains('te-color'));
+      if (idx < 0) throw new Error('there is no colour button in the toolbar at all');
+      if (idx !== 0) throw new Error('the colour swatch is control ' + (idx + 1) + ' of ' + btns.length + ' — he asked for it at the far LEFT of the bar');
+      const last = btns[btns.length - 1];
+      if (!last.classList.contains('te-done')) throw new Error('Done is no longer the last control (it is ' + last.className + ') — moving colour to the front should not have reshuffled the rest');
+    } finally {
+      try { if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop(); } catch (e) {}
+      await sleep(120);
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

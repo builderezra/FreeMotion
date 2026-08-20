@@ -12647,7 +12647,32 @@ wait for them to report back."*
       has no software keyboard. Drive `window.visualViewport` resize/offset by hand in the probe (and say
       in the entry that it is a simulation), or this will read as "cannot reproduce" the way it has before.
 
-- [ ] **440 — Move the colour button in the text toolbar.** (20 Aug, phone screenshot at v10.71 with an
+      📐 **DRIVEN 20 Aug at v10.78 through `tests/_kbdevice.py`, which already exists for exactly this and
+      is not a simulation of the easy kind** — it runs index.html TOP-LEVEL at 390x844 dpr3 with an iPhone
+      UA, real Chrome safe-area emulation, and a visual viewport that behaves like iOS's (the layout
+      viewport stays 844 while the visual one shrinks AND gains a non-zero offsetTop).
+      **`--sweep` runs 12 (visual height × offsetTop) combinations. 73 assertions, 0 failed.** In every
+      one, "docked field sits on the keyboard" passes exactly — e.g. visual 407 / offsetTop 437: dock at
+      screen 285-365 with the keyboard starting at 407.
+      **So the app's own geometry is not what is wrong**, and that is worth knowing because it is where
+      three previous rounds looked.
+      🔎 **WHAT HIS SCREENSHOT ACTUALLY SHOWS, and it is the lead.** The pill above the keyboard carrying
+      **˄ ˅ and ✓** is not ours — we draw no such control. Up-arrow, down-arrow and Done is **iOS's own
+      form-accessory bar**, which it puts above the keyboard for text fields. Our dock is a `<textarea>`,
+      so it gets one. If iOS reports `visualViewport.height` as excluding the keyboard but NOT that
+      accessory strip, then `m.fixedBottom` is short by the strip's height and our field sits directly
+      behind it — which is his sentence exactly, and it is invisible to this harness because Chrome has
+      no accessory bar to report.
+      ⏸️ **BLOCKED ON ONE ANSWER FROM HIM, and only one:** with the keyboard up, **is the ˄ ˅ ✓ pill
+      sitting ON TOP of the text field, or is the field somewhere else entirely?** If it is on top, the
+      fix is to add the strip's height to the dock's offset and there is nothing else to investigate. If
+      the field is elsewhere, the geometry above is wrong in a way 12 combinations did not reach and the
+      next step is a screen recording rather than more Chrome.
+      ⚠️ **Do NOT close this as "cannot reproduce"** — the entry said so before and it is still right. What
+      has changed is that the app's own layout is now ruled out with 73 measurements, so the search has
+      somewhere new to go.
+
+- [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.
       **From:** the white rounded swatch, currently 4th of six (☰ · Inter ▾ · 160 pt ▾ · ⬜ · Aa · ✓).
@@ -12655,6 +12680,10 @@ wait for them to report back."*
       ⚠️ His arrow starts under "Inter" and curves to the swatch, so the two readings are "put the colour
       first" or "swap the colour and the font". The drawn line ends at the LEFT EDGE, so it is being built
       as "colour goes first"; if that is wrong it is one line to change, and say so when showing him.
+      ✅ **v10.79 — built as "colour goes first".** The bar reads ⬜ · align · Inter▾ · 160pt▾ · Aa · ✓.
+      Nothing else moved: Done stays in the far corner, and the test asserts that as well as the swatch's
+      position, because moving one control to the front is exactly the edit that quietly reshuffles the
+      rest. **If he meant SWAP colour and the font, it is one word in `bar.append(...)`.**
 
 - [ ] **441 — Captions need a corner drag handle to extend them.** (20 Aug, phone screenshot at v10.71 of
       a caption cue selected on the timeline.) His words, verbatim: *"Make the captions ur hovering over
