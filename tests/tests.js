@@ -2950,6 +2950,48 @@
     });
   });
 
+  test('captions keep their project times when the clip head is trimmed', { item: 'caption-drift' }, function () {
+    /* BUG HUNT (21 Aug), and it found one. Caption cue times are layer-LOCAL — `t - layer.start`, with
+       NO trim offset — so raising `start` slid every caption later in project time. Measured on a 1.6s
+       track through the real trim grips: a 0.367s head trim moved a cue from 2.200-2.500 to 2.567-2.867.
+       Captions timed against the audio lose sync with it, which is the entire point of having timed them.
+       A video head trim already compensates: it advances `trimStart` so the picture stays put while the
+       window moves over it. A caption track has no `trimStart`, so the offset goes onto the cues.
+       ⚠️ Asserted through `FM.trimLayerHead`, the seam the grip drag uses, rather than by driving the
+       grips: a TOUCH trim requires a deliberate 550ms hold before it arms (queue 336), and a probe that
+       presses and drags immediately arms nothing and measures nothing — which is exactly what the first
+       two runs of tests/_capdrift.html did while reporting "cues stayed put". */
+    if (!FM.trimLayerHead) throw new Error('FM.trimLayerHead is not exposed, so the head trim cannot be driven');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { name: 'Caps', text: 'one' });
+      L.start = 2; L.duration = 1.6; L.trimStart = 0;
+      L.captions = [{ start: 0.2, end: 0.5, text: 'A' }, { start: 0.6, end: 0.9, text: 'B' }, { start: 1.0, end: 1.4, text: 'C' }];
+      FM.scene.layers.push(L);
+      const projOf = () => (L.captions || []).map(c => (L.start + c.start).toFixed(3) + '-' + (L.start + c.end).toFixed(3)).join(' ');
+      const before = projOf(), start0 = L.start, dur0 = L.duration;
+      const DELTA = 0.4;
+      FM.trimLayerHead(L, DELTA);
+      // CONTROL: the trim has to have actually happened, or the comparison below is 0 === 0.
+      if (Math.abs((L.start - start0) - DELTA) > 1e-6) throw new Error('the head trim did not move the clip start (' + start0 + ' → ' + L.start + '), so nothing below is being measured');
+      if (Math.abs((dur0 - L.duration) - DELTA) > 1e-6) throw new Error('the head trim did not shorten the clip (' + dur0 + ' → ' + L.duration + ')');
+      if (projOf() !== before) throw new Error('trimming the head slid the captions: ' + before + ' → ' + projOf() + ' — they lose sync with the audio they were timed to, while a video head trim keeps its picture still');
+      /* NON-DESTRUCTIVE: a cue pushed before the new head keeps a negative time rather than being
+         deleted, so dragging the head back out brings it back — the same promise trimming a video makes
+         about its frames. */
+      FM.trimLayerHead(L, 0.6);           // now 1.0s in: cue A (0.2-0.5) is entirely behind the head
+      if ((L.captions || []).length !== 3) throw new Error('a cue was DELETED by a head trim (' + (L.captions || []).length + ' left of 3) — trimming is a window, not a cut, and dragging the head back must bring it back');
+      const a = L.captions[0];
+      if (!(a.end < 0.001)) throw new Error('the cue behind the new head was not pushed out of the window (end ' + a.end + ')');
+      FM.trimLayerHead(L, -1.0);          // …drag the head all the way back out
+      if (projOf() !== before) throw new Error('extending the head back did not restore the cues to where they were: ' + before + ' → ' + projOf());
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

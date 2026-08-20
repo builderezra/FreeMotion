@@ -1476,7 +1476,9 @@ window.FM = window.FM || {};
       const beginTrim = (e) => {
         try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
-        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer) };
+        // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
+        // same way `start`/`dur`/`trim` above do. Shifting the live list per move would compound.
+        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       };
@@ -2434,6 +2436,19 @@ window.FM = window.FM || {};
         L.start = trimDrag.start + delta;
         L.duration = trimDrag.dur - delta;
         if (L.type === 'video') L.trimStart = trimDrag.trim + delta * spL;
+        /* A CAPTION TRACK'S CUES ARE ITS SOURCE, AND A HEAD TRIM MUST NOT DRAG THEM (bug hunt, 21 Aug).
+           Cue times are layer-LOCAL (`t - layer.start`) with no trim offset, so raising `start` slid
+           every caption later in project time. Measured on a 1.6s track: a 0.367s head trim moved a cue
+           from 2.200-2.500 to 2.567-2.867 — captions timed against the audio lose sync with it, which is
+           the whole point of having timed them.
+           This is the SAME compensation the line above makes for video: a head trim advances `trimStart`
+           so the picture stays where it was. A caption track has no `trimStart`, so the offset goes onto
+           the cues instead. Both keep the CONTENT still while the window moves over it.
+           Non-destructive on purpose — cues pushed before the new head keep negative times rather than
+           being deleted, so dragging the head back out brings them back, exactly as re-extending a video
+           brings its frames back. `indexAt` only ever matches `lt >= c.start && lt < c.end`, so a
+           negative cue simply never shows. */
+        if (Array.isArray(L.captions) && Math.abs(delta) > 1e-9) L.captions = shiftCues(trimDrag.caps, delta);
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene (it cascades into every layout)
@@ -2452,6 +2467,32 @@ window.FM = window.FM || {};
     }
     FM.requestRender();
   }
+
+  /* ONE WRITER for "a head trim moves the window, not the cues" (bug hunt, 21 Aug). Both the grip drag
+   * and FM.trimLayerHead below need it, and the first version of this fix wrote the rule out twice —
+   * which is the thing this file warns about repeatedly, and which a mutation immediately proved: the
+   * suite drives the seam, so a mutation in the grip's copy SURVIVED. One function, two callers, and a
+   * mutation to it now fails the test.
+   * Both callers pass the list AS IT WAS AT THE GRAB, never the live one: shifting the live list per
+   * pointermove would compound the delta on every frame of the drag. */
+  function shiftCues(caps, delta) {
+    return Array.isArray(caps) ? caps.map(c => ({ ...c, start: c.start - delta, end: c.end - delta })) : null;
+  }
+
+  /* Head-trim as a function, so the suite can drive the thing the grip drives (bug hunt, 21 Aug).
+   * Driving the GRIP from a test is not equivalent: a touch trim requires a deliberate 550ms hold before
+   * it arms (queue 336), so a synthetic press-and-drag arms nothing and measures nothing — which is what
+   * two runs of tests/_capdrift.html did while reporting "cues stayed put".
+   * Same three writes the grip's forward-clip head branch makes, and the SAME cue compensation, because
+   * two copies of that rule is how they come to disagree. */
+  FM.trimLayerHead = function (layer, delta) {
+    if (!layer || !isFinite(delta)) return;
+    const caps = Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null;
+    layer.start = (layer.start || 0) + delta;
+    layer.duration = Math.max(0.1, (layer.duration || 0) - delta);
+    if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * (FM.speedAt ? FM.speedAt(layer, layer.start) : 1);
+    if (caps) layer.captions = shiftCues(caps, delta);
+  };
 
   /* The placement half of a clip-body drag, lifted out of the pointermove handler so the edge-scroll
    * loop can re-run it with the finger standing still. Same maths as before, and only one copy of it:

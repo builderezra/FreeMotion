@@ -26,10 +26,18 @@ f.addEventListener('load',function(){
   function build(){
     FM.scene.layers.length=0;
     var L=FM.makeLayer('text',{name:'Caps',text:'one'});
-    L.start=2; L.duration=6; L.trimStart=0;
-    L.captions=[{start:0.5,end:1.5,text:'A'},{start:2,end:3,text:'B'},{start:4,end:5,text:'C'}];
+    /* A SHORT clip, so BOTH grips are on screen at 380px. The first attempt used a 6s clip: at the
+       default zoom it is wider than the viewport, so a grip that `querySelector` finds may be parked at
+       an edge where the drag maps to a time the clamp refuses — which is one of the two things that
+       made the first run trim nothing at all. */
+    L.start=2; L.duration=1.6; L.trimStart=0;
+    L.captions=[{start:0.2,end:0.5,text:'A'},{start:0.6,end:0.9,text:'B'},{start:1.0,end:1.4,text:'C'}];
     FM.scene.layers.push(L);
     FM.scene.project.duration=14;
+    /* Park the playhead in the middle of the clip: the timeline is playhead-centred, so a clip whose
+       time is far from FM.time sits off the right of a 380px viewport and its far grip is unreachable —
+       which is what put grip.right at x=415 on a 380px screen in the run before this. */
+    FM.time = L.start + L.duration / 2;
     FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
     return L;
   }
@@ -42,8 +50,17 @@ f.addEventListener('load',function(){
     var g=d.querySelector('.clip-grip.'+side);
     if(!g){ say('   ✗ no .clip-grip.'+side+' on screen (is the clip selected?)'); return false; }
     var r=g.getBoundingClientRect();
+    var tlr=d.getElementById('timeline').getBoundingClientRect();
+    say('   grip.'+side+' at x '+r.left.toFixed(0)+'..'+r.right.toFixed(0)+'  (timeline '+tlr.left.toFixed(0)+'..'+tlr.right.toFixed(0)+')'
+        + ((r.left<tlr.left||r.right>tlr.right)?'   ⚠️ OFF the visible timeline':''));
     var x=r.left+r.width/2, y=r.top+r.height/2;
+    /* HOLD FIRST — 550ms. Queue 336 made a TOUCH trim require a deliberate hold before it arms
+       ("accidentally touching for a second moves it"), so a probe that presses and drags immediately
+       never arms one and measures nothing. That is why the first two runs trimmed nothing at all: not a
+       bug, a design this fixture did not know about. A mouse does not need it, which is why the desktop
+       path would have looked fine. */
     g.dispatchEvent(pe('pointerdown',x,y,64));
+    await sleep(700);
     /* CONTROL, and the reason this probe is not to be trusted without it: the first run found both grips,
        dispatched a full drag, and reported "cues stayed put" — against a clip whose start and duration
        had not moved at all. Nothing was trimmed, so nothing could drift. `FM.timeline._trimming()` is a
@@ -73,21 +90,25 @@ f.addEventListener('load',function(){
   L=build(); await sleep(500);
   FM.selectLayer(L.id); await sleep(400);
   before=proj(L); s0=L.start; var d0=L.duration;
-  var ok=await dragGrip('left', 60);
+  var ok=await dragGrip('left', 24);
   if(ok){
     say('');
     say('TRIM LEFT     start '+s0.toFixed(3)+' → '+L.start.toFixed(3)+'   duration '+d0.toFixed(3)+' → '+L.duration.toFixed(3));
     say('              before ' + before);
     say('              after  ' + proj(L));
-    say('              ⇒ cues moved by ' + (L.start - s0).toFixed(3) + 's in project time'
-        + (Math.abs(L.start - s0) > 0.02 ? '   ❌ trimming the head SLID every caption' : '   ✅ stayed put'));
+    /* THE VERDICT IS THE CUES, NOT THE CLIP. `start` MUST change on a head trim — that is what a head
+       trim is. The question is whether the captions moved with it, so the two cue strings are compared
+       directly. Keying the verdict off `start` reported ❌ against a build that had just been fixed. */
+    say('              ⇒ ' + (proj(L) === before
+        ? '✅ every cue kept its project time — the window moved over them, they did not move'
+        : '❌ trimming the head SLID every caption (they lose sync with the audio they were timed to)'));
   }
 
   // ---- 3. TRIM the RIGHT edge ----
   L=build(); await sleep(500);
   FM.selectLayer(L.id); await sleep(400);
   before=proj(L); s0=L.start; d0=L.duration;
-  ok=await dragGrip('right', -60);
+  ok=await dragGrip('right', -24);
   if(ok){
     say('');
     say('TRIM RIGHT    start '+s0.toFixed(3)+' → '+L.start.toFixed(3)+'   duration '+d0.toFixed(3)+' → '+L.duration.toFixed(3));

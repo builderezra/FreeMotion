@@ -12998,7 +12998,8 @@ wait for them to report back."*
       in a path that does arithmetic on it, allowing the two safe shapes by pattern. Same technique the
       service-worker test uses. Mutation-proved by putting the exporter's back.
 
-- [ ] **452 — Finish the caption-drift hunt: does trimming a caption clip slide its cues?** (21 Aug,
+- [x] **452 — Finish the caption-drift hunt: does trimming a caption clip slide its cues?** ✅ **YES IT
+      DID — FOUND AND FIXED v10.91.** (21 Aug,
       from the v10.90 bug-hunt session.) Not his words — an unresolved measurement, filed so it is not
       mistaken for a clean result.
       **What IS established:** moving a clip carries every cue by exactly the same delta (measured), and
@@ -13016,3 +13017,23 @@ wait for them to report back."*
       `FM.timeline._trimming()` says which.
       ⚠️ If it turns out cues DO slide on a head trim, the fix is not obviously "stop them": think about
       what a head trim on a caption track should mean before changing the model. Worth asking him.
+
+      ✅ **THEY DID SLIDE, and it is a sync bug rather than a design question — so it was fixed rather
+      than asked about.** Measured through the real grips: a 0.367s head trim moved a cue from
+      **2.200–2.500 to 2.567–2.867**. The app already has an answer for this shape of edit and applies it
+      to every other clip type: a video head trim advances `trimStart` so the PICTURE stays put while the
+      window moves over it. A caption track has no `trimStart`, so the offset goes onto the cues. Both
+      keep the content still. Captions that had been timed against the audio were being dragged off it,
+      which no reading of "what a head trim should mean" defends.
+      ✅ **Non-destructive**, and asserted as a round trip: a cue pushed behind the new head keeps a
+      negative time rather than being deleted, so dragging the head back out restores it exactly — the
+      same promise trimming a video makes about its frames.
+      🔎 **THE HARNESS WAS WRONG THREE TIMES BEFORE IT WAS RIGHT**, and all three are now written into it:
+      · it reported "cues stayed put" against a clip that had never been trimmed —
+        `FM.timeline._trimming()` as a CONTROL turned that into an honest "no trim ever started";
+      · the reason none started is that a TOUCH trim needs a deliberate **550ms hold** before it arms
+        (queue 336), so a press-and-drag arms nothing — not a bug, a design the fixture did not know;
+      · its verdict keyed off the CLIP's `start`, which MUST change on a head trim, so it reported ❌
+        against the fixed build. It compares the cue project times now.
+      🧱 **And the fix itself wrote the rule twice.** A mutation in the grip's copy SURVIVED, because the
+      suite drives the seam. One `shiftCues` writer, two callers, and a mutation to it now fails.

@@ -1274,4 +1274,29 @@ time the clamp then refuses; and the left grip's pointerdown may be bailing befo
 
 ⚠️ **The lesson is the one this file keeps re-learning.** A gesture probe without a control does not
 report "no bug" — it reports nothing, in the shape of "no bug". The control is what turned a false clean
-into a known unknown. Logged as **REQUESTS 452**.
+into a known unknown.
+
+### ✅ FINISHED THE SAME SESSION — and the trim half was a real bug. FIXED v10.91
+
+The reason no trim ever started: **a TOUCH trim requires a deliberate 550ms hold before it arms**
+(queue 336 — *"accidentally touching for a second moves it"*). A probe that presses and drags
+immediately arms nothing. Not a bug; a design the fixture did not know about, and one a desktop
+(mouse) path would never have revealed.
+
+With the hold added, and the clip centred so both grips are actually on the 380px screen:
+
+    TRIM LEFT   start 2.000 → 2.367   cue A  2.200–2.500  →  2.567–2.867     ❌ every caption slid
+    TRIM RIGHT  duration 1.600 → 1.233  cue A  2.200–2.500  →  2.200–2.500   ✅ correct
+
+**Captions timed against the audio were dragged off it by a head trim.** The app already answers this
+shape of edit everywhere else — a video head trim advances `trimStart` so the picture stays put while
+the window moves over it — and a caption track has no `trimStart`, so the offset goes onto the cues.
+Non-destructive: a cue behind the new head keeps a negative time and comes back when the head is
+dragged out, exactly as a video's frames do.
+
+**A third false reading, after the fix:** the probe's verdict keyed off the CLIP's `start`, which MUST
+change on a head trim — so it reported ❌ against a build that had just been fixed. It compares the cue
+PROJECT times now, which is the actual question.
+
+**And the fix wrote the rule twice.** A mutation in the grip's copy SURVIVED, because the suite drives
+the seam rather than the grip. One `shiftCues` writer, two callers, mutation now caught.
