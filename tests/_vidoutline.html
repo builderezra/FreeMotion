@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Outline on a video layer (queue 386)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.inspector)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  var sk=d.getElementById('splash-skip'); if(sk) sk.click();
+  var sp=d.getElementById('splash'); if(sp) sp.remove();
+  d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('video',{name:'Clip'}); L.start=0; L.duration=3; FM.scene.layers.push(L);
+  FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+  FM.inspector.openCategory('border'); await sleep(300);
+  L.stroke={enabled:true,width:10,color:'#5ac7ed',position:'outside'};
+  FM.inspector.refresh(); FM.inspector.openCategory('border'); await sleep(500);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

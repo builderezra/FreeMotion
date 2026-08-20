@@ -4817,7 +4817,13 @@ window.FM = window.FM || {};
       // stroke is the LINE colour (not a border), so no border UI there. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
       const openKind = layer.type === 'shape' && ['line', 'arc'].indexOf(layer.shape) >= 0;
-      const canBorder = (layer.type === 'shape' && !openKind) || layer.type === 'text' || layer.type === 'group';
+      /* …and MEDIA (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and
+         clips, not just shadow". Video and image were excluded because the media draw path ignores
+         `layer.stroke` — but it does not have to read it: `effectiveFx` now turns the toggle into the
+         same alpha-outline `stroke` effect a group's border already becomes, so the card can offer the
+         identical control here and it renders. */
+      const canBorder = (layer.type === 'shape' && !openKind) || layer.type === 'text' || layer.type === 'group'
+                        || layer.type === 'video' || layer.type === 'image';
       if (canBorder) {
         if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;

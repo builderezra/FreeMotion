@@ -1409,7 +1409,32 @@ window.FM = window.FM || {};
      * disagree with the real stack about ordering or about anything else. */
     const pv = FM._fxPreview;
     const pre = (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
-    const base = pre ? own.concat(pre) : own;
+    let base = pre ? own.concat(pre) : own;
+    /* …and a MEDIA layer's Outline, which is the same alpha-outline effect a GROUP's border already
+       becomes (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and clips,
+       not just shadow".
+       WHY IT IS DONE HERE rather than in the media draw path: the draw path branches text → shape →
+       media and only the first two ever read `layer.stroke`, which is why the entry recorded "there is
+       no media stroke code at all". There does not need to be any: the `stroke` pixel effect already
+       grows an exact distance field from a layer's ALPHA, and a video's plate has alpha like anything
+       else. Translating the toggle into that effect is precisely what the group path does a few hundred
+       lines below, so this is one existing pattern applied to one more layer type — no new rendering.
+       IT FOLLOWS THE ALPHA, not the layer rectangle: a cropped or rounded clip gets an outline that hugs
+       what you can actually see, which is what "outline" means everywhere else in this app.
+       It is added HERE and not to `layer.effects` so it never appears in the layer's Effects list, never
+       reaches the document, and cannot be duplicated by a copy or a save — the toggle stays the one
+       place it is owned, exactly like a shape's. */
+    if (layer && (layer.type === 'video' || layer.type === 'image') && layer.stroke && layer.stroke.enabled) {
+      const mbw = FM.evalProp(layer.stroke.width, t) || 0;
+      if (mbw > 0) {
+        base = base.concat([{ type: 'stroke', enabled: true, params: {
+          width: mbw,
+          color: FM.evalProp(layer.stroke.color, t) || '#ffffff',
+          position: layer.stroke.position === 'inside' ? 2 : (layer.stroke.position === 'center' ? 1 : 0),
+          shape: layer.stroke.round ? 1 : 0
+        } }]);
+      }
+    }
     if (!layer || !Array.isArray(layer.captions) || !layer.captions.length) return base;
     let cue = null;
     try { cue = FM.captions && FM.captions.cueAt(layer, t); } catch (e) { cue = null; }

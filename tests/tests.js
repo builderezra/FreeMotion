@@ -2092,6 +2092,69 @@
     }
   });
 
+  test('media: a video can carry an Outline, and it never leaks into the effects list', { item: '386' }, function () {
+    /* Queue 386 clause 1. Ezra: "Outlines should still be a toggle option on videos and clips, not just
+       shadow". The entry recorded "there is no media stroke code at all", which was true of
+       `layer.stroke` and false of the app: the `stroke` PIXEL effect already grows an exact distance
+       field from a layer's alpha, and that is how a GROUP's border has always been drawn. So the toggle
+       is translated into that effect at render time, for media exactly as for a group.
+       Asserted at `FM._effectiveFx`, the file's own single answer to "which effects does this layer
+       render with at time t", rather than by rasterising a video the suite has no file for. */
+    if (!FM._effectiveFx) throw new Error('no _effectiveFx seam to read');
+    const vid = { id: 'v1', type: 'video', effects: [], transform: {}, start: 0, duration: 3 };
+    const strokes = l => (FM._effectiveFx(l, 0) || []).filter(e => e && e.type === 'stroke');
+
+    if (strokes(vid).length) throw new Error('a video with no Outline set already renders a stroke');
+    vid.stroke = { enabled: false, width: 8, color: '#ff0000' };
+    if (strokes(vid).length) throw new Error('the Outline renders while its toggle is OFF');
+
+    vid.stroke.enabled = true;
+    const on = strokes(vid);
+    if (on.length !== 1) throw new Error('a video with Outline on renders ' + on.length + ' stroke effects, expected exactly 1');
+    if ((on[0].params || {}).width !== 8) throw new Error('the outline did not take the width from the card (' + JSON.stringify(on[0].params) + ')');
+    if ((on[0].params || {}).color !== '#ff0000') throw new Error('the outline did not take the colour from the card (' + JSON.stringify(on[0].params) + ')');
+
+    // A width of zero is "no outline", not a hairline default — the queue 403 trap, in a new place.
+    vid.stroke.width = 0;
+    if (strokes(vid).length) throw new Error('a zero-width outline still renders a stroke');
+    vid.stroke.width = 8;
+
+    /* AND IT NEVER REACHES THE DOCUMENT. This is the half that would go wrong quietly: if the effect
+       were pushed onto `layer.effects` it would show up in the Effects list, survive a save, and be
+       duplicated by every copy — so the toggle would stop being the one place the outline is owned. */
+    if ((vid.effects || []).some(e => e && e.type === 'stroke')) throw new Error('the outline was written into layer.effects, so it will show in the Effects list and be saved twice');
+
+    // …and an image gets the same, while a shape does NOT (it has a real stroke in the draw path).
+    const img = { id: 'i1', type: 'image', effects: [], transform: {}, stroke: { enabled: true, width: 5, color: '#00ff00' } };
+    if (strokes(img).length !== 1) throw new Error('an image with Outline on does not render one');
+    const shp = { id: 's1', type: 'shape', shape: 'rect', effects: [], transform: {}, stroke: { enabled: true, width: 5, color: '#00ff00' } };
+    if (strokes(shp).length) throw new Error('a SHAPE now renders the media outline as well as its own — that would double the stroke');
+
+    // The card must actually offer it, or the renderer support is unreachable.
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'Clip' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+      FM.inspector.openCategory('border');
+      /* THE TOGGLE, not the word. Searching the panel text for "Outline" is self-satisfying — the CARD
+         is called "Outline & Shadows" since queue 369, so the title alone passes it and the assertion
+         proves nothing. The mutation check caught exactly that, in the same trap the canary test
+         further up this file already documents. `checkRow` builds a `label.chk-row` holding a real
+         checkbox, so look for that. */
+      const rows = [].slice.call(document.querySelectorAll('#inspector .chk-row, .insp-body .chk-row'));
+      const outline = rows.filter(r => /^\s*Outline\s*$/.test(r.textContent || ''))[0];
+      if (!outline || !outline.querySelector('input[type="checkbox"]')) {
+        throw new Error('the Outline & Shadows card on a VIDEO offers no Outline TOGGLE (check rows found: ' + rows.map(r => (r.textContent || '').trim()).join(', ').slice(0, 140) + ')');
+      }
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
   test('clipboard: paste reproduces the layer exactly, and independently', { item: 'paste-fidelity' }, async function () {
     /* Same family as the duplicate sweep: a property the clipboard forgets is silently missing from
        what you paste. Two things are deliberately NOT differences and would otherwise make this test

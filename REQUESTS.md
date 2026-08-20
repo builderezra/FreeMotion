@@ -10700,15 +10700,16 @@ wait for them to report back."*
       ⏸️ **Not built today on purpose.** Everything above is measured and settled — what is left is the
       careful part, and the honest place for it is the start of a session rather than the end of a long one.
 
-- [ ] **386 — Videos and clips lost the Outline toggle, and there is no plain shadow — only the long drop
-      one.** (18 Aug, phone screenshot at v9.83: a video layer's Border / Shadow card containing ONE control,
+- [x] **386 — Videos and clips lost the Outline toggle, and there is no plain shadow — only the long drop
+      one.** ✅ **DONE — clause 2 v10.61, clause 1 v10.64.** (18 Aug, phone screenshot at v9.83: a video layer's Border / Shadow card containing ONE control,
       "Drop shadow".) His words, verbatim: *"Outlines should still be a toggle option on videos and clips, not
       just shadow, and also there needs to be a normal shadow not just the long drop one"*.
       **Confirmed in the code:** `canBorder` is `(shape && !openKind) || text || group` (`js/inspector.js:4540`)
       — video and image are deliberately excluded, so a media layer's card offers only the shadow. He is
       saying that exclusion is wrong: a video should be outline-able like anything else.
       **Clauses:**
-      1. [ ] **Outline works on video and image layers**, as a toggle, like it does on shapes and text.
+      1. [x] ✅ **v10.64 — Outline works on video and image layers**, as a toggle, like it does on shapes
+             and text.
       2. [x] ✅ **v10.61 — A normal shadow** as well as the long drop shadow — a soft shadow hugging the
              layer, rather than the offset one that is the only option today.
       ⚠️ An outline on a VIDEO means stroking the layer's rectangle (or its crop/rounded-corner shape), not
@@ -10761,9 +10762,23 @@ wait for them to report back."*
       excludes video and image, so the Outline & Shadows card offers them nothing. For a media layer the
       card's Outline toggle should add/remove that `stroke` effect and drive its width and colour, instead
       of writing `layer.stroke`, which the media draw path genuinely does ignore.
-      ⚠️ One consequence worth stating before it is built: the effect will also appear in the layer's
-      Effects list, because that is where it lives. That is honest rather than a leak — it is the same
-      control, reachable two ways — but it is a visible difference from how a shape's outline behaves.
+      ✅ **BUILT v10.64, and the consequence above was avoided.** The translation happens in
+      `effectiveFx` — the compositor's single answer to "which effects does this layer render with at
+      time t" — so the stroke is added for the RENDER only. It never touches `layer.effects`, which means
+      it does not appear in the Effects list, does not reach the document, is not saved twice and cannot
+      be duplicated by a copy: the toggle stays the one place the outline is owned, exactly like a
+      shape's. `canBorder` now includes video and image, so the card offers the identical Outline row,
+      Position segment, colour and size.
+      **Tested at the seam and at the card**, with four things a naive version would get wrong: the
+      outline is absent while the toggle is off, absent at width 0 (the queue 403 trap in a new place),
+      absent on a SHAPE (which would otherwise double its real stroke), and never written into
+      `layer.effects`. Both halves mutation-checked — removing video from `canBorder`, and disabling the
+      translation — each caught.
+      ⚠️ **And one trap this walked straight into, recorded because the file already warns about it:** the
+      first version of the card assertion searched the panel text for "Outline" and passed with the
+      feature removed, because the CARD is called "Outline & Shadows" (queue 369). That is the identical
+      self-satisfying check the canary test further up tests.js documents. It looks for the real toggle —
+      a `label.chk-row` holding a checkbox — now.
       **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
