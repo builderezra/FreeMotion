@@ -20,3 +20,7 @@ mkdir -p "$(dirname "$OUT")"
   --screenshot="$OUT" \
   "http://localhost:8777$URLPATH" 2>/dev/null
 echo "wrote $OUT"
+# Said on EVERY run, not just in the header above, because the header is read once and this trap costs
+# an hour each time it is met: virtual time does not finish a transition, so anything that slides is
+# photographed where it started. Moving the warning to the moment of use is the whole point.
+echo "  (virtual time: CSS transitions never complete — if this screen slides or fades, use tests/_shotlive.py)"
