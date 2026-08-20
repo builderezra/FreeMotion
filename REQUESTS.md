@@ -11099,6 +11099,28 @@ wait for them to report back."*
       ⚠️ Check what the exporter already does — GIF and video exist (js/gif-encode.js, js/exporter.js),
       so this may be a third branch of an existing dialog rather than a new feature.
 
+      📐 **MEASURED 20 Aug (`tests/_audiocodecs.html`) — and clause 2's question has a hard answer: MP3
+      is the one format the browser cannot give us.**
+      | | WebCodecs `AudioEncoder` | MediaRecorder |
+      |---|---|---|
+      | **MP3** | **no** | `audio/mpeg` **no** |
+      | AAC (`mp4a.40.2`) | **SUPPORTED** | `audio/mp4;codecs=mp4a.40.2` **SUPPORTED** |
+      | Opus | **SUPPORTED** | `audio/webm;codecs=opus` **SUPPORTED** |
+      | FLAC / PCM | no | `audio/wav` no |
+      (Headless Chrome. **iOS Safari is narrower still and is the browser that matters for him** — so
+      anything offered has to degrade honestly there rather than fail at the end of a render.)
+      **So the choice, in his terms:**
+      · **MP3 needs a LIBRARY** (lamejs or similar over CDN). Doable — the CDN route is allowed when
+        genuinely needed — but it is a real dependency for a format nothing native will produce.
+      · **M4A/AAC and WAV cost almost nothing and can ship today.** `buildAudioMix` (js/exporter.js)
+        already renders the WHOLE soundtrack through an OfflineAudioContext, and the exporter already
+        encodes it to AAC for video. Audio-only export is that mix written out instead of muxed in.
+        WAV needs no encoder at all — a RIFF header in front of the PCM the mix already produces.
+      🔧 **RECOMMENDATION, so this is not another open question:** ship **M4A (AAC)** and **WAV** as the
+      audio-only options — both free, both native, both work where video export already works — and only
+      add MP3 if he specifically wants that extension. "or whatever" reads like *give me a way to get the
+      audio out*, and these two do that today. **Building it does not need his answer; adding MP3 does.**
+
 - [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
       not itself"*

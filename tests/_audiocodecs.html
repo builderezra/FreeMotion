@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What audio can this browser actually encode? (queue 395)</title></head>
+<body style="margin:0;background:#06121a;color:#cfe;font:12px ui-monospace">
+<pre id="out" style="padding:10px;white-space:pre-wrap"></pre>
+<script>
+(async function(){
+  var o=[], AE=window.AudioEncoder;
+  o.push('WebCodecs AudioEncoder: '+(AE?'present':'ABSENT'));
+  var cfgs=[
+    ['AAC (mp4a.40.2)', {codec:'mp4a.40.2', sampleRate:48000, numberOfChannels:2, bitrate:160000}],
+    ['MP3 (mp3)',       {codec:'mp3',       sampleRate:48000, numberOfChannels:2, bitrate:192000}],
+    ['Opus',            {codec:'opus',      sampleRate:48000, numberOfChannels:2, bitrate:128000}],
+    ['FLAC',            {codec:'flac',      sampleRate:48000, numberOfChannels:2}],
+    ['PCM (u8/s16)',    {codec:'pcm-s16',   sampleRate:48000, numberOfChannels:2}]
+  ];
+  if(AE){ for(var i=0;i<cfgs.length;i++){
+    var name=cfgs[i][0], cfg=cfgs[i][1], r='?';
+    try { var s=await AE.isConfigSupported(cfg); r = s && s.supported ? 'SUPPORTED' : 'no'; }
+    catch(e){ r='no ('+(e.name||e.message).slice(0,28)+')'; }
+    o.push('  encode '+name.padEnd(18)+r);
+  } }
+  o.push('');
+  o.push('MediaRecorder mime types:');
+  ['audio/mpeg','audio/mp4','audio/mp4;codecs=mp4a.40.2','audio/webm','audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/wav']
+    .forEach(function(m){ o.push('  '+m.padEnd(30)+(window.MediaRecorder&&MediaRecorder.isTypeSupported(m)?'SUPPORTED':'no')); });
+  o.push('');
+  o.push('NOTE: this is THIS browser (headless Chrome). iOS Safari differs and is the one that matters');
+  o.push('for Ezra — WebCodecs audio landed late there and MediaRecorder mime support is narrower.');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+})();
+</script></body></html>
