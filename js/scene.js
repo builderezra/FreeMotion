@@ -441,6 +441,19 @@ window.FM = window.FM || {};
   // After dragging keyframes in the timeline, drop any *non-dragged* keyframe that now shares a
   // time with a dragged one (otherwise two keyframes stack at one time → degenerate interpolation),
   // then re-sort. The dragged keyframe wins the collision.
+  /* Keep every animated prop SORTED. `evalProp`'s whole structure depends on ascending `t` — its two
+   * early-outs and its pair scan all assume it — and a list out of order does not degrade, it goes
+   * badly wrong: measured (tests/_kfhostile.html), an unsorted three-keyframe list returns the LAST
+   * value at every time including at the other keyframes' own times, so the animation is simply frozen
+   * on the wrong number.
+   * Split out of dedupDraggedKfs so the DRAG can call it per move. The drag writes `kf.t` on every
+   * pointermove and only sorted on release, so for the whole of a drag that carried a keyframe past its
+   * neighbour the preview was showing that broken evaluation — you were choosing a position by watching
+   * a picture that was wrong. Sorting a handful of keyframes per move costs nothing. */
+  FM.sortKeyframes = function (layer) {
+    (FM.animatedProps ? FM.animatedProps(layer) : []).forEach(p => { p.kf.sort((a, b) => a.t - b.t); });
+  };
+
   FM.dedupDraggedKfs = function (layer, draggedKfs) {
     const dragged = new Set(draggedKfs || []);
     (FM.animatedProps ? FM.animatedProps(layer) : []).forEach(p => {

@@ -1364,3 +1364,35 @@ three operations later as "my layer moved" and cannot be traced back.
 So it is a permanent suite sweep over delete-a-group, ungroup, duplicate-then-delete-the-original, and
 undo-a-group-delete — each step asserting the operation DID something first, because a sweep over
 operations that silently no-op is a green run that proves nothing. Both removal paths mutation-proved.
+
+
+## 23. 🚨 A keyframe drag showed a broken curve for the whole drag — FIXED v10.94
+
+**The invariant nobody wrote down.** `FM.evalProp` is the single evaluator for every animated property
+in the app, and its structure depends on `kf` being sorted ascending by `t` — the two early-outs
+(`t <= kf[0].t`, `t >= last.t`) and the pair scan all assume it. Nothing at the function says so.
+
+**An out-of-order list does not degrade, it goes badly wrong.** Swept against hostile lists
+(`tests/_kfhostile.html`), an unsorted three-keyframe list returns the LAST value at every sampled
+time — including at the other keyframes' own times:
+
+    sorted (control)   -0.50→0.00  0.20→2.00  0.90→9.00  1.60→16.00  2.30→20.00
+    UNSORTED           -0.50→20.00 0.20→20.00 0.90→20.00 1.60→20.00  2.30→10.00
+
+**Where it was reachable.** Every WRITER sorts — `setProp`, the mask tool, the preset builder — and the
+`.fmotion.json` import sanitiser sorts. The keyframe DRAG sorts too… on release. It writes `kf.t` on
+every pointermove and only calls `dedupDraggedKfs` when the finger lifts, so for the whole of a drag
+that carried a keyframe past its neighbour, the preview was evaluating the broken curve. **You place a
+keyframe by watching the picture, and the picture was wrong.** Same class as queue 443's lying drop-gap,
+in a different gesture.
+
+Fixed by splitting the sort out as `FM.sortKeyframes` and calling it per move. The test leads with a
+CONTROL proving the unsorted state really is broken — without it, "sorted is correct" would pass on a
+build where order never mattered and the guard would be empty.
+
+### Recorded, not acted on
+
+Two garbage-in cases that the IMPORT sanitiser catches and the ordinary localStorage load does not: a
+NaN keyframe **value** propagates NaN through the curve, and a NaN keyframe **time** makes it jump to
+its last value. Same shape as the `FM.speedAt` find in section 19 — worth a load-time sweep if a third
+instance of this shape turns up.

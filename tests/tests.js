@@ -3146,6 +3146,60 @@
     }
   });
 
+  test('dragging a keyframe past its neighbour keeps the curve correct DURING the drag', { item: 'kf-sort-live' }, function () {
+    /* BUG HUNT (21 Aug). `FM.evalProp` is the one evaluator every animated property goes through, and
+       its whole structure depends on `kf` being sorted ascending by t — both early-outs and the pair
+       scan assume it. A list out of order does not degrade gracefully: measured
+       (tests/_kfhostile.html), an unsorted three-keyframe list returns the LAST value at every time,
+       including at the other keyframes' own times. The animation is frozen on the wrong number.
+       The keyframe drag writes `kf.t` on EVERY pointermove and only re-sorted on RELEASE — so for the
+       whole of a drag that carried a keyframe past its neighbour, the preview was evaluating that
+       broken curve. You were choosing where to put it by watching a picture that was wrong.
+       ⚠️ The control matters as much as the assertion here: this first proves the UNSORTED state really
+       is broken, because otherwise "sorted is correct" would pass on a build where sorting did nothing
+       and the order never mattered. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'K', shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#fff' });
+      L.start = 0; L.duration = 4;
+      L.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 10, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      const p = L.transform.x;
+      if (!FM.animatedProps || FM.animatedProps(L).indexOf(p) < 0) throw new Error('FM.animatedProps does not report transform.x, so FM.sortKeyframes would never reach it');
+
+      /* CONTROL — the unsorted state must genuinely be broken. */
+      p.kf = [{ t: 2, v: 20, e: 'linear' }, { t: 0, v: 0, e: 'linear' }, { t: 1, v: 10, e: 'linear' }];
+      if (Math.abs(FM.evalProp(p, 0) - 0) < 1e-6) throw new Error('an UNSORTED keyframe list evaluates correctly, so evalProp does not depend on order — this test is guarding nothing');
+
+      if (!FM.sortKeyframes) throw new Error('FM.sortKeyframes is missing — the drag has nothing to call per move');
+      FM.sortKeyframes(L);
+      [[0, 0], [1, 10], [2, 20]].forEach(([t, v]) => {
+        const got = FM.evalProp(p, t);
+        if (Math.abs(got - v) > 1e-6) throw new Error('after sorting, t=' + t + ' evaluates to ' + got + ' instead of ' + v);
+      });
+      if (Math.abs(FM.evalProp(p, 0.5) - 5) > 1e-6) throw new Error('the curve does not interpolate after sorting (t=0.5 gave ' + FM.evalProp(p, 0.5) + ', want 5)');
+
+      /* NOW THE DRAG'S OWN MOVE: carry the FIRST keyframe past the last, exactly as the pointermove
+         handler does — write `kf.t`, then sort — and check the curve is right at every step rather than
+         only once the finger lifts. */
+      const moving = p.kf[0];
+      [0.5, 1.5, 2.5, 3.0].forEach(nt => {
+        moving.t = nt;
+        FM.sortKeyframes(L);
+        const sorted = p.kf.every((k, i) => i === 0 || p.kf[i - 1].t <= k.t);
+        if (!sorted) throw new Error('mid-drag the keyframes are out of order at t=' + nt + ' (' + p.kf.map(k => k.t).join(',') + ') — the preview is evaluating a broken curve while the finger is still down');
+        p.kf.forEach(k => {
+          const got = FM.evalProp(p, k.t);
+          if (Math.abs(got - k.v) > 1e-6) throw new Error('mid-drag at t=' + nt + ', the keyframe at ' + k.t + ' evaluates to ' + got + ' instead of its own value ' + k.v);
+        });
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

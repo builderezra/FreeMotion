@@ -3062,6 +3062,10 @@ window.FM = window.FM || {};
           }
           kfDrag.moved = true;   // armed and tracking — every pixel from here retimes
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
+          // …and re-sort NOW, not on release. evalProp depends on ascending t, so carrying a keyframe
+          // past its neighbour left the preview evaluating a broken curve for the rest of the drag —
+          // you were placing it by watching a picture that was wrong. (bug hunt, 21 Aug)
+          if (FM.sortKeyframes) FM.sortKeyframes(kfDrag.layer);
           kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
           FM.requestRender();
           return;

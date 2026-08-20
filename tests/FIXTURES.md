@@ -67,6 +67,11 @@ transition is meaningless there.
   of the original? Measured clean. **Note the corrected expectation in it:** an in-place duplicate does
   NOT double the ink, because the copy sits exactly on top.
 
+- `_kfhostile.html` — `FM.evalProp` against unsorted, duplicated, empty, NaN and unknown-ease keyframe
+  lists. It is what showed that an out-of-order list returns the LAST value at every time rather than
+  degrading (queue/bug-hunt 23), and it still reports that — the fix is that WRITERS keep the list
+  sorted, not that evalProp tolerates disorder.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>evalProp against hostile keyframe lists (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">sweeping…</pre>
+<script>
+/* BUG HUNT — FM.evalProp is the single evaluator every animated property in the app goes through:
+   transforms, effect params, colours, masks, audio. Its whole structure assumes `kf` is SORTED
+   ASCENDING by t — the two early-outs (`t <= kf[0].t`, `t >= last.t`) and the pair scan all depend on
+   it. Sorting happens on WRITE (setProp, the mask tool) and on IMPORT (sanitizeKf), so the question is
+   what happens to a list that is out of order anyway — which is exactly the shape of the FM.speedAt
+   find: the ordinary localStorage load deliberately does not re-run most sanitisers.
+   INVARIANTS, over hostile lists:
+     1. always a finite number (or a string for colour props) — never NaN/undefined;
+     2. at a keyframe's own t, its own value;
+     3. never outside [min(v), max(v)] for plain linear keys — an eased curve may overshoot, so only
+        linear rows are held to this. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.evalProp)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(300);
+  var CASES = [
+    ['sorted (control)',   { kf:[{t:0,v:0,e:'linear'},{t:1,v:10,e:'linear'},{t:2,v:20,e:'linear'}] }],
+    ['UNSORTED',           { kf:[{t:2,v:20,e:'linear'},{t:0,v:0,e:'linear'},{t:1,v:10,e:'linear'}] }],
+    ['reversed order',     { kf:[{t:2,v:20,e:'linear'},{t:1,v:10,e:'linear'},{t:0,v:0,e:'linear'}] }],
+    ['duplicate times',    { kf:[{t:0,v:0,e:'linear'},{t:1,v:10,e:'linear'},{t:1,v:99,e:'linear'},{t:2,v:20,e:'linear'}] }],
+    ['single keyframe',    { kf:[{t:1,v:7,e:'linear'}] }],
+    ['empty kf',           { kf:[] }],
+    ['NaN time',           { kf:[{t:0,v:0,e:'linear'},{t:NaN,v:10,e:'linear'},{t:2,v:20,e:'linear'}] }],
+    ['NaN value',          { kf:[{t:0,v:0,e:'linear'},{t:1,v:NaN,e:'linear'},{t:2,v:20,e:'linear'}] }],
+    ['unknown ease',       { kf:[{t:0,v:0,e:'toString'},{t:1,v:10,e:'nope'},{t:2,v:20,e:'linear'}] }],
+    ['loop, 1 keyframe',   { kf:[{t:0,v:5,e:'linear'}], loopMode:'cycle' }],
+    ['pingpong unsorted',  { kf:[{t:2,v:20,e:'linear'},{t:0,v:0,e:'linear'}], loopMode:'pingpong' }]
+  ];
+  var bad=[], checked=0;
+  CASES.forEach(function(C){
+    var name=C[0], p=C[1];
+    var vals=(p.kf||[]).map(function(k){return k.v;}).filter(function(v){return typeof v==='number' && isFinite(v);});
+    var lo=vals.length?Math.min.apply(null,vals):0, hi=vals.length?Math.max.apply(null,vals):0;
+    var linear=(p.kf||[]).every(function(k){return !k.e||k.e==='linear';});
+    var sawNaN=(p.kf||[]).some(function(k){return typeof k.v==='number' && !isFinite(k.v);});
+    var seen=[];
+    for(var i=0;i<=40;i++){
+      var t=-0.5 + i*(3.5/40);
+      var v=FM.evalProp(p,t);
+      checked++;
+      if(i%8===0) seen.push(t.toFixed(2)+'→'+(typeof v==='number'?v.toFixed(2):String(v)));
+      if(v===undefined || v===null){ bad.push(name+': returned '+String(v)+' at t='+t.toFixed(2)); break; }
+      if(typeof v==='number' && !isFinite(v) && !sawNaN){ bad.push(name+': returned '+v+' at t='+t.toFixed(2)+' from finite keyframes'); break; }
+      if(linear && !sawNaN && typeof v==='number' && vals.length && (v < lo-1e-6 || v > hi+1e-6)){
+        bad.push(name+': '+v.toFixed(3)+' at t='+t.toFixed(2)+' is outside the keyframe values ['+lo+','+hi+']'); break;
+      }
+    }
+    // at each keyframe's own time, its own value
+    (p.kf||[]).forEach(function(k){
+      if(!isFinite(k.t)) return;
+      var v=FM.evalProp(p,k.t);
+      if(typeof k.v==='number' && isFinite(k.v) && typeof v==='number' && Math.abs(v-k.v)>1e-6){
+        bad.push(name+': at its own keyframe t='+k.t+' the value is '+v+', not '+k.v);
+      }
+    });
+    say(name.padEnd(20)+' '+seen.join('  '));
+  });
+  say('');
+  say('samples: '+checked);
+  if(!bad.length) say('✅ every hostile list held all three invariants');
+  else { say('❌ '+bad.length+' failure(s):'); bad.forEach(function(b){ say('   '+b); }); }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>
