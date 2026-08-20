@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.71</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v10.72</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -720,6 +720,13 @@
                soundtrack export that cannot fail for want of a codec is worth more than a smaller
                one that sometimes does. -->
           <option value="audio">Audio only (WAV)</option>
+          <!-- …and M4A (queue 395). Ezra: "I want more export options like mp3 or whatever". MP3 is the
+               one format no browser will encode (measured — tests/_audiocodecs.html), so it would need a
+               CDN library; AAC in an .m4a is native, is what the MP4 path already uses, and comes out
+               roughly a tenth the size of the WAV. WAV stays FIRST and stays the default, because it
+               cannot fail for want of a codec and #215 is the record of what that costs. If this browser
+               cannot encode AAC, the export says so and writes the WAV instead of a broken file. -->
+          <option value="audiom4a">Audio only (M4A)</option>
         </select>
       </label>
       <label class="field"><span>Resolution</span>
@@ -904,13 +911,13 @@
   <script src="js/graph-editor.js?v=16"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=103"></script>
+  <script src="js/exporter.js?v=104"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=41"></script>
   <script src="js/shortcuts.js?v=78"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=321"></script>
+  <script src="js/app.js?v=322"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>

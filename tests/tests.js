@@ -18692,6 +18692,62 @@
     if (!('from' in r) || !('to' in r)) throw new Error('exportRange did not report a range: ' + JSON.stringify(r));
   });
 
+  test('export: M4A is offered, produces a real MP4 audio file, and never saves an empty track', { item: '395' }, async function () {
+    /* Queue 395. His words: *"I want more export options like mp3 or whatever"*. MP3 is the one format
+       no browser will encode — measured, not assumed (tests/_audiocodecs.html) — so it needs a CDN
+       library. M4A/AAC is native and reuses the video path's own mixer, encoder and muxer.
+       WAV stays first and stays the fallback, because queue 215 is the record of what happens when an
+       export depends on a codec: a browser refused AAC and handed him a silent file. */
+    const sel = document.getElementById('exp-format');
+    if (!sel) throw new Error('the export dialog has no format select');
+    const opts = Array.prototype.map.call(sel.options, o => o.value);
+    if (opts.indexOf('audio') < 0) throw new Error('the WAV audio export is gone — it is the fallback everything else leans on');
+    if (opts.indexOf('audiom4a') < 0) throw new Error('there is no M4A option in the export dialog (' + opts.join(', ') + ')');
+
+    /* WIRED, not just listed. A format in the list that runExport does not recognise renders as a
+       video export with no picture — the "looks right, does nothing" failure. */
+    const was = sel.value;
+    try {
+      sel.value = 'audiom4a';
+      FM._syncExportFormat();
+      const resField = (document.getElementById('exp-res') || {}).closest ? document.getElementById('exp-res').closest('.field') : null;
+      if (resField && !resField.classList.contains('hidden')) throw new Error('choosing M4A left the Resolution control on screen — the format is listed but not treated as audio-only');
+      const go = document.getElementById('exp-go');
+      if (go && go.textContent !== 'Export audio') throw new Error('the export button says "' + go.textContent + '" for M4A, so this format is not on the audio path');
+    } finally { sel.value = was; try { FM._syncExportFormat(); } catch (e) {} }
+
+    if (!FM.exporter || typeof FM.exporter.encodeM4A !== 'function') throw new Error('FM.exporter.encodeM4A is missing, so the option above has nothing behind it');
+
+    // A real half-second tone, in the shape buildAudioMix returns.
+    const rate = 48000, n = rate / 2;
+    const mix = { audioBuffer: fakeAudioBuffer(n, rate, i => Math.sin(2 * Math.PI * 440 * i / rate) * 0.4), sampleRate: rate, channels: 1 };
+    const can = await FM.exporter.aacSupported(mix);
+    const out = await FM.exporter.encodeM4A(mix);
+    if (!can) {
+      // Honest on a browser without AAC: a NAMED reason, never a blob. The caller writes the WAV.
+      if (out.blob) throw new Error('this browser reports it cannot encode AAC, yet encodeM4A handed back a file anyway — that is the silent broken track queue 215 is about');
+      if (out.reason !== 'aac-unavailable') throw new Error('no AAC support, but the reason given was "' + out.reason + '" — the caller keys its message off this');
+    } else {
+      if (!out.blob) throw new Error('AAC is supported here but the M4A export produced nothing (reason: ' + out.reason + ')');
+      if (out.blob.type !== 'audio/mp4') throw new Error('the M4A came out typed "' + out.blob.type + '"');
+      if (out.blob.size < 512) throw new Error('the M4A is only ' + out.blob.size + ' bytes for half a second of tone — that is an empty or truncated file');
+      /* IS IT ACTUALLY AN MP4? Bytes 4-7 of an MP4 are the 'ftyp' box type. Checking the size alone
+         would pass a buffer of anything, and "it downloaded something" is exactly how a broken export
+         ships. */
+      const head = new Uint8Array(await out.blob.slice(0, 12).arrayBuffer());
+      const tag = String.fromCharCode(head[4], head[5], head[6], head[7]);
+      if (tag !== 'ftyp') throw new Error('the exported file does not start with an MP4 ftyp box (got "' + tag + '") — it is not a playable .m4a');
+    }
+
+    /* AND IT NEVER SAVES AN EMPTY TRACK. A mix with no samples encodes to no chunks; a muxer finalized
+       on that writes a moov advertising an audio track that was never fed, which plays silently in one
+       player and is refused outright by another (queue 215's worst case). It has to refuse instead. */
+    const empty = { audioBuffer: fakeAudioBuffer(0, rate, () => 0), sampleRate: rate, channels: 1 };
+    const none = await FM.exporter.encodeM4A(empty);
+    if (none.blob) throw new Error('a mix with no samples still produced a ' + none.blob.size + '-byte file — an audio track with nothing in it is the broken-file case, not a small export');
+    if (!none.reason) throw new Error('the empty mix was refused without saying why, so the caller cannot tell it from success');
+  });
+
   /* ---------------- queue 214: notes belong to ONE project ----------------
    * "Currently the notes carry across projects, I want each projects notes only for that project,
    * and when you save the project file as well it should save the notes."

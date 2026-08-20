@@ -11177,8 +11177,10 @@ wait for them to report back."*
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
       **Clauses:**
-      1. Audio-only export — MP3 or whatever the browser can actually encode without a library.
-      2. "or whatever" is an invitation, not a spec: work out what the export dialog can honestly offer
+      1. [x] ✅ Audio-only export — MP3 or whatever the browser can actually encode without a library.
+             **Already shipped under queue 216 (WAV), before he asked.**
+      2. [x] ✅ **"or whatever" — answered and built at v10.72: M4A/AAC alongside WAV.** The one thing
+             left is MP3, which needs a library and is his call. "or whatever" is an invitation, not a spec: work out what the export dialog can honestly offer
          given this is a local-only app with no backend. Worth checking what MediaRecorder and
          WebCodecs support on iOS Safari specifically before promising a format.
       ⚠️ Check what the exporter already does — GIF and video exist (js/gif-encode.js, js/exporter.js),
@@ -11227,6 +11229,18 @@ wait for them to report back."*
       audio-only options — both free, both native, both work where video export already works — and only
       add MP3 if he specifically wants that extension. "or whatever" reads like *give me a way to get the
       audio out*, and these two do that today. **Building it does not need his answer; adding MP3 does.**
+      ✅ **M4A SHIPPED v10.72** — the half that did not need his answer. "Audio only (M4A)" sits under the
+      WAV option in the export dialog, and it reuses the video path's own `buildAudioMix`, `encodeAudio`
+      and mp4-muxer, so the soundtrack cannot drift into a second meaning. About a tenth the size of the
+      WAV. **WAV stays first, stays the default, and is now the FALLBACK:** if this browser cannot encode
+      AAC the export says so and writes the WAV, rather than producing nothing or an empty track — #215
+      exactly. Never saves a half-written file: an encode that yields no chunks is refused, not finalized.
+      Guarded by a test that the file really is an MP4 (bytes 4–7 are `ftyp`), that an empty mix produces
+      no file, and that choosing M4A puts the dialog on the audio path rather than only appearing in the
+      list — all three mutation-proved. Verified at 380px.
+      ⏭️ **STILL OPEN, AND IT IS HIS CALL: MP3.** No browser encodes it, so it needs a CDN library
+      (lamejs or similar). Everything else worth having is now shipped, so the only question left is
+      whether he wants that specific extension enough to add a dependency for it.
 
 - [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
@@ -12566,3 +12580,33 @@ wait for them to report back."*
              categories are visible at 380px without scrolling, before and after. Measure both.
       ⚠️ Longest category names are the constraint, not the average — find the longest label in the
       registry and size the tile to that, or the widest one will be the one that breaks.
+
+- [ ] **446 — Rename two effect categories.** (20 Aug, two messages.) His words, verbatim: *"Chang the
+      repeat menus name to repetition"* and *"Distortion and warp to warping"*.
+      **Clauses:**
+      1. [ ] **"Repeat" → "Repetition"** (the effects-browser category).
+      2. [ ] **"Distortion and Warp" → "Warping"**.
+      ⚠️ Category names live in the effect registry (js/fx-registry.js) and are matched by the browser's
+      SEARCH as well as shown as headings — queue v2.34 made typing "warp" surface the whole family. So
+      renaming the heading must not stop `warp` finding those effects; keep the old word as a search alias
+      if the match is on the display name.
+      3. [ ] **"Procedural" → "Generative"**. His words, verbatim: *"Change procedural to generative"*.
+      4. [ ] **"Matte / Mask / Key" → something better, my choice.** His words, verbatim: *"Change the
+             name of Matt/mask/key to whatever you thinks best instead of that"*. (He typed "Matt"; the
+             category is spelled Matte.) A slash-triple is three words for one idea and reads like a
+             glossary — pick ONE plain word for what these effects DO and show him.
+      ⚠️ Ships naturally with **#445** (rename Featured → New, square category tiles) — same menu, same
+      release, and #445's square tiles have to fit "Repetition" and "Generative", both longer than what
+      they replace.
+
+- [ ] **447 — The canvas tool rail should close when the effects browser opens.** (20 Aug, phone
+      screenshot at v10.71 with the right-hand vertical rail circled.) His words, verbatim: *"Make this
+      menu close when you open the effect menu"*.
+      **What is circled:** the floating tool rail down the right of the canvas — 1×, +, loop, magnet,
+      grid, then the trim/split block, then the up/down arrows. With the effects browser open as a
+      bottom sheet, that rail is still sitting over the preview.
+      ⚠️ It must come BACK when the browser closes — a rail that only reappears on a rebuild or a
+      re-selection would read as "the buttons disappeared", which is a worse bug than the one being fixed.
+      ⚠️ Check what else opens over the canvas (the Add sheet, the inspector sheet, the colour picker):
+      if they all want the same behaviour, it belongs in one place keyed on "a full-height sheet is open",
+      not a special case for the effects browser alone.

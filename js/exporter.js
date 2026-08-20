@@ -512,9 +512,58 @@ window.FM = window.FM || {};
     return built;
   }
 
+  /* ---- AUDIO-ONLY M4A (queue 395) --------------------------------------------------------------
+   * His words: *"I want more export options like mp3 or whatever"*. MP3 is the ONE format no browser
+   * will produce — measured, not assumed (tests/_audiocodecs.html: MP3 unsupported by both WebCodecs
+   * AudioEncoder and MediaRecorder, AAC and Opus both supported) — so it would need a CDN library.
+   * M4A/AAC costs almost nothing here because every piece already exists for the video path: the same
+   * `buildAudioMix`, the same `encodeAudio`, and mp4-muxer, which takes an audio track with no video.
+   * WAV stays the default and is untouched: it needs no codec at all, and #215 is the record of what
+   * happens when an export depends on one — a browser refused AAC and handed him a silent file.
+   *
+   * SO THIS PROBES BEFORE IT PROMISES, and reports the reason rather than writing a broken file. Three
+   * distinct failures are separated, because #215's whole lesson is that they are different and only
+   * one of them was ever visible: no encoder in this browser at all; the encoder rejects THIS mix's
+   * shape; the encode itself throws part-way. Each returns a named reason, and the caller offers WAV.
+   * Nothing half-written is ever saved — the muxer is finalized only after every chunk is in. */
+  async function aacSupported(mix) {
+    if (typeof AudioEncoder === 'undefined') return false;
+    try {
+      const s = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: mix.sampleRate, numberOfChannels: mix.channels, bitrate: 160000 });
+      return !!(s && s.supported);
+    } catch (e) { return false; }
+  }
+  async function encodeM4A(mix) {
+    if (typeof window.Mp4Muxer === 'undefined') return { blob: null, reason: 'no-muxer' };
+    if (!(await aacSupported(mix))) return { blob: null, reason: 'aac-unavailable' };
+    const muxer = new Mp4Muxer.Muxer({
+      target: new Mp4Muxer.ArrayBufferTarget(),
+      audio: { codec: 'aac', numberOfChannels: mix.channels, sampleRate: mix.sampleRate },
+      // 'in-memory' rather than the video path's streamed false: a soundtrack is ~1.2MB a minute, and
+      // an in-memory moov means the file plays from the first byte instead of needing the whole thing.
+      fastStart: 'in-memory',
+    });
+    let n = 0;
+    try {
+      await encodeAudio((chunk, meta) => { n++; muxer.addAudioChunk(chunk, meta); }, mix);
+    } catch (e) {
+      console.warn('[export] audio-only AAC encode failed', e);
+      return { blob: null, reason: 'encode-failed' };
+    }
+    // An empty track is the "broken/silent track strict players reject" from queue 215, reached by a
+    // route the support probe cannot see. A file with nothing in it is not a file worth saving.
+    if (!n) return { blob: null, reason: 'no-chunks' };
+    muxer.finalize();
+    const buf = muxer.target.buffer;
+    if (!buf || !buf.byteLength) return { blob: null, reason: 'empty' };
+    return { blob: new Blob([buf], { type: 'audio/mp4' }), reason: '' };
+  }
+
   FM.exporter = {
     prepareCaches,
     buildAudioMix,
+    encodeM4A,
+    aacSupported,
     async run(opts) {
       if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') {
         throw new Error('NO_WEBCODECS');

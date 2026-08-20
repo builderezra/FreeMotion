@@ -38,6 +38,9 @@ transition is meaningless there.
   back again, plus the card thumbnail's ink and whether a project file saved from home still carries its
   media. The three numbers that matter are on three lines.
 
+- `_expfmt.html` — the export dialog at 380px with a format pre-chosen. Built for queue 395's M4A option;
+  it caught the first label ("Audio only (M4A — smaller)") truncating in the select at that width.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

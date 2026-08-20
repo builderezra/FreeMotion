@@ -3371,7 +3371,7 @@ window.FM = window.FM || {};
        "the export dialog's resolution/fps controls should hide themselves when it is chosen, rather
        than sitting there meaning nothing". A control that cannot affect the output is worse than no
        control: it invites you to set it and then quietly ignores you. */
-    const audioOnly = fmt === 'audio';
+    const audioOnly = fmt === 'audio' || fmt === 'audiom4a';
     ['exp-res', 'exp-fps', 'exp-custom-field', 'exp-transparent-field'].forEach(function (id) {
       const n = document.getElementById(id);
       const f = n && (n.classList.contains('field') ? n : (n.closest('.field') || n.parentElement));
@@ -3381,8 +3381,13 @@ window.FM = window.FM || {};
     });
     const go = document.getElementById('exp-go');
     if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames'
-      : (fmt === 'audio' ? 'Export audio' : (fmt === 'frame' ? 'Save frame' : 'Export MP4')));
+      : (audioOnly ? 'Export audio' : (fmt === 'frame' ? 'Save frame' : 'Export MP4')));
   }
+
+  // Seam: the dialog's own format sync. Without it the M4A option can only be checked as MARKUP, and a
+  // format that is listed but not wired into audioOnly would ship looking correct — the same "a control
+  // that looks right but does nothing" trap FM._exportSoloId exists for.
+  FM._syncExportFormat = syncExportFormat;
 
   /* WHICH RANGE IS BEING EXPORTED — one definition, read by the video path and the audio-only path
    * (queue 216). Pulled out of runExport rather than copied, because two copies of "whole project /
@@ -3411,7 +3416,10 @@ window.FM = window.FM || {};
    * out of OfflineAudioContext as raw samples and WAV needs no codec, which matters because #215
    * established that a browser can simply refuse to encode AAC. An audio export that cannot fail for
    * want of a codec is worth more than a smaller one that sometimes hands you silence. */
-  async function runAudioOnlyExport() {
+  async function runAudioOnlyExport(opts) {
+    const wantM4A = opts && opts.m4a !== undefined
+      ? !!opts.m4a
+      : ((document.getElementById('exp-format') || {}).value) === 'audiom4a';
     const P = FM.scene.project;
     const range = exportRange();
     if (range.stop) return;
@@ -3432,13 +3440,34 @@ window.FM = window.FM || {};
        the wrapper straight to encodeWav produced no file at all, silently. Caught by running the
        export for real against a synthesised tone rather than trusting the shape. */
     const abuf = mix.audioBuffer || mix;
-    let blob = null;
-    try { blob = FM.sfx && FM.sfx.encodeWav ? FM.sfx.encodeWav(abuf) : null; }
-    catch (e) { console.warn('wav encode failed', e); blob = null; }
+    /* M4A IS AN OPT-IN THAT FALLS BACK, NEVER A SILENT FAILURE (queue 395, and queue 215's lesson).
+       AAC is a property of the BROWSER, not of the project — the same file exports with sound in one and
+       without it in another — so the format he picked is attempted, and if this browser cannot do it the
+       export SAYS WHY and writes the WAV rather than producing nothing or, worse, an empty track that
+       plays silently in one player and is refused by another. */
+    let blob = null, ext = 'wav', fellBack = '';
+    if (wantM4A && FM.exporter && FM.exporter.encodeM4A) {
+      let r = null;
+      try { r = await FM.exporter.encodeM4A(mix); }
+      catch (e) { console.warn('m4a export failed', e); r = null; }
+      if (r && r.blob) { blob = r.blob; ext = 'm4a'; }
+      else fellBack = (r && r.reason) || 'failed';
+    }
+    if (!blob) {
+      try { blob = FM.sfx && FM.sfx.encodeWav ? FM.sfx.encodeWav(abuf) : null; }
+      catch (e) { console.warn('wav encode failed', e); blob = null; }
+      ext = 'wav';
+    }
     if (!blob) { if (FM.toast) FM.toast('Could not write the audio file'); return; }
+    if (fellBack && FM.toast) {
+      FM.toast(fellBack === 'aac-unavailable' || fellBack === 'no-muxer'
+        ? 'This browser cannot encode AAC — exported as WAV instead'
+        : 'The M4A encode failed — exported as WAV instead', 5200);
+    }
+    FM._lastAudioExport = { ext: ext, fellBack: fellBack, bytes: blob.size };   // read by the suite
     const name = ((P.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = name + '.wav';
+    const a = document.createElement('a'); a.href = url; a.download = name + '.' + ext;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     if (FM.toast) FM.toast('Audio exported — ' + (Math.round((to - from) * 10) / 10) + 's', 2600);
@@ -3466,7 +3495,8 @@ window.FM = window.FM || {};
        It reuses buildAudioMix, which is the SAME mixer the MP4 path uses, so this cannot drift into
        a second definition of "the soundtrack" that disagrees with the video — and it inherits the
        drop reporting added in v7.90 for free, so a clip the mixer cannot read still says so. */
-    if (((document.getElementById('exp-format') || {}).value) === 'audio') {
+    const _fmt = ((document.getElementById('exp-format') || {}).value);
+    if (_fmt === 'audio' || _fmt === 'audiom4a') {
       await runAudioOnlyExport();
       return;
     }
