@@ -49,6 +49,46 @@ self.addEventListener('activate', (e) => {
   })());
 });
 
+/* DROP SUPERSEDED COPIES (queue 430). Versioned assets are cached cache-first and keyed on the full
+ * URL, which is right — but nothing ever removed the OLD ones, so every release's copy of every changed
+ * file stayed forever. On a phone that matters more than disk: the origin's storage is ONE budget shared
+ * with IndexedDB, where his imported media lives, and under pressure a browser evicts the whole origin.
+ *
+ * PRUNED AFTER A GOOD NAVIGATION, not on `activate`: activate only fires when sw.js itself changes
+ * byte-wise, which is not most releases, so it would prune rarely and unpredictably.
+ *
+ * BY PATH, NOT BY PRESENCE — and this is the safety that matters. "Delete anything index.html does not
+ * name" would evict assets referenced from CSS (the wordmark is `url('brand-wordmark.png?v=2')`, which
+ * appears in no HTML), and offline they would be gone. So: for each versioned URL the live page names,
+ * remember its PATH and its `v`. Delete a cached entry only when its path is one of those AND its `v`
+ * differs — a superseded copy of a file still in use. Anything whose path the page never mentions is
+ * left alone, because this cannot know who needs it.
+ * Parsing nothing deletes nothing, so a surprise in the HTML is a no-op rather than a wipe. */
+async function pruneSuperseded(res, c) {
+  let html = '';
+  try { html = await res.text(); } catch (_) { return; }
+  const live = new Map();                      // path -> the v= this build uses
+  const re = /(?:src|href)="([^"]+\?v=[^"]*)"/g;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const u = new URL(m[1], self.location.origin);
+      live.set(u.pathname, u.searchParams.get('v'));
+    } catch (_) {}
+  }
+  if (!live.size) return;                      // parsed nothing → touch nothing
+  let reqs;
+  try { reqs = await c.keys(); } catch (_) { return; }
+  await Promise.all(reqs.map((r) => {
+    let u;
+    try { u = new URL(r.url); } catch (_) { return null; }
+    if (!isVersionedAsset(u)) return null;     // index-fallback and the stale marker are not assets
+    const want = live.get(u.pathname);
+    if (want == null) return null;             // this page never mentions that path — not ours to judge
+    return u.searchParams.get('v') === want ? null : c.delete(r);
+  }));
+}
+
 function isVersionedAsset(url) {
   // Same-origin static assets only. `?v=` is the contract that these bytes are immutable for this URL;
   // anything without it is treated as changeable and goes to the network.
@@ -112,6 +152,13 @@ self.addEventListener('fetch', (e) => {
       if (fresh && fresh.ok) {
         c.put('index-fallback', fresh.clone());
         c.delete(STALE_KEY);          // this load is current — nothing to warn about
+        /* `waitUntil` where it exists, plain call where it does not. A real FetchEvent always has it —
+           it keeps the worker alive while the prune finishes — but the suite drives this handler with a
+           minimal mock event, and requiring the method turned a housekeeping nicety into a hard
+           dependency that broke an existing queue 306 test. The prune is best-effort by nature: if the
+           worker is torn down mid-sweep, the next navigation simply finishes the job. */
+        const pruning = pruneSuperseded(fresh.clone(), c);
+        if (e && typeof e.waitUntil === 'function') e.waitUntil(pruning);
         return fresh;
       }
       if (fresh) return fresh;        // a real error response is the server's answer, not ours to replace

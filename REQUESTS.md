@@ -12263,7 +12263,8 @@ wait for them to report back."*
              ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
              That decides between the three, and this could not be narrowed further without guessing.
 
-- [ ] **430 — 🚨 The offline cache grows forever, and it shares a storage budget with his media.**
+- [x] **430 — 🚨 The offline cache grows forever, and it shares a storage budget with his media.**
+      ✅ **DONE v10.69**, verified functionally and with the offline check both before and after.
       (20 Aug, found while auditing the service worker for #306 — not reported by Ezra, and he has not
       hit it yet as far as anyone knows.)
       **What is true today.** `sw.js` caches versioned assets (`?v=`) cache-first, keyed on the full URL —
@@ -12278,8 +12279,8 @@ wait for them to report back."*
       evicts the WHOLE ORIGIN, not the tidy parts of it. So this is a slow path to losing project media.
       It also squeezes the export crash-resume store (#47), which needs room for up to 512MB of chunks.
       **Clauses:**
-      1. [ ] Old versioned assets are removed when they stop being referenced.
-      2. [ ] Offline still works afterwards — load, go offline, reload, the app comes up.
+      1. [x] ✅ **v10.69** — Old versioned assets are removed when they stop being referenced.
+      2. [x] ✅ **v10.69** — Offline still works afterwards — load, go offline, reload, the app comes up.
       🔧 **THE DESIGN, with one option already rejected so nobody re-derives it:**
       · *Prune on `activate`* — simple and WRONG: `activate` only fires when `sw.js` itself changes
         byte-wise, which is not most releases. It would prune rarely and unpredictably. **Rejected.**
@@ -12287,6 +12288,16 @@ wait for them to report back."*
         stale-marker path already parses that text. Collect the `?v=` URLs it references, walk
         `cache.keys()`, delete versioned entries not among them. Self-maintaining, runs at most once per
         navigation, conservative by construction: anything the live page names is kept.
-      ⚠️ **Clause 2 is the one that can be broken by clause 1**, and nothing in the suite covers offline
-      boot today. Whoever builds this should add that check first, so the prune has something to fail.
+      ⚠️ **Clause 2 is the one that can be broken by clause 1**, and nothing in the suite covered offline
+      boot. That check was built FIRST (`tests/_offlineboot.py`) so the prune had something to fail.
+      ✅ **BUILT v10.69, and the design changed once for safety.** "Delete anything index.html does not
+      name" would have evicted assets referenced from CSS — the wordmark is `url('brand-wordmark.png?v=2')`
+      and appears in no HTML — and offline they would simply be gone. So the prune works BY PATH: for each
+      versioned URL the live page names, remember its path and its `v`, and delete a cached entry only
+      when its path is one of those AND its `v` differs. A superseded copy of a file still in use. Anything
+      whose path the page never mentions is left alone, because the worker cannot know who needs it.
+      Parsing nothing deletes nothing, so a surprise in the HTML is a no-op rather than a wipe.
+      **VERIFIED, not assumed** — planted two entries and reloaded: a superseded `/js/app.js?v=1` was
+      **deleted**, an unrelated `/js/nosuchfile.js?v=1` was **kept**, the current app.js survived, and
+      `tests/_offlineboot.py` still reports the app coming up with the network off.
 
