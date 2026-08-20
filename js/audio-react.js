@@ -114,7 +114,9 @@ window.FM = window.FM || {};
     const reversed = !!layer.reversed;
     const ramped = FM.isAnimated && FM.isAnimated(layer.speed);
     const totalAdv = ramped ? FM.layerSourceAdvance(layer, layer.duration) : 0;
-    const spStatic = ramped ? 1 : (layer.speed || 1);
+    // THROUGH speedAt for the static case (queue 451) — a malformed speed prop is an object, and
+    // `availSec / spStatic` below would be NaN.
+    const spStatic = ramped ? 1 : FM.speedAt(layer, layer.start);
     const lenSec = ramped ? 0 : Math.min(layer.duration, availSec / (spStatic || 1));
 
     function srcSample(tLocal) {   // float source-sample index for a clip-local time, or -1 (silence)

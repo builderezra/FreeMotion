@@ -1278,7 +1278,7 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       // trimmed-source indicator: a striped edge where there's more source beyond the trim
       if (m && isFinite(m.duration)) {
-        const srcSpan = rampSpeed ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
+        const srcSpan = rampSpeed ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * FM.speedAt(layer, layer.start);   // speedAt for the static case (queue 451)
         if (layer.trimStart > 0.03) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim l' }));
         if (layer.trimStart + srcSpan < m.duration - 0.05) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim r' }));
       }

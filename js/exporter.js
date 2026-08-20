@@ -222,7 +222,7 @@ window.FM = window.FM || {};
      * Reversed reads from the end of the covered span, so output 0 is the clip's LAST source sample. */
     const sp = FM.isAnimated && FM.isAnimated(layer.speed)
       ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
-      : (layer.speed || 1);
+      : FM.speedAt(layer, layer.start);   // THROUGH speedAt (queue 451): a malformed prop is an object → NaN length → a clip silently dropped from the export mix
     const lenSec = Math.min(layer.duration, availSec / sp); // timeline seconds this clip fills
     const lenSamples = Math.max(1, Math.floor(lenSec * sr));
     const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);

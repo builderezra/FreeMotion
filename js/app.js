@@ -2761,7 +2761,7 @@ window.FM = window.FM || {};
     if (!side) return false;                                   // inside the clip — extending is meaningless
     const m = layer.type === 'video' && FM.media.get ? FM.media.get(layer.id) : null;
     const srcDur = (m && m.duration) ? m.duration : Infinity;
-    const ramped = FM.isAnimated(layer.speed), sp = ramped ? 1 : (layer.speed || 1);
+    const ramped = FM.isAnimated(layer.speed), sp = ramped ? 1 : FM.speedAt(layer, layer.start);   // speedAt for the static case (queue 451)
     const s0 = layer.start, d0 = layer.duration, tr0 = layer.trimStart;
     /* Same reversed branch as the timeline's trim grips (BUG-HUNT names both sites): a reversed clip's
        head is the source window's END and its tail is the window's START, so without this the button

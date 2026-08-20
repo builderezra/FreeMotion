@@ -12967,7 +12967,7 @@ wait for them to report back."*
       dispatched in one tick all carry the same timeStamp". This fixture had not forgotten to space
       them — it believed it had.
 
-- [ ] **451 — Sweep the remaining raw `layer.speed || 1` sites.** (21 Aug, found by the v10.89 bug hunt.)
+- [x] **451 — Sweep the remaining raw `layer.speed || 1` sites.** ✅ **DONE v10.90.** (21 Aug, found by the v10.89 bug hunt.)
       Not his words — a follow-up to a fix, filed rather than done silently.
       v10.89 made `FM.speedAt` actually return a number and routed `FM.layerLocalTime` and
       `FM.layerSourceAdvance` through it, because a malformed speed prop was producing **NaN source time
@@ -12982,3 +12982,18 @@ wait for them to report back."*
       ✅ **Worth doing as one sweep with the source-time test extended to cover each site**, rather than
       one at a time — the value of the v10.89 fix is that there is now a single function that cannot
       return junk, and these are the callers still not using it.
+
+      ✅ **v10.90 — done exactly that. EIGHT real sites** now go through `speedAt`: `audio-play.js` (the
+      reversed static buffer), `audio-react.js`, `captions.js`, `exporter.js` (the clip buffer that sizes
+      the export mix), two in `inspector.js` (the re-time span), `timeline.js` (the trim's source span)
+      and `app.js`. Each of them divides or multiplies by the value, so a malformed prop was a NaN length.
+      ⚠️ **Two shapes deliberately left raw, and the reason matters more than the count:**
+      · `FM.isAnimated(x) || (x || 1) < 1` — a malformed prop makes the comparison FALSE, so the clip is
+        treated as not-slow. Graceful, and nothing propagates.
+      · `FM.somethingAt ? FM.somethingAt(…) : raw` — a fallback for scene.js not having loaded, in which
+        case nothing in the app works anyway.
+      🧷 **Guarded at SOURCE level**, and that was a judgement: most of these sit deep inside functions
+      that need a decoded audio buffer to reach, and a test that cannot reach its subject is not a guard.
+      The source-time test fetches the four audio/caption/export files and fails if the raw idiom returns
+      in a path that does arithmetic on it, allowing the two safe shapes by pattern. Same technique the
+      service-worker test uses. Mutation-proved by putting the exporter's back.

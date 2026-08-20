@@ -4356,7 +4356,7 @@ window.FM = window.FM || {};
           if (FM.toast) FM.toast('This clip has a speed ramp — solving one speed would throw the ramp away', 2800);
           return;
         }
-        const span = layer.duration * (layer.speed || 1);         // the footage, which re-timing never changes
+        const span = layer.duration * FM.speedAt(layer, layer.start);   // the footage, which re-timing never changes. speedAt, not `|| 1` (queue 451): a malformed prop is an object and this span would be NaN
         const end = layer.start + layer.duration;
         const want = toEnd ? (FM.time - layer.start) : (end - FM.time);
         if (!(want > 0.02)) {
@@ -4407,7 +4407,7 @@ window.FM = window.FM || {};
           FM.setProp(layer, 'speed', sp, FM.time);          // ramp: writes/updates a keyframe at the playhead; clip window stays fixed
         } else {
           const durBefore = layer.duration;                   // measured BEFORE, so the keyframes below scale by what ACTUALLY happened
-          const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
+          const span = layer.duration * FM.speedAt(layer, layer.start);   // source span is invariant → re-time the clip (speedAt, queue 451)
           layer.speed = sp;
           layer.duration = Math.max(0.1, span / sp);
           // Clamp against the source that's actually left, exactly as the trim grips do

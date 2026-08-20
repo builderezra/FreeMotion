@@ -2919,6 +2919,35 @@
     }))));
     if (!sawMalformed) throw new Error('the malformed-speed case was not in the sweep — without it this is a happy-path check that would have shipped the very hole it found');
     if (checked < 500) throw new Error('only ' + checked + ' samples swept');
+
+    /* AND THE CALL SITES, NOT JUST THE HELPER (queue 451). v10.89 fixed `speedAt` and the two functions
+       in scene.js; the same raw `layer.speed || 1` idiom was still in the audio mixers, the caption
+       mapper, the exporter, the inspector's re-time maths and the timeline's trim. Each divides or
+       multiplies by it, so a malformed prop is a NaN buffer length — a clip silently dropped from the
+       export mix, or a reversed clip rendering as silence.
+       Asserted on the SOURCE, because most of these are deep inside functions that need a decoded audio
+       buffer to reach, and a test that cannot reach them is not a guard. Fetching the file is the same
+       technique the service-worker test uses and for the same reason. */
+    const RAW = /speed\s*\|\|\s*1/g;
+    const files = ['js/audio-play.js', 'js/audio-react.js', 'js/captions.js', 'js/exporter.js'];
+    return Promise.all(files.map(f => fetch(f + '?t=' + Date.now()).then(r => r.text()).then(src => ({ f: f, src: src })))).then(all => {
+      const offenders = [];
+      all.forEach(({ f, src }) => {
+        src.split('\n').forEach((line, i) => {
+          if (!RAW.test(line)) { RAW.lastIndex = 0; return; }
+          RAW.lastIndex = 0;
+          /* Two shapes are allowed and neither can produce a NaN that propagates:
+             · `FM.isAnimated(x) || (x || 1) < 1` — a malformed prop makes the compare false, so the
+               clip is simply treated as not-slow rather than poisoning anything;
+             · `FM.somethingAt ? FM.somethingAt(...) : raw` — a fallback for scene.js not being loaded,
+               in which case nothing in the app works anyway. */
+          if (/isAnimated\s*\(/.test(line)) return;
+          if (/FM\.\w+\s*\?/.test(line)) return;
+          offenders.push(f + ':' + (i + 1) + '  ' + line.trim().slice(0, 110));
+        });
+      });
+      if (offenders.length) throw new Error('raw `speed || 1` is back in a path that divides or multiplies by it — a malformed speed prop is an object, so this is a NaN buffer length (a clip dropped from the export mix, or a reversed clip rendering as silence):\n  ' + offenders.join('\n  '));
+    });
   });
 
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {

@@ -126,7 +126,7 @@ window.FM = window.FM || {};
       // exactly as the exporter's audio mixer does for the same reason.
       const sp = ramped
         ? (FM.layerSourceAdvance(srcLayer, srcLayer.duration) / Math.max(0.01, srcLayer.duration))
-        : (srcLayer.speed || 1);
+        : FM.speedAt(srcLayer, srcLayer.start);   // THROUGH speedAt (queue 451): a malformed prop is an object, and the divide below would be NaN
       const projT = (srcLayer.start || 0) + (bufT - trim) / Math.max(0.01, sp);
       return projT - (capLayer.start || 0);
     },

@@ -54,7 +54,10 @@ window.FM = window.FM || {};
       }
       return out;
     }
-    const sp = layer.speed || 1;
+    // Static branch (the ramped one returned above). THROUGH speedAt (queue 451): `sp || 1` returns
+    // an OBJECT for a malformed speed prop, and `availSec / sp` is then NaN — a reversed clip that
+    // renders as silence, in the preview mix, with nothing said.
+    const sp = FM.speedAt(layer, layer.start);
     const lenSec = Math.min(layer.duration, availSec / sp);
     const lenSamples = Math.max(1, Math.floor(lenSec * sr));
     const out = audioCtx.createBuffer(ab.numberOfChannels, lenSamples, sr);
