@@ -10746,8 +10746,8 @@ wait for them to report back."*
       dead and the mutation said so: `getComputedStyle` renders colours as `rgb(...)`, so a
       `conic-gradient\([^)]*\)` match stopped at the first inner bracket and compared identical prefixes.)*
 
-- [ ] **385 — Should a project unload when you leave it? He is asking for a judgement, not an
-      instruction.** (18 Aug.) His words, verbatim: *"I think it may be worth having project not stay open
+- [x] **385 — Should a project unload when you leave it? He is asking for a judgement, not an
+      instruction.** ✅ **ANSWERED AND BUILT — v10.71.** (18 Aug.) His words, verbatim: *"I think it may be worth having project not stay open
       and close when you leave them, needing them to be re loaded when you back in and out, incase a project
       is broken and really laggy then it won't effect the home menu. Also if you think this is a bad idea
       then don't go through with it."* and *"I do like the effect of having a project open with the glint
@@ -10795,6 +10795,28 @@ wait for them to report back."*
       `FM._mediaBusy` is set (a pack hydration/duplicate is writing); and never release during an export.
       ⏸️ **Not built today on purpose.** Everything above is measured and settled — what is left is the
       careful part, and the honest place for it is the start of a session rather than the end of a long one.
+      ✅ **BUILT 20 Aug, v10.71 — and it does what the design above says.** Verified with a REAL imported
+      video (`tests/_leaverelease.html`, which makes one rather than faking a record — `_leavecost.html`
+      used shape layers and so could never have measured a fix): **1 media record in the project → 0 on the
+      home screen → 1 again on the way back in**, with the element's `src` restored and no reload. The scene
+      document and `curId` stay, so **the OPEN glint you like still costs nothing** — that was the point.
+      **The four silent-data-loss hazards, each closed and each proved by a mutation that put it back:**
+      1. [x] **Nothing is freed that IndexedDB cannot give back.** The ids are checked against the store's
+             KEYS first (one read, no blobs). A record with no blob behind it — an import whose write had
+             not landed, anything parked there by another module — is skipped. Freeing one would be a clip
+             gone for good, discovered much later.
+      2. [x] **The ordering hazard the design warned about.** The release hangs off the END of the card's
+             thumbnail capture, which renders the canvas. Measured with it moved earlier: caught. Measured
+             as shipped: the thumbnail comes out 100% non-black.
+      3. [x] **"Save project file…"** re-opens the CURRENT project with `keepOpen`, so home never closes and
+             the close-path hydrate never fires — and `serializeScene` reads FM.media, so the .fmotion.json
+             would have carried the scene and NO MEDIA. That path hydrates first now: measured 0 blobs
+             embedded before, 1 after.
+      4. [x] **Stands down** during an export, while a media write is in flight, and while you are still in
+             the project — re-checked AFTER its own awaits, because you can be back inside by then.
+      Plus: one hydrate at a time (two overlapping runs would free a record the compositor is drawing from),
+      and the tap on an already-open card still starts its push in the SAME TASK as the click — the suite
+      caught that the moment an `await` slipped in, and the hydrate is now awaited only on the export path.
 
 - [x] **386 — Videos and clips lost the Outline toggle, and there is no plain shadow — only the long drop
       one.** ✅ **DONE — clause 2 v10.61, clause 1 v10.64.** (18 Aug, phone screenshot at v9.83: a video layer's Border / Shadow card containing ONE control,

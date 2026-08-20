@@ -32,6 +32,12 @@ transition is meaningless there.
   `layers 1 / .tl-empty-start true / display none` at step 2, which is the whole of v10.70.
   `_phheadshot.html` leaves the app in that same post-add state for a picture.
 
+- `_leavecost.html` — what going home releases. Answered queue 385's own question with "nothing", but it
+  uses SHAPE layers, which have no media, so it can measure the before and never the after.
+- `_leaverelease.html` — the after, with a REAL imported video: records resident → on the home screen →
+  back again, plus the card thumbnail's ink and whether a project file saved from home still carries its
+  media. The three numbers that matter are on three lines.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

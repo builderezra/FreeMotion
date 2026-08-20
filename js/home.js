@@ -309,6 +309,16 @@ window.FM = window.FM || {};
       if (!root || root.classList.contains('hidden')) return;   // left again already — nothing to refresh
       try { FM.projects.touchCurrent(true); } catch (e) {}
       render();
+      /* …AND ONLY NOW MAY THE PROJECT'S MEDIA GO (queue 385).
+       * This is the ordering hazard that held the whole item up for a day. The capture above RENDERS
+       * THE CANVAS to make the card's picture, and it is deliberately late and asynchronous so its
+       * ~62ms does not stutter the slide home. Release the media anywhere earlier — in open(), which
+       * is where it obviously belongs — and every project card quietly re-captures itself BLANK on the
+       * way out, with nothing on screen to say so. Same family as #399 ("a clip does not survive a
+       * reload") and much harder to notice. So the release hangs off the END of the capture, which is
+       * the last thing that needs the media, and releaseSceneMedia re-checks for itself that the
+       * project is still left by the time its own reads return. */
+      if (FM.storage && FM.storage.releaseSceneMedia) FM.storage.releaseSceneMedia();
     };
     thumbTimer = setTimeout(function () {
       thumbTimer = 0;
@@ -1637,6 +1647,26 @@ window.FM = window.FM || {};
     }
     try {
       if (needsLoad) await FM.projects.open(id);
+      /* SAME PROJECT, NO LOAD — SO NOTHING PUTS ITS MEDIA BACK (queue 385).
+       * `needsLoad` is false when you re-open the project you were already in, and that path is not
+       * only the ordinary "tap the OPEN card": "Save project file…" runs it with keepOpen, so home
+       * never closes and the close() hydrate never fires — and `serializeScene` reads FM.media, so the
+       * .fmotion.json would come out with the scene and NO MEDIA, silently. Awaited, because the
+       * caller exports on the next line. `onlyMissing` makes it free when nothing was released. */
+      else if (FM.storage && FM.storage.hydrateSceneMedia) {
+        /* NOT awaited unless the caller is about to READ the media. Tapping the card of the project you
+           are already in must start its push in the SAME TASK as the click — an await here yields, the
+           close slips a task, and the hand-off the push test measures is gone. So the hydrate runs in
+           the background for a normal tap (close() would fire it anyway) and is waited on only for
+           keepOpen, which is "Save project file…" serializing FM.media on the very next line. */
+        const back = FM.storage.hydrateSceneMedia({ onlyMissing: true }).then(function (n) {
+          if (!n) return;
+          if (FM.seekVideosToTime) FM.seekVideosToTime();
+          FM.storage.warmReverseCaches();
+          if (FM.requestRender) FM.requestRender();
+        });
+        if (keepOpen) await back;
+      }
       // Opening a project restores its media from IndexedDB, so the same not-yet-decoded window applies
       // — arguably more so, since it is every clip at once rather than one (queue 201).
       if (FM.loadingDot) FM.loadingDot.check();
@@ -2207,6 +2237,22 @@ window.FM = window.FM || {};
         endPush(false);
         root.classList.add('hidden');
       }
+      /* THE OTHER HALF OF queue 385 — put back what leaving released.
+       * close() is the ONE funnel back into the editor: every card tap, every template, every route
+       * ends here, and openProject only calls projects.open() when the id actually CHANGES
+       * (`needsLoad`), so returning to the project you just left never reloads anything. Hydrating
+       * here rather than there is what makes that path work.
+       * `onlyMissing` makes it a no-op in every other case — after a real load every layer already has
+       * its record — so this costs one skipped loop on the common path. */
+      if (FM.storage && FM.storage.hydrateSceneMedia) {
+        FM.storage.hydrateSceneMedia({ onlyMissing: true }).then(function (n) {
+          if (!n) return;   // nothing was released, or nothing came back — leave the frame alone
+          if (FM.loadingDot) FM.loadingDot.check();   // decoding from cold again; say so, as an open does
+          if (FM.seekVideosToTime) FM.seekVideosToTime();
+          FM.storage.warmReverseCaches();
+          if (FM.requestRender) FM.requestRender();
+        });
+      }
       if (FM.requestRender) FM.requestRender();
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
     },
@@ -2220,6 +2266,10 @@ window.FM = window.FM || {};
     pushWillRun() { return pushAllowed(); },
     isOpen() { return !!root && !root.classList.contains('hidden') && !closing; },
     _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
+    /* The card-tap path itself, as a seam. "Save project file…" reaches it with keepOpen, which is the
+       one route that leaves home OPEN and then serializes FM.media — so the media release (queue 385)
+       has to be driven through THIS, not through close(), to prove that path is safe. */
+    _openProject: openProject,
     _waits: WAIT,              // ditto: the suite shortens WAIT.stuck rather than sleeping 8s for it
     // The phone gate, as a swappable function rather than an inline matchMedia. The suite asserts the
     // REAL one is false in its own 900px frame (that IS the desktop case) and then swaps in a stub to

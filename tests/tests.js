@@ -2849,6 +2849,130 @@
     }
   });
 
+  /* ---- QUEUE 385: leaving a project should stop costing you -----------------------------------
+   * His words: *"I think it may be worth having project not stay open and close when you leave them…
+   * incase a project is broken and really laggy then it won't effect the home menu"*, and *"I do like
+   * the effect of having a project open with the glint around it but not at the cost of a shitty
+   * system"*. Measured first (tests/_leavecost.html): going home released NOTHING. The answer is that
+   * the two things are not in tension — the glint is a flag on a card, the cost is the decoded media —
+   * so the scene document and curId stay and the media goes.
+   * Every test below guards a way this could destroy work SILENTLY, which is why they exist at all. */
+  function q385Png() {
+    // A REAL, decodable image — a 64-byte Uint8Array named .png is not one, and hydrate's per-layer
+    // catch would swallow the failure and leave the test proving nothing.
+    return new Promise(function (res) {
+      const c = document.createElement('canvas'); c.width = 2; c.height = 2;
+      const g = c.getContext('2d'); g.fillStyle = '#4af'; g.fillRect(0, 0, 2, 2);
+      c.toBlob(function (b) { res(new File([b], 'q385.png', { type: 'image/png' })); }, 'image/png');
+    });
+  }
+  async function q385Layer(name, withIdbBlob) {
+    const L = FM.makeLayer('image', { name: name, x: 100, y: 100 });
+    L.start = 0; L.duration = 3;
+    FM.scene.layers.push(L);
+    const file = await q385Png();
+    const el = document.createElement('img');
+    FM.media.set(L.id, { kind: 'image', el: el, width: 2, height: 2, file: file });
+    if (withIdbBlob) await FM.storage.writeMedia(L.id, { file: file, kind: 'image' });
+    return L;
+  }
+  async function q385Cleanup(ids, layers0) {
+    for (const id of ids) { try { FM.media.remove(id); await FM.storage.removeMedia(id); } catch (e) {} }
+    FM.scene.layers = layers0;
+    if (FM.refreshAll) FM.refreshAll();
+  }
+  // Pretend the project is left, without driving the whole home animation. isOpen is the exact
+  // condition releaseSceneMedia asks, so stubbing it tests the real gate rather than a copy.
+  function q385AsIfHome(fn) {
+    const real = FM.home.isOpen;
+    FM.home.isOpen = function () { return true; };
+    return Promise.resolve().then(fn).finally(function () { FM.home.isOpen = real; });
+  }
+
+  test('385: leaving a project frees its media, and coming back puts it back', { item: '385' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const L = await q385Layer('q385 round trip', true);
+    try {
+      if (!FM.media.get(L.id)) throw new Error('the fixture never became resident, so there is nothing for a release to free');
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      if (!freed) throw new Error('leaving the project released nothing — this is the state queue 385 was raised about (tests/_leavecost.html measured exactly this)');
+      if (FM.media.get(L.id)) throw new Error('releaseSceneMedia reported ' + freed + ' but the record is still resident');
+      // …and the scene itself must NOT be torn down: the OPEN glint he likes is a flag on the card,
+      // and it is the whole reason this is a media release rather than a project unload.
+      if (!FM.scene.layers.some(l => l.id === L.id)) throw new Error('the layer was removed from the scene — this was meant to free the MEDIA and keep the document');
+      const back = await FM.storage.hydrateSceneMedia({ onlyMissing: true });
+      if (!back) throw new Error('coming back hydrated nothing, so the clip stays blank until a reload — which is worse than never releasing it');
+      const m = FM.media.get(L.id);
+      if (!m || !m.file) throw new Error('the record came back without its file, so nothing can re-save or re-export it');
+    } finally { await q385Cleanup([L.id], layers0); }
+  });
+
+  test('385: nothing is released that IndexedDB cannot give back', { item: '385' }, async function () {
+    /* THE ONE THAT MATTERS. FM.media is keyed by layer id and not every record has a blob behind it —
+       an import whose write has not landed, anything parked here by another module. Free one of those
+       and the clip is gone for good, and the user finds out much later. So release checks the store's
+       KEYS first (one read, no blobs) and skips anything it cannot restore.
+       The recoverable sibling is the control: without it a release that simply did nothing would pass. */
+    const layers0 = FM.scene.layers.slice();
+    const safe = await q385Layer('q385 in idb', true);
+    const orphan = await q385Layer('q385 not in idb', false);
+    try {
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      if (!FM.media.get(orphan.id)) throw new Error('a record with NO blob in IndexedDB was released — that clip cannot ever come back, and nothing on screen would say so');
+      if (FM.media.get(safe.id)) throw new Error('the recoverable record was NOT released (freed ' + freed + '), so this test cannot tell a working guard from a release that does nothing at all');
+    } finally { await q385Cleanup([safe.id, orphan.id], layers0); }
+  });
+
+  test('385: the release stands down during an export, and while you are still in the project', { item: '385' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    const L = await q385Layer('q385 guards', true);
+    const wasExporting = FM._exporting, wasBusy = FM._mediaBusy;
+    try {
+      // Still in the project: nothing has been left, so nothing may be freed. Forced rather than
+      // assumed — whether the runner happens to have home open is not this test's business.
+      const realOpen = FM.home.isOpen;
+      FM.home.isOpen = function () { return false; };
+      try {
+        if (await FM.storage.releaseSceneMedia()) throw new Error('media was freed while the project was still open on screen');
+      } finally { FM.home.isOpen = realOpen; }
+      if (!FM.media.get(L.id)) throw new Error('the record went even though the release reported 0');
+      // Mid-export: the exporter reads these records frame by frame.
+      FM._exporting = true;
+      if (await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); })) throw new Error('media was freed DURING AN EXPORT — the render reads those records frame by frame');
+      FM._exporting = false;
+      // Mid media write: a pack hydration/duplicate has ids in flight.
+      FM._mediaBusy = 1;
+      if (await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); })) throw new Error('media was freed while a media write was in flight');
+      FM._mediaBusy = 0;
+      // …and with every guard down it really does fire, or the three above prove nothing.
+      if (!(await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); }))) throw new Error('with no guard active the release still did nothing, so the three assertions above pass vacuously');
+    } finally {
+      FM._exporting = wasExporting; FM._mediaBusy = wasBusy;
+      await q385Cleanup([L.id], layers0);
+    }
+  });
+
+  test('385: going home does not free the media before the card picture is taken', { item: '385' }, async function () {
+    /* THE ORDERING HAZARD, and the reason this item sat measured-but-unbuilt for a day. home.open()
+       finishes with captureThumbSoon(), which RENDERS THE CANVAS to make the card's thumbnail, late
+       and asynchronously so its ~62ms does not stutter the slide. Put the release in open() — where it
+       obviously belongs — and every project card silently re-captures itself BLANK on the way out.
+       So: immediately after open(), the media must still be there. */
+    const layers0 = FM.scene.layers.slice();
+    const wasOpen = FM.home.isOpen();
+    const L = await q385Layer('q385 ordering', true);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      FM.home.open();
+      await sleep(120);   // well inside the capture's PUSH_MS + 80 timer
+      if (!FM.media.get(L.id)) throw new Error('the media was freed within 120ms of going home — the thumbnail capture had not run yet, so every project card would re-capture itself blank');
+    } finally {
+      try { if (!wasOpen) FM.home.close(); } catch (e) {}
+      await sleep(60);
+      await q385Cleanup([L.id], layers0);
+    }
+  });
+
   test('phone: a bottom sheet parked off the screen casts no shadow back onto the app', { item: '424' }, async function () {
     /* The other half of queue 424, and the reason his empty screenshot had a darker band along the
        bottom at all: it was not the timeline. #inspector-panel and #ai-panel are both parked with

@@ -159,6 +159,108 @@ window.FM = window.FM || {};
     return fixed;
   }
 
+  /* ---- LEAVING A PROJECT SHOULD COST NOTHING TO STAY LEFT (queue 385) --------------------------
+   * His words: *"I think it may be worth having project not stay open and close when you leave them,
+   * needing them to be re loaded when you back in and out, incase a project is broken and really laggy
+   * then it won't effect the home menu"* — and, on the OPEN glint he likes, *"I do like the effect of
+   * having a project open with the glint around it but not at the cost of a shitty system"*.
+   *
+   * MEASURED FIRST (`tests/_leavecost.html`, 19 Aug): going home tears down NOTHING. Across
+   * `home.open()` the scene stayed fully resident, `curId` was kept, and a `<video>` element was still
+   * attached with its `src` intact. `home.open()` pauses playback, resets the viewport, exits a group
+   * and saves metadata — and releases no heavy state at all. So his diagnosis was right.
+   *
+   * The two things he wants are not in tension, which is the whole answer: the glint is a FLAG on a
+   * card and costs nothing; what costs is the decoded media. So the scene document and `curId` stay —
+   * he keeps the glint — and the media goes.
+   *
+   * FOUR THINGS MAKE THIS SAFE, and each is a bug that would otherwise be silent:
+   *  1. NOTHING IS FREED THAT IDB CANNOT GIVE BACK. The ids are checked against the store's KEYS (one
+   *     read, no blobs) before anything is released. A record with no blob behind it — an import whose
+   *     write had not landed, anything parked here by another module — is left alone. Releasing one
+   *     would destroy a clip, and the user would find out much later.
+   *  2. PINNED records are skipped (`fx-thumbs` parks its own entries here under ids that are not
+   *     layers), and `remove()` unpins as a side effect, so releasing one would also break the effect
+   *     thumbnails permanently.
+   *  3. It stands down entirely while a pack write is in flight (`FM._mediaBusy`) or an export is
+   *     running (`FM._exporting`) — an export reads these records frame by frame.
+   *  4. It only runs while home is genuinely open, re-checked AFTER the awaits, because the user can
+   *     be back inside the project by the time the key read returns.
+   * The ORDERING hazard is handled at the call site, not here: `home.open()` finishes with an async
+   * thumbnail capture that RENDERS THE CANVAS, so releasing before it runs would re-capture every card
+   * blank. The release is hung off the end of that capture — see `captureThumbSoon` in js/home.js. */
+  /* ONE HYDRATE AT A TIME. Two overlapping runs would both `idbGet` the same layer and both `set()`,
+   * and `set()` FREES whatever it displaces — so the second one would tear down a record the compositor
+   * may already be drawing from, and that clip goes blank with nothing in the log. The routes really can
+   * overlap: close() fires this without awaiting, and openProject awaits its own call on the
+   * same-project path. Callers share the run rather than racing it. */
+  let _hydrating = null;
+  function hydrateSceneMedia(opts) {
+    if (_hydrating) return _hydrating;
+    _hydrating = _hydrateSceneMedia(opts).then(function (n) { _hydrating = null; return n; },
+                                              function (e) { _hydrating = null; throw e; });
+    return _hydrating;
+  }
+  async function _hydrateSceneMedia(opts) {
+    const onlyMissing = !!(opts && opts.onlyMissing);
+    let n = 0;
+    try {
+      const db = await openDB();
+      for (const layer of FM.scene.layers) {
+        if (!layer || layer.type === 'text') continue;
+        if (onlyMissing && FM.media.get(layer.id)) continue;   // still resident — a fresh load, or never released
+        try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
+          const rec = await idbGet(db, layer.id);
+          if (rec && rec.file) {
+            const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
+            FM.media.set(layer.id, loaded);
+            if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
+            if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
+            n++;
+          }
+        } catch (le) { /* this layer's media failed to decode — keep restoring the rest */ }
+      }
+      db.close();
+    } catch (e) { /* media restore failed — scene structure still loads */ }
+    return n;
+  }
+
+  // reversed / frame-blend-slow clips render from the frame cache — rebuild it so they don't
+  // show forward-direction frames when scrubbing before the first play. ONE writer, called by the
+  // project load and by the return-from-home rehydrate: two copies would be two chances to disagree
+  // about which clips need a cache, and the failure looks like "slow-mo died on reload".
+  function warmReverseCaches() {
+    FM.scene.layers.forEach(l => { if (l && l.type === 'video' && (l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1))) && FM.ensureReverseCache) FM.ensureReverseCache(l); });   // ramped speed is an object → isAnimated, else (obj||1)<1 is false and slow-mo dies on reload
+  }
+
+  function releaseBlocked() {
+    if (FM._exporting) return 'an export is running';
+    if (FM._mediaBusy) return 'a media write is in flight';
+    if (!(FM.home && FM.home.isOpen && FM.home.isOpen())) return 'the project is not actually left';
+    return '';
+  }
+
+  async function releaseSceneMedia() {
+    if (releaseBlocked()) return 0;
+    let ids = [];
+    try {
+      const db = await openDB();
+      const keys = new Set(await idbKeys(db));
+      db.close();
+      for (const layer of FM.scene.layers) {
+        if (!layer || layer.type === 'text') continue;
+        const id = layer.id;
+        if (!FM.media.get(id)) continue;                                  // nothing resident to free
+        if (FM.media.isPinned && FM.media.isPinned(id)) continue;         // owned by something other than the scene
+        if (!keys.has(id)) continue;                                      // ← IDB cannot give it back, so it is not ours to free
+        ids.push(id);
+      }
+    } catch (e) { return 0; }
+    if (releaseBlocked()) return 0;   // re-checked: the reads above awaited, and he may be back inside
+    ids.forEach(id => FM.media.remove(id));
+    return ids.length;
+  }
+
   FM.storage = {
     async save() {
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
@@ -239,28 +341,11 @@ window.FM = window.FM || {};
       // Restore the full multi-selection (filtered to layers that still exist), not just one. (#20)
       const liveIds = new Set(FM.scene.layers.map(l => l.id));
       FM.scene.selectedIds = (Array.isArray(scene.selectedIds) ? scene.selectedIds : (scene.selectedId ? [scene.selectedId] : [])).filter(id => liveIds.has(id));
-      try {
-        const db = await openDB();
-        for (const layer of FM.scene.layers) {
-          if (layer.type === 'text') continue;
-          try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
-            const rec = await idbGet(db, layer.id);
-            if (rec && rec.file) {
-              const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
-              FM.media.set(layer.id, loaded);
-              if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
-              if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
-            }
-          } catch (le) { /* this layer's media failed to decode — keep restoring the rest */ }
-        }
-        db.close();
-      } catch (e) { /* media restore failed — scene structure still loads */ }
+      await hydrateSceneMedia();
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
       if (FM.seekVideosToTime) FM.seekVideosToTime();
-      // reversed / frame-blend-slow clips render from the frame cache — rebuild it so they don't
-      // show forward-direction frames when scrubbing before the first play.
-      FM.scene.layers.forEach(l => { if (l.type === 'video' && (l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1))) && FM.ensureReverseCache) FM.ensureReverseCache(l); });   // ramped speed is an object → isAnimated, else (obj||1)<1 is false and slow-mo dies on reload
+      warmReverseCaches();
       return true;
     },
 
@@ -286,6 +371,10 @@ window.FM = window.FM || {};
   // LAN probe. Reject anything that isn't an embedded data URL.
   async function dataURLToFile(dataURL, name) { if (typeof dataURL !== 'string' || !/^data:/i.test(dataURL)) return null; const blob = await (await fetch(dataURL)).blob(); return new File([blob], name || 'media', { type: blob.type }); }
   const EMBED_LIMIT = 6 * 1024 * 1024;   // skip embedding media larger than this (keeps the JSON sane)
+
+  FM.storage.hydrateSceneMedia = hydrateSceneMedia;
+  FM.storage.releaseSceneMedia = releaseSceneMedia;
+  FM.storage.warmReverseCaches = warmReverseCaches;
 
   FM.storage.serializeScene = async function (scene) {
     const media = {};
