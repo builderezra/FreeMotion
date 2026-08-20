@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What the shape grid's colours actually do (queue 434)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 434: *"The colours you chose for the shapes menu are ugly and still repetitive."*
+   "Still" means the last attempt (queue 413, sixteen hues at an even 22.5° spacing) did not fix it, so
+   the job is to find out WHAT repeats before choosing anything. Two things can make a repeat the eye
+   catches, and they are different: the palette cycling back round, and the cycle length lining up with
+   the GRID so the same colour lands in the same column every few rows. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.addMenu&&w.FM.mobile&&w.FM.mobile.openAdd)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+function hueOf(t){
+  var n=String(t).split(',').map(function(x){return parseFloat(x)/255;});
+  var mx=Math.max.apply(null,n), mn=Math.min.apply(null,n);
+  if(mx-mn<0.02) return null;
+  var h;
+  if(mx===n[0]) h=60*((((n[1]-n[2])/(mx-mn))%6+6)%6);
+  else if(mx===n[1]) h=60*((n[2]-n[0])/(mx-mn)+2);
+  else h=60*((n[0]-n[1])/(mx-mn)+4);
+  return (h+360)%360;
+}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.mobile.openAdd(); await sleep(900);
+  var sheet=d.getElementById('add-sheet');
+  if(!sheet){ say('no #add-sheet'); document.title='ready'; return; }
+  // the Shape tab
+  var tabs=[].slice.call(sheet.querySelectorAll('.addmenu-tab'));
+  say('tabs: '+tabs.map(function(t){return ((t.textContent||'').trim()||t.getAttribute('aria-label')||t.title||'?');}).join(' | '));
+  var shapeTab=tabs.filter(function(t){return /shape/i.test((t.textContent||'')+' '+(t.getAttribute('aria-label')||'')+' '+(t.title||'')); })[0];
+  if(shapeTab){ shapeTab.click(); await sleep(700); }
+  say('shape tab clicked: '+(shapeTab?'yes':'NO — measuring whatever tab is open'));
+
+  var cards=[].slice.call(sheet.querySelectorAll('.addmenu-card'));
+  say('cards on this PAGE: '+cards.length);
+  var tints=cards.map(function(c){ return (c.style.getPropertyValue('--am-tint')||'').trim(); });
+  var rects=cards.map(function(c){ return c.getBoundingClientRect(); });
+  // how many COLUMNS does the grid have? count distinct x positions in the first row band
+  var xs={}; rects.forEach(function(r){ xs[Math.round(r.left)]=1; });
+  var cols=Object.keys(xs).length;
+  say('grid columns (distinct x): '+cols);
+
+  var uniq={}; tints.forEach(function(t){ if(t) uniq[t]=(uniq[t]||0)+1; });
+  var keys=Object.keys(uniq);
+  say('distinct tints on the page: '+keys.length+' across '+tints.filter(Boolean).length+' coloured cards');
+  var dupes=keys.filter(function(k){return uniq[k]>1;});
+  say('tints used more than once: '+dupes.length+(dupes.length?('  worst = '+Math.max.apply(null,keys.map(function(k){return uniq[k];}))+' cards share one colour'):''));
+
+  // the whole palette the cycle runs off, and what it does to NEIGHBOURS on the grid
+  var pal = FM._addTints ? FM._addTints() : [];
+  say('');
+  say('palette length: '+pal.length+'   → with '+cols+' columns, the same colour lands in the same column every '+(pal.length/cols)+' rows'+((pal.length%cols===0)?'   ❌ EXACTLY — whole columns share a set of hues':'   (not aligned)'));
+  var hs=pal.map(hueOf);
+  var sep=function(a,b){var x=Math.abs(a-b);return Math.min(x,360-x);};
+  var mn=999, mnAt=-1;
+  for(var i=0;i+1<hs.length;i++){ var dd=sep(hs[i],hs[i+1]); if(dd<mn){mn=dd;mnAt=i;} }
+  say('closest ADJACENT pair in the palette: '+Math.round(mn)+'° (entries '+mnAt+'/'+(mnAt+1)+')');
+  // saturation / lightness spread — "ugly" is usually sixteen colours at one loudness
+  var sats=[], lts=[];
+  pal.forEach(function(t){
+    var n=String(t).split(',').map(function(x){return parseFloat(x)/255;});
+    var mx=Math.max.apply(null,n), mnn=Math.min.apply(null,n);
+    var l=(mx+mnn)/2; var s=(mx===mnn)?0:(l>0.5?(mx-mnn)/(2-mx-mnn):(mx-mnn)/(mx+mnn));
+    sats.push(s); lts.push(l);
+  });
+  var rng=function(a){return (Math.min.apply(null,a)*100).toFixed(0)+'% – '+(Math.max.apply(null,a)*100).toFixed(0)+'%';};
+  say('saturation across the palette: '+rng(sats)+'   lightness: '+rng(lts));
+  say('   → every entry at one loudness is what reads as "candy" rather than designed; a spread gives the grid depth.');
+
+  // and the neighbours ON SCREEN (left-right AND up-down), which is what the eye actually sees
+  var worstN=999, worstPair='';
+  for(var a=0;a<cards.length;a++){
+    for(var b=a+1;b<cards.length;b++){
+      var ra=rects[a], rb=rects[b];
+      var adjacent = (Math.abs(ra.top-rb.top)<4 && Math.abs(ra.left-rb.left)<ra.width*1.6)
+                  || (Math.abs(ra.left-rb.left)<4 && Math.abs(ra.top-rb.top)<ra.height*1.6);
+      if(!adjacent) continue;
+      var ha=hueOf(tints[a]), hb=hueOf(tints[b]);
+      if(ha==null||hb==null) continue;
+      var dd2=sep(ha,hb);
+      if(dd2<worstN){ worstN=dd2; worstPair=a+'/'+b; }
+    }
+  }
+  say('closest pair of TOUCHING tiles on screen: '+(worstN===999?'(none measured)':Math.round(worstN)+'° (cards '+worstPair+')'));
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

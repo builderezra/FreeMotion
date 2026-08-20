@@ -12448,7 +12448,7 @@ wait for them to report back."*
       own comment claimed all along — and the sheet reads it without consuming it, so a mid-drag rebuild
       still cannot let the panel slip up. Both fixes mutation-proved by putting the old code back.
 
-- [ ] **434 — The shapes-menu colours are ugly and still repetitive.** (20 Aug.) His words, verbatim:
+- [x] **434 — The shapes-menu colours are ugly and still repetitive.** ✅ **DONE v10.74.** (20 Aug.) His words, verbatim:
       *"The colours you chose for the shapes menu are ugly and still repetitive. Come on man put some
       effort in"*.
       **"Still" matters** — this is a re-report, so whatever was done last time did not fix it, and the
@@ -12456,6 +12456,20 @@ wait for them to report back."*
       did before changing anything.
       ⚠️ He is judging this by eye on a phone, so the deliverable is a SCREENSHOT of the real menu at
       380px, not a palette in a comment.
+
+      📐 **MEASURED FIRST, AND BOTH HALVES OF HIS SENTENCE WERE LITERALLY TRUE** (`tests/_shapehues.html`,
+      380px). **Repetitive:** the shape tab draws **67 cards** and the palette had **16** entries, so it
+      wrapped four times over and **five different shapes wore one colour**. Re-ordering sixteen entries —
+      which is what 413 did — cannot fix a shortage of them. **Ugly:** saturation measured **85% to 85%**
+      and lightness **66% to 66%**; every entry at exactly one loudness. Local variety was already fine
+      (nearest touching pair 67° apart), so a third re-spacing would have changed nothing he could see.
+      ✅ **v10.74 — the colour is DERIVED from the index instead of looked up.** Hue advances by the
+      golden angle, so the sequence never comes back round: 67 shapes get 67 colours, and so would 670.
+      Four tones cycle underneath it for depth. **Four rather than three for an arithmetic reason, not a
+      taste one:** the golden angle folds back at Fibonacci distances (step 21 lands 7.7° away), and 21
+      is divisible by 3 — so a three-tone cycle put cards 0 and 21 in the same colour twice. The suite
+      caught that before it shipped. Measured after: **67 distinct tints across 67 cards, zero repeats**,
+      saturation 48%–93%, lightness 50%–76%. Screenshot taken at 380px. Both halves mutation-proved.
 
 - [ ] **435 — The people shapes look awful — give them arms, and use a workflow with real references.**
       (20 Aug.) His words, verbatim: *"The people shapes look awful, make sure when you try and fix them

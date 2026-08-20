@@ -63,6 +63,10 @@ transition is meaningless there.
   scrolls, and the home overlay swallowing the press. Each produced a confident wrong answer.
 - `_soloroom.html` — the phone solo view: the gap between the clip's row and its docked options, and
   whether a grab latches that sheet shut (queue 433). `_soloshot.html` is the same state, for a picture.
+- `_shapehues.html` — what the shape grid's colours actually DO: how many cards, how many distinct
+  tints, how often one repeats, and the saturation/lightness spread across the palette (queue 434). It is
+  the probe that turned "ugly and repetitive" into two numbers — 67 cards off 16 tints, and 85%–85%
+  saturation. `_shapeshot.html` is the same tab, for a picture.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

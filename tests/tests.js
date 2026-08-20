@@ -32904,40 +32904,65 @@
     if (FM.addMenu._tileHue('Empty group')) throw new Error('the palette still carries an "Empty group" key — a dead entry that will outlive everyone who remembers why');
   });
 
-  test('the shape palette has real variety and never puts two near-identical hues side by side', { item: 'shape-palette' }, function () {
-    /* Queue 413. Ezra: "Add more colour to the shapes icons, currently the colours repeat and don't have
-       much variety and isn't very pretty."
-       Measured before the change: EIGHT tints cycled by index across the whole shape tab, so the same
-       colour returned about every one and a half rows. Both halves of his sentence are asserted — enough
-       hues that the cycle is not obvious, and no two ADJACENT entries close enough to read as the same
-       colour twice.
-       ⚠️ The second half is what stops this being fixed with a longer list of blues: queue 271's complaint
-       about the Elements tab was "three blues, two greens" in a hand-picked palette, and a count alone
-       would pass exactly that. */
+  test('every shape gets its own colour, and the palette is not one loudness', { item: '434' }, function () {
+    /* Queue 434, after 413. He said it twice, and the second time is the one that matters: "The colours
+       you chose for the shapes menu are ugly and still repetitive. Come on man put some effort in."
+       MEASURED (tests/_shapehues.html, 380px) before the change, because "still" means the previous idea
+       was not the answer:
+         · the shape tab draws 67 cards off a 16-entry palette, so it wrapped four times and FIVE shapes
+           wore the same colour — that is the repeat, and re-ordering sixteen entries cannot fix it;
+         · saturation measured 85%–85% and lightness 66%–66%. Every entry at exactly one loudness, which
+           is the "ugly". Local variety was already fine (nearest touching pair 67° apart), so another
+           re-spacing would have changed nothing he could see.
+       Both halves are asserted here, against the number of cards the tab really draws. */
     if (!FM._addTints) throw new Error('FM._addTints seam is missing');
-    const tints = FM._addTints();
-    if (tints.length < 14) throw new Error('only ' + tints.length + ' shape tints — the cycle repeats about every ' + tints.length + ' tiles, which is what he can see');
-    const hueOf = t => {
+    const N = 67;   // what the shape tab actually renders — measured, not guessed
+    const tints = FM._addTints(N);
+    if (tints.length !== N) throw new Error('asked for ' + N + ' tints and got ' + tints.length + ' — the palette is still a fixed list, so it must wrap');
+
+    /* HIS WORD, "REPETITIVE": no shape may wear a colour another shape is already wearing. */
+    const seen = Object.create(null);
+    tints.forEach(function (t, i) {
+      if (seen[t] !== undefined) throw new Error('cards ' + seen[t] + ' and ' + i + ' are both "' + t + '" — with ' + N + ' shapes on the tab that is the repeat he can see');
+      seen[t] = i;
+    });
+
+    const hsl = t => {
       const n = String(t).split(',').map(x => parseFloat(x) / 255);
       const mx = Math.max.apply(null, n), mn = Math.min.apply(null, n);
-      if (mx - mn < 0.02) return null;                       // grey: no hue
-      let h;
-      if (mx === n[0]) h = 60 * (((n[1] - n[2]) / (mx - mn)) % 6);
-      else if (mx === n[1]) h = 60 * ((n[2] - n[0]) / (mx - mn) + 2);
-      else h = 60 * ((n[0] - n[1]) / (mx - mn) + 4);
-      return (h + 360) % 360;
+      const l = (mx + mn) / 2;
+      const sat = (mx === mn) ? 0 : (l > 0.5 ? (mx - mn) / (2 - mx - mn) : (mx - mn) / (mx + mn));
+      let h = 0;
+      if (mx !== mn) {
+        if (mx === n[0]) h = 60 * ((((n[1] - n[2]) / (mx - mn)) % 6 + 6) % 6);
+        else if (mx === n[1]) h = 60 * ((n[2] - n[0]) / (mx - mn) + 2);
+        else h = 60 * ((n[0] - n[1]) / (mx - mn) + 4);
+      }
+      return { h: (h + 360) % 360, s: sat, l: l, grey: mx - mn < 0.02 };
     };
-    const hs = tints.map(hueOf);
-    if (hs.some(h => h == null)) throw new Error('a shape tint has no hue at all (a grey in the rotation)');
+    const c = tints.map(hsl);
+    if (c.some(x => x.grey)) throw new Error('a shape tint has no hue at all (a grey in the rotation)');
+
+    /* HIS OTHER WORD, "UGLY": sixteen equally shouty colours read as candy rather than as a design.
+       A real spread in BOTH saturation and lightness is what gives the grid depth. */
+    const span = k => { const v = c.map(x => x[k]); return Math.max.apply(null, v) - Math.min.apply(null, v); };
+    if (span('s') < 0.15) throw new Error('saturation spans only ' + Math.round(span('s') * 100) + ' points across the palette — every tile at one loudness is the "ugly" half of his report');
+    if (span('l') < 0.12) throw new Error('lightness spans only ' + Math.round(span('l') * 100) + ' points across the palette — the grid has no depth, just ' + N + ' colours shouting equally');
+
+    /* …and neighbours must still clash, which is what the eye catches on the grid itself. */
     const sep = (a, b) => { const d = Math.abs(a - b); return Math.min(d, 360 - d); };
-    // …distinct: no two entries anywhere in the list within 12°
-    for (let a = 0; a < hs.length; a++) for (let b = a + 1; b < hs.length; b++) {
-      if (sep(hs[a], hs[b]) < 12) throw new Error('tints ' + a + ' and ' + b + ' are ' + Math.round(sep(hs[a], hs[b])) + '° apart (' + tints[a] + ' vs ' + tints[b] + ') — that is the same colour twice, which is the "not much variety" he reported');
+    for (let a = 0; a + 1 < c.length; a++) {
+      const d = sep(c[a].h, c[a + 1].h);
+      if (d < 40) throw new Error('tiles ' + a + ' and ' + (a + 1) + ' sit next to each other only ' + Math.round(d) + '° apart — adjacent tiles will read as the same colour');
     }
-    // …and never two similar ones side by side, which is what the eye actually catches
-    for (let a = 0; a + 1 < hs.length; a++) {
-      const d = sep(hs[a], hs[a + 1]);
-      if (d < 40) throw new Error('tints ' + a + ' and ' + (a + 1) + ' sit next to each other only ' + Math.round(d) + '° apart — adjacent tiles will read as the same colour');
+
+    /* With 67 colours some hues MUST come close — 67 × 12° is more than a circle — so the rule that
+       replaces "no two within 12°" is: if two are close in hue they have to differ in tone, or they
+       genuinely are the same colour twice. */
+    for (let a = 0; a < c.length; a++) for (let b = a + 1; b < c.length; b++) {
+      if (sep(c[a].h, c[b].h) >= 10) continue;
+      const dl = Math.abs(c[a].l - c[b].l), ds = Math.abs(c[a].s - c[b].s);
+      if (dl < 0.06 && ds < 0.10) throw new Error('tints ' + a + ' and ' + b + ' are ' + Math.round(sep(c[a].h, c[b].h)) + '° apart with the same tone (' + tints[a] + ' vs ' + tints[b] + ') — that is the same colour twice');
     }
   });
 

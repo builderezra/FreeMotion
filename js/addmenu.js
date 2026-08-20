@@ -827,36 +827,68 @@ window.FM = window.FM || {};
   var TINTS_MEDIA = ['150, 160, 176', '240, 200, 90', '120, 190, 240'];
   var TINTS_AUDIO = ['150, 160, 176', '160, 140, 235', '235, 70, 70'];
 
-  /* SIXTEEN HUES, NOT EIGHT, AND ORDERED SO NEIGHBOURS CLASH (queue 413). Ezra: "Add more colour to the
-     shapes icons, currently the colours repeat and don't have much variety and isn't very pretty."
-     MEASURED FIRST, as the entry asked: the shape grid ran off EIGHT tints cycled by index across every
-     shape in the tab — so the same colour came back roughly every one and a half rows, which is what
-     reads as a repeat.
-     These are not eyeballed. They are sixteen hues generated at an even 22.5° spacing round the wheel at
-     one saturation and lightness, then REORDERED by stepping 7 places each time — 7 is coprime with 16,
-     so the walk visits every hue exactly once and never places two neighbours near each other. Measured
-     on the result: the closest any two ADJACENT entries come is 157°, i.e. nearly opposite.
-     Generating them is the point rather than a shortcut: queue 271's complaint about the Elements tab was
-     "three blues, two greens" in a hand-picked list, and hand-picking sixteen is how that happens again. */
-  var TINTS = [
-    '242, 95, 95',     // red (0°)
-    '95, 242, 187',    // teal (158°)
-    '242, 95, 205',    // magenta (315°)
-    '113, 242, 95',    // green (112°)
-    '168, 95, 242',    // violet (270°)
-    '224, 242, 95',    // gold (68°)
-    '95, 131, 242',    // azure (225°)
-    '242, 150, 95',    // orange (22°)
-    '95, 242, 242',    // cyan (180°)
-    '242, 95, 150',    // rose (338°)
-    '95, 242, 131',    // mint (135°)
-    '224, 95, 242',    // purple (292°)
-    '168, 242, 95',    // lime (90°)
-    '113, 95, 242',    // blue (248°)
-    '242, 205, 95',    // amber (45°)
-    '95, 187, 242',    // sky (202°)
+  /* A COLOUR PER SHAPE, GENERATED — NOT A LIST THAT COMES ROUND AGAIN (queue 434, after 413).
+     Ezra, twice. First: "Add more colour to the shapes icons, currently the colours repeat and don't
+     have much variety and isn't very pretty" (413, which went from eight hand-picked tints to sixteen
+     generated ones). Then, at v10.71: "The colours you chose for the shapes menu are ugly and still
+     repetitive. Come on man put some effort in."
+
+     MEASURED BEFORE TOUCHING IT (tests/_shapehues.html, 380px), because "still" means the last idea was
+     not the answer and a third guess is not worth having:
+       · the shape tab draws **67 cards** and the palette had **16** entries, so it wrapped four times
+         over and **five different shapes wore one colour**. That is the repeat, and no amount of
+         re-ordering sixteen entries can fix a shortage of them.
+       · saturation across the whole palette measured **85% to 85%**, lightness **66% to 66%**. Every
+         single entry at one loudness — sixteen equally shouty candy colours, which is the "ugly".
+         Local variety was already fine (nearest touching pair 67° apart), so re-spacing hues again
+         would have changed nothing he can see.
+
+     So the colour is DERIVED from the index instead of looked up:
+       · hue advances by the golden angle (137.508°). Consecutive tiles are always ~137° apart, and the
+         sequence does not come back round — 67 shapes get 67 different colours, and so would 670.
+       · three TONES cycle underneath it, so the grid has depth instead of one flat intensity. Because
+         they cycle every 3 and the hue never repeats, no two cards can match on both.
+     Generating it is the point rather than a shortcut: 271's complaint about the Elements tab was
+     "three blues, two greens" in a hand-picked list, and hand-picking sixty-seven is how that happens
+     again, only worse. */
+  /* FOUR TONES, NOT THREE, AND THE REASON IS ARITHMETIC RATHER THAN TASTE. The golden angle spreads
+     hues beautifully but it FOLDS BACK at Fibonacci distances: step 21 lands 7.7° from where you
+     started, step 34 lands 3.7° away. With three tones, 21 is divisible by 3 — so cards 0 and 21 came
+     out 8° apart wearing the SAME tone, i.e. genuinely the same colour twice, which is the exact thing
+     this change exists to remove. The suite caught it (238,131,99 vs 238,149,99).
+     4 is coprime with 21, 34 and 55, so every near-hue pair the golden angle produces lands on a
+     different tone and reads as a different colour. */
+  var GOLDEN = 137.508, HUE0 = 14;
+  var TONES = [
+    { s: 0.82, l: 0.64 },   // full
+    { s: 0.56, l: 0.50 },   // deep
+    { s: 0.94, l: 0.76 },   // bright
+    { s: 0.48, l: 0.70 },   // soft
   ];
-  FM._addTints = function () { return TINTS.slice(); };   // suite seam (queue 413)
+  function hsl2rgb(h, s, l) {
+    h = ((h % 360) + 360) % 360 / 360;
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    var f = function (t) {
+      t = (t + 1) % 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map(function (v) { return Math.round(v * 255); }).join(', ');
+  }
+  function tintFor(i) {
+    var t = TONES[i % TONES.length];
+    return hsl2rgb(HUE0 + i * GOLDEN, t.s, t.l);
+  }
+  // Suite seam (413, widened for 434): the tints a run of N tiles would actually WEAR, not a fixed
+  // list — the palette is a sequence now, and asking it for 16 would have hidden the very repeat this
+  // change is about.
+  FM._addTints = function (n) {
+    var out = [], k = Math.max(1, n || 24);
+    for (var i = 0; i < k; i++) out.push(tintFor(i));
+    return out;
+  };
 
   function card(item, cls, iconOnly, tint) {
     var b = document.createElement('button');
@@ -1043,7 +1075,7 @@ window.FM = window.FM || {};
           var pal = tab.key === 'object' ? TINTS_ELEMENT      // the Elements tab's key is 'object'
                   : tab.key === 'media' ? TINTS_MEDIA
                   : tab.key === 'audio' ? TINTS_AUDIO
-                  : TINTS;
+                  : null;                                    // shapes: generated per index, see tintFor
           /* A card that shows a PICTURE gets no tint — a colour plate under a photo is just a wash
              over it. That was already true for media tiles (o.mid); it is now true for a template
              carrying its own thumb, which is #210's last clause word for word: "it shouldn't even
@@ -1054,7 +1086,7 @@ window.FM = window.FM || {};
              index palette; queue 281 removed the count, so the label is stable and the special case
              went with it. */
           var byName = BY_LABEL[o.label];
-          var tint = (o.mid || o.thumb) ? null : (byName || pal[idx % pal.length]);
+          var tint = (o.mid || o.thumb) ? null : (byName || (pal ? pal[idx % pal.length] : tintFor(idx)));
           // Elements gets the quieter plate (queue 210) — his "backdrop more subtle", applied per
           // TAB rather than per card so the whole tab reads as one family.
           var soft = tab.key === 'object' ? ' addmenu-card--soft' : '';
