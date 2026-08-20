@@ -201,14 +201,15 @@ window.FM = window.FM || {};
     // FM.settings used to be reachable from the home screen only, so on a phone this menu really was
     // the one door to snapping, onion skin, guides and save/reset. It is two taps from the cog now.
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
+    /* ONE TAP, NO MENU (queue 376) — and on the phone that is all this button can be. Measured at 380px
+       with four layers selected: the header's five visible controls plus their gaps use every pixel of
+       its 370px content box, and the 56px hole beside the bin is `#m-del { margin-right: 52px }`, a
+       deliberate mis-tap guard for the red button. A second icon here would come straight out of
+       "4 layers selected", so Masking Group lives in the multi-select sheet below instead, where there
+       is room for both as full-width buttons. It is also still on the ⧉ layer-actions menu and the
+       timeline right-click, so nothing was taken away. */
     var mGroup = document.getElementById('m-group');
-    if (mGroup) mGroup.addEventListener('click', function () {
-      var r = mGroup.getBoundingClientRect();   // AM: the group action offers Grouping OR Masking
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, [
-        { label: 'Group', action: function () { FM.groupSelection(); } },
-        { label: 'Masking Group — top layer clips the rest', action: function () { FM.groupSelection({ mask: true }); } },
-      ]); else if (FM.groupSelection) FM.groupSelection();
-    });
+    if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection(); });
 
     // Anchor the docked sheet's top just below the single selected-clip row so the property
     // options never cover the clip — clamped so the panel always keeps a usable height.

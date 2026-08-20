@@ -775,7 +775,13 @@ window.FM = window.FM || {};
     // not move mid-gesture (see the note in styles.css); nothing here shifts under a thumb, so plain
     // display is right. (queue 53)
     const grpBtn = document.getElementById('btn-group');
-    if (grpBtn) grpBtn.style.display = (FM.selectionIds ? FM.selectionIds().length : 0) >= 2 ? '' : 'none';
+    const nSel = (FM.selectionIds ? FM.selectionIds().length : 0);
+    if (grpBtn) grpBtn.style.display = nSel >= 2 ? '' : 'none';
+    /* …and its new twin travels with it (queue 376). ONE writer for both, here, because this function is
+       already the single owner of the group button's visibility — the note above says so, and a second
+       writer is how two authorities end up disagreeing about whether a control is on screen. */
+    const mgBtn = document.getElementById('btn-maskgroup');
+    if (mgBtn) mgBtn.style.display = nSel >= 2 ? '' : 'none';
     // …and the two that moved into the transport row beside it (queue 168). Here rather than only in
     // refreshAll, because this is the function that runs whenever the selection chrome changes — and
     // BUILD from here too (it is idempotent), so the row is assembled by the first chrome sync rather
@@ -4123,14 +4129,15 @@ window.FM = window.FM || {};
     // Group / Masking Group on PC (queue 53) — the same two-item menu mobile.js hangs off #m-group,
     // so grouping means one thing on both. Deliberately NOT a third implementation: both entries call
     // FM.groupSelection, which is also what the ⧉ menu and the timeline right-click already call.
+    /* ONE TAP EACH, NO MENU (queue 376). Ezra: "When group together, instead of one button with a drop
+       down, make it two buttons with one function each."
+       The common action was costing two taps and a read, for a choice most groupings never make. Both
+       still call the SAME `FM.groupSelection` — the whole reason the menu existed was to pass one flag,
+       and a second button passes it just as well without a menu to open, aim at and dismiss. */
     const groupBtn = document.getElementById('btn-group');
-    if (groupBtn) groupBtn.addEventListener('click', () => {
-      const r = groupBtn.getBoundingClientRect();
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, [
-        { label: 'Group', action: () => FM.groupSelection() },
-        { label: 'Masking Group — top layer clips the rest', action: () => FM.groupSelection({ mask: true }) },
-      ]); else if (FM.groupSelection) FM.groupSelection();
-    });
+    if (groupBtn) groupBtn.addEventListener('click', () => { if (FM.groupSelection) FM.groupSelection(); });
+    const maskGrpBtn = document.getElementById('btn-maskgroup');
+    if (maskGrpBtn) maskGrpBtn.addEventListener('click', () => { if (FM.groupSelection) FM.groupSelection({ mask: true }); });
     const undoBtn = document.getElementById('btn-undo'), redoBtn = document.getElementById('btn-redo');
     if (undoBtn) undoBtn.addEventListener('click', () => { if (FM.history) FM.history.undo(); });
     if (redoBtn) redoBtn.addEventListener('click', () => { if (FM.history) FM.history.redo(); });
@@ -4408,7 +4415,7 @@ window.FM = window.FM || {};
        left — a mirror of where it was, not a new arrangement. The pill's own contrast is in styles.css.
        The centring is safe by construction (the flanking tracks are minmax(0,1fr), #373 clause 8) and
        `playhead-play-centre` proves it. */
-    ['btn-parent', 'btn-del-layer', 'btn-group', 'btn-more-layer'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
+    ['btn-parent', 'btn-del-layer', 'btn-group', 'btn-maskgroup', 'btn-more-layer'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
     if (sel.childNodes.length) right.appendChild(sel);
 
     // far right — refresh chip, NOTES, cog, export, then view options OUTERMOST (his amendment)

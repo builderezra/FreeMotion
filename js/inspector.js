@@ -2404,6 +2404,33 @@ window.FM = window.FM || {};
     acts.appendChild(bar);
     wrap.appendChild(acts);
 
+    /* ---- TWO BUTTONS, ONE FUNCTION EACH (queue 376) ---------------------------------------------
+     * Ezra: "When group together, instead of one button with a drop down, make it two buttons with one
+     * function each."
+     * They live HERE on the phone rather than in the header, and that was measured rather than chosen:
+     * at 380px with four layers selected the header's five controls and their gaps use every pixel of
+     * its 370px content box, and the one visible hole — 56px beside the bin — is `#m-del`'s deliberate
+     * mis-tap margin, not slack. A second icon up there would come straight out of "4 layers selected".
+     * Down here the row is full width, so both fit as real buttons with their names on them, which is
+     * also the first time the masking option has been anything other than a sentence in a menu.
+     * `.align-clipacts` above is NOT the home for these: that row swaps its contents with the playhead
+     * (trim/split vs move/extend) and is about clip TIMING. Grouping is neither. */
+    const grp = el('div', 'align-clipacts align-groupacts');
+    grp.appendChild(el('div', 'align-label', 'Group ' + n + ' clips'));
+    const gbar = el('div', 'quick-row');
+    const gbtn = (label, title, icon, fn) => {
+      const b = el('button', 'qr-btn');
+      b.title = title;
+      b.innerHTML = svgIcon(icon);
+      b.appendChild(el('span', 'qr-cap', label));
+      b.addEventListener('click', () => { fn(); });
+      gbar.appendChild(b);
+    };
+    gbtn('Group', 'Group the selected layers', 'M4 4h7v7H4zM13 13h7v7h-7z', () => { if (FM.groupSelection) FM.groupSelection(); });
+    gbtn('Masking group', 'Masking group — the top layer clips the rest', 'M4 10.5h7.5V18H4zM9 6h11v9H9', () => { if (FM.groupSelection) FM.groupSelection({ mask: true }); });
+    grp.appendChild(gbar);
+    wrap.appendChild(grp);
+
     /* ---- timeline alignment (AM bottom-right): time only, never canvas position ----
      * "with the align buttons just make them big and fill up the whole section" — the .align-big class
      * is what styles.css hangs that on, desktop only. It is worth being precise about what "the whole

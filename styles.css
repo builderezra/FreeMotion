@@ -2406,6 +2406,15 @@ body.fm-playing #time-readout {
 /* The align buttons' names. Off on the phone, where the row is still three icons in a 36px strip and
    a word would push them to a size you cannot hit. */
 .qr-cap { display: none; }
+/* …EXCEPT in the group row, on every width (queue 376). Ezra asked for "two buttons with one function
+   each", and two icons is not two buttons if you cannot tell them apart: the masking mark is the same
+   two-shapes idea as the plain one, with the top shape clipping the lower, which is a distinction that
+   does not survive being shrunk to a 24px glyph with no word under it. The align row already makes this
+   argument on desktop (`body.sel-multi .align-big .qr-cap`) — "at that size an icon with no word beside
+   it just looks like an unfinished button" — and it applies harder here, where the two are siblings.
+   Stacked rather than side-by-side so the label sits under its own mark at a phone width. */
+.align-groupacts .qr-btn { flex-direction: column; gap: 4px; height: auto; padding: 9px 4px; }
+.align-groupacts .qr-cap { display: block; font-size: 11.5px; line-height: 1.2; color: var(--text); }
 /* The multi-select panel on DESKTOP (queue 169). Ezra: "get rid of the buttons that are near the play
    head and then with the align buttons just make them big and fill up the whole section."
    Same arrangement the SINGLE-clip row already has (.qr-trim / .qr-nudge above): the clip actions live

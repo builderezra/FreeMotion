@@ -2092,6 +2092,72 @@
     }
   });
 
+  test('grouping: two buttons with one function each, and no drop-down to open', { item: '376' }, async function () {
+    /* Queue 376. Ezra: "When group together, instead of one button with a drop down, make it two buttons
+       with one function each."
+       Measured rather than assumed where they could go: at 380px with four layers selected the phone
+       header's five controls and their gaps use every pixel of its 370px content box (the one visible
+       hole is `#m-del`'s deliberate 52px mis-tap margin), so the pair lives in the multi-select sheet
+       where both fit as real, labelled buttons. The header button becomes a one-tap Group. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const seed = () => {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 3; i++) {
+          const L = FM.makeLayer('shape', { name: 'S' + i, shape: 'rect', x: 300 + i * 90, y: 500 + i * 150, shapeW: 200, shapeH: 160, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.refreshAll();
+        FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+        FM.scene.selectedId = FM.scene.layers[0].id;
+        FM.refreshAll(); FM.inspector.refresh();
+      };
+      const capOf = b => ((b.querySelector('.qr-cap') || {}).textContent || '').trim();
+      const groupBtns = () => [].slice.call(document.querySelectorAll('.align-groupacts .qr-btn'));
+
+      seed(); await sleep(80);
+      const btns = groupBtns();
+      if (btns.length !== 2) throw new Error('the multi-select sheet offers ' + btns.length + ' group buttons, expected exactly 2 — "two buttons with one function each"');
+      const caps = btns.map(capOf);
+      if (!/^group$/i.test(caps[0]) || !/mask/i.test(caps[1])) throw new Error('the two buttons are not Group and Masking group (' + caps.join(' / ') + ')');
+      /* They must be READABLE, not two similar glyphs: the captions are hidden on the phone everywhere
+         else in this row family, and two group marks side by side cannot be told apart without words. */
+      btns.forEach((b, i) => { if (getComputedStyle(b.querySelector('.qr-cap')).display === 'none') throw new Error('button ' + i + ' has its label hidden, so the pair is two unlabelled icons'); });
+
+      // …and each does its own single thing.
+      btns[0].click(); await sleep(120);
+      const plain = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!plain) throw new Error('tapping Group made no group');
+      if (plain.maskGroup) throw new Error('the plain Group button made a MASKING group');
+
+      seed(); await sleep(80);
+      groupBtns()[1].click(); await sleep(120);
+      const masked = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!masked) throw new Error('tapping Masking group made no group');
+      if (!masked.maskGroup) throw new Error('the Masking group button made a PLAIN group, so the two buttons do the same thing');
+
+      /* NO DROP-DOWN LEFT. The header control must act, not open a menu — that is the whole request. */
+      seed(); await sleep(80);
+      const hdr = document.getElementById('m-group') || document.getElementById('btn-group');
+      if (!hdr) throw new Error('neither group button exists in the header');
+      const before = FM.scene.layers.length;
+      /* The menu ELEMENT survives in the DOM after any earlier test used one, so its existence proves
+         nothing — ask whether it is on screen. Checking existence made this fail against correct code. */
+      const menuUp = () => { const m = document.getElementById('ctx-menu'); return !!(m && m.offsetParent !== null && getComputedStyle(m).display !== 'none'); };
+      if (menuUp()) throw new Error('a context menu was already open before the click, so this cannot tell what the button did');
+      hdr.click(); await sleep(150);
+      if (menuUp()) throw new Error('the header group button still opens a drop-down');
+      if (!FM.scene.layers.some(l => l.type === 'group')) throw new Error('one tap on the header group button did not group (layers ' + before + ' → ' + FM.scene.layers.length + ')');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('add menu: the page dots are pinned to the bottom, not carried by the scroll', { item: '426' }, function () {
     /* Queue 426. Ezra: "when extending the add pannel it makes the three dots at the bottom go down".
        It could not be reproduced at v10.63 (the entry records what was measured and why the theory in it

@@ -10414,23 +10414,49 @@ wait for them to report back."*
       measures the block itself now, told apart from the frame by area, and the same mutation reports
       *"centres on x=14.40, not 12"*.
 
-- [ ] **376 — Group should be two buttons, not one button with a drop-down — and the drop-down has a
-      dreadful gap.** (18 Aug, phone screenshot at v9.81 with 4 layers selected and the group menu open.)
+- [x] **376 — Group should be two buttons, not one button with a drop-down — and the drop-down has a
+      dreadful gap.** ✅ **DONE v10.66 — with one thing to check, at the bottom.** (18 Aug, phone screenshot at v9.81 with 4 layers selected and the group menu open.)
       His words, verbatim: *"When group together, instead of one button with a drop down, make it two
       buttons with one function each. And get rid of that dreadful gap"*.
       **What the shot shows:** tapping the group icon in the multi-select header opens a panel containing
       two choices — **Group** and **Masking Group — top layer clips the rest** — and the panel carries a
       large empty band above the first item, which is the gap he means.
       **Clauses:**
-      1. [ ] **Two buttons, one function each.** No menu: Group and Masking Group become separate
+      1. [x] ✅ **v10.66 — Two buttons, one function each.** No menu: Group and Masking Group are separate
              controls, so the common action is one tap instead of two.
-      2. [ ] **The gap goes.** Worth finding the cause rather than padding it away — an empty band at the
-             TOP of a popup is usually a header element with no text in it, or a min-height on a
-             container built for a longer list. Padding over it leaves the real thing there.
+      2. [x] ✅ **v10.66 — The gap goes**, by the only honest route: the drop-down it lived in no longer
+             exists. ⚠️ But read the measurement below before assuming that is the gap you meant.
       **Where they go is the real design question:** the header already holds ?, delete and the group
       icon at 380px. Two buttons may not fit beside those, in which case they belong in the multi-select
       bar with the other bulk actions rather than being crammed in. Decide by measuring at 380, not by
       hoping.
+
+      📐 **MEASURED FIRST, at 380px with four layers selected — and the header genuinely has no room.**
+      Its five visible controls (back · "4 layers selected" · ? · bin · group) and their gaps use every
+      pixel of the 370px content box. The one visible hole, 56px between the bin and the group icon, is
+      `#m-del { margin-right: 52px }` — a deliberate mis-tap guard so the red button is not under your
+      thumb beside another control. A second icon up there would come straight out of the "4 layers
+      selected" label, which is `flex: 1` and already the thing that gives.
+      ✅ **SO, BUILT v10.66:**
+      · The **drop-down is gone from both entries** — the desktop button (js/app.js) and the phone one
+        (js/mobile.js) each act on one tap now. Both always called the same `FM.groupSelection`; the menu
+        existed only to pass one flag, and a second button passes it without a menu to open and dismiss.
+      · **The phone gets its two buttons in the multi-select sheet**, as a "Group N clips" row of two
+        full-width controls — Group and Masking group — which is the first time the masking option has
+        been anything other than a sentence inside a menu. NOT in the `Edit N clips` row above it: that
+        row swaps its contents with the playhead and is about clip TIMING.
+      · **They carry their names.** `.qr-cap` is hidden on the phone everywhere else in this row family,
+        and two group marks side by side cannot be told apart without words — the align row makes the
+        same argument on desktop. Stacked icon-over-label so both fit.
+      · **Desktop gets a real second button**, `#btn-maskgroup`, beside the group icon in `#t-sel`, with
+        one writer for both buttons' visibility (`syncTopBar`) so they cannot disagree about being shown.
+      **Guarded** by a test that presses each button and checks the group it makes: the plain one must not
+      set `maskGroup`, the masking one must, both must be labelled and visible, and one tap on the header
+      button must group WITHOUT a menu appearing. Two mutations, each caught.
+      ⚠️ **THE ONE THING TO CHECK:** the drop-down's own band measured **0px** unexplained at v10.65 (its
+      6px is border + padding), so if "that dreadful gap" was the **56px hole in the header** rather than
+      anything in the menu, it is still there — untouched on purpose, because it is the bin's safety
+      margin. Say the word and it shrinks.
       📐 **MEASURED 19 Aug (`tests/_grouphdr.html`), and it is half an answer — recorded rather than acted
       on, because the missing half changes the design.**
       · **The header at 380 is nearly full.** Seven visible controls — back, clip name, version chip, ?,

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Group drop-down: empty band above first item (queue 376 clause 2)</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.5 ui-monospace,monospace">
+<!-- Read-only measurement fixture. Drives a REAL 4-layer multi-selection through FM.selectAll()
+     (the previous fixture, _grouphdr.html, assigned scene.selectedIds by hand and never reached
+     the sel-multi state, so #m-group was invisible and the menu was never the phone's menu),
+     opens the #m-group drop-down at 380px and reports the menu box, its padding/border, and the
+     offset of the FIRST .ctx-item from the menu's top edge. -->
+<iframe id="app" src="../index.html?v=groupgap" style="width:380px;height:820px;border:0;display:block;position:absolute;left:-9999px;top:0"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(res,rej){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.contextMenu&&w.FM.selectAll)return res(w.FM);if(n++>600)return rej(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), L=[];
+function say(s){L.push(s);out.textContent=L.join('\n');}
+f.addEventListener('load',function(){
+  var w=f.contentWindow, d=f.contentDocument;
+  waitFM(w).then(async function(FM){
+    if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+    await sleep(500);
+    FM.scene.layers.length=0;
+    for(var i=0;i<4;i++){var l=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:300+i*300,shapeW:200,shapeH:200,fill:'#3a7bd5'});l.start=0;l.duration=3;FM.scene.layers.push(l);}
+    FM.refreshAll();
+    FM.selectAll();                       // the real path: sets selectedIds AND syncs the chrome
+    await sleep(500);
+    say('theme            '+(d.documentElement.getAttribute('data-theme')||'(default)'));
+    say('iframe width     '+w.innerWidth+'  height '+w.innerHeight);
+    say('selection        '+FM.selectionIds().length+' layers   body: '+d.body.className);
+    var g=d.getElementById('m-group'), gr=g.getBoundingClientRect(), gcs=w.getComputedStyle(g);
+    say('#m-group         '+gr.left.toFixed(1)+'..'+gr.right.toFixed(1)+' x '+gr.top.toFixed(1)+'..'+gr.bottom.toFixed(1)+'  vis '+gcs.visibility+' disp '+gcs.display);
+    if(gcs.visibility!=='visible'||gr.width<1){say('!! group button not really on screen — measurement invalid');document.title='ERR';return;}
+    g.click();
+    await sleep(400);
+    var m=d.getElementById('ctx-menu');
+    if(!m||m.classList.contains('hidden')){say('!! no open #ctx-menu');document.title='ERR';return;}
+    var mr=m.getBoundingClientRect(), cs=w.getComputedStyle(m);
+    say('');
+    say('MENU  #ctx-menu');
+    say('  box            x '+mr.left.toFixed(1)+'..'+mr.right.toFixed(1)+' (w '+mr.width.toFixed(1)+')   y '+mr.top.toFixed(1)+'..'+mr.bottom.toFixed(1)+' (h '+mr.height.toFixed(1)+')');
+    say('  padding        '+cs.paddingTop+' / '+cs.paddingRight+' / '+cs.paddingBottom+' / '+cs.paddingLeft);
+    say('  border-top     '+cs.borderTopWidth+'   minHeight '+cs.minHeight+'   maxHeight '+cs.maxHeight);
+    say('  scrollTop      '+m.scrollTop+'   scrollHeight '+m.scrollHeight+'   clientHeight '+m.clientHeight);
+    say('  children       '+m.children.length);
+    var first=null;
+    [].slice.call(m.children).forEach(function(c,i){
+      var r=c.getBoundingClientRect(), ccs=w.getComputedStyle(c);
+      if(!first&&c.classList.contains('ctx-item'))first=c;
+      say('   ['+i+'] <'+c.tagName.toLowerCase()+' class="'+c.className+'"> y '+r.top.toFixed(1)+'..'+r.bottom.toFixed(1)+' h '+r.height.toFixed(1)+
+          '  offsetFromMenuTop '+(r.top-mr.top).toFixed(1)+'  mt '+ccs.marginTop+' pt '+ccs.paddingTop+' disp '+ccs.display+
+          '  text["'+(c.textContent||'').trim().slice(0,34)+'"]');
+    });
+    if(first){
+      var fr=first.getBoundingClientRect();
+      say('');
+      say('FIRST ITEM offset from menu top edge : '+(fr.top-mr.top).toFixed(1)+'px');
+      say('  …of which menu border+padding      : '+(parseFloat(cs.borderTopWidth)+parseFloat(cs.paddingTop)).toFixed(1)+'px');
+      say('  UNEXPLAINED empty band             : '+((fr.top-mr.top)-parseFloat(cs.borderTopWidth)-parseFloat(cs.paddingTop)).toFixed(1)+'px');
+      // what actually paints in the band, sampled one pixel at a time down the menu's left-of-centre
+      var cx=Math.round(mr.left+mr.width/2), hits=[];
+      for(var yy=Math.round(mr.top)+1; yy<Math.round(fr.top)+2; yy++){
+        var el=d.elementFromPoint(cx,yy);
+        var tag=el?(el.id?'#'+el.id:el.tagName.toLowerCase()+'.'+el.className):'(none)';
+        if(!hits.length||hits[hits.length-1].tag!==tag)hits.push({tag:tag,from:yy,to:yy}); else hits[hits.length-1].to=yy;
+      }
+      say('  hit-test down the band (x='+cx+'): '+hits.map(function(h){return h.tag+' y'+h.from+'–'+h.to;}).join('  |  '));
+    } else say('!! no .ctx-item found in the menu');
+    document.title='ready';
+  }).catch(function(e){say('ERR '+e.message);document.title='ERR';});
+});
+</script>
+</body>
+</html>
