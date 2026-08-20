@@ -969,3 +969,29 @@ went red ("the list stopped dead when the finger lifted, 150 → 150") — while
 `repeater` from clipboard snapshots, which cannot affect flinging. The baseline immediately before was
 green. So that test is likely sensitive to timing or to what ran before it. Worth confirming with an
 isolation run; a test that fails for reasons unrelated to what it asserts costs more than it protects.
+
+
+## 10. ⚠️ THE VERTICAL-GLIDE TEST IS STILL INTERMITTENT — and the earlier diagnosis was incomplete
+Section 9 above concluded the test was time-sensitive and fixed it by polling for up to 1500ms instead
+of sleeping 260ms. **That was not the whole story.** On 20 Aug a baseline run (nothing mutated, tree
+otherwise green) failed it again with `150 → 150`: the scroll position did not move AT ALL inside the
+full 1.5 seconds. A slow machine cannot produce that — polling would have caught any movement.
+**So the fling sometimes never ARMS**, which is a different fault from "the glide had not gone far
+enough yet". Candidates, none yet tested:
+- a previous test leaving a captured pointer or an unreleased drag, so the synthetic `pointerdown`
+  lands on a scroller that is already mid-gesture;
+- the fixture's 24 layers not overflowing on that run (the test guards this, but only at setup);
+- `_lastScrollFling` being armed while `startScrollMomentum` early-outs against a clamped `scrollTop`
+  — the guard the v10.53 comment describes ("it stops if scrollTop refuses to move").
+**Next step:** run it in isolation and in a loop, and record `FM._tlLastScrollFling()` on the failing
+run — the velocity being present with no movement would point straight at the clamp.
+Kept as an open lead rather than a fix, because the earlier entry claimed this was solved and it is not.
+
+## 11. A test written for queue 427 that was too strict to ship (same session)
+Guarding the play pill's accent colour is worth doing — 427 spent a fortnight open on a cascade bug
+that did not exist, and a colour that changes on play is easy to delete by accident. The test as drafted
+asserted the pill returns EXACTLY to its resting colour after pause, and measured `rgb(230,243,247)`
+against `rgb(233,244,247)`: the colour transition is still in flight 120ms after the pause. Three levels
+apart, and correct behaviour. It needs to poll until the colour settles, or compare with a tolerance,
+rather than sampling once — the same lesson as section 9, in a place I did not expect it.
+It was reverted rather than shipped red; re-adding it with that fix is a five-minute job.
