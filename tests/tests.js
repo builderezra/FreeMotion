@@ -32497,7 +32497,14 @@
       const scroller = document.getElementById('timeline');
       const inner = document.getElementById('tl-inner');
       if (!scroller || !inner) throw new Error('#timeline / #tl-inner missing');
-      if (scroller.scrollHeight <= scroller.clientHeight + 40) throw new Error('the timeline does not overflow enough to glide');
+      /* ENOUGH ROOM FOR THE DRAG *AND* THE GLIDE. This guard used to ask for 40px of overflow, and the
+         drag below is five 30px steps — 150px — so on any run where the list was a little shorter the
+         FINGER consumed the entire scrollable range and the glide had nowhere left to go. That is the
+         intermittent `150 → 150` failure: a fling was armed with a real velocity (271 px/s measured) and
+         `startScrollMomentum` correctly stopped because `scrollTop` was already pinned at the bottom.
+         Nothing was wrong with the code; the fixture was asking the glide to run off the end of the list.
+         150 for the drag, plus 120 of headroom for the glide to be measurable in. */
+      if (scroller.scrollHeight <= scroller.clientHeight + 270) throw new Error('the timeline only overflows by ' + Math.round(scroller.scrollHeight - scroller.clientHeight) + 'px — the 150px drag would use most of it and leave nothing to glide into, so this run could not tell a dead glide from a short list');
       scroller.scrollTop = 0;
       await sleep(40);
       const r = scroller.getBoundingClientRect();
@@ -32523,9 +32530,18 @@
         after = scroller.scrollTop;
         if (after > atRelease + 6) break;
       }
-      if (!(after > atRelease + 6)) throw new Error('the list stopped dead when the finger lifted (' + Math.round(atRelease) + ' → ' + Math.round(after) + ') — a horizontal flick glides, this should too');
-      const fling = FM._tlLastScrollFling && FM._tlLastScrollFling();
-      if (!fling || !Math.abs(fling.v)) throw new Error('the release recorded no fling velocity at all');
+      /* THE VELOCITY IS CHECKED FIRST, ON PURPOSE. This test has failed intermittently with `150 → 150`
+         — zero movement inside a 1.5s poll, which no slow machine explains — and the useful question is
+         whether the release ARMED a fling at all or armed one that then refused to move. Asserting the
+         movement first threw that information away every time: the run died before it ever looked at the
+         velocity. In this order the next intermittent failure names which half broke, with no extra runs
+         and nobody having to reproduce it on purpose. */
+      const armed = FM._tlLastScrollFling && FM._tlLastScrollFling();
+      if (!armed || !Math.abs(armed.v)) {
+        throw new Error('the release recorded no fling velocity at all (' + JSON.stringify(armed) + ') — the gesture never armed, so this is not a slow glide, it is a dead one');
+      }
+      if (!(after > atRelease + 6)) throw new Error('a fling WAS armed (v=' + armed.v.toFixed(3) + ') but the list did not move: ' + Math.round(atRelease) + ' → ' + Math.round(after) + ') — a horizontal flick glides, this should too');
+      // (the velocity is asserted above, before the movement, so an intermittent failure is diagnostic)
     } finally {
       try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31 })); } catch (e) {}
       FM.scene.layers = layers0;

@@ -985,6 +985,25 @@ enough yet". Candidates, none yet tested:
   — the guard the v10.53 comment describes ("it stops if scrollTop refuses to move").
 **Next step:** run it in isolation and in a loop, and record `FM._tlLastScrollFling()` on the failing
 run — the velocity being present with no movement would point straight at the clamp.
+✅ **DONE CHEAPLY (20 Aug): the test now answers that question itself.** The velocity assertion was
+sitting AFTER the movement one, so every intermittent failure died before it ever looked at the fling and
+threw away the one fact worth having. Reordered: it now reports either *"the release recorded no fling
+velocity at all — the gesture never armed"* or *"a fling WAS armed (v=…) but the list did not move"*.
+Same assertions, same strictness; the next occurrence names which half broke with no extra runs and
+nobody having to reproduce it deliberately. Chasing an intermittent failure by re-running it is the
+expensive way; making it explain itself costs one edit.
+
+### ✅ AND IT SOLVED IT ON THE FIRST RUN — the code was never wrong, the FIXTURE was
+The reordered test reported: *"a fling WAS armed (v=271.212) but the list did not move: 150 → 150"*.
+That is the whole answer. The drag is five 30px steps = **150px**, and the guard only required **40px**
+of overflow — so on any run where the list was slightly shorter, the FINGER consumed the entire
+scrollable range and `startScrollMomentum` correctly stopped because `scrollTop` was already pinned at
+the bottom. The v10.53 comment even documents that behaviour ("it stops if scrollTop refuses to move").
+So: not a race, not test order, not the machine — a fixture asking the glide to run off the end of the
+list. The guard now requires 270px (150 for the drag + 120 of measurable headroom) and says so when it
+trips. **Three wrong diagnoses preceded this one** (test order, then wall-clock timing, then a clamp
+bug), and all three were guesses; the run that solved it was the one where the test was made to report
+what it actually saw.
 Kept as an open lead rather than a fix, because the earlier entry claimed this was solved and it is not.
 
 ## 11. A test written for queue 427 that was too strict to ship (same session)
