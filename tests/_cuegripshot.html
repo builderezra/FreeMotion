@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Caption cue with its drag arrows (queue 441)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.captions&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  FM.addCaptionLayer(); await sleep(600);
+  // addCaptionLayer jumps straight into the text editor; this fixture is about the TIMELINE chip.
+  if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+  await sleep(400);
+  var L=FM.scene.layers[0];
+  var cues=FM.captions.cues(L);
+  if(cues[0]){ cues[0].start=0; cues[0].end=3.4; cues[0].text='First caption'; }
+  if(FM.captions.addCue) FM.captions.addCue(L, 4);
+  cues=FM.captions.cues(L);
+  if(cues[1]){ cues[1].start=4; cues[1].end=7; cues[1].text='Second caption'; }
+  FM.scene.project.duration=10;
+  FM.time=1.5;
+  FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(900);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

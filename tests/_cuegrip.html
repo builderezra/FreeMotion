@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Caption cue grips (queue 441)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 441. The grips existed; only :hover ever showed them, so on a phone they were ten invisible
+   pixels at each end. This reports whether the LIVE cue's arrows are actually painted, and whether a
+   short cue keeps a middle to grab. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.captions&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  if(!FM.addCaptionLayer){ say('no FM.addCaptionLayer'); document.title='ready'; return; }
+  FM.addCaptionLayer();
+  await sleep(500);
+  var L=FM.scene.layers[0];
+  say('layer type: '+(L&&L.type)+'   is a caption track: '+(FM.captions.isTrack(L)));
+  // one long cue and one very short one
+  var cues=FM.captions.cues(L);
+  say('cues to start: '+cues.length);
+  if(cues.length){ cues[0].start=0; cues[0].end=4; }
+  if(cues.length<2 && FM.captions.addCue){ FM.captions.addCue(L, 4.2); }
+  cues=FM.captions.cues(L);
+  if(cues[1]){ cues[1].start=4.2; cues[1].end=4.45; }   // ~0.25s → a narrow chip
+  FM.time=1; FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  var chips=[].slice.call(d.querySelectorAll('.cap-cue'));
+  say('chips drawn: '+chips.length);
+  chips.forEach(function(c,i){
+    var r=c.getBoundingClientRect();
+    var grips=c.querySelectorAll('.cap-cue-grip');
+    var live=c.classList.contains('live'), wide=c.classList.contains('cap-cue--wide');
+    var arrow='(no grip)';
+    if(grips.length){
+      var cs=W.getComputedStyle(grips[0],'::before');
+      arrow='opacity '+cs.opacity+'  size '+cs.width+'x'+cs.height;
+    }
+    var mid = r.width - grips.length*12;
+    say('  chip '+i+'  w '+r.width.toFixed(1)+'px  live '+live+'  wide '+wide
+        +'  grips '+grips.length+'  arrow '+arrow
+        +'   middle left to grab: '+mid.toFixed(1)+'px'+(mid<12?' ❌ nothing to move it by':''));
+  });
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

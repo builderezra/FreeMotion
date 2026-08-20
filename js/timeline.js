@@ -1515,7 +1515,13 @@ window.FM = window.FM || {};
       FM.captions.cues(layer).forEach((cue, ci) => {
         const w = Math.max(4, (cue.end - cue.start) * pps);
         const chip = document.createElement('div');
-        chip.className = 'cap-cue' + (FM.captions.indexAt(layer, FM.time) === ci ? ' live' : '');
+        /* WIDE ENOUGH TO HAVE ENDS (queue 441). Two grips are 20px of the chip, so on a short cue they
+           cover the whole thing: you can neither trim it (the marks have nowhere to draw) nor move it
+           (there is no middle left to grab). Below 46px the cue is move-only, which is the honest
+           behaviour for something that small — and it is why the grips are gated on a class rather than
+           always present. */
+        const wide = w >= 46;
+        chip.className = 'cap-cue' + (FM.captions.indexAt(layer, FM.time) === ci ? ' live' : '') + (wide ? ' cap-cue--wide' : '');
         chip.style.left = (cue.start * pps) + 'px';
         chip.style.width = w + 'px';
         chip.dataset.ci = ci;
@@ -1609,7 +1615,7 @@ window.FM = window.FM || {};
           if (FM.scrubTime) FM.scrubTime((layer.start || 0) + cue.start + Math.min(0.05, (cue.end - cue.start) / 2));
           if (FM.textEdit) FM.textEdit.start(layer.id, { selectAll: true });
         });
-        ['l', 'r'].forEach(side => {
+        if (wide) ['l', 'r'].forEach(side => {
           const g = document.createElement('div');
           g.className = 'cap-cue-grip ' + side;
           g.addEventListener('pointerdown', (e) => startCue(e, side === 'l' ? 'trimL' : 'trimR'));

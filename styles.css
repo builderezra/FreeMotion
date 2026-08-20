@@ -2484,9 +2484,32 @@ body.fm-playing #time-readout {
 .cap-cue:active { cursor: grabbing; }
 .cap-cue.live { background: rgba(110, 168, 254, .5); border-color: #fff; }
 .cap-cue-lbl { padding: 0 6px; font-size: 10px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
-.cap-cue-grip { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; touch-action: none; z-index: 4; }
-.cap-cue-grip.l { left: -2px; } .cap-cue-grip.r { right: -2px; }
+/* THE GRIPS WERE ALREADY THERE AND NOTHING EVER SHOWED THEM (queue 441). Ezra: "Make the captions ur
+   hovering over have their own little corner drag arrow you can hold on to extend."
+   He is describing a control that exists: a cue chip has had a trim grip at each end since captions
+   shipped. Their ONLY visual state was `:hover`, which a phone does not have — so on his device they are
+   ten invisible pixels at each end of the chip, and the feature reads as missing. This is an affordance
+   fix, not a new gesture: the drag machinery (cueDrag's move / trimL / trimR) is untouched.
+   The mark is a CHEVRON pointing outward — the direction the edge will travel — drawn at each end, shown
+   on the LIVE cue (the one under the playhead, which is what "the one you're hovering over" means when
+   there is no cursor) and brightened on hover for the desktop.
+   `left: 0` rather than `-2px`: `.cap-cue` is `overflow: hidden`, so the 2px that hung outside was being
+   clipped anyway — and with a mark to draw, clipping it would have cut the chevron. */
+.cap-cue-grip { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; touch-action: none; z-index: 4; }
+.cap-cue-grip.l { left: 0; } .cap-cue-grip.r { right: 0; }
+.cap-cue-grip::before {
+  content: ''; position: absolute; top: 50%; width: 5px; height: 5px;
+  border-top: 1.6px solid #fff; border-right: 1.6px solid #fff;
+  opacity: 0; transition: opacity .12s ease;
+}
+.cap-cue-grip.l::before { left: 3px; transform: translateY(-50%) rotate(-135deg); }
+.cap-cue-grip.r::before { right: 3px; transform: translateY(-50%) rotate(45deg); }
+/* Visible without a pointer: the cue you are ON always wears its arrows. */
+.cap-cue.live .cap-cue-grip::before { opacity: .95; }
+.cap-cue.live .cap-cue-grip { background: linear-gradient(to right, rgba(255,255,255,.18), rgba(255,255,255,0)); }
+.cap-cue.live .cap-cue-grip.r { background: linear-gradient(to left, rgba(255,255,255,.18), rgba(255,255,255,0)); }
 .cap-cue-grip:hover { background: rgba(255,255,255,.35); }
+.cap-cue-grip:hover::before { opacity: 1; }
 
 /* ‹ Cue n / N › strip above the text field while captioning. */
 .te-cue-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }

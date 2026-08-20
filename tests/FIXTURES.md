@@ -75,6 +75,10 @@ transition is meaningless there.
   header before writing any drag probe:** the layer reorder binds its pointermove to the drag HANDLE and
   relies on pointer capture, the add row's grip binds to WINDOW, and dispatching at the wrong one makes
   the gesture silently not happen.
+- `_cuegrip.html` / `_cuegripshot.html` — the caption cue's trim grips: whether the live cue's arrows are
+  actually painted, and whether a short cue keeps a middle to grab (queue 441). Note that
+  `FM.addCaptionLayer()` jumps straight into the TEXT EDITOR — a fixture about the timeline chip has to
+  call `FM.textEdit.stop()` first, or it photographs the wrong screen.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

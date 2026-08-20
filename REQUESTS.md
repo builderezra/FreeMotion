@@ -12685,7 +12685,7 @@ wait for them to report back."*
       position, because moving one control to the front is exactly the edit that quietly reshuffles the
       rest. **If he meant SWAP colour and the font, it is one word in `bar.append(...)`.**
 
-- [ ] **441 — Captions need a corner drag handle to extend them.** (20 Aug, phone screenshot at v10.71 of
+- [x] **441 — Captions need a corner drag handle to extend them.** ✅ **DONE v10.80.** (20 Aug, phone screenshot at v10.71 of
       a caption cue selected on the timeline.) His words, verbatim: *"Make the captions ur hovering over
       have their own little corner drag arrow you can hold on to extend"*.
       **Read as:** the caption CUE you are on (the chip inside the caption clip) should carry its own small
@@ -12694,6 +12694,18 @@ wait for them to report back."*
       ⚠️ The cue drag machinery already exists (`cueDrag` in js/timeline.js has `move` / `trimL` / `trimR`
       modes), so this is likely an AFFORDANCE problem, not a missing feature: the grips are invisible.
       Check what actually exists before building anything new.
+      ✅ **THAT WARNING WAS EXACTLY RIGHT.** `.cap-cue-grip.l` / `.r` have existed since captions shipped,
+      12px wide with `touch-action: none` and the real trim handlers on them. Their ONLY visual state was
+      `.cap-cue-grip:hover`, and a phone has no hover — so on his device they are invisible pixels and the
+      feature reads as missing. Nothing needed building; it needed showing.
+      ✅ **v10.80 — a chevron at each end**, pointing the way that edge will travel, painted on the LIVE
+      cue (the one under the playhead — which is what "the one you're hovering over" means with no cursor)
+      and brightened on hover for the desktop. Verified at 380px with a screenshot: `‹ First caption ›`.
+      🔎 **AND A LATENT BUG FOUND ON THE WAY, fixed in the same pass:** two grips are 24px of the chip, so
+      on a cue under about half a second they covered it end to end and it could be neither trimmed NOR
+      moved — a control that was dead in both directions. Below 46px a cue is move-only now, which is the
+      honest behaviour for something that small, and the test asserts it so the fix cannot trade one dead
+      control for another.
 
 - [ ] **442 — Wasted space in the track-head column: push it to the wall.** (20 Aug, phone screenshot at
       v10.71 with the left edge of the timeline scribbled down its whole height.) His words, verbatim:

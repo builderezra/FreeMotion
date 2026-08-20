@@ -2373,6 +2373,72 @@
     }
   });
 
+  test('441: a caption cue shows its drag arrows without a pointer, and a short one keeps a middle', { item: '441' }, async function () {
+    /* Queue 441. Ezra: "Make the captions ur hovering over have their own little corner drag arrow you
+       can hold on to extend."
+       He is describing a control that already EXISTS — a cue chip has had a trim grip at each end since
+       captions shipped — whose only visual state was `:hover`. A phone has no hover, so on his device
+       they were ten invisible pixels at each end and the feature read as missing. So this is an
+       affordance assertion, not a gesture one: the drag machinery is untouched and is covered elsewhere.
+       "The one you're hovering over" has no cursor meaning on a phone, so it is read as the LIVE cue —
+       the one under the playhead — which is the same thing his sentence means.
+       ⚠️ The second half is a latent bug the fix had to avoid: two grips are 24px of the chip, so on a
+       short cue they cover the whole thing and it can be neither trimmed nor MOVED. Below 46px the cue
+       is move-only now, and that is asserted, or the fix trades one dead control for another. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, dur0 = FM.scene.project.duration;
+    try {
+      if (!FM.addCaptionLayer || !FM.captions) throw new Error('captions are not available');
+      FM.scene.layers.length = 0;
+      FM.addCaptionLayer();
+      await sleep(200);
+      if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();   // it opens the editor; this is about the chip
+      await sleep(160);
+      const L = FM.scene.layers[0];
+      if (!L || !FM.captions.isTrack(L)) throw new Error('no caption track was added');
+      const cues = FM.captions.cues(L);
+      if (!cues.length) throw new Error('the caption track has no cues');
+      cues[0].start = 0; cues[0].end = 4;                       // long: gets grips
+      if (FM.captions.addCue) FM.captions.addCue(L, 5);
+      const all = FM.captions.cues(L);
+      if (all.length < 2) throw new Error('could not make a second cue, so the short-cue half cannot be checked');
+      all[1].start = 5; all[1].end = 5.2;                       // ~0.2s: too short for grips
+      FM.scene.project.duration = 10;
+      FM.time = 1;                                              // …so cue 0 is the LIVE one
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(220);
+
+      const chips = [].slice.call(document.querySelectorAll('.cap-cue'));
+      if (chips.length < 2) throw new Error('only ' + chips.length + ' cue chip(s) on the timeline, expected 2');
+      const live = chips.filter(c => c.classList.contains('live'))[0];
+      if (!live) throw new Error('no cue is marked live at the playhead, so "the one you are on" cannot be identified');
+      const grips = [].slice.call(live.querySelectorAll('.cap-cue-grip'));
+      if (grips.length !== 2) throw new Error('the live cue has ' + grips.length + ' grip(s), expected one at each end');
+      grips.forEach(function (g, i) {
+        const cs = getComputedStyle(g, '::before');
+        const op = parseFloat(cs.opacity);
+        if (!(op > 0.5)) throw new Error('grip ' + i + ' of the LIVE cue draws its arrow at opacity ' + cs.opacity + ' — invisible without a pointer, which is the whole of his report');
+        if (parseFloat(cs.width) < 3 || parseFloat(cs.height) < 3) throw new Error('grip ' + i + '’s arrow is ' + cs.width + 'x' + cs.height + ' — too small to read as a mark');
+      });
+      /* CONTROL: a cue that is NOT live must not wear them, or "the one you're hovering over" is every
+         cue and the assertion above would pass on a build that simply painted them all. */
+      const idle = chips.filter(c => !c.classList.contains('live') && c.classList.contains('cap-cue--wide'))[0];
+      if (idle) {
+        const io = parseFloat(getComputedStyle(idle.querySelector('.cap-cue-grip'), '::before').opacity);
+        if (io > 0.5) throw new Error('a cue that is NOT under the playhead also shows its arrows (opacity ' + io + ') — every chip wearing them is not "the one you are on"');
+      }
+      /* …and the short cue keeps something to grab. */
+      const short = chips.filter(c => !c.classList.contains('cap-cue--wide'))[0];
+      if (!short) throw new Error('the 0.2s cue was not treated as short, so this build would put two grips across the whole of it and leave no middle to move it by');
+      if (short.querySelectorAll('.cap-cue-grip').length) throw new Error('a cue too short for grips still has them — they cover it end to end, so it can be neither trimmed nor moved');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0; FM.scene.project.duration = dur0;
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
