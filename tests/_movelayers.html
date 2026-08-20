@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>moveLayers sweep (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">sweeping…</pre>
+<script>
+/* BUG HUNT — picked by COVERAGE, not by guessing: of 232 exported FM functions, 76 are never mentioned
+   in the suite, and `FM.moveLayers` is the highest-stakes of them. It is the one thing that reorders
+   his work, it is driven by TWO different UIs (the ≡ drag and the switch-throw from queue 416), and a
+   fault there silently rearranges layers.
+   INVARIANTS, swept over every (moving set × drop target) on a 6-layer stack:
+     1. nothing is lost or duplicated — the same ids come out as went in;
+     2. the moved ids end up CONTIGUOUS;
+     3. their order among themselves is preserved;
+     4. the layers that did not move keep their relative order;
+     5. every layer lands immediately before the requested target (or at the end for null);
+     6. hostile input — unknown ids, duplicates, a target inside the moving set, an empty set — leaves
+        the stack intact rather than corrupting it. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.moveLayers&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(function(FM){
+  var N=6;
+  function seed(){
+    FM.scene.layers.length=0;
+    for(var i=0;i<N;i++){
+      var L=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:10,y:10,shapeW:10,shapeH:10,fill:'#fff'});
+      L.start=0;L.duration=1;FM.scene.layers.push(L);
+    }
+    return FM.scene.layers.map(function(l){return l.id;});
+  }
+  function names(){ return FM.scene.layers.map(function(l){return l.name;}); }
+  var bad=[], n=0;
+  // every non-empty subset of 6 layers, against every drop target incl. null
+  for(var mask=1; mask<(1<<N); mask++){
+    for(var tgt=-1; tgt<N; tgt++){
+      var ids=seed();
+      var moving=[], movingNames=[];
+      for(var i=0;i<N;i++) if(mask&(1<<i)){ moving.push(ids[i]); movingNames.push('L'+i); }
+      var before = tgt<0 ? null : ids[tgt];
+      var beforeName = tgt<0 ? '(end)' : 'L'+tgt;
+      var restNames=[]; for(var j=0;j<N;j++) if(!(mask&(1<<j))) restNames.push('L'+j);
+      var tag='move ['+movingNames.join(',')+'] before '+beforeName;
+      try { FM.moveLayers(moving, before); } catch(e){ bad.push(tag+'  → THREW: '+e.message); continue; }
+      n++;
+      var after=names();
+      // 1
+      if(after.length!==N || new Set(after).size!==N){ bad.push(tag+'  → the stack is now '+after.join(',')); continue; }
+      // 2 + 3
+      var idxs=movingNames.map(function(nm){return after.indexOf(nm);});
+      var sorted=idxs.slice().sort(function(a,b){return a-b;});
+      if(sorted.some(function(v,k){return k && v!==sorted[k-1]+1;})) bad.push(tag+'  → the moved block is not contiguous: '+after.join(','));
+      if(idxs.join(',')!==sorted.join(',')) bad.push(tag+'  → the moved layers changed order among themselves: '+after.join(','));
+      // 4
+      var restAfter=after.filter(function(nm){return restNames.indexOf(nm)>=0;});
+      if(restAfter.join(',')!==restNames.join(',')) bad.push(tag+'  → the layers that did NOT move were reordered: '+restAfter.join(',')+' (was '+restNames.join(',')+')');
+      // 5 — landed before the target, when the target stayed put
+      if(tgt>=0 && restNames.indexOf(beforeName)>=0){
+        var last=sorted[sorted.length-1];
+        if(after[last+1]!==beforeName) bad.push(tag+'  → the block did not land immediately before '+beforeName+': '+after.join(','));
+      }
+    }
+  }
+  // 6 — hostile input
+  var ids=seed(); var was=names().join(',');
+  [['unknown ids',['nope','also-nope'],null],['duplicate ids',[ids[0],ids[0]],ids[3]],['empty',[],ids[2]],['target unknown',[ids[1]],'nope'],['null ids',null,ids[0]]].forEach(function(C){
+    seed(); was=names().join(',');
+    try { FM.moveLayers(C[1], C[2]); } catch(e){ bad.push(C[0]+'  → THREW: '+e.message); return; }
+    var after=names();
+    if(after.length!==N || new Set(after).size!==N) bad.push(C[0]+'  → corrupted the stack: '+after.join(','));
+  });
+  say('combinations swept: '+n);
+  say('');
+  if(!bad.length) say('✅ every combination held all six invariants');
+  else { say('❌ '+bad.length+' failure(s) — first 12:'); bad.slice(0,12).forEach(function(b){ say('   '+b); }); }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

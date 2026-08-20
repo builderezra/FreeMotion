@@ -3530,6 +3530,74 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('moveLayers: every subset lands where it was asked, and nothing is lost', { item: 'movelayers-sweep' }, function () {
+    /* BUG HUNT (21 Aug), picked by COVERAGE rather than by guessing: of 232 exported FM functions, 76
+       were never mentioned in this file, and `FM.moveLayers` is the highest-stakes of them — it is the
+       one thing that reorders his work, it is driven by TWO UIs (the ≡ drag and the switch-throw from
+       queue 416), and a fault there silently rearranges layers.
+       Swept over every non-empty subset of a 5-layer stack against every drop target including the end:
+       186 combinations here, 441 on six layers in tests/_movelayers.html. All correct — this pins it.
+       SIX INVARIANTS, because "it moved" is not the same as "it moved correctly": nothing lost or
+       duplicated; the moved ids contiguous; their order among themselves preserved; the untouched
+       layers' relative order preserved; the block landing immediately before the requested target; and
+       hostile input leaving the stack intact. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const N = 5;
+      const seed = () => {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < N; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+          L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+        }
+        return FM.scene.layers.map(l => l.id);
+      };
+      const names = () => FM.scene.layers.map(l => l.name);
+      let n = 0;
+      for (let mask = 1; mask < (1 << N); mask++) {
+        for (let tgt = -1; tgt < N; tgt++) {
+          const ids = seed();
+          const moving = [], movingNames = [], restNames = [];
+          for (let i = 0; i < N; i++) { if (mask & (1 << i)) { moving.push(ids[i]); movingNames.push('L' + i); } else restNames.push('L' + i); }
+          const before = tgt < 0 ? null : ids[tgt];
+          const beforeName = tgt < 0 ? '(end)' : 'L' + tgt;
+          const tag = 'moving [' + movingNames.join(',') + '] before ' + beforeName;
+          FM.moveLayers(moving, before);
+          n++;
+          const after = names();
+          if (after.length !== N || new Set(after).size !== N) throw new Error(tag + ': the stack is now ' + after.join(',') + ' — a layer was lost or duplicated');
+          const idxs = movingNames.map(nm => after.indexOf(nm));
+          const sorted = idxs.slice().sort((a, b) => a - b);
+          if (sorted.some((v, k) => k && v !== sorted[k - 1] + 1)) throw new Error(tag + ': the moved block is not contiguous — ' + after.join(','));
+          if (idxs.join(',') !== sorted.join(',')) throw new Error(tag + ': the moved layers changed order among themselves — ' + after.join(','));
+          const restAfter = after.filter(nm => restNames.indexOf(nm) >= 0);
+          if (restAfter.join(',') !== restNames.join(',')) throw new Error(tag + ': the layers that did NOT move were reordered — ' + restAfter.join(',') + ', was ' + restNames.join(','));
+          if (tgt >= 0 && restNames.indexOf(beforeName) >= 0) {
+            const last = sorted[sorted.length - 1];
+            if (after[last + 1] !== beforeName) throw new Error(tag + ': the block did not land immediately before ' + beforeName + ' — ' + after.join(','));
+          }
+        }
+      }
+      if (n < 150) throw new Error('only ' + n + ' combinations swept');
+
+      /* HOSTILE INPUT must leave the stack intact rather than corrupt or throw. `null` was the one
+         input that threw in the sweep; it is not reachable from either caller today, which is exactly
+         when a public entry point is cheapest to make safe. */
+      const ids = seed();
+      [['unknown ids', ['nope', 'also-nope'], null], ['duplicate ids', [ids[0], ids[0]], ids[3]],
+       ['an empty list', [], ids[2]], ['an unknown target', [ids[1]], 'nope'],
+       ['a null list', null, ids[0]], ['a non-array', 'x', ids[0]]].forEach(([what, a, b]) => {
+        seed();
+        try { FM.moveLayers(a, b); } catch (e) { throw new Error('moveLayers threw on ' + what + ': ' + e.message); }
+        const after = names();
+        if (after.length !== N || new Set(after).size !== N) throw new Error(what + ' corrupted the stack: ' + after.join(','));
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

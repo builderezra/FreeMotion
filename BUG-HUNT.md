@@ -1579,3 +1579,29 @@ callers — because the next caller will not know.
 silence when `clipDur` is 0 went red against correct behaviour: there are no samples to fade, and
 `fadeMul`'s `clipDur &&` guard deliberately skips the division rather than divide by zero. That is the
 queue-427 trap — an assertion too strict to ship — caught before it shipped this time.
+
+## 30. `FM.moveLayers` — 441 subset×target combinations, all correct (21 Aug, v11.01)
+
+**Picked by coverage, not by hunch.** The previous eleven hunts chose a subsystem by guessing where bugs
+felt likely. This one asked the code instead: a script over `js/*.js` listed every exported `FM.*` function
+and checked each name against `tests/tests.js`. **232 exported, 76 never mentioned.** `FM.moveLayers` stood
+out of that 76 — it is the single function that reorders his layers, it has two independent callers (the ≡
+drag handle and the switch-throw from queue 416), and when a reorder goes wrong it does so silently: the
+stack simply is not what he left it as.
+
+**Six invariants, because "it moved" is not "it moved correctly":** nothing lost or duplicated; the moved
+ids contiguous afterwards; their order among themselves preserved; the order of the layers that did NOT
+move preserved; the block landing immediately before the requested target; hostile input leaving the stack
+intact. Swept every non-empty subset of a 6-layer stack (63 of them) against every drop target including
+the end — **441 combinations. Every one correct.**
+
+**Verdict: clean.** No defect. The function is right, including the cases that usually break this kind of
+code — a target inside the moving set, a multi-select spanning a gap, dropping at the very end.
+
+One input threw: `moveLayers(null, id)`, at `ids.forEach`. **It is not reachable** — both callers pass a
+real array. Guarded anyway (one line; a public entry point with two callers today and no reason to expect
+there will not be a third), and recorded here as unreachable rather than written up as a bug found, because
+inflating a defensive nicety into a fix is how a hunt starts lying about its own results.
+
+**Guard:** 186 of the combinations now run in the suite (`movelayers-sweep`). Mutation-checked twice —
+reversing the moved block, and removing the new null guard — both caught.

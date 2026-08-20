@@ -3170,6 +3170,11 @@ window.FM = window.FM || {};
   // the timeline reorder drag — handles single- and multi-layer drags through one path.
   FM.moveLayers = function (ids, beforeId) {
     const arr = FM.scene.layers;
+    // A missing list is not an empty one — `null.forEach` throws, and this is a public entry point with
+    // two callers today and no reason to think there will not be a third (bug hunt, 21 Aug: swept over
+    // all 441 subset×target combinations, every one correct; this was the only input that threw, and it
+    // is not reachable from either caller — both pass a real array).
+    if (!Array.isArray(ids) || !ids.length) return;
     const set = {}; ids.forEach(id => { set[id] = 1; });
     const moving = arr.filter(l => set[l.id]);          // preserves current order
     if (!moving.length) return;
