@@ -551,6 +551,28 @@ window.FM = window.FM || {};
   // '_'). A live <canvas> serialises to {} and comes back methodless, which crashed the compositor
   // (Copy Background's _bgSnap, motion-blur plates, media _lastFrame, group _canvas, …).
   FM.jsonReplacer = function (k, v) { return (typeof k === 'string' && k.charCodeAt(0) === 95) ? undefined : v; };
+  /* THE EFFECT-PHASE CLOCK, in ONE place (bug hunt, 21 Aug). Every time-driven canvas effect — Drift,
+   * Spin, Orbit, Wiggle, Shake and the rest — is driven by "seconds since THIS CLIP began", so a split
+   * handed the tail half a fresh clock and the picture SNAPPED at a cut that is meant to be invisible:
+   * measured at 211px of centroid shift on a 320px-wide canvas for Drift, 162 for Shake, 160 for Orbit
+   * (tests/_splitclock.html). Five of the seven time-driven effects moved.
+   * `fxTimeOffset` carries the phase across the cut. It is an OFFSET, not an absolute time, for two
+   * reasons: dragging the half somewhere else still takes its effects with it, and splitting an already
+   * split half chains instead of overwriting.
+   * NON-UNDERSCORE ON PURPOSE. The obvious fix is `_clipStart`, which already exists for group proxies —
+   * but FM.jsonReplacer strips every key beginning with '_', so that version would have worked until the
+   * first save or the first undo and then quietly reverted. That is a worse bug than the one it fixes.
+   * Coerced exactly the way FM.speedAt and FM.fadeWindows are, and for the same reason: a saved document
+   * the UI did not write can carry a string or an Infinity here, and Infinity puts every one of those
+   * effects at a non-finite phase for the rest of the render. */
+  FM.fxLocalTime = function (layer, t) {
+    if (!layer) return t;
+    const base = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);
+    const o = layer.fxTimeOffset;
+    const n = (typeof o === 'number') ? o : parseFloat(o);
+    return t - base + (isFinite(n) ? n : 0);
+  };
+
   FM.cloneLayer = function (layer, plain) {
     const c = JSON.parse(JSON.stringify(layer, FM.jsonReplacer));
     c.id = uid('layer');

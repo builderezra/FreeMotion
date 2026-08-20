@@ -1678,3 +1678,57 @@ separately asserts the intro and outro that SHOULD survive still run. Mutation-c
 **Method note worth keeping.** Both of these came out of one habit: when a bug is found, ask what the
 CLASS is and sweep for the rest of it. The grep for the class missed this one because it assumed the
 answer would be a scalar property on the layer. A sweep is only as good as its assumption about shape.
+
+## 33. Splitting a clip restarted every time-driven effect (21 Aug, v11.04) — REAL BUG, and the biggest of the three
+
+Third of the split family, and found by asking the generalised question rather than a new one: **what else
+is measured from a clip's own edges?** §31 was fades, §32 was text animation. This is the whole effect system.
+
+`js/compositor.js:6688` hands every canvas effect `tl` — the comment above it says it plainly: *"tl = time
+since the clip began (so Spin/Drift/Orbit start at the clip's start)"*. A split gives the tail half a new
+`start`, so its `tl` restarts at 0 at the cut.
+
+**Measured, on real pixels** (`tests/_splitclock.html`, centroid of the composited frame, 320×180):
+
+| effect | centroid shift at the cut |
+|---|---|
+| Drift | **211 px** |
+| Shake | **162 px** |
+| Orbit | **160 px** |
+| Wiggle | **46 px** |
+| Spin | 3 px |
+| Swing / Pulse | ≤1 px |
+
+211 px is two thirds of the canvas width.
+
+### The probe lied the first time, and that is the important part of this entry
+
+The first run reported **0.00 for all seven effects and a clean verdict.** It was completely wrong. The probe
+built the effect record by hand as `{id, enabled, params:{}}`; the real shape is `{type, enabled, params:<defaults>}`
+(`FM.fxRegistry.makeInstance`, js/fx-registry.js:530). No effect ever ran — and a still picture cannot jump
+at a cut, so every reading was a true 0 measuring nothing.
+
+Everything about that clean looked right: ink was present, the layer existed, the split happened. The tell was
+`worstT = null` — not one comparison had exceeded zero, which real rendering never does.
+
+So the suite version builds effects through **the app's own single creation path** and carries a **control that
+fails the test** if the effect did not move the picture by itself. The control is mutation-checked: freezing
+`FM.fxLocalTime` makes the test fail with `CONTROL FAILED`, not with a pass.
+
+### The fix, and the trap inside it
+
+One seam — `FM.fxLocalTime(layer, t)` in js/scene.js — used by all three phase-clock sites. A fourth site
+(js/compositor.js:2145) reads the same expression but uses it as motion blur's **clip window**, not a phase,
+and was deliberately left alone.
+
+`fxTimeOffset` is an **offset, not an absolute time**, so dragging the half elsewhere takes its effects with it
+and splitting twice chains. And it deliberately has **no leading underscore**: the obvious implementation reuses
+`_clipStart`, which already exists for group proxies — but `FM.jsonReplacer` strips every `_` key from save,
+history and clone, so that version would have worked until the first save or undo and then silently reverted.
+
+### Method note
+
+This came from a 27-agent fan-out over seven lenses. It returned **20 candidate findings and refuted zero**,
+which is itself a warning: a refutation stage that kills nothing is not doing its job. Every one of them is
+being treated as an unproven claim and measured individually. This one was real. The remaining nineteen are
+listed in §34 as leads, not findings.

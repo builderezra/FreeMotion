@@ -3530,6 +3530,65 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: cutting a clip does not restart its time-driven effects', { item: 'split-fxclock' }, async function () {
+    /* BUG HUNT (21 Aug), third of the same family and the biggest. Every canvas effect is handed
+       "seconds since THIS CLIP began" (FM.fxLocalTime), so a split gave the tail half a fresh clock and
+       the picture SNAPPED at a cut that is meant to be invisible. Measured centroid shift on a 320px
+       canvas: Drift 211px, Shake 162, Orbit 160, Wiggle 46, Spin 3 (tests/_splitclock.html).
+       THE CONTROL IS THE POINT. The first run of this probe read a clean 0.00 for all seven effects and
+       was completely wrong: it built the effect record by hand as {id, params:{}} when the real shape is
+       {type, params:<defaults>}, so nothing ran and a still picture cannot move at a cut. The effect is
+       therefore built through FM.fxRegistry.makeInstance — the app's own single creation path — and the
+       test FAILS rather than passes if the effect did not move the picture on its own. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 320, H = 180;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const frame = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0, sx = 0, sy = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i] > 120 && d[i + 1] > 120 && d[i + 2] > 120) { const px = i / 4; n++; sx += px % W; sy += Math.floor(px / W); }
+        }
+        return { n: n, cx: n ? sx / n : 0, cy: n ? sy / n : 0 };
+      };
+      const times = [1, 3, 4.5, 4.9, 5, 5.1, 5.5, 7, 9];
+      const judged = [];
+      for (const id of ['drift', 'orbit', 'shake', 'wiggle']) {
+        const inst = FM.fxRegistry && FM.fxRegistry.makeInstance(id);
+        if (!inst) continue;
+        FM.scene.layers.length = 0;
+        const A = FM.makeLayer('shape', { name: 's', shape: 'rect', x: W / 2 - 20, y: H / 2 - 20, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+        A.start = 0; A.duration = 10; A.effects = [inst];
+        FM.scene.layers.push(A);
+        const before = times.map(frame);
+        let spread = 0;
+        for (let a = 0; a < before.length; a++) for (let b = a + 1; b < before.length; b++)
+          spread = Math.max(spread, Math.hypot(before[a].cx - before[b].cx, before[a].cy - before[b].cy));
+        if (spread < 1) throw new Error('CONTROL FAILED: "' + id + '" never moved the picture over 10s, so "it did not move at the cut" proves nothing — the effect is not running (check the record shape from FM.fxRegistry.makeInstance)');
+        FM.time = 5;
+        // splitLayer is async and inserts the tail half AFTER an await (reloadMediaTo) for every type
+        // except text — a non-awaited call reads a one-layer scene and fails for the wrong reason.
+        await FM.splitLayer(A.id);
+        if (FM.scene.layers.length !== 2) throw new Error('the split did not produce two halves for ' + id);
+        const after = times.map(frame);
+        let worst = 0, worstT = null;
+        times.forEach((t, i) => { const d = Math.hypot(after[i].cx - before[i].cx, after[i].cy - before[i].cy); if (d > worst) { worst = d; worstT = t; } });
+        judged.push(id);
+        if (worst > 2) throw new Error('splitting re-phased "' + id + '": the picture jumped ' + worst.toFixed(1) + 'px at t=' + worstT);
+      }
+      if (judged.length < 2) throw new Error('only ' + judged.length + ' effect(s) could be judged — the test is not covering what it claims');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: cutting an animated TEXT clip does not replay its intro at the cut', { item: 'split-textanim' }, async function () {
     /* BUG HUNT (21 Aug), the same class as `split-fade` and found by looking for the rest of it: a text
        layer's in/out animation is timed off the clip's own edges too (`t - layer.start` and

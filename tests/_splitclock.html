@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>split x effect clock (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT. Every canvas effect is handed `tl` = time since THE CLIP began
+   (js/compositor.js:6688 — "so Spin/Drift/Orbit start at the clip's start").
+   A split gives the tail half a new `start`, so its tl restarts at 0 at the cut. If that is real,
+   a drifting/spinning layer SNAPS at a cut that is meant to be invisible.
+   Measured on real pixels: the CENTROID and the ink of the composited frame, either side of the cut. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.splitLayer&&w.FM.makeLayer&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function frame(FM,doc,t,W,H){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,t);
+  var d=ctx.getImageData(0,0,W,H).data, n=0, sx=0, sy=0;
+  for(var i=0;i<d.length;i+=4){
+    if(d[i]>120&&d[i+1]>120&&d[i+2]>120){ var p=i/4; n++; sx+=p%W; sy+=Math.floor(p/W); }
+  }
+  return {n:n, cx:n?sx/n:0, cy:n?sy/n:0};
+}
+async function run(FM){
+  var doc=f.contentDocument, W=320,H=180, L=[];
+  var EFFECTS=['drift','spin','orbit','wiggle','shake','swing','pulse'];
+  var times=[1.0,3.0,4.5,4.9,5.0,5.1,5.5,7.0,9.0];
+  L.push('effect      worst centroid shift across the cut (px)   verdict');
+  var anyBad=false;
+  for(var e=0;e<EFFECTS.length;e++){
+    var id=EFFECTS[e];
+    FM.scene.layers.length=0;
+    FM.scene.project.width=W; FM.scene.project.height=H;
+    var A=FM.makeLayer('shape',{name:'s',shape:'rect',x:W/2-20,y:H/2-20,shapeW:40,shapeH:40,fill:'#ffffff'});
+    A.start=0; A.duration=10;
+    var inst=FM.fxRegistry.makeInstance(id);
+    if(!inst){ L.push('  '+id.padEnd(11)+'(no such effect in the registry — SKIPPED)'); continue; }
+    A.effects=[inst];
+    FM.scene.layers.push(A);
+    var before=times.map(function(t){return frame(FM,doc,t,W,H);});
+    if(!before[0].n){ L.push('  '+id.padEnd(11)+'(effect drew nothing — SKIPPED, probe cannot judge it)'); continue; }
+    /* CONTROL. A verdict of "nothing moved across the cut" is worthless unless the effect was MOVING
+       in the first place — the first version of this probe passed the wrong record shape (id/empty
+       params instead of type/defaults), the effect never ran, and all seven read a clean 0.00. */
+    var spread=0;
+    for(var a=0;a<before.length;a++) for(var b=a+1;b<before.length;b++)
+      spread=Math.max(spread, Math.hypot(before[a].cx-before[b].cx, before[a].cy-before[b].cy)
+                            + Math.abs(before[a].n-before[b].n)/40);
+    if(spread<1.0){ L.push('  '+id.padEnd(11)+'(INERT: the effect never moved the picture over 10s — probe cannot judge it)'); continue; }
+    FM.time=5;
+    await FM.splitLayer(A.id);
+    var after=times.map(function(t){return frame(FM,doc,t,W,H);});
+    var worst=0, worstT=null;
+    times.forEach(function(t,i){
+      var d=Math.hypot(after[i].cx-before[i].cx, after[i].cy-before[i].cy);
+      if(d>worst){worst=d;worstT=t;}
+    });
+    var bad=worst>1.0;
+    if(bad) anyBad=true;
+    L.push('  '+id.padEnd(11)+worst.toFixed(2).padStart(7)+'  at t='+worstT+(bad?'   <-- JUMPS at the cut':'   ok'));
+  }
+  L.push('');
+  L.push(anyBad?'❌ splitting re-phases time-driven effects':'✅ no effect moved across the cut');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

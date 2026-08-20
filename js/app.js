@@ -2886,6 +2886,10 @@ window.FM = window.FM || {};
      * and it is the louder of the two: measured, the title VANISHED for 1.2s across the cut, not
      * merely dimmed. `stagger` goes with durIn because with durIn 0 the units still pop in one at a
      * time; `durIn` cannot simply be deleted either, since it defaults to 0.6 when absent. */
+    /* Time-driven canvas effects run on "seconds since this clip began" (FM.fxLocalTime), so without
+     * this the tail half restarts them at the cut — Drift jumped 211px of a 320px canvas. Chains, so
+     * splitting an already-split half stays correct. */
+    B.fxTimeOffset = (parseFloat(layer.fxTimeOffset) || 0) + into;
     if (layer.textAnim) layer.textAnim.durOut = 0;
     if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
     if (Array.isArray(layer.captions)) {

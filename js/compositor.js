@@ -1723,7 +1723,7 @@ window.FM = window.FM || {};
     var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0 };
     var fx = layer && layer.effects;
     if (fx && fx.length) {
-      var info = { localT: t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
+      var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
       for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
     }
     return st;
@@ -6685,7 +6685,7 @@ window.FM = window.FM || {};
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM);
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer, ps, expand);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, FM.fxLocalTime(layer, t), layer, ps, expand);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
@@ -10149,7 +10149,7 @@ window.FM = window.FM || {};
     const bctx = _mbcB.getContext('2d');
     baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer); }
+    try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, FM.fxLocalTime(layer, t), layer); }
     catch (e) { bctx.drawImage(_mbcA, 0, 0); }
     ctx.save();
     ctx.globalAlpha = opacity;
