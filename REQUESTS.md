@@ -12534,3 +12534,35 @@ wait for them to report back."*
       simply missing rather than wrong.
       ⚠️ Ships near **#438** (the add row not updating live during a drag) — same row, same gesture, and
       fixing one without the other will look like it half-works.
+
+- [ ] **444 — Tuff catalogue: one more filter, more filter categories, and favouriting.** (20 Aug.) His
+      words, verbatim: *"Add to the bottom of the list to make it so the tuff catalogue has one extra
+      filter and also make more categories for filters, and make it so you can fave them and they go to
+      the top when you do, not the categories but each individual. And it doesn't take it away from its
+      group when you do so"*.
+      **Clauses:**
+      1. [ ] **One extra filter** in the Tuff catalogue (the section shipped in v9.99).
+      2. [ ] **More categories** for filters.
+      3. [ ] **Favourite an individual filter** — a fave, not a category-level thing.
+      4. [ ] **Faves rise to the top** of the browser.
+      5. [ ] **…and it stays in its own group too** — favouriting must not MOVE it out of its category, it
+             appears in both.
+      ⚠️ Clause 5 is the design constraint that makes this more than a sort: the same filter has to render
+      in two places at once, so whatever backs the list has to allow a duplicate entry without duplicating
+      the identity (picking it from either place is the same filter, and un-faving must not leave a ghost).
+      ⚠️ Faves are per-user state, so they belong in localStorage next to the other preferences — NOT in
+      the project document, or a project shared or re-imported would carry someone else's faves.
+
+- [ ] **445 — Effects menu: rename "Featured" to "New", and make the category tiles SQUARE.** (20 Aug.)
+      His words, verbatim: *"Also in the effects menu change the featured row to New and also make each
+      catagory like shakes / movement a square box instead of the long one (still fitting its name in
+      there". This is so we can fit more categories on screen and you don't have to scroll as much."*
+      **Clauses:**
+      1. [ ] **"Featured" → "New"** — the row's heading in the effects browser.
+      2. [ ] **Category tiles become SQUARE** instead of the current long/wide ones (Shakes, Movement, …).
+      3. [ ] **Their names still fit** — his own parenthesis, so a square tile that truncates "Movement"
+             or drops to 8pt has failed the request.
+      4. [ ] **The point is FITTING MORE ON SCREEN** — he says why, so the acceptance test is how many
+             categories are visible at 380px without scrolling, before and after. Measure both.
+      ⚠️ Longest category names are the constraint, not the average — find the longest label in the
+      registry and size the tile to that, or the widest one will be the one that breaks.
