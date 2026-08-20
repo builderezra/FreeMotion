@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Can a layer be dropped on every side of the add row? (queue 443)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1020px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 443: "the add layer is still not acting like a layer in the sense when I try to drag a layer
+   below it it doesn't let me and stuff, just a bit buggy".
+   The add row is deliberately NOT a .track-row (no layer, no clip, no index), but it IS one of the
+   `statics` the reorder lays out — so the question is which drop SLOTS around it actually resolve.
+   This drags one layer to every slot in turn and reports where it ended up, so an unreachable one shows
+   as two slots producing the same order.
+   ⚠️ The reorder binds pointermove/up to the drag HANDLE and relies on pointer capture, which a
+   synthetic pointerId cannot have — so the moves go to the handle, not to window. Sent to window the
+   gesture silently does not happen at all. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  function pe(type,x,y,id){return new W.PointerEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,pointerId:id,pointerType:'touch',isPrimary:true,button:0,buttons:type==='pointerup'?0:1});}
+
+  function seed(addAt){
+    FM.scene.layers.length=0;
+    for(var i=0;i<5;i++){
+      var L=FM.makeLayer('shape',{name:'L'+i,shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+      L.start=0;L.duration=3;FM.scene.layers.push(L);
+    }
+    FM.addAt=addAt; FM.dragAddAt=null;
+    FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+  }
+  function order(){ return FM.scene.layers.map(function(l){return l.name;}).join(','); }
+  function rows(){
+    return [].slice.call(d.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow')).map(function(r){
+      var isAdd=r.classList.contains('tl-addrow');
+      var hd=r.querySelector('.track-head');
+      return { add:isAdd, name:isAdd?'[ADD]':(hd?(FM.scene.layers[parseInt(hd.dataset.idx,10)]||{}).name:'?'), el:r, top:r.getBoundingClientRect().top, h:r.getBoundingClientRect().height };
+    });
+  }
+
+  seed(2); await sleep(400);
+  say('rows on screen: '+rows().map(function(r){return r.name;}).join(' | '));
+  var slotH = rows()[1] ? (rows()[1].top - rows()[0].top) : 42;
+  say('slot height '+slotH.toFixed(0)+'px   FM.addAt '+FM.addAt);
+  say('');
+  say('dragging L4 (the bottom layer) to each slot, by its ≡ handle:');
+
+  for (var slot=0; slot<=5; slot++){
+    seed(2); await sleep(300);
+    var rr=rows();
+    var src=rr.filter(function(r){return r.name==='L4';})[0];
+    if(!src){ say('  slot '+slot+': no L4 row'); continue; }
+    var h=src.el.querySelector('.row-drag');
+    if(!h){ say('  slot '+slot+': no drag handle'); continue; }
+    var hr=h.getBoundingClientRect();
+    var x=hr.left+hr.width/2, y0=hr.top+hr.height/2;
+    var targetY = rr[0].top + slot*slotH + slotH/2;
+    var before=order();
+    h.dispatchEvent(pe('pointerdown',x,y0,80+slot));
+    await sleep(40);
+    for(var k=1;k<=6;k++){ await sleep(26); h.dispatchEvent(pe('pointermove',x, y0 + (targetY-y0)*k/6, 80+slot)); await sleep(26); }
+    /* WHERE THE GAP IS, WHILE THE FINGER IS STILL DOWN. The landing order alone cannot see this bug:
+       the collapse of two slots onto one target is unavoidable (six gap positions, five boundaries).
+       What was wrong is that at the gap ON the add row the rows opened ABOVE it and the layer then
+       landed BELOW it — the preview lying for a whole row's height. So the gap is read mid-drag and
+       compared with where the layer actually goes. */
+    var gapAt='(none)';
+    var live=[].slice.call(d.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow')).filter(function(r){return !r.classList.contains('row-dragging');});
+    for(var q=0;q<live.length;q++){
+      var tf=W.getComputedStyle(live[q]).transform;
+      var ty=0;
+      if(tf&&tf!=='none'){ var m=tf.match(/matrix\(([^)]+)\)/); if(m) ty=parseFloat(m[1].split(',')[5]); }
+      if(ty>4){ var hd2=live[q].querySelector('.track-head');
+        gapAt = live[q].classList.contains('tl-addrow') ? '[ADD]' : ((FM.scene.layers[parseInt(hd2&&hd2.dataset.idx,10)]||{}).name||'?');
+        break; }
+    }
+    h.dispatchEvent(pe('pointerup',x,targetY,80+slot));
+    await sleep(450);
+    var after=order();
+    // where did it actually land? the row it ended up ABOVE
+    var idx=after.split(',').indexOf('L4');
+    var landedBefore = after.split(',')[idx+1] || '(end)';
+    say('  slot '+slot+' (y '+targetY.toFixed(0)+')  gap opened before '+String(gapAt).padEnd(7)
+        +' → landed before '+String(landedBefore).padEnd(7)
+        +'  '+before+' → '+after
+        +(String(gapAt)!=='(none)' && gapAt!==landedBefore ? '   ❌ THE PREVIEW LIED' : ''));
+  }
+  say('');
+  say('(the add row sits at slot 2. Two different slots giving the same order means one of them is unreachable.)');
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

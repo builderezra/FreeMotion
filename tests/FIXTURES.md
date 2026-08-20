@@ -81,6 +81,9 @@ transition is meaningless there.
   call `FM.textEdit.stop()` first, or it photographs the wrong screen.
 - `_headgap.html` — the track head measured WITH a group in the project and without, so the chevron
   column's cost can be told apart from plain padding (queue 442).
+- `_adddrop.html` — drags one layer to every slot around the add row and reports, for each, where the
+  gap OPENED against where the layer LANDED (queue 443). The landing order alone cannot see that bug: the
+  collapse of two slots onto one target is unavoidable, and what was wrong was the preview.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

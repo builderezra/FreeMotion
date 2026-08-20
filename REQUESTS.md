@@ -12734,7 +12734,7 @@ wait for them to report back."*
       ⚠️ **If 18px is still too much for him, the only lever left is the column itself** — and that is the
       #191 trade, so it is his call rather than a build decision.
 
-- [ ] **443 — The Add-layer row still does not behave like a layer when you drag around it.** (20 Aug.)
+- [x] **443 — The Add-layer row still does not behave like a layer when you drag around it.** ✅ **DONE v10.82.** (20 Aug.)
       His words, verbatim: *"Also the add layer is still not acting like a layer in the sense when I try to
       drag a layer below it it doesn't let me and stuff, just a bit buggy"*.
       **Read as:** dragging a real layer PAST / BELOW the add row is refused or behaves oddly. The row is
@@ -12743,6 +12743,22 @@ wait for them to report back."*
       simply missing rather than wrong.
       ⚠️ Ships near **#438** (the add row not updating live during a drag) — same row, same gesture, and
       fixing one without the other will look like it half-works.
+
+      📐 **MEASURED at 380px with the add row at index 2 (`tests/_adddrop.html`), by dragging one layer to
+      every slot in turn and reporting where it landed.** Dropping ON the add row and dropping just BELOW
+      it gave the same order — and that part is CORRECT and unavoidable: six gap positions have to map to
+      five real boundaries, so exactly one collapse must happen, and the add row is the right place for it.
+      🔎 **The actual fault was in what you SEE while deciding.** The drop already skipped past the add row
+      to the boundary it marks; the LAYOUT did not. So at that position the rows opened ABOVE the add row
+      and the layer then landed BELOW it — the preview and the result disagreeing for a whole row's
+      height. Aiming at a gap that lies is exactly what "it doesn't let me" feels like.
+      ✅ **v10.82 — the add row is not a slot for the gap either.** A gap landing on it is pushed one past
+      it, and the same number now drives both the layout and the drop, so what you see is where it goes.
+      🧪 **TWO DEAD ASSERTIONS WERE CAUGHT PROVING THIS.** The first mutation was aimed at the drop line
+      and was caught by the test's CONTROL rather than by the assertion under test (the mutated drop
+      resolved to the add row's null id and dropped at the end). The second, aimed correctly at the layout
+      line, **survived** — the gap reading came back null and both checks were written as
+      `if (gapBefore …)`, so a run that saw nothing reported success. A null reading fails outright now.
 
 - [ ] **444 — Tuff catalogue: one more filter, more filter categories, and favouriting.** (20 Aug.) His
       words, verbatim: *"Add to the bottom of the list to make it so the tuff catalogue has one extra
@@ -12824,3 +12840,18 @@ wait for them to report back."*
       ⚠️ WAV is uncompressed: a 3-minute clip is ~30MB in IndexedDB. Worth checking against #430's
       storage-budget work before shipping — M4A/AAC (v10.72) is now available as an encoder if the size
       turns out to matter.
+
+- [ ] **449 — Possible one-slot disagreement at the TOP of the layer list (found by measurement, not
+      reported).** (20 Aug, found while measuring #443.) Not his words — this is a lead, not a request.
+      `tests/_adddrop.html` drags one layer to every slot and compares the gap you can see with where it
+      lands. Slots 2–5 agree. **Slots 0 and 1 read as disagreeing by one**: aiming at the first row, the
+      gap appeared to open before L1 while the layer landed before L0.
+      ⚠️ **NOT CONFIRMED, and it may well be the probe rather than the app.** The reading is "the first row
+      whose transform pushed it down", and near the top of the list the block's soft clamp
+      (`listTop - slotH * 0.4`) can put the gap at 0 while the row it would push is already at its
+      resting place — in which case there is nothing to read and the probe picks the next one down. That
+      would be a measurement artefact and nothing else.
+      **Settle it before building anything:** report the resolved `g` and `dropBeforeId` from the app
+      itself rather than inferring the gap from transforms, and see whether they agree at slots 0 and 1.
+      Do not "fix" this on the strength of the current reading — it is exactly the shape of the three
+      lies `_scrubstart.html` told before it was believed.

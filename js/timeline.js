@@ -1117,11 +1117,22 @@ window.FM = window.FM || {};
           const idx = FM.scene.layers.findIndex(l => l.id === statics[statics.length - 1].id);
           for (let i2 = idx + 1; i2 < FM.scene.layers.length; i2++) { if (!groupSet[FM.scene.layers[i2].id]) { bottomBefore = FM.scene.layers[i2].id; break; } }
         }
-        /* Land ON the add row and you mean the boundary it marks, which is the next real row below it —
-           the same answer dropping on that row gives, so the two agree instead of competing. */
-        let tgt = g;
-        while (statics[tgt] && statics[tgt].isAdd) tgt++;
-        dropBeforeId = statics[tgt] ? statics[tgt].id : bottomBefore;
+        /* LAND ON THE ADD ROW AND YOU MEAN THE BOUNDARY IT MARKS — the next real row below it. That was
+           already the rule for the DROP, and the gap the finger could see did not obey it (queue 443).
+           Ezra: "the add layer is still not acting like a layer in the sense when I try to drag a layer
+           below it it doesn't let me and stuff, just a bit buggy."
+           MEASURED at 380px with the add row at index 2 (tests/_adddrop.html): dropping ON it and
+           dropping just BELOW it both produced L0,L1,L4,L2,L3 — which is correct and unavoidable, since
+           six gap positions have to map to five real boundaries. What was NOT correct is what you saw
+           while deciding: at the gap ON the add row the rows opened ABOVE it and the layer then landed
+           BELOW it. The preview and the result disagreed for a whole row's height, which is exactly what
+           "it doesn't let me" feels like — you aim at the gap you can see and get somewhere else.
+           So the add row is not a slot for the GAP either: a gap that lands on it is pushed one past it,
+           and the same number then drives both the layout and the target. What you see is where it goes,
+           and the unavoidable collapse now happens with both positions showing the identical preview. */
+        const addIdx = statics.findIndex(sr => sr.isAdd);
+        const ge = (addIdx >= 0 && g === addIdx) ? g + 1 : g;
+        dropBeforeId = statics[ge] ? statics[ge].id : bottomBefore;
         /* THE SWITCH FOLLOWS THE DRAG, NOT THE DROP (queue 438). Ezra: "The switch doesn't update live
            when dragging layers or the main create layer. Make it update as ur dragging."
            He is right and the reason is structural: the switch reads `FM.addAt`, and a reorder is
@@ -1141,7 +1152,7 @@ window.FM = window.FM || {};
         if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
-          const target = listTop + j * slotH + (j >= g ? blockH : 0);   // packed layout with the gap open at g
+          const target = listTop + j * slotH + (j >= ge ? blockH : 0);   // packed layout with the gap open at ge — the SAME number the drop uses (queue 443)
           const shift = target - s.top;
           s.el.style.transform = shift ? ('translateY(' + shift + 'px)') : '';
         });

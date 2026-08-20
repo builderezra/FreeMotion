@@ -2514,6 +2514,88 @@
     }
   });
 
+  test('443: the gap you can see and the place the layer lands are the same slot, around the add row', { item: '443' }, async function () {
+    /* Queue 443. Ezra: "the add layer is still not acting like a layer in the sense when I try to drag a
+       layer below it it doesn't let me and stuff, just a bit buggy."
+       MEASURED at 380px with the add row at index 2 (tests/_adddrop.html): dropping ON the add row and
+       dropping just BELOW it both produced the same order — which is correct and unavoidable, since six
+       gap positions have to map to five real boundaries. What was NOT correct is what you saw while
+       deciding: at the gap ON the add row the rows opened ABOVE it and the layer then landed BELOW it.
+       The preview and the result disagreed for a whole row's height, and aiming at a gap that lies is
+       exactly what "it doesn't let me" feels like.
+       So this asserts the two agree, which the landing order alone cannot see — it has to read the gap
+       while the finger is still down.
+       ⚠️ The reorder binds pointermove/up to the drag HANDLE and relies on pointer capture, which a
+       synthetic pointerId cannot have. Sent to window the gesture silently does not happen at all, and
+       the control below (the order must change) is what catches that. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 5; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.addAt = 2; FM.dragAddAt = null;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(200);
+        const rowsNow = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow'));
+        const all = rowsNow();
+        const addRow = all.filter(r => r.classList.contains('tl-addrow'))[0];
+        if (!addRow) throw new Error('there is no add row on the timeline to drag around');
+        if (all.length < 6) throw new Error('only ' + all.length + ' rows drawn, expected 5 layers + the add row');
+        const slotH = all[1].getBoundingClientRect().top - all[0].getBoundingClientRect().top;
+        const listTop = all[0].getBoundingClientRect().top;
+        const src = all.filter(r => { const hd = r.querySelector('.track-head'); return hd && (FM.scene.layers[parseInt(hd.dataset.idx, 10)] || {}).name === 'L4'; })[0];
+        if (!src) throw new Error('could not find L4’s row to drag');
+        const h = src.querySelector('.row-drag');
+        if (!h) throw new Error('L4’s row has no .row-drag handle');
+        const hr = h.getBoundingClientRect();
+        const x = hr.left + hr.width / 2, y0 = hr.top + hr.height / 2;
+        const targetY = listTop + 2 * slotH + slotH / 2;      // dead on the ADD ROW
+        const pe = (t, cy) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: cy, pointerId: 91, pointerType: 'touch', isPrimary: true, button: 0, buttons: t === 'pointerup' ? 0 : 1 });
+        const before = FM.scene.layers.map(l => l.name).join(',');
+        h.dispatchEvent(pe('pointerdown', y0));
+        await sleep(40);
+        for (let k = 1; k <= 6; k++) { await sleep(26); h.dispatchEvent(pe('pointermove', y0 + (targetY - y0) * k / 6)); await sleep(26); }
+        // WHERE THE GAP IS, with the finger still down.
+        let gapBefore = null;
+        rowsNow().filter(r => !r.classList.contains('row-dragging')).some(r => {
+          const tf = getComputedStyle(r).transform;
+          let ty = 0;
+          if (tf && tf !== 'none') { const m = tf.match(/matrix\(([^)]+)\)/); if (m) ty = parseFloat(m[1].split(',')[5]); }
+          if (ty > 4) {
+            const hd = r.querySelector('.track-head');
+            gapBefore = r.classList.contains('tl-addrow') ? '[ADD]' : ((FM.scene.layers[parseInt(hd && hd.dataset.idx, 10)] || {}).name || '?');
+            return true;
+          }
+          return false;
+        });
+        h.dispatchEvent(pe('pointerup', targetY));
+        await sleep(450);
+        const after = FM.scene.layers.map(l => l.name);
+        if (after.join(',') === before) throw new Error('the order did not change (' + before + '), so the drag never happened and the gap reading proves nothing — see the note about listener homes above');
+        const landedBefore = after[after.indexOf('L4') + 1] || '(end)';
+        /* A NULL READING IS NOT A PASS. Both checks below are `if (gapBefore …)`, so a run where no row
+           was pushed skipped them and reported success — which is how the first version of this test
+           survived a mutation that put the original bug straight back. */
+        if (!gapBefore) throw new Error('no row was pushed down while the finger was on the add row, so the gap could not be read at all and the two assertions below would have been skipped');
+        if (gapBefore === '[ADD]') throw new Error('the gap opened ABOVE the add row while the layer landed before ' + landedBefore + ' — the preview shows one slot and the drop takes another, which is the whole of his report');
+        if (gapBefore && gapBefore !== landedBefore) throw new Error('the gap opened before ' + gapBefore + ' but the layer landed before ' + landedBefore + ' — what you can see and what you get are different slots');
+      }, 380);
+    } finally {
+      FM.dragAddAt = null; FM.dragLayerId = null;
+      FM.scene.layers = layers0; FM.addAt = at0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
