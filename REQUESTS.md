@@ -12797,31 +12797,50 @@ wait for them to report back."*
       "goes to the end" on an EMPTY favourites list — both put the new entry at index 0 — so a mutation
       swapping `unshift` for `push` survived. The test seeds an existing favourite first now.
 
-- [ ] **445 — Effects menu: rename "Featured" to "New", and make the category tiles SQUARE.** (20 Aug.)
+- [x] **445 — Effects menu: rename "Featured" to "New", and make the category tiles SQUARE.** ✅ **DONE v10.84.** (20 Aug.)
       His words, verbatim: *"Also in the effects menu change the featured row to New and also make each
       catagory like shakes / movement a square box instead of the long one (still fitting its name in
       there". This is so we can fit more categories on screen and you don't have to scroll as much."*
       **Clauses:**
-      1. [ ] **"Featured" → "New"** — the row's heading in the effects browser.
-      2. [ ] **Category tiles become SQUARE** instead of the current long/wide ones (Shakes, Movement, …).
-      3. [ ] **Their names still fit** — his own parenthesis, so a square tile that truncates "Movement"
-             or drops to 8pt has failed the request.
-      4. [ ] **The point is FITTING MORE ON SCREEN** — he says why, so the acceptance test is how many
-             categories are visible at 380px without scrolling, before and after. Measure both.
+      1. [x] ✅ **v10.84.** "Featured" → "New" — and it is the honest word: FX_FEATURED leads with the
+             newest effects, so "Featured" was promising an editorial pick the list does not make.
+      2. [x] ✅ **v10.84 — square, three across on a phone and four on the desktop.**
+      3. [x] ✅ **v10.84 — every name inside its tile**, longest included, asserted on BOTH axes.
+      4. [x] ✅ **v10.84 — measured at 380px:** twelve full-width bars became twelve square tiles in a
+             472px block, **nine of them on screen at once**.
       ⚠️ Longest category names are the constraint, not the average — find the longest label in the
       registry and size the tile to that, or the widest one will be the one that breaks.
+      ⚠️ **THAT WARNING WAS RIGHT AND THE FIRST MEASUREMENT MISSED IT ANYWAY.** The name check compared
+      label WIDTH against tile width and reported "none overflow" while **"Shakes / Movement" was drawing
+      out of the TOP of its tile and over the row above** — a fixed `aspect-ratio` sets the HEIGHT, and a
+      flex child overflows rather than shrinks. The screenshot showed it at a glance. Both axes are
+      checked now.
+      ⚠️ **And the media queries were written the wrong way round**, so the PHONE got four columns of 81px
+      and the desktop got three. Everything from styles.css:3340 is `@media (max-width: 700px)`.
+      🧪 **Two dead assertions caught by mutation.** (1) Opening the real effects browser in a test mounts
+      every effect thumbnail, and a LATER test then measured six effects as indistinguishable from their
+      subjects — the suite went red on a file this change never touched. Proved by stashing the source
+      edits and re-running: the failure stayed, so it was the TEST. It builds the same markup in a
+      container of known width now. (2) Measuring width against height ALONE passed a mutation that
+      removed `aspect-ratio` outright, because a grid row stretches to its tallest tile and a four-line
+      label makes it square by accident. The computed property is asserted as well as the shape.
 
-- [ ] **446 — Rename two effect categories.** (20 Aug, two messages.) His words, verbatim: *"Chang the
+- [x] **446 — Rename two effect categories.** ✅ **ALL FOUR — v10.84.** (20 Aug, two messages.) His words, verbatim: *"Chang the
       repeat menus name to repetition"* and *"Distortion and warp to warping"*.
       **Clauses:**
-      1. [ ] **"Repeat" → "Repetition"** (the effects-browser category).
-      2. [ ] **"Distortion and Warp" → "Warping"**.
+      1. [x] ✅ **v10.84 — "Repeat" → "Repetition".**
+      2. [x] ✅ **v10.84 — "Distortion / Warp" → "Warping".**
       ⚠️ Category names live in the effect registry (js/fx-registry.js) and are matched by the browser's
       SEARCH as well as shown as headings — queue v2.34 made typing "warp" surface the whole family. So
       renaming the heading must not stop `warp` finding those effects; keep the old word as a search alias
       if the match is on the display name.
-      3. [ ] **"Procedural" → "Generative"**. His words, verbatim: *"Change procedural to generative"*.
-      4. [ ] **"Matte / Mask / Key" → something better, my choice.** His words, verbatim: *"Change the
+      3. [x] ✅ **v10.84 — "Procedural" → "Generative".** His words, verbatim: *"Change procedural to generative"*.
+      4. [x] ✅ **v10.84 — "Matte / Mask / Key" → "KEYING", and here is the reasoning since he asked me to
+             choose.** A slash-triple is three words for one idea and reads like a glossary: matte, mask
+             and key are the same act named by three different trades. "Keying" is what these effects
+             actually DO — cut one thing out of another by a property — and it is a VERB, which is the
+             direction the rest of the list is already drifting (Warping, Colouring, Drawing). **Say the
+             word if you want a different one; it is one line.** His words, verbatim: *"Change the
              name of Matt/mask/key to whatever you thinks best instead of that"*. (He typed "Matt"; the
              category is spelled Matte.) A slash-triple is three words for one idea and reads like a
              glossary — pick ONE plain word for what these effects DO and show him.

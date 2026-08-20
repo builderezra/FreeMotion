@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>How many effect categories fit on screen? (queue 445)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 445. He gave the REASON — "This is so we can fit more categories on screen and you don't have
+   to scroll as much" — so the reason is the measurement: how many category tiles are inside the
+   scroll viewport without scrolling, at 380px. Plus whether every name still fits its tile, which is
+   his own parenthesis. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.fxBrowser)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'S',shape:'rect',x:540,y:960,shapeW:400,shapeH:400,fill:'#3a7bd5'});
+  L.start=0;L.duration=4;FM.scene.layers.push(L);
+  FM.refreshAll(); FM.selectLayer(L.id); await sleep(300);
+  FM.fxBrowser.open(L); await sleep(900);
+  var scroll=d.querySelector('.fxb-scroll, .fxb-body, #fx-browser .fxb-section') ;
+  var tiles=[].slice.call(d.querySelectorAll('.fxb-banner'));
+  say('category tiles: '+tiles.length);
+  var host=tiles.length?tiles[0].closest('[style], div'):null;
+  // the scrolling container is whatever actually clips them
+  var sc=tiles.length?tiles[0].parentElement:null;
+  while(sc && sc.scrollHeight<=sc.clientHeight+1 && sc!==d.body) sc=sc.parentElement;
+  var vr=sc?sc.getBoundingClientRect():{top:0,bottom:820};
+  say('scroll viewport '+vr.top.toFixed(0)+'..'+vr.bottom.toFixed(0)+'  ('+(sc?(sc.className||sc.id||sc.tagName):'?')+')');
+  var vis=0, overflow=[];
+  tiles.forEach(function(t){
+    var r=t.getBoundingClientRect();
+    if(r.top>=vr.top-1 && r.bottom<=vr.bottom+1) vis++;
+    var lbl=t.querySelector('.fxb-banner-label');
+    if(lbl){
+      var lr=lbl.getBoundingClientRect();
+      /* BOTH AXES. The first version compared widths only and reported "none" while "Shakes / Movement"
+         was drawing out of the TOP of its tile and over the row above — the fault the screenshot showed
+         at a glance. A label has to be inside its tile's box, not merely narrower than it. */
+      if(lr.top < r.top - 1 || lr.bottom > r.bottom + 1 || lr.left < r.left - 1 || lr.right > r.right + 1)
+        overflow.push((lbl.textContent||'').trim()+' [label '+lr.top.toFixed(0)+'..'+lr.bottom.toFixed(0)+' vs tile '+r.top.toFixed(0)+'..'+r.bottom.toFixed(0)+']');
+    }
+  });
+  say('tile sizes: '+tiles.slice(0,4).map(function(t){var r=t.getBoundingClientRect();return r.width.toFixed(0)+'x'+r.height.toFixed(0);}).join('  '));
+  /* The Categories block sits under New and Recents, so nothing is in the FIRST viewport either way —
+     comparing that number would compare the two sections above it, not this change. What his sentence
+     is actually about is how tall the block is: scroll to it and count what fits, and report the height
+     the whole list occupies. */
+  var grid=tiles.length?tiles[0].parentElement:null;
+  var gr=grid?grid.getBoundingClientRect():{height:0};
+  say('the Categories block is '+gr.height.toFixed(0)+'px tall for '+tiles.length+' tiles');
+  if(sc && grid){
+    sc.scrollTop = grid.offsetTop - sc.offsetTop;
+    await sleep(250);
+    var vr2=sc.getBoundingClientRect(), n2=0;
+    tiles.forEach(function(t){ var r=t.getBoundingClientRect(); if(r.top>=vr2.top-1 && r.bottom<=vr2.bottom+1) n2++; });
+    say('SCROLLED TO THE CATEGORIES: '+n2+' of '+tiles.length+' fit on screen at once');
+  }
+  say('(in the first viewport, before scrolling: '+vis+' — the block starts below New and Recents)');
+  say('names that do not fit their tile: '+(overflow.length?overflow.join(' | '):'none ✅'));
+  var title=[].slice.call(d.querySelectorAll('.fxb-sec-title')).map(function(t){return (t.textContent||'').trim();});
+  say('section titles: '+title.join(' | '));
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>

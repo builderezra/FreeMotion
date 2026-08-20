@@ -2664,6 +2664,101 @@
     });
   });
 
+  test('445/446: effect categories are square tiles that fit their names, and the row says New', { item: '445' }, async function () {
+    /* Queue 445: "in the effects menu change the featured row to New and also make each catagory like
+       shakes / movement a square box instead of the long one (still fitting its name in there". This is
+       so we can fit more categories on screen and you don't have to scroll as much."
+       He gave the REASON, so the reason is the acceptance test — more per screen — and he gave the
+       constraint in his own parenthesis, so the names have to fit.
+
+       ⚠️ THIS BUILDS THE MARKUP RATHER THAN OPENING THE BROWSER, and that is not a shortcut — it is the
+       second thing that went wrong here. Opening the real effects browser mounts every effect thumbnail,
+       and a LATER test ("no thumbnail is a picture of the subject doing nothing") then measured six
+       effects as indistinguishable from their subjects. The suite went red on a file this change never
+       touched. Proved by stashing the source edits and re-running: the failure stayed, so it was the
+       TEST. Building the same elements the browser builds, in a container of a known width, measures the
+       same CSS with none of that reach — and it is deterministic, where the live browser's tile size
+       depends on whatever width the runner happens to be.
+       ⚠️ AND THE NAME CHECK TESTS BOTH AXES. A first version compared label WIDTH against tile width and
+       reported "none overflow" while "Shakes / Movement" drew out of the TOP of its tile: a fixed
+       `aspect-ratio` sets the height, and a flex child overflows rather than shrinks. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    /* QUEUE 446 — four renames, each from a separate message of his. Asserted as "the old word is GONE",
+       not just "the new one is present": a rename that leaves the old label somewhere is the app calling
+       one thing two names. No DOM needed for this half. */
+    const cats = FM.fxRegistry.categories() || [];
+    const labels = cats.map(c => c.label);
+    [['Repeat', 'Repetition'], ['Distortion / Warp', 'Warping'], ['Procedural', 'Generative'], ['Matte / Mask / Key', 'Keying']].forEach(([was, now]) => {
+      if (labels.indexOf(was) >= 0) throw new Error('the "' + was + '" category still carries its old name — he asked for "' + now + '"');
+      if (labels.indexOf(now) < 0) throw new Error('there is no "' + now + '" category (have: ' + labels.join(' | ') + ')');
+    });
+
+    // …and the row he asked to rename, read from the builder's own output rather than from a live sheet.
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:380px;';
+    document.body.appendChild(host);
+    try {
+      const list = document.createElement('div');
+      list.className = 'fxb-cats';
+      cats.forEach(cat => {
+        const b = document.createElement('button');
+        b.className = 'fxb-banner'; b.dataset.cat = cat.key;
+        const lb = document.createElement('span'); lb.className = 'fxb-banner-label'; lb.textContent = cat.label;
+        const ct = document.createElement('span'); ct.className = 'fxb-banner-count'; ct.textContent = String(FM.fxRegistry.byCategory(cat.key).length);
+        b.appendChild(lb); b.appendChild(ct);
+        list.appendChild(b);
+      });
+      host.appendChild(list);
+      await sleep(60);
+
+      const tiles = [].slice.call(list.querySelectorAll('.fxb-banner'));
+      if (tiles.length < 8) throw new Error('only ' + tiles.length + ' categories to lay out');
+      const r0 = tiles[0].getBoundingClientRect();
+      if (r0.width < 40) throw new Error('the tiles measured ' + r0.width.toFixed(1) + 'px wide — the container did not lay out, so nothing below means anything');
+      /* SQUARE BY CONSTRUCTION, not by coincidence — and the difference is why this needs two checks.
+         Measuring width against height ALONE passed a mutation that removed `aspect-ratio` entirely: a
+         grid row stretches all its tiles to the tallest, and at 87px wide "Shakes / Movement" wraps to
+         four lines, so the row came out roughly square anyway. Measured under that mutation the tiles
+         were 112x64 in the real browser and still "square" in this host. The computed property is what
+         actually says "he asked for a square box". */
+      const ar = getComputedStyle(tiles[0]).aspectRatio || '';
+      if (!/^1(\s*\/\s*1)?$/.test(ar.trim())) throw new Error('a category tile has aspect-ratio "' + ar + '" — it is not a square box by construction, only whatever its contents make it');
+      if (Math.abs(r0.width - r0.height) > Math.max(4, r0.width * 0.08)) throw new Error('a category tile is ' + r0.width.toFixed(0) + 'x' + r0.height.toFixed(0) + ' — he asked for a square box instead of the long one');
+
+      /* MORE PER SCREEN, which is the reason he gave. Counted as tiles per ROW: a full-width bar is one. */
+      const tops = {};
+      tiles.forEach(t => { const k = Math.round(t.getBoundingClientRect().top); tops[k] = (tops[k] || 0) + 1; });
+      const perRow = Math.max.apply(null, Object.keys(tops).map(k => tops[k]));
+      if (perRow < 3) throw new Error('only ' + perRow + ' categor(y/ies) per row at 380px — the point of the change is fitting more on screen');
+
+      /* HIS PARENTHESIS: the name still has to be in there — every one of them, longest included. */
+      tiles.forEach(t => {
+        const lbl = t.querySelector('.fxb-banner-label');
+        const tr = t.getBoundingClientRect(), lr = lbl.getBoundingClientRect();
+        if (lr.top < tr.top - 1 || lr.bottom > tr.bottom + 1 || lr.left < tr.left - 1 || lr.right > tr.right + 1) {
+          throw new Error('"' + (lbl.textContent || '').trim() + '" does not fit its tile (label ' + lr.top.toFixed(0) + '..' + lr.bottom.toFixed(0) + ' vs tile ' + tr.top.toFixed(0) + '..' + tr.bottom.toFixed(0) + ') — "still fitting its name in there" is his own condition');
+        }
+      });
+    } finally { host.remove(); }
+  });
+
+  test('445: the effects browser leads with New, not Featured', { item: '445' }, function () {
+    /* The other half of 445, asserted on the BUILDER's source rather than by opening the browser — for
+       the reason written at length in the test above: opening it mounts every thumbnail and breaks a
+       later measurement. The string is the whole of this clause, so the source is enough to hold it. */
+    const src = (FM._buildFeaturedSrc && FM._buildFeaturedSrc()) || '';
+    if (!src) {
+      // no seam: fall back to the live DOM only if a browser happens to be open already
+      const titles = [].slice.call(document.querySelectorAll('.fxb-sec-title')).map(t => (t.textContent || '').trim());
+      if (!titles.length) throw new Error('FM.fxBrowser._buildFeatured is not exposed and no browser is open, so the row title cannot be checked at all');
+      if (titles.indexOf('Featured') >= 0) throw new Error('the row still says "Featured" — he asked for "New"');
+      return;
+    }
+    if (/'Featured'/.test(src)) throw new Error('the featured row is still titled "Featured" — he asked for "New"');
+    if (!/'New'/.test(src)) throw new Error('the featured row builder no longer names its title, so this cannot tell what it says');
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

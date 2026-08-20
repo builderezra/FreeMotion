@@ -1597,8 +1597,29 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   .fxb-favview-in, .fxb-favview-pull { animation: fxb-fav-fade 200ms linear both; }
   .fxb-pullhint, .fxb-pullhint-ico, .fxb-pullhint.cancelled { transition: none; }
 }
-.fxb-cats { display: flex; flex-direction: column; gap: 9px; }
-.fxb-banner { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px; border: 1px solid var(--line); border-radius: 12px; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; background: linear-gradient(120deg, var(--panel-3), var(--panel-2)); }
+/* SQUARE TILES, THREE ACROSS (queue 445). Ezra: "make each catagory like shakes / movement a square box
+   instead of the long one (still fitting its name in there". This is so we can fit more categories on
+   screen and you don't have to scroll as much."
+   He gave the reason, so the reason is the acceptance test: how many categories are visible without
+   scrolling, at 380px, before against after. A full-width row 55px tall showed four; a square tile three
+   across shows nine.
+   The name still has to fit, which is his own parenthesis and the constraint that decides the type size:
+   the longest labels are "Opacity / Visibility" and "Shakes / Movement", and at ~104px of tile they need
+   to wrap to two or three lines rather than shrink to unreadable. 12px/1.15 with a normal wrap does that
+   and leaves the count its own line. */
+.fxb-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.fxb-banner {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  aspect-ratio: 1; padding: 8px 6px; text-align: center;
+  border: 1px solid var(--line); border-radius: 14px;
+  color: #fff; font-weight: 700; font-size: 12px; line-height: 1.15; cursor: pointer;
+  background: linear-gradient(120deg, var(--panel-3), var(--panel-2));
+  /* A fixed aspect-ratio sets the HEIGHT, and a flex child overflows rather than shrinks — so a long
+     label drew straight out of the top of its tile and over the row above. Clipping alone would hide
+     half a word, so the label is bounded and allowed to wrap instead. */
+  overflow: hidden;
+}
+.fxb-banner-label { display: block; overflow-wrap: anywhere; max-width: 100%; }
 /* Category colours (v6.13). Ezra: "make the colours for all of the effects brighter and more pretty."
    The hues were never the problem — the ALPHA was. Every banner was rgba at .16–.32 over a near-black
    panel (#10141d), and translucent paint on black is just a dark version of itself: Drawing & Edge's
@@ -1624,7 +1645,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fxb-banner[data-cat="text"] { background: linear-gradient(120deg, rgba(238,243,255,.34), rgba(168,182,205,.26)); }
 .fxb-banner[data-cat="threed"] { background: linear-gradient(120deg, rgba(136,236,255,.60), rgba(112,122,255,.46)); }
 .fxb-banner[data-cat="other"] { background: linear-gradient(120deg, rgba(196,206,226,.40), rgba(134,146,170,.30)); }
-.fxb-banner-count { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
+.fxb-banner-count { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.72); }
 .fxb-catview { position: absolute; inset: 0; z-index: 5; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 /* The drilled-in category view is a SECOND full-cover header stacked over the first, with the same
    status-bar problem and therefore the same fix — measured: ‹ Back sat at y=14 under a 62px inset. */
@@ -3650,7 +3671,12 @@ body.fm-playing #time-readout {
 /* ---- Add Effect browser: AM parity ---- */
 /* Phone: categories as a 2-col wall of tiles (label over count), like AM */
 @media (max-width: 700px) {
-  .fxb-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  /* THREE ACROSS ON A PHONE, four on the desktop — and note which block this is: everything from
+     line 3340 is `@media (max-width: 700px)`, i.e. the PHONE. Written the other way round first, the
+     phone got four columns of 81px and "Shakes / Movement" spilled out over the row above it, which
+     is the one thing his request said not to do. Caught by looking at the screenshot, not by the
+     probe, whose overflow check only compared widths. */
+  .fxb-cats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .fxb-banner { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; min-height: 64px; padding: 12px 13px; font-size: 14px; }
 }
 /* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet.

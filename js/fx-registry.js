@@ -113,12 +113,21 @@ window.FM = window.FM || {};
   const CATEGORY_LABELS = {
     color: 'Colouring',          // queue 288 — "Change colour and light effect menu to just Colouring"
     blur: 'Blur',
-    distort: 'Distortion / Warp',
-    proc: 'Procedural',
-    matte: 'Matte / Mask / Key',
+    /* FOUR RENAMES, ALL HIS (queue 446), across four separate messages:
+       · "Distortion and warp to warping"
+       · "Change procedural to generative"
+       · "Chang the repeat menus name to repetition"
+       · "Change the name of Matt/mask/key to whatever you thinks best instead of that" — my choice,
+         and the choice is KEYING. A slash-triple is three words for one idea and reads like a
+         glossary; matte, mask and key are the same act named by three trades. "Keying" is the one
+         these effects actually DO — cutting one thing out of another by a property — and it is a verb,
+         which is what the rest of this list is drifting toward (Warping, Colouring, Drawing). */
+    distort: 'Warping',
+    proc: 'Generative',
+    matte: 'Keying',
     drawing: 'Drawing / Edge',
     move: 'Shakes / Movement',   // his name for it (queue 332 clause 2)
-    repeat: 'Repeat',
+    repeat: 'Repetition',
     stylize: 'Stylize',
     threed: '3D',
     opacity: 'Opacity / Visibility',

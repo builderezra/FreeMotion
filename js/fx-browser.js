@@ -674,10 +674,13 @@ window.FM = window.FM || {};
     return wrap;
   }
 
-  // Section A — auto-scrolling, swipeable featured carousel.
+  // Section A — auto-scrolling, swipeable "New" carousel.
   function buildFeatured() {
     const sec = el('div', 'fxb-section');
-    sec.appendChild(el('div', 'fxb-sec-title', 'Featured'));
+    /* "New", not "Featured" (queue 445, clause 1). Ezra: "in the effects menu change the featured row to
+       New". It is the honest word for what the row actually is — FX_FEATURED leads with the newest
+       effects, so "Featured" was promising an editorial pick the list does not make. */
+    sec.appendChild(el('div', 'fxb-sec-title', 'New'));
     const row = el('div', 'fxb-featured');
     /* …and nothing whose id is also a FILTER's (queue 318). Cleaning FM.FX_FEATURED fixes today; this
        is what stops it coming back, because that list is appended to and the collision lives in a
@@ -1230,6 +1233,10 @@ window.FM = window.FM || {};
       row.scrollLeft = Math.min(max, row.scrollLeft + 1.2);
     }, 30);
   }
+  // Seam: the suite reads this builder's title string rather than OPENING the browser, because
+  // opening it mounts every effect thumbnail and a later thumbnail measurement then goes red (queue 445).
+  FM._buildFeaturedSrc = function () { return String(buildFeatured); };
+
 
   FM.fxBrowser = {
     isFav: isFav, toggleFav: toggleFav,   // so an applied effect's ⋯ menu can favourite it too (#62)
