@@ -13,6 +13,14 @@ breaks if one rots — but a probe you cannot identify is a probe nobody re-uses
 | a picture of anything that SLIDES, fades or flings | `python3 tests/_shotlive.py /tests/_x.html out.png W H` | virtual time never completes a CSS transition — `_shot.sh` photographs the Add sheet still parked off-screen, every time |
 | a NUMBER out of the page | drive `tests/_cdp.py`'s launcher and `cdp.eval(...)` | real clock, real rAF; see `_shotlive.py` for the pattern |
 
+**`Event.timeStamp` is READ-ONLY — you cannot fake it in the init dict** (queue 450). Passing
+`timeStamp: t` to `new PointerEvent(...)` is silently ignored: the browser assigns its own. So a loop
+that dispatches five moves "12ms apart" actually dispatches them in one tick, dt comes out 0 or 1ms at
+random, and any velocity sampled from them is garbage — one run measured 229 px/ms for a gesture that
+travels 2.5, and a dt of exactly 0 made the value non-finite, which the app's own guard then refused.
+That took the ship gate red on a build with nothing wrong with it. **Space moves with real `await`s**,
+and assert the sampled velocity is plausible before asserting what it caused.
+
 Timing measurements must use the real-clock path. Under `--virtual-time-budget` rAF is throttled and
 `performance.now()` does not advance the way the app expects, so anything about playback, momentum or a
 transition is meaningless there.
