@@ -11969,3 +11969,33 @@ wait for them to report back."*
       he taps into those two tabs. Everything above says the tabs function, so the answer decides whether
       this is a layout job or a hunt for something the probes cannot see.
 
+- [ ] **429 — No lines or special colouring past the cut-off, and the little + must not move while you
+      swipe the timeline.** (20 Aug, via the phone inbox.) His words, verbatim:
+
+      > After this cut off point I don't want the lines or special colouring. And also the little plus button is moving around and stuff when I swipe on the time line, should be stiff
+
+      **Clauses:**
+      1. [ ] **Past the cut-off point: no lines, no special colouring.** "This cut off point" refers to
+             something he was looking at and did not name — almost certainly the END of the project on the
+             timeline, past which the ruler keeps drawing its notches and the lane keeps its treatment.
+             ⚠️ He sent no screenshot with this one, so CHECK what is actually drawn past the last clip /
+             past `project.duration` before changing anything, and say which cut-off was assumed.
+      2. [ ] **The + button must be STIFF while you swipe the timeline** — it "moves around and stuff",
+             so it is tracking the scroll when it should be pinned. Likely the add-row's `+` inside
+             `.tl-addrow-head`, or the empty-state disc: the row is sticky-left, and a sticky element
+             that is re-laid during a fling can visibly wobble against a smooth scroll.
+             📐 **MEASURED 20 Aug at v10.66 — NOT REPRODUCED under a programmatic scroll.**
+             `tests/_plusstiff.html` scrolls `#timeline` in twelve steps with four clips on the timeline
+             and samples `.tl-addrow-plus` every frame: **x drift 1.00px, y drift 0.00px**, and that
+             single pixel is the sticky element settling on the first step away from scrollLeft 0. So
+             under a scroll driven by JS, it is already stiff.
+             **What that leaves, in the order worth trying:**
+             · a REAL touch fling — native momentum scrolling updates sticky elements on the compositor,
+               and iOS is known to let them lag or judder in a way `scrollLeft = n` never reproduces;
+             · a `rebuild()` landing mid-scroll, which re-creates the row and its `+` — that would show
+               as a jump rather than a wobble, and is worth counting rebuilds during a swipe to rule out;
+             · the wrong `+` entirely: there are three — the add-row's small one, the empty-state disc,
+               and the floating `#add-fab`. This probe measured the first.
+             ⚠️ **Worth one line from him: WHICH + and is the timeline empty or full when it happens.**
+             That decides between the three, and this could not be narrowed further without guessing.
+
