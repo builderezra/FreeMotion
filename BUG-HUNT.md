@@ -1524,3 +1524,29 @@ does.
 advances on `requestAnimationFrame` — a question about the MACHINE — and a new 250-render fuzz test had
 just finished. It counts FRAMES now, and distinguishes "the tab was throttled to a standstill" from "the
 glide is dead" instead of reporting the second when it means the first. Three consecutive suite runs green.
+
+
+## 28. Undo vs deleted media — CLEAN, and already well guarded (21 Aug)
+
+The history stack decides when a deleted clip's MEDIA may be freed, and the code calls getting it wrong
+*"the worst kind of data loss"*: `FM.deleteLayer` deliberately KEEPS the record, because undo restores
+JSON only — freeing it there made an undone delete come back **blank**. The release happens later, from
+`history.commit`, once no snapshot can restore the layer.
+
+**Measured end to end** (`tests/_undomedia.html`), both halves, which pull in opposite directions so a
+build cannot pass by doing nothing:
+
+    before delete        media yes (with file)
+    after delete         layers 0   media yes (with file)    ← kept on purpose
+    after undo           layer back   media yes (with file)  ✅
+    redo + 130 commits   media no                            ✅ freed once unreachable
+
+**No bug.** And the mutations are the interesting part: freeing on delete is caught by **four** separate
+tests, and ignoring undo-stack reachability by **two**. This area was already properly defended. The new
+test earns its place only by walking the whole user-visible sequence in one run, where the existing ones
+test the pieces — that is a small addition, and it is recorded as such rather than dressed up as a find.
+
+⚠️ `tools/mutate.sh` reported **"caught, but not by the test you expected"** on one attempt. That is the
+gate doing its job: the reachability rule is guarded by existing tests, not by the new one, because the
+new one's first half never discards a snapshot and therefore never runs that sweep. Without that check
+the mutation would have been credited to the wrong assertion and the gap left open.

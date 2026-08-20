@@ -3427,6 +3427,59 @@
     }
   });
 
+  test('undoing a delete brings the clip back WITH its picture, and the record is freed once it cannot', { item: 'undo-media' }, async function () {
+    /* BUG HUNT (21 Aug). The history stack decides when a deleted clip's MEDIA may be freed, and the
+       code calls getting it wrong "the worst kind of data loss": `FM.deleteLayer` deliberately KEEPS the
+       record, because undo restores JSON only — freeing it there made an undone delete come back BLANK.
+       The record is released later, from `history.commit`, once no snapshot on the stack can restore it.
+       TWO HALVES THAT PULL IN OPPOSITE DIRECTIONS, so a build cannot pass by doing nothing:
+         1. undo a delete → the media must still be there, or the clip returns empty;
+         2. once the delete has fallen off the stack → it must be freed, or every discarded import leaks
+            for the life of the session (the leak named in "Editing lags, and gets bad fast").
+       Measured clean; this pins it. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('image', { name: 'M', x: 100, y: 100 });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      const id = L.id;
+      FM.media.set(id, { kind: 'image', el: document.createElement('img'), width: 2, height: 2, file: new File([new Uint8Array(8)], 'x.png', { type: 'image/png' }) });
+      FM.refreshAll();
+      FM.history.commit();
+      await sleep(60);
+      if (!FM.media.get(id)) throw new Error('the fixture never registered a media record, so neither half below means anything');
+
+      FM.deleteLayer(id);
+      FM.history.commit();
+      await sleep(80);
+      if (FM.scene.layers.some(l => l.id === id)) throw new Error('the delete did not remove the layer, so this run is not testing a delete');
+
+      FM.history.undo();
+      await sleep(120);
+      const back = FM.scene.layers.filter(l => l.id === id)[0];
+      if (!back) throw new Error('undo did not restore the deleted layer at all');
+      const rec = FM.media.get(id);
+      if (!rec || !rec.file) throw new Error('the undone delete came back BLANK — its media record was freed while a snapshot could still restore it, which is the failure deleteLayer keeps the record to avoid');
+
+      /* HALF TWO — push the delete off the stack and require the record to go. */
+      FM.history.redo();
+      await sleep(80);
+      if (FM.scene.layers.some(l => l.id === id)) throw new Error('redo did not re-apply the delete, so the record is still legitimately reachable and half two cannot run');
+      for (let i = 0; i < 130; i++) {
+        const S = FM.makeLayer('shape', { name: 's' + i, shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+        S.start = 0; S.duration = 1; FM.scene.layers.push(S);
+        FM.history.commit();
+      }
+      await sleep(120);
+      if (FM.media.get(id)) throw new Error('the media record is still held after the delete fell off the undo stack — nothing can bring that layer back, so every discarded import leaks for the whole session');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history && FM.history.commit) FM.history.commit();
+    }
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does undoing a delete bring the clip back with its media? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — the history stack decides when a deleted clip's MEDIA can be freed, and the code calls
+   getting it wrong "the worst kind of data loss": `FM.deleteLayer` deliberately KEEPS the record,
+   because undo restores JSON only, so freeing it there made an undone delete come back BLANK. The
+   record is released later, from history.commit, once no snapshot on the stack can bring the layer back.
+   Two halves, and they pull in opposite directions:
+     1. undo a delete → the media must still be there, or the clip comes back empty;
+     2. once the delete has fallen off the stack → the media must be freed, or every discarded import
+        leaks for the life of the session (the leak named in "Editing lags, and gets bad fast").
+   A build can pass either one alone by doing nothing, so both are measured. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.history&&w.FM.media&&w.FM.deleteLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  function seedMedia(L){
+    var el=document.createElement('img');
+    FM.media.set(L.id, { kind:'image', el:el, width:2, height:2, file:new File([new Uint8Array(8)],'x.png',{type:'image/png'}) });
+  }
+  function has(id){ var m=FM.media.get(id); return m ? ('yes'+(m.file?' (with file)':' (NO FILE)')) : 'no'; }
+
+  // ---- 1. delete → undo ----
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('image',{name:'M',x:100,y:100});
+  L.start=0;L.duration=3;FM.scene.layers.push(L);
+  seedMedia(L);
+  FM.refreshAll(); FM.history.reset ? FM.history.reset() : FM.history.commit();
+  await sleep(200);
+  FM.history.commit();
+  var id=L.id;
+  say('before delete       : layer present, media ' + has(id));
+  FM.deleteLayer(id);
+  FM.history.commit();
+  await sleep(200);
+  say('after delete        : layers '+FM.scene.layers.length+'  media '+has(id));
+  FM.history.undo();
+  await sleep(300);
+  var back=FM.scene.layers.filter(function(l){return l.id===id;})[0];
+  say('after undo          : layer '+(back?'back':'MISSING')+'  media '+has(id));
+  say('   ⇒ ' + ((back && FM.media.get(id) && FM.media.get(id).file)
+    ? '✅ the clip came back WITH its picture'
+    : '❌ the undone delete came back blank — the record was freed while a snapshot could still restore it'));
+
+  // ---- 2. …now push the delete off the stack ----
+  say('');
+  FM.history.redo();            // back to the deleted state
+  await sleep(200);
+  say('redo (deleted again): layers '+FM.scene.layers.length+'  media '+has(id));
+  var t0=performance.now();
+  for(var i=0;i<130;i++){
+    var S=FM.makeLayer('shape',{name:'s'+i,shape:'rect',x:10,y:10,shapeW:10,shapeH:10,fill:'#fff'});
+    S.start=0;S.duration=1;FM.scene.layers.push(S);
+    FM.history.commit();
+  }
+  await sleep(300);
+  say('after 130 more edits: media '+has(id)+'   ('+((performance.now()-t0)/1000).toFixed(1)+'s)');
+  say('   ⇒ ' + (FM.media.get(id)
+    ? '❌ the record is STILL held after the delete fell off the undo stack — every discarded import leaks for the session'
+    : '✅ freed once nothing could bring it back'));
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

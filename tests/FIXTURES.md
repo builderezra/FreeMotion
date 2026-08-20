@@ -87,6 +87,10 @@ transition is meaningless there.
   combinations. `_saneff.html` asks `sanitizeEffects` directly what it removes, which is what settled
   whether the container throws are reachable (they are not).
 
+- `_undomedia.html` — delete a media clip, undo it, then push the delete off the undo stack: is the
+  picture still there when it comes back, and is the record freed once nothing can restore it
+  (bug-hunt 28)? Both halves clean.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.
