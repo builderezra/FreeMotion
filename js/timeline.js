@@ -2479,6 +2479,18 @@ window.FM = window.FM || {};
     return Array.isArray(caps) ? caps.map(c => ({ ...c, start: c.start - delta, end: c.end - delta })) : null;
   }
 
+  /* THE CUE RULE, exported, because a THIRD caller turned up and had lost it (bug hunt, 21 Aug).
+   * FM.extendClipTo made the very same three head writes as FM.trimLayerHead below and simply did not
+   * re-base the captions — which is precisely the "two copies of the rule come to disagree" failure the
+   * comment above predicts. Measured: extending a caption track's head by 1s slid every cue 1s earlier
+   * while trimLayerHead held them still (tests/_extendcues.html).
+   * Callers pass the head movement that ACTUALLY landed, not the one they intended, so a clamped or
+   * rejected edit shifts nothing. */
+  FM.shiftLayerCues = function (layer, delta) {
+    if (!layer || !isFinite(delta) || !delta || !Array.isArray(layer.captions)) return;
+    layer.captions = shiftCues(layer.captions, delta);
+  };
+
   /* Head-trim as a function, so the suite can drive the thing the grip drives (bug hunt, 21 Aug).
    * Driving the GRIP from a test is not equivalent: a touch trim requires a deliberate 550ms hold before
    * it arms (queue 336), so a synthetic press-and-drag arms nothing and measures nothing — which is what

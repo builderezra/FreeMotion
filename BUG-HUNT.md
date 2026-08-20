@@ -1818,3 +1818,34 @@ and timeline lag is an open complaint (#95, #125, #202). `!p.splitOf` is the FIR
 never split a parent pays one property read and never scans the layer list. Both halves are stamped at split
 time precisely so that gate stays cheap — stamping only the tail half would have made every child of an
 unsplit head layer fall through to the scan.
+
+## 36. Extend-to-playhead dragged every caption out of sync (21 Aug, v11.06) — REAL BUG, second verified lead from §34
+
+`FM.trimLayerHead` re-bases captions when the head moves, and its own comment says why it exists at all:
+*"two copies of that rule is how they come to disagree."* `FM.extendClipTo` then made the same three head
+writes — start, duration, trimStart — and did not re-base anything. A third caller, with the rule lost.
+
+**Measured, with the control built into the design** (`tests/_extendcues.html`): the SAME 1-second head
+movement applied both ways. If the known-good path had drifted too, the probe's notion of absolute cue time
+would have been wrong and neither reading would count.
+
+| path | cues before | cues after |
+|---|---|---|
+| `FM.trimLayerHead` (known good) | 4.5, 6, 8 | 4.5, 6, 8 |
+| `FM.extendClipTo` (the button) | 4.5, 6, 8 | **3.5, 5, 7** |
+
+A full second, in the direction of the extension, on every cue on the track.
+
+**Fix:** the rule is exported once (`FM.shiftLayerCues`) and shared. It is driven off `layer.start - s0` —
+the movement that ACTUALLY landed — rather than the intended delta, so a clamp, or the belt-and-braces
+non-finite reset immediately above it, leaves the cues alone by construction rather than by remembering to.
+
+**The guard is written over the whole family, not the broken one.** `edge-cues` drives four different ways
+of moving a clip edge and demands all of them hold the cues, each with a control that fails if the edit did
+nothing. The defect here was not bad arithmetic — it was a new caller that did not know about a rule. A test
+of `extendClipTo` alone would not catch the fifth caller; this one does.
+
+**Noticed in passing, not chased:** the mutation run for this also turned *"the timeline sizes its scroll
+range from itself, not from the window"* red, which the mutation cannot possibly affect (it removed a caption
+re-base). That test is flaky. It has not recurred since, but a flaky test in a suite that gates every ship is
+worth a section of its own if it comes back.

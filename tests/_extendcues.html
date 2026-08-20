@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>extend x captions (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.extendClipTo's head branch makes the same three writes as
+   FM.trimLayerHead (start, duration, trimStart) but skips the cue compensation trimLayerHead does —
+   the exact "two copies of the rule come to disagree" failure that trimLayerHead's own comment warns
+   about. Captions are stored in LOCAL time, so moving layer.start without re-basing them drags every
+   caption across the timeline.
+   The CONTROL is built in: the SAME head movement is applied both ways. trimLayerHead is the known-good
+   path — if it drifts too, the probe's idea of "absolute cue time" is wrong and neither result counts. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.extendClipTo&&w.FM.trimLayerHead&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function mk(FM){
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'cap',shape:'rect',x:10,y:10,shapeW:40,shapeH:40,fill:'#fff'});
+  L.start=4; L.duration=6;
+  L.captions=[{start:0.5,end:1.5,text:'one'},{start:2.0,end:3.0,text:'two'},{start:4.0,end:5.0,text:'three'}];
+  FM.scene.layers.push(L);
+  return L;
+}
+function abs(L){ return L.captions.map(function(c){return +(L.start+c.start).toFixed(3);}); }
+function run(FM){
+  var out2=[];
+  var DELTA=-1.0;                 // pull the head 1s earlier
+  // --- path A: the known-good seam ---
+  var A=mk(FM); var a0=abs(A);
+  FM.trimLayerHead(A, DELTA);
+  var a1=abs(A);
+  // --- path B: the Extend button ---
+  var B=mk(FM); var b0=abs(B);
+  FM.time=B.start+DELTA;          // playhead OUTSIDE the clip, on the head side
+  var moved=FM.extendClipTo(B, FM.time);
+  var b1=abs(B);
+
+  out2.push('head moved by '+DELTA+'s in both cases');
+  out2.push('');
+  out2.push('  trimLayerHead (known good)   cues at '+a0.join(', ')+'  ->  '+a1.join(', '));
+  out2.push('  extendClipTo  (the button)   cues at '+b0.join(', ')+'  ->  '+b1.join(', ')+'   [returned '+moved+', start '+B.start+']');
+  out2.push('');
+  var aDrift=Math.max.apply(null,a0.map(function(v,i){return Math.abs(a1[i]-v);}));
+  var bDrift=Math.max.apply(null,b0.map(function(v,i){return Math.abs(b1[i]-v);}));
+  if(!moved){ out2.push('CONTROL FAILED: extendClipTo did nothing, so it cannot be judged.'); }
+  else if(aDrift>0.01){ out2.push('CONTROL FAILED: the known-good path drifted '+aDrift.toFixed(3)+'s too — the probe\'s notion of absolute cue time is wrong, neither reading counts.'); }
+  else if(bDrift>0.01){ out2.push('❌ extendClipTo slid every caption by '+bDrift.toFixed(3)+'s while trimLayerHead held them still'); }
+  else { out2.push('✅ both paths keep the captions where they were'); }
+  document.getElementById('out').textContent=out2.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

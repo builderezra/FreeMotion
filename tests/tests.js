@@ -3530,6 +3530,51 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('captions: EVERY way of moving a clip edge leaves the cues where they were', { item: 'edge-cues' }, function () {
+    /* BUG HUNT (21 Aug). FM.trimLayerHead re-bases captions when the head moves; FM.extendClipTo made
+       the same three head writes and did not — the exact "two copies of the rule come to disagree"
+       failure trimLayerHead's own comment predicts. Measured: one press of Extend slid every caption a
+       full second early while the trim held them still (tests/_extendcues.html).
+       WRITTEN AS A GUARD OVER ALL OF THEM, not as a test of the one that was broken, because the fault
+       was a NEW CALLER losing the rule — so a fourth one has to fail this too.
+       A whole-clip MOVE is deliberately not here: captions are stored local to the clip, so they ride
+       along with a move, and that is correct. This is about the EDGES only. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const mk = () => {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'cap', shape: 'rect', x: 10, y: 10, shapeW: 40, shapeH: 40, fill: '#fff' });
+        L.start = 4; L.duration = 6;
+        L.captions = [{ start: 0.5, end: 1.5, text: 'one' }, { start: 2, end: 3, text: 'two' }, { start: 4, end: 5, text: 'three' }];
+        FM.scene.layers.push(L);
+        return L;
+      };
+      const abs = L => L.captions.map(c => +(L.start + c.start).toFixed(3));
+      const drift = (was, now) => Math.max(...was.map((v, i) => Math.abs(now[i] - v)));
+
+      const cases = [
+        ['trimLayerHead, head pulled 1s earlier', L => { FM.trimLayerHead(L, -1); return true; }],
+        ['trimLayerHead, head pushed 1s later', L => { FM.trimLayerHead(L, 1); return true; }],
+        ['extendClipTo, head stretched back to the playhead', L => { FM.time = L.start - 1; return FM.extendClipTo(L, FM.time); }],
+        ['extendClipTo, tail stretched out to the playhead', L => { FM.time = L.start + L.duration + 1; return FM.extendClipTo(L, FM.time); }],
+      ];
+      cases.forEach(([what, act]) => {
+        const L = mk();
+        const was = abs(L), s0 = L.start;
+        const did = act(L);
+        if (!did) throw new Error('CONTROL FAILED: "' + what + '" did nothing, so it cannot be judged');
+        const now = abs(L);
+        const d = drift(was, now);
+        if (d > 0.01) throw new Error(what + ' slid the captions by ' + d.toFixed(3) + 's (' + was.join(',') + ' -> ' + now.join(',') + ')');
+        // and the edit must actually have happened, or "the cues did not move" is trivially true
+        if (Math.abs(L.start - s0) < 1e-9 && L.duration === 6) throw new Error('CONTROL FAILED: "' + what + '" left the clip untouched');
+      });
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: cutting an animated PARENT does not strand the layers parented to it', { item: 'split-parent' }, async function () {
     /* BUG HUNT (21 Aug), fourth of the split family. A split divides the parent's keyframes so each half
        owns only its own window — right, and the reason stray diamonds stopped appearing outside a clip.

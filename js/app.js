@@ -2847,6 +2847,14 @@ window.FM = window.FM || {};
     if (!isFinite(layer.duration) || layer.duration < 0.1) layer.duration = d0;
     if (!isFinite(layer.start)) layer.start = s0;
     if (layer.trimStart != null && !isFinite(layer.trimStart)) layer.trimStart = tr0;
+    /* Captions are stored in time LOCAL to the clip, so any head movement has to be taken back out of
+     * them or every cue slides across the timeline with the edge — the same rule FM.trimLayerHead
+     * applies, now shared rather than re-written (bug hunt, 21 Aug: this branch had lost it, and one
+     * press of Extend dragged every caption a full second early).
+     * Driven off what ACTUALLY landed rather than the intended delta, so a clamp above — or the
+     * belt-and-braces reset just above this — leaves the cues alone by construction. */
+    const applied = layer.start - s0;
+    if (applied && FM.shiftLayerCues) FM.shiftLayerCues(layer, applied);
     return layer.start !== s0 || layer.duration !== d0;
   };
 
