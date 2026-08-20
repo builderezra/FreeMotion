@@ -9391,31 +9391,44 @@ window.FM = window.FM || {};
         Y: f => r4(top + f * H),                      // fraction of figure height → box y
         X: s => r4(0.5 + s * H),                      // signed half-width in height units → box x
         R: v => r4(v * H),                            // a length in height units → box units
-        headR: 0.075, headF: 0.075,   // head Ø 0.150H → 1:6.67 tall, inside the 1:6–1:7 band (was 1:5.57)
-        shF: 0.192,                   // shoulder line = head bottom (0.150) + a 0.042H neck gap. The gap is
+        headR: 0.072, headF: 0.072,   // head Ø 0.144H → 1:6.9 tall, inside the 1:6–1:7.5 pictogram band
+        shF: 0.184,                   // shoulder line = head bottom (0.144) + a 0.040H neck gap. The gap is
                                       // sized by RENDER, not by taste: below ~0.038H the head fuses to the
                                       // shoulders at 24px (measured across every size from 18 to 64).
-        shW: 0.150,                   // half shoulder width → 0.300H, two head diameters. IDENTICAL for both.
-        shR: 0.045,                   // shoulder round: square corners read as a box lid, a big radius domes them
-        splitF: 0.575,                // his crotch — a standing pictogram splits at 0.57–0.60 (was 0.681)
-        hemF: 0.615,                  // her hem sits just below his crotch; that IS the convention, not a mismatch
-        flareF: 0.470,                // where her dress leaves the arm line and starts to flare — BELOW her wrist
-        hemW: 0.258,                  // half hem width. Wider than the arms (0.227) on purpose — see ARMS below
-        // ---- arms (queue 160) ----
-        torsoW: 0.090,                // the chest under the shoulder, narrowed so an armpit can exist at all
-        armIn: 0.145, armOut: 0.227,  // 0.082H thick, and 0.055H clear of the chest — the LEG-gap number
-        armTopF: 0.196,               // the arm starts at the shoulder line and is buried in it
-        armSlopeF: 0.268,             // where the shoulder finishes sloping out onto the arm
-        armBotF: 0.545,               // his hand stops just above the crotch line
-        armBotFW: 0.435,              // hers stops above her hem, so the wrist ends against background
+        /* THE SHOULDER IS AS WIDE AS THE ARMS, AND THAT ONE NUMBER IS THE WHOLE OF QUEUE 435'S FIRST
+           FAULT. It used to be 0.150 while the arms reached 0.227, so the arms stuck out past the
+           shoulders and their top edge had to slope back IN to meet them — leaving a sharp dark notch
+           at each shoulder. Rendered at 220px, that is what makes the figure read as a coat hanger:
+           two slabs laid on a torso rather than one body. With shW == armOut the outer silhouette runs
+           unbroken from the neck to the wrist and the notch cannot exist. */
+        shW: 0.230,                   // half shoulder width = the arms' outer edge. IDENTICAL for both.
+        shR: 0.050,                   // shoulder round: square corners read as a box lid, a big radius domes them
+        splitF: 0.590,                // his crotch — a standing pictogram splits at 0.57–0.60
+        hemF: 0.630,                  // her hem sits just below his crotch; that IS the convention, not a mismatch
+        flareF: 0.462,                // where her dress leaves the arm line and starts to flare — BELOW her wrist
+        /* HER HEM HAS TO BEAT HIS WIDEST POINT BY ENOUGH TO SURVIVE 24px, which 0.258 against 0.227 did
+           not: 0.031H is 0.7px at icon size, so the two figures MEASURED IDENTICALLY there (both 12x24,
+           widest at 21% down) and converged into one blob in the picker. 0.300 against 0.230 is 1.6px a
+           side — the hem is then the widest thing on her by a margin the eye and the pixels both keep. */
+        hemW: 0.300,                  // half hem width
+        // ---- arms (queue 160, rebuilt for 435) ----
+        torsoW: 0.098,                // the chest under the shoulder, narrowed so an armpit can exist at all
+        /* ARMS THINNER THAN LEGS. They were 0.082H against a 0.0905H leg — near enough the same that the
+           figure read as having four legs, which is his "they look awful" as much as the notch is.
+           0.070H against 0.095H is a clear difference at every size. The armpit channel is
+           armIn − torsoW = 0.062H, wider than the leg gap, so it is the last thing to close. */
+        armIn: 0.160, armOut: 0.230,
+        armTopF: 0.189,               // buried under the shoulder line, so the two are one solid mass
+        armBotF: 0.560,               // his hand stops just above the crotch line
+        armBotFW: 0.450,              // hers stops above her hem, so the wrist ends against background
         /* His chest holds its width until BELOW the wrist and only then widens to the hip. The first
            version widened from 0.520 while the arms ran to 0.575, so the armpit narrowed from 0.055H to
            0.027H on the way down and PINCHED SHUT at small sizes — leaving the gap above it as an
            enclosed hole, which the legibility test caught at 24px. The channel has to stay open all the
            way out, not merely start wide. */
-        holdF: 0.560,
-        gapW: 0.0275,                 // half the leg gap → 0.055H ≈ 1.3px at 24px, so he stays two legs
-        hipW: 0.118,                  // half hip width → 0.236H ≈ 1.57 head-widths under 2.0 at the shoulder
+        holdF: 0.575,
+        gapW: 0.030,                  // half the leg gap → 0.060H ≈ 1.4px at 24px, so he stays two legs
+        hipW: 0.125,                  // half hip width → 0.250H, comfortably under the shoulder
         footR: 0.026,                 // rounded foot corners
       };
       P.legW = r4(P.hipW - P.gapW);   // each leg, both figures — the leg's outer line continues the hip line
@@ -9450,17 +9463,34 @@ window.FM = window.FM || {};
          figure. Mirroring by sign flips the winding, and nonzero fill turns a backwards arm into a HOLE
          cut through the torso, so the mirrored copy is reversed back. */
       P.arm = (sgn, botF) => {
-        const r = P.R(P.footR), yB = P.Y(botF);
-        const xi = P.X(sgn * P.armIn), xs = P.X(sgn * P.shW), xo = P.X(sgn * P.armOut);
+        /* A STRAIGHT HANGING LIMB, because the shoulder now does the sloping. The old arm carried its
+           own diagonal from the shoulder corner out to its outer line — necessary when the arm was
+           wider than the shoulder, and the source of the notch. With shW == armOut the arm's outer
+           edge simply continues the shoulder's, so the arm is a rounded-bottom bar buried under the
+           shoulder line and the join is invisible by construction rather than by fitting. */
+        const r = P.R(P.footR), yB = P.Y(botF), yT = P.Y(P.armTopF);
+        const xi = P.X(sgn * P.armIn), xo = P.X(sgn * P.armOut);
         const lo = Math.min(xi, xo), hi = Math.max(xi, xo);
-        const pts = [[xi, P.Y(P.armTopF + 0.006)], [xs, P.Y(P.armTopF)], [xo, P.Y(P.armSlopeF), 1], [xo, r4(yB - r)]]
+        /* NO MIRROR-REVERSE ANY MORE, AND THIS COST A RENDER TO SEE. The old arm was built from signed
+           x values, so flipping the sign flipped its winding, and nonzero fill turns a backwards arm
+           into a HOLE cut through the torso — hence the reverse. This one is built from lo/hi, i.e.
+           already left-to-right whichever side it is on, so the winding is the same for both and the
+           reverse is what would break it. It did: the first render came back with a square notch
+           punched out of the top of each arm. Built by ORDER rather than by sign, there is nothing
+           left to flip. */
+        return [[lo, yT], [hi, yT], [hi, r4(yB - r)]]
           .concat(arcS(hi - r, yB - r, r, r, 0, PI / 2, 3, true), [[r4(lo + r), yB]],
-                  arcS(lo + r, yB - r, r, r, PI / 2, PI, 3, true), [[xi, r4(yB - r)]]);
-        return sgn < 0 ? pts.slice().reverse() : pts;
+                  arcS(lo + r, yB - r, r, r, PI / 2, PI, 3, true));
       };
       // The armpit: off the shoulder, in to the narrow chest, then whatever sides that figure has.
       P.torso = (sides) => {
-        const right = [[P.X(P.shW), P.Y(0.250)], [P.X(P.torsoW), P.Y(0.295), 1]]
+        /* THE ARMPIT IS A SHORT CURVE, NOT A DEEP WEDGE. The chest used to leave the shoulder at 0.250
+           and reach its narrow width at 0.295 — but the shoulder was only 0.150 wide, so the "armpit"
+           was really the whole gap between a narrow torso and arms hanging outside it, a wedge running
+           nearly to the waist. Now the shoulder slab is the full 0.230, so the torso comes DOWN inside
+           it and tucks in over 0.255 → 0.300: a short hollow under the arm, with the arm's inner edge
+           parallel to the chest below it. That is what an armpit looks like. */
+        const right = [[P.X(P.shW), P.Y(0.255)], [P.X(P.torsoW), P.Y(0.300), 1]]
           .concat(sides.map(m => [P.X(m[0]), P.Y(m[1])]));
         const left = right.slice().reverse().map(q => { const o = [r4(1 - q[0]), q[1]]; if (q[2]) o.push(1); return o; });
         return P.shoulders().concat(right, left);

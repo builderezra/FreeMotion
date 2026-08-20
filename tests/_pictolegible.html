@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Are the people pictograms legible at the sizes they are used? (queue 435)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* Queue 435 needs a way to say "this reads" that is not an opinion. Three things decide whether a
+   restroom pictogram survives being shrunk, and all three are measurable from the pixels:
+     · the LEG GAP — background between the two legs at the ankle. If it closes, one column, not a person.
+     · the ARMPIT — background between each arm and the torso. If it pinches shut it becomes an enclosed
+       hole, which is worse than no gap at all: a dark speck inside the figure.
+     · the NECK — background between the head and the shoulders. If it closes the head fuses on.
+   Plus the silhouette's own proportions: head:height, and where the widest point sits, which is what
+   tells the two figures apart. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.traceShapePath)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  function render(kind, px){
+    var c=document.createElement('canvas'); c.width=px; c.height=px;
+    var g=c.getContext('2d');
+    g.clearRect(0,0,px,px);
+    FM.traceShapePath(g,{shape:kind},0,0,px,px);
+    g.fillStyle='#fff'; g.fill('nonzero');
+    var d=g.getImageData(0,0,px,px).data;
+    var on=function(x,y){ return d[(y*px+x)*4+3] > 100; };
+    return { px:px, on:on };
+  }
+  // runs of background inside a row that has ink on BOTH sides = a real gap the eye can see
+  function gapsInRow(R,y){
+    var runs=[], inRun=false, start=0, seenInk=false, lastInk=-1;
+    for(var x=0;x<R.px;x++){
+      if(R.on(x,y)){ if(inRun && seenInk){ runs.push([start,x-1]); } inRun=false; seenInk=true; lastInk=x; }
+      else { if(!inRun){ inRun=true; start=x; } }
+    }
+    return runs;
+  }
+  function inkRow(R,y){ var n=0; for(var x=0;x<R.px;x++) if(R.on(x,y)) n++; return n; }
+  function bounds(R){
+    var t=-1,b=-1,l=R.px,r=-1;
+    for(var y=0;y<R.px;y++) for(var x=0;x<R.px;x++) if(R.on(x,y)){ if(t<0)t=y; b=y; if(x<l)l=x; if(x>r)r=x; }
+    return {t:t,b:b,l:l,r:r,h:b-t+1,w:r-l+1};
+  }
+  ['person','woman'].forEach(function(kind){
+    say('');
+    say('=== '+kind+' ===');
+    [24,32,51,96,240].forEach(function(px){
+      var R=render(kind,px), B=bounds(R);
+      if(B.t<0){ say('  '+px+'px: nothing drew'); return; }
+      // head height: the first row where the ink WIDENS sharply is the shoulder line
+      var headBottom=-1, prev=inkRow(R,B.t);
+      for(var y=B.t+1;y<=B.b;y++){
+        var w=inkRow(R,y);
+        if(prev>0 && w===0){ headBottom=y-1; break; }     // a clean neck gap
+        prev=w;
+      }
+      var neck = headBottom>=0;
+      // the ankle row (95% down) — the leg gap
+      var ay=Math.round(B.t+B.h*0.95);
+      var legGaps=gapsInRow(R,ay).filter(function(g){return g[1]-g[0]>=1;});
+      // the armpit row (just below the shoulder, 30% down)
+      var py=Math.round(B.t+B.h*0.32);
+      var pitGaps=gapsInRow(R,py).filter(function(g){return g[1]-g[0]>=0;});
+      // widest row and where it sits
+      var wMax=0, wAt=0;
+      for(var y2=B.t;y2<=B.b;y2++){ var ww=inkRow(R,y2); if(ww>wMax){wMax=ww;wAt=y2;} }
+      say('  '+String(px+'px').padEnd(6)
+        +' figure '+B.w+'x'+B.h
+        +'   neck gap '+(neck?'yes (head clear)':'NO — head fused to the shoulders ❌')
+        +'   leg gap '+(legGaps.length?legGaps[0][1]-legGaps[0][0]+1+'px':'CLOSED ❌')
+        +'   armpits '+pitGaps.length+(pitGaps.length>=2?'':' ❌')
+        +'   widest '+wMax+'px at '+((wAt-B.t)/B.h*100).toFixed(0)+'% down');
+    });
+  });
+  say('');
+  say('(neck / leg gap / two armpits at 24px is the bar. "widest at % down" is what tells the pair apart:');
+  say(' on him it should be up at the shoulders, on her down at the hem.)');
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

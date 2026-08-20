@@ -12471,16 +12471,62 @@ wait for them to report back."*
       caught that before it shipped. Measured after: **67 distinct tints across 67 cards, zero repeats**,
       saturation 48%–93%, lightness 50%–76%. Screenshot taken at 380px. Both halves mutation-proved.
 
-- [ ] **435 — The people shapes look awful — give them arms, and use a workflow with real references.**
+- [x] **435 — The people shapes look awful — give them arms, and use a workflow with real references.**
+      ✅ **DONE v10.75.**
       (20 Aug.) His words, verbatim: *"The people shapes look awful, make sure when you try and fix them
       you use a workflow, and make sure they actually have arms, reference photos online"*.
       **Clauses:**
-      1. [ ] The people shapes (`person`, `woman` in FM.traceShapePath) look bad and need redrawing.
-      2. [ ] **They must actually have ARMS** — his specific complaint, so this is the acceptance test.
-      3. [ ] **Use a WORKFLOW** for it — he asked for this explicitly, which is the opt-in the tool needs.
-      4. [ ] **Reference real pictures online** rather than drawing from memory.
+      1. [x] ✅ **v10.75.** The people shapes (`person`, `woman` in FM.traceShapePath) look bad and need redrawing.
+      2. [x] ✅ **They already had arms** (queue 160) — what was wrong is that they did not READ as arms.
+             Now they do: thinner than the legs, hanging from a shoulder they are flush with.
+      3. [x] ✅ **A workflow ran** — four designs, three judging lenses each. See the note below for what
+             it actually contributed, and what went wrong with it.
+      4. [x] ✅ **Real references** — the four designs worked from AIGA/DOT Symbol Signs, ISO 7001, modern
+             OS emoji sets, and one pure-silhouette brief, and each had to say what it looked at.
       ⚠️ Deliverable is a picture at the size they are actually used — the add-menu icon is ~24px and the
       canvas shape is large — because a silhouette that reads at one and not the other is not fixed.
+
+      📐 **LOOKED AT AND MEASURED FIRST, 20 Aug at v10.74** (`tests/_people.html` renders them,
+      `tests/_pictolegible.html` measures them). **They DO already have arms** — queue 160 added them —
+      so clause 2 is not literally missing; what is wrong is that the arms do not READ as arms.
+      **What the render shows at 220px, and he is right:** a sharp dark NOTCH where each arm meets the
+      shoulder, so the shoulders look like two slabs laid on the torso — a coat hanger; armpit gaps that
+      are deep wedges running nearly to the waist, so the torso reads as a narrow post with two planks
+      beside it; and arms as thick as the legs stopping at mid-thigh, so the figure reads as having four
+      legs.
+      **What the MEASUREMENT adds, which the eye missed:** the mechanical bar is actually met at every
+      size — neck gap, leg gap and two open armpits from 24px up — **except that at 24px the woman
+      measures identically to the man** (both 12×24, widest 10px at 21% down). Her skirt does not survive
+      the smallest size, so at the icon size the pair converges into one shape. That is a second defect,
+      it is not what he complained about, and it should be fixed in the same pass.
+      **The bar for the redesign, so "better" is not a matter of opinion:** neck gap, leg gap and two
+      open armpits at 24px, AND the widest point of the two figures at different heights at 24px.
+
+      ✅ **BUILT v10.75.** One number is most of it: **the shoulder is now as wide as the arms' outer
+      edge** (0.230, against the old 0.150 with arms reaching 0.227). An arm wider than the shoulder it
+      hangs from has to slope back IN to meet it, and that slope IS the notch — with them equal the outer
+      silhouette runs unbroken from neck to wrist and the arm becomes a plain hanging bar with nothing to
+      fit. The armpit is a short hollow under the arm rather than a wedge to the waist, the arms are
+      thinner than the legs (0.070H against 0.095H), the head sits at 1:6.9, and her hem went 0.258 →
+      0.300 so the pair no longer converges at 24px.
+      🤖 **WHAT THE WORKFLOW ACTUALLY CONTRIBUTED, honestly:** its synthesis step died on a network error,
+      so it produced no final table. But the three surviving designs — AIGA/DOT, ISO 7001 and the
+      emoji-small-size one — had **independently reached the same conclusion**: the shoulder must BE the
+      top of the arm, one continuous outer contour. Three separate agents converging on the fix that was
+      already being built is better corroboration than a summary would have been. Two ideas of theirs are
+      NOT taken and are recorded rather than lost: a **hairline armpit slit** instead of a channel (all
+      three wanted one; rejected because the measured bar is two OPEN armpits at 24px and a hairline
+      closes), and **round hand caps** distinct from the feet (worth trying, not tried).
+      ⚠️ **It also ran 17 agents against a 15 guideline**, and 6 of them failed on the network. Next time,
+      fewer judging lenses.
+      🧪 **AND ONE ASSERTION WAS WRITTEN, MUTATION-TESTED, AND DELETED RATHER THAN SHIPPED.** "The shoulder
+      line must be as wide as the arm span" reads like the perfect guard for this and **cannot see its own
+      defect**: `shoulderW` is sampled 0.012H below the top of the body, by which point the arms are
+      already in that row, so both narrowing the shoulder and dropping the arms lower leave the two
+      numbers identical. It passed while the geometry was broken. A notch is not a row-width change at
+      all — both the old shape and the new one widen monotonically from neck to arm, and only the MANNER
+      differs. So the notch is verified by RENDER (`tests/_people.html`), the suite holds everything that
+      is measurable, and the test file says which is which.
 
 - [ ] **436 — Group belongs in the TOP RIGHT, not the bottom sheet — and the top icons are still badly
       placed with a multi-selection.** (20 Aug, two phone screenshots at v10.71: the ⧉ drop-down with

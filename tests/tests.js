@@ -4255,9 +4255,27 @@
       if (!(s.headsPerHeight >= 6 && s.headsPerHeight <= 7)) {
         throw new Error(s.kind + ' is 1:' + s.headsPerHeight.toFixed(2) + ' heads tall — outside the 1:6–1:7 pictogram band');
       }
-      if (!(s.shoulderW / s.headW >= 1.7 && s.shoulderW / s.headW <= 2.3)) {
-        throw new Error(s.kind + "'s shoulders are " + (s.shoulderW / s.headW).toFixed(2) + ' head-widths (want 1.7–2.3); at 1.0 the head is as wide as the body and it reads as a bell');
-      }
+      /* THE 1.7–2.3 SHOULDER RULE IS GONE, AND ITS REPLACEMENT WAS DELETED TOO — read this before
+         adding another one (queue 435).
+         It used to read "shoulders 1.7–2.3 head-widths" and it measured the BODY's shoulder, because
+         the arms began just below the shoulder line and reached WIDER: 0.300H of shoulder with arms out
+         at 0.454H. That is exactly what put a dark notch at each shoulder — an arm wider than the
+         shoulder it hangs from has to slope back IN to meet it — and at 220px the figure read as a coat
+         hanger, two slabs laid on a torso. The fix makes the shoulder as wide as the arms, so the two
+         measurements are now necessarily equal and the old band would contradict the 2.5–3.3 arm-span
+         rule below.
+         The obvious replacement — "the shoulder line must be as wide as the arm span" — was written,
+         and then MUTATION-TESTED AND DELETED, because it cannot see its own defect: `shoulderW` is
+         sampled 0.012H below the top of the body, by which point the arms are already in the row, so
+         narrowing the shoulder or dropping the arms lower both leave the two numbers identical. It
+         passed while the geometry was broken.
+         A notch is not a row-width change at all. Both the old shape and the new one widen
+         monotonically from neck to arm; what differs is HOW the outer edge gets there — gradually, or
+         in a step whose inner corner reads as a nick. Row widths cannot tell those apart, so **this one
+         is verified by RENDER (tests/_people.html) and not by the suite**, and saying so is worth more
+         than a green assertion that proves nothing. What the suite does still hold is everything that
+         IS measurable: the 24px legibility bar, the pair staying distinct, the chest rule below (which
+         carries the original "the head is as wide as the body" intent), and the arm-span band. */
       /* And the arms have to stay arms. Under about 2.5 they are tucked so close that the armpit dies
          at picker size — the fault three judges kept naming; over about 3.3 the figure is doing a lat
          spread. The shipped pair sits at 3.0. */
@@ -32964,6 +32982,69 @@
       const dl = Math.abs(c[a].l - c[b].l), ds = Math.abs(c[a].s - c[b].s);
       if (dl < 0.06 && ds < 0.10) throw new Error('tints ' + a + ' and ' + b + ' are ' + Math.round(sep(c[a].h, c[b].h)) + '° apart with the same tone (' + tints[a] + ' vs ' + tints[b] + ') — that is the same colour twice');
     }
+  });
+
+  test('the two people pictograms survive 24px, and still tell each other apart there', { item: '435' }, function () {
+    /* Queue 435. His words: "The people shapes look awful, make sure when you try and fix them you use
+       a workflow, and make sure they actually have arms, reference photos online."
+       They already HAVE arms (queue 160) — what is wrong is that they do not read as arms — so the
+       redesign is a matter of taste, and this test is the part that is NOT: whatever the silhouette
+       becomes, four things have to survive being shrunk to the icon size, and each is a way a pictogram
+       dies that you cannot see by looking at it big.
+       ⚠️ MEASURED at v10.74 (tests/_pictolegible.html) BEFORE any redesign, so this pins what already
+       worked rather than only what changed: neck gap, leg gap and two open armpits held at every size
+       from 24px up — but at 24px the woman measured IDENTICALLY to the man (both 12x24, widest 10px at
+       21% down). Her skirt does not survive the smallest size, so at the icon size the pair converges
+       into one shape. That last assertion is the one that fails today’s art, and it is deliberate. */
+    if (!FM.traceShapePath) throw new Error('FM.traceShapePath is missing');
+    const PX = 24;
+    const shot = function (kind) {
+      const c = document.createElement('canvas'); c.width = PX; c.height = PX;
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, PX, PX);
+      FM.traceShapePath(g, { shape: kind }, 0, 0, PX, PX);
+      g.fillStyle = '#fff'; g.fill('nonzero');
+      const d = g.getImageData(0, 0, PX, PX).data;
+      const on = (x, y) => d[(y * PX + x) * 4 + 3] > 100;
+      const inkRow = y => { let n = 0; for (let x = 0; x < PX; x++) if (on(x, y)) n++; return n; };
+      let t = -1, b = -1;
+      for (let y = 0; y < PX; y++) if (inkRow(y)) { if (t < 0) t = y; b = y; }
+      if (t < 0) throw new Error('the "' + kind + '" shape drew nothing at ' + PX + 'px');
+      const h = b - t + 1;
+      // gaps in a row = background runs with ink on both sides
+      const gaps = y => {
+        const out = []; let run = -1, seen = false;
+        for (let x = 0; x < PX; x++) {
+          if (on(x, y)) { if (run >= 0 && seen) out.push(x - run); run = -1; seen = true; }
+          else if (run < 0) run = x;
+        }
+        return out;
+      };
+      let wMax = 0, wAt = t;
+      for (let y = t; y <= b; y++) { const w = inkRow(y); if (w > wMax) { wMax = w; wAt = y; } }
+      // a clean neck: some row between the head and the shoulders with no ink at all
+      let neck = false;
+      for (let y = t + 1; y < b; y++) { if (inkRow(y) === 0) { neck = true; break; } }
+      return {
+        kind: kind, t: t, b: b, h: h,
+        neck: neck,
+        legGap: gaps(Math.round(t + h * 0.95)).filter(n => n >= 1).length,
+        armpits: gaps(Math.round(t + h * 0.32)).length,
+        widestAt: (wAt - t) / h,
+        widest: wMax,
+      };
+    };
+    const man = shot('person'), woman = shot('woman');
+    [man, woman].forEach(function (f) {
+      if (!f.neck) throw new Error('at ' + PX + 'px the "' + f.kind + '" head has fused into the shoulders — there is no clear row between them');
+      if (!f.legGap) throw new Error('at ' + PX + 'px the "' + f.kind + '" legs have merged into one column — the gap between them closed');
+      if (f.armpits < 2) throw new Error('at ' + PX + 'px the "' + f.kind + '" has ' + f.armpits + ' open armpit(s) instead of 2 — the arms have merged into the torso, which is the "it has no arms" read');
+    });
+    /* AND THE PAIR MUST STILL BE A PAIR. What separates them is WHERE the figure is widest: his
+       shoulders and arms up top, her hem down low. At 24px today they measure the same. */
+    const sep = Math.abs(man.widestAt - woman.widestAt);
+    if (sep < 0.2) throw new Error('at ' + PX + 'px the man is widest ' + Math.round(man.widestAt * 100) + '% down and the woman ' + Math.round(woman.widestAt * 100) + '% down — only ' + Math.round(sep * 100) + ' points apart, so at the icon size the two shapes converge into one blob');
+    if (woman.widestAt < man.widestAt) throw new Error('the woman is widest ' + Math.round(woman.widestAt * 100) + '% down and the man ' + Math.round(man.widestAt * 100) + '% down — her hem should be the lowest wide point, not his shoulders');
   });
 
   test('tapping a position number opens the editor on the FIRST tap', { item: 'position-tap-type' }, async function () {

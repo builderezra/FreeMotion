@@ -1,44 +1,47 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><base href="../"><title>#160 — the two people shapes, for judging</title>
-<style>
-  html,body{margin:0;background:#ffffff;color:#111;font:13px/1.4 system-ui,sans-serif}
-  /* WRAP, and enough room for all six. The first cut was one non-wrapping row on a 900px shot, which
-     silently CLIPPED the last column — so the 24px woman was never rendered, and she is the figure that
-     fails first. A judging sheet that quietly drops a case is worse than no sheet. */
-  .row{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-end;padding:22px 26px;max-width:860px}
-  figure{margin:0;text-align:center}
-  figcaption{margin-top:6px;font-size:12px;color:#444}
-  canvas{background:#fff;image-rendering:auto}
-</style></head><body>
-<div class="row" id="row"></div>
-<script src="js/settings.js"></script><script src="js/scene.js"></script>
-<script src="js/eases.js"></script><script src="js/masks.js"></script>
-<script src="js/behaviors.js"></script><script src="js/media.js"></script>
-<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<html lang="en"><head><meta charset="utf-8"><title>The people shapes, at the sizes they are used (queue 435)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<div id="stage" style="padding:14px"></div>
 <script>
-/* Ezra (#160): "The two people shapes are good but need arms, make sure when adding arms you get other
-   agents to verify if it's any good or not."
-   This renders both figures black-on-white at the sizes that matter — big enough to judge the drawing,
-   and 24px because that is the add-menu icon where every earlier figure change has actually failed.
-   White ground on purpose: these are judged as SILHOUETTES, and a dark UI ground flatters them. */
-(function () {
-  const row = document.getElementById('row');
-  const draw = (kind, n) => {
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = n;
-    const ctx = cv.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n, n);
-    const layer = FM.makeLayer('shape', { shape: kind, x: n / 2, y: n / 2, shapeW: n, shapeH: n, fill: '#111', start: 0, duration: 2 });
-    const sc = { layers: [layer], project: { width: n, height: n, fps: 30, duration: 2, background: null, markers: [] } };
-    FM.renderScene(ctx, sc, 0);
-    const f = document.createElement('figure');
-    f.appendChild(cv);
-    const c = document.createElement('figcaption'); c.textContent = kind + ' — ' + n + 'px';
-    f.appendChild(c);
-    return f;
-  };
-  [['person', 256], ['woman', 256], ['person', 96], ['woman', 96], ['person', 24], ['woman', 24]]
-    .forEach(([k, n]) => row.appendChild(draw(k, n)));
-  window.__done = true;
-})();
+/* Queue 435: "The people shapes look awful… make sure they actually have arms". They DO have arms in
+   the code (queue 160), so the first job is to look at what actually RENDERS, at the sizes they are
+   really seen at: the add-menu icon (~24-51px) and the canvas. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.traceShapePath)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), stage=document.getElementById('stage');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(400);
+  var sizes=[24,32,51,96,220];
+  ['person','woman'].forEach(function(kind){
+    var row=document.createElement('div'); row.style.cssText='display:flex;gap:16px;align-items:flex-end;margin-bottom:18px';
+    var lab=document.createElement('div'); lab.textContent=kind; lab.style.cssText='width:60px;color:#8fb';
+    row.appendChild(lab);
+    sizes.forEach(function(px){
+      var wrap=document.createElement('div'); wrap.style.cssText='text-align:center';
+      var c=document.createElement('canvas'); c.width=px*2; c.height=px*2;
+      c.style.cssText='width:'+px+'px;height:'+px+'px;background:#101a22;border:1px solid #223';
+      var g=c.getContext('2d'); g.scale(2,2);
+      g.save();
+      FM.traceShapePath(g, { shape: kind }, 0, 0, px, px);
+      g.fillStyle='#8fd7ff'; g.fill('nonzero');
+      g.restore();
+      var t=document.createElement('div'); t.textContent=px+'px'; t.style.cssText='color:#678;font-size:10px;margin-top:3px';
+      wrap.appendChild(c); wrap.appendChild(t); row.appendChild(wrap);
+    });
+    // …and an OUTLINE version, which is how the add-menu icon draws it
+    var wrap2=document.createElement('div'); wrap2.style.cssText='text-align:center';
+    var c2=document.createElement('canvas'); c2.width=96; c2.height=96;
+    c2.style.cssText='width:48px;height:48px;background:#101a22;border:1px solid #223';
+    var g2=c2.getContext('2d'); g2.scale(2,2);
+    g2.beginPath(); FM.traceShapePath(g2,{ shape: kind },0,0,48,48);
+    g2.strokeStyle='#8fd7ff'; g2.lineWidth=2; g2.stroke();
+    var t2=document.createElement('div'); t2.textContent='outline 48'; t2.style.cssText='color:#678;font-size:10px;margin-top:3px';
+    wrap2.appendChild(c2); wrap2.appendChild(t2); row.appendChild(wrap2);
+    stage.appendChild(row);
+  });
+  document.title='ready';
+ }).catch(function(e){stage.textContent='ERR '+e.message;document.title='ERR';});
+});
 </script></body></html>

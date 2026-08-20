@@ -67,6 +67,10 @@ transition is meaningless there.
   tints, how often one repeats, and the saturation/lightness spread across the palette (queue 434). It is
   the probe that turned "ugly and repetitive" into two numbers — 67 cards off 16 tints, and 85%–85%
   saturation. `_shapeshot.html` is the same tab, for a picture.
+- `_people.html` — the person/woman pictograms rendered at 24/32/51/96/220px plus an outline, which is
+  the ONLY way the shoulder notch in queue 435 was visible; row widths cannot see it.
+  `_pictolegible.html` is the numeric half: neck gap, leg gap, open armpits and where each figure is
+  widest, at every size — it is what found the pair measuring identically at 24px.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).
