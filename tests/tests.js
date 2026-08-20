@@ -2165,6 +2165,31 @@
     }
   });
 
+  test('phone: the canvas is sized in a viewport unit that browser chrome cannot move', { item: '429' }, async function () {
+    /* Queue 429. Ezra: "the little plus button is moving around and stuff when I swipe on the time line,
+       should be stiff."
+       MEASURED (tests/_growbisect.html): `#app` is `auto / var(--stage-h) / 1fr`, so ANY viewport growth
+       splits between the canvas and the timeline band — a 60px growth gave the stage 24 and the band 36,
+       and everything in the band slid down mid-gesture, the + included. Pinning the stage held it at
+       0.0px against 24.0px unpinned, which is what proved the mechanism.
+       ASSERTED AT THE RULE, not the behaviour, and that is deliberate: `svh`, `lvh` and `vh` all resolve
+       IDENTICALLY in a headless browser, because there is no browser chrome for them to differ about.
+       So no measurement here can tell the fix from the bug — but a future tidy-up that puts plain `vh`
+       back would silently return it, and this catches that. */
+    /* Read the RESOLVED custom property at a phone width, rather than walking `document.styleSheets`.
+       A custom property substitutes as a raw token, so `getComputedStyle` hands back the unit text
+       itself — "40svh" — which is exactly what needs asserting. The stylesheet walk was the first
+       attempt and found nothing; this needs no knowledge of which media query the rule lives in. */
+    return await atPhoneWidth(async function () {
+      const seen = ((getComputedStyle(document.documentElement).getPropertyValue('--stage-h')) || '').trim();
+    if (!seen) throw new Error('no rule sets --stage-h at all — the phone canvas is not sized the way this test expects, so it is guarding nothing');
+    if (/\d+vh/.test(seen) && !/svh/.test(seen)) {
+      throw new Error('--stage-h is back to plain vh (' + seen + ') — browser chrome sliding away resizes the canvas, which slides the timeline under the finger mid-swipe (measured: 24px)');
+    }
+      if (/dvh/.test(seen)) throw new Error('--stage-h uses dvh (' + seen + '), which tracks the chrome deliberately — the worst possible unit here');
+    }, 380);
+  });
+
   test('add menu: the page dots are pinned to the bottom, not carried by the scroll', { item: '426' }, function () {
     /* Queue 426. Ezra: "when extending the add pannel it makes the three dots at the bottom go down".
        It could not be reproduced at v10.63 (the entry records what was measured and why the theory in it
