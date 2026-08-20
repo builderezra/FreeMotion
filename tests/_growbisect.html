@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Which element moves when the viewport grows? (queue 429)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:940px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  for(var i=0;i<3;i++){ var L=FM.makeLayer('shape',{name:'Clip '+(i+1),shape:'rect',x:540,y:700+i*250,shapeW:300,shapeH:220,fill:'#3a7bd5'});
+    L.start=0; L.duration=8; FM.scene.layers.push(L); }
+  FM.scene.project.duration=20; FM.refreshAll(); FM.timeline.rebuild(); await sleep(500);
+
+  // Walk from the + up to <body>, plus the app's key boxes — measure each before and after the grow.
+  var plus=d.querySelector('.tl-addrow-plus');
+  var chain=[], n=plus;
+  while(n && n!==d.body){ chain.push(n); n=n.parentElement; }
+  ['stage','timeline-panel','timeline','tl-inner','tl-tracks','app','main','transport'].forEach(function(id){
+    var e=d.getElementById(id); if(e && chain.indexOf(e)<0) chain.push(e);
+  });
+  function label(e){ return e.id ? '#'+e.id : (e.tagName.toLowerCase()+'.'+(e.className||'').toString().trim().split(/\s+/).slice(0,2).join('.')); }
+  function snap(){ return chain.map(function(e){ var r=e.getBoundingClientRect(); return {t:r.top,h:r.height}; }); }
+  var before=snap();
+  f.style.height='880px'; W.dispatchEvent(new W.Event('resize')); await sleep(200);
+  var after=snap();
+  o.push('viewport 820 → 880 (what Safari does when its toolbar hides)');
+  o.push('the + itself moved '+(after[0].t-before[0].t).toFixed(1)+'px down');
+  o.push('');
+  o.push('  Δtop   Δheight   element');
+  chain.forEach(function(e,i){
+    var dt=after[i].t-before[i].t, dh=after[i].h-before[i].h;
+    if(Math.abs(dt)<0.5 && Math.abs(dh)<0.5) return;
+    o.push('  '+String(dt.toFixed(1)).padStart(6)+' '+String(dh.toFixed(1)).padStart(8)+'   '+label(e));
+  });
+  o.push('');
+  o.push('(the OUTERMOST element with a Δheight is the one being resized; everything under it just follows)');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

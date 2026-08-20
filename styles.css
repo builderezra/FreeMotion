@@ -2881,7 +2881,18 @@ body.fm-playing #time-readout {
 
 @media (max-width: 700px) {
   /* Preview is a FIXED window (doesn't resize with the comp aspect); the timeline gets the rest. */
+  /* svh, NOT vh — the canvas must not resize under a finger that is mid-swipe (queue 429).
+     Ezra: "the little plus button is moving around and stuff when I swipe on the time line".
+     MEASURED, after five other causes were eliminated: grow the viewport 820->880 (what happens when
+     browser chrome slides away, and what a rotation or an on-screen keyboard also does) and the add
+     row's + jumps 24px DOWN mid-gesture. Bisecting every box between the + and <body> found why: #app
+     is `auto / var(--stage-h) / 1fr`, so a taller viewport gives the STAGE 24px of it and the timeline
+     band the other 36 — and everything in the band, the + included, slides down while you are touching it.
+     `svh` is the SMALL viewport — the one with the chrome showing — and it does not move when the chrome
+     hides. `dvh` would be the worst choice here: it tracks the change deliberately. The plain `vh` line
+     stays first as the fallback for anything that does not know the unit. */
   :root { --stage-h: 40vh; }
+  :root { --stage-h: 40svh; }
   #app { grid-template-rows: auto var(--stage-h) 1fr; grid-template-columns: minmax(0, 1fr); }
   /* Re-place for the single-column phone grid: the desktop rules span to column line 3, which would
      conjure an implicit second column here. The inspector is a position:fixed sheet on phone, so it is

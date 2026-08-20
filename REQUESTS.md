@@ -12194,6 +12194,22 @@ wait for them to report back."*
              `grid-template-rows` (capped by `min(232px, …)`, so it does not grow). The 24px comes from
              somewhere else — the next session should bisect by watching which ELEMENT's rect moves when
              the frame grows, not by guessing at rules.
+             🎯 **MECHANISM FOUND, by bisecting every box between the + and `<body>`:** `#app` is
+             `grid-template-rows: auto var(--stage-h) 1fr`, and on the phone **`--stage-h: 40vh`**
+             (styles.css). Grow the viewport 60px and the STAGE takes 24 of it while the timeline band
+             (`1fr`) takes the other 36 — measured exactly: stage +24, panel +36, and the + rides down
+             with the band. That is the whole of it.
+             🔧 **CANDIDATE FIX SHIPPED v10.67, and labelled honestly: `--stage-h: 40svh`** (with the `vh`
+             line kept above it as a fallback). `svh` is the viewport WITH the browser chrome showing and
+             does not change when the chrome hides; `dvh` would be the worst possible choice, since it
+             tracks the change on purpose.
+             ⚠️ **IT CANNOT BE VERIFIED ON THIS MACHINE, and that is stated rather than glossed:** headless
+             Chrome has no browser chrome, so `svh`, `lvh` and `vh` all resolve identically — the harness
+             is physically unable to tell the fix from the bug. Re-running the reproduction after the
+             change shows the same 24px, and that is EXPECTED, not a failure.
+             **So this needs 30 seconds on his phone: swipe the timeline in Safari and see whether the +
+             still shifts.** If it does, the mechanism above is still right and the trigger is something
+             other than chrome collapse (a rotation and an on-screen keyboard resize the viewport too).
              ✅ **The reproduction is the win here.** Case D fails on demand, so whatever is changed next
              can be measured instead of hoped at — and the fix is almost certainly to size that band from
              `svh` (the viewport WITH chrome, which does not move when it hides) rather than `vh`/`dvh`.
