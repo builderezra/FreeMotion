@@ -118,7 +118,13 @@ BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line fro
                      r'Left OPEN rather than ticked|left open until|until (he|you) confirm|say so and (it|this) is live|'
                      r'if it still|next time it happens|one line from (him|you)|REAL-DEVICE report', re.I)
 BIG     = re.compile(r'wants a session of its own|Not started deliberately|days of work', re.I)
-buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': []}
+# …and entries that are NOT WORK AT ALL. Some exist as a receipt — a standing instruction he has had to
+# repeat, kept so it does not live only in a chat log — and some say in their own words that they no
+# longer hold the queue. Both used to land in ACTIONABLE, because nothing about them looks blocked, and
+# that sends the next session to read a reminder instead of building something.
+STANDING = re.compile(r'Nothing to build|this is the receipt|Standing reminder|no longer holds the queue|'
+                      r'standing instruction', re.I)
+buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': [], 'standing note (no build)': []}
 for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
@@ -126,11 +132,12 @@ for n, i in enumerate(starts):
     m = re.match(r'- \[ \] \*\*(\d+[a-z]?)', lines[i])
     tag = m.group(1) if m else '(unnumbered)'
     title = re.sub(r'\*\*', '', lines[i][6:])[:64]
-    key = ('held by Ezra' if HELD.search(body) else
+    key = ('standing note (no build)' if STANDING.search(body) else
+           'held by Ezra' if HELD.search(body) else
            'blocked on Ezra' if BLOCKED.search(body) else
            'needs its own session' if BIG.search(body) else 'ACTIONABLE')
     buckets[key].append((tag, title, i + 1))
-for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session'):
+for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)'):
     print('%-22s %d' % (k + ':', len(buckets[k])))
 act = buckets['ACTIONABLE']
 if act:
