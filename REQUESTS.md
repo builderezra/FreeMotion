@@ -11749,9 +11749,15 @@ wait for them to report back."*
       > With the undo and redo buttons request I just did make the lines thinner tho so it matches everything else on that row
       **Clauses:**
       1. [ ] Redraw undo/redo to match the reference.
-      2. [ ] **Thinner strokes than the reference**, matching the rest of the row's weight (1.8).
+      2. [x] ✅ **ALREADY TRUE — checked 20 Aug, not fixed.** `#btn-undo` and `#btn-redo` are drawn at
+             `stroke-width="1.8"` (index.html:429-430), which is exactly what `#btn-toend` and the rest of
+             the transport row use. "Make the lines thinner so it matches everything else" is satisfied by
+             the current markup, so there is nothing to change here — and changing it would make them
+             thinner than the row rather than matching it.
       ⚠️ **THE REFERENCE IMAGE IS NOT IN THE INBOX — it is a text file, so "this" did not come through.**
       Ask for it, or catch it in the chat. Do not guess at a shape he has a specific picture of.
+      **So the WHOLE of what is left here is clause 1, and it is waiting on that image** — one word from
+      him, or a paste into the chat, is the entire unblock.
       🔗 v10.22 (#410) has just re-centred these two glyphs; whatever replaces them must stay centred on
       y=12 in the 24×24 box or the `transport-vcentre` test goes red — which is the point of that test.
 

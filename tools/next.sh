@@ -116,7 +116,9 @@ BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line fro
                      # until he confirms on his own device. They read as actionable and are not — there is
                      # nothing to build, only something for him to look at.
                      r'Left OPEN rather than ticked|left open until|until (he|you) confirm|say so and (it|this) is live|'
-                     r'if it still|next time it happens|one line from (him|you)|REAL-DEVICE report', re.I)
+                     r'if it still|next time it happens|one line from (him|you)|REAL-DEVICE report|'
+                     # …and the plainest block of all: the thing the request refers to never arrived.
+                     r'IS NOT IN THE INBOX|did not come through|never arrived|no screenshot|reference image', re.I)
 BIG     = re.compile(r'wants a session of its own|Not started deliberately|days of work', re.I)
 # …and entries that are NOT WORK AT ALL. Some exist as a receipt — a standing instruction he has had to
 # repeat, kept so it does not live only in a chat log — and some say in their own words that they no
