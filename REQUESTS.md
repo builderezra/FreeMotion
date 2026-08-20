@@ -12170,10 +12170,26 @@ wait for them to report back."*
              gave it edge-scrolling), so a swipe that starts on or near the row may be engaging the ROW
              DRAG rather than scrolling the timeline — which would move the + with his finger, by design,
              and look exactly like "it moves around and stuff".
-             ⚠️ **THE ONE QUESTION THAT SETTLES IT:** does it move when his finger starts **on the add row
-             itself** (the bar with the + and "Tap to add a layer"), or anywhere on the timeline including
-             far from it? If it is only near the row, this is the row's own drag and the fix is about when
-             that drag arms — not about stiffness.
+             📐 **AND THE GESTURE PATH IS RULED OUT TOO (`tests/_swipeonrow.html`).** Synthetic pointer
+             swipes were driven from three different starting points, with three clips and 493px of range:
+             | swipe starts on | timeline scrolled | playhead | + moved mid-swipe |
+             |---|---|---|---|
+             | the ADD ROW | 120 → 394 | 1.93 → 6.40 | **0.0px** |
+             | the lane, away from the row | 120 → 423 | 2.37 → 6.86 | **0.0px** |
+             | the row's GRIP | 120 → 147 | unchanged | **0.0px** |
+             The grip correctly captures its own gesture without scrubbing, and in all three cases the +
+             sits at x=25.0 the whole way through. So the row's drag is not stealing the swipe either.
+             🍎 **LEADING HYPOTHESIS NOW, and it is one no harness here can reproduce: iOS SAFARI'S TOOLBAR.**
+             Swiping in Safari collapses and expands the browser chrome, which changes the VISUAL VIEWPORT
+             — and anything positioned against `100vw`/`vh` or `position: sticky` shifts when it does. The
+             add row's inner is `position: sticky; width: 100vw` (styles.css, the empty-state note). That
+             would look exactly like "the plus button is moving around and stuff when I swipe", would
+             happen only on a real phone, and would be invisible to every measurement above.
+             ⚠️ **THE QUESTION THAT SETTLES IT, and it is one tap for him: does it happen in the INSTALLED
+             app (added to the home screen, no browser chrome) or only in Safari with the toolbar showing?**
+             If it is Safari-only, this is the toolbar and the fix is to stop using viewport units for that
+             row. If it happens in the installed app too, the toolbar is innocent and this needs a screen
+             recording, because five causes are now eliminated by measurement.
              ⚠️ **Superseded: is his timeline EMPTY when it happens?** — answered above, it is not. The slim row's small + has
              no animation, so the answer picks between "undo a deliberate effect" and "hunt a real lag".
              ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
