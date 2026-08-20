@@ -12179,7 +12179,25 @@ wait for them to report back."*
              | the row's GRIP | 120 → 147 | unchanged | **0.0px** |
              The grip correctly captures its own gesture without scrubbing, and in all three cases the +
              sits at x=25.0 the whole way through. So the row's drag is not stealing the swipe either.
-             🍎 **LEADING HYPOTHESIS NOW, and it is one no harness here can reproduce: iOS SAFARI'S TOOLBAR.**
+             🎯 **REPRODUCED — 20 Aug, `tests/_swipeonrow.html` case D. THIS IS THE BUG.**
+             A bare `resize` event changes nothing (the app's handler early-outs), but making the viewport
+             REALLY grow **820 → 880 mid-swipe** — exactly what iOS Safari does when its toolbar slides
+             away as you scroll — moves the add row's **+ 24px DOWN, instantly, at the moment of the
+             resize**, while the finger is still down. x never moves; it is purely vertical.
+             **So it is not the + and not the scroll: the LAYOUT is being resized under his finger**, and
+             on iOS that happens on every swipe that hides the chrome. That is why five careful probes
+             found nothing — they all held the viewport still, which is the one thing a real phone does not do.
+             ⚠️ **The exact rule is NOT yet identified, and two guesses have already been measured and
+             REJECTED** (both reverted rather than shipped, because a fix that does not move the number is
+             not a fix): `--tl-h`'s `30vh`/`33vh` (those live in `min-width: 1100px` media queries and are
+             never in play on a phone) and the phone's own `46vh` fallback in `#app`'s
+             `grid-template-rows` (capped by `min(232px, …)`, so it does not grow). The 24px comes from
+             somewhere else — the next session should bisect by watching which ELEMENT's rect moves when
+             the frame grows, not by guessing at rules.
+             ✅ **The reproduction is the win here.** Case D fails on demand, so whatever is changed next
+             can be measured instead of hoped at — and the fix is almost certainly to size that band from
+             `svh` (the viewport WITH chrome, which does not move when it hides) rather than `vh`/`dvh`.
+             🍎 **Superseded hypothesis, kept because it led here: iOS SAFARI'S TOOLBAR.**
              Swiping in Safari collapses and expands the browser chrome, which changes the VISUAL VIEWPORT
              — and anything positioned against `100vw`/`vh` or `position: sticky` shifts when it does. The
              add row's inner is `position: sticky; width: 100vw` (styles.css, the empty-state note). That

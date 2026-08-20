@@ -41,12 +41,42 @@ f.addEventListener('load',function(){
     o.push('');
   }
 
+  // D) THE REAL SUSPECT: iOS fires `resize` when Safari's toolbar collapses during a swipe. If anything
+  //    rebuilds the timeline on resize, the add row is re-created mid-gesture and its + jumps.
+  async function swipeWithResize(){
+    tl.scrollLeft = 120; await sleep(80);
+    var rowEl=d.querySelector('.tl-addrow'), r=rowEl.getBoundingClientRect();
+    var x=Math.round(r.left+r.width*0.55), y=Math.round(r.top+r.height/2), id=77;
+    function ev(t2,cx,cy,tg){ (tg||W).dispatchEvent(new W.PointerEvent(t2,{clientX:cx,clientY:cy,pointerId:id,isPrimary:true,bubbles:true,cancelable:true,buttons:1})); }
+    var p0=d.querySelector('.tl-addrow-plus').getBoundingClientRect();
+    ev('pointerdown',x,y,rowEl); await sleep(40);
+    for(var k=1;k<=3;k++){ ev('pointermove',x-k*22,y); await sleep(24); }
+    /* …the toolbar collapses HERE, mid-swipe. A bare `resize` event is NOT enough — the app's handler
+       can early-out when nothing actually changed, which would make this test hollow. So the frame is
+       really made taller, the way Safari's viewport grows when its chrome slides away (~60px). */
+    f.style.height = '880px';
+    W.dispatchEvent(new W.Event('resize'));
+    await sleep(120);
+    var pMid=d.querySelector('.tl-addrow-plus').getBoundingClientRect();
+    for(var k2=4;k2<=6;k2++){ ev('pointermove',x-k2*22,y); await sleep(24); }
+    ev('pointerup',x-6*22,y); await sleep(260);
+    var p1=d.querySelector('.tl-addrow-plus').getBoundingClientRect();
+    f.style.height = '820px'; W.dispatchEvent(new W.Event('resize')); await sleep(60);
+    o.push('D) the VIEWPORT REALLY GROWS 820→880 mid-swipe (what Safari does when its toolbar collapses):');
+    o.push('   + x '+p0.left.toFixed(1)+' → '+pMid.left.toFixed(1)+' → '+p1.left.toFixed(1)
+      +'    y '+p0.top.toFixed(1)+' → '+pMid.top.toFixed(1)+' → '+p1.top.toFixed(1));
+    var dx=Math.abs(pMid.left-p0.left), dy=Math.abs(pMid.top-p0.top);
+    o.push('   jumped '+dx.toFixed(1)+'px across, '+dy.toFixed(1)+'px down at the moment of the resize');
+    o.push(dx>1.5||dy>1.5 ? '   ❌ THE + JUMPS when a resize lands mid-swipe' : '   ✅ a mid-swipe resize does not move it');
+    o.push('');
+  }
   var row=d.querySelector('.tl-addrow');
   var lane=d.getElementById('tl-inner');
   await swipe(row,  'A) finger STARTS ON THE ADD ROW:');
   await swipe(lane, 'B) finger starts on the lane, away from the row:');
   var grip=d.querySelector('.tl-addrow-grip');
   if(grip) await swipe(grip, 'C) finger starts on the row GRIP (drag is meant to arm here):');
+  await swipeWithResize();
   document.getElementById('out').textContent=o.join('\n');
   document.title='ready';
  }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
