@@ -65,6 +65,13 @@ Two things that made it worse, both worth avoiding:
   on disk, so a measurement taken then describes the MUTATION, not the code. That has already produced
   one confidently wrong reading.
 
+## ⚠️ THE LOOP LIVES IN [LOOP.md](LOOP.md) — he should not be pasting it
+
+He said it himself on 20 Aug: *"the following loop thing doesnt seem to be working properly"*. It was
+being re-pasted every turn, it told me never to report (which a turn cannot obey), and it kept firing
+with nothing to do. The rules are in `LOOP.md` now, with two changes that matter: a blocker gets SAID as
+well as recorded, and an empty queue ends the turn in one line instead of manufacturing work.
+
 ## ⚠️ WORK THE LIST OLDEST FIRST — not whatever he just said
 
 **The next thing to work on is the LOWEST-NUMBERED open item in [REQUESTS.md](REQUESTS.md), always.**
