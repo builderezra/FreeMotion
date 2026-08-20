@@ -1,4 +1,4 @@
-# ⚠️ READ FIRST — seven ways a measurement lied, all on 20 Aug 2026
+# ⚠️ READ FIRST — eight ways a measurement lied, all on 20 Aug 2026
 
 Every one of these produced a confident WRONG answer that survived until something forced a second look.
 They are listed by SYMPTOM, because that is how you meet them.
@@ -23,7 +23,11 @@ They are listed by SYMPTOM, because that is how you meet them.
    ten clauses, 418 clause 2). An entry records what was ASKED, not what is still missing, and nothing
    keeps the two in step. Read the file the entry names before building.
 
-**The one rule underneath all seven:** a measurement that CANNOT fail is not evidence. Before believing
+8. **"The element moved hundreds of pixels."** The timeline REBUILDS on resize — the add row and its +
+   are replaced — so an element reference held across the resize measures a DETACHED node as all-zeros.
+   A probe reported the + moving −453.5px that way. Re-query by selector after anything that can rebuild.
+
+**The one rule underneath all eight:** a measurement that CANNOT fail is not evidence. Before believing
 a probe, ask what it would have shown if the thing were broken — and if the answer is "the same", the
 probe is the bug. Every new sweep in `tests.js` now carries a coverage guard for exactly this reason.
 

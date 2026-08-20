@@ -12203,7 +12203,17 @@ wait for them to report back."*
              line kept above it as a fallback). `svh` is the viewport WITH the browser chrome showing and
              does not change when the chrome hides; `dvh` would be the worst possible choice, since it
              tracks the change on purpose.
-             ⚠️ **IT CANNOT BE VERIFIED ON THIS MACHINE, and that is stated rather than glossed:** headless
+             ✅ **THE MECHANISM IS NOW VERIFIED (`tests/_growbisect.html?pin=1`).** Pinning the stage to a
+             fixed px height — which is exactly what a unit that does not grow achieves — and then growing
+             the viewport gives: **the + moves 0.0px**, against **24.0px** unpinned. So "hold the stage
+             still and the band's top edge stops moving, so nothing in it slides" is measured, not argued.
+             What remains assumed is only that `svh` does not move when iOS hides its chrome — which is
+             the definition of the unit rather than a guess about this app.
+             ⚠️ **A MEASUREMENT TRAP FOUND ON THE WAY, worth more than the fix:** the timeline REBUILDS on
+             resize, replacing the add row and its +. The first version of this probe held element
+             REFERENCES across the resize and measured a detached node as all-zeros, reporting the + as
+             moving −453.5px. Re-query by selector after anything that can rebuild; never hold a ref.
+             ⚠️ **The UNIT still cannot be verified on this machine, and that is stated rather than glossed:** headless
              Chrome has no browser chrome, so `svh`, `lvh` and `vh` all resolve identically — the harness
              is physically unable to tell the fix from the bug. Re-running the reproduction after the
              change shows the same 24px, and that is EXPECTED, not a failure.

@@ -26,11 +26,30 @@ f.addEventListener('load',function(){
   });
   function label(e){ return e.id ? '#'+e.id : (e.tagName.toLowerCase()+'.'+(e.className||'').toString().trim().split(/\s+/).slice(0,2).join('.')); }
   function snap(){ return chain.map(function(e){ var r=e.getBoundingClientRect(); return {t:r.top,h:r.height}; }); }
+  /* ?pin=1 — pin the stage to the px height it currently has. This does not test `svh` (headless has no
+     browser chrome, so svh/lvh/vh are identical here); it tests the MECHANISM the fix relies on: if the
+     stage stops growing, the band's TOP edge stops moving, and everything in the band should hold still. */
+  if (location.search.indexOf('pin') >= 0) {
+    var st = d.getElementById('stage').getBoundingClientRect().height;
+    var sEl = d.createElement('style');
+    sEl.textContent = ':root { --stage-h: ' + Math.round(st) + 'px !important; }';
+    d.head.appendChild(sEl);
+    await sleep(150);
+    o.push('stage pinned at ' + Math.round(st) + 'px (simulating a unit that does not grow)');
+  }
+  /* RE-QUERY AFTER THE RESIZE. The timeline REBUILDS on resize — the add row and its + are replaced —
+     so a cached reference measures a detached node as all-zeros and reports a nonsense delta. The first
+     version of this probe did exactly that and reported the + moving -453.5px. Selectors, not refs. */
+  var plusSel='.tl-addrow-plus';
+  var pBefore=d.querySelector(plusSel).getBoundingClientRect().top;
   var before=snap();
-  f.style.height='880px'; W.dispatchEvent(new W.Event('resize')); await sleep(200);
+  f.style.height='880px'; W.dispatchEvent(new W.Event('resize')); await sleep(250);
+  var pAfter=d.querySelector(plusSel).getBoundingClientRect().top;
   var after=snap();
+  o.push('THE + (re-queried, not a stale ref): top ' + pBefore.toFixed(1) + ' → ' + pAfter.toFixed(1)
+    + '   moved ' + (pAfter-pBefore).toFixed(1) + 'px');
   o.push('viewport 820 → 880 (what Safari does when its toolbar hides)');
-  o.push('the + itself moved '+(after[0].t-before[0].t).toFixed(1)+'px down');
+
   o.push('');
   o.push('  Δtop   Δheight   element');
   chain.forEach(function(e,i){
