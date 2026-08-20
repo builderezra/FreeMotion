@@ -2165,6 +2165,47 @@
     }
   });
 
+  test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
+    /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
+       A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
+       Pages serves HTML with `max-age=600`. For ten minutes after a deploy that hands back the PREVIOUS
+       index.html with an `ok` response — so the stale-detection built for this bug never fires — and
+       every `?v=` inside it then names an old asset the worker answers cache-first. A whole older build,
+       silently, on a good connection.
+       ASSERTED ON THE SOURCE TEXT, which is unusual and deliberate: the behaviour cannot be observed
+       from inside the page (the suite is not the service worker, and the dev server does not send the
+       Pages cache headers that make it bite). A tidy-up that drops the option would otherwise restore the
+       bug with nothing failing anywhere. */
+    let src = '';
+    try { src = await (await fetch('../sw.js?t=' + Date.now())).text(); }
+    catch (e) { throw new Error('could not read sw.js to check it: ' + e.message); }
+    if (src.length < 500) throw new Error('sw.js came back as ' + src.length + ' chars — that is not the worker, so this proves nothing');
+    if (!/req\.mode === 'navigate'/.test(src)) {
+      throw new Error('sw.js has no navigation branch any more — this guard is pointed at code that no longer exists');
+    }
+    /* …and ONLY inside the navigation branch. Asset fetches further down are deliberately plain: their
+       URLs carry `?v=` and are unique per release, so an HTTP-cached answer for one of them is the
+       CORRECT answer. The first version of this searched the whole file and reported those as failures,
+       which would have pushed the next person to "fix" something that is right. */
+    /* STRIP THE COMMENTS FIRST. The note above that fetch explains the bug in prose and contains the
+       characters `fetch(req)` — so scanning the raw source matched the DOCUMENTATION and reported a
+       failure against correct code. Three refinements, each one found by the mutation gate rather than
+       by reading: too-loose (any fetch counted), too-wide (asset fetches counted), and this. */
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const navStart = code.indexOf("req.mode === 'navigate'");
+    const navBlock = navStart < 0 ? '' : code.slice(navStart, navStart + 1200);
+    const navFetches = navBlock.match(/fetch\(req[^;]*?\)/g) || [];
+    if (!navFetches.length) throw new Error('sw.js never fetches the request — the worker has been rewritten and this guard needs rewriting with it');
+    /* EVERY such fetch, not just one of them. The first version of this asked whether ANY navigation
+       fetch revalidated — and the mutation check killed it: dropping the option from the PRIMARY fetch
+       still left the blip-retry line matching, so the test passed while the bug was fully restored. The
+       primary fetch is the one that runs; the retry only fires after a throw. */
+    const plain = navFetches.filter(f => !/no-cache|no-store|'reload'/.test(f));
+    if (plain.length) {
+      throw new Error(plain.length + ' navigation fetch(es) in sw.js do not revalidate — e.g. `' + plain[0] + '`. GitHub Pages caches HTML for 600s, so a refresh inside that window serves the PREVIOUS build with an ok response, and every ?v= in it then points at old assets the worker answers cache-first');
+    }
+  });
+
   test('phone: the canvas is sized in a viewport unit that browser chrome cannot move', { item: '429' }, async function () {
     /* Queue 429. Ezra: "the little plus button is moving around and stuff when I swipe on the time line,
        should be stiff."
