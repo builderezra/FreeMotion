@@ -330,7 +330,10 @@ window.FM = window.FM || {};
       // render dispatch tables), so they get checked here. The rest of the sanitisers are NOT run:
       // rewriting audioFx / masks / behaviours across his existing projects is a much larger change
       // than this one is allowed to be, and it is logged as its own item rather than smuggled in.
-      FM.scene.layers.forEach(l => { if (l) sanitizeEffects(l); });
+      /* …AND THE VALUE-LEVEL SAFETY CHECKS, on every load (bug hunt, 21 Aug). `sanitizeEffects` alone
+         left a remote `fillImage` URL intact through a save and reopen, and the compositor assigns that
+         straight to `Image.src`. Cheap enough to run on every layer of every open. */
+      FM.scene.layers.forEach(l => { if (l) { sanitizeEffects(l); sanitizeUnsafeValues(l); } });
       // BEFORE anything walks the graph. A document saved by a pre-v5.06 build can carry a parent
       // cycle; every parent walk below (refreshAll → the timeline, the layers panel, the compositor)
       // then throws, and because that throw happens inside this promise the boot .then() never runs:
@@ -798,6 +801,38 @@ window.FM = window.FM || {};
     };
     l.effects = l.effects.slice(0, FX_MAX).map(f => sane(f, 0)).filter(Boolean);
   }
+  /* THE VALUE-LEVEL CHECKS THAT MUST RUN ON EVERY LOAD, NOT ONLY ON IMPORT (bug hunt, 21 Aug).
+   *
+   * These were inside sanitizeImportedLayers, and the ordinary project load runs only sanitizeEffects —
+   * the load path says so itself: "anything an import once let through has been autosaved back into
+   * localStorage and comes in unchecked here forever after." Measured (tests/_fillurl.html): a shape
+   * whose `fillImage` is `https://example.invalid/beacon.png` SURVIVES a save and a reopen, and
+   * js/compositor.js does `rec.img.src = layer.fillImage` — so drawing the project fetches it. A
+   * zero-click beacon / LAN probe out of an app whose whole promise is that nothing leaves the device.
+   * The same run showed `fillGradient.angle` coming back as the string "99999" and `type` as
+   * "url(http://evil)", both of which are interpolated raw into a CSS gradient string.
+   *
+   * Split out rather than copied, so the import and the load cannot drift into two different ideas of
+   * what is safe. Only the CHEAP value checks are here: audioFx, masks and behaviours stay
+   * import-only, because rewriting those across his existing projects is the much larger change the
+   * load path's comment already declines, and it is logged rather than smuggled in. */
+  function sanitizeUnsafeValues(l) {
+    if (!l) return;
+    if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
+    if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
+    if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
+    if (l.clipColorSet != null) l.clipColorSet = !!l.clipColorSet;               // deliberate-choice flag: boolean only
+    if (l.fillGradient) {
+      if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
+      if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
+      // angle + type are interpolated raw into a CSS gradient string (inspector fill preview) — a
+      // crafted angle could close the gradient and inject url(http://…): coerce to a number / whitelist.
+      l.fillGradient.angle = Math.max(0, Math.min(360, +l.fillGradient.angle || 0));
+      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';
+    }
+  }
+  FM.storage_sanitizeUnsafeValues = sanitizeUnsafeValues;   // seam: the suite drives the real function
+
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
@@ -807,18 +842,7 @@ window.FM = window.FM || {};
       sanitizeBehaviors(l);
       sanitizeMasks(l);
       sanitizeCamera(l);
-      if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
-      if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
-      if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
-      if (l.clipColorSet != null) l.clipColorSet = !!l.clipColorSet;               // deliberate-choice flag: boolean only
-      if (l.fillGradient) {
-        if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
-        if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
-        // angle + type are interpolated raw into a CSS gradient string (inspector fill preview) — a
-        // crafted angle could close the gradient and inject url(http://…): coerce to a number / whitelist.
-        l.fillGradient.angle = Math.max(0, Math.min(360, +l.fillGradient.angle || 0));
-        if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';
-      }
+      sanitizeUnsafeValues(l);
     });
   }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a

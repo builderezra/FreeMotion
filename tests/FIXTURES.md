@@ -72,6 +72,10 @@ transition is meaningless there.
   degrading (queue/bug-hunt 23), and it still reports that — the fix is that WRITERS keep the list
   sorted, not that evalProp tolerates disorder.
 
+- `_fillurl.html` — plants a remote `fillImage` URL and a hostile gradient in a real project, saves,
+  reopens it through `FM.projects.open`, and reports what survived (bug-hunt 24). The end-to-end proof
+  that the load path was not running the security sanitisers.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

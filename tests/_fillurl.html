@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does a remote fill URL survive a save and reopen? (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT — the sanitiser gap between IMPORT and LOAD.
+   `.fmotion.json` import runs six sanitisers; the ordinary project load runs ONE (sanitizeEffects), and
+   the load path says so itself: "anything an import once let through has been autosaved back into
+   localStorage and comes in unchecked here forever after."
+   The sharpest item in that gap is a SECURITY check, not a tidiness one:
+       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
+   because js/compositor.js does `rec.img.src = layer.fillImage` — an arbitrary URL there is fetched by
+   the browser the moment the project is drawn. A remote one is a zero-click beacon / LAN probe from a
+   local-only app, which is the exact thing dataURLToFile already guards on the import side.
+   So: does such a value SURVIVE a save and a reopen? Driven through the app's own project APIs. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.projects&&w.FM.storage)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  await sleep(500);
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(400);
+  var made=[];
+  try{
+    var id=await FM.projects.create({name:'ZZ-fillurl', width:640, height:640});
+    made.push(id);
+    await sleep(400);
+    var L=FM.makeLayer('shape',{name:'F',shape:'rect',x:320,y:320,shapeW:200,shapeH:200,fill:'#fff'});
+    L.start=0;L.duration=3;
+    L.fillMode='media';
+    L.fillImage='https://example.invalid/beacon.png?u=' + encodeURIComponent('probe');
+    L.fillGradient={c0:'#fff',c1:'#000',angle:'99999',type:'url(http://evil)'};
+    FM.scene.layers.push(L);
+    FM.storage.markDirty(); FM.storage.flushSync();
+    await FM.storage.save();
+    await sleep(500);
+    say('planted   fillImage: ' + String(L.fillImage).slice(0,60));
+
+    // …reopen the project the ordinary way
+    var other=await FM.projects.create({name:'ZZ-fillurl-other'}); made.push(other);
+    await sleep(500);
+    await FM.projects.open(id);
+    await sleep(900);
+
+    var back=FM.scene.layers.filter(function(l){return l.name==='F';})[0];
+    if(!back){ say('the layer did not come back at all'); }
+    else{
+      var fi=back.fillImage;
+      var remote = fi && !/^data:image\//i.test(String(fi));
+      say('after reopen fillImage: ' + (fi===undefined?'(stripped ✅)':String(fi).slice(0,60)));
+      say('   ⇒ ' + (remote
+        ? '❌ A REMOTE URL SURVIVED THE LOAD — the compositor assigns this to Image.src, so opening the project fetches it'
+        : '✅ not a remote URL'));
+      var g=back.fillGradient||{};
+      say('after reopen gradient angle: ' + JSON.stringify(g.angle) + '   type: ' + JSON.stringify(g.type));
+      say('   ⇒ ' + ((typeof g.angle==='number' && g.angle>=0 && g.angle<=360 && ['linear','radial','angular'].indexOf(g.type)>=0)
+        ? '✅ coerced' : '❌ NOT coerced — these are interpolated into a CSS gradient string'));
+    }
+  } catch(e){ say('ERR '+e.message); }
+  finally {
+    for (var i=0;i<made.length;i++){ try { FM.projects.remove && FM.projects.remove(made[i]); } catch(e){} }
+  }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

@@ -1396,3 +1396,36 @@ Two garbage-in cases that the IMPORT sanitiser catches and the ordinary localSto
 NaN keyframe **value** propagates NaN through the curve, and a NaN keyframe **time** makes it jump to
 its last value. Same shape as the `FM.speedAt` find in section 19 — worth a load-time sweep if a third
 instance of this shape turns up.
+
+
+## 24. 🚨 The load path did not re-run the SECURITY sanitisers — FIXED v10.95
+
+**Found by following a shape, not a subsystem.** Two earlier hunts (section 19's `FM.speedAt`, section
+23's keyframe order) both ended the same way: the `.fmotion.json` import sanitises it, the ordinary
+localStorage load does not. Rather than hunt a third subsystem, the question became *how big is that
+gap* — and the answer is five sanitisers wide. Import runs six; load ran one (`sanitizeEffects`).
+
+**The sharpest item in the gap is a security check.** `js/compositor.js` does
+`rec.img.src = layer.fillImage`, so an arbitrary URL there is fetched by the browser the moment the
+project is drawn — a zero-click beacon or LAN probe out of a local-only app. The import strips anything
+that is not a `data:image/` URL. The load did not.
+
+Measured through the app's own project APIs (`tests/_fillurl.html`) — create, plant, save, reopen:
+
+    planted      fillImage: https://example.invalid/beacon.png?u=probe
+    after reopen fillImage: https://example.invalid/beacon.png?u=probe   ❌ survived
+    after reopen gradient  angle: "99999"   type: "url(http://evil)"     ❌ not coerced
+
+The gradient pair matters for the same reason: both are interpolated raw into a CSS gradient string.
+
+**Fixed** by splitting the value-level checks out as `sanitizeUnsafeValues` and calling them from BOTH
+the import and the load — split rather than copied, so the two cannot drift into different ideas of
+what is safe. The heavy structural sanitisers (audioFx, masks, behaviours) stay import-only: rewriting
+those across existing projects is the much larger change the load path already declines in its own
+comment, and it stays logged rather than smuggled in.
+
+⚠️ **The test asserts a legitimate `data:image/…` fill SURVIVES.** A "fix" that stripped every fill
+would pass a naive check and quietly delete real work — the failure mode of a security patch is usually
+that it eats something legitimate. `javascript:`, protocol-relative `//host` and `data:text/html` are
+covered too. Both the check and the load path's CALL to it are mutation-proved: a correct sanitiser
+nobody calls is worth nothing.

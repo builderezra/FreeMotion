@@ -3200,6 +3200,51 @@
     }
   });
 
+  test('a remote fill URL never survives a load — the value checks are not import-only', { item: 'load-sanitise' }, function () {
+    /* BUG HUNT (21 Aug). `.fmotion.json` import runs six sanitisers; the ordinary project load ran ONE
+       (sanitizeEffects), and the load path says so itself: "anything an import once let through has been
+       autosaved back into localStorage and comes in unchecked here forever after."
+       The sharpest thing in that gap is a SECURITY check rather than a tidiness one:
+       js/compositor.js does `rec.img.src = layer.fillImage`, so an arbitrary URL there is fetched by the
+       browser the moment the project is drawn — a zero-click beacon or LAN probe out of an app whose
+       whole promise is that nothing leaves the device.
+       MEASURED (tests/_fillurl.html) before the fix, through the app's own project APIs: a shape whose
+       fillImage was `https://example.invalid/beacon.png` came back from a save-and-reopen intact, and
+       `fillGradient.angle` came back as the STRING "99999" with `type` "url(http://evil)" — both
+       interpolated raw into a CSS gradient string.
+       Asserted against the REAL function rather than a re-implementation, which would only ever agree
+       with itself. */
+    const f = FM.storage_sanitizeUnsafeValues;
+    if (typeof f !== 'function') throw new Error('the value-level sanitiser is not exposed, so the load path cannot be checked');
+
+    // the beacon
+    const a = { fillImage: 'https://example.invalid/beacon.png?u=probe' };
+    f(a);
+    if (a.fillImage !== undefined) throw new Error('a remote fillImage URL survived the sanitiser (' + a.fillImage + ') — the compositor assigns this to Image.src, so opening the project fetches it');
+    // …and a legitimate one is NOT thrown away, or the fix is just deleting the feature
+    const ok = { fillImage: 'data:image/png;base64,iVBORw0KGgo=' };
+    f(ok);
+    if (ok.fillImage !== 'data:image/png;base64,iVBORw0KGgo=') throw new Error('a legitimate data: fill image was stripped too — the check is not "no remote URLs", it is "data: only"');
+    // protocol tricks
+    ['javascript:alert(1)', '//evil.example/x.png', 'DATA:text/html,<script>', 'data:text/html,<script>'].forEach(src => {
+      const o = { fillImage: src };
+      f(o);
+      if (o.fillImage !== undefined) throw new Error('"' + src + '" survived as a fill image');
+    });
+    // the gradient, which is interpolated into a CSS string
+    const g = { fillGradient: { c0: 'red; background:url(http://evil)', c1: '#000', angle: '99999', type: 'url(http://evil)' } };
+    f(g);
+    if (typeof g.fillGradient.angle !== 'number' || g.fillGradient.angle < 0 || g.fillGradient.angle > 360) throw new Error('fillGradient.angle is ' + JSON.stringify(g.fillGradient.angle) + ' — it goes straight into a CSS gradient string');
+    if (['linear', 'radial', 'angular'].indexOf(g.fillGradient.type) < 0) throw new Error('fillGradient.type is ' + JSON.stringify(g.fillGradient.type) + ' — not one of the three allowed');
+    if (/url\(/i.test(String(g.fillGradient.c0))) throw new Error('a gradient colour kept a url() in it: ' + g.fillGradient.c0);
+
+    /* AND THE LOAD PATH ACTUALLY CALLS IT. Asserted on the source, because reaching the real load needs
+       a planted localStorage document and a project switch — driven end to end by tests/_fillurl.html,
+       which is what found this. Without this line the sanitiser could be correct and unreachable. */
+    const src = String(FM.storage.load);
+    if (!/sanitizeUnsafeValues/.test(src)) throw new Error('FM.storage.load does not call the value-level sanitiser, so a remote fill URL still survives a reopen however correct the function is');
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub
