@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>split x text animation (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* BUG HUNT, follow-on from the fade one. A text layer's in/out animation is timed the SAME edge-anchored
+   way the fades were — `tIn = t - layer.start`, `tToEnd = layer.start + layer.duration - t` — so a split
+   should divide it for exactly the same reason. This measures REAL PIXELS: render the composited scene
+   at a set of absolute times before and after the cut and count the painted text.
+   Ink is counted BY COLOUR, not by alpha — the project paints its own background, so an alpha test
+   reports the whole canvas (a trap this repo has been caught by three times). */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.splitLayer&&w.FM.makeLayer&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message;});};
+function inkAt(FM,doc,t,W,H){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,t);
+  var d=ctx.getImageData(0,0,W,H).data, n=0;
+  for(var i=0;i<d.length;i+=4){ if(d[i]>140&&d[i+1]>140&&d[i+2]>140) n++; }   // WHITE text only
+  return n;
+}
+async function run(FM){
+  var doc=f.contentDocument, W=320,H=180, L=[];
+  FM.scene.layers.length=0;
+  FM.scene.project.width=W; FM.scene.project.height=H;
+  var A=FM.makeLayer('text',{name:'title',text:'HELLO',fontSize:48,color:'#ffffff',fill:'#ffffff'});
+  A.start=0; A.duration=10; A.textAnim={preset:'fade',durIn:0.6,durOut:0.6,stagger:0.04};
+  FM.scene.layers.push(A);
+  var times=[0.0,0.3,0.6,1.0,4.0,4.7,4.9,5.0,5.1,5.3,6.0,9.0,9.4,9.7,10.0];
+  var before=times.map(function(t){return inkAt(FM,doc,t,W,H);});
+  FM.time=5;
+  await FM.splitLayer(A.id);
+  var after=times.map(function(t){return inkAt(FM,doc,t,W,H);});
+  L.push('layers after split: '+FM.scene.layers.length);
+  FM.scene.layers.forEach(function(l){var a=l.textAnim||{};L.push('  '+l.name+' start='+l.start+' dur='+l.duration+'  durIn='+a.durIn+' durOut='+a.durOut+' stagger='+a.stagger);});
+  L.push('');
+  L.push('  t      before   after');
+  var worst=0,worstT=null;
+  times.forEach(function(t,i){
+    var b=before[i],a=after[i], base=Math.max(b,a,1), d=Math.abs(a-b)/base;
+    if(d>worst){worst=d;worstT=t;}
+    L.push('  '+String(t).padEnd(7)+String(b).padEnd(9)+String(a)+((d>0.05)?'   <-- CHANGED '+(d*100).toFixed(0)+'%':''));
+  });
+  L.push('');
+  L.push(worst>0.05
+    ? '❌ the split CHANGED what is on screen: worst '+(worst*100).toFixed(0)+'% at t='+worstT
+    : '✅ the split is invisible — the same pixels either side');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

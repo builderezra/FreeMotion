@@ -2881,6 +2881,13 @@ window.FM = window.FM || {};
      * Unconditional on `reversed`: reversal swaps which part of the SOURCE each half plays, but the
      * fades are timeline-local, and A is still the half at the head of the timeline. */
     B.fadeIn = 0; layer.fadeOut = 0;
+    /* A text layer's in/out animation is timed the SAME edge-anchored way (`t - layer.start` and
+     * `layer.start + layer.duration - t` in drawAnimatedText), so it divides for the same reason —
+     * and it is the louder of the two: measured, the title VANISHED for 1.2s across the cut, not
+     * merely dimmed. `stagger` goes with durIn because with durIn 0 the units still pop in one at a
+     * time; `durIn` cannot simply be deleted either, since it defaults to 0.6 when absent. */
+    if (layer.textAnim) layer.textAnim.durOut = 0;
+    if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
     if (Array.isArray(layer.captions)) {
       // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
       const orig = layer.captions;

@@ -1641,3 +1641,40 @@ SOURCE each half plays, but fades are timeline-local and A is still the half at 
 **Guard:** `split-fade` samples the entire timeline either side of the cut, not just the seam, and
 separately asserts the real fades survive. Mutation-checked BOTH ways — restoring the bug, and clearing
 every fade instead — because a seam-only assertion would have called the second one a pass.
+
+## 32. The same split bug again, in TEXT — and louder (21 Aug, v11.03) — REAL BUG
+
+§31 fixed fades at a split. The right next question was not "what else is broken" but **"what else is
+anchored to a clip's edges?"** — because that, not fades specifically, was the actual fault.
+
+A sweep for edge-anchored layer properties returned `fadeIn`/`fadeOut` and nothing else, which looked
+like the class was closed. It was not: the second one is not a layer property at all. It is
+**`layer.textAnim`**, an object, and `drawAnimatedText` times it exactly the same way —
+`tIn = t - layer.start`, `tToEnd = layer.start + layer.duration - t`.
+
+So splitting an animated title made it animate OUT into the cut and back IN from it. Measured on real
+pixels (`tests/_splittext.html`, ink counted by colour because the project paints its own background):
+
+| t | ink before | ink after |
+|---|---|---|
+| 4.0 | 473 | 473 |
+| 4.7 | 473 | **0** |
+| 5.0 | 473 | **0** |
+| 5.3 | 473 | **0** |
+| 6.0 | 473 | 473 |
+
+**The title disappeared completely for 1.2 seconds.** Worse than the fade case, which at least stayed
+partly visible.
+
+**Two things that would have made a careless fix wrong**, both found by trying it:
+- `durIn` cannot simply be deleted — `drawAnimatedText` defaults it to **0.6 s when absent**, so removing
+  the key restores the bug rather than fixing it.
+- Setting `durIn` to 0 is not enough on its own: with no duration the units still pop in one at a time,
+  because the staggered branch (`tIn >= gi * stagger`) takes over. `stagger` has to go with it.
+
+**Guard:** `split-textanim` renders the composited scene either side of the cut and compares ink, and
+separately asserts the intro and outro that SHOULD survive still run. Mutation-checked both ways.
+
+**Method note worth keeping.** Both of these came out of one habit: when a bug is found, ask what the
+CLASS is and sweep for the rest of it. The grep for the class missed this one because it assumed the
+answer would be a scalar property on the layer. A sweep is only as good as its assumption about shape.

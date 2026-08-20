@@ -3530,6 +3530,60 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: cutting an animated TEXT clip does not replay its intro at the cut', { item: 'split-textanim' }, async function () {
+    /* BUG HUNT (21 Aug), the same class as `split-fade` and found by looking for the rest of it: a text
+       layer's in/out animation is timed off the clip's own edges too (`t - layer.start` and
+       `layer.start + layer.duration - t` in drawAnimatedText), so a split handed both halves both ends
+       of it. This one was LOUDER than the fades — measured on real pixels, the title disappeared
+       completely for 1.2 s across the cut (tests/_splittext.html), because A animated out into the
+       split and B animated back in from it.
+       Counts ink BY COLOUR rather than by alpha: the project paints its own background, so an
+       alpha test reports the entire canvas. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 320, H = 180;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const ink = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 140 && d[i + 1] > 140 && d[i + 2] > 140) n++;
+        return n;
+      };
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('text', { name: 'title', text: 'HELLO', fontSize: 48, color: '#ffffff', fill: '#ffffff' });
+      A.start = 0; A.duration = 10;
+      A.textAnim = { preset: 'fade', durIn: 0.6, durOut: 0.6, stagger: 0.04 };
+      FM.scene.layers.push(A);
+      const times = [0, 0.3, 0.6, 1, 4, 4.7, 4.9, 5, 5.1, 5.3, 6, 9, 9.4, 9.7, 10];
+      const before = times.map(ink);
+      if (!(before[3] > 50)) throw new Error('the probe never drew any text at all — ' + before.join(',') + ' (the assertions below would be meaningless)');
+      FM.time = 5;
+      await FM.splitLayer(A.id);
+      if (FM.scene.layers.length !== 2) throw new Error('the split did not produce two halves');
+      const after = times.map(ink);
+      let worst = 0, worstT = null;
+      times.forEach((t, i) => {
+        const base = Math.max(before[i], after[i], 1);
+        const d = Math.abs(after[i] - before[i]) / base;
+        if (d > worst) { worst = d; worstT = t; }
+      });
+      if (worst > 0.05) throw new Error('the split changed what is on screen by ' + (worst * 100).toFixed(0) + '% at t=' + worstT +
+        ' (ink was ' + before[times.indexOf(worstT)] + ', now ' + after[times.indexOf(worstT)] + ')');
+      /* The animations that SHOULD survive must still run — clearing all four numbers would pass the
+         check above while silently deleting his title animation. */
+      if (!(after[0] < 50)) throw new Error('the intro animation at the head of the clip was lost (ink ' + after[0] + ' at t=0)');
+      if (!(after[times.length - 1] < 50)) throw new Error('the outro animation at the tail was lost (ink ' + after[times.length - 1] + ' at t=10)');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: cutting a clip does not fade it to black and silent at the cut', { item: 'split-fade' }, async function () {
     /* BUG HUNT (21 Aug). A split is meant to be INVISIBLE — two halves end to end should look and sound
        exactly like the one clip did. They did not. `FM.fadeMul` measures the fade from each clip's OWN
