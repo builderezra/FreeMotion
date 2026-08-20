@@ -11851,3 +11851,47 @@ wait for them to report back."*
       and NOT the one he reported — #402 was about yellow and about grey text, both of which are fixed.
       **Do not "fix" it by adding `!important`** — that hides the cause, and the cause is the interesting
       part here. Reproduce it in the live app first and find out which of the three it is.
+- [ ] **428 — The Media and Audio sections are broken.** (20 Aug, via the phone inbox.) His words,
+      verbatim:
+
+      > These sections are broken now media audio
+
+      That is the whole message, quoted rather than paraphrased. Two sections named — **Media** and
+      **Audio** — and the word "now", which says they worked before: this is a REGRESSION, not a gap.
+      ⚠️ **Which Media and Audio?** The names appear in more than one place and guessing wrong wastes the
+      item: the ADD MENU has Media and Audio tabs, and there is also the media LIBRARY and the audio half
+      of a clip's inspector. The add-menu tabs are the first suspect — they are what he would have been
+      standing in front of for both to break at once, and the add menu is what the last several releases
+      have been moving around.
+
+      📐 **INVESTIGATED 20 Aug at v10.63, on the phone sheet at 380px. NO DEFINITE BREAK FOUND — here is
+      exactly what was ruled out, so the next round does not repeat it.**
+      · **Both tabs switch and render their own content.** Media shows Import · Sample clip · AI Scene;
+        Audio shows Import audio · Sound effects · Record voice. No console errors, no thrown errors.
+      · **A false alarm of my own, recorded so nobody repeats it:** the first probe reported that EVERY
+        tab showed the same nine tiles. That was the probe, not the app — there are TWO add-menu
+        instances in the DOM (the phone sheet and the parked PC panel), and a document-wide
+        `querySelector` was clicking the parked one's tab while reading the sheet. Scope every query to
+        `#add-sheet`. (`tests/_tabshot.html`, `tests/_tabcheck.html`, `tests/_tabtap.html` all do now.)
+      · **Taps register**: each tile closes the sheet when clicked. "Sample clip" appeared to add nothing,
+        but `FM.addSampleClip` GENERATES a clip and is async — the probe's 1.2s wait was too short, so
+        that is not evidence of a break either.
+      · ⚠️ **A screenshot-harness trap worth keeping:** `tests/_shot.sh` uses `--virtual-time-budget`,
+        under which the sheet's slide-up transition never advances, so the sheet is still parked
+        off-screen in the shot. Anything involving a transition needs the real-time CDP path instead
+        (see the `probe.py` / `shot_cdp.py` pattern in the scratchpad, or drive `tests/_cdp.py` directly).
+      **THE ONE THING THAT LOOKS WRONG, and the best current theory:** Media and Audio have **three**
+      tiles each, in the same **354x286** body that Elements fills with nine — measured 113x64 tiles in a
+      single row, leaving roughly 190px of empty panel beneath them. And "now" fits: **v10.25 (#404), his
+      own request**, made every add menu the same height reaching up to the canvas. Three tiles huddled at
+      the top of a tall empty box is what "broken" looks like from across a room.
+      ⚠️ **The fix is NOT in `planGrid`.** That fitter is PC-panel only — `js/addmenu.js` says so at the
+      top of the fit section: *"every style it needs is scoped to `.addmenu--fit`, a class the sheet never
+      gets"*. A change there was written, measured to do nothing on the phone, and reverted. The sheet's
+      grid is plain CSS (`.addmenu--sheet .addmenu-body`, `.addmenu-grid`), and that is where the spare
+      height has to be dealt with — by filling it, centring in it, or letting a sparse tab be shorter
+      (which would undo #404, so it needs his word).
+      **ASKED HIM (20 Aug):** whether "broken" is that empty space, or something that does not WORK when
+      he taps into those two tabs. Everything above says the tabs function, so the answer decides whether
+      this is a layout job or a hunt for something the probes cannot see.
+

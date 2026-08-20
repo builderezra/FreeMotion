@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Add sheet with a chosen tab</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.addMenu&&w.FM.mobile)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), Q=new URLSearchParams(location.search);
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(600);
+  FM.scene.layers.length=0; FM.refreshAll(); await sleep(200);
+  FM.mobile.openAdd(); await sleep(800);
+  var want=(Q.get('tab')||'media').toLowerCase();
+  var btn=[].slice.call((d.getElementById('add-sheet')||d).querySelectorAll('.addmenu-tab')).filter(function(b){return (b.textContent||'').trim().toLowerCase().indexOf(want)>=0;})[0];
+  if(btn){ btn.click(); await sleep(800); }
+  document.title = btn ? 'ready' : 'ERR no tab button for '+want;
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>
