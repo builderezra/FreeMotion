@@ -66,9 +66,21 @@ window.FM = window.FM || {};
       // a gesture on some other layer — or set while the viewport was not a phone and this
       // function was returning early — cannot suppress an unrelated panel: anything that does not
       // match is cleared on sight.
+      /* SUPPRESS FOR THE LIFE OF THE DRAG — NEVER LATCH (queue 433 clause 2). This used to consume the
+         stamp and set `userClosed = true`, and `userClosed` is only ever reset when the selection KEY
+         changes. So grabbing the clip that is ALREADY selected latched its sheet shut: the drag ends,
+         the selection has not changed — a grab deliberately does not select — and nothing brings the
+         panel back. Measured at 380px (tests/_soloroom.html): stamp set, drag over, stamp cleared,
+         refresh → sheet STILL CLOSED with that layer still selected, and only picking a DIFFERENT clip
+         freed it. That is his report: *"I pressed on a layer and the edit menu didn't load"*.
+         `userClosed` means the user dismissed it. A grab is not a dismissal, so it must not write that
+         flag. The stamp's lifetime is the drag — timeline.js clears it when the gesture ends — and this
+         reads it without consuming it, so a mid-drag rebuild cannot let the sheet slip up either.
+         A stamp naming some OTHER layer is stale and is still cleared on sight, which is the guard that
+         stopped a flag set on desktop from suppressing an unrelated panel. */
       if (FM._sheetSuppressFor) {
-        var grabbed = FM._sheetSuppressFor; FM._sheetSuppressFor = null;
-        if (!multi && grabbed === id) { userClosed = true; return; }
+        if (!multi && FM._sheetSuppressFor === id) return;
+        FM._sheetSuppressFor = null;
       }
       if (userClosed) return;                                               // swiped away on purpose — leave it down
       if (!insp.classList.contains('open')) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); }
@@ -216,8 +228,23 @@ window.FM = window.FM || {};
     function dockSheet() {
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
       var tracks = document.getElementById('tl-tracks');
-      var b = tracks ? tracks.getBoundingClientRect().bottom : 0;
-      var top = Math.min(Math.round(b + 6), Math.round(window.innerHeight * 0.66));
+      /* DOCK TO THE ROWS, NOT TO THE CONTAINER (queue 433 clause 1). Ezra, with the band circled:
+         "Wasted space here". Measured at 380px: the clip's row ended at y=485 and the sheet started at
+         541 — a 56px strip of nothing between a clip and its own options, one and a third rows tall.
+         It is not a margin and nothing is broken: `#tl-tracks` carries
+         `padding-bottom: calc(52px + safe-area)` so you can drag a layer past the last one and so the
+         list can scroll clear of the home bar. That padding is scroll room for a LIST — and this dock
+         only ever runs in the single-selection solo view, where exactly one row is drawn and there is
+         no list to scroll. So the sheet was measuring an allowance for content that does not exist.
+         Measuring the last ROW instead leaves the padding doing its job everywhere it has one. */
+      var bottom = 0;
+      if (tracks) {
+        var rows = tracks.querySelectorAll('.track-row, .tl-addrow');
+        for (var i = 0; i < rows.length; i++) bottom = Math.max(bottom, rows[i].getBoundingClientRect().bottom);
+        // No rows at all (an empty project) → the container is the only thing there is to measure.
+        if (!bottom) bottom = tracks.getBoundingClientRect().bottom;
+      }
+      var top = Math.min(Math.round(bottom + 6), Math.round(window.innerHeight * 0.66));
       insp.style.top = top + 'px';
       insp.style.maxHeight = 'none';
     }

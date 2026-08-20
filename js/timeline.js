@@ -186,6 +186,7 @@ window.FM = window.FM || {};
       // Before clipMove is nulled — the restore reads the width it borrowed off the gesture. (queue 115)
       endClipEdgeScroll();
       clipMove = null;
+      FM._sheetSuppressFor = null;   // the gesture is over by every route, not only the tidy one (queue 433)
     }
     if (trimDrag) {
       const L = trimDrag.layer;
@@ -3043,6 +3044,11 @@ window.FM = window.FM || {};
         }
         if (clipMove) {
           const cm = clipMove; clipMove = null; hideSnap();
+          /* THE GRAB IS OVER, SO THE SUPPRESSION IS OVER (queue 433 clause 2). The note where this is
+             stamped has always said "Cleared on pointerup/cancel" and nothing ever cleared it — the
+             sheet consumed it instead, and turned it into a latch that shut that layer's panel for the
+             rest of the session. Its lifetime is the gesture, and this is where the gesture ends. */
+          FM._sheetSuppressFor = null;
           if (cm.moved) {
             // Moving a clip in time carries its whole animation with it: retime every keyframe by the
             // same delta (keyframe times are absolute project time, so they'd otherwise be left behind).

@@ -3221,6 +3221,89 @@
     }
   });
 
+  /* ---- QUEUE 433: the band under the clip, and the menu that would not come back ---------------
+   * His words, with the band circled in orange: *"Wasted space here and also I had a glitch where I
+   * pressed on a layer and the edit menu didn't load"*. Two separate defects, both measured at 380px
+   * before anything was changed (tests/_soloroom.html). */
+  async function q433Solo(fn) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { name: 'C' + i, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+          L.start = i * 1.5; L.duration = 1.2; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 10;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(140);
+        const A = FM.scene.layers[1];
+        FM.selectLayer(A.id);
+        await sleep(320);
+        const insp = document.getElementById('inspector-panel');
+        if (!insp) throw new Error('there is no #inspector-panel');
+        if (!insp.classList.contains('open')) throw new Error('selecting a clip did not open the phone sheet, so nothing below is measuring the docked state');
+        return await fn(A, insp, sleep);
+      }, 380);
+    } finally {
+      FM._sheetSuppressFor = null;
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  }
+
+  test('433: the phone sheet docks under the clip, not under the list’s scroll padding', { item: '433' }, async function () {
+    /* MEASURED BEFORE: the clip's row ended at y=485 and the sheet started at 541 — 56px of nothing
+       between a clip and its own options, which is the band he circled. Nothing was broken: #tl-tracks
+       carries `padding-bottom: 52px + safe-area` so a layer can be dragged past the last one and the
+       list can scroll clear of the home bar. But this dock only runs in the SOLO view, where one row is
+       drawn and there is no list to scroll, so the sheet was leaving room for content that cannot exist. */
+    return await q433Solo(async function (A, insp, sleep) {
+      const row = document.querySelector('#tl-tracks .track-row');
+      if (!row) throw new Error('no .track-row on screen in the solo view');
+      const rows = document.querySelectorAll('#tl-tracks .track-row').length;
+      if (rows !== 1) throw new Error('the solo view drew ' + rows + ' rows — this test is about the one-row case');
+      const rr = row.getBoundingClientRect(), ir = insp.getBoundingClientRect();
+      const gap = ir.top - rr.bottom;
+      if (gap > 16) throw new Error('there are ' + gap.toFixed(1) + 'px between the bottom of the clip’s row and the top of its options — that is the wasted band, and it is the list’s scroll padding being measured as if it held rows');
+      if (gap < -1) throw new Error('the sheet now overlaps the clip’s row by ' + (-gap).toFixed(1) + 'px');
+      /* AND THE SCROLL ROOM IS STILL THERE. Deleting the padding would pass the assertion above and
+         break dragging a layer past the last one — a fix that trades one complaint for another. */
+      const pad = parseFloat(getComputedStyle(document.getElementById('tl-tracks')).paddingBottom) || 0;
+      if (pad < 40) throw new Error('#tl-tracks lost its bottom scroll padding (' + pad + 'px) — that is the room to drag a layer past the last one, and the gap was fixed by removing it rather than by not measuring it');
+    });
+  });
+
+  test('433: grabbing a clip hides its sheet only while the drag lasts, and never latches it shut', { item: '433' }, async function () {
+    /* Grabbing a clip stamps FM._sheetSuppressFor so the panel does not throw itself over the timeline
+       being dragged on. The sheet used to CONSUME that stamp and set its own `userClosed` flag — which
+       is only ever reset when the SELECTION KEY changes. A grab deliberately does not select, so after
+       dragging the clip you were already on, nothing could bring its panel back: measured at 380px,
+       the sheet stayed shut with that layer still selected and only picking a different clip freed it.
+       That is *"I pressed on a layer and the edit menu didn't load"*. */
+    return await q433Solo(async function (A, insp, sleep) {
+      // Start from closed, so "did it open" is a real question rather than "did it stay".
+      insp.classList.remove('open');
+      await sleep(120);
+      FM._sheetSuppressFor = A.id;          // exactly what timeline.js stamps when a hold arms
+      FM.refreshAll();
+      await sleep(260);
+      if (insp.classList.contains('open')) throw new Error('the sheet opened over a live clip drag — the suppression is not working at all, so the assertion below would prove nothing');
+      FM._sheetSuppressFor = null;          // …and the drag ends
+      FM.refreshAll();
+      await sleep(320);
+      if (FM.scene.selectedId !== A.id) throw new Error('the selection changed during the test, which is what clears the latch anyway — this run proves nothing');
+      if (!insp.classList.contains('open')) throw new Error('after the drag ended the clip’s own edit sheet stayed shut, with that clip still selected — nothing but selecting a different layer can bring it back');
+    });
+  });
+
   test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
     /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
        actually move in a cool way and not just a drag it up and down, like they're alive. Because

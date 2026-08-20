@@ -61,6 +61,8 @@ transition is meaningless there.
   387 clause 1). **Read its header before writing any gesture probe** — it lists the three ways this
   measurement lied first: a stale element ref across a rebuild, coordinates that move when the timeline
   scrolls, and the home overlay swallowing the press. Each produced a confident wrong answer.
+- `_soloroom.html` — the phone solo view: the gap between the clip's row and its docked options, and
+  whether a grab latches that sheet shut (queue 433). `_soloshot.html` is the same state, for a picture.
 - `_vidoutline.html` — the Outline & Shadows card on a VIDEO layer (queue 386).
 - `_shadowstyle.html` — the shadow Soft/Drop row.
 - `_emptyplus.html` — the empty-project timeline, used for the one-surface work (queue 424).

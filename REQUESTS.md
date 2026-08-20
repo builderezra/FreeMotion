@@ -12409,15 +12409,16 @@ wait for them to report back."*
       clearly at the ~24px it is actually used at and show him, rather than guessing at a style. The other
       four marks in that row (cube, shapes, picture, music note) are the family it has to sit in.
 
-- [ ] **433 — Wasted space under the clip in the solo view, and a press that did not open the edit menu.**
+- [x] **433 — Wasted space under the clip in the solo view, and a press that did not open the edit menu.**
+      ✅ **BOTH DONE — v10.73.**
       (20 Aug, phone screenshot at v10.71 with the empty band circled in orange.) His words, verbatim:
       *"Wasted space here and also I had a glitch where I pressed on a layer and the edit menu didn't load"*.
       **Clauses:**
-      1. [ ] **The wasted space** — in the phone solo view (one clip selected, its options docked below),
+      1. [x] ✅ **v10.73 — 56px → 6px.** **The wasted space** — in the phone solo view (one clip selected, its options docked below),
              there is a full empty row's worth of band between the clip's row and the `[| <|> |]` action
              row. He has circled exactly that band. Measured from his screenshot: the clip row ends around
              y=1250 and the action row starts around y=1360 — roughly a whole row of nothing.
-      2. [ ] **The glitch: pressing a layer did not load the edit menu.** Intermittent, and he says so
+      2. [x] ✅ **v10.73 — found, and it was NOT a race.** **The glitch: pressing a layer did not load the edit menu.** Intermittent, and he says so
              ("I had a glitch"), so it is a race rather than a dead path — most likely the same family as
              `FM._sheetSuppressFor`, the stamp that stops a clip GRAB from throwing the sheet over the
              timeline (js/timeline.js). If that stamp survives a gesture that ends by an unusual path, the
@@ -12426,6 +12427,26 @@ wait for them to report back."*
              one-shot leaked across a desktop/phone sync — so check it before looking anywhere else.
       ⚠️ Clause 2 has no reproduction yet. Do not close it on "cannot reproduce": find the paths that can
       leave the suppression stamped, and make it impossible by construction rather than by timing.
+
+      📐 **MEASURED AND FIXED 20 Aug, v10.73 (`tests/_soloroom.html`, 380px).**
+      **Clause 1 — the band.** The clip's row ended at y=485 and its options started at 541: **56.0px of
+      nothing**, 1.33 rows tall, which is his circle exactly. Nothing was broken — `#tl-tracks` carries
+      `padding-bottom: 52px + safe-area` so a layer can be dragged past the last one and the list can
+      scroll clear of the home bar — but the sheet docked to that PADDED edge, and this dock only ever
+      runs in the solo view, where one row is drawn and there is no list to scroll. It measures the last
+      ROW now: **56px → 6px**, with a test that also asserts the padding is still on `#tl-tracks`, so the
+      gap cannot be "fixed" next time by deleting the scroll room and trading one complaint for another.
+      **Clause 2 — and the entry's guess was wrong, which is worth recording.** It is not a race and it
+      is not timing. Grabbing a clip stamps `FM._sheetSuppressFor`; the sheet CONSUMED that stamp and set
+      its own `userClosed`, and `userClosed` is only ever reset when the selection KEY changes. A grab
+      deliberately does not select — so after dragging the clip you were already on, **nothing could bring
+      its panel back**. Measured: stamp set, drag over, stamp cleared, refresh → sheet still closed with
+      that layer still selected, and only choosing a DIFFERENT clip freed it. Deterministic, not
+      intermittent; it just needs you to have grabbed the clip you were already on, which is why it felt
+      like a glitch. `userClosed` means the user dismissed it, and a grab is not a dismissal. The stamp's
+      lifetime is the gesture now — cleared where the drag ends AND on the abort path, which is what its
+      own comment claimed all along — and the sheet reads it without consuming it, so a mid-drag rebuild
+      still cannot let the panel slip up. Both fixes mutation-proved by putting the old code back.
 
 - [ ] **434 — The shapes-menu colours are ugly and still repetitive.** (20 Aug.) His words, verbatim:
       *"The colours you chose for the shapes menu are ugly and still repetitive. Come on man put some
@@ -12610,3 +12631,22 @@ wait for them to report back."*
       ⚠️ Check what else opens over the canvas (the Add sheet, the inspector sheet, the colour picker):
       if they all want the same behaviour, it belongs in one place keyed on "a full-height sheet is open",
       not a special case for the effects browser alone.
+
+- [ ] **448 — Import Audio → pick a video from the camera roll → extract its audio as an audio layer.**
+      (20 Aug.) His words, verbatim: *"When you press import audio then choose from camera role it should
+      auto extract the audio from the video and make it like an audio layer"*.
+      **Read as:** on the Audio tab, Import opens the picker; the iOS picker offers videos too, and if he
+      picks one, the app should take the SOUND out of it and add an audio layer — not a video layer, and
+      not a silent failure.
+      **This is very buildable with what already exists:** `FM.decodeAudio` decodes a file to an
+      AudioBuffer, `FM.audioBufferToWav` writes one back out as a File (js/audio-tools.js already does
+      exactly this round trip for "remove vocals"), and `FM.addMediaLayer` takes it from there. So it is
+      decode → WAV → import, with no new dependency.
+      ⚠️ **Two honest failure modes to handle rather than swallow:** a video with NO audio track (say so
+      — do not add a silent layer), and a codec the browser cannot decode (#215's lesson: say which file
+      and why). A big clip also takes real time to decode, so it needs the loading dot.
+      ⚠️ Decide what the layer is CALLED — "IMG_4350 (audio)" reads better than the bare filename, since
+      the timeline will otherwise show something identical to the video layer beside it.
+      ⚠️ WAV is uncompressed: a 3-minute clip is ~30MB in IndexedDB. Worth checking against #430's
+      storage-budget work before shipping — M4A/AAC (v10.72) is now available as an encoder if the size
+      turns out to matter.

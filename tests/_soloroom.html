@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Solo-view gap, and the sheet that will not come back (queue 433)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1000px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 433, both clauses.
+   1. the empty band he circled between the clip's row and the action row in the phone solo view;
+   2. "I pressed on a layer and the edit menu didn't load" — read as a race in the entry, but the code
+      says otherwise: grabbing a clip stamps FM._sheetSuppressFor, and js/mobile.js turns that stamp
+      into `userClosed = true`, which is only ever reset when the SELECTION KEY changes. Grab a clip
+      that is already selected and its sheet is latched shut until you select something else. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline&&w.FM.mobile)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+
+  FM.scene.layers.length=0;
+  for(var i=0;i<4;i++){
+    var L=FM.makeLayer('shape',{name:'C'+i,shape:'rect',x:540,y:960,shapeW:300,shapeH:300,fill:'#3a7bd5'});
+    L.start=i*1.5; L.duration=1.2; FM.scene.layers.push(L);
+  }
+  FM.scene.project.duration=10;
+  FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+
+  var A=FM.scene.layers[1];
+  FM.selectLayer(A.id); await sleep(700);
+  var insp=d.getElementById('inspector-panel');
+  say('sheet open after selecting a clip: '+(insp&&insp.classList.contains('open')?'yes':'NO — nothing below is meaningful'));
+
+  // ---- CLAUSE 1: the band he circled ----
+  var row=d.querySelector('.track-row'), tl=d.getElementById('timeline'), panel=d.getElementById('timeline-panel');
+  if(row&&insp&&tl&&panel){
+    var rr=row.getBoundingClientRect(), ir=insp.getBoundingClientRect(), tr=tl.getBoundingClientRect(), pr=panel.getBoundingClientRect();
+    say('');
+    say('CLAUSE 1 — the empty band, measured at 380px');
+    say('   rows on screen: '+d.querySelectorAll('.track-row').length+'   (solo view draws one)');
+    say('   clip row      : '+rr.top.toFixed(0)+' → '+rr.bottom.toFixed(0)+'  (h '+rr.height.toFixed(0)+')');
+    say('   timeline      : '+tr.top.toFixed(0)+' → '+tr.bottom.toFixed(0));
+    say('   panel         : '+pr.top.toFixed(0)+' → '+pr.bottom.toFixed(0));
+    say('   sheet top     : '+ir.top.toFixed(0));
+    say('   ⇒ GAP between the bottom of the clip row and the top of the sheet: '+(ir.top-rr.bottom).toFixed(1)+'px'
+        +'   ('+((ir.top-rr.bottom)/Math.max(1,rr.height)).toFixed(2)+' rows of nothing)');
+    var addRow=d.querySelector('.tl-addrow');
+    if(addRow){ var ar=addRow.getBoundingClientRect(); say('   add row       : '+ar.top.toFixed(0)+' → '+ar.bottom.toFixed(0)+'  (h '+ar.height.toFixed(0)+')  — drawn in solo? '+(ar.height>0?'yes':'no')); }
+    else say('   add row       : not drawn in the solo view');
+  }
+
+  // ---- CLAUSE 2: grab a clip that is already selected, then try to get its menu back ----
+  say('');
+  say('CLAUSE 2 — grab the clip that is ALREADY selected, then ask for its menu again');
+  say('   before: sheet '+(insp.classList.contains('open')?'open':'closed'));
+  // exactly what timeline.js does when a hold arms on a clip
+  FM._sheetSuppressFor = A.id;
+  FM.refreshAll(); await sleep(300);
+  say('   after the grab stamp + a refresh: sheet '+(insp.classList.contains('open')?'open':'closed')
+      +'   (the stamp is meant to stop it OPENING over a drag)');
+  /* THE LATCH, ISOLATED. A grab stamps FM._sheetSuppressFor; syncSheet turns that into
+     `userClosed = true` and returns. `userClosed` is only reset when the selection KEY changes — so
+     once the drag is over, nothing brings the sheet back for the clip you were dragging, because that
+     clip is still the selection. Driven at the seam, with the sheet CLOSED first so "did it open" is a
+     real question. */
+  insp.classList.remove('open');
+  await sleep(200);
+  FM._sheetSuppressFor = A.id;
+  FM.refreshAll(); await sleep(300);
+  say('   [isolated] stamp set, sheet closed → after a refresh: '+(insp.classList.contains('open')?'open':'closed')+'  (should stay closed — a drag owns the screen)');
+  FM._sheetSuppressFor = null;   // the drag is over
+  FM.refreshAll(); await sleep(400);
+  say('   [isolated] drag over, stamp cleared → after a refresh: '+(insp.classList.contains('open')?'OPEN ✅':'STILL CLOSED ❌ — latched, and only a different selection clears it')+'   selectedId still A? '+(FM.scene.selectedId===A.id));
+  say('');
+  // The sheet goes down. Two ways, and BOTH are worth measuring, because either is a plausible
+  // reading of "I pressed on a layer and the edit menu didn't load".
+  //   a) the grab stamp made syncSheet set userClosed = true (js/mobile.js:71);
+  //   b) he swiped it away himself, which sets the same flag by design.
+  // Either way the flag only clears when the selection KEY changes — and tapping the clip that is
+  // already selected does not change it. So the sheet is latched shut for that layer.
+  var down=d.querySelector('.insp-grip')||insp;
+  var ir0=insp.getBoundingClientRect();
+  function pe(type,x,y,id){return new W.PointerEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,pointerId:id,pointerType:'touch',isPrimary:true,button:0,buttons:type==='pointerup'?0:1});}
+  var gx=ir0.left+ir0.width/2, gy=ir0.top+8;
+  down.dispatchEvent(pe('pointerdown',gx,gy,71));
+  for(var k=1;k<=8;k++){ await sleep(16); W.dispatchEvent(pe('pointermove',gx,gy+k*26,71)); }
+  W.dispatchEvent(pe('pointerup',gx,gy+8*26,71));
+  await sleep(600);
+  say('   after swiping the sheet down: '+(insp.classList.contains('open')?'still open (the swipe did not take)':'closed'));
+
+  // …now TAP THE SAME CLIP AGAIN — the selection does not change, which is the whole point.
+  var wasSel=FM.scene.selectedId;
+  FM.selectLayer(A.id); FM.refreshAll();
+  await sleep(600);
+  var back=insp.classList.contains('open');
+  say('   selection unchanged? '+(wasSel===FM.scene.selectedId?'yes (this IS tapping the clip you are already on)':'no'));
+  say('   tapped the same clip again → sheet '+(back?'OPEN ✅':'STILL CLOSED ❌ — this is "the edit menu didn\'t load"'));
+  // and prove it is a LATCH rather than the sheet being broken: a different clip opens it fine
+  FM.selectLayer(FM.scene.layers[2].id); FM.refreshAll(); await sleep(500);
+  say('   selecting a DIFFERENT clip → sheet '+(insp.classList.contains('open')?'OPEN':'closed')
+      +'   (opening here while the line above stayed shut = latched per selection, not broken)');
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>
