@@ -11089,7 +11089,8 @@ wait for them to report back."*
       clip legitimately belongs at 5 minutes in a long project) and guessing it would trade his bug for a
       limit he never asked for.
 
-- [ ] **395 — More export formats, MP3 among them.** (19 Aug, via the phone inbox.)
+- [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
+      export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
       **Clauses:**
       1. Audio-only export — MP3 or whatever the browser can actually encode without a library.
@@ -11121,7 +11122,24 @@ wait for them to report back."*
       mixdown, with trims, fades, per-clip volume, solo/mute and audio effects already applied and
       already covered by the suite. So WAV is not "write an exporter", it is: take `mix.audioBuffer`,
       interleave the channels, put a 44-byte RIFF header in front, save. The hard part is done.
-      🔧 **RECOMMENDATION, so this is not another open question:** ship **M4A (AAC)** and **WAV** as the
+      🚨 **AND THEN I FOUND IT ALREADY EXISTS — 20 Aug, after doing all of the above.** `index.html:722`
+      has `<option value="audio">Audio only (WAV)</option>`, shipped under **queue 216** ("Add an export
+      option to just export audio"), and its comment states the same reasoning this investigation
+      reconstructed from scratch: WAV because the mix already comes out of OfflineAudioContext as raw
+      samples and needs no codec, and because #215 proved a browser can refuse to encode AAC and hand you
+      a silent file. `syncExportFormat` even hides the picture controls for it.
+      **So clause 1 is DONE and was done before he asked.** The measurement above is still worth keeping —
+      it is the honest codec table for clause 2 — but the recommendation it led to was to build something
+      that ships today, which is the "#37 was already done" failure this file exists to catch, arrived at
+      by measuring the browser instead of first reading the dialog.
+      ✅ **WHAT IS ACTUALLY LEFT:** only "more formats" beyond WAV — i.e. **MP3, which needs a library**
+      (no browser encodes it), or M4A/AAC, which is smaller but can fail for want of a codec exactly as
+      #215 documented. **Both are his call, not a build decision**, and neither is urgent given a working
+      audio export already exists.
+      ⚠️ **NEXT TIME, THE ORDER IS: read the UI, then measure the platform.** This entry's own warning said
+      "Check what the exporter already does… this may be a third branch of an existing dialog" — and it
+      was right.
+      🔧 **The superseded recommendation, kept for the record:** ship **M4A (AAC)** and **WAV** as the
       audio-only options — both free, both native, both work where video export already works — and only
       add MP3 if he specifically wants that extension. "or whatever" reads like *give me a way to get the
       audio out*, and these two do that today. **Building it does not need his answer; adding MP3 does.**
