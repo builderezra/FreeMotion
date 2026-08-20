@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>What is drawn past the end of the project</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  FM.scene.layers.length=0;
+  // two short clips, so there is a clear "after this" region on the lane
+  for(var i=0;i<2;i++){
+    var L=FM.makeLayer('shape',{name:'Clip '+(i+1),shape:'rect',x:540,y:700+i*260,shapeW:300,shapeH:220,fill:['#3a7bd5','#29d9bb'][i]});
+    L.start=0; L.duration=2.5; FM.scene.layers.push(L);
+  }
+  FM.refreshAll(); FM.timeline.rebuild();
+  if(FM.timeline.setZoom) FM.timeline.setZoom(1.1, 0);
+  FM.time=0; FM.timeline.updatePlayhead();
+  await sleep(700);
+  document.title='ready';
+ }).catch(function(e){document.title='ERR '+e.message;});
+});
+</script></body></html>

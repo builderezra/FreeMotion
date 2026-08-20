@@ -12007,6 +12007,21 @@ wait for them to report back."*
              timeline, past which the ruler keeps drawing its notches and the lane keeps its treatment.
              ⚠️ He sent no screenshot with this one, so CHECK what is actually drawn past the last clip /
              past `project.duration` before changing anything, and say which cut-off was assumed.
+             📐 **PHOTOGRAPHED 20 Aug (`tests/_pastend.html`, via `tests/_shotlive.py`) — two 2.5s clips on
+             a 380px phone, playhead at 0. There are FOUR separate things it could be**, and naming them
+             is most of the work, because "the lines" is ambiguous on this screen:
+             1. **The head divider** — a vertical hairline at the track-head boundary (`--head-w`), which
+                queue 417 deliberately aligned so every row cuts off at the same place;
+             2. **the ruler's vertical notches**, which continue across the lane the whole scrollable
+                width — including well past the last clip;
+             3. **the shading either side of the playhead**: the lane left of time 0 reads a different
+                shade from the lane over the clips;
+             4. **the add row's own treatment** — a dashed outline and a tinted wash spanning the full
+                width, past everything.
+             ⚠️ Any of those four fits "lines or special colouring", and three of them are deliberate
+             (417, the ruler, and the add row's affordance). **Removing the wrong one undoes a request he
+             already made**, which is why this is not being guessed at — one circle on a screenshot, or
+             "the ruler lines" / "the add row" / "the shading", picks it in a word.
       2. [ ] **The + button must be STIFF while you swipe the timeline** — it "moves around and stuff",
              so it is tracking the scroll when it should be pinned. Likely the add-row's `+` inside
              `.tl-addrow-head`, or the empty-state disc: the row is sticky-left, and a sticky element
