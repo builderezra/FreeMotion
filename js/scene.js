@@ -718,7 +718,21 @@ window.FM = window.FM || {};
   // scaled down proportionally so they meet at a single peak (a triangle) instead of overlapping —
   // which would otherwise produce out-of-order Web Audio automation (a pop) on export/preview.
   FM.fadeWindows = function (layer, clipDur) {
-    let fi = Math.max(0, layer.fadeIn || 0), fo = Math.max(0, layer.fadeOut || 0);
+    /* FINITE, NON-NEGATIVE NUMBERS, ALWAYS — the same discipline as FM.speedAt above, and for the same
+     * reason (bug hunt, 21 Aug). `Math.max(0, layer.fadeIn || 0)` returns NaN for a string or an object
+     * and Infinity for Infinity, and the proportional scaling below cannot fix either: it is skipped
+     * entirely when `clipDur <= 0`, and `Infinity * 0` is NaN rather than 0.
+     * Swept over fadeIn x fadeOut x clipDur including hostile values (tests/_fadesweep.html): 342 of 726
+     * combinations produced a non-finite window before this.
+     * NaN is mostly harmless downstream — every consumer tests `fi > 0`, which NaN fails, so the fade is
+     * silently LOST rather than wrong. **Infinity is not.** `js/audio-play.js` does
+     * `linearRampToValueAtTime(vol, base + fi / pr)` behind exactly that `fi > 0` test, and Infinity
+     * passes it: Web Audio throws on a non-finite time, which kills playback. Reachable the way all of
+     * these are — a saved document the UI did not write.
+     * Coerced at the source rather than guarded at each caller, because there are three of them and the
+     * next one will not know. */
+    const num = v => { const n = (typeof v === 'number') ? v : parseFloat(v); return (isFinite(n) && n > 0) ? n : 0; };
+    let fi = num(layer.fadeIn), fo = num(layer.fadeOut);
     if (clipDur > 0 && fi + fo > clipDur) { const k = clipDur / (fi + fo); fi *= k; fo *= k; }
     return { fi: fi, fo: fo };
   };

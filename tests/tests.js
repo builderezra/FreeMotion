@@ -3480,6 +3480,56 @@
     }
   });
 
+  test('audio fades: the gain envelope is finite, in range, and has one peak', { item: 'fade-sweep' }, function () {
+    /* BUG HUNT (21 Aug). `FM.fadeWindows` / `FM.fadeMul` shape the gain of every clip in the preview mix
+       AND in the export. The suite had 28 audio tests and **none** touched either function, while the
+       code states an invariant nobody checked: overlapping fades are scaled "so they meet at a single
+       peak (a triangle) instead of overlapping — which would otherwise produce out-of-order Web Audio
+       automation (a pop)".
+       WHAT THE SWEEP FOUND: `Math.max(0, layer.fadeIn || 0)` gives NaN for a string or object and
+       Infinity for Infinity, and the scaling cannot fix either — it is skipped when `clipDur <= 0`, and
+       `Infinity * 0` is NaN. 342 of 726 combinations produced a non-finite window.
+       NaN is mostly harmless: every consumer tests `fi > 0`, which NaN fails, so the fade is silently
+       LOST rather than wrong. **Infinity is not** — js/audio-play.js does
+       `linearRampToValueAtTime(vol, base + fi / pr)` behind that same `fi > 0` test, and Infinity passes
+       it. Web Audio throws on a non-finite time, which kills playback.
+       Five invariants, swept over fadeIn x fadeOut x clipDur including hostile values. */
+    if (!FM.fadeWindows || !FM.fadeMul) throw new Error('FM.fadeWindows / FM.fadeMul are missing');
+    const FADES = [0, 0.25, 1, 2, 5, -1, NaN, Infinity, 'x', {}, null];
+    const DURS = [0.5, 1, 3, 0, -2, NaN];
+    let n = 0, sawReal = false;
+    DURS.forEach(dur => FADES.forEach(fi0 => FADES.forEach(fo0 => {
+      const L = { fadeIn: fi0, fadeOut: fo0 };
+      const w = FM.fadeWindows(L, dur);
+      n++;
+      const tag = 'dur=' + String(dur) + ' in=' + String(fi0) + ' out=' + String(fo0);
+      if (!w || !isFinite(w.fi) || !isFinite(w.fo)) throw new Error(tag + ': the fade windows are ' + JSON.stringify(w) + ' — a non-finite one reaches linearRampToValueAtTime, and Web Audio throws on that');
+      if (w.fi < 0 || w.fo < 0) throw new Error(tag + ': a negative fade window ' + JSON.stringify(w));
+      if (isFinite(dur) && dur > 0 && w.fi + w.fo > dur + 1e-9) throw new Error(tag + ': the fades OVERLAP (' + w.fi.toFixed(3) + ' + ' + w.fo.toFixed(3) + ' > ' + dur + ') — that is the out-of-order automation the scaling exists to prevent');
+      const D = (isFinite(dur) && dur > 0) ? dur : 1;
+      let prev = null, dir = 0, changes = 0;
+      for (let k = 0; k <= 24; k++) {
+        const into = D * k / 24;
+        const g = FM.fadeMul(L, into, dur);
+        if (!isFinite(g) || g < 0 || g > 1) throw new Error(tag + ': gain ' + g + ' at into=' + into.toFixed(2) + ' — it multiplies every sample, so this is silence or clipping');
+        /* THE START/END CHECKS ONLY APPLY TO A CLIP THAT HAS A DURATION. With `clipDur = 0` there are no
+           samples to fade, and `fadeMul`'s `clipDur &&` guard deliberately skips the fade-out rather
+           than divide by zero — so gain 1 is correct there. The first version of this assertion did not
+           carry that condition and went red against right code: the queue-427 trap, an assertion too
+           strict to ship. */
+        const realDur = isFinite(dur) && dur > 0;
+        if (realDur && k === 0 && w.fi > 0 && g > 1e-9) throw new Error(tag + ': a fade-IN that does not start at silence (' + g + ')');
+        if (realDur && k === 24 && w.fo > 0 && g > 1e-9) throw new Error(tag + ': a fade-OUT that does not end at silence (' + g + ')');
+        if (prev !== null && Math.abs(g - prev) > 1e-9) { const d = g > prev ? 1 : -1; if (dir && d !== dir) changes++; dir = d; }
+        prev = g;
+      }
+      if (changes > 1) throw new Error(tag + ': the envelope changes direction ' + changes + ' times — it should rise once and fall once');
+      if (w.fi > 0 && w.fo > 0) sawReal = true;
+    })));
+    if (n < 500) throw new Error('only ' + n + ' combinations swept');
+    if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
+  });
+
   test('service worker: the page is revalidated, never taken from the browser HTTP cache', { item: '306' }, async function () {
     /* Queue 306 — "an older version of my project comes back on refresh", his most-repeated bug.
        A plain `fetch(req)` for a navigation may be answered from the BROWSER's HTTP cache, and GitHub

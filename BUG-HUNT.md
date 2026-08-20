@@ -1550,3 +1550,32 @@ test the pieces — that is a small addition, and it is recorded as such rather 
 gate doing its job: the reachability rule is guarded by existing tests, not by the new one, because the
 new one's first half never discards a snapshot and therefore never runs that sweep. Without that check
 the mutation would have been credited to the wrong assertion and the gap left open.
+
+
+## 29. 🚨 The audio fade maths had NO test, and Infinity could throw in Web Audio — FIXED v11.00
+
+**Coverage was checked before picking this time** — the lesson of section 28, where the hunt landed on
+an area already guarded by four tests. The suite has 28 audio tests and **none** touch `FM.fadeWindows`
+or `FM.fadeMul`, which shape the gain of every clip in the preview mix and in the export. The code
+states an invariant nobody was checking:
+
+> when fadeIn+fadeOut exceed the clip duration they're scaled down proportionally so they meet at a
+> single peak (a triangle) instead of overlapping — which would otherwise produce out-of-order Web Audio
+> automation (a pop) on export/preview.
+
+**342 of 726 combinations produced a non-finite window.** `Math.max(0, layer.fadeIn || 0)` gives NaN for
+a string or an object and Infinity for Infinity, and the proportional scaling cannot fix either: it is
+skipped when `clipDur <= 0`, and `Infinity * 0` is NaN.
+
+**Why NaN is survivable and Infinity is not.** Every consumer tests `fi > 0`, which NaN fails — so a
+corrupted fade is silently LOST rather than wrong. Infinity passes that test, and `js/audio-play.js`
+does `linearRampToValueAtTime(vol, base + fi / pr)` right behind it. Web Audio throws on a non-finite
+time: playback dies.
+
+Coerced at the source, like `FM.speedAt` in section 19, rather than guarded at each of the three
+callers — because the next caller will not know.
+
+⚠️ **One assertion was relaxed because IT was wrong, not the code.** Requiring a fade-out to end at
+silence when `clipDur` is 0 went red against correct behaviour: there are no samples to fade, and
+`fadeMul`'s `clipDur &&` guard deliberately skips the division rather than divide by zero. That is the
+queue-427 trap — an assertion too strict to ship — caught before it shipped this time.

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Audio fade maths sweep (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">sweeping…</pre>
+<script>
+/* BUG HUNT — `FM.fadeMul` / `FM.fadeWindows` decide the gain envelope of every clip in the PREVIEW mix
+   and in the EXPORT. Grepped the suite first: 28 audio tests, and **zero** touch either function. The
+   code states an invariant nobody checks — "when fadeIn+fadeOut exceed the clip duration they're scaled
+   down proportionally so they meet at a single peak (a triangle) instead of overlapping — which would
+   otherwise produce out-of-order Web Audio automation (a pop) on export/preview."
+   A fault here is silent damage in the finished file, which is the #215 class: you find it afterwards.
+   INVARIANTS swept over fadeIn x fadeOut x clipDur, including hostile values:
+     1. the gain is always a finite number in [0,1];
+     2. a fade-in starts at 0 and reaches 1;   3. a fade-out ends at 0;
+     4. the two windows never overlap — fi + fo <= clipDur after scaling;
+     5. the envelope has ONE peak: up, then down, never up again. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.fadeMul&&w.FM.fadeWindows)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(function(FM){
+  var FADES=[0,0.25,1,2,5,-1,NaN,Infinity,'x',{},null];
+  var DURS=[0.5,1,3,0,-2,NaN];
+  var bad=[], n=0;
+  DURS.forEach(function(dur){
+    FADES.forEach(function(fi){
+      FADES.forEach(function(fo){
+        var L={ fadeIn: fi, fadeOut: fo };
+        var w, tag='dur '+String(dur)+'  in '+String(fi)+'  out '+String(fo);
+        try { w = FM.fadeWindows(L, dur); } catch(e){ bad.push(tag+'  → fadeWindows THREW: '+e.message); return; }
+        n++;
+        if(!w || !isFinite(w.fi) || !isFinite(w.fo)) { bad.push(tag+'  → windows are '+JSON.stringify(w)); return; }
+        if(w.fi<0 || w.fo<0) { bad.push(tag+'  → a negative window '+JSON.stringify(w)); return; }
+        // 4: no overlap once there is a real duration
+        if(isFinite(dur) && dur>0 && w.fi+w.fo > dur+1e-9) bad.push(tag+'  → the two fades OVERLAP: '+w.fi.toFixed(3)+'+'+w.fo.toFixed(3)+' > '+dur);
+        // 1 + 5: sample the envelope
+        var prev=null, dir=0, changes=0, sawZeroStart=false, sawZeroEnd=false, peak=0;
+        var D = (isFinite(dur) && dur>0) ? dur : 1;
+        for(var k=0;k<=40;k++){
+          var into = D*k/40;
+          var g;
+          try { g = FM.fadeMul(L, into, dur); } catch(e){ bad.push(tag+'  → fadeMul THREW at into='+into.toFixed(2)+': '+e.message); return; }
+          if(!isFinite(g) || g<0 || g>1){ bad.push(tag+'  → gain '+g+' at into='+into.toFixed(2)+' (must be a finite 0..1)'); return; }
+          if(k===0 && w.fi>0) sawZeroStart = g < 1e-9;
+          if(k===40 && w.fo>0) sawZeroEnd = g < 1e-9;
+          if(g>peak) peak=g;
+          if(prev!==null && Math.abs(g-prev)>1e-9){ var d=g>prev?1:-1; if(dir && d!==dir) changes++; dir=d; }
+          prev=g;
+        }
+        if(changes>1) bad.push(tag+'  → the envelope changes direction '+changes+' times — it should rise once and fall once');
+        if(isFinite(dur)&&dur>0&&w.fi>0&&!sawZeroStart) bad.push(tag+'  → a fade-IN that does not start at silence');
+        if(isFinite(dur)&&dur>0&&w.fo>0&&!sawZeroEnd) bad.push(tag+'  → a fade-OUT that does not end at silence');
+      });
+    });
+  });
+  say('combinations swept: '+n);
+  say('');
+  if(!bad.length) say('✅ every combination held all five invariants');
+  else { say('❌ '+bad.length+' failure(s) — first 14:'); bad.slice(0,14).forEach(function(b){ say('   '+b); }); }
+  document.title='ready';
+ }).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;document.title='ERR';});
+});
+</script></body></html>

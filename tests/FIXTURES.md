@@ -91,6 +91,10 @@ transition is meaningless there.
   picture still there when it comes back, and is the record freed once nothing can restore it
   (bug-hunt 28)? Both halves clean.
 
+- `_fadesweep.html` — `FM.fadeWindows` / `FM.fadeMul` over fadeIn × fadeOut × clipDur including hostile
+  values (bug-hunt 29). 726 combinations against five invariants; it is what found that Infinity survives
+  the `fi > 0` test every consumer relies on.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.
