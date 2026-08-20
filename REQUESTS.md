@@ -12003,7 +12003,23 @@ wait for them to report back."*
       · and the computed colour is `rgb(233, 244, 247)` — `--text`. The rule's `border-color` and
         `box-shadow` do not land either, so the whole declaration block is being skipped.
       **That should not be possible**, which is exactly why it is written down rather than explained away.
-      The likely candidates, in order: the class is being removed again before the style resolves (a sync
+      📐 **TWO OF THE THREE CANDIDATES ARE NOW ELIMINATED (20 Aug), by reading rather than re-measuring:**
+      · **"a second `#time-readout` exists" — NO.** `index.html` carries exactly one, and no JS anywhere
+        creates one (`grep` for the id across `js/*.js` returns nothing). Worth stating because this app
+        genuinely DOES have duplicate-instance traps — the add menu has two live copies, which cost an
+        hour on queue 428 — so it was the strongest candidate and it is dead.
+      · **"a stylesheet re-inserted later reorders the cascade" — NOT via the theme.** `theme-glass.css`
+        loads after `styles.css` and does not mention `#time-readout` at all, and no rule after 2172 in
+        `styles.css` touches its colour. So the accent rule really is the last word in the stylesheets.
+      · ⚠️ **And the rule is deliberate, not leftover:** queue 402's own comment (styles.css:2213) says
+        *"The press colour is untouched — `body.fm-playing #time-readout` turns it accent"*. So this is a
+        behaviour that is supposed to work, not a rule someone forgot to delete.
+      **That leaves ONE candidate standing**, and it is the runtime one: the class going on and off again
+      before the style resolves, or something setting the colour at runtime that the earlier probe did not
+      look for (a `style` property write rather than an attribute, or a CSS custom property overridden on
+      an ancestor). Next step is a live re-measure watching `document.body.className` across a play, not
+      more reading.
+      The original candidates, in order: the class is being removed again before the style resolves (a sync
       loop reading `FM.playing`), a second `#time-readout` element exists and the wrong one is measured, or
       a stylesheet is being re-inserted after load in a way that reorders the cascade.
       ⚠️ **It means the pill probably does not visibly change while playing**, which is a real (small) bug
