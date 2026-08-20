@@ -10709,6 +10709,17 @@ wait for them to report back."*
       is broken and really laggy then it won't effect the home menu. Also if you think this is a bad idea
       then don't go through with it."* and *"I do like the effect of having a project open with the glint
       around it but not at the cost of a shitty system"*.
+      ✅ **THE JUDGEMENT HE ASKED FOR, GIVEN 20 Aug — DO IT.** He said *"if you think this is a bad idea
+      then don't go through with it"*, so this is the answer rather than a summary of one: his diagnosis is
+      correct and it is measured, not guessed — leaving a project releases NOTHING today (see the reading
+      below), so a heavy project really does keep costing him on the home screen. And the thing he did not
+      want to trade away is not in tension with it: the glint is a flag on a card and costs nothing, while
+      the cost is the resident scene, its decoded media and its render loop. Release the heavy state, keep
+      the marker; he gets both.
+      **Recorded here rather than left in a chat reply**, because an answer that lives only in a chat log is
+      the exact thing this file exists to stop — and because the next session should start at the build, not
+      at the question.
+
       **My read, to be given properly when this comes up:** the diagnosis is sound — a heavy project staying
       resident is exactly why the home screen can feel slow after opening one, and it is very likely part of
       **#355** ("exiting a project makes the UI glitch") and the standing perf items.
