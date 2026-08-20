@@ -54,6 +54,11 @@ transition is meaningless there.
   an OBJECT for a malformed speed prop. **Note the lesson in its header:** the probe had a fallback for
   `layerSourceAdvance` and missed the second instance that the suite version caught.
 
+- `_capdrift.html` — do caption cues keep their project times when the clip is moved, trimmed or split?
+  Move is measured clean; the TRIM half is unresolved (REQUESTS 452). **Read its control before reusing
+  it:** the first version reported "cues stayed put" against a clip that had never been trimmed, and
+  `FM.timeline._trimming()` is what turned that false clean into a known unknown.
+
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.
 - `_dupsweep.html` / `_pastesweep.html` — duplicate and copy→paste fidelity, plus deep-copy independence.

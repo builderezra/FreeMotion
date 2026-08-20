@@ -1241,3 +1241,37 @@ localStorage and comes in unchecked here forever after."*
 ⚠️ The same raw `layer.speed || 1` idiom survives in about ten other call sites (audio-play,
 audio-react, captions, exporter, app.js). Logged as **REQUESTS 451** rather than swept in silently —
 several of them deliberately want the STATIC value and are not a find-and-replace.
+
+
+## 20. Caption cues across clip edits — MOVE and SPLIT clean, TRIM **unresolved** (21 Aug)
+
+Caption cue times are LAYER-LOCAL: `localTime(layer, t) = t - layer.start`, with **no trim offset**. The
+timeline's own comment claims they "travel with it for free when the clip is moved or trimmed", and that
+claim is worth checking rather than trusting, because moving and trimming are not the same shape of edit:
+moving changes `start` alone, while trimming the head changes `start` AND `duration`. If a cue is measured
+from `start`, trimming the head would slide every caption later in project time — and captions already
+timed against the audio would all move.
+
+**MOVE — clean, measured.** A clip moved +1.5s carried every cue by exactly 1.5s
+(2.500–3.500 → 4.000–5.000, and so on for all three).
+
+**SPLIT — clean, by reading the code.** `FM.splitLayer` re-bases B's cues to its new start and trims A's
+to its new length, and says so in a comment. Nothing to add.
+
+**TRIM — NOT ESTABLISHED, and this is recorded as unresolved rather than as a pass.** The probe
+(`tests/_capdrift.html`) drives the real `.clip-grip` elements with real-timed pointer events, and:
+
+- the first run reported **"cues stayed put"** on both edges — against a clip whose `start` and
+  `duration` had not changed at all. Nothing was trimmed, so nothing could drift. A clean sweep that
+  measured nothing.
+- adding `FM.timeline._trimming()` as a CONTROL — a seam that exists in this repo precisely so a test can
+  tell "a trim started" from "nothing happened" — turned that into an honest **"NO TRIM EVER STARTED"**
+  on the left edge. On the right edge a trim *did* start and still changed no duration.
+
+So the harness is now trustworthy and the question is still open. **Two guesses worth measuring first,
+not acting on:** the 6s clip may be wider than the 380px viewport, so the grip found on screen maps to a
+time the clamp then refuses; and the left grip's pointerdown may be bailing before `trimDrag` is created.
+
+⚠️ **The lesson is the one this file keeps re-learning.** A gesture probe without a control does not
+report "no bug" — it reports nothing, in the shape of "no bug". The control is what turned a false clean
+into a known unknown. Logged as **REQUESTS 452**.

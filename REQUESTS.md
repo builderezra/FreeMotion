@@ -12997,3 +12997,22 @@ wait for them to report back."*
       The source-time test fetches the four audio/caption/export files and fails if the raw idiom returns
       in a path that does arithmetic on it, allowing the two safe shapes by pattern. Same technique the
       service-worker test uses. Mutation-proved by putting the exporter's back.
+
+- [ ] **452 — Finish the caption-drift hunt: does trimming a caption clip slide its cues?** (21 Aug,
+      from the v10.90 bug-hunt session.) Not his words — an unresolved measurement, filed so it is not
+      mistaken for a clean result.
+      **What IS established:** moving a clip carries every cue by exactly the same delta (measured), and
+      `FM.splitLayer` re-bases cues correctly (read in the code).
+      **What is NOT:** trimming. Cue times are `t - layer.start` with **no trim offset**, so trimming the
+      HEAD raises `start` and would slide every caption later in project time — captions already timed
+      against the audio would all move. That is the thing to prove or disprove.
+      🧪 **The harness is ready and honest** — `tests/_capdrift.html` drives the real `.clip-grip`
+      elements with real-timed pointer events and carries a CONTROL (`FM.timeline._trimming()`) that
+      makes a run where the gesture never took say so. Its first version reported "cues stayed put"
+      against a clip that had not been trimmed at all; the control is what caught that.
+      🔎 **Two things to measure before touching anything:** the 6s clip may be wider than the 380px
+      viewport, so the grip that is on screen maps to a time the clamp then refuses (try a short clip and
+      a zoomed-out timeline); and the LEFT grip's pointerdown may be bailing before `trimDrag` exists —
+      `FM.timeline._trimming()` says which.
+      ⚠️ If it turns out cues DO slide on a head trim, the fix is not obviously "stop them": think about
+      what a head trim on a caption track should mean before changing the model. Worth asking him.

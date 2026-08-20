@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Do caption cues stay put when the clip is edited? (bug hunt)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:1020px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* BUG HUNT — caption cue times are LAYER-LOCAL: `localTime(layer, t) = t - layer.start`, with no trim
+   offset. The timeline's own comment says they "travel with it for free when the clip is moved or
+   trimmed". Moving is obviously right. TRIMMING is the question: trimming the left edge raises
+   `layer.start`, and if a cue's time is measured from `start`, every caption slides later in project
+   time — captions you had already timed against the audio would all move.
+   So: record each cue's PROJECT window, apply an edit through the REAL code, and record it again.
+   ⚠️ The trims are driven through the actual grips (pointer events, spaced in real time — a synthetic
+   burst in one tick is the queue 450 trap), not by poking start/duration, because poking them would be
+   testing my model of trimming rather than trimming. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.captions&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+
+  function build(){
+    FM.scene.layers.length=0;
+    var L=FM.makeLayer('text',{name:'Caps',text:'one'});
+    L.start=2; L.duration=6; L.trimStart=0;
+    L.captions=[{start:0.5,end:1.5,text:'A'},{start:2,end:3,text:'B'},{start:4,end:5,text:'C'}];
+    FM.scene.layers.push(L);
+    FM.scene.project.duration=14;
+    FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+    return L;
+  }
+  function proj(L){ return (L.captions||[]).map(function(c){ return [(L.start+c.start).toFixed(3),(L.start+c.end).toFixed(3)].join('–'); }).join('  '); }
+  function pe(type,x,y,id){return new W.PointerEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,pointerId:id,pointerType:'touch',isPrimary:true,button:0,buttons:type==='pointerup'?0:1});}
+
+  /* The classes are `left`/`right`, not `l`/`r` — the CUE chip's grips use l/r and the CLIP's use the
+     long names. Guessing cost a run that reported "no grip on screen" against a grip that was there. */
+  async function dragGrip(side, dxPx){
+    var g=d.querySelector('.clip-grip.'+side);
+    if(!g){ say('   ✗ no .clip-grip.'+side+' on screen (is the clip selected?)'); return false; }
+    var r=g.getBoundingClientRect();
+    var x=r.left+r.width/2, y=r.top+r.height/2;
+    g.dispatchEvent(pe('pointerdown',x,y,64));
+    /* CONTROL, and the reason this probe is not to be trusted without it: the first run found both grips,
+       dispatched a full drag, and reported "cues stayed put" — against a clip whose start and duration
+       had not moved at all. Nothing was trimmed, so nothing could drift. `FM.timeline._trimming()` is a
+       seam that exists for exactly this question, so a run where the gesture never took now SAYS so
+       instead of reporting a clean sweep. */
+    var everTrimming=false;
+    for(var k=1;k<=6;k++){
+      await sleep(24);
+      W.dispatchEvent(pe('pointermove',x+dxPx*k/6,y,64));
+      if(FM.timeline._trimming && FM.timeline._trimming()) everTrimming=true;
+      await sleep(24);
+    }
+    W.dispatchEvent(pe('pointerup',x+dxPx,y,64));
+    await sleep(400);
+    if(!everTrimming) say('   ⚠️ NO TRIM EVER STARTED — the gesture did not take, so this row proves nothing');
+    return everTrimming;
+  }
+
+  // ---- 1. MOVE ----
+  var L=build(); await sleep(400);
+  var before=proj(L), s0=L.start;
+  L.start += 1.5; FM.refreshAll(); await sleep(200);
+  say('MOVE  +1.5s   before ' + before);
+  say('              after  ' + proj(L) + '   (every cue should shift by exactly 1.5)');
+
+  // ---- 2. TRIM the LEFT edge ----
+  L=build(); await sleep(500);
+  FM.selectLayer(L.id); await sleep(400);
+  before=proj(L); s0=L.start; var d0=L.duration;
+  var ok=await dragGrip('left', 60);
+  if(ok){
+    say('');
+    say('TRIM LEFT     start '+s0.toFixed(3)+' → '+L.start.toFixed(3)+'   duration '+d0.toFixed(3)+' → '+L.duration.toFixed(3));
+    say('              before ' + before);
+    say('              after  ' + proj(L));
+    say('              ⇒ cues moved by ' + (L.start - s0).toFixed(3) + 's in project time'
+        + (Math.abs(L.start - s0) > 0.02 ? '   ❌ trimming the head SLID every caption' : '   ✅ stayed put'));
+  }
+
+  // ---- 3. TRIM the RIGHT edge ----
+  L=build(); await sleep(500);
+  FM.selectLayer(L.id); await sleep(400);
+  before=proj(L); s0=L.start; d0=L.duration;
+  ok=await dragGrip('right', -60);
+  if(ok){
+    say('');
+    say('TRIM RIGHT    start '+s0.toFixed(3)+' → '+L.start.toFixed(3)+'   duration '+d0.toFixed(3)+' → '+L.duration.toFixed(3));
+    say('              before ' + before);
+    say('              after  ' + proj(L));
+    say('              ⇒ cues moved by ' + (L.start - s0).toFixed(3) + 's   (the tail should not move the heads)');
+    var over=(L.captions||[]).filter(function(c){ return c.start >= L.duration - 1e-6; });
+    say('              cues now entirely PAST the clip end: ' + over.length + (over.length?'   ← they can never show again':''));
+  }
+  document.title='ready';
+ }).catch(function(e){say('ERR '+e.message+'\n'+e.stack);document.title='ERR';});
+});
+</script></body></html>
