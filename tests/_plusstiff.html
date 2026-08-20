@@ -13,7 +13,7 @@ f.addEventListener('load',function(){
   var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
   if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
   FM.scene.layers.length=0;
-  for(var i=0;i<4;i++){
+  for(var i=0;i<26;i++){
     var L=FM.makeLayer('shape',{name:'Shape '+(i+1),shape:'rect',x:400,y:600+i*200,shapeW:300,shapeH:200,fill:'#3a7bd5'});
     L.start=i*0.8; L.duration=6; FM.scene.layers.push(L);
   }
@@ -39,6 +39,26 @@ f.addEventListener('load',function(){
     o.push('');
     o.push('  x drift '+(mxx-mnx).toFixed(2)+'px    y drift '+(mxy-mny).toFixed(2)+'px');
     o.push((mxx-mnx)>1.5 ? '  ❌ the + MOVES while the timeline scrolls' : '  ✅ the + holds still');
+    // …and VERTICALLY, which is the swipe he describes: the add row is a row IN the list, so it travels
+    // with the list by design — the question is whether the + jitters SIDEWAYS while it does.
+    o.push('');
+    o.push('vertical swipe (the row travels with the list; watch x for sideways jitter):');
+    tl.scrollLeft = 0; tl.scrollTop = 0;
+    var room = tl.scrollHeight - tl.clientHeight;
+    o.push('  scrollable room: '+room+'px  '+(room < 220 ? '❌ TOO LITTLE — anything below is vacuous' : '(enough to measure)'));
+    await new Promise(function(r){W.requestAnimationFrame(function(){W.requestAnimationFrame(r);});});
+    var vx=[], vy=[];
+    for(var s2=0;s2<12;s2++){
+      tl.scrollTop = s2*18;
+      await new Promise(function(r){W.requestAnimationFrame(function(){W.requestAnimationFrame(r);});});
+      var e2=plus(); var r2=e2.getBoundingClientRect();
+      vx.push(r2.left); vy.push(r2.top);
+    }
+    var jx=Math.max.apply(null,vx)-Math.min.apply(null,vx);
+    o.push('  x: '+vx.map(function(v){return v.toFixed(1);}).join(' '));
+    o.push('  y: '+vy.map(function(v){return v.toFixed(0);}).join(' '));
+    o.push('  sideways jitter '+jx.toFixed(2)+'px   (y travelling is correct — it is a row in the list)');
+    o.push(jx>1.5 ? '  ❌ the + SLIDES SIDEWAYS during a vertical swipe' : '  ✅ no sideways jitter');
   }
   document.getElementById('out').textContent=o.join('\n');
   document.title='ready';

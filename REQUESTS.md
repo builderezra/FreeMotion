@@ -12119,6 +12119,16 @@ wait for them to report back."*
              and samples `.tl-addrow-plus` every frame: **x drift 1.00px, y drift 0.00px**, and that
              single pixel is the sticky element settling on the first step away from scrollLeft 0. So
              under a scroll driven by JS, it is already stiff.
+             📐 **AND VERTICALLY TOO (20 Aug) — also stiff.** The first pass only scrolled sideways, which
+             is not the swipe he describes. Re-measured with the list scrolled DOWN through 809px of real
+             overflow: the + travels smoothly with the list (y 454 → 256, exactly 18px per step, which is
+             correct — it IS a row in the list) and its **x never moves at all: 26.0 across every sample,
+             0.00px of sideways jitter.**
+             ⚠️ **The first attempt at this was VACUOUS and nearly got recorded as a result** — the fixture
+             had 4 layers, the timeline did not overflow, `scrollTop` stayed 0, and "nothing moved" looked
+             like a clean pass. It is the same trap that made the vertical-glide test flaky for three
+             rounds. The probe now reports the scrollable room first and says outright when there is too
+             little for the reading to mean anything.
              **What that leaves, in the order worth trying:**
              · a REAL touch fling — native momentum scrolling updates sticky elements on the compositor,
                and iOS is known to let them lag or judder in a way `scrollLeft = n` never reproduces;
