@@ -1133,6 +1133,19 @@ window.FM = window.FM || {};
         const addIdx = statics.findIndex(sr => sr.isAdd);
         const ge = (addIdx >= 0 && g === addIdx) ? g + 1 : g;
         dropBeforeId = statics[ge] ? statics[ge].id : bottomBefore;
+        /* Seam (queue 449): what the gesture ACTUALLY resolved, straight from the code that resolved it.
+           A probe inferring the gap from row TRANSFORMS read the top of the list as disagreeing by one
+           slot, and could not tell a real off-by-one from its own reading — near the top the block's
+           soft clamp can put the gap at 0 while the row it would push is already at rest, so there is
+           nothing to see and the probe picks the next row down. It was the probe: with these numbers
+           reported, all six slots agree. Kept because the next gesture question will want it.
+           BEHIND A FLAG, because this runs on every pointermove of a drag: unset it costs one property
+           read, and building the object and mapping `statics` per frame in the gesture path #387 is
+           about would be exactly the wrong place to spend. */
+        if (FM._dragDebug) {
+          FM._dragGap = { g: g, ge: ge, addIdx: addIdx, before: dropBeforeId,
+                          statics: statics.map(sr => sr.isAdd ? '[ADD]' : sr.id) };
+        }
         /* THE SWITCH FOLLOWS THE DRAG, NOT THE DROP (queue 438). Ezra: "The switch doesn't update live
            when dragging layers or the main create layer. Make it update as ur dragging."
            He is right and the reason is structural: the switch reads `FM.addAt`, and a reorder is

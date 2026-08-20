@@ -12906,8 +12906,8 @@ wait for them to report back."*
       storage-budget work before shipping — M4A/AAC (v10.72) is now available as an encoder if the size
       turns out to matter.
 
-- [ ] **449 — Possible one-slot disagreement at the TOP of the layer list (found by measurement, not
-      reported).** (20 Aug, found while measuring #443.) Not his words — this is a lead, not a request.
+- [x] **449 — Possible one-slot disagreement at the TOP of the layer list (found by measurement, not
+      reported).** ✅ **CLOSED v10.87 — NOT A BUG. It was the probe.** (20 Aug, found while measuring #443.) Not his words — this is a lead, not a request.
       `tests/_adddrop.html` drags one layer to every slot and compares the gap you can see with where it
       lands. Slots 2–5 agree. **Slots 0 and 1 read as disagreeing by one**: aiming at the first row, the
       gap appeared to open before L1 while the layer landed before L0.
@@ -12920,6 +12920,19 @@ wait for them to report back."*
       itself rather than inferring the gap from transforms, and see whether they agree at slots 0 and 1.
       Do not "fix" this on the strength of the current reading — it is exactly the shape of the three
       lies `_scrubstart.html` told before it was believed.
+
+      ✅ **SETTLED v10.87, exactly the way this entry said to settle it: report the app's own numbers
+      instead of inferring them.** `g`, the effective gap and the resolved id now come straight from the
+      code that computes them, and **all six slots agree** — at slot 1 the app says g=1 → before L1 and
+      the layer lands before L1, while the transform reading claimed L2. The suspicion in this entry was
+      right: near the top the block's soft clamp can put the gap where the row it would push is already
+      at rest, so there is nothing to see and the probe picks the next row down. It disagreed with itself
+      between runs.
+      🧰 **Two things kept.** The seam stays, **behind `FM._dragDebug`** — it runs on every pointermove of
+      a drag, and building an object and mapping the row list per frame in the gesture path #387 is about
+      would be the wrong place to spend; unset it costs one property read. And `tests/_adddrop.html` takes
+      its VERDICT from the app's numbers now, printing the transform reading as information only: a probe
+      whose own noise reads as a bug is worse than no probe at all.
 
 - [ ] **450 — FLAKY TEST: "a vertical flick on the timeline keeps gliding, like a horizontal one".**
       (20 Aug, found by the ship gate.) Not his words — a finding, not a request.

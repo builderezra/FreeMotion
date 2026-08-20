@@ -42,6 +42,7 @@ f.addEventListener('load',function(){
     });
   }
 
+  FM._dragDebug = true;   // the resolved-gap seam is behind a flag so it costs nothing in a real drag
   seed(2); await sleep(400);
   say('rows on screen: '+rows().map(function(r){return r.name;}).join(' | '));
   var slotH = rows()[1] ? (rows()[1].top - rows()[0].top) : 42;
@@ -68,6 +69,10 @@ f.addEventListener('load',function(){
        What was wrong is that at the gap ON the add row the rows opened ABOVE it and the layer then
        landed BELOW it — the preview lying for a whole row's height. So the gap is read mid-drag and
        compared with where the layer actually goes. */
+    /* ASK THE APP, do not infer (queue 449). The transform reading below is kept because it is what the
+       eye sees, but FM._dragGap is what the gesture actually resolved — and near the top of the list the
+       two can disagree for reasons that are the PROBE, not the app. */
+    var live0 = FM._dragGap ? JSON.parse(JSON.stringify(FM._dragGap)) : null;
     var gapAt='(none)';
     var live=[].slice.call(d.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow')).filter(function(r){return !r.classList.contains('row-dragging');});
     for(var q=0;q<live.length;q++){
@@ -84,10 +89,21 @@ f.addEventListener('load',function(){
     // where did it actually land? the row it ended up ABOVE
     var idx=after.split(',').indexOf('L4');
     var landedBefore = after.split(',')[idx+1] || '(end)';
-    say('  slot '+slot+' (y '+targetY.toFixed(0)+')  gap opened before '+String(gapAt).padEnd(7)
-        +' → landed before '+String(landedBefore).padEnd(7)
+    var resolved = live0 ? (live0.statics[live0.ge] || '(end)') : '?';
+    var nameOf = function(id){ var L2=FM.scene.layers.filter(function(l){return l.id===id;})[0]; return L2?L2.name:(id||'(end)'); };
+    say('  slot '+slot+'  app says: g='+(live0?live0.g:'?')+' ge='+(live0?live0.ge:'?')+' addIdx='+(live0?live0.addIdx:'?')
+        +' → before '+(live0?nameOf(live0.before):'?'));
+    /* THE VERDICT COMES FROM THE APP'S OWN NUMBERS, not from the transform reading (queue 449).
+       Inferring the gap from "the first row pushed down" is unreliable near the top of the list — the
+       block's soft clamp can put the gap where the row is already at rest — and it disagreed with
+       itself between runs. It is still printed, because it is what the eye sees, but it is INFORMATION
+       and never the verdict: a probe whose own noise reads as a bug is worse than no probe. */
+    var appSays = live0 ? nameOf(live0.before) : '?';
+    say('  slot '+slot+' (y '+targetY.toFixed(0)+')  app resolved → '+String(appSays).padEnd(7)
+        +' landed before '+String(landedBefore).padEnd(7)
         +'  '+before+' → '+after
-        +(String(gapAt)!=='(none)' && gapAt!==landedBefore ? '   ❌ THE PREVIEW LIED' : ''));
+        +(live0 && appSays!==landedBefore && !(appSays==='?'||landedBefore==='(end)') ? '   ❌ RESOLVED ONE PLACE, LANDED ANOTHER' : '')
+        +'      [transform reading, informational: gap before '+String(gapAt)+']');
   }
   say('');
   say('(the add row sits at slot 2. Two different slots giving the same order means one of them is unreachable.)');
