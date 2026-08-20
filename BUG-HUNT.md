@@ -934,7 +934,20 @@ looked exactly like lost data on the first run:
   0.2667. The fixture uses 0.5s (frame 15 exactly) so the snap is a no-op.
 Mutation-checked by making `FM.copySelection` drop `repeater` from its snapshot.
 
-### ⚠️ A lead, not yet chased: a possibly order-sensitive test
+### ✅ CHASED AND FIXED (20 Aug): the order-sensitive test was time-sensitive
+The lead below was real, and the cause was not test ORDER but WALL CLOCK. `a vertical flick on the
+timeline keeps gliding` released a fling, slept a fixed **260ms**, and required `scrollTop` to have
+advanced. The glide advances on requestAnimationFrame, so that fixed window does not ask "did the code
+fling" — it asks "did enough frames run on this machine in a quarter of a second". Under a mutation run,
+with a second Chrome and a suite competing for the box, the answer is sometimes no. That is why it went
+red under a mutation (removing a field from clipboard snapshots) that cannot touch flinging at all.
+It now POLLS for up to 1500ms and stops the moment the list has moved. The assertion is unchanged in
+meaning, and mutation-checking it — making `startScrollMomentum` a no-op — still reports "the list
+stopped dead when the finger lifted", so nothing was weakened to buy the stability.
+**The general lesson, and it applies to every timing assertion in this suite:** wait for the CONDITION,
+never for a duration. A fixed sleep in a test that measures animation is a bet on the machine.
+
+### ⚠️ The original lead, kept for the record
 During that mutation run, `a vertical flick on the timeline keeps gliding, like a horizontal one` also
 went red ("the list stopped dead when the finger lifted, 150 → 150") — while the mutation only removed
 `repeater` from clipboard snapshots, which cannot affect flinging. The baseline immediately before was

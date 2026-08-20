@@ -32510,8 +32510,19 @@
       for (let k = 0; k < 5; k++) { y -= 30; t0 += 12; window.dispatchEvent(new PointerEvent('pointermove', at(t0))); }
       const atRelease = scroller.scrollTop;
       window.dispatchEvent(new PointerEvent('pointerup', at(t0 + 4)));
-      await sleep(260);                                   // …finger gone; the glide should still be running
-      const after = scroller.scrollTop;
+      /* WAIT FOR THE CONDITION, NOT A FIXED 260ms. The glide advances on requestAnimationFrame, so a
+         fixed window asks "did enough frames run in a quarter of a second" — which is a question about
+         the MACHINE, not about the code. It went red once during a mutation run whose mutation
+         (removing a field from clipboard snapshots) cannot affect flinging at all: the box was simply
+         busy. Polling keeps the assertion identical in meaning — the list kept moving after the finger
+         lifted — while a slow frame costs time instead of a false failure. */
+      let after = scroller.scrollTop;
+      const glideBy = performance.now() + 1500;
+      while (performance.now() < glideBy) {
+        await sleep(30);
+        after = scroller.scrollTop;
+        if (after > atRelease + 6) break;
+      }
       if (!(after > atRelease + 6)) throw new Error('the list stopped dead when the finger lifted (' + Math.round(atRelease) + ' → ' + Math.round(after) + ') — a horizontal flick glides, this should too');
       const fling = FM._tlLastScrollFling && FM._tlLastScrollFling();
       if (!fling || !Math.abs(fling.v)) throw new Error('the release recorded no fling velocity at all');
