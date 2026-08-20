@@ -1130,3 +1130,16 @@ something did not move? If yes, ask what happens when the action silently no-ops
 layout, it needs nothing.
 **Unfinished on purpose.** Judging 24 tests properly is a session's work, and doing it badly would
 replace a real question with a false all-clear.
+
+✅ **SAMPLED BY HAND — 2 of the 24, both flagged "unguarded" by the scan, and BOTH ARE GUARDED:**
+- `the Add layer can be dragged by its grip…` throws *"dragging the grip down opened no gap — nothing on
+  screen followed the finger"* BEFORE it asserts the tap did not fire. The drag is proven to have
+  happened.
+- `captions: dragging a cue edge…` throws *"the cue chip only moved Npx across the whole drag — it is
+  not tracking"* before asserting the chip did not jump on release. Same shape.
+**So the base rate looks good and the scan's 18 is mostly noise** — this file's culture already demands
+controls ("a control assertion proving the panel really was moving so the test cannot pass vacuously"
+was written into the playhead work at v6.31). Two samples is not a proof, and it is offered as a sample:
+the remaining 22 are worth a pass one day, at LOW priority, and the check is the one written above.
+The reason to keep this section at all is the direction rule in section 14 — it is what any NEW
+"stays put" test must satisfy, and that is where the next false pass would come from, not from here.
