@@ -27,6 +27,10 @@ transition is meaningless there.
   clock stalls or jumps. Every earlier round of the phone-lag investigation had no video to play.
 - `_phopen.html` — is `#tl-centerline` in the DOM and correctly placed across create / open / switch?
   (Answered the oldest open item's own diagnostic question: yes, always; only the empty state hides it.)
+- `_phhead.html` — the follow-on, and the one that found it: does the playhead come BACK when the first
+  clip arrives? Walks empty → add → deselect → re-select and names the state each time. It read
+  `layers 1 / .tl-empty-start true / display none` at step 2, which is the whole of v10.70.
+  `_phheadshot.html` leaves the app in that same post-add state for a picture.
 
 **Document integrity** — these back the suite's invariant sweeps
 - `_roundtrip.html` — a feature-rich project through save → load, diffed field by field.

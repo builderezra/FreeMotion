@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does the playhead come back when the first clip arrives?</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:980px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* THE OLDEST OPEN ITEM: "Playhead missing when a project opens. Needs an app restart to come back."
+   _phopen.html ruled out the open path — the line is always in the DOM and always centred. What it did
+   NOT drive is the one state that legitimately hides it: an EMPTY project (queue 354 hides the centreline
+   while the big + fills the timeline). This probe asks the next question: once a clip EXISTS, does the
+   line come back — through the same route a user takes, which is tapping + and adding a layer? */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  o.push('phone? '+(FM.mobile&&FM.mobile.isPhone?FM.mobile.isPhone():'(no FM.mobile)')+'   innerWidth '+W.innerWidth);
+  function look(tag){
+    var line=d.getElementById('tl-centerline');
+    var panel=d.getElementById('timeline-panel');
+    var flag = panel ? panel.classList.contains('tl-empty-start') : '(no panel)';
+    var n = FM.scene.layers.length;
+    var solo = FM._soloLayerId ? !!FM._soloLayerId() : '(seam missing)';
+    if(!line){o.push(tag+'  ❌ centreline NOT IN THE DOM');return;}
+    var cs=W.getComputedStyle(line), r=line.getBoundingClientRect();
+    var shown = cs.display!=='none' && cs.visibility!=='hidden' && parseFloat(cs.opacity||'1')>0.05 && r.height>10;
+    var verdict = (n===0)
+      ? (shown ? '❔ shown on an EMPTY project (queue 354 says it should be hidden)' : '✅ hidden — correct, project is empty')
+      : (shown ? '✅ VISIBLE — correct, project has '+n+' layer(s)' : '❌ HIDDEN WITH '+n+' LAYER(S) ON SCREEN — this is the bug');
+    o.push(tag+'  layers '+n+'  solo '+solo+'  .tl-empty-start '+flag+'  display '+cs.display+'  h '+r.height.toFixed(0)+'   '+verdict);
+  }
+  // Start from a genuinely empty project, the state a new project opens in.
+  FM.scene.layers.length=0; FM.scene.selectedId=null; FM.scene.selectedIds=[];
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  look('1 empty project      :');
+
+  // …now add a layer the way the + does. Every creator selects what it made.
+  FM.addTextLayer(); await sleep(600);
+  if(FM.textEdit&&FM.textEdit.stop) FM.textEdit.stop();
+  await sleep(400);
+  look('2 after adding text  :');
+
+  // Deselect — does it come back without a reload?
+  FM.scene.selectedId=null; FM.scene.selectedIds=[];
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  look('3 after deselecting  :');
+
+  // Re-select the layer: does it go away again?
+  FM.scene.selectedId=FM.scene.layers[0].id; FM.scene.selectedIds=[FM.scene.layers[0].id];
+  FM.refreshAll(); FM.timeline.rebuild(); await sleep(400);
+  look('4 re-selected        :');
+
+  // And the second half of his report: does a RELOAD bring it back?
+  o.push('');
+  o.push('(if 2 and 4 read ❌ and 3 reads ✅, the trigger is: empty project → add a clip → the new');
+  o.push(' layer is selected → phone solo skips buildAddRow → the empty-state class is never cleared.)');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>

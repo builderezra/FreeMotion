@@ -1792,6 +1792,30 @@ window.FM = window.FM || {};
   }
   FM._soloLayerId = soloLayerId;   // seam: the suite asks the real condition, not a copy of it
 
+  /* ---- THE EMPTY-TIMELINE STATE IS A FACT ABOUT THE SCENE, NOT ABOUT THE ADD ROW ----------------
+   * This lived inside buildAddRow, and that is the oldest open bug in the list: *"Playhead missing when
+   * a project opens. Needs an app restart to come back."* Two earlier rounds ruled out the open path —
+   * the centreline is always in the DOM and always centred (`tests/_phopen.html`) — and the answer was
+   * one step past where they stopped looking.
+   *
+   *   empty project on a phone -> the class goes ON, the big + fills the timeline, the playhead hides
+   *   (queue 354, deliberately). Tap + and add your first layer. Every creator SELECTS what it made, a
+   *   selected layer on a phone triggers the solo view, and the solo branch of buildTracks does not draw
+   *   an Add row — so buildAddRow never ran, so the class was never taken off, so the playhead stayed
+   *   hidden with a clip on screen. Measured at 380px (`tests/_phhead.html`): layers 1, .tl-empty-start
+   *   still true, `display: none`. It came back on the next rebuild that was not soloed — tapping off the
+   *   layer — or on a reload, which is the restart he reported.
+   *
+   * A flag describing "is the scene empty" cannot be computed inside a function that only runs in some of
+   * the states it describes. It is applied from buildTracks now, which runs on EVERY rebuild, so no branch
+   * can skip it. buildAddRow reads the same helper rather than a second copy of the condition. */
+  function isEmptyStart() { return isPhoneNow() && !FM.scene.layers.length; }
+  function applyEmptyStart() {
+    const tlPanel = document.getElementById('timeline-panel');
+    if (tlPanel) tlPanel.classList.toggle('tl-empty-start', isEmptyStart());
+  }
+  FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
+
   function buildAddRow() {
     /* TWO RENDERINGS, ONE IDEA (queue 294, clause 7). On a phone it is a layer: "an actual full layer".
        On PC he asked for something smaller — "instead of being like an actual full layer and like taking
@@ -1810,15 +1834,15 @@ window.FM = window.FM || {};
        is big and in the middle, this should make it very apparent and obvious for beginners on how to
        start". Only while there is nothing to show: the moment a clip exists it goes back to the slim row,
        which is the state his second screenshot shows and which must not change. */
-    const empty = phone && !FM.scene.layers.length;
+    const empty = isEmptyStart();
     /* AND THE PLAYHEAD GOES WITH IT (queue 354). Ezra, with a screenshot of exactly this: "Hide the
        player head while the add button is big". The fixed-centre line is drawn straight down through
        the + and through the label, and in an empty project it is pointing at nothing — there is no
        clip to scrub past it, so it is a ruler over a blank page sitting on top of the one control that
        matters. The flag goes on the PANEL rather than on the row because #tl-centerline is a sibling
-       of #timeline, not a descendant of it, so a class on the row could never reach it. */
-    const tlPanel = document.getElementById('timeline-panel');
-    if (tlPanel) tlPanel.classList.toggle('tl-empty-start', !!empty);
+       of #timeline, not a descendant of it, so a class on the row could never reach it — and it is
+       applied from buildTracks, not from here, because this function does not run in every state the
+       flag has to be right in. See isEmptyStart above. */
     row.className = 'tl-addrow' + (phone ? '' : ' tl-addrow--line') + (empty ? ' tl-addrow--empty' : '') + (addDragging ? ' tl-addrow-dragging' : '');
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
@@ -2148,6 +2172,7 @@ window.FM = window.FM || {};
 
   function buildTracks() {
     tracksEl.innerHTML = '';
+    applyEmptyStart();   // every rebuild, every branch — see isEmptyStart
     /* RESERVE THE CHEVRON COLUMN ONLY WHEN A GROUP EXISTS (queue 295). Every childless layer carries a
      * `visibility: hidden` chevron so that a group row and a plain row at the same depth line up (#191
      * — "the arrow pushes the ui over making it ugly"). That is worth 22px in a project that HAS a

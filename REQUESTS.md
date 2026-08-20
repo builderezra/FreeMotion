@@ -2767,7 +2767,25 @@ better still, keep working inside the turn rather than parking work for a later 
       taller on a big screen, that height was remembered and followed you: a stored 270px left the
       canvas 120px. Both now shrink only on short screens. Measured: canvas 145x145 → 194x194, and a
       desktop keeps exactly the height you dragged.
-- [ ] **Playhead missing when a project opens.** Needs an app restart to come back.
+- [x] **Playhead missing when a project opens.** Needs an app restart to come back. **DONE v10.70 — the
+      third cause found, and it is the one that explains the restart.**
+      **What it was:** queue 354 hides the centreline while a project is EMPTY (the big + fills the
+      timeline, and a ruler over a blank page points at nothing). That flag was computed inside
+      `buildAddRow`. So: open a project with nothing in it, tap +, add your first layer — and every
+      creator SELECTS what it made, a selected layer on a phone triggers the solo view, and the solo
+      branch of the rebuild draws no Add row. `buildAddRow` never ran, so the flag was never taken off,
+      so **the playhead stayed hidden with a clip on screen**. Measured at 380px (`tests/_phhead.html`),
+      before anything was changed: layers 1, `.tl-empty-start` still true, centreline `display: none`.
+      It came back on the next rebuild that was NOT soloed — tapping off the layer — or on a reload,
+      which is the restart in his report. Intermittent for exactly that reason: whether it looked broken
+      depended on whether he happened to tap off the new clip.
+      **The fix:** a flag describing "is the scene empty" cannot be computed inside a function that only
+      runs in some of the states it describes. It is applied from `buildTracks` now, which runs on every
+      rebuild in every branch, and `buildAddRow` reads the same helper rather than a second copy of the
+      condition. Guarded by a test that drives the real route (a real creator, which selects) and asserts
+      both controls first — the empty state on at the start, solo on at the end — so it cannot pass
+      vacuously; mutation-proved by restoring the exact old semantics, which the new test alone caught.
+      **If it happens again it is a FOURTH cause** and these three are ruled out.
       *Status (v6.31):* the known cause IS fixed and now tested on BOTH paths — a recompute landing
       mid-animation no longer stores the translated edge, on the project-open push and on the
       return-to-home pop that v6.27 added. Measured drift under 1px on both, with a control assertion

@@ -2802,6 +2802,53 @@
     }
   });
 
+  test('phone: adding the first layer brings the playhead back — without a reload', { item: 'playhead-missing' }, async function () {
+    /* THE OLDEST OPEN ITEM IN THE LIST: "Playhead missing when a project opens. Needs an app restart to
+       come back." Two earlier rounds looked at the OPEN path and cleared it — the centreline is always in
+       the DOM and always centred (tests/_phopen.html). The cause was one step further on.
+
+       Queue 354 hides the centreline while a project is empty, because the big + fills the timeline and a
+       ruler over a blank page points at nothing. That flag was computed inside buildAddRow. Then: tap +,
+       add your first layer, and every creator SELECTS what it made -> a selected layer on a phone triggers
+       the solo view -> the solo branch draws no Add row -> buildAddRow never ran -> the flag was never
+       taken off. Measured at 380px before the fix: layers 1, .tl-empty-start still true, display: none.
+       It came back only on a rebuild that was not soloed, or on a reload — his "restart".
+
+       This test drives the real route (a real creator, which selects), and it asserts the CONTROL first:
+       without the empty state on at the start, and without solo on at the end, it would prove nothing. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(90);
+        const panel = document.getElementById('timeline-panel');
+        const line = document.getElementById('tl-centerline');
+        if (!panel || !line) throw new Error('missing #timeline-panel or #tl-centerline');
+        // CONTROL A: the empty state really is on, so what follows is the transition out of it.
+        if (!panel.classList.contains('tl-empty-start')) throw new Error('an empty phone project is not in the tl-empty-start state, so this test never exercises the transition out of it');
+        if (getComputedStyle(line).display !== 'none') throw new Error('the centreline is already visible on an empty project — queue 354 says it should be hidden, and with it visible from the start this test cannot tell a fix from a no-op');
+
+        // The real route: a creator that inserts AND selects, exactly like the + does.
+        FM.addNullLayer();
+        await sleep(140);
+        if (!FM.scene.layers.length) throw new Error('addNullLayer added nothing, so there is no clip on screen to want a playhead for');
+        // CONTROL B: the solo view is what skips the Add row. Without it, the old code passed too.
+        if (!FM._soloLayerId || !FM._soloLayerId()) throw new Error('the new layer did not end up soloed, so this is not the state the bug needed — the test would pass against the broken code');
+
+        if (panel.classList.contains('tl-empty-start')) throw new Error('the timeline is still flagged empty with ' + FM.scene.layers.length + ' layer(s) on screen — this is the bug: the flag is only cleared where an Add row is drawn');
+        const cs = getComputedStyle(line), r = line.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < 0.05 || r.height < 10)
+          throw new Error('the playhead is still hidden after adding a layer (display ' + cs.display + ', opacity ' + cs.opacity + ', height ' + r.height.toFixed(1) + ') — it only comes back on a rebuild that is not soloed, or on a reload');
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('phone: a bottom sheet parked off the screen casts no shadow back onto the app', { item: '424' }, async function () {
     /* The other half of queue 424, and the reason his empty screenshot had a darker band along the
        bottom at all: it was not the timeline. #inspector-panel and #ai-panel are both parked with
