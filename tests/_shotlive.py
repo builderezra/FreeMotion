@@ -49,7 +49,22 @@ def shoot(path, out, w=400, h=840, wait=120):
         cdp.close()
         return title
     finally:
+        _stop(proc)
+
+
+def _stop(proc):
+    """Kill the browser and WAIT for it. `terminate()` alone leaked processes all night on 20 Aug —
+    24 of them were found still running, because SIGTERM to the parent does not always take the helpers
+    with it and nothing waited to find out. Terminate, wait, then kill."""
+    try:
         proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception:
+            pass
 
 
 def read(path, wait=180, throttle=0, w=400, h=840):
@@ -86,7 +101,7 @@ def read(path, wait=180, throttle=0, w=400, h=840):
         cdp.close()
         return out if out.strip() else "(no #out content; title: %s)" % title
     finally:
-        proc.terminate()
+        _stop(proc)
 
 
 if __name__ == "__main__":
