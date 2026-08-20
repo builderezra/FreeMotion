@@ -10745,9 +10745,25 @@ wait for them to report back."*
       also true of no shadow at all — that trap is asserted against explicitly) and even within 18%, while
       8/8 still has to land down-and-right. Five mutations, each caught: the Soft action, the default, the
       renderer's X offset, the shadow render itself, and the Style row's existence.
-      ⏸️ **Clause 1 is still open and still held on his answer** — what should a video's outline follow:
-      its rectangle, its crop box, or its alpha silhouette? There is no media stroke code at all, so this
-      is a build, not a flag flip.
+      ⏸️ **Clause 1 is still open** — but it is a much smaller job than this entry has been claiming, and
+      the decision it was waiting on is answered.
+      🔎 **FOUND 20 Aug: the capability already exists, and the earlier note "there is no media stroke code
+      at all" was true only of `layer.stroke`.** There is a **`stroke` PIXEL EFFECT** (js/compositor.js,
+      in the effects table with Width / Position / Shape / Softness) that outlines a layer by growing a
+      distance field from its ALPHA — exact, O(pixels), with inside/centre/outside and round or square
+      corners. Being a pixel effect, it runs on whatever the layer rendered, so **a video can be outlined
+      today** by adding Stroke from the effects browser. Nothing needs inventing.
+      ✅ **So the design question answers itself: the outline follows the ALPHA silhouette**, because that
+      is the one implementation that exists and it is also what "outline" means everywhere else in this
+      app. A cropped or rounded clip gets an outline that hugs what you can actually see. If he wants the
+      layer RECTANGLE instead, that is the change to ask for — but it would be the odd one out.
+      **What is actually left**, and it is wiring rather than rendering: `canBorder` (js/inspector.js) 
+      excludes video and image, so the Outline & Shadows card offers them nothing. For a media layer the
+      card's Outline toggle should add/remove that `stroke` effect and drive its width and colour, instead
+      of writing `layer.stroke`, which the media draw path genuinely does ignore.
+      ⚠️ One consequence worth stating before it is built: the effect will also appear in the layer's
+      Effects list, because that is where it lives. That is honest rather than a leak — it is the same
+      control, reachable two ways — but it is a visible difference from how a shape's outline behaves.
       **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
