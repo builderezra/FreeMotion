@@ -11116,6 +11116,11 @@ wait for them to report back."*
         already renders the WHOLE soundtrack through an OfflineAudioContext, and the exporter already
         encodes it to AAC for video. Audio-only export is that mix written out instead of muxed in.
         WAV needs no encoder at all — a RIFF header in front of the PCM the mix already produces.
+      ✅ **VERIFIED, not assumed:** `buildAudioMix` (js/exporter.js:393) ends with
+      `return { audioBuffer: rendered, sampleRate, channels }` — a real `AudioBuffer` holding the WHOLE
+      mixdown, with trims, fades, per-clip volume, solo/mute and audio effects already applied and
+      already covered by the suite. So WAV is not "write an exporter", it is: take `mix.audioBuffer`,
+      interleave the channels, put a 44-byte RIFF header in front, save. The hard part is done.
       🔧 **RECOMMENDATION, so this is not another open question:** ship **M4A (AAC)** and **WAV** as the
       audio-only options — both free, both native, both work where video export already works — and only
       add MP3 if he specifically wants that extension. "or whatever" reads like *give me a way to get the
