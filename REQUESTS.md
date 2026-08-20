@@ -12154,7 +12154,27 @@ wait for them to report back."*
              move, slowly" — via `.tl-addrow--empty .tl-addrow-plus::before { animation }`. On an empty
              project that + is genuinely in motion by design. If that is what he is seeing, "should be
              stiff" is a request to stop that animation while scrolling, or to drop it, not a bug fix.
-             ⚠️ **Still to determine: is his timeline EMPTY when it happens?** The slim row's small + has
+             📐 **THREE CAUSES RULED OUT BY MEASUREMENT (20 Aug, `tests/_plusempty.html`):**
+             · **Not the empty state.** An empty project's timeline has **0px of horizontal scroll range**
+               (scrollWidth 380 = clientWidth 380) — there is nothing to swipe, so nothing can move. Which
+               also means he almost certainly has CLIPS when he sees it.
+             · **Not positional drift.** With three clips and 493px of real range, the + holds at x=25.0
+               across every sample.
+             · **Not a sub-pixel shimmer** — the v10.58 / queue 422 class, where a half-pixel showed at
+               dpr 3. Driven with FRACTIONAL scroll offsets (…24.37, 48.74…) the + lands on a whole pixel
+               every single time: 0 of 14 samples fractional.
+             🔎 **What that leaves is the GESTURE path, not the scroll.** Every probe here writes
+             `scrollLeft` directly, which bypasses the handler — and `#timeline` is `touch-action: none`
+             with JS owning every gesture, so a real finger goes down a different road. The strongest
+             remaining candidate: **the add row is itself draggable** (queue 294 gave it a grip, queue 411
+             gave it edge-scrolling), so a swipe that starts on or near the row may be engaging the ROW
+             DRAG rather than scrolling the timeline — which would move the + with his finger, by design,
+             and look exactly like "it moves around and stuff".
+             ⚠️ **THE ONE QUESTION THAT SETTLES IT:** does it move when his finger starts **on the add row
+             itself** (the bar with the + and "Tap to add a layer"), or anywhere on the timeline including
+             far from it? If it is only near the row, this is the row's own drag and the fix is about when
+             that drag arms — not about stiffness.
+             ⚠️ **Superseded: is his timeline EMPTY when it happens?** — answered above, it is not. The slim row's small + has
              no animation, so the answer picks between "undo a deliberate effect" and "hunt a real lag".
              ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
              That decides between the three, and this could not be narrowed further without guessing.

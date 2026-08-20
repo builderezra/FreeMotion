@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Does the BIG + hold still while the timeline scrolls? (queue 429)</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<pre id="out" style="position:fixed;left:390px;top:0;width:900px;color:#cfe;font:11px ui-monospace;background:#06121a;padding:8px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.timeline)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), o=[];
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+  // EMPTY project — the big + centred in a 100vw sticky inner, which is a different animal from the
+  // slim row's small + that the first probe measured.
+  FM.scene.layers.length=0;
+  for(var i=0;i<3;i++){ var L=FM.makeLayer('shape',{name:'Clip '+(i+1),shape:'rect',x:540,y:700+i*250,shapeW:300,shapeH:220,fill:'#3a7bd5'});
+    L.start=0; L.duration=8; FM.scene.layers.push(L); }
+  FM.scene.project.duration=20; FM.refreshAll(); FM.timeline.rebuild(); await sleep(500);
+  var tl=d.getElementById('timeline');
+  var row=d.querySelector('.tl-addrow');
+  o.push('row classes: '+(row?row.className:'(none)'));
+  var plus=d.querySelector('.tl-addrow-plus');
+  if(!plus){o.push('no + found');document.getElementById('out').textContent=o.join('\n');document.title='ready';return;}
+  var inner=d.querySelector('.tl-addrow-inner');
+  var ir=inner?inner.getBoundingClientRect():null;
+  o.push('inner: '+(ir?ir.width.toFixed(1)+'w at x'+ir.left.toFixed(1):'?')+'   scrollWidth '+tl.scrollWidth+'  clientWidth '+tl.clientWidth);
+  o.push('scrollable across: '+(tl.scrollWidth-tl.clientWidth)+'px');
+  var xs=[];
+  for(var s=0;s<14;s++){
+    tl.scrollLeft = s*24 + (s%3)*0.37;   // FRACTIONAL, like a real fling — whole numbers hide sub-pixel landing
+    await new Promise(function(r){W.requestAnimationFrame(function(){W.requestAnimationFrame(r);});});
+    var p2=d.querySelector('.tl-addrow-plus');
+    xs.push(p2.getBoundingClientRect().left);
+  }
+  var mn=Math.min.apply(null,xs), mx=Math.max.apply(null,xs);
+  o.push('');
+  o.push('  + x across a horizontal scroll: '+xs.map(function(v){return v.toFixed(1);}).join(' '));
+  o.push('  drift '+(mx-mn).toFixed(2)+'px');
+  var frac = xs.filter(function(v){ return Math.abs(v-Math.round(v)) > 0.01; });
+  o.push('  samples landing on a FRACTIONAL pixel: '+frac.length+' of '+xs.length
+    +(frac.length? '   ← at dpr 3 that is a visible shimmer (see v10.58 / queue 422)' : ''));
+  o.push((mx-mn)>1.5 ? '  ❌ THE BIG + MOVES while the timeline scrolls' : '  ✅ the big + holds still');
+  document.getElementById('out').textContent=o.join('\n');
+  document.title='ready';
+ }).catch(function(e){document.getElementById('out').textContent='ERR '+e.message+'\n'+o.join('\n');document.title='ERR';});
+});
+</script></body></html>
