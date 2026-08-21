@@ -746,8 +746,20 @@ window.FM = window.FM || {};
     grab.type = 'button';
     // "Don't name it all faves, just faves" (#124) — it was "All favourites", and the "All" was doing
     // no work: there is only one faves screen, so the word only ever added length to a 11px caps label.
-    grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">Faves' +
-      (favs.length ? ' \u00b7 ' + favs.length : '') + ' \u25be</span>';
+    /* A REAL BUTTON, NOT A NOTCH (queue 462). Ezra: *"Make the faves menu a big button and not just
+       this small notch, and give it some nice shiny golden background colours"*.
+       The star is the same mark that flags a favourite on every tile, so the button says what it opens
+       without needing the word — and it is what earns the gold. The grab bar stays, small and above the
+       face: the pull-down gesture is a real feature (queue 74) and removing its only affordance would
+       hide it, but it is no longer the whole control. */
+    grab.innerHTML = '<span class="fxb-favmore-bar"></span>'
+      + '<span class="fxb-favmore-face">'
+      +   '<svg class="fxb-favmore-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+      +     '<path d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.75L12 16.9l-5.2 2.7 1-5.75-4.2-4.1 5.8-.85z"/>'
+      +   '</svg>'
+      +   '<span class="fxb-favmore-txt">Faves' + (favs.length ? ' \u00b7 ' + favs.length : '') + '</span>'
+      +   '<span class="fxb-favmore-chev">\u25be</span>'
+      + '</span>';
     grab.title = 'Pull up (or tap) for your faves, with sorting';
     grab.addEventListener('click', () => openFavourites());   // a drag that ended here never reaches this: attachFavPull swallows that click in the capture phase
     body.appendChild(grab);

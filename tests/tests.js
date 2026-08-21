@@ -24691,6 +24691,52 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the Faves control is a real gold button, not a notch (queue 462)', { item: '462' }, async function () {
+    /* Ezra, with the strip circled: *"Make the faves menu a big button and not just this small notch,
+     * and give it some nice shiny golden background colours"*. It was a transparent full-width strip
+     * carrying a 4px grab bar and 11px caps — about 30px tall with no surface of its own.
+     * The pull-down gesture it also serves is a real feature (queue 74), so the grab bar stays; what
+     * changed is that it now has a face you can see and aim at. */
+    if (!FM.fxBrowser || !FM.fxBrowser.open) throw new Error('the effects browser is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { name: 'favprobe', shape: 'rect', x: 200, y: 200, shapeW: 120, shapeH: 90, fill: '#cc22cc', start: 0, duration: 5 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open();
+      await sleep(420);
+      const btn = [].slice.call(document.querySelectorAll('.fxb-favmore'))
+        .filter(b => b.getBoundingClientRect().width > 0)[0];
+      if (!btn) throw new Error('no visible Faves control — the browser did not open');
+      if (btn.tagName !== 'BUTTON') throw new Error('the Faves control is not a <button>, so it is back to being a gesture-only affordance');
+
+      const face = btn.querySelector('.fxb-favmore-face');
+      if (!face) throw new Error('the Faves control has no face — it is a bare notch again');
+      const h = face.getBoundingClientRect().height;
+      if (h < 30) throw new Error('the Faves face is only ' + Math.round(h) + 'px tall — that is the notch he asked to be replaced');
+
+      /* GOLD, and actually a gradient. A flat fill would satisfy "has a background" while missing the
+         "shiny" half, which is the part he asked for by name. */
+      const bg = getComputedStyle(face).backgroundImage || '';
+      if (!/gradient/.test(bg)) throw new Error('the Faves face has no gradient — a flat fill is not "shiny"');
+      const rgbs = bg.match(/rgba?\([^)]*\)/g) || [];
+      const gold = rgbs.some((c) => {
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c);
+        if (!m) return false;
+        const r = +m[1], g = +m[2], b = +m[3];
+        return r > 150 && g > 100 && b < g && (r - b) > 60;      // warm, red>green>blue
+      });
+      if (!gold) throw new Error('nothing in the Faves face reads as gold: ' + rgbs.slice(0, 4).join(' '));
+      // …and it still opens the faves view when tapped.
+      if (!btn.onclick && !btn.getAttribute('title')) throw new Error('the Faves button lost its behaviour');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('every effect category has its own distinct icon (queue 461)', { item: '461' }, async function () {
     /* Ezra: *"Make an icon for each section that resembles the overall theme in some way, like for
      * colouring you could do an interesting colour palette but do something distinct for each one"*,

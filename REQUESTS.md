@@ -13825,8 +13825,7 @@ wait for them to report back."*
       ⚠️ **A document-wide selector found 16 tiles for 12 categories in the suite frame** — other panels
       of the app are alive in there. Scoped to the VISIBLE grid, which is the same fix #428 already
       recorded for the add menu.
-- [ ] **462 — The FAVES strip should be a proper button with a shiny gold look, not a thin notch.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **462 — ✅ **DONE v11.40.** The FAVES strip should be a proper button with a shiny gold look, not a thin notch.**
       (21 Aug, with a screenshot; he circled it in red.) His words, verbatim: *"Make the faves menu a big
       button and not just this small notch, and give it some nice shiny golden background colours"*.
       Today it is a slim full-width strip reading "FAVES · 34 ▾" with a small drag pill above it, sitting
@@ -13834,6 +13833,20 @@ wait for them to report back."*
       button — bigger — and gold, which also matches the gold stars already used to mark favourites.
       "Shiny" implies a gradient with a highlight, not a flat fill.
 
+      ✅ **DONE v11.40 — a full-width gold button where a 30px transparent strip used to be.**
+      It was `.fxb-favmore`: no background at all, a 4px grab bar and 11px caps. Now a face 39px tall
+      inside a 61px control, carrying the ★, the count and the chevron.
+      **"Shiny" is three layers, not one flat fill** — a warm ramp for the metal, a highlight across the
+      top third for the light, and a hairline inner rim so the edge catches. A single flat gold reads as
+      a sticker, which is the note the rainbow Sound effects card already carries a few hundred lines
+      away in the same file.
+      **The hue is one the app already owns:** the same gold as the ★ that marks a favourite on a tile,
+      so the button and the things it collects match rather than adding a fourth accent.
+      **The grab bar stays.** That strip is also a pull-down gesture (queue 74), and removing its only
+      visible affordance would have hidden a feature while fixing a look.
+      Mutation-checked both ways that matter: flattening the button back to a notch is caught by height,
+      and swapping the gold for grey is caught by a warmth test on the computed gradient — "has a
+      background" alone would have passed while missing the half he asked for by name.
 - [ ] **463 — In the filters menu, rows like TUFF should be ONE row you swipe sideways, not two stacked
       **STATUS: 🟢 READY — nothing is stopping this**
       rows.** (21 Aug, with a screenshot.) His words, verbatim: *"Make in the filters menu for rows like
