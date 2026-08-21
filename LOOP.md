@@ -40,53 +40,56 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.49** — queue **468**, a bug hunt finding. Suite **814/814 green**, pushed and verified.
-Both directions mutation-checked (unwiring the call site; removing the sort).
+**Last shipped: v11.49** (queue 468). **This tick found NO bug and only PARTLY finished its sweep — said
+plainly rather than dressed up.** No app code changed, no version bump.
 
-**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN numbered
-entry; **no findings means no entry.**
+**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim).
 
-**THIS TICK — keyframe evaluation at its boundaries.** Every WELL-FORMED case is correct: the value at an
-exact keyframe time is that keyframe's value, it holds rather than extrapolating outside the range, a
-linear midpoint is the midpoint, a lone keyframe is a constant. **Two file-only shapes were not:** unsorted
-keyframes collapse an animation to a CONSTANT (evalProp walks in order and returns the first entry at every
-time), and a `null` value evaluates to NaN at its own time. Fixed at import by a generic `{kf:[…]}` walk —
-**#468**.
-**Confirmed the app cannot produce either**, which is why this is a file concern rather than a live bug:
-`toggleProp` substitutes 0 for a missing fallback, and all 199 visual effects and 60 audio params carry a
-default. Checking that FIRST is what kept the entry honest — it would have been easy to write this up as
-something he was hitting.
+**THIS TICK — the phone layout at 380px with a BUSY project (12 layers).** What was actually established,
+and it is less than intended:
+- **The home / category grid: clean.** No horizontal overflow, page does not scroll sideways.
+- **The Effects panel with effects applied: clean.** Widest control reaches 368 px of 380; nothing off the
+  right edge; no sideways scroll.
+- **NOT established: the per-category sweep.** It was abandoned after repeatedly hitting the harness, not
+  after finding anything. Also NOT established: whether content BELOW the fold is reachable — the sheet's
+  scroll container was never identified, so `everyControlReachable` above only means "within the panel's
+  own box", which is not the same claim. **Do not read this as "the phone layout is verified".**
+
+**⚠️ THE TRAPS THAT ATE THIS TICK are now BUG-HUNT.md §8e.** One panel PER CALL (30 s budget vs a UI that
+needs many sequential steps); timers are throttled while the pane is hidden (`tabs_select` fixes it — and
+measure a sleep, because `document.hidden` still reports true either way); `getComputedStyle` over a whole
+panel is far slower than it looks; opening the `element` category on a TEXT layer launches the full-screen
+editor and collapses the inspector to 0×0 so everything after reads zero; and repeated
+`FM.inspector.back()` can unwind past the grid and leave the app out of edit mode entirely.
+
+**NEXT TICK, do the sweep properly:** one category per call, on a SHAPE layer, re-asserting the selection
+each time, with the tab fronted first. Identify the sheet's scroll container ONCE and then the
+below-the-fold question can actually be answered.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
 - **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
   newest features**; **the queue-217 re-id gate, verified not trusted**; **timeline at 10 s / 10 min /
   60 min**; **the LIVE audio path for all six newly-keyframable params**; **the EXPORT audio path
   end-to-end**; **exportFitRect + the frame loop**; **the service worker's caching rules**; **clip frame
-  boundaries** (pinned by a test); **keyframe evaluation** (this tick — well-formed cases all correct).
+  boundaries** (pinned by a test); **keyframe evaluation** (FOUND #468); **380px home grid + Effects panel
+  with 12 layers** (this tick, partial).
 
-**STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data path
-is verified via `_reIdLayers`, the UI path is not); the phone layout of the newest panels at 380px under a
-LONG project (many layers); group/parent transform chains at depth.
+**STILL UN-SWEPT:** the rest of the per-category phone sweep; a hostile TEMPLATE PACK through the real
+insert UI; group/parent transform chains at depth.
 
-**⚠️ THE CONTROL CAUGHT ME TWICE THIS TICK.** A hand-written layer JSON "proved" a null keyframe blanked the
-picture — until the GOOD control drew nothing either, because my hand-built layer was missing fields the
-renderer needs. Rebuilt with `FM.makeLayer` (the real constructor), both drew, and the true symptom turned
-out to be milder: the layer is MISPLACED, not missing. **Build fixtures with the app's own constructors;
-a hand-rolled object is a fixture that only proves itself.**
+**Running tally, said plainly:** across nine hunts — **three real bugs** (#466, #467, #468), **two coverage
+gaps closed**, **one safeguard built**, **ten probe/harness errors** caught before they reached him, and
+**one tick (this one) that produced almost nothing.** That last number matters: the returns are thinning.
 
-**Running tally, said plainly:** across eight hunts — **three real bugs** (#466, #467, #468), **two coverage
-gaps closed** (exporter scheduling, clip frame edges), **one safeguard built** (cache-buster gate), and
-**nine probe errors** caught before they reached him.
+**⚠️ SAID TO HIM TWICE NOW, and worth a third:** the queue has been 0-actionable for NINE ticks. Hunting is
+his standing fallback, but the last four findings were malformed-FILE robustness rather than anything he
+can see today, and this tick found nothing at all. **A few one-word answers would unblock far more real
+work than another sweep.**
 
-**⚠️ WORTH SAYING TO HIM, and it has now been said twice:** the queue has been 0-actionable for eight ticks.
-Hunting is his standing fallback and it is still finding things, but three of the last four findings were
-malformed-FILE robustness rather than anything he can see today. **A few one-word answers would unblock more
-real work than another sweep.**
-
-**Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
-395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it
-feels better on his device); **whether an animated reverb stutters while previewing on his phone**; and
-**392** — his verdict on Text to Voice, plus the cloud-vs-record choice.
+**Waiting on Ezra:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395, 429, 418, 223
+follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on his
+device); **whether an animated reverb stutters while previewing on his phone**; and **392** — his verdict on
+Text to Voice, plus the cloud-vs-record choice.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no

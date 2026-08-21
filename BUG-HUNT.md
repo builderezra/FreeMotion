@@ -1,4 +1,4 @@
-# ⚠️ READ FIRST — eleven ways a measurement lied (20 Aug 2026, extended 22 Aug)
+# ⚠️ READ FIRST — twelve ways a measurement lied (20 Aug 2026, extended 22 Aug)
 
 Every one of these produced a confident WRONG answer that survived until something forced a second look.
 They are listed by SYMPTOM, because that is how you meet them.
@@ -54,6 +54,22 @@ before reporting anything as broken.
    unconnected one still reads `1`.
    *(The control rule below is what caught this: the Echo/Delay `time` control — a parameter known to
    work — read stale in exactly the same way, which proved the probe was blind rather than the code.)*
+
+8e. **"I'll sweep every panel in one probe."** You will not, and here is the shape of the wall (22 Aug).
+   A per-call script budget of 30 s against a UI that needs many sequential steps means **one panel per
+   call**, not eight. Four specific traps, all met in one tick:
+   · **Timers are throttled while the Browser pane is hidden** — a nominal 200 ms sleep can take seconds,
+     so a loop of eight `sleep(300)`s blows the budget on waiting alone. `tabs_select` to front the tab
+     restores normal timing (`document.hidden` still reports true; measure a sleep to check, don't trust
+     the flag).
+   · **`getComputedStyle` on every element** of a full panel is far slower than it looks. Prefer
+     `body.scrollWidth > innerWidth`, or query only leaf controls (`button, input, select`).
+   · **Opening the `element` category on a TEXT layer launches the full-screen text editor**, which
+     collapses the inspector to 0×0 — every measurement after that reads zero and looks like a broken
+     panel. Sweep with a SHAPE layer, or skip that key.
+   · **Repeated `FM.inspector.back()` can unwind past the grid** and leave `document.body.className`
+     empty, i.e. the app out of edit mode entirely. Re-assert the selection between categories rather
+     than assuming the previous state survived.
 
 8. **"The element moved hundreds of pixels."** The timeline REBUILDS on resize — the add row and its +
    are replaced — so an element reference held across the resize measures a DETACHED node as all-zeros.
