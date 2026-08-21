@@ -13273,6 +13273,34 @@ wait for them to report back."*
       those two — if they work, the bug is narrower than "the category is broken"; if they do not, it is
       wider. Say which, with numbers, before changing any code.
 
+      📐 **MEASURED 21 Aug — the category is NOT broken, and FOUR named effects are. Numbers below.**
+      Method as prescribed: a shape layer rendered with and without each of the 43 Colouring effects,
+      changed pixels counted, instances built through `FM.fxRegistry.makeInstance`, every effect tried at
+      its default AND with each range param pushed to its maximum, on two different fills.
+      **37 of 43 work. Six looked dead; two of those are innocent:**
+      · **halation — WORKS.** 34,600 changed pixels on a white fill, 0 on his magenta one. It is a bloom
+        around highlights and a flat mid-magenta has none. Correct behaviour, not a bug.
+      · **matchgrade — WORKS.** 0 with no source layer, **5,400 with one**. Doing nothing until you give
+        it a source is correct.
+      🔴 **GENUINELY DEAD — 0 changed pixels on BOTH a white and a magenta fill, at default and at every
+      range parameter's maximum:**
+      **`lightglow` · `longshadow` · `channelremap` · `radialshadow`**
+      **What is already ruled out:** all four are present in the POSTFX dispatch table, all four have an
+      implementation in js/compositor.js, all four pass `supportsLayer` for a shape, and all four receive
+      sensible parameters from `makeInstance` — `lightglow {amount:0.6, radius:6, threshold:60}`,
+      `longshadow {length:30, color:'#000000'}`, `channelremap {mode:1, mix:1, luma:0}`,
+      `radialshadow {reach:40, x:50, y:35, color:'#000000'}`.
+      ⚠️ **A WRONG CAUSE WAS NEARLY PUBLISHED — the control caught it, and the near-miss is worth keeping.**
+      `channelremap` opens with `var crM=(p.mode|0); if(crM===0) return;`, and the registry reports
+      `def=undefined` for its mode, which looked exactly like "the default is the no-op". It is not:
+      `def` is undefined for **197 of the 198 effects in the registry, including every one that works**,
+      and `makeInstance` hands channelremap `mode:1`. Checking a KNOWN-GOOD effect the same way is what
+      exposed it. **Do not diagnose from `p.def`.**
+      **NEXT STEP: instrument the four implementations to find out whether they are CALLED at all.**
+      Everything cheap has been ruled out from the outside; the next fact worth having is whether the
+      pixel function runs and does nothing, or never runs. Those are different bugs with different fixes.
+      **Tell Ezra the four names either way** — he has asked twice and deserves to know exactly which
+      tiles are lying to him, even before they are fixed.
 - [ ] **461 — Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
       (21 Aug, with a screenshot.) His words, verbatim: *"Make an icon for each section that resembles
       the overall theme in some way, like for colouring you could do an interesting colour palette but do
@@ -13318,6 +13346,22 @@ wait for them to report back."*
       "Add naked"). **Reuse that, do not invent a second one**, and check whether the same component can
       simply be pointed at the filter list.
       Ties into **463**: both are about the filters menu behaving like the effects menu.
+
+- [ ] **465 — Split the stairs button in the timeline toolbar into TWO: stairs down and stairs up.**
+      (21 Aug, with a screenshot; he scribbled over the button and drew a line down its middle to show
+      the split.) His words, verbatim: *"Split this button into two, one stairs down and one stairs up."*
+      **What his screenshot shows:** the row of buttons under the TIMELINE heading at the bottom of the
+      editor. The middle one carries a small step-shaped icon (two short horizontal strokes at different
+      heights) and he has drawn a vertical line through it, meaning: make this two buttons.
+      **So the button currently does ONE thing in one direction, or cycles, and he wants both directions
+      exposed explicitly** — one that steps DOWN and one that steps UP.
+      ⚠️ **Identify the button before designing anything.** The two buttons either side of it in the
+      screenshot are clip-edge actions (an icon pointing a box to the left edge, and one pointing right),
+      so this row is timeline/clip operations. Find the actual handler and say what it does today — if it
+      is a toggle, splitting it is trivial; if it cycles through more than two states, ask him which two
+      he means rather than guessing.
+      Related in spirit to **425** (he wanted the trash / copy / parent buttons moved on PC) — the same
+      toolbar family, so check that entry for anything already known about this row.
 
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
