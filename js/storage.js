@@ -833,6 +833,37 @@ window.FM = window.FM || {};
   }
   FM.storage_sanitizeUnsafeValues = sanitizeUnsafeValues;   // seam: the suite drives the real function
 
+  /* A LAYER'S TIMING MUST BE A NUMBER (queue 467, found by a bug hunt).
+   * The project's own width/height/fps/duration have been clamped since the OOM-brick fix above, but the
+   * LAYER's start and duration never were — an asymmetry, not a decision. Measured: a file carrying
+   * `"duration": "abc"`, `null` or `{}` imports with that value intact, and since every timeline and
+   * compositor read is `start + duration`, the arithmetic goes to NaN. The clip then silently never
+   * renders and the whole project reports itself as 0 seconds long. No crash, no message — the project
+   * just looks empty, which is the worst way for a file to fail.
+   * It matters more from here on: sharing project and template files with other people is something Ezra
+   * has asked for (queue 427), and that turns "a file I made" into "a file someone sent me".
+   * ⚠️ speed and volume are KEYFRAMABLE, so they arrive as {kf:[…]} objects on perfectly good projects.
+   * Coercing those to numbers would silently delete real animation — a far worse bug than the one being
+   * fixed — so an animated value is left alone and only a non-finite PLAIN value is repaired. */
+  function num(v, lo, hi, dflt) {
+    // MISSING is not the same as OUT OF RANGE, and conflating them was wrong in the first draft:
+    // `+null` is 0, which is finite, so a null duration clamped to the 0.05 floor and imported as a
+    // 20-millisecond sliver of a clip instead of falling back to a sane length. Absent means absent.
+    if (v === null || v === undefined || v === '') return dflt;
+    v = +v;
+    return isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt;
+  }
+  function sanitizeTiming(l) {
+    if (!l) return;
+    l.start = num(l.start, 0, 3600, 0);
+    l.duration = num(l.duration, 0.05, 3600, 1);       // 0 would be a clip that cannot be selected or seen
+    if (l.trimStart != null) l.trimStart = num(l.trimStart, 0, 3600, 0);
+    // …and the two that may legitimately be animated: repair a broken plain value, never touch a keyframed one.
+    if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, 0.05, 100, 1);
+    if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, 0, 4, 1);
+  }
+  FM.storage._sanitizeTiming = sanitizeTiming;   // seam: the suite drives the real function
+
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
@@ -843,6 +874,7 @@ window.FM = window.FM || {};
       sanitizeMasks(l);
       sanitizeCamera(l);
       sanitizeUnsafeValues(l);
+      sanitizeTiming(l);
     });
   }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a

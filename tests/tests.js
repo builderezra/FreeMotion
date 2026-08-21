@@ -24695,6 +24695,58 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('import: a layer\'s timing is always a number, and a good project is untouched (queue 467)', { item: '467' }, function () {
+    /* Found by a bug hunt, not reported. The project's own width/height/fps/duration have been clamped
+     * since the OOM-brick fix, but the LAYER's start and duration never were — an asymmetry rather than
+     * a decision. MEASURED before the fix: a file carrying "duration": "abc" imported with the string
+     * intact; since every timeline and compositor read is `start + duration`, the arithmetic went to NaN,
+     * the clip silently never rendered, and the whole project reported itself as 0 seconds long. No
+     * crash and no message — it just looked empty, which is the worst way for a file to fail.
+     * It matters more from here: sharing project and template files is something Ezra has asked for
+     * (queue 427), which turns "a file I made" into "a file someone sent me". */
+    if (!FM.storage || !FM.storage._sanitizeTiming) throw new Error('FM.storage._sanitizeTiming is not reachable');
+    const san = FM.storage._sanitizeTiming;
+
+    // Every shape a broken file can carry must come out a finite, usable number.
+    [['a string', 'abc'], ['an object', {}], ['an array', []], ['null', null], ['absent', undefined],
+     ['Infinity', Infinity], ['NaN', NaN], ['negative', -5], ['absurd', 1e12]].forEach(function (c) {
+      const l = { id: 'x', type: 'text', start: 0, duration: c[1], transform: {} };
+      san(l);
+      if (typeof l.duration !== 'number' || !isFinite(l.duration)) throw new Error('a duration of ' + c[0] + ' survived import as ' + JSON.stringify(l.duration) + ' — every `start + duration` downstream becomes NaN, so the clip vanishes and the project reads as 0 seconds long');
+      if (l.duration <= 0) throw new Error('a duration of ' + c[0] + ' became ' + l.duration + ', a clip that cannot be seen or selected');
+    });
+    const neg = { id: 'x', type: 'text', start: -1e999, duration: 2, transform: {} };
+    san(neg);
+    if (!isFinite(neg.start) || neg.start < 0) throw new Error('a start of -Infinity survived as ' + neg.start);
+
+    /* THE CONTROL, and it is the more important half: a sanitiser that quietly rewrites GOOD data is a
+       worse bug than the one it fixes. Byte-identity against the real function, on a layer carrying the
+       awkward cases — fractional timing, and keyframed speed/volume, which arrive as {kf:[…]} objects on
+       any project with a speed ramp. Coercing those to numbers would silently delete real animation. */
+    const good = { id: 'G1', type: 'video', start: 1.5, duration: 3.25, trimStart: 0.5,
+                   speed: { kf: [{ t: 0, v: 1 }, { t: 3, v: 2 }] },
+                   volume: { kf: [{ t: 0, v: 1 }, { t: 3, v: 0 }] }, transform: {} };
+    const before = JSON.stringify(good);
+    san(good);
+    if (JSON.stringify(good) !== before) throw new Error('a perfectly good layer was rewritten on import:\n  before ' + before + '\n  after  ' + JSON.stringify(good));
+    if (!FM.isAnimated(good.speed) || !FM.isAnimated(good.volume)) throw new Error('a keyframed speed/volume was flattened to a plain number — that deletes the animation the project was built with');
+
+    // …while a broken PLAIN speed is still repaired.
+    const broken = { id: 'G2', type: 'video', start: 0, duration: 2, speed: 'fast', transform: {} };
+    san(broken);
+    if (typeof broken.speed !== 'number' || !isFinite(broken.speed)) throw new Error('a non-numeric plain speed survived as ' + JSON.stringify(broken.speed));
+
+    /* …AND IT MUST ACTUALLY BE WIRED IN. Everything above drives _sanitizeTiming directly, which proves
+       the function works and NOTHING about whether import calls it. That gap is not hypothetical: deleting
+       the call from sanitizeImportedLayers left every assertion above passing. Two facts either side of a
+       seam, and the test only knew one of them. This drives the REAL entry point every foreign layer comes
+       through — project import, template insert, element insert, project duplicate. */
+    const viaImport = [{ id: 'W1', type: 'text', text: 'hi', start: 'nonsense', duration: 'abc', transform: {} }];
+    FM.storage._sanitizeLayers(viaImport);
+    if (typeof viaImport[0].duration !== 'number' || !isFinite(viaImport[0].duration)) throw new Error('the import path does not call the timing sanitiser — a broken duration reaches the scene however well the sanitiser itself works');
+    if (typeof viaImport[0].start !== 'number' || !isFinite(viaImport[0].start)) throw new Error('the import path leaves a non-numeric start intact');
+  });
+
   test('text to voice: the button is where he drew it, and the menu reads the layer\'s own words (queue 392)', { item: '392' }, async function () {
     /* Ezra: *"Where I outlined add a button that says text to voice and make a whole menu and feature for
      * this"*, and then, once told what the browser can and cannot do: *"...if this is too hard then don't

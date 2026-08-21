@@ -11695,6 +11695,34 @@ wait for them to report back."*
       ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
+- [x] **467 — A damaged project file imports as an empty-looking project.** ✅ **DONE v11.48.**
+      (22 Aug — found by a bug hunt sweeping the import path with hostile files, not reported by Ezra.)
+      **What happened:** a `.fmotion.json` carrying a layer whose `duration` was not a number — a string,
+      `null`, `{}`, or `1e999` (JSON has no Infinity literal, but that parses to it) — imported with the
+      value intact. Every timeline and compositor read is `start + duration`, so the arithmetic went to
+      NaN: the clip silently never rendered and the project reported itself as **0 seconds long**. No
+      crash, no message. It simply looked like the work was gone, which is the worst way for a file to
+      fail. Reproduced against a clean control at every step, because "no clip element found" is exactly
+      the kind of reading that is usually a wrong selector rather than a real bug.
+      **Root cause: an asymmetry, not a decision.** `clampProjectDims` has bounded the PROJECT's width,
+      height, fps and duration since the OOM-brick fix — but nothing ever bounded the LAYER's own timing.
+      **Fix:** `sanitizeTiming` in the layer sanitiser, which is the gate every batch of foreign layers
+      passes through (project import, template insert, element insert, project duplicate — queue 217 made
+      that structural, so a new import route cannot forget).
+      ⚠️ **speed and volume are KEYFRAMABLE and are deliberately left alone when animated.** They arrive as
+      `{kf:[…]}` on any project with a speed ramp, and coercing those to numbers would silently delete real
+      animation — a worse bug than the one being fixed. Only a broken PLAIN value is repaired.
+      ⚠️ **A MUTATION SURVIVED FIRST, and the lesson is worth more than the fix.** Deleting the call from
+      the import path left every assertion passing, because the test drove `_sanitizeTiming` DIRECTLY — it
+      proved the function worked and nothing at all about whether anything called it. Two facts either side
+      of a seam, again. The test now drives the real entry point as well.
+      Also fixed on the way: `null` was being treated as out-of-range rather than absent, so a null duration
+      clamped to the 0.05 floor and imported as a 20-millisecond sliver instead of a sane default.
+      **Swept and found CLEAN in the same hunt** (recorded so it is not re-checked every session):
+      prototype pollution via `__proto__` / `constructor` in a layer or in the project (no pollution);
+      remote and `javascript:` `fillImage` URLs (both dropped); prototype-chain effect types
+      (`constructor`, `toString` — both dropped); and the 2000-layer refusal.
+
 - [x] **466 — Text to Voice forgot your chosen voice.** ✅ **DONE v11.47.** (22 Aug — found by a bug
       hunt, not reported by Ezra. His standing instruction from 260 covers it: *"When you finish the last
       thing, do a bug and issue hunt. Also look for potential ideas and things to do."*)
