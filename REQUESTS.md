@@ -2734,6 +2734,8 @@ better still, keep working inside the turn rather than parking work for a later 
       the screen-breaking part is measured and fixed, but whether the slam now LOOKS right is yours to
       judge. Say if it still does not and this is live again.
 
+      **ANSWERED BY EZRA, 21 Aug:** *"yes i want it, just fix it"*. So the slam Easter egg STAYS and
+      the PC regression is to be fixed. No design question here — it worked before, make it work again.
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
@@ -3697,6 +3699,14 @@ better still, keep working inside the turn rather than parking work for a later 
       carrying an unknown**, which is the reverse of what was recorded.
       Still yours to call, and still for the same reason: I can measure a discontinuity, and you can hear
       whether it sounds like anything.
+      **ANSWERED BY EZRA, 21 Aug:** *"if audio key frames break the project and lag too much just put a
+      warning next to it before use- I may not be understanding what ur saying because it is a bit
+      confusing"*. Combined with his standing line the same day — *"I just want options"* — the answer
+      is: **BUILD ALL SIX, and put a warning next to the expensive ones.** Do not silently withhold a
+      slider because it is costly; label it and let him decide. The six: Reverb Size, Reverb Decay,
+      Distortion Drive, Bit Crush Bits, Lo-Fi Amount, Pitch Shift Semitones. Measured costs to put in
+      the warning: Reverb ~12.5ms per frame (75% of the frame budget); Bit Crush, Distortion and Lo-Fi
+      click audibly when swept (6.8x, 2.8x and 1.7x worse than static).
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
@@ -11216,6 +11226,20 @@ wait for them to report back."*
       **Not started.** Option 1 can ship in an afternoon and is worth doing regardless; 2 and 3 are
       different features wearing the same button.
 
+      **ANSWERED BY EZRA, 21 Aug — his words, verbatim:** *"text to voice should work like how TikTok's
+      or capcuts does and be in the position I told you to put it, if this is too hard then don't do it
+      but atleast a simple option for me to test, if it's really bad maybe just leave it as an effect in
+      the audio effects menu and text effects menu and make sure it actually works like an effect if you
+      do so"*.
+      **Four clauses — tick separately:** (1) behave like TikTok/CapCut text-to-speech: pick a voice,
+      it reads your text aloud as an audio layer; (2) in the position he previously specified — FIND
+      that earlier instruction in this file, do not guess; (3) if the full thing is too hard, ship a
+      SIMPLE version he can test rather than nothing; (4) the fallback is to expose it as an effect in
+      BOTH the audio effects menu and the text effects menu — and if so it must behave like a real
+      effect, not a special case.
+      ⚠️ Worth telling him: a good TTS voice normally means a cloud service (a key, a bill, data leaving
+      the device). The browser's built-in `speechSynthesis` is free, offline and instant but sounds
+      robotic and CANNOT be recorded to a file on iOS. That constraint decides the shape of this.
 - [x] **393 — The "Loading …" bar sits ON TOP of the pop-up menus.** ✅ **v9.94.** (18 Aug, phone screenshot at v9.93:
       the "Loading IMG_2596" pill covering the Edit Shape card in the category grid.) His words, verbatim:
       *"Make it so the loading bar goes behind the pop up menus, so it isn't obstructing."*
@@ -12202,6 +12226,8 @@ wait for them to report back."*
       nobody can construct on demand — which is exactly why this stayed open.
       ⚠️ **So if you still see the dots pushed off, it is NOT this.** Tell me the window height and it goes
       back on the list with a real reproduction to work from.
+      **ANSWERED BY EZRA, 21 Aug:** *"fixed"*. ✅ The guard that shipped works — the Add panel no
+      longer pushes the page dots off the bottom for him. Closing this.
 - [x] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
       ✅ **CLOSED 20 Aug at v10.66 — THE ANOMALY IS NOT REAL, AND THE ORIGINAL MEASUREMENT WAS WRONG.**
       Re-measured live across a real play (`tests/_pillcolour.html`), sampling every 150ms: paused, the
@@ -12804,6 +12830,24 @@ wait for them to report back."*
       173-792, no overlap; suite green 794/794 with both keyboard tests re-pointed at the new position.
       **Do not tick this until Ezra confirms on a real iPhone** — every previous attempt also passed its
       tests, and that is exactly how this entry survived so long.
+
+- [ ] **453 — Leaving a project mid-drawing leaves you stuck in the sketch mode, in THAT project and in
+      others.** (21 Aug, from his phone.) His words, verbatim: *"Also when you leave a project mid
+      drawing it still has you in the drawing menu sketching menu when you load back in and if you load
+      another project it's also doing the drawing thing still"*.
+      **Two distinct clauses, and the second is the worse one — tick them separately:**
+      1. Leave a project while the draw/sketch tool is open, come back to THAT project, and you are
+         still in the drawing menu.
+      2. Leave a project while drawing and open a DIFFERENT project, and that one is in drawing mode
+         too — so the tool's state is surviving a project switch entirely. That points at the draw
+         tool's active state living somewhere global (a module-level flag or a body class) that project
+         load does not clear, rather than in the project it belongs to.
+      Related to **361** (sketching), but a different failure: 361 is a stroke not repainting, this is
+      the MODE not exiting. Keep them apart.
+      Where to look: js/draw-tool.js's teardown, and whatever the project-open path resets — compare
+      against how text-edit.js tears down (it removes its panel and clears body.text-editing), which is
+      the pattern that works.
+
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.
