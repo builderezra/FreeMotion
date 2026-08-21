@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>ramped-speed trim (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out (reported by two lenses in two forms): head-trimming a clip advances
+   trimStart by the INSTANTANEOUS speed at the new head times the delta, where a ramp needs the INTEGRAL
+   of the curve. FM.splitLayer already uses the integral (FM.layerSourceAdvance) — so the right primitive
+   exists in the codebase and the trim does not use it. Same shape as the caption and group-move faults.
+   The measurement needs no media: FM.layerLocalTime maps a project time to the SOURCE time it shows.
+   A trim of the HEAD must not change which source frame is on screen at any surviving project time. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.trimLayerHead&&w.FM.layerLocalTime&&w.FM.extendClipTo)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function run(FM){
+  var L=[];
+  function mk(ramped, reversed){
+    FM.scene.layers.length=0;
+    var v=FM.makeLayer('video',{name:'clip'});
+    v.start=2; v.duration=6; v.trimStart=1; v.reversed=!!reversed;
+    v.speed = ramped ? {kf:[{t:2,v:0.5,e:'linear'},{t:8,v:2.0,e:'linear'}]} : 1.5;
+    FM.scene.layers.push(v);
+    FM.media.set(v.id,{kind:'video',duration:60,width:2,height:2});
+    return v;
+  }
+  function srcAt(v, times){ return times.map(function(t){ var s=FM.layerLocalTime(v,t); return s===null?null:+s.toFixed(4); }); }
+  [['static speed 1.5x',false],['RAMPED speed 0.5x -> 2x',true]].forEach(function(c){
+    var v=mk(c[1],false);
+    var times=[4.0,5.0,6.0,7.0];                 // all survive a 1s head trim (clip 2..8 -> 3..8)
+    var before=srcAt(v,times);
+    FM.trimLayerHead(v, 1);                      // pull the head 1s later
+    var after=srcAt(v,times);
+    var worst=0,worstT=null;
+    times.forEach(function(t,i){ if(before[i]===null||after[i]===null) return; var d=Math.abs(after[i]-before[i]); if(d>worst){worst=d;worstT=t;} });
+    L.push('  '+c[0].padEnd(26)+'source time '+before.join(', ')+'  ->  '+after.join(', '));
+    L.push('  '+''.padEnd(26)+(worst>0.01?'❌ the picture shifted by '+worst.toFixed(3)+'s of source at t='+worstT:'✅ unchanged'));
+    L.push('');
+  });
+  // and the reversed + ramped tail case, reported separately
+  var v=mk(true,true);
+  var times=[3.0,4.0,5.0];
+  var before=srcAt(v,times);
+  FM.time=v.start+v.duration+1;
+  var did=FM.extendClipTo(v, FM.time);
+  var after=srcAt(v,times);
+  var worst=0,worstT=null;
+  times.forEach(function(t,i){ if(before[i]===null||after[i]===null) return; var d=Math.abs(after[i]-before[i]); if(d>worst){worst=d;worstT=t;} });
+  L.push('  reversed + ramped, TAIL extended by 1s (extendClipTo returned '+did+')');
+  L.push('    source time '+before.join(', ')+'  ->  '+after.join(', '));
+  L.push('    '+(worst>0.01?'❌ every frame already on screen shifted by up to '+worst.toFixed(3)+'s of source (worst at t='+worstT+')':'✅ unchanged'));
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

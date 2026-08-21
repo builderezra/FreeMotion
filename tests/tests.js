@@ -3530,6 +3530,67 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('speed ramps: trimming or extending an edge does not move the surviving picture', { item: 'ramp-edges' }, function () {
+    /* BUG HUNT (21 Aug), eighth and ninth verified leads from BUG-HUNT §34, reported by two lenses in
+       three forms. Moving a clip's edge advances trimStart by the INSTANTANEOUS speed at that edge times
+       the delta — correct only when the speed is flat. FM.splitLayer already used the ramp's INTEGRAL
+       (FM.layerSourceAdvance), so the right primitive existed and the edge editors were not using it.
+       Measured on a 0.5x -> 2x ramp (tests/_ramptrim.html), via FM.layerLocalTime, which maps a project
+       time to the SOURCE time showing at it — so this needs no media and states the defect exactly:
+         · head-trimming 1s displaced the surviving picture by 0.125s of source (~4 frames at 30fps);
+         · extending the tail of a REVERSED ramped clip displaced every frame on screen by a FULL SECOND,
+           because the cap on how far the tail can grow divided the available source by a flat rate.
+       THE STATIC-SPEED CASE IS THE CONTROL and runs first: if a flat 1.5x clip drifted too, the probe's
+       idea of source time would be wrong and nothing else here would mean anything. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const mk = (ramped, reversed) => {
+        FM.scene.layers.length = 0;
+        const v = FM.makeLayer('video', { name: 'clip' });
+        v.start = 2; v.duration = 6; v.trimStart = 1; v.reversed = !!reversed;
+        v.speed = ramped ? { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 8, v: 2, e: 'linear' }] } : 1.5;
+        FM.scene.layers.push(v);
+        FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+        return v;
+      };
+      const srcAt = (v, times) => times.map(t => { const s = FM.layerLocalTime(v, t); return s === null ? null : +s.toFixed(4); });
+      const drift = (was, now, times) => {
+        let worst = 0, worstT = null;
+        times.forEach((t, i) => {
+          if (was[i] === null || now[i] === null) return;
+          const d = Math.abs(now[i] - was[i]); if (d > worst) { worst = d; worstT = t; }
+        });
+        return { worst: worst, at: worstT };
+      };
+
+      // 1 + 2: head trim, flat speed (control) then ramped
+      [['static 1.5x (CONTROL)', false], ['ramped 0.5x -> 2x', true]].forEach(([what, ramped]) => {
+        const v = mk(ramped, false);
+        const times = [4, 5, 6, 7];                    // all survive a 1s head trim (2..8 -> 3..8)
+        const before = srcAt(v, times);
+        if (before.some(x => x === null)) throw new Error('CONTROL FAILED: a sample fell outside the clip before the trim (' + what + ')');
+        FM.trimLayerHead(v, 1);
+        const d = drift(before, srcAt(v, times), times);
+        if (d.worst > 0.01) throw new Error('head-trimming a ' + what + ' clip moved the picture by ' + d.worst.toFixed(3) + 's of source at t=' + d.at);
+      });
+
+      // 3: reversed + ramped, tail extended past the source that is actually available
+      {
+        const v = mk(true, true);
+        const times = [3, 4, 5];
+        const before = srcAt(v, times);
+        FM.time = v.start + v.duration + 1;
+        if (!FM.extendClipTo(v, FM.time)) throw new Error('CONTROL FAILED: extendClipTo did nothing');
+        const d = drift(before, srcAt(v, times), times);
+        if (d.worst > 0.01) throw new Error('extending the tail of a reversed ramped clip moved every frame on screen by ' +
+          d.worst.toFixed(3) + 's of source at t=' + d.at);
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('move: moving a GROUP clip takes the layers inside it along', { item: 'move-group' }, function () {
     /* BUG HUNT (21 Aug), seventh verified lead from BUG-HUNT §34. FM.moveLayerToPlayhead already knew a
        group bar carries its members — its own comment says so — and FM.moveClipTo did not. Same shape as

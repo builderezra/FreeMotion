@@ -2880,9 +2880,15 @@ window.FM = window.FM || {};
     if (side > 0) {                                            // stretch the TAIL out to the playhead
       let nd = Math.max(0.1, t - layer.start);
       if (rev) {
-        const extra = (nd - d0) * sp;                          // the tail is the window START: eat source below trimStart
+        // the tail is the window START: eat source below trimStart — through the ramp's INTEGRAL, not a
+        // flat multiply (which used sp = 1 for a ramp and threw the whole clip a full second out).
+        /* Cap the growth against the source that is actually THERE, solved on the real curve: the old
+         * `d0 + tr0 / sp` used a flat rate (1x for any ramp), so the source consumed did not equal the
+         * source given up and the whole clip slid by the difference. */
+        if (FM.speedAdvanceSolve) nd = Math.max(0.1, FM.speedAdvanceSolve(layer, d0, nd, tr0 || 0));
+        let extra = FM.speedAdvanceOver ? FM.speedAdvanceOver(layer, d0, nd) : (nd - d0) * sp;
         let nt = (tr0 || 0) - extra;
-        if (nt < 0) { nd = Math.max(0.1, d0 + (tr0 || 0) / sp); nt = 0; }
+        if (nt < 0) { nt = 0; }
         layer.trimStart = nt;
         layer.duration = nd;
       } else {
@@ -2901,11 +2907,16 @@ window.FM = window.FM || {};
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
       } else {
-        const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // local source rate at the new head
-        if (layer.type === 'video' && (layer.trimStart || 0) + delta * spL < 0) delta = -(layer.trimStart || 0) / spL;
+        // Source consumed by the head movement, through the ramp's integral (see FM.headSourceDelta).
+        const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // still needed to re-solve a clamped delta
+        let srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
+        if (layer.type === 'video' && (layer.trimStart || 0) + srcD < 0) {
+          delta = -(layer.trimStart || 0) / spL;                            // approximate re-solve, then re-integrate exactly
+          srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
+        }
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
-        if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * spL;
+        if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + srcD;
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene — it cascades into every layout

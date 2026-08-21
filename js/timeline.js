@@ -2500,9 +2500,14 @@ window.FM = window.FM || {};
   FM.trimLayerHead = function (layer, delta) {
     if (!layer || !isFinite(delta)) return;
     const caps = Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null;
+    /* Computed BEFORE start/duration move, and through the RAMP'S INTEGRAL rather than the instantaneous
+     * rate at one end (bug hunt, 21 Aug) — on a 0.5x -> 2x ramp the old flat multiply displaced the
+     * surviving picture by 0.125s of source per second trimmed. FM.headSourceDelta is signed. */
+    const srcDelta = (FM.headSourceDelta ? FM.headSourceDelta(layer, delta)
+                                         : delta * (FM.speedAt ? FM.speedAt(layer, layer.start) : 1));
     layer.start = (layer.start || 0) + delta;
     layer.duration = Math.max(0.1, (layer.duration || 0) - delta);
-    if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * (FM.speedAt ? FM.speedAt(layer, layer.start) : 1);
+    if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + srcDelta;
     if (caps) layer.captions = shiftCues(caps, delta);
   };
 

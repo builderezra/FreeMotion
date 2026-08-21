@@ -1759,7 +1759,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
       `audio-react.js:296` — Import a music track and a logo. On the logo add a behavior -> Audio drive, pick the music layer as 'Audio from' (the picker at js/inspector.js:3959 / js/behaviors.js:66), set it to pump scale. Play: the logo pumps for the whole song. Now select the music clip, park the playhead halfway and Split at
 - [ ] **Split inserts a 90ms dip to silence at the cut in preview — the 45ms de-click envelope is measured from each clip's own edges**  
       `app.js:1266` — Drop a continuous music track (or a video with continuous room tone) on the timeline, play it and hear it run smoothly. Park the playhead mid-clip and Split at playhead, then play across the cut. You hear a short dip/blip — a ~90ms V-shaped duck all the way to silence straddling the cut — that was n
-- [ ] **Head-trimming a speed-RAMPED clip moves the picture: trimStart is advanced by the instantaneous rate at the new head instead of the integral of the ramp**  
+- [x] **Head-trimming a speed-RAMPED clip moves the picture: trimStart is advanced by the instantaneous rate at the new head instead of the integral of the ramp**    
+      ➜ **REAL — fixed v11.13, see §43**
       `timeline.js:2438` — Drop a 4s video at t=0. In Speed, keyframe 0.5x at t=0 and 2.0x at t=4 (a linear ramp). Grab the clip's LEFT trim grip and drag it 2.0s to the right. Expected: the frame now at the head is the one that was at project t=2, i.e. 1.75s into the source (the integral). Actual: trimStart becomes 2 x speed
 - [x] **FM.extendClipTo does not re-base caption cues, so extending a caption track's head slides every caption earlier and out of sync**    
       ➜ **REAL — fixed v11.06, see §36**
@@ -1771,9 +1772,11 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
       `app.js:2586` — Add a shape ("Box") and a text layer ("Title"). On Title, layer menu → Parent → Box. Select both rows, then ⋯ → "Duplicate 2 layers" (js/app.js:4376, or the keyboard shortcut at js/app.js:5340). Since queue 156 a duplicate lands exactly on its original, so nothing looks wrong yet. Now drag "Box copy
 - [ ] **Copied effects / saved layer presets carry a layer id across projects; the effect then silently renders nothing**  
       `inspector.js:341` — In project A, put Luma Matte on a clip and pick "Logo" as its source; the clip is cut to the logo's luma. Press Copy in the effects header. Open project B, select any clip, press Paste. The toast says "Pasted 1 effect", the Luma Matte row appears in the stack — and the clip renders as the full uncut
-- [ ] **Head-trimming a speed-ramped clip uses a flat multiply where the ramp needs integrating — the remaining footage jumps**  
+- [x] **Head-trimming a speed-ramped clip uses a flat multiply where the ramp needs integrating — the remaining footage jumps**    
+      ➜ **REAL (same bug) — fixed v11.13, see §43**
       `timeline.js:2434` — Put a video clip on the timeline, keyframe its Speed to ramp from 25% at the clip start to 400% at the clip end (Speed panel ◆ button at each end). Park the playhead 2s into the 6s clip and note the frame on canvas. Now drag the clip's LEFT grip to that same playhead position. The frame at the new h
-- [ ] **On a reversed + speed-ramped clip the tail grip treats the ramp as 1×, so extending the tail shifts every frame already on screen**  
+- [x] **On a reversed + speed-ramped clip the tail grip treats the ramp as 1×, so extending the tail shifts every frame already on screen**    
+      ➜ **REAL, and the worst of the three — fixed v11.13, see §43**
       `timeline.js:2410` — Video clip, tick 'Reverse (video + audio)', then keyframe Speed to ramp 100%→400% across the clip. Note the very first frame the clip shows. Drag the clip's RIGHT grip out by one second. The first frame changes — the entire clip's content slides through the footage — even though you only touched the
 - [ ] **maxDurForSource is the one speed site still doing raw `|| 1` division — a malformed imported speed prop writes NaN straight into layer.duration on media replace**  
       `scene.js:693` — Load a `.fmotion.json` whose video layer has `"speed": {"keys":[{"t":0,"v":1}]}` (the load path deliberately does not re-sanitise, per the note at js/scene.js:680-683). Right-click the clip → Replace media, pick any video: the clip's duration becomes NaN and the clip disappears from the timeline / t
@@ -2043,3 +2046,40 @@ t=7 is outside it.
 Worth recording as the mirror image of the other probe failures in this run: three times a probe reported a
 false CLEAN, and once it reported a false FAILURE. Both come from the probe encoding an assumption the code
 never made. The test now samples the midpoint of wherever the clip actually landed.
+
+## 43. Speed-ramped clips: dragging an edge moved the picture that was already on screen (21 Aug, v11.13) — REAL, three §34 leads at once
+
+Two lenses reported this in three forms. All three are one fault: an edge editor works out how much SOURCE
+an edge movement consumes by taking the **instantaneous** speed at that edge and multiplying. That is only
+right when the speed is flat. `FM.splitLayer` already used the ramp's **integral** (`layerSourceAdvance`), so
+the correct primitive was in the codebase and the edge editors simply were not using it — the same shape as
+§36 and §42.
+
+**Measured** on a 0.5× → 2× ramp (`tests/_ramptrim.html`) through `FM.layerLocalTime`, which maps a project
+time to the source time showing at it — so no media is needed and the defect is stated exactly:
+
+| edit | source time at surviving frames | drift |
+|---|---|---|
+| static 1.5×, head trimmed 1s (**control**) | 4, 5.5, 7, 8.5 → 4, 5.5, 7, 8.5 | 0 |
+| ramped, head trimmed 1s | 2.5, 3.625, 5, 6.625 → 2.625, 3.75, 5.125, 6.75 | **0.125s** (~4 frames) |
+| reversed + ramped, tail extended 1s | 7.875, 7, 5.875 → 8.875, 8, 6.875 | **1.000s** (30 frames) |
+
+**Two fixes, and the second was not obvious.**
+
+1. `FM.speedAdvanceOver(layer, from, to)` — the integral between two points in a clip. `layerSourceAdvance`
+   clamps to `[0, duration]`, so it cannot answer "past the tail" (tail extend) or "before the head" (head
+   pulled earlier), which is exactly what was being asked. Implemented by presenting the layer as a virtual
+   clip spanning the window asked about — the speed keyframes are in absolute project time, so a shifted
+   window integrates the right part of the curve, and the existing cache signature already includes start
+   and duration so each window gets its own table. Restored on a `finally`.
+
+2. The reversed-tail case was **still a full second out after fix 1**, and the cause was the CAP, not the
+   integral. A reversed clip's tail eats source below `trimStart`, so growth is limited by how much is
+   there — and the old cap divided the available source by a flat rate (1× for any ramp). The source
+   consumed then did not equal the source given up, and the whole clip slid by the difference.
+   `FM.speedAdvanceSolve` bisects the real curve for the largest tail that fits the budget. Bisection rather
+   than algebra because the ramp is an arbitrary keyframed curve with easing, and this runs once per edit.
+
+**The static-speed case is the control and runs first** in the suite test: had a flat 1.5× clip drifted too,
+the measurement of source time itself would have been wrong and nothing else would have meant anything.
+Both fixes mutation-checked independently.

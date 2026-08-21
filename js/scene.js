@@ -749,6 +749,55 @@ window.FM = window.FM || {};
     layer.duration = save;
     return Math.max(0.1, lo);
   };
+  /* HOW MUCH SOURCE IS CONSUMED BETWEEN TWO POINTS IN A CLIP (bug hunt, 21 Aug).
+   * FM.layerSourceAdvance above answers "from the clip's start", and CLAMPS to [0, duration] — so it
+   * cannot answer "past the tail" (needed when a tail is extended) or "before the head" (needed when a
+   * head is pulled earlier), which is exactly what the edge editors were asking. They were using the
+   * INSTANTANEOUS rate at one end times the delta instead, which is only right when the speed is flat.
+   * Measured (tests/_ramptrim.html) on a 0.5x -> 2x ramp: a 1s head trim displaced the surviving picture
+   * by 0.125s of source, and extending the tail of a REVERSED ramped clip displaced every frame already
+   * on screen by a full second.
+   * Implemented by presenting the layer as a virtual clip spanning exactly the window asked about. The
+   * speed keyframes are in ABSOLUTE project time, so integrating a shifted window integrates the right
+   * part of the curve; and layerSourceAdvance's own cache signature includes start and duration, so each
+   * window gets its own table rather than a stale one. Restored on a finally, so a throw inside cannot
+   * leave the layer resized. One-shot edit path only — never per frame. */
+  FM.speedAdvanceOver = function (layer, fromInto, toInto) {
+    if (!layer || !(toInto > fromInto)) return 0;
+    const s0 = layer.start, d0 = layer.duration;
+    try {
+      layer.start = (s0 || 0) + fromInto;
+      layer.duration = Math.max(0.001, toInto - fromInto);
+      const v = FM.layerSourceAdvance(layer, layer.duration);
+      return isFinite(v) ? v : 0;
+    } finally { layer.start = s0; layer.duration = d0; }
+  };
+
+  /* HOW FAR CAN THE TAIL GROW BEFORE IT RUNS OUT OF SOURCE? (bug hunt, 21 Aug.)
+   * A reversed clip's tail eats source BELOW trimStart, so the growth is capped by how much there is.
+   * The old cap divided the available source by a flat rate — and for a ramp it used a rate of 1x — so
+   * the source it actually consumed did not match the source it gave up, and every frame already on
+   * screen slid by the difference: measured at a full second (tests/_ramptrim.html).
+   * Solved against the real curve instead. Bisection rather than algebra because the ramp is an
+   * arbitrary keyframed curve with easing, and this runs once per edit, not per frame. */
+  FM.speedAdvanceSolve = function (layer, fromInto, maxTo, budget) {
+    if (!(maxTo > fromInto) || !(budget > 0)) return fromInto;
+    if (FM.speedAdvanceOver(layer, fromInto, maxTo) <= budget) return maxTo;
+    let lo = fromInto, hi = maxTo;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (FM.speedAdvanceOver(layer, fromInto, mid) > budget) hi = mid; else lo = mid;
+    }
+    return lo;
+  };
+
+  /* The source consumed by moving a clip's HEAD by `delta` seconds — positive trims inward, negative
+   * pulls it earlier and reveals source before the current window. Signed, so callers just add it. */
+  FM.headSourceDelta = function (layer, delta) {
+    if (!isFinite(delta) || !delta) return 0;
+    return delta > 0 ? FM.speedAdvanceOver(layer, 0, delta) : -FM.speedAdvanceOver(layer, delta, 0);
+  };
+
   FM.layerLocalTime = function (layer, t) {
     if (t < layer.start || t >= layer.start + layer.duration) return null;
     const into = t - layer.start;                       // seconds into the clip
