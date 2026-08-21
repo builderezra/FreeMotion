@@ -13645,8 +13645,7 @@ wait for them to report back."*
       ⚠️ **The lesson for whoever edits this file next: `s.find(marker)` searches from position 0.**
       Cutting a region needs `s.find(end, i + len(start))`. Getting it wrong does not raise — it
       duplicates, silently, and the app still boots.
-- [ ] **459 — The open-a-project animation is still not right: it should be a SEQUENCE, not both at
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **459 — ✅ **DONE v11.38.** The open-a-project animation is still not right: it should be a SEQUENCE, not both at
       once.** (21 Aug.) His words, verbatim: *"Also the animation made ages ago for when you open a
       project still isn't just right - I want it so the project swipes to the left first with a smooth
       animation that is well designed, and then after it does the swipe to the left the project opens
@@ -13664,6 +13663,30 @@ wait for them to report back."*
       His phrase "made ages ago" means this has been attempted before — find the earlier entry and read
       what was tried, rather than starting from scratch.
 
+      ✅ **DONE v11.38 — both halves of his sentence were true, and they were two separate faults.**
+      **"they move at the same time":** phase 2 started the instant the project finished LOADING. On a
+      large project that is invisible — the list is still travelling and the join never shows — and on a
+      small one the load is a few tens of ms, so both halves ran together and the whole thing read as one
+      cut. Phase 2 now waits for phase 1 to finish, so the order is the same however fast the load is.
+      **"smoothly and slowly":** the arrival had the departure's duration and curve. It is 520ms now
+      against the list's 380ms, on an ease that decelerates into place — a thing leaving can accelerate
+      away, a thing arriving should settle.
+      ✅ **QUEUE 128 IS NOT UNDONE, and the entry was right to warn about it.** That fix was about the
+      CARD not leaving until the load finished — 113ms of dead screen. The card still leaves on the tap:
+      the test asserts the editor is PARKED and the list already moving before phase 2 is even armed.
+      Nothing is idle at any point; the two motions simply no longer overlap. The honest cost is that the
+      whole transition is longer end to end (380 + 520 rather than 380 overlapped), which is what he
+      asked for — "smoothly and slowly".
+      ⚠️ **A DESYNC WAS NEARLY SHIPPED.** The + orb rides with the editor and carried its OWN copy of the
+      duration and curve (`body.fm-pushing #add-fab`), because a `%` translate resolves against the
+      element's own box — the comment there records measuring that desync down to 0.0px. Slowing #app
+      alone would have re-opened it by 140ms, on a different easing. Both now read `--fm-push-in-ms` and
+      `--fm-push-in-ease`, so they cannot drift again.
+      ⚠️ **TIMING CANNOT BE MEASURED IN THE PREVIEW PANE** — it reports `document.hidden`, so a 30ms
+      timer took 971ms and the first check read "not held" when the code was correct. The test drives
+      `close({push:true,wait:true})` and `armPushIn()` in ONE synchronous block, where elapsed time is 0
+      by construction and the hold must engage. Both mutation directions caught; removing the release
+      also trips an existing push test.
 - [ ] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** (21 Aug,
       **STATUS: 🟢 READY — nothing is stopping this**
       with a screenshot.) His words, verbatim: *"Effects in this image STILLLLLLLLLL don't work"*.

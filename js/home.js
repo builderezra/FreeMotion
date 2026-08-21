@@ -99,6 +99,14 @@ window.FM = window.FM || {};
      cannot drift apart — this number also drives the backstop timer, and a backstop that fires before
      the animation it guards leaves a stranded transform on #app. */
   const PUSH_MS = 380;
+  /* THE PROJECT ARRIVES MORE SLOWLY THAN THE LIST LEAVES (queue 459). Ezra: *"I want it so the project
+     swipes to the left first with a smooth animation that is well designed, and then after it does the
+     swipe to the left the project opens from the right smoothly and slowly, currently it's very cutty
+     and they move at the same time and it's just off"*.
+     Two separate complaints in that sentence — they overlap, and the arrival is not slow — so there are
+     two numbers now instead of one. */
+  const PUSH_IN_MS = 520;
+  let pushOutAt = 0;      // when phase 1 began; phase 2 waits for it to finish. See armPushIn.
   // The two long waits, in one mutable object rather than as consts, so the regression suite can
   // drive the abandon path without sleeping for eight seconds. Nothing in the app writes to it.
   //   release — a finger lifted off a card that then opened nothing (see releasePress)
@@ -393,6 +401,7 @@ window.FM = window.FM || {};
   };
 
   try { document.documentElement.style.setProperty('--fm-push-ms', PUSH_MS + 'ms'); } catch (e) {}
+  try { document.documentElement.style.setProperty('--fm-push-in-ms', PUSH_IN_MS + 'ms'); } catch (e) {}
 
   /* TWO-PHASE PUSH (queue 128). Ezra: "make it so the animation of the project layer moving to the
    * left happens instantly, so it feels responsive, then smoothly the project should swoop in too."
@@ -426,6 +435,20 @@ window.FM = window.FM || {};
     const app = document.getElementById('app');
     if (!app || !app.classList.contains('fm-push-wait')) return false;
     if (waitTimer) { clearTimeout(waitTimer); waitTimer = 0; }
+    /* ONE MOTION AT A TIME (queue 459). Phase 2 used to start the instant the project had loaded, which
+     * is right when loading is slow — the list is still travelling and the join is invisible — and is
+     * exactly his complaint when it is fast: a small project loads in a few tens of ms, so both halves
+     * ran together and the whole thing read as one cut rather than two moves.
+     * So phase 2 waits for phase 1 to actually finish. THIS DOES NOT REINSTATE THE DEAD TIME queue 128
+     * removed: that was the CARD not leaving until the load finished, and the card still leaves on the
+     * tap. Something is moving at every moment; the two things simply no longer move at once.
+     * Re-entered rather than recursed so the guards above run again on the second pass. */
+    const since = pushOutAt ? (Date.now() - pushOutAt) : PUSH_MS;
+    if (since < PUSH_MS) {
+      if (waitTimer) clearTimeout(waitTimer);
+      waitTimer = setTimeout(() => { waitTimer = 0; armPushIn(); }, PUSH_MS - since);
+      return true;
+    }
     app.classList.remove('fm-push-wait');
     app.classList.add('fm-push-in');
     app.addEventListener('animationend', onAppPushEnd);   // same ref every time, so this registers once
@@ -433,7 +456,7 @@ window.FM = window.FM || {};
     // there is no incoming animation to guard. Armed at the tap it could fire mid-load and tear the
     // push down with the editor still parked off-screen.
     if (pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_MS + 140);
+    pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_IN_MS + 140);
     return true;
   }
   // The load failed, or there is nothing to arm phase 2 with. Put the home screen back rather than
@@ -464,6 +487,7 @@ window.FM = window.FM || {};
       return false;
     }
     if (pushTimer) endPush(false);           // a second push on top of a running one: restart it
+    pushOutAt = Date.now();                  // phase 2 measures its wait from here (queue 459)
     /* A pop still classed on #app would BEAT the park. fm-pop-out has animation-fill-mode:both, and a
      * running animation always wins over a plain declaration — so `fm-push-wait`'s static transform is
      * silently ignored and the editor sits wherever the pop's last frame left it, part-way on screen

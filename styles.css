@@ -5535,6 +5535,7 @@ body.fm-popping #app { position: fixed; inset: 0; z-index: 210; }
   body.fm-popping #app { position: static; z-index: auto; }
 }
 
+:root { --fm-push-in-ease: cubic-bezier(.16, .84, .28, 1); }   /* arrival decelerates into place (queue 459) */
 @keyframes fm-push-out {          /* the screen you are leaving: less travel, and it dims away */
   from { transform: translate3d(0, 0, 0);    opacity: 1; }
   to   { transform: translate3d(-24%, 0, 0); opacity: .42; }
@@ -5614,7 +5615,11 @@ body.fm-pushing #add-fab { will-change: transform, opacity; }
    The explicit background matters: #app itself is transparent and only its four panels paint, so
    without this the home screen would show through the seams while the two overlap. */
 body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; background: var(--bg); }
-#app.fm-push-in { animation: fm-push-in var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+/* The arrival gets its own, LONGER duration (queue 459) — "the project opens from the right smoothly
+   and slowly". An ease-OUT curve as well: the list leaving is a departure and can accelerate away, but
+   the thing arriving should decelerate into place, which is what makes it read as settling rather than
+   stopping. */
+#app.fm-push-in { animation: fm-push-in var(--fm-push-in-ms, 520ms) var(--fm-push-in-ease) both; }
 /* Phase 1 of the two-phase push (queue 128): the editor waits exactly where fm-push-in's `from` frame
    would have put it, with no animation, while the project loads. A STATIC transform on purpose — the
    point of the split is that the card leaves on the tap while this side stands still, so anything that
@@ -5649,7 +5654,12 @@ body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; backgroun
    outright, the phone block re-styles it at :1887 but the LATER phone rule at :2210 hides it again
    ("AM has no edit pencil"), so nothing ever un-hides it. Re-measured in the real editor at
    320 / 380 / 414 / 700 / 701 / 900 / 1280 — display:none and a 0x0 box at all seven. */
-body.fm-pushing #add-fab { z-index: 212; animation: fm-push-in-vw var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+/* THE ORB'S TIMING IS THE EDITOR'S TIMING, THROUGH THE SAME TWO VARIABLES (queue 459). It rides with
+   #app, so a duration or a curve that differs by anything at all shows up as the orb arriving early and
+   along a different path — the comment above already records measuring this desync down to 0.0px, and
+   slowing the editor to 520ms while this still said 380ms would have re-opened it by 140ms. Two copies
+   of one rule is this project's most expensive bug shape; these are now one. */
+body.fm-pushing #add-fab { z-index: 212; animation: fm-push-in-vw var(--fm-push-in-ms, 520ms) var(--fm-push-in-ease) both; }
 /* The one thing that deliberately does NOT travel. A toast is a message about what just happened
    ("Creating project…", "Added …"), not furniture belonging to either screen, so it stays exactly
    where it is and stays readable while the two screens cross underneath it. It only needs the lift:

@@ -24691,6 +24691,50 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('opening a project is two moves, not one — the list leaves before the project arrives (queue 459)', { item: '459' }, async function () {
+    /* Ezra: *"I want it so the project swipes to the left first with a smooth animation that is well
+     * designed, and then after it does the swipe to the left the project opens from the right smoothly
+     * and slowly, currently it's very cutty and they move at the same time and it's just off"*.
+     * Phase 2 used to start the instant the project had loaded. On a slow load that is invisible — the
+     * list is still travelling — and on a fast one both halves ran together, which is his "they move at
+     * the same time". Phase 2 now waits for phase 1 to finish.
+     * ⚠️ THIS MUST NOT REINSTATE THE DEAD TIME QUEUE 128 REMOVED. That was the CARD not leaving until
+     * the load finished — 113ms of nothing at phone speed. The card must still leave on the tap, which
+     * the parked assertion below is: the editor is positioned and the list is already going.
+     * Driven with ZERO elapsed time between the two calls, on purpose: a hidden or throttled pane
+     * stretches a 30ms timer to nearly a second, so any check that waits before arming measures the
+     * environment rather than the code. Synchronously, the elapsed time is 0 and the hold must engage. */
+    if (!FM.home || !FM.home.armPushIn) throw new Error('FM.home.armPushIn is not reachable');
+    const app = document.getElementById('app');
+    if (!app) throw new Error('no #app');
+    const realGate = FM.home._pushAllowed;
+    try {
+      FM.home._pushAllowed = () => true;      // the push is phone-only; the suite frame is 900px wide
+      app.classList.remove('fm-push-in', 'fm-push-wait');
+      document.body.classList.remove('fm-pushing');
+      if (!FM.home.isOpen()) FM.home.open();
+      await sleep(200);
+
+      FM.home.close({ push: true, wait: true });
+      // The card leaves on the tap: the editor is PARKED off-screen and the list is already moving.
+      if (!app.classList.contains('fm-push-wait')) throw new Error('the editor was not parked by phase 1 — the two-phase push did not start, so nothing below is measuring it');
+
+      FM.home.armPushIn();                    // a project that loaded instantly
+      if (app.classList.contains('fm-push-in')) {
+        throw new Error('the project began arriving in the same instant the list started leaving — both halves are moving at once, which is exactly what he reported');
+      }
+      // …and it must actually arrive afterwards, or the hold is just a hang.
+      await sleep(700);
+      if (!app.classList.contains('fm-push-in')) throw new Error('the project never arrived at all — the hold does not release');
+    } finally {
+      try { FM.home._pushAllowed = realGate; } catch (e) {}
+      app.classList.remove('fm-push-in', 'fm-push-wait');
+      document.body.classList.remove('fm-pushing');
+      try { if (FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(120);
+    }
+  });
+
   test('no element id appears twice in the page (queue 458)', { item: '458' }, function () {
     /* Ezra: *"Save and discard button in the settings cog menu in the project doesn't work"*.
      * They did nothing because they were DUPLICATES. A bad edit in v11.25 wrote `s[:i] + s[j:]` with
