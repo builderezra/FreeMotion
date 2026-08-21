@@ -33,7 +33,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE — keep this current
 
-**v11.26, suite 794 green. List: 38 open, 12 actionable.**
+**v11.26, suite 794 green. List: 41 open, 15 actionable.**
 
 **In flight**
 - **Per-effect-slider keyframes** (unnumbered, oldest actionable). Measured: the six rebuild-style audio
@@ -47,6 +47,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
   tested); the range needs a log mapping so 1.5x is reachable.
 - **#456** — the two rainbow Create buttons must differ in colour, both still animated, and the
   in-project one needs a better animation than a slow spin. Show him options with one marked recommended.
+- **#429 answered** — "the cut-off point" is the track-head DIVIDER LINE, not the project end. The
+  add-layer row's blue fill and its ⊕ must clip at it; bookmarks too. The 20 Aug photographs were all
+  looking at the wrong place.
+- **#457** — the export button was never meant to be rainbow; revert it. NOT the same as #456, which
+  wants the two CREATE buttons rainbow. Do not conflate them.
+- **#458** — 🚨 Save and Discard in the project's cog menu do nothing. Reproduce first and say what
+  "doesn't work" means. Data-loss-shaped; tell him if it reproduces.
+- **#459** — the open-project animation must be a SEQUENCE (card swipes left, THEN the project comes in
+  from the right), not both at once. ⚠️ Fights queue 128, which split them ON PURPOSE to remove 113ms of
+  dead time. Measure the total before and after and say so.
 
 **Waiting on Ezra — note, do not re-ask**
 - **#387** — what was he doing in the 9.5s recording, playing or scrubbing? Measured: 96.2% of frames

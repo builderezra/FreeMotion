@@ -12712,6 +12712,22 @@ wait for them to report back."*
              ⚠️ **Superseded question, kept for the record: WHICH + and is the timeline empty or full.**
              That decides between the three, and this could not be narrowed further without guessing.
 
+      ✅ **THE AMBIGUITY IS ANSWERED — screenshot, 21 Aug. His words, verbatim:** *"Past the line I don't
+      want the blue dots or blue background for the add layer showing, the line is what cuts it off. Also
+      the bookmarks still don't get cut off there and show up there when they should get cut off"*.
+      **So "the cut-off point" is NOT the end of the project.** It is the VERTICAL DIVIDER LINE between
+      the track-head column (eye icon + layer thumbnail) and the timeline tracks — the line at roughly
+      x=200 in his screenshot. Everything above about the project end was the wrong guess, and the four
+      candidates photographed on 20 Aug were all looking in the wrong place.
+      **What his screenshot shows** (he scribbled over it in red to mark the offender): the "Tap to add a
+      layer" row carries its dashed border and pale blue fill ACROSS THE WHOLE WIDTH, including the
+      track-head column left of the divider, and the blue ⊕ disc sits in that column at about x=95.
+      **What he wants:** the add-layer row's blue background and its ⊕ must be CLIPPED AT THE DIVIDER —
+      the divider is the boundary, and nothing of that treatment belongs on the head-column side of it.
+      **Second clause, same line:** BOOKMARKS also fail to clip there and show through on the wrong side.
+      ⚠️ Verify which side he means by looking at the built page rather than reasoning from this note —
+      but the screenshot is unambiguous that the ⊕ and the blue fill are on the head-column side and he
+      has circled them as wrong.
 - [x] **430 — 🚨 The offline cache grows forever, and it shares a storage budget with his media.**
       ✅ **DONE v10.69**, verified functionally and with the offline check both before and after.
       (20 Aug, found while auditing the service worker for #306 — not reported by Ezra, and he has not
@@ -13166,6 +13182,47 @@ wait for them to report back."*
              next to the best option"*.
       Both buttons appear in his screenshots: the home screen's floating ＋ (a soft rainbow disc, bottom
       centre) and the in-project one in the top-right of the editor toolbar.
+
+- [ ] **457 — The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
+      verbatim: *"Also I never wanted a rainbow export button change it back to what it was"*.
+      **This is a revert, not a redesign.** Something gave the export button a rainbow treatment that he
+      did not ask for — find the commit that did it and restore the previous appearance.
+      ⚠️ **Do not confuse this with 456.** He DOES want the two Create buttons rainbow (in different
+      colours, both animated). The EXPORT button is a different button and should never have been given
+      the treatment. Getting these two mixed up would undo the thing he actually wants.
+      Where to look: the export/share button lives in the project's top bar (the up-arrow tile in his
+      screenshots, top-right). Search styles.css for the gradient applied to it and check git history for
+      when it arrived — the honest fix is whatever it looked like before that change.
+
+- [ ] **458 — 🚨 Save and Discard in the project's settings-cog menu do nothing.** (21 Aug.) His words,
+      verbatim: *"Save and discard button in the settings cog menu in the project doesn't work"*.
+      **Two buttons, both dead, in the menu people reach for when they want to keep or abandon work — so
+      this is a data-loss-shaped bug even if nothing is actually lost.** Treat it as high priority
+      despite the oldest-first rule if it reproduces, and tell him if so.
+      Where to look: the cog opens the canvas/settings dialog (`#canvas-dialog`, js/app.js). Its
+      Cancel/Apply wiring is right there; find what "Save" and "Discard" are bound to and whether the
+      handlers exist at all. **A dead button usually means a listener attached to an id that changed** —
+      check the ids in index.html against the `getElementById` calls.
+      ⚠️ Reproduce it FIRST and say exactly what "doesn't work" turned out to mean — nothing happens, or
+      it closes without doing the thing. Those are different bugs.
+
+- [ ] **459 — The open-a-project animation is still not right: it should be a SEQUENCE, not both at
+      once.** (21 Aug.) His words, verbatim: *"Also the animation made ages ago for when you open a
+      project still isn't just right - I want it so the project swipes to the left first with a smooth
+      animation that is well designed, and then after it does the swipe to the left the project opens
+      from the right smoothly and slowly, currently it's very cutty and they move at the same time and
+      it's just off,"*.
+      **The complaint is precise and it is about ORDER, not polish:**
+      1. [ ] The card/home swipes LEFT first, on its own, with a smooth well-designed motion.
+      2. [ ] THEN — after that finishes — the project comes in from the RIGHT, smoothly and slowly.
+      3. [ ] Currently the two overlap ("they move at the same time") and it reads as "cutty".
+      ⚠️ **This fights an existing deliberate decision, and whoever picks it up must read that first.**
+      js/home.js's `openProject` was SPLIT ON PURPOSE (queue 128) so the card leaves on the tap while the
+      project loads — *"113ms of dead time at phone speed"* was the problem being solved. Sequencing the
+      two animations strictly means the second cannot start until the first ends, which risks putting
+      that dead time back. **Say so when you build it, and measure the total time before and after.**
+      His phrase "made ages ago" means this has been attempted before — find the earlier entry and read
+      what was tried, rather than starting from scratch.
 
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
