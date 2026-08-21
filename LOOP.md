@@ -40,21 +40,29 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.43** — queue **465**, the stairs button split into chain-down and chain-up.
-Suite **807/807 green**, pushed and verified (`HEAD == ssh/main`). Two mutation checks caught:
-removing `.slice().reverse()` (up stops climbing) and deleting the pairing CSS (buttons fall to 30px).
+**Last shipped: v11.44** — the unnumbered **per-effect-slider keyframes** entry: Pitch Shift Semitones
+is keyframable and glides. Suite **808/808 green**, pushed and verified (`HEAD == ssh/main`). Both
+directions mutation-checked (force the static path → the glide never happens; drop the gate → a static
+instance pays for scheduling).
 
-**Note for the next tick — one that nearly slipped through.** Adding a fourth button to the align
-panel squeezed every button in it from 48px to 34px on desktop Studio, because that panel is a short
-264px band and the buttons split it evenly. Nothing about the new button was wrong; the panel was
-just full. The existing queue-169 test caught it, which is the whole reason it measures the GAP to the
-bottom of the panel rather than just a height. **Adding a control to a filled panel is a layout change
-to every control already in it** — measure the others, not only the new one.
+**That entry is now 4 of 6 and STAYS OPEN.** Only **Reverb Size** and **Reverb Decay** are left. They
+rebuild an impulse response, cost ~12.5 ms a frame, and are the two Ezra's *"put a warning next to it"*
+answer was actually about. **Do NOT copy the shaper bank OR the Pitch Shift fix to them** — a bank of
+convolvers is a different and much heavier proposition. That is the next tick.
 
-**Next item:** the unnumbered ones are oldest — `Editing lags, and gets bad fast` (line 2845) leads,
-then per-effect-slider keyframes (Reverb Size/Decay and Pitch Shift are what remain, and they use a
-different mechanism — do NOT copy the audio-fx curveBank to them).
+**Two probe lessons from v11.44, both worth keeping:**
+- `48000 * 2.3` is `110399.99999999999`. A fractional buffer index reads `undefined`, every comparison
+  is false, and the window reports zero — which looked exactly like an audio dropout. **Round every
+  sample index.**
+- The animated render's quietest 10 ms (0.049 RMS) looked like a hole until the same probe was pointed
+  at STATIC values: +9 st dips to 0.042 on its own. **Before calling an artifact new, measure whether
+  the thing already does it at rest.**
+
+**Note still live from v11.43:** adding a control to a filled panel is a layout change to every control
+already in it — the fourth align button took the others from 48px to 34px. Measure the neighbours.
 
 **Waiting on Ezra** (do not burn ticks guessing): 432 template icon letter, 456 create-button letter,
 460 the two options, 454 second half, 202 perf readout while playing, 387, 215, 250 does the slam
-still look wrong, 342, 391, 395 MP3 yes/no, 429, 418, 223 follow-ups.
+still look wrong, 342, 391, 395 MP3 yes/no, 429, 418, 223 follow-ups. Also the unnumbered **"Editing
+lags"** entry — both measured causes and the memory leak are FIXED; it is open only until he says
+whether it feels better on his own device.
