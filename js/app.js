@@ -2585,6 +2585,29 @@ window.FM = window.FM || {};
     }
   }
 
+  /* EVERY CROSS-LAYER REFERENCE A COPY CARRIES, REMAPPED IN ONE PLACE (bug hunt, 21 Aug).
+   * This rule existed twice — inside duplicateLayer for a group's own subtree, and in paste — and a
+   * MULTI-LAYER duplicate had neither, because it duplicates one layer at a time and each pass only
+   * knows about its own subtree. So selecting two layers that reference each other and pressing
+   * Duplicate gave you copies still wired to the ORIGINALS: measured, all four kinds of link failed —
+   * a Follow target, an Audio Drive source, a parent link and an effect's source layer
+   * (tests/_dupsel.html). Move the original afterwards and the "copy" follows it.
+   * Two-way rather than paste's three-way rule on purpose: when duplicating, every original is still in
+   * the scene, so there is no dead reference to clear — a ref that is not a batch mate is a deliberate
+   * link to a layer that still exists, and both the original and the copy may legitimately use it. */
+  FM.remapLayerRefs = function (layer, idMap) {
+    if (!layer || !idMap) return;
+    if (layer.parent && idMap[layer.parent]) layer.parent = idMap[layer.parent];
+    if (Array.isArray(layer.behaviors)) layer.behaviors.forEach(bh => {
+      if (!bh || !bh.params) return;
+      ['targetId', 'sourceId'].forEach(k => { if (bh.params[k] && idMap[bh.params[k]]) bh.params[k] = idMap[bh.params[k]]; });
+    });
+    if (FM.eachFx) FM.eachFx(layer, fx => {
+      if (fx && fx.params && fx.params.source && idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
+    });
+    if (layer.karaokeOf && idMap[layer.karaokeOf]) layer.karaokeOf = idMap[layer.karaokeOf];
+  };
+
   FM.duplicateLayer = async function (id, inPlace) {
     const src = FM.layerById(FM.scene, id);
     if (!src) return;
@@ -2594,10 +2617,12 @@ window.FM = window.FM || {};
     const copy = FM.cloneLayer(src, !!inPlace);
     await reloadMediaTo(id, copy.id);
     const inserts = [copy];
+    const dupMap = Object.create(null); dupMap[id] = copy.id;
+    FM._lastDupMap = dupMap;                 // duplicateSelection stitches these into ONE batch map
     if (src.type === 'group' && FM.groupDescendants) {
       // a group is just a parent link — duplicating ONLY the group row made an empty invisible group.
       // Clone its whole subtree with fresh ids and remap parents through an idMap (like pasteClipboard).
-      const idMap = Object.create(null); idMap[src.id] = copy.id;
+      const idMap = dupMap;
       for (const d of FM.groupDescendants(id)) {
         const dc = FM.cloneLayer(d, true);   // plain copy — the group offset already moved the block
         idMap[d.id] = dc.id;
@@ -2647,7 +2672,7 @@ window.FM = window.FM || {};
       if (l && l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => { inside[d.id] = 1; });
     });
     const todo = ids.filter(id => !inside[id]);
-    const made = [];
+    const made = [], batch = Object.create(null);
     // duplicateLayer commits history itself, so the loop would leave one undo entry PER layer and
     // reversing a single button press would take three presses of undo. Muted for the run, then one
     // commit at the end — the whole duplication is one action, so it is one step back.
@@ -2656,9 +2681,16 @@ window.FM = window.FM || {};
     try {
       for (const id of todo) {
         await FM.duplicateLayer(id, inPlace);
+        Object.assign(batch, FM._lastDupMap || {});
         if (FM.scene.selectedId && made.indexOf(FM.scene.selectedId) < 0) made.push(FM.scene.selectedId);
       }
     } finally { if (hist) hist.commit = realCommit; }
+    /* THE WHOLE BATCH AT ONCE, once every copy exists. A per-layer pass cannot do this: when layer A is
+     * duplicated, layer B's copy does not exist yet, so a link from A to B has nothing to point at.
+     * Idempotent over the per-subtree remap duplicateLayer already did — those refs are copy ids now,
+     * and a copy id is never a key in the batch map. */
+    const copyIds = new Set(Object.keys(batch).map(k => batch[k]));
+    FM.scene.layers.forEach(l => { if (copyIds.has(l.id)) FM.remapLayerRefs(l, batch); });
     if (made.length) { FM.scene.selectedIds = made; FM.scene.selectedId = made[made.length - 1]; }
     FM.refreshAll();
     if (FM.history) FM.history.commit();

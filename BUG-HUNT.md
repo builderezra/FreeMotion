@@ -1769,7 +1769,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **FM.moveClipTo abandons a group's members: the bar and the group's own keyframes move, the layers inside do not**    
       ➜ **REAL — fixed v11.12, see §42**
       `app.js:2792` — Group three layers that span 2-5s, then keyframe the group's X so it slides in from t=2 to t=3. Select the GROUP bar, park the playhead at 8s and press the 'Move clip right to the playhead' quick-row button (or the right tl-nudge). The group bar jumps to 5-8s and its two position keyframes move to 5
-- [ ] **Multi-layer Duplicate leaves every copy's cross-layer link pointing at the ORIGINALS (no idMap)**  
+- [x] **Multi-layer Duplicate leaves every copy's cross-layer link pointing at the ORIGINALS (no idMap)**    
+      ➜ **REAL — fixed v11.16, see §46**
       `app.js:2586` — Add a shape ("Box") and a text layer ("Title"). On Title, layer menu → Parent → Box. Select both rows, then ⋯ → "Duplicate 2 layers" (js/app.js:4376, or the keyboard shortcut at js/app.js:5340). Since queue 156 a duplicate lands exactly on its original, so nothing looks wrong yet. Now drag "Box copy
 - [ ] **Copied effects / saved layer presets carry a layer id across projects; the effect then silently renders nothing**  
       `inspector.js:341` — In project A, put Luma Matte on a clip and pick "Logo" as its source; the clip is cut to the logo's luma. Press Copy in the effects header. Open project B, select any clip, press Paste. The toast says "Pasted 1 effect", the Luma Matte row appears in the stack — and the clip renders as the full uncut
@@ -2146,3 +2147,35 @@ exemption unconditional fails the second.
 *what else is anchored to a clip's edges, or references a clip by id across time?* Fades, text animation,
 effect clocks, parent links, captions, audio-drive behaviors, bounce rings, speed-ramp source mapping, and
 the anti-click envelope — every one of them assumed a clip is never divided.
+
+## 46. Duplicating linked layers together wired the copies to the originals (21 Aug, v11.16) — REAL, twelfth verified §34 lead
+
+`FM.duplicateSelection` copies the selection **one layer at a time**, and `duplicateLayer` only remaps ids
+within its own group subtree. So selecting two layers that reference each other and pressing Duplicate
+produced copies still pointing at the ORIGINALS.
+
+**Measured** (`tests/_dupsel.html`) — all four kinds of cross-layer link, all four broken:
+
+| link | before | after |
+|---|---|---|
+| Follow behavior `targetId` | → original B | → copy B |
+| Audio Drive `sourceId` | → original B | → copy B |
+| parent link | → original B | → copy B |
+| an effect's source layer | → original B | → copy B |
+
+Move the originals afterwards and the "copy" moves with them, which reads as the duplicate being broken
+rather than mis-wired.
+
+**Why a per-layer pass could never fix it:** when layer A is duplicated, layer B's copy does not exist yet,
+so a link from A to B has nothing to point at. The remap has to run **once every copy exists**.
+
+**Fix:** the rule is one function now (`FM.remapLayerRefs`), used by `duplicateLayer` for its subtree and by
+`duplicateSelection` for the whole batch. Idempotent across both passes — after the subtree remap a ref is
+already a copy id, and a copy id is never a key in the batch map.
+
+Paste keeps its own **three-way** rule (batch mate → clone, live outside layer → keep, dead ref → clear) and
+was deliberately left alone: when duplicating, every original is still in the scene, so there is no dead
+reference to clear and a non-batch ref is a deliberate link both copies may legitimately share.
+
+**Same root cause as §36, §42 and §43:** a rule that lives in more than one place, and a caller that has
+none of them. That is four of the twelve verified defects in this run.

@@ -3530,6 +3530,55 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('duplicate: copying two linked layers together rewires the copies to each other', { item: 'dup-batch-refs' }, async function () {
+    /* BUG HUNT (21 Aug), twelfth verified lead from BUG-HUNT §34. duplicateSelection copies the selection
+       ONE LAYER AT A TIME, and each pass only remaps ids within its own group subtree — so selecting two
+       layers that reference each other and pressing Duplicate produced copies still wired to the
+       ORIGINALS. Move the original afterwards and the "copy" follows it.
+       Measured (tests/_dupsel.html): all FOUR kinds of cross-layer link failed.
+       Written over all four rather than the one that prompted it, because the fault is that a rule lived
+       in two places and the third caller had neither — so the fifth kind of link has to fail here too. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const trial = async (what, wire, read) => {
+        FM.scene.layers.length = 0;
+        const a = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+        const b = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 60, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+        [a, b].forEach(l => { l.start = 0; l.duration = 5; FM.scene.layers.push(l); });
+        if (!wire(a, b)) throw new Error('CONTROL FAILED: could not set up "' + what + '"');
+        FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+        await FM.duplicateSelection(true);
+        if (FM.scene.layers.length !== 4) throw new Error('CONTROL FAILED: expected 2 copies for "' + what + '", scene has ' + FM.scene.layers.length);
+        const copies = FM.scene.layers.filter(l => l !== a && l !== b);
+        const copyA = copies.filter(l => l.name === a.name)[0] || copies[0];
+        const copyB = copies.filter(l => l !== copyA)[0];
+        const got = read(copyA);
+        if (got === b.id) throw new Error(what + ': the copy still points at the ORIGINAL');
+        if (got !== copyB.id) throw new Error(what + ': the copy points at neither the original nor its copy (' + got + ')');
+      };
+      await trial('a Follow behavior target',
+        (a, b) => { a.behaviors = [{ type: 'follow', enabled: true, prop: 'x', params: { targetId: b.id, mult: 1, offset: 0, delay: 0 } }]; return true; },
+        c => c.behaviors && c.behaviors[0] && c.behaviors[0].params.targetId);
+      await trial('an Audio Drive source',
+        (a, b) => { a.behaviors = [{ type: 'audio', enabled: true, prop: 'x', params: { sourceId: b.id, amount: 50 } }]; return true; },
+        c => c.behaviors && c.behaviors[0] && c.behaviors[0].params.sourceId);
+      await trial('a parent link',
+        (a, b) => { a.parent = b.id; return true; },
+        c => c.parent);
+      await trial('an effect source layer',
+        (a, b) => {
+          const inst = FM.fxRegistry && (FM.fxRegistry.makeInstance('lumamatte') || FM.fxRegistry.makeInstance('luma'));
+          if (!inst) return false;
+          inst.params.source = b.id; a.effects = [inst]; return true;
+        },
+        c => c.effects && c.effects[0] && c.effects[0].params.source);
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: the cut does not duck the sound to silence in preview', { item: 'split-declick' }, async function () {
     /* BUG HUNT (21 Aug), eleventh verified lead from BUG-HUNT §34 and the last of the split family.
        The 45ms anti-click ramp is measured from each clip's OWN edges. The two halves of a split are the

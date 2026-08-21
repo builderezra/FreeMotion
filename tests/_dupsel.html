@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>multi-layer duplicate links (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.duplicateSelection duplicates the selection ONE LAYER AT A TIME, and
+   FM.duplicateLayer only builds an id map for a GROUP's own subtree. So when two sibling layers are
+   selected together and one of them points at the other — a Follow behavior, an Audio Drive source, an
+   effect's source layer, a parent link — the COPY still points at the ORIGINAL.
+   Deterministic: the ids are the measurement. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.duplicateSelection&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+async function run(FM){
+  var L=[], bad=0, checked=0;
+  async function trial(label, wire, read){
+    FM.scene.layers.length=0;
+    var a=FM.makeLayer('shape',{name:'A',shape:'rect',x:10,y:10,shapeW:20,shapeH:20,fill:'#fff'});
+    var b=FM.makeLayer('shape',{name:'B',shape:'rect',x:60,y:10,shapeW:20,shapeH:20,fill:'#fff'});
+    [a,b].forEach(function(l){l.start=0;l.duration=5;FM.scene.layers.push(l);});
+    wire(a,b);
+    FM.scene.selectedIds=[a.id,b.id]; FM.scene.selectedId=a.id;
+    var n0=FM.scene.layers.length;
+    await FM.duplicateSelection(true);
+    if(FM.scene.layers.length!==n0+2){ L.push('  '+label.padEnd(30)+'SETUP FAILED: expected 2 copies, scene went '+n0+' -> '+FM.scene.layers.length); return; }
+    var copies=FM.scene.layers.filter(function(l){return l!==a && l!==b;});
+    var copyA=copies.filter(function(l){return l.name===a.name;})[0]||copies[0];
+    var copyB=copies.filter(function(l){return l!==copyA;})[0];
+    var pointsAt=read(copyA);
+    checked++;
+    var ok = pointsAt===copyB.id;
+    if(!ok) bad++;
+    L.push('  '+label.padEnd(30)+(ok?'✅ the copy points at the COPY':'❌ the copy still points at the ORIGINAL')+
+           '   ('+(pointsAt===b.id?'original B':pointsAt===copyB.id?'copy B':String(pointsAt))+')');
+  }
+  await trial('Follow behavior targetId',
+    function(a,b){ a.behaviors=[{type:'follow',enabled:true,prop:'x',params:{targetId:b.id,mult:1,offset:0,delay:0}}]; },
+    function(c){ return c.behaviors && c.behaviors[0] && c.behaviors[0].params.targetId; });
+  await trial('Audio Drive sourceId',
+    function(a,b){ a.behaviors=[{type:'audio',enabled:true,prop:'x',params:{sourceId:b.id,amount:50}}]; },
+    function(c){ return c.behaviors && c.behaviors[0] && c.behaviors[0].params.sourceId; });
+  await trial('parent link',
+    function(a,b){ a.parent=b.id; },
+    function(c){ return c.parent; });
+  await trial('an effect source layer',
+    function(a,b){ var inst=FM.fxRegistry.makeInstance('lumamatte')||FM.fxRegistry.makeInstance('luma'); if(inst){inst.params.source=b.id; a.effects=[inst];} },
+    function(c){ return c.effects && c.effects[0] && c.effects[0].params.source; });
+  L.push('');
+  L.push(bad? '❌ '+bad+' of '+checked+' cross-layer links survive a multi-layer duplicate pointing at the originals'
+            : '✅ every cross-layer link follows the copy');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>
