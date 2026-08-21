@@ -1723,6 +1723,16 @@ window.FM = window.FM || {};
   function afxParam(p) {
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable };
   }
+  /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
+     only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
+     the project and lag too much just put a warning next to it before use"*. Deliberately conditional:
+     the same note sitting under a slider nobody has keyframed is wallpaper, and wallpaper is what people
+     stop reading before the one time it mattered. */
+  function afxWarnFor(reg, fx, p) {
+    const w = reg && reg.warn && reg.warn[p.key];
+    if (!w) return null;
+    return FM.isAnimated(fx.params ? fx.params[p.key] : undefined) ? w : null;
+  }
 
   // undefined numberOfChannels = not decoded yet = UNKNOWN. Only a decoded 1-channel buffer warns.
   function layerIsMono(layer) {
@@ -1800,7 +1810,11 @@ window.FM = window.FM || {};
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
-      reg.params.forEach(p => body.appendChild(fxScrubber(fx, afxParam(p), layer, idx)));
+      reg.params.forEach(p => {
+        body.appendChild(fxScrubber(fx, afxParam(p), layer, idx));
+        const w = afxWarnFor(reg, fx, p);
+        if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
+      });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       wrap.appendChild(body);
     }

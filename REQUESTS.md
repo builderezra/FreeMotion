@@ -3635,8 +3635,7 @@ better still, keep working inside the turn rather than parking work for a later 
 - [x] **Tiny: "Color & Light" is spelled the American way** **DONE v6.72.** in the effects browser's categories,
       which looks odd next to the "Colouring" rename you asked for in 83. Say the word and I'll
       change it — it's your app's voice, not mine to decide.
-- [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **Per-effect-slider keyframes.** ✅ **DONE v11.45 — 499/499 visual and 60/60 audio.** *"each effect slider having its own key frames still doesn't
       exist fully"*. **Measured, and it is more finished than that** — here is exactly where it stands,
       because "doesn't exist fully" needed a number rather than another guess.
       **Visual effects: 499 of 499 sliders are keyframable.** Verified end to end, not just counted:
@@ -3853,10 +3852,42 @@ better still, keep working inside the turn rather than parking work for a later 
          run on STATIC values: a static +9 st dips to 0.042 on its own. Those nulls are the granular
          shifter's own comb, not something animation introduced, so the test asserts "no actual silence"
          rather than a bar the effect never cleared in the first place.
-      **STILL OPEN — Reverb Size and Reverb Decay only.** They rebuild an impulse response, they cost
-      ~12.5 ms a frame, and they are the two that need the warning Ezra asked for
-      (*"if audio key frames break the project and lag too much just put a warning next to it before
-      use"*). No further input needed — that answer already covers them.
+      ✅ **ALL SIX — v11.45 finishes it with Reverb Size and Reverb Decay, and this entry is DONE.**
+      Counted from the live registry rather than claimed: **499 of 499 visual sliders and 60 of 60 audio
+      params are keyframable, with none excluded.**
+      **Why these two were last and hardest.** A reverb's parameter is not a number on a node, it is an
+      AudioBuffer holding a room. Assigning it is instant and ignores `when`, so scheduling it would apply
+      every value at once and the last would win — the same lie flipping the flag would have told for
+      Distortion. And it cannot be rescued by swapping the buffer at the right instant either, because an
+      offline render offers no such instant: the graph that exists when `startRendering()` is called is the
+      graph that renders. Every room must exist before the first sample.
+      **So: a bank of rooms, cross-faded.** Sampled along the ANIMATION'S OWN keyframe span rather than
+      across each parameter's range — size and decay are two knobs but one room, so sampling the range
+      would need a K × K grid, while sampling the path through time collapses it to K. K is a budget, not
+      a constant: a longer tail buys fewer rooms (~16 convolver-seconds, between 2 and 6), and identical
+      neighbours collapse, so a decay creeping 2.0 → 2.004 builds ONE room and costs what it always did.
+      The fade is equal-power (sqrt-weighted triangles via `setValueCurveAtTime`) because two reverb tails
+      are uncorrelated noise and a linear fade sits at half power through every hand-over — a 3 dB hole
+      punched into exactly the sweep that was supposed to be smooth.
+      **The warning is in, and it is conditional.** It sits under Size and Decay only, and only once the
+      param is actually animated — a warning that is always on is wallpaper. The other four ended up not
+      needing one, which is the honest outcome rather than the predicted one.
+      ⚠️ **Three defects this work caught before shipping, two of them mine and found by tests:**
+      1. **The bank sampled the EXPORT window, not the animation.** A two-second reverb move inside a
+         three-minute export would have been sampled at 36-second intervals and walked straight past:
+         right rooms, wrong moment. The keyframes choose where to look now.
+      2. **The live-preview quantum leaked into offline renders.** Coarse rounding keeps preview
+         responsive (an un-quantised sweep rebuilds a room per frame at ~12.5 ms each, which is the lag
+         his answer was about), but it was rounding a 0.4 s decay to 0.5 s in an EXPORT — the file quietly
+         differing from the project. Offline uses a hundredth now, matching the bank's own room grid.
+      3. **A mutation SURVIVED and exposed a real hole in the test.** Leaving the original single room
+         un-muted applies the reverb twice, and every case at the time swept the room OPEN, where the
+         leftover is the quiet 0.4 s room and invisible. A CLOSING sweep makes the leftover the loud one;
+         it now reads 0.01720 against 0.00042 when broken. Also worth recording: two assertions failed
+         against CORRECT code first, both by measuring the sweep at a moment it had already left.
+      **Not covered, and said plainly:** nothing here measures the LIVE preview's smoothness while an
+      animated reverb plays — the quantum makes it survivable and the warning says so, but "does it
+      stutter on your phone" is a question only Ezra can answer.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       **STATUS: 🔵 BIG — wants a session of its own**
       Chunk-replay resume is proven; not landed.

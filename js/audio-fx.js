@@ -59,6 +59,12 @@ window.FM = window.FM || {};
     return function () { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
   const _irCache = {};   // "size|decay|rate" -> AudioBuffer, so scrubbing Mix never regenerates noise
+  /* The one warning label in this file, and it is his (the per-effect-slider entry): *"if audio key
+     frames break the project and lag too much just put a warning next to it before use"*. It is shown
+     only when Size or Decay is ACTUALLY animated, because a warning that is always on is wallpaper.
+     Plain language on purpose — this is written for Ezra to read, not for a developer. */
+  const AFX_REVERB_KF_WARN = 'Heads up: animating the room is the expensive one. Every different room has to be built and played at once, so a long tail that moves a lot can slow an export down and may stutter while you preview it. Short moves and short tails are cheap.';
+
   function impulse(ctx, size, decay) {
     const sr = ctx.sampleRate;
     const key = size.toFixed(3) + '|' + decay.toFixed(3) + '|' + sr;
@@ -149,6 +155,15 @@ window.FM = window.FM || {};
     const aps = o.params || {}, xf = o.xf || {}, custom = o.custom || {};
     return {
       input: o.input, output: o.output,
+      /* THE WHOLE-WINDOW HOOK, and why one effect needs it (Reverb; the per-effect-slider entry).
+       * Every other animated param is driven one value at a time through set/ramp, which is all an
+       * AudioParam needs. A ConvolverNode is different in a way that no per-value API can paper over:
+       * its room is an AudioBuffer, and **an OfflineAudioContext gives you no moment during the render
+       * at which to swap one**. The graph that renders is the graph that existed before rendering
+       * started. So an effect whose animation changes its BUFFER has to see the entire window up front,
+       * build every room it will need, and cross-fade between them with gains — and this is the hook
+       * that hands it the window. Null for all thirty-odd other effects. */
+      window: o.window || null,
       // Non-null ONLY when set(key, v) is exactly param(key).setValueAtTime(v) — a caller that schedules
       // onto a returned param must not be able to desync a pair (mix) or skip a conversion (gain's dB).
       param: function (key) { return (aps[key] && !xf[key]) ? aps[key] : null; },
@@ -345,21 +360,153 @@ window.FM = window.FM || {};
   /* ---- Space & Stereo ---- */
   DEFS.push({
     type: 'reverb', label: 'Reverb', category: 'space',
-    params: [P('size', 'Size', 0, 1, 0.01, 0.5, '', false), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', false), MIX(0.3)],
+    params: [P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true), MIX(0.3)],
+    /* THE WARNING EZRA ASKED FOR LIVES ON THESE TWO, and only on these two. His answer on the six audio
+       sliders that could not be keyframed: *"if audio key frames break the project and lag too much just
+       put a warning next to it before use"*. The other four turned out not to need one — Distortion, Bit
+       Crush and Lo-Fi cross-fade a bank of cheap shapers, and Pitch Shift drives ordinary audio params.
+       These two are the expensive pair he was actually being warned about. Measured, rendering four
+       seconds of audio: one room costs 25 ms, six cost about 140 ms, and six LONG rooms about 460 ms. */
+    warn: { size: AFX_REVERB_KF_WARN, decay: AFX_REVERB_KF_WARN },
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const conv = s.convolver();   // normalize stays on: size/decay then change the room, not the level
+      /* A gain of exactly 1 in front of the wet sum, so the STATIC room can be handed over to the bank
+         without disconnecting it mid-render. Multiplying by 1.0 is exact in floating point, so a project
+         that never animates these renders the same samples it did before this existed. */
+      const convG = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.3);
       input.connect(wd.dry).connect(out);
-      input.connect(conv); conv.connect(wd.wet); wd.wet.connect(out);
+      input.connect(conv); conv.connect(convG); convG.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
       conv.buffer = impulse(ctx, size, decay);
+
+      const pdef = (key) => ((REG['reverb'] || {}).params || []).filter(p => p.key === key)[0];
+      const isAnim = () => !!(inst && inst.params && (FM.isAnimated(inst.params.size) || FM.isAnimated(inst.params.decay)));
+
+      /* ---- ANIMATED SIZE / DECAY: A BANK OF ROOMS, CROSS-FADED (the per-effect-slider entry) --------
+       * This is the last two of the six, and the entry is emphatic that neither the shaper bank nor the
+       * Pitch Shift fix may be copied here. Both warnings are correct, for the same underlying reason:
+       * this effect's "parameter" is an AudioBuffer full of a room, not a number on a node.
+       * WHY A BANK IS THE ONLY SHAPE THAT WORKS. Assigning `conv.buffer` is instant and ignores `when`,
+       * so scheduling it would apply every value at once and the last would win — the same lie the flag
+       * alone would have told for Distortion. And it cannot be fixed by swapping the buffer at the right
+       * moment either, because **an offline render has no such moment**: whatever graph exists when
+       * startRendering() is called is the graph that renders. Every room must therefore exist up front.
+       * SAMPLED ALONG THE ANIMATION, NOT ACROSS THE RANGE. Size and decay are two knobs but ONE room, so
+       * a bank across each range separately would need a K × K grid. Sampling the animation's own path
+       * through time collapses that back to K: the rooms we need are the ones the automation actually
+       * visits. Identical neighbours collapse further, so a decay that creeps from 2.0 to 2.1 builds one.
+       * K IS A BUDGET, NOT A CONSTANT. A room costs in proportion to its length, so a long tail buys
+       * fewer rooms: roughly sixteen convolver-seconds total, between two and six rooms.
+       * EQUAL POWER, NOT LINEAR. Two reverb tails are uncorrelated noise, so cross-fading them with
+       * straight gains dips 3 dB in the middle of every hand-over — an audible pumping right where the
+       * sweep is supposed to be smooth. The curves are sqrt-weighted triangles, written with
+       * setValueCurveAtTime so each gain carries one continuous curve for the whole window. */
+      let banked = false, windowed = false;
+      const buildBank = function (fromScene, toScene) {
+        // Only schedule() calls this, so it doubles as "we are rendering a known window" — which the
+        // setters below need in order to tell an OFFLINE render from live preview.
+        windowed = true;
+        if (banked || !isAnim()) return;
+        const span = Math.max(0, (toScene || 0) - fromScene);
+        if (span <= 0) return;
+        const sP = pdef('size'), dP = pdef('decay');
+        if (!sP || !dP) return;
+        /* SAMPLE THE ANIMATION'S OWN SPAN, NOT THE EXPORT WINDOW. The window handed in is the whole
+           export range, which can be minutes long while the reverb move lasts two seconds. Sampling K
+           points across THAT would step 36 s at a time through a three-minute export and walk straight
+           past the change — the rooms would be right and the moment would be wrong. The keyframes say
+           where the movement is, so they choose where to look. Outside that span the value is constant
+           by definition, and the end rooms hold. */
+        let lo = Infinity, hi = -Infinity;
+        ['size', 'decay'].forEach(function (k) {
+          const raw = inst && inst.params ? inst.params[k] : null;
+          if (!FM.isAnimated(raw)) return;
+          raw.kf.forEach(function (f) { if (f && typeof f.t === 'number') { lo = Math.min(lo, f.t); hi = Math.max(hi, f.t); } });
+        });
+        const a = Math.max(lo, fromScene), b = Math.min(hi, toScene);
+        // The movement misses this export entirely — every value inside the window is constant, so the
+        // ordinary one-room path is not merely adequate, it is correct. Leave `banked` false for it.
+        if (!(b > a)) return;
+        // Longest room the automation asks for sets the budget, so cost is bounded rather than K fixed.
+        let maxDecay = 0.1;
+        for (let k = 0; k <= 24; k++) maxDecay = Math.max(maxDecay, valueAt(inst, dP, a + (b - a) * (k / 24)));
+        const K = Math.max(2, Math.min(6, Math.round(16 / maxDecay)));
+        // The rooms the automation actually visits, in order, with identical neighbours collapsed — so a
+        // decay that creeps from 2.0 to 2.1 builds ONE room and costs what it did before.
+        const rooms = [];
+        for (let i = 0; i < K; i++) {
+          const t = a + (b - a) * (i / (K - 1));
+          const sz = valueAt(inst, sP, t), dc = valueAt(inst, dP, t);
+          const key = sz.toFixed(2) + '|' + dc.toFixed(2);
+          const prev = rooms[rooms.length - 1];
+          if (prev && prev.key === key) { prev.t1 = t; continue; }
+          rooms.push({ key: key, sz: sz, dc: dc, t0: t, t1: t });
+        }
+        if (rooms.length < 2) return;   // the animation never leaves one room — the static path is right
+        banked = true;                  // …set ONLY once a bank really exists, or the setters below
+                                        // would be switched off with nothing to replace them.
+        // Counted so the suite can prove a STATIC reverb builds nothing. Sound cannot police this: a
+        // bank that merely reproduces the static room renders identically while costing N convolvers.
+        FM._irBanksBuilt = (FM._irBanksBuilt || 0) + 1;
+        FM._irBankRooms = (FM._irBankRooms || 0) + rooms.length;
+        // Hand the static room over at time 0 — without this its output sums with the bank's and the
+        // reverb is applied twice.
+        try { convG.gain.setValueAtTime(0, 0); } catch (e) {}
+        // Centres in window-normalised time. Enough curve points for ~50 ms resolution, so a quick move
+        // inside a long export is not smeared by the crossfade's own sampling.
+        const cs = rooms.map(r => ((r.t0 + r.t1) / 2 - fromScene) / span);
+        const N = Math.max(128, Math.min(4096, Math.round(span * 20)));
+        for (let i = 0; i < rooms.length; i++) {
+          const r = rooms[i];
+          const c = s.convolver();
+          c.buffer = impulse(ctx, r.sz, r.dc);
+          const g = s.gain(0);
+          input.connect(c); c.connect(g); g.connect(wd.wet);
+          const curve = new Float32Array(N);
+          for (let n = 0; n < N; n++) {
+            const x = n / (N - 1);
+            let w;
+            if (x <= cs[i]) w = (i === 0) ? 1 : Math.max(0, (x - cs[i - 1]) / Math.max(1e-6, cs[i] - cs[i - 1]));
+            else w = (i === rooms.length - 1) ? 1 : Math.max(0, (cs[i + 1] - x) / Math.max(1e-6, cs[i + 1] - cs[i]));
+            curve[n] = Math.sqrt(w);   // triangle basis sums to 1, so SQRT of it sums to 1 in POWER
+          }
+          try { g.gain.setValueCurveAtTime(curve, 0, Math.max(0.001, span)); } catch (e) {}
+        }
+      };
+
+      /* LIVE PREVIEW is the per-frame path and gets no window, so it keeps rebuilding the one room — but
+         QUANTISED while animating. Un-quantised it would rebuild on every frame at up to 12.5 ms each,
+         which is the lag his answer was about; rounded to a twentieth of the size range and a quarter of
+         a second of decay, a sweep rebuilds a handful of times and the IR cache catches the repeats.
+         The static path is deliberately NOT quantised — dragging the slider by hand must still land on
+         the exact value the number beside it shows.
+         AN OFFLINE RENDER USES A MUCH FINER GRID, and that distinction is not a nicety — it was a bug,
+         caught by rendering a reverb whose keyframes sit outside the exported range. There the bank
+         correctly declines to build (nothing moves inside the window), the ordinary path takes over, and
+         the LIVE quantum rounded a 0.4 s decay to 0.5 s: an export quietly different from the project.
+         Two hundredths matches the grid the bank keys its rooms on, so repeated values still collapse to
+         one rebuild instead of a hundred and twenty. */
+      const q = (v, step) => Math.round(v / step) * step;
+      const qSize = () => (windowed ? 0.01 : 0.05), qDecay = () => (windowed ? 0.01 : 0.25);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        window: buildBank,
         custom: {
-          size: function (v) { v = clamp(v, 0, 1); if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay); } },
-          decay: function (v) { v = clamp(v, 0.1, 8); if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); } },
+          size: function (v) {
+            v = clamp(v, 0, 1);
+            if (banked) return;                      // the bank owns the wet path now
+            if (isAnim()) v = q(v, qSize());
+            if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay); }
+          },
+          decay: function (v) {
+            v = clamp(v, 0.1, 8);
+            if (banked) return;
+            if (isAnim()) v = q(v, qDecay());
+            if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); }
+          },
           mix: wd.set,
         },
       });
@@ -929,6 +1076,9 @@ window.FM = window.FM || {};
         const span = Math.max(0, (toScene || 0) - fromScene);
         for (let i = 0; i < built.length; i++) {
           const b = built[i], ps = b.def.params;
+          // Before any per-value scheduling: an effect that animates a BUFFER rather than a param needs
+          // the whole window, because offline rendering offers no later moment to change one.
+          if (b.u.window) { try { b.u.window(fromScene, toScene || fromScene); } catch (e) { console.warn('fx window hook failed', e); } }
           for (let j = 0; j < ps.length; j++) {
             const p = ps[j];
             const raw = b.inst.params ? b.inst.params[p.key] : undefined;

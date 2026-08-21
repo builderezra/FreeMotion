@@ -24695,6 +24695,124 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is', { item: 'audio-kf-reverb' }, async function () {
+    /* The last two of the six in the unnumbered per-effect-slider entry, and the two Ezra's answer was
+     * really about: *"if audio key frames break the project and lag too much just put a warning next to
+     * it before use"*.
+     * WHY THIS ONE IS DIFFERENT. Reverb's parameter is not a number on a node, it is an AudioBuffer full
+     * of a room. Assigning it is instant and ignores `when`, and — the part that rules out every simpler
+     * fix — **an offline render offers no moment to swap a buffer**: the graph that exists when
+     * startRendering() is called is the graph that renders. So every room the automation visits has to
+     * be built up front and cross-faded with gains.
+     * The probe is a train of clicks and it measures the TAIL each one leaves behind, which is what size
+     * and decay actually control. */
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext — the audio chain cannot be exercised at all');
+    const SR = 48000;
+    async function render(params, secs, from, to) {
+      const oac = new OAC(1, SR * secs, SR);
+      const buf = oac.createBuffer(1, SR * secs, SR);
+      const d = buf.getChannelData(0);
+      for (let t = 0; t < secs; t += 0.5) { const i = Math.round(t * SR); for (let k = 0; k < 64; k++) d[i + k] = (k < 32 ? 1 : -1) * 0.8; }
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: [{ type: 'reverb', enabled: true, params: params }] }, from || 0);
+      if (!chain) throw new Error('no reverb chain built');
+      src.connect(chain.input); chain.output.connect(oac.destination);
+      FM._irBanksBuilt = 0; FM._irBankRooms = 0;
+      chain.schedule(from || 0, to == null ? secs : to); src.start(0);
+      const banks = FM._irBanksBuilt, rooms = FM._irBankRooms;
+      const out = await oac.startRendering(), c = out.getChannelData(0);
+      // Math.round on every index — 48000 * 2.3 is not an integer, and a fractional index reads undefined.
+      const rms = (x, y) => { x = Math.round(x); y = Math.round(y); let t = 0; for (let i = x; i < y; i++) t += c[i] * c[i]; return Math.sqrt(t / (y - x)); };
+      const tails = [];
+      for (let t = 0; t < secs - 0.5; t += 0.5) tails.push(rms(SR * (t + 0.30), SR * (t + 0.45)));
+      return { banks: banks, rooms: rooms, tails: tails };
+    }
+    const P = (dc) => ({ size: 0.5, decay: dc, mix: 1 });
+
+    // CONTROL — a short room and a long one must leave measurably different tails, or nothing below means anything.
+    const shortR = await render(P(0.4), 4), longR = await render(P(6), 4);
+    const sT = shortR.tails[5], lT = longR.tails[5];
+    if (!(lT > sT * 4)) throw new Error('a 6 s decay leaves a tail of ' + lT.toFixed(5) + ' against a 0.4 s decay\'s ' + sT.toFixed(5) + ' — this probe cannot see decay at all');
+    /* THE COST GUARD. A static reverb must build NO bank. Sound cannot police it: a bank reproducing the
+       static room renders identically while costing several convolvers, and a convolver is the most
+       expensive node in this file. Same lesson as the Distortion shaper bank, which shipped exactly that
+       bug because it guarded on `when == null` while the static path passes when = 0. */
+    if (shortR.banks || longR.banks) throw new Error('a STATIC reverb built a convolver bank (' + shortR.banks + '/' + longR.banks + ') — every plain Reverb in every project now pays for animation it does not use');
+
+    // THE BUG — a keyframed decay must actually open the room out as it goes.
+    const a = await render({ size: 0.5, decay: { kf: [{ t: 0, v: 0.4 }, { t: 4, v: 6 }] }, mix: 1 }, 4);
+    if (!a.banks) throw new Error('a keyframed decay never built a bank — the diamonds would do nothing');
+    if (!(a.tails[6] > a.tails[0] * 2)) throw new Error('a 0.4 -> 6 s decay sweep ended at ' + a.tails[6].toFixed(5) + ' having started at ' + a.tails[0].toFixed(5) + ' — the room never opened');
+    /* "It must start in the 0.4 s room" is the assertion that first went here, and it FAILED against
+       correct code — worth keeping the reason. The first tail is measured 0.30-0.45 s after the opening
+       click, and by then a four-second 0.4 -> 6 sweep has already moved the decay to about 0.9 s. The
+       render was right and the expectation was pointed at a moment the sweep had left. What actually
+       discriminates is the opposite error — a bank that jumped to its END value would start out sounding
+       like the LONG room, so that is what this compares against. */
+    if (!(a.tails[0] < longR.tails[0] * 0.7)) throw new Error('the sweep starts at ' + a.tails[0].toFixed(5) + ', already as open as a static 6 s room (' + longR.tails[0].toFixed(5) + ') — it jumped to its final value instead of sweeping');
+
+    /* THE MOMENT, NOT JUST THE ROOMS — and this caught a real bug before it shipped. The window handed to
+       schedule() is the whole export range, which can be minutes long while the move lasts two seconds.
+       Sampling the bank across THAT window steps 36 s at a time through a three-minute export and walks
+       straight past the change: right rooms, wrong moment. The keyframes choose where to look now, so a
+       move at 8-10 s inside a 12 s render must leave the first eight seconds ALONE. */
+    const late = await render({ size: 0.5, decay: { kf: [{ t: 8, v: 0.4 }, { t: 10, v: 6 }] }, mix: 1 }, 12);
+    if (!late.banks) throw new Error('a late keyframed decay built no bank at all');
+    const early = Math.max(late.tails[0], late.tails[5], late.tails[10]);   // 0 s, 2.5 s, 5 s — all before the move
+    if (early > sT * 3) throw new Error('the room had already opened to ' + early.toFixed(5) + ' before its first keyframe at 8 s — the bank is sampling the export window instead of the animation');
+    if (!(late.tails[late.tails.length - 1] > early * 3)) throw new Error('the late move never happened: ' + late.tails[late.tails.length - 1].toFixed(5) + ' at the end against ' + early.toFixed(5) + ' before it');
+
+    /* THE MOVE LIES OUTSIDE THIS EXPORT. Nothing changes inside the window, so the ordinary one-room path
+       is not merely acceptable, it is correct — and it must render the SAME room a static project would.
+       This is the second bug this test caught: the coarse quantum that keeps live preview responsive was
+       rounding a 0.4 s decay to 0.5 s in an offline render, quietly making the export differ from the
+       project. */
+    const outside = await render({ size: 0.5, decay: { kf: [{ t: 20, v: 0.4 }, { t: 22, v: 6 }] }, mix: 1 }, 4, 0, 4);
+    if (outside.banks) throw new Error('a reverb whose keyframes are outside the exported range still built a bank');
+    if (Math.abs(outside.tails[5] - sT) > sT * 0.05) throw new Error('outside its animation the reverb renders a ' + outside.tails[5].toFixed(5) + ' tail where a static 0.4 s decay gives ' + sT.toFixed(5) + ' — the export does not match the project');
+
+    /* A CLOSING ROOM, and it is here because a mutation SURVIVED without it. The hand-over that mutes
+       the original single room is what stops the reverb being applied TWICE — bank plus static room, both
+       feeding the wet sum. Every case above sweeps the room OPEN, which hides it completely: the leftover
+       is the 0.4 s room, far too quiet to show under a 6 s tail. Reversed, the leftover becomes the LOUD
+       one, ringing through the whole render while the bank closes around it.
+       MEASURED AFTER THE MOVE ENDS, not during it — the first version of this asserted at 3.0 s of a
+       4-second sweep and failed against correct code, because the room was only about 70% closed there
+       and legitimately still ringing. The keyframes finish at 3 s and the render runs to 5 s, so the last
+       window is a room that has SETTLED, where the right answer is exactly a static 0.4 s room. */
+    const closing = await render({ size: 0.5, decay: { kf: [{ t: 0, v: 6 }, { t: 3, v: 0.4 }] }, mix: 1 }, 5);
+    const shortLong = await render(P(0.4), 5), longLong = await render(P(6), 5);
+    if (!closing.banks) throw new Error('a descending decay built no bank');
+    const settled = closing.tails[closing.tails.length - 1];
+    const wantSettled = shortLong.tails[shortLong.tails.length - 1];
+    if (Math.abs(settled - wantSettled) > wantSettled * 0.5) throw new Error('two seconds after closing from 6 s to 0.4 s the tail is ' + settled.toFixed(5) + ', where a static 0.4 s room gives ' + wantSettled.toFixed(5) + ' (a static 6 s room gives ' + longLong.tails[longLong.tails.length - 1].toFixed(5) + ') — the original room is still ringing underneath, so the reverb is being applied twice');
+
+    /* THE HAND-OVERS MUST NOT DIP — the cross-fade is equal-power, and this is what proves it. Two reverb
+       tails are uncorrelated noise, so fading between them on straight gains leaves both at 0.5 in the
+       middle of every hand-over, which sums to HALF the power: a 3 dB hole punched at each one, audible
+       as pumping in exactly the sweep that was supposed to be smooth. Square-rooted weights sum to one in
+       power instead.
+       Isolating it needs rooms that sound ALIKE, or the trend of the sweep buries the dip: five rooms
+       between 3.0 s and 3.4 s decay, sampled where the hand-overs fall. Every point then has to sit on
+       top of a plain static room of the same sort — measured within 2.6% throughout, against the ~29%
+       shortfall a linear fade would leave. */
+    const near = await render({ size: 0.5, decay: { kf: [{ t: 0, v: 3.0 }, { t: 4, v: 3.4 }] }, mix: 1 }, 4);
+    const flat = await render(P(3.4), 4);
+    if (near.rooms < 3) throw new Error('the near-rooms probe only built ' + near.rooms + ' rooms, so it never crosses a hand-over and cannot see a dip');
+    for (let i = 0; i < near.tails.length; i++) {
+      if (near.tails[i] < flat.tails[i] * 0.88) {
+        throw new Error('at ' + (i * 0.5) + 's a sweep between near-identical rooms measures ' + near.tails[i].toFixed(5) + ' against a static room\'s ' + flat.tails[i].toFixed(5) + ' — that hole is a hand-over fading through half power, so the cross-fade is linear where it must be equal-power');
+      }
+    }
+
+    // A move too small to leave one room must cost nothing: no bank, and the same sound as a static room.
+    const tiny = await render({ size: 0.5, decay: { kf: [{ t: 0, v: 2.0 }, { t: 4, v: 2.004 }] }, mix: 1 }, 4);
+    const two = await render(P(2), 4);
+    if (tiny.banks) throw new Error('a decay that creeps from 2.0 to 2.004 built a whole bank of rooms for a change nobody can hear');
+    if (Math.abs(tiny.tails[5] - two.tails[5]) > two.tails[5] * 0.05) throw new Error('a hair-thin decay move renders ' + tiny.tails[5].toFixed(5) + ' against a static 2 s room\'s ' + two.tails[5].toFixed(5));
+  });
+
   test('audio: a keyframed Pitch Shift actually glides, and a static one costs nothing extra', { item: 'audio-kf-pitch' }, async function () {
     /* The unnumbered "per-effect-slider keyframes" entry, and the last of the six audio sliders it
      * lists. Pitch Shift is NOT the crossfaded-shaper-bank fix the other three got — the entry says
