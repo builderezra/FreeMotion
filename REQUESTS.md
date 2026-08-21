@@ -11113,25 +11113,45 @@ wait for them to report back."*
       **So the next question is narrow and worth asking before any more work:** was the lag he means
       actually captured in these 9.55 seconds? If yes, the symptom is not dropped frames and every
       profile so far has been looking for the wrong thing.
-      **🚨 EZRA CONFIRMS THE LAG WAS IN THE RECORDING, 21 Aug:** *"yes it was buggy asf"*.
-      **THIS REDIRECTS THE WHOLE INVESTIGATION AND EVERY PROFILE SO FAR HAS BEEN LOOKING FOR THE WRONG
-      THING.** The recording he says was "buggy asf" measures, from its own MP4 sample tables:
-      **60.0 fps, 573 frames over 9.55s, ZERO dropped frames, and the longest the screen went without
-      changing was ONE frame (16ms).** The compositor put a fresh, different frame on the glass every
-      16ms for the entire clip.
-      So **the symptom is not frame drops, not stutter, and not a stall** — which is what "laggy" has
-      been assumed to mean here for weeks, and why it "does not reproduce in Chrome at any CPU
-      throttle": Chrome was being measured for the one thing that is demonstrably not happening.
-      **What stays consistent with a perfect 60fps and still feels awful — check these, in order:**
-      1. **INPUT LATENCY.** The screen is smooth but trails your finger. Frame rate is perfect and the
-         app still feels broken, because what is late is the RESPONSE, not the painting. Look for work
-         done inside pointermove before paint, non-passive listeners, or a rAF that renders last
-         frame's input.
-      2. **The picture moving in coarse steps** while the UI around it stays smooth — a scrub that
-         jumps in big increments makes frames BIGGER, not smaller, so it looks like healthy change.
-      3. **Stale frames on seek** — video decode latency showing an out-of-date picture while the
-         playhead and timeline move perfectly.
-      **Do not profile for dropped frames again.** That question is answered, from his own device.
+      **🚨 EZRA CONFIRMS THE LAG WAS IN THE RECORDING, 21 Aug:** *"yes it was buggy asf"* — sent with
+      `ScreenRecording_08212026_134735_1.mp4` (9.54s, 1320x2868, HEVC).
+
+      ⚠️ **A WRONG READING WAS PUBLISHED AND THEN CORRECTED THE SAME HOUR. READ THE CORRECTION, NOT THE
+      FIRST CLAIM — and read WHY it was wrong, because the mistake is an easy one to repeat.**
+      **THE WRONG READING (retracted):** the MP4's `stsz`/`stts` sample tables were parsed and the file
+      showed 573 frames at a flat 60fps with a minimum frame size of 3041 bytes and no long runs of tiny
+      frames. That was reported as "the screen updates every 16ms, zero drops, the symptom is NOT frame
+      drops" — and an instruction was written into this entry saying *"do not profile for dropped frames
+      again"*. **All of that was wrong.**
+      **WHY it was wrong, which is the lesson:** frame BYTE SIZE is not visual change. An HEVC inter
+      frame still costs thousands of bytes when the picture is identical — sensor noise, grain, encoder
+      overhead. Byte size was used as a proxy for motion, and it is not one. The control that would have
+      caught it (does the measured quantity actually go to zero when nothing moves?) was never run.
+
+      ✅ **THE CORRECTED READING — the pixels themselves, decoded.** Chrome cannot decode this file
+      (`canPlayType('hvc1')` is empty; the clock advanced to 1.98s with ZERO frames presented, which is
+      also why an in-browser probe returned an all-zero "clean"). There is no ffmpeg on the Mac. So the
+      frames were decoded natively through AVFoundation — `tests/_framediff.swift`, built with the Xcode
+      toolchain that is already installed:
+      ```
+      swiftc -O tests/_framediff.swift -o /tmp/framediff && /tmp/framediff <file.mp4>
+      ```
+      · **573 frames decoded over 9.54s. Recorder gap a flat 16.7ms — the RECORDING is a true 60fps.**
+      · **96.2% of consecutive frames are VISUALLY IDENTICAL (550 of 572).**
+      · **Longest frozen run: 66 frames = 1.10 SECONDS, starting at 8.43s.**
+      · Change arrives in isolated bursts (max per-frame diff 4-14) separated by long still stretches;
+        per second, between 56 and 60 of every 60 frames show no change at all.
+      · CONTROLS PASS: ink range 21-37 (not a blank probe), max diff 14.40 (real change is detectable).
+      **So the app IS stuttering badly, and visibly. He is right, and "does not reproduce in Chrome" now
+      reads as a limitation of the harness rather than evidence of health.**
+
+      **WHAT TO DO NEXT, in order:**
+      1. **Find out what he was DOING in those 9.5 seconds** — the freeze is at 8.43-9.53s, the very end
+         of the clip, and the burstiness before it suggests it was already struggling. Playing? Scrubbing?
+         The entry's own asymmetry (scrub fine / play buggy) makes that the single most valuable answer.
+      2. **`tests/_framediff.swift` is now the instrument for this whole class of report.** Any screen
+         recording he sends can be turned into hard numbers. It should be used before any more profiling.
+      3. Only then profile — and profile the PLAY path, per the asymmetry above.
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
