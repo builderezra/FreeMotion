@@ -739,15 +739,23 @@ window.FM = window.FM || {};
   /* Longest clip duration whose consumed source stays within availSrc source-seconds.
    * Static speed: plain division (old behaviour). Ramped: bisect the monotonic advance integral. */
   FM.maxDurForSource = function (layer, availSrc, hint) {
-    if (!isAnimated(layer.speed)) return availSrc / (layer.speed || 1);
+    /* THROUGH speedAt, the last site that was not (bug hunt, 21 Aug). This was dividing by
+     * `layer.speed || 1`, and for a malformed animated prop — an object with no `kf` array, which
+     * isAnimated rejects — that divides by an OBJECT and yields NaN, which is then written straight
+     * into layer.duration. Swept over twelve speed values (tests/_maxdur.html): four produced a
+     * duration the scene cannot use — `{}`, an object with no kf, a non-array kf (all NaN), and
+     * Infinity (0, an empty clip). Exactly the hole already closed in FM.speedAt and
+     * FM.layerSourceAdvance, in the third function of the same family. */
+    if (!isAnimated(layer.speed)) return availSrc / FM.speedAt(layer, layer.start);
     let hi = Math.max(0.1, hint || layer.duration || 1);
     const save = layer.duration;
-    layer.duration = hi;                                 // the integral table must span the probe range
-    if (FM.layerSourceAdvance(layer, hi) <= availSrc) { layer.duration = save; return hi; }
-    let lo = 0;
-    for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (FM.layerSourceAdvance(layer, mid) > availSrc) hi = mid; else lo = mid; }
-    layer.duration = save;
-    return Math.max(0.1, lo);
+    try {
+      layer.duration = hi;                               // the integral table must span the probe range
+      if (FM.layerSourceAdvance(layer, hi) <= availSrc) return hi;
+      let lo = 0;
+      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (FM.layerSourceAdvance(layer, mid) > availSrc) hi = mid; else lo = mid; }
+      return Math.max(0.1, lo);
+    } finally { layer.duration = save; }                 // a throw must not leave the clip resized
   };
   /* HOW MUCH SOURCE IS CONSUMED BETWEEN TWO POINTS IN A CLIP (bug hunt, 21 Aug).
    * FM.layerSourceAdvance above answers "from the clip's start", and CLAMPS to [0, duration] — so it

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>maxDurForSource hostile speeds (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.maxDurForSource is the one speed site still dividing by
+   `layer.speed || 1`. For a malformed animated prop — an object with no kf array, which `isAnimated`
+   rejects — that divides by an OBJECT and yields NaN, and the result is written straight into
+   layer.duration. The same hole FM.speedAt and FM.layerSourceAdvance were already closed for. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.maxDurForSource&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function run(FM){
+  var L=[], bad=0;
+  var CASES=[['a normal number',2],['1x',1],['an empty object {}',{}],['an object with no kf',{loopMode:'none'}],
+             ['kf not an array',{kf:'nope'}],['a string',"2"],['null',null],['undefined',undefined],
+             ['zero',0],['Infinity',Infinity],['NaN',NaN],['a genuine ramp',{kf:[{t:0,v:1},{t:5,v:2}]}]];
+  CASES.forEach(function(c){
+    FM.scene.layers.length=0;
+    var v=FM.makeLayer('video',{name:'clip'});
+    v.start=0; v.duration=5; v.trimStart=0; v.speed=c[1];
+    FM.scene.layers.push(v);
+    var r;
+    try { r=FM.maxDurForSource(v, 10, 5); } catch(e){ r='THREW: '+e.message; }
+    var ok=(typeof r==='number' && isFinite(r) && r>0);
+    if(!ok) bad++;
+    L.push('  '+c[0].padEnd(24)+String(r)+(ok?'':'   <-- NOT A USABLE DURATION'));
+    // and duration must not have been left mutated by the probe path
+    if(v.duration!==5) L.push('  '+''.padEnd(24)+'⚠ layer.duration left at '+v.duration+' instead of 5');
+  });
+  L.push('');
+  L.push(bad? '❌ '+bad+' of '+CASES.length+' speed values produce a duration the scene cannot use'
+            : '✅ every speed value yields a finite, positive duration');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

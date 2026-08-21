@@ -1778,7 +1778,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **On a reversed + speed-ramped clip the tail grip treats the ramp as 1×, so extending the tail shifts every frame already on screen**    
       ➜ **REAL, and the worst of the three — fixed v11.13, see §43**
       `timeline.js:2410` — Video clip, tick 'Reverse (video + audio)', then keyframe Speed to ramp 100%→400% across the clip. Note the very first frame the clip shows. Drag the clip's RIGHT grip out by one second. The first frame changes — the entire clip's content slides through the footage — even though you only touched the
-- [ ] **maxDurForSource is the one speed site still doing raw `|| 1` division — a malformed imported speed prop writes NaN straight into layer.duration on media replace**  
+- [x] **maxDurForSource is the one speed site still doing raw `|| 1` division — a malformed imported speed prop writes NaN straight into layer.duration on media replace**    
+      ➜ **REAL — fixed v11.14, see §44**
       `scene.js:693` — Load a `.fmotion.json` whose video layer has `"speed": {"keys":[{"t":0,"v":1}]}` (the load path deliberately does not re-sanitise, per the note at js/scene.js:680-683). Right-click the clip → Replace media, pick any video: the clip's duration becomes NaN and the clip disappears from the timeline / t
 - [ ] **Preview resolution change wipes Time Warp's frozen frame but not its progress marker — the scanned band turns into a hole**  
       `compositor.js:7071` — Add Time Warp Scan (defaults: Freeze, duration 2.5s) to a video layer. Scrub to about half way through the scan so the top half of the frame is visibly frozen. Press Play. The frozen half instantly goes transparent — a hole showing whatever is beneath the layer — and it stays a hole for the rest of
@@ -2083,3 +2084,32 @@ time to the source time showing at it — so no media is needed and the defect i
 **The static-speed case is the control and runs first** in the suite test: had a flat 1.5× clip drifted too,
 the measurement of source time itself would have been wrong and nothing else would have meant anything.
 Both fixes mutation-checked independently.
+
+## 44. maxDurForSource could write a NaN clip length (21 Aug, v11.14) — REAL, tenth verified §34 lead
+
+The **third** function in this family with the same hole. `FM.speedAt` and `FM.layerSourceAdvance` were both
+fixed earlier for arithmetic on `layer.speed || 1`, which returns the OBJECT for a malformed animated prop —
+one with no `kf` array, which `isAnimated` rejects. `maxDurForSource` was still doing it, and its result goes
+straight into `layer.duration`, where a NaN spreads through the entire timeline layout.
+
+**Swept over twelve speed values** (`tests/_maxdur.html`):
+
+| speed | before | after |
+|---|---|---|
+| `{}` / no-kf object / `{kf:'nope'}` | **NaN** | 10 |
+| `Infinity` | **0** (an empty clip) | 10 |
+| `2`, `'2'`, a real ramp, `null`, `0`, `NaN` | correct | unchanged |
+
+Four of twelve produced a duration the scene cannot use.
+
+**Fix:** route through `FM.speedAt`, which is the only thing in the codebase that guarantees a finite non-zero
+rate. Also given a `finally` so a throw inside the bisection cannot leave the clip resized — the function
+temporarily rewrites `layer.duration` to size its integral table.
+
+**The test carries a control** that the two legitimate cases still return the RIGHT number (a plain 2× and a
+real ramp), not merely "a number". Without it the assertion degrades to `isFinite`, which a fix that returned
+a constant would also satisfy.
+
+That is three functions with one root cause. **The pattern is not "a speed bug"** — it is that `x || 1` reads
+as a null-guard and is not one, for any property that can legitimately be an object. Worth grepping for
+whenever a new animatable property is added.

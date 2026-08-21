@@ -3530,6 +3530,45 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('maxDurForSource: no speed value can put a NaN duration into the scene', { item: 'maxdur-safe' }, function () {
+    /* BUG HUNT (21 Aug), tenth verified lead from BUG-HUNT §34, and the THIRD function in this family to
+       have the same hole. FM.speedAt and FM.layerSourceAdvance were both fixed earlier for dividing or
+       multiplying by `layer.speed || 1` — which returns the OBJECT for a malformed animated prop (one
+       with no `kf` array, which isAnimated rejects). This one was still doing it, and its result goes
+       straight into layer.duration, where a NaN cascades through the whole timeline layout.
+       Swept over twelve speed values (tests/_maxdur.html): four produced a duration the scene cannot use.
+       Reachable the way all of these are — a saved document the UI did not write.
+       The two legitimate values are the control: if a plain 2x or a real ramp stopped returning the
+       right answer, this test would be asserting nothing but "it is a number". */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const CASES = [
+        ['a normal number', 2, 5], ['1x', 1, 10],
+        ['an empty object', {}, null], ['an object with no kf', { loopMode: 'none' }, null],
+        ['a non-array kf', { kf: 'nope' }, null], ['a string', '2', 5],
+        ['null', null, null], ['undefined', undefined, null], ['zero', 0, null],
+        ['Infinity', Infinity, null], ['NaN', NaN, null],
+        ['a genuine ramp', { kf: [{ t: 0, v: 1 }, { t: 5, v: 2 }] }, 5],
+      ];
+      CASES.forEach(([what, speed, expect]) => {
+        FM.scene.layers.length = 0;
+        const v = FM.makeLayer('video', { name: 'clip' });
+        v.start = 0; v.duration = 5; v.trimStart = 0; v.speed = speed;
+        FM.scene.layers.push(v);
+        let r;
+        try { r = FM.maxDurForSource(v, 10, 5); }
+        catch (e) { throw new Error('maxDurForSource threw on ' + what + ': ' + e.message); }
+        if (!(typeof r === 'number' && isFinite(r) && r > 0)) throw new Error('speed = ' + what + ' produced a duration the scene cannot use: ' + r);
+        if (v.duration !== 5) throw new Error('maxDurForSource left the clip resized (' + v.duration + ') after ' + what);
+        // CONTROL: the values that have a right answer must still give it, not merely "a number"
+        if (expect !== null && Math.abs(r - expect) > 0.01) throw new Error('CONTROL FAILED: speed = ' + what + ' should allow ' + expect + 's, got ' + r);
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('speed ramps: trimming or extending an edge does not move the surviving picture', { item: 'ramp-edges' }, function () {
     /* BUG HUNT (21 Aug), eighth and ninth verified leads from BUG-HUNT §34, reported by two lenses in
        three forms. Moving a clip's edge advances trimStart by the INSTANTANEOUS speed at that edge times
