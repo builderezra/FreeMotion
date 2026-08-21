@@ -5801,8 +5801,17 @@ body.fm-pushing #toast { z-index: 213; }
    this file and used to repaint the PNGs — that file has been changed too, because patching only
    this one would have left the shipped default theme unchanged. That mistake has been made five
    times in this project already. */
-#btn-export,
-.m-export,
+/* THE EXPORT BUTTONS ARE NOT IN THIS LIST ANY MORE (queue 457). Ezra: *"Also I never wanted a rainbow
+   export button change it back to what it was"*.
+   `#btn-export` and `.m-export` used to head this selector, from back when the body of this rule was the
+   shared neutral GLASS material every chrome button wore. Queue 384 replaced that body with the coloured
+   disc for the home + — and the selector was never trimmed, so both export buttons silently became
+   rainbow discs with a near-black glyph. Nobody asked for that and nothing failed; the rule simply kept
+   painting whoever was still listed on it.
+   They fall back to their own block below — the cyan-tinted glass and accent glow they had before — which
+   is exactly "what it was". The + buttons keep the disc, which is what queue 384 (and 456) are about.
+   ⚠️ Do NOT re-add an export selector here to "share the material": the body of this rule is a specific
+   look for the + buttons, not a shared material any more. */
 #add-fab,
 /* THE HOME + IS A COLOURED DISC NOW, AND DELIBERATELY THE SAME ONE AS THE TIMELINE'S (queue 384).
    Ezra: "Make the plus button in this menu an array of colours and look pretty like what you did with
@@ -5837,6 +5846,11 @@ body.fm-pushing #toast { z-index: 213; }
 .m-export {
   background-color: rgba(90, 199, 237, .20);
   box-shadow: var(--lg-rim), var(--lg-lift), 0 0 14px rgba(96, 196, 246, .30);
+  /* THE GLYPH GOES BACK TO LIGHT (queue 457). It was `#06121c`, near-black — correct while these
+     buttons were wearing the bright rainbow disc, and wrong the instant that was taken off them: the
+     arrow is drawn with `currentColor`, so removing the rainbow alone left a black arrow on translucent
+     cyan glass over a dark bar. Taking the colour off a button is two changes, not one. */
+  color: #eef8ff;
 }
 /* PAINT ONLY below this line. `display` must never be set here: this block sits outside every media
    query, so a `display: flex` would override the desktop rule that hides #topbar-m and #add-fab

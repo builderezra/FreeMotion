@@ -24691,6 +24691,41 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the export button is not a rainbow, and the + buttons still are (queue 457)', { item: '457' }, async function () {
+    /* Ezra: *"Also I never wanted a rainbow export button change it back to what it was"*.
+     * `#btn-export` and `.m-export` used to HEAD the selector that carried the app's shared neutral
+     * glass. Queue 384 replaced that rule's body with the coloured disc for the home + and never
+     * trimmed the selector, so both export buttons silently became rainbow discs. Nothing failed —
+     * the rule just kept painting whoever was still listed on it.
+     * Asserted on the COMPUTED style rather than the source, because the defect was a selector list
+     * and the symptom is what actually lands on the element. */
+    const has = (el) => !!el && /conic-gradient/.test(getComputedStyle(el).backgroundImage || '');
+    return atPhoneWidth(async function () {
+      await sleep(120);
+      const exp = document.getElementById('m-export') || document.getElementById('btn-export');
+      if (!exp) throw new Error('neither export button is in the DOM');
+      /* CONTROL FIRST — a + button must still BE a rainbow, or "export is not a rainbow" is also what
+       * you would read if the disc had been deleted from the whole app. */
+      const plus = document.getElementById('add-fab') || document.getElementById('hm-new');
+      if (!plus) throw new Error('no + button to compare against');
+      if (!has(plus)) throw new Error('the + button has lost its coloured disc — this test cannot tell "export was fixed" from "the disc was deleted everywhere"');
+
+      if (has(exp)) throw new Error('the export button is still painted with the rainbow conic disc');
+
+      /* AND THE GLYPH HAS TO STAY VISIBLE. Taking the colour off is TWO changes: the arrow is drawn
+       * with currentColor, and the near-black `#06121c` that suited a bright disc left a black arrow on
+       * translucent glass over a dark bar the moment the disc went. Caught by measuring, not by eye. */
+      const svg = exp.querySelector('svg');
+      if (svg) {
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(svg).stroke || '');
+        if (m) {
+          const lum = (+m[1] * 0.299 + +m[2] * 0.587 + +m[3] * 0.114);
+          if (lum < 90) throw new Error('the export arrow is drawn at luminance ' + Math.round(lum) + ' — near-black on dark glass, which is what removing the disc alone leaves behind');
+        }
+      }
+    });
+  });
+
   test('the speed ruler moves in 5% steps, not 10x jumps (queue 455)', { item: '455' }, function () {
     /* Ezra: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way the fuck
      * down"* — and "10x at a time" turned out to be literally exact.

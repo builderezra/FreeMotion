@@ -13580,8 +13580,7 @@ wait for them to report back."*
         would need a colour change alongside.
       ⏳ **WAITING ON EZRA — a letter, or a mix (e.g. "B's colours with D's comet").**
       Clause 2 is satisfied by all four: every option still moves.
-- [ ] **457 — The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **457 — ✅ **DONE v11.36.** The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
       verbatim: *"Also I never wanted a rainbow export button change it back to what it was"*.
       **This is a revert, not a redesign.** Something gave the export button a rainbow treatment that he
       did not ask for — find the commit that did it and restore the previous appearance.
@@ -13592,6 +13591,22 @@ wait for them to report back."*
       screenshots, top-right). Search styles.css for the gradient applied to it and check git history for
       when it arrived — the honest fix is whatever it looked like before that change.
 
+      ✅ **DONE v11.36 — and it was never a decision, it was a leftover selector.**
+      `#btn-export` and `.m-export` HEADED the selector list of the rule that used to carry the app's
+      shared neutral glass. **Queue 384 replaced that rule's BODY with the coloured disc for the home +
+      and never trimmed the list**, so both export buttons silently became rainbow discs. Nothing failed
+      and nothing warned — the rule simply kept painting whoever was still named on it. The comment
+      above it talks only about the home +, which is how it read as intentional.
+      Export falls back to its own block: the cyan-tinted glass and accent glow it had before, i.e.
+      literally *"what it was"*. Both + buttons keep the disc, which is what 384 and 456 are about.
+      ⚠️ **TAKING A COLOUR OFF A BUTTON WAS TWO CHANGES, NOT ONE.** The arrow is drawn with
+      `currentColor`, and that rule also set `color: #06121c` — near-black, correct against a bright
+      rainbow. Removing the disc alone left a **black arrow on translucent glass over a dark bar**,
+      measured at luminance 16. The glyph is explicitly light again.
+      **The test asserts the COMPUTED style, not the source** — the defect was a selector list, and what
+      matters is what lands on the element. It carries a control that a + button is STILL a rainbow,
+      because "export is not a rainbow" is equally what you would read if the disc had been deleted
+      app-wide, and it measures the arrow's luminance. Both mutation directions caught.
 - [ ] **458 — 🚨 Save and Discard in the project's settings-cog menu do nothing.** (21 Aug.) His words,
       **STATUS: 🟢 READY — nothing is stopping this**
       verbatim: *"Save and discard button in the settings cog menu in the project doesn't work"*.
