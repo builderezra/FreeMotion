@@ -3530,6 +3530,61 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('duplicate: a copied group is stacked the same way inside as the original', { item: 'dup-group-order' }, async function () {
+    /* BUG HUNT (21 Aug). This one was a LEAD THAT DIED — it was claimed that duplicating a group whose
+       subtree is interleaved in the layer array hands back a copy stacked differently inside. Measured
+       (tests/_dupgroup.html), it does not: the copy comes out contiguous and in the original's relative
+       order, in both the ordinary case and a deliberately interleaved one.
+       Kept as a guard rather than thrown away, because the behaviour is worth holding: a duplicate lands
+       exactly on its original (queue 156), so the copy draws OVER it — meaning any difference in the
+       copy's internal order shows up immediately as a colour change at an overlap. That makes this a
+       cheap, sharp check on ordering that nothing else covers.
+       The interleaved case is not reachable from grouping any more (v11.08 fixed that), but older saved
+       documents can still carry the shape, so it stays in. */
+    const layers0 = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 200, H = 120, PX = 60, PY = 40;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const pixel = () => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 1);
+        const d = ctx.getImageData(PX, PY, 1, 1).data;
+        return d[0] + ',' + d[1] + ',' + d[2];
+      };
+      for (const interleave of [false, true]) {
+        FM.scene.layers.length = 0;
+        // red and blue occupy exactly the same box, so whichever is in front owns the sample pixel
+        const r = FM.makeLayer('shape', { name: 'red', shape: 'rect', x: 60, y: 40, shapeW: 60, shapeH: 40, fill: '#ff0000' });
+        const b = FM.makeLayer('shape', { name: 'blue', shape: 'rect', x: 60, y: 40, shapeW: 60, shapeH: 40, fill: '#0000ff' });
+        const o = FM.makeLayer('shape', { name: 'other', shape: 'rect', x: 10, y: 100, shapeW: 10, shapeH: 10, fill: '#00ff00' });
+        [r, b, o].forEach(l => { l.start = 0; l.duration = 10; FM.scene.layers.push(l); });
+        FM.scene.selectedIds = [r.id, b.id]; FM.scene.selectedId = r.id;
+        FM.groupSelection();
+        const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+        if (!G) throw new Error('groupSelection did not make a group');
+        if (interleave) {
+          const arr = FM.scene.layers, oi = arr.indexOf(o), gi = arr.indexOf(G);
+          arr.splice(oi, 1); arr.splice(gi + 2, 0, o);
+        }
+        const before = pixel();
+        if (before === '0,0,0') throw new Error('CONTROL FAILED: nothing is drawn at the sample point, so the reading would be the background');
+        const n0 = FM.scene.layers.length;
+        await FM.duplicateLayer(G.id);
+        if (FM.scene.layers.length !== n0 + 3) throw new Error('the duplicate did not copy the whole subtree (' + n0 + ' -> ' + FM.scene.layers.length + ')');
+        const after = pixel();
+        if (after !== before) throw new Error('the copy of the group is stacked differently inside' + (interleave ? ' (interleaved case)' : '') +
+          ': the overlap went ' + before + ' -> ' + after + ' (stack ' + FM.scene.layers.map(l => l.name).join(' | ') + ')');
+      }
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('group: grouping a GROUP with another layer does not re-stack the picture', { item: 'group-stack' }, function () {
     /* BUG HUNT (21 Aug), fourth verified lead from BUG-HUNT §34. groupSelection pulled the selected
        MEMBERS contiguous under the new row, but a member that is itself a group has children which are

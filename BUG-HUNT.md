@@ -1909,3 +1909,29 @@ combination that happens. **A background reading is now a hard failure in both t
 
 That is three false cleans in this hunt — §33 (wrong effect record), §35's control, and this one. Every one
 came from the probe not exercising the thing it claimed to measure, never from bad arithmetic.
+
+## 39. Duplicating a nested group — REFUTED by measurement (21 Aug, v11.09)
+
+**The first §34 lead that measurement killed**, and it is recorded as prominently as the ones that were real,
+because §34's own warning was that the fan-out refuted nothing and therefore could not be trusted either way.
+Five leads checked so far: four real, one false. That is roughly the ratio the warning assumed.
+
+The claim: duplicating a group whose subtree is interleaved in the layer array yields a copy stacked
+differently inside.
+
+**Measured** (`tests/_dupgroup.html`) — red and blue occupying exactly the same box, so whichever is in front
+owns the sample pixel, and a duplicate lands exactly on its original so the copy draws over it:
+
+| case | stack before | stack after | pixel |
+|---|---|---|---|
+| ordinary group | `Group \| red \| blue \| other` | `Group copy \| red \| blue \| Group \| red \| blue \| other` | red → red |
+| interleaved subtree | `Group \| red \| other \| blue` | `Group copy \| red \| blue \| Group \| red \| other \| blue` | red → red |
+
+The copy comes out **contiguous and in the original's relative order** in both cases. No defect.
+
+**Kept as a guard anyway** (`dup-group-order`), because the property is worth holding and the check is unusually
+sharp: any change to the copy's internal order flips the overlap colour immediately. Mutation-checked by
+reversing the copied subtree — the test goes red with `red -> blue`.
+
+The interleaved case is no longer reachable from grouping (v11.08 fixed the thing that created it), but older
+saved documents can still carry the shape, so it stays.

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>duplicate a group (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: duplicating a group whose subtree is INTERLEAVED in the layer array is
+   claimed to hand back a copy stacked in a different order than the original.
+   A duplicate lands exactly on its original (queue 156), so the copy is drawn over it — which makes this
+   easy to see: if the copy's internal order differs, the overlap pixel changes colour.
+   Two cases: the ordinary contiguous group, and a deliberately INTERLEAVED one, because older saved
+   projects can still carry that shape even though grouping no longer creates it (v11.08). */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.duplicateLayer&&w.FM.groupSelection&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function px(FM,doc,W,H,x,y){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,1);
+  var d=ctx.getImageData(x,y,1,1).data; return d[0]+','+d[1]+','+d[2];
+}
+function names(FM){return FM.scene.layers.map(function(l){return l.name;}).join(' | ');}
+async function run(FM){
+  var doc=f.contentDocument, W=200,H=120, PX=60,PY=40, L=[];
+  FM.scene.project.width=W; FM.scene.project.height=H;
+  async function trial(label, interleave){
+    FM.scene.layers.length=0;
+    var r=FM.makeLayer('shape',{name:'red',shape:'rect',x:60,y:40,shapeW:60,shapeH:40,fill:'#ff0000'});
+    var b=FM.makeLayer('shape',{name:'blue',shape:'rect',x:60,y:40,shapeW:60,shapeH:40,fill:'#0000ff'});
+    var o=FM.makeLayer('shape',{name:'other',shape:'rect',x:10,y:100,shapeW:10,shapeH:10,fill:'#00ff00'});
+    [r,b,o].forEach(function(l){l.start=0;l.duration=10;FM.scene.layers.push(l);});
+    FM.scene.selectedIds=[r.id,b.id]; FM.scene.selectedId=r.id;
+    FM.groupSelection();
+    var G=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+    if(!G) throw new Error('no group');
+    if(interleave){
+      // shove an unrelated layer INTO the middle of the subtree, the shape older documents can hold
+      var arr=FM.scene.layers, oi=arr.indexOf(o), gi=arr.indexOf(G);
+      arr.splice(oi,1); arr.splice(gi+2,0,o);
+    }
+    var before=px(FM,doc,W,H,PX,PY);
+    if(before==='0,0,0'){ L.push('  '+label+': CONTROL FAILED — nothing drawn at the sample point'); return; }
+    L.push('  '+label);
+    L.push('    stack before: '+names(FM));
+    L.push('    pixel before: '+before);
+    await FM.duplicateLayer(G.id);
+    var after=px(FM,doc,W,H,PX,PY);
+    L.push('    stack after:  '+names(FM));
+    L.push('    pixel after:  '+after+(before!==after?'   <-- THE COPY IS STACKED DIFFERENTLY':'   ok'));
+    L.push('');
+    return before!==after;
+  }
+  var bad1=await trial('ordinary group (contiguous subtree)', false);
+  var bad2=await trial('legacy INTERLEAVED subtree', true);
+  L.push((bad1||bad2)?'❌ duplicating a group can change the picture':'✅ duplicating a group keeps the same picture');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>
