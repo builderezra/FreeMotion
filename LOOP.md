@@ -61,10 +61,15 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
   dead time. Measure the total before and after and say so.
 
 **Newest in (21 Aug, phone) — they wait their turn unless noted**
-- **#460 🚨** — effects in the Colouring list still do nothing; he has reported this before ("STILLLLLLLLLL").
-  The measurement method is already written in the entry. **Start with Grayscale and Invert on his flat
-  magenta rect** — those two MUST change it, so they separate "the category is broken" from "these
-  effects are subtle on a flat fill". Numbers before code.
+- **#460** — RESOLVED as a diagnosis: **nothing in Colouring is broken, 43 of 43 work.** A "four dead
+  effects" report was published and RETRACTED the same session; the count went 9 → 6 → 4 → 2 → 0 and
+  every drop was a blind spot in the probe, never a change to the app. His complaint still stands as a
+  PRODUCT problem: on a flat magenta rect at default settings many effects show nothing (black shadows
+  on a dark background, a red↔blue swap where red equals blue, glow with no highlights). **Waiting on
+  him to pick: visible-by-default settings (recommended), or a note when an effect cannot act.**
+  ⚠️ **RULE EARNED: a NEGATIVE probe result is a claim about the probe until proven otherwise. Only
+  positives are trustworthy.** Never report an effect broken without a positive control proving the
+  probe can see that kind of change.
 - **#461** — an icon per effect category that suits its theme, replacing the meaningless gradients.
 - **#462** — the FAVES notch becomes a real gold button.
 - **#463** — filter sections like TUFF become one sideways-swiping rail, not two stacked rows.

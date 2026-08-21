@@ -13301,6 +13301,48 @@ wait for them to report back."*
       pixel function runs and does nothing, or never runs. Those are different bugs with different fixes.
       **Tell Ezra the four names either way** — he has asked twice and deserves to know exactly which
       tiles are lying to him, even before they are fixed.
+      🔴🔴 **THE "FOUR DEAD EFFECTS" ABOVE IS RETRACTED. IT WAS WRONG. Every one of them works.**
+      Instrumented `drawPixelEffect` and the four kernels, then measured each effect against content it
+      can actually act on. Each of these is a POSITIVE result — pixels demonstrably changed — and a
+      positive cannot be a false clean:
+      · **channelremap — WORKS.** 7,000 pixels changed on an ORANGE fill. It does nothing on his magenta
+        `#cc22cc` because mode 1 swaps RED and BLUE, and in that colour **red and blue are identical**
+        (204 and 204). Swapping them is correctly a no-op. Same on white.
+      · **lightglow — WORKS.** 7,000 pixels on orange.
+      · **longshadow — WORKS.** 2,970 pixels once the shadow colour is red. Its default colour is BLACK
+        and the probe's project background was BLACK, so the shadow was landing perfectly and was
+        invisible. The handover warns about exactly this — *"measure ink by COLOUR, not alpha; the
+        project paints its own background"* — and it caught me anyway.
+      · **radialshadow — WORKS.** 2,176 pixels, same conditions.
+      · **halation — WORKS** (34,600 on white). · **matchgrade — WORKS** (5,400 with a source layer).
+      **SO: nothing in the Colouring category has been shown to be broken. 43 of 43.**
+      ⚠️ **How this went wrong five times over, because the pattern matters more than the result.** The
+      count went 9 → 6 → 4 → 2 → 0 across one session, and EVERY drop came from a blind spot in the
+      probe, never from a change to the app:
+      1. "Strong setting" pushed each param to whichever end was FARTHER from its default — which for an
+         `amount` defaulting to 1 in a 0..1 range is **0, the no-op**. Condemned 3 effects.
+      2. Diagnosed from `p.def` being undefined — true for **197 of 198 effects, including every working
+         one**. Nearly published as the cause.
+      3. Counted kernel ENTRY as kernel WORK. A kernel that early-returns still increments a counter at
+         the top of its body.
+      4. Compared RGB only, so a black shadow on a black background — and black-on-transparent — read as
+         "no change".
+      **The rule this earns: a NEGATIVE result from a probe is a claim about the PROBE until proven
+      otherwise. Only positives are trustworthy.** Do not report an effect as broken without a positive
+      control showing the same probe CAN see that kind of change.
+      ✅ **WHAT IS ACTUALLY TRUE, AND IT IS STILL A REAL PROBLEM FOR HIM.** His complaint stands even
+      though no code is broken: on a flat magenta rectangle at default settings, a lot of these produce
+      **no visible change** — shadows default to black against a dark background, the channel swap is a
+      no-op on that particular colour, glow and halation need highlights a flat fill has none of. He taps
+      an effect, nothing happens, and concludes it is broken. That is a product defect even with correct
+      code, and it is what to fix.
+      **Two options, and he should pick — recommended first:**
+      1. **Defaults that always show something** — shadows default to a colour that contrasts with the
+         layer rather than black, channelremap defaults to a mode that moves every hue, glow's threshold
+         adapts to the content's actual brightness range. He sees an effect the instant he taps it.
+      2. **Tell him when an effect cannot act** — a quiet note on the row ("no highlights to glow"). More
+         honest, more work, and still leaves him with a tile that does nothing.
+      **Do NOT "fix" any of these effects' code. There is nothing wrong with it.**
 - [ ] **461 — Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
       (21 Aug, with a screenshot.) His words, verbatim: *"Make an icon for each section that resembles
       the overall theme in some way, like for colouring you could do an interesting colour palette but do
