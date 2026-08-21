@@ -27,6 +27,18 @@ the tests and the commit in the same command and not reading the output). Also c
 matches the newest POLISH-LOG entry, refuses while a mutation is in progress, and confirms the push
 landed by comparing `HEAD` to `ssh/main` rather than trusting the push output.
 
+Two more gates live in it now, both added on 22 Aug and both locks on doors that were only ever held shut
+by remembering:
+- **A changed `js/*.js` or `styles.css` must have its `?v=` bumped in `index.html`, or ship.sh refuses.**
+  This file has warned about it for months — *"a missed buster reads as 'the fix does not work' — it
+  has"* — and nothing enforced it. The failure is the worst kind of silent: the code is right, the suite
+  is green, the push lands, and the phone serves the OLD file, so a perfectly good fix reads as broken.
+  New files are exempt (no previous `?v=` to differ from).
+- **`python3 tools/_classify.py` self-tests the queue classifier, and ship.sh refuses if any rule fails.**
+  Every rule in it cures a real bug — an answered item gone unreachable, a hold that would not lift, five
+  real items hidden by a phrase in a note about them — and nothing else in the repo would notice if one
+  stopped working. The symptom is silence, which is why it needs a test rather than a reader.
+
 ```bash
 tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
 ```

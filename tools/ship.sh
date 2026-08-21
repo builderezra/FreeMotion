@@ -48,6 +48,46 @@ for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' 
     exit 1
   fi
 done
+# ---- A CHANGED FILE MUST HAVE ITS CACHE-BUSTER BUMPED (22 Aug) ----------------------------------
+# WHY. CLAUDE.md has carried this warning for a long time — "a missed buster reads as 'the fix does not
+# work' — it has" — and the only thing enforcing it was remembering. That is exactly what this project
+# treats as no safeguard at all. The failure is silent and it is the WORST kind of silent: the code is
+# correct, the tests are green, the push lands, and Ezra opens the app on his phone and sees the old
+# build. Every symptom points at the fix being wrong when the fix is fine.
+# Forty commits were scanned when this gate was written and none had missed one — so this is not a fix
+# for a present mess, it is a lock on a door that has been left open the whole time.
+# NEW files are exempt: they have no previous ?v= to differ from, and being referenced at all is enough.
+BUSTER_MISS="$(python3 - <<'PYEOF'
+import subprocess, re, sys
+def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+changed = set()
+for line in sh("git status --porcelain").splitlines():
+    parts = line[3:].split(" -> ")
+    changed.add(parts[-1].strip())
+watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css)$', f)]
+if not watched: sys.exit(0)
+now = open('index.html', encoding='utf-8').read()
+was = sh("git show HEAD:index.html")
+def buster(txt, f):
+    m = re.search(re.escape(f) + r'\?v=([0-9.]+)', txt)
+    return m.group(1) if m else None
+for f in sorted(watched):
+    b_now = buster(now, f)
+    if b_now is None: continue          # not referenced by index.html (a tool, a test helper) — not cached
+    b_was = buster(was, f)
+    if b_was is None: continue          # brand new reference — nothing to bump
+    if b_now == b_was:
+        print("%s (still ?v=%s)" % (f, b_now))
+PYEOF
+)"
+if [ -n "$BUSTER_MISS" ]; then
+  echo "❌ A FILE CHANGED BUT ITS CACHE-BUSTER DID NOT — not committing, not pushing."
+  echo "$BUSTER_MISS" | sed 's/^/   /'
+  echo "   Bump the ?v= for each of those in index.html. Without it the phone keeps serving the OLD file,"
+  echo "   the app looks unchanged, and the fix reads as broken when it is fine."
+  exit 1
+fi
+
 # THE CLASSIFIER MUST PROVE ITSELF BEFORE IT LABELS ANYTHING (22 Aug). tools/_classify.py decides what
 # the loop picks up next AND what STATUS Ezra reads in REQUESTS.md, and every rule in it was written to
 # cure a real bug — an answered item that had become unreachable, a hold that would not lift, five real

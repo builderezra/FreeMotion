@@ -40,43 +40,43 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.48** (queue 467). **Third hunt in a row with no bug in the target area** — but this one
-closed a real COVERAGE gap, which is the more useful outcome. No app code changed, no version bump.
+**Last shipped: v11.48** (queue 467). **This tick: no bug found — a SAFEGUARD built instead.** No app code
+changed, no version bump.
 
-**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN
-numbered entry; **no findings means no entry.**
+**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN numbered
+entry; **no findings means no entry.**
 
-**THIS TICK — the exporter's own audio assembly**, driven through the real `FM.exporter.buildAudioMix`
-seam rather than through `buildAudioFxChain` (which is what the exporter does, but is not the exporter).
-All correct: an animated reverb reaches the exported mix and opens across it; a clip starting at 4 s of an
-8 s export is silent before it starts and opens across ITS OWN keyframe span, with a tail profile identical
-to the same clip at zero; two clips build two banks and the mix is not silent.
-**AND THE GAP THAT MATTERED:** nothing anywhere tested that the exporter *schedules automation at all*.
-Deleting `chain.schedule(from, to)` from `exporter.js` left the ENTIRE suite green — every one of the 60
-keyframed audio params would have silently exported at its first value, in every export, forever. There is
-now a test that fails on exactly that (mutation-checked). This is the queue-215 shape again: not a crash,
-just sound quietly not being what it should be.
+**⚠️ NEW GATE IN `tools/ship.sh`: a changed `js/*.js` or `styles.css` MUST have its `?v=` bumped in
+index.html, or the push is refused.** CLAUDE.md has warned about this for months — *"a missed buster reads
+as 'the fix does not work' — it has"* — and the only thing enforcing it was remembering, which this project
+treats as no safeguard at all. Forty commits were scanned and NONE had missed one, so this is not a fix for
+a present mess: it is a lock on a door that has been open the whole time. The failure it prevents is the
+worst kind of silent — code correct, suite green, push landed, and the phone serves the OLD file, so a good
+fix reads as broken. Proven both ways: edited a file with the buster untouched → refused; bumped it → passed.
+New files are exempt (no previous `?v=` to differ from). Recorded in CLAUDE.md beside the other safeguards.
+
+**THIS TICK'S SWEEP — the video side of export.** `exportFitRect` correct across 11 cases including
+degenerates (aspect preserved, centred, fits, letterbox flag honest). The frame loop reads correctly:
+`totalFrames = round((end-start)*fps)`, `t = start + f/fps`, so frame f covers [f/fps, (f+1)/fps). All 69
+local assets in index.html carry a buster.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
-- **All 27 audio effects** (v11.47 tick): offline, static AND every param animated min→max.
-- **Project import, hostile files** (v11.48 tick): prototype pollution, remote / `javascript:` fillImage,
-  prototype-chain effect types, the 2000-layer refusal. FOUND **#467**.
-- **Undo / redo across the four newest features**; **the queue-217 re-id gate, verified not trusted**;
-  **timeline at 10 s / 10 min / 60 min** (all prev tick).
-- **The LIVE audio path, all six newly-keyframable params** (prev tick), on a real connected context.
-- **The EXPORT audio path end-to-end** (this tick), including a clip starting mid-export.
+- **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
+  newest features**; **the queue-217 re-id gate, verified not trusted**; **timeline at 10 s / 10 min /
+  60 min**; **the LIVE audio path for all six newly-keyframable params**; **the EXPORT audio path
+  end-to-end** including a clip starting mid-export; **exportFitRect + the frame loop** (this tick).
 
-**STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data
-path is verified via `_reIdLayers`, the UI path is not); the video/frame side of export (everything swept
-so far has been audio); the service worker / PWA update path.
+**STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data path
+is verified via `_reIdLayers`, the UI path is not); the service worker's own cache list vs index.html; the
+compositor's behaviour at clip boundaries (does a clip appear in the exact frame it starts?).
 
-**⚠️ A LESSON ABOUT MUTATIONS, worth keeping.** `mutate.sh` reported CAUGHT for the scene-time-anchoring
-mutation — but by a DIFFERENT test than the one named, and it said so. The new export test was weaker than
-intended for that case. **A green "CAUGHT" is not proof that YOUR test works; check which assertion fired.**
-The tool prints this; read it.
+**⚠️ §8b CAUGHT ME AGAIN THIS TICK, in my own notes.** The first `exportFitRect` probe assumed `{x,y,w,h}`
+and reported NINE failures; the real shape is `{dx,dy,dw,dh,letterboxed}`. Every one was `undefined`
+arithmetic. **Read the function before writing the probe** — it is three lines and would have cost nothing.
 
-**Running tally, said plainly:** across five hunts — **two real bugs** (#466, #467), **one coverage gap
-closed** (exporter scheduling), and **seven probe errors** caught before they reached him.
+**Running tally, said plainly:** across six hunts — **two real bugs** (#466, #467), **one coverage gap
+closed** (exporter scheduling), **one safeguard built** (cache-buster gate), and **eight probe errors**
+caught before they reached him.
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it
