@@ -11089,6 +11089,25 @@ wait for them to report back."*
       **So the next question is narrow and worth asking before any more work:** was the lag he means
       actually captured in these 9.55 seconds? If yes, the symptom is not dropped frames and every
       profile so far has been looking for the wrong thing.
+      **🚨 EZRA CONFIRMS THE LAG WAS IN THE RECORDING, 21 Aug:** *"yes it was buggy asf"*.
+      **THIS REDIRECTS THE WHOLE INVESTIGATION AND EVERY PROFILE SO FAR HAS BEEN LOOKING FOR THE WRONG
+      THING.** The recording he says was "buggy asf" measures, from its own MP4 sample tables:
+      **60.0 fps, 573 frames over 9.55s, ZERO dropped frames, and the longest the screen went without
+      changing was ONE frame (16ms).** The compositor put a fresh, different frame on the glass every
+      16ms for the entire clip.
+      So **the symptom is not frame drops, not stutter, and not a stall** — which is what "laggy" has
+      been assumed to mean here for weeks, and why it "does not reproduce in Chrome at any CPU
+      throttle": Chrome was being measured for the one thing that is demonstrably not happening.
+      **What stays consistent with a perfect 60fps and still feels awful — check these, in order:**
+      1. **INPUT LATENCY.** The screen is smooth but trails your finger. Frame rate is perfect and the
+         app still feels broken, because what is late is the RESPONSE, not the painting. Look for work
+         done inside pointermove before paint, non-passive listeners, or a rAF that renders last
+         frame's input.
+      2. **The picture moving in coarse steps** while the UI around it stays smooth — a scrub that
+         jumps in big increments makes frames BIGGER, not smaller, so it looks like healthy change.
+      3. **Stale frames on seek** — video decode latency showing an out-of-date picture while the
+         playhead and timeline move perfectly.
+      **Do not profile for dropped frames again.** That question is answered, from his own device.
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
@@ -12791,7 +12810,7 @@ wait for them to report back."*
       the CONTROL: the layer order had not changed either. Both are asserted now, so a run that did not
       actually drag says so instead of producing a number.
 
-- [ ] **439 — 🚨 HE NAMES THIS AS THE OLDEST THING STILL NOT DONE: the text bar hides under the keyboard.**
+- [x] **439 — ✅ **DONE v11.20.** 🚨 HE NAMES THIS AS THE OLDEST THING STILL NOT DONE: the text bar hides under the keyboard.**
       (20 Aug, phone screenshot at v10.71 with the keyboard up.) His words, verbatim: *"The longest issue
       you still haven't done I can remember is edit text. The bar that shows the text you're typing still
       is hidden below the keyboard. Fix it"*.
@@ -12850,6 +12869,11 @@ wait for them to report back."*
       **Do not tick this until Ezra confirms on a real iPhone** — every previous attempt also passed its
       tests, and that is exactly how this entry survived so long.
 
+      **✅ CONFIRMED BY EZRA ON HIS PHONE, 21 Aug:** *"Text menu is finally great"*. Ticked on his word,
+      on the real device — which is the only evidence that ever counted here. Every earlier attempt
+      passed its tests and its measurements too; what closed it was moving the field somewhere iOS
+      cannot cover rather than measuring the keyboard more accurately. **He named this the oldest thing
+      still not done.**
 - [ ] **453 — Leaving a project mid-drawing leaves you stuck in the sketch mode, in THAT project and in
       others.** (21 Aug, from his phone.) His words, verbatim: *"Also when you leave a project mid
       drawing it still has you in the drawing menu sketching menu when you load back in and if you load
@@ -12866,6 +12890,27 @@ wait for them to report back."*
       Where to look: js/draw-tool.js's teardown, and whatever the project-open path resets — compare
       against how text-edit.js tears down (it removes its panel and clears body.text-editing), which is
       the pattern that works.
+
+
+- [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
+      phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
+      down, presets are just for effects not anything else, if it says preset remove any other function
+      than just saving what effects the layer has"*.
+      **"Putting my foot down" — this is a decision, not a discussion.** He has circled "YOUR PRESETS"
+      in the New Project dialog, which currently offers a saved project preset ("Cool loop,
+      1080x1080 · 30 fps"). That is a project-settings preset, and by his rule it must not be called a
+      preset — the word belongs to one thing only: **saving the set of effects on a layer.**
+      **The job:** find every place the app uses "preset" for anything other than a layer's effects and
+      remove that function (not merely rename it — his words are "remove any other function"). Known so
+      far from the screenshot: the New Project sheet's YOUR PRESETS block. **Sweep for others before
+      building** — project presets, export presets, canvas presets, text-style presets are all candidates.
+      ⚠️ **One thing to put to him before deleting:** removing the project preset deletes a thing he has
+      already made ("Cool loop"). His standing line of the same day covers it — *"if my old stuff gets
+      recked idc, just make it what I want"* — so this is very likely just "delete it", but the sweep
+      should REPORT what will disappear before it disappears.
+      Related to **329** (two save buttons in the Presets card, done v9.75) and the earlier preset
+      thumbnails conflict he settled the same day with *"presets are fine as they are"* — that answer
+      was about the effects presets, which is exactly the one kind he is keeping.
 
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,

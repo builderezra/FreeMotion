@@ -8931,6 +8931,41 @@
     }
   });
 
+  test('drawing: opening a project ends any sketch in progress', { item: '453' }, async function () {
+    /* QUEUE 453. Ezra, from his phone: "when you leave a project mid drawing it still has you in the
+     * drawing menu sketching menu when you load back in and if you load another project it's also
+     * doing the drawing thing still."
+     * Both halves are ONE cause: `FM.drawTool` is a single module-level object, not per-project state,
+     * so an unfinished sketch outlived the project it was started in — you returned to a drawing
+     * toolbar over a project you had never drawn in, holding strokes from a scene no longer loaded.
+     * THE INTERESTING PART, and the reason this sat open: the teardown was never missing. `_stop` has
+     * been exported for releases and THIS SUITE HAS BEEN CALLING IT in three other tests. Nothing in
+     * the app ever did. A function that only tests call is not a seam, it is a decoration — so this
+     * test drives the real entry point (`_openProject`) rather than calling `_stop` itself, which is
+     * exactly the mistake that let the gap survive. */
+    if (!FM.startDraw) throw new Error('FM.startDraw is not reachable');
+    if (!FM.home || !FM.home._openProject) throw new Error('FM.home._openProject is not reachable');
+    const bodyHas = c => document.body.classList.contains(c);
+    try {
+      FM.startDraw('vector');
+      await sleep(60);
+      // CONTROL: the sketch must really be running, or everything below passes on an empty scene and
+      // proves nothing — the shape of the four false cleans recorded in the handover.
+      if (!FM.drawTool.active) throw new Error('startDraw did not start a sketch, so this test cannot tell the fix from the bug');
+      if (!bodyHas('drawing')) throw new Error('a sketch is active but body.drawing is not set — the control is measuring the wrong thing');
+
+      await FM.home._openProject(FM.projects && FM.projects.currentId && FM.projects.currentId(), true);
+      await sleep(120);
+
+      if (FM.drawTool.active) throw new Error('after opening a project the sketch is STILL active — you land in a drawing session belonging to a project that is no longer loaded');
+      if (FM.drawTool.mode) throw new Error('the sketch mode survived opening a project: ' + FM.drawTool.mode);
+      if (bodyHas('drawing')) throw new Error('body.drawing survived opening a project, so the drawing chrome is still over the new project');
+      if (bodyHas('draw-vector')) throw new Error('body.draw-vector survived opening a project');
+    } finally {
+      try { FM.drawTool._stop(); } catch (e) {}
+    }
+  });
+
   test('drawing: panning cannot push the canvas off the screen', { item: 'draw-pan-clamp' }, async function () {
     /* v8.03, fixing a trap v8.02 shipped. The two-finger pan had no limit: measured, twenty-five flicks
      * put the canvas at top -5025, bottom -4377 — entirely gone — and while drawing there is no way back,

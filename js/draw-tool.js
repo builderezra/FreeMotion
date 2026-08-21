@@ -511,6 +511,7 @@ window.FM = window.FM || {};
     if (FM.resizeCanvas) FM.resizeCanvas();   // the stage shrinks back to its normal share of the window
   }
 
+
   function updateBar() {
     if (!bar) return;
     var vec = FM.drawTool.mode === 'vector';
@@ -651,6 +652,12 @@ window.FM = window.FM || {};
   // …and the way OUT, which the test needs in a finally. Without it a test that starts the tool leaves
   // body.drawing on for the rest of the run, and the collapsed layout it causes fails eight unrelated
   // tests downstream — which is how this hook came to exist.
+  /* A PRODUCTION SEAM NOW, NOT ONLY A TEST ONE (queue 453, v11.22). This export already existed and
+   * the suite used it; what did not exist was anyone CALLING it when you leave a project. FM.drawTool
+   * is one module-level object, not per-project state, so an unfinished sketch outlived the project it
+   * started in — Ezra: "when you leave a project mid drawing it still has you in the drawing menu
+   * sketching menu when you load back in and if you load another project it's also doing the drawing
+   * thing still". Both halves are that one cause. See home.js's openProject. */
   FM.drawTool._stop = stop;
   FM.startDraw = function (mode, opts) {
     /* THE RESET IS GONE (v8.01, queue 165.3). Ezra: "another option that lets you grab the screen and

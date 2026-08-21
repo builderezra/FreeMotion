@@ -1626,6 +1626,18 @@ window.FM = window.FM || {};
     // …but only for as long as that first open is plausibly still running. An open whose promise
     // never settles at all would otherwise wall the home screen off permanently — see openAbandoned.
     if (_opening && !openAbandoned()) return false;
+    /* END ANY DRAWING SESSION BEFORE A PROJECT LOADS (queue 453, v11.22).
+     * FM.drawTool is ONE module-level object, not per-project state, so an unfinished sketch survived
+     * a project switch entirely: you came back to the drawing toolbar over a project you had never
+     * drawn in, holding strokes belonging to a scene that was no longer loaded.
+     * The teardown was already exported and already correct — draw-tool.js's `_stop` — and the suite
+     * had been calling it for releases. Nothing in the APP ever did. That is the whole bug: not a
+     * missing function, a missing call at the seam.
+     * Placed BEFORE the load, so the overlay and its body classes are gone before the new scene
+     * paints; after the load it flashes. Unconditional on purpose — `_stop` is idempotent and cheap
+     * when nothing is active, and a condition here is one more thing that can be wrong at a seam whose
+     * entire job is to leave no state behind. */
+    if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
     _opening = true; _openingAt = Date.now();
     holdPress();   // this open now owns the press — no release timer, and no other card, may take it
     /* THE CARD LEAVES ON THE TAP (queue 128). Everything below used to happen after `await open(id)`,
