@@ -1,4 +1,4 @@
-# ⚠️ READ FIRST — twelve ways a measurement lied (20 Aug 2026, extended 22 Aug)
+# ⚠️ READ FIRST — thirteen ways a measurement lied (20 Aug 2026, extended 22 Aug)
 
 Every one of these produced a confident WRONG answer that survived until something forced a second look.
 They are listed by SYMPTOM, because that is how you meet them.
@@ -70,6 +70,16 @@ before reporting anything as broken.
    · **Repeated `FM.inspector.back()` can unwind past the grid** and leave `document.body.className`
      empty, i.e. the app out of edit mode entirely. Re-assert the selection between categories rather
      than assuming the previous state survived.
+
+8f. **"Sweeping the panels is too slow to finish."** It is not — the WAITING was the whole cost (22 Aug).
+   `FM.inspector.openCategory(k)` rebuilds the panel **synchronously in about 7 ms**; the sheet is already
+   open, so switching category animates nothing. Measured immediately after the call and again after a
+   450 ms settle: identical control count, identical widths, identical scroll height. A sweep that timed
+   out three times with `sleep(250)` between categories finished all eight in ONE call with no sleeps at
+   all. **Before adding a settle wait, measure whether anything actually settles.**
+   Related, and the answer to "can the user reach the controls below the fold": the scroll container is
+   **`#inspector-panel`** (an `<aside class="panel open">`, `overflow-y: auto`). Walk up from a control and
+   find the first ancestor whose `scrollHeight > clientHeight` — do not guess which element scrolls.
 
 8. **"The element moved hundreds of pixels."** The timeline REBUILDS on resize — the add row and its +
    are replaced — so an element reference held across the resize measures a DETACHED node as all-zeros.

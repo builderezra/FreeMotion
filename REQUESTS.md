@@ -11695,6 +11695,30 @@ wait for them to report back."*
       ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
+- [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
+      **WAITING ON EZRA — a one-word answer, and it is a taste call, not a bug.**
+      (22 Aug — found by a bug hunt of the 380px layout, not reported by him. He has never complained
+      about this, which is worth stating up front: it is a measurement, not a symptom.)
+      **What was measured**, sweeping all eight inspector categories at 380px with a 12-layer project:
+      no horizontal overflow anywhere, every control reachable by scrolling, nothing clipped. **One thing
+      stood out** — the ◆ keyframe buttons are **18×18 px with zero padding** (`.mt-vbox-kf` in
+      Position / Scale, `.fill-kf` in Colouring at 22×25). Apple's own guidance is 44×44.
+      **A false alarm ruled out in the same pass, recorded so nobody re-checks it:** the 15×15 checkboxes
+      in Outline & Shadows and Customise Shape are wrapped in `<label>`, so the whole **356×21 row** is
+      tappable. Those are fine. Only the standalone diamonds are small.
+      **Why this is NOT being changed unilaterally.** The hit area can be grown without changing how
+      anything LOOKS, but not for free: the nearest neighbour is **9.8 px away and it is the Back
+      button**. Grow the diamond's target to the full 36 px that gap allows and taps meant for Back would
+      start landing on ◆ — which CREATES A KEYFRAME. Trading "hard to hit" for "adds animation you did not
+      ask for" is a bad trade, and it is your app's feel, not a mechanical fix.
+      **The options:**
+      1. **Leave it.** It has shipped this way for a long time and you have never mentioned it.
+      2. **Grow the hit area to ~30 px, invisibly** — bigger finger target, ~4 px of clearance left to
+         Back, appearance completely unchanged. **(Recommended if you have ever mis-tapped one.)**
+      3. **Make the diamonds visibly bigger**, which changes the look of the rail.
+      **Nothing happens until you pick.** If you have never fumbled one, option 1 is a perfectly good
+      answer and this entry closes.
+
 - [x] **468 — A damaged project file silently loses its animations.** ✅ **DONE v11.49.**
       (22 Aug — found by a bug hunt sweeping keyframe evaluation at its boundaries, not reported by Ezra.)
       **Two shapes, both file-only, and the first is the bad one:**
