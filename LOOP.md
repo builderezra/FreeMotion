@@ -36,7 +36,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE — keep this current
 
-**v11.28, suite 795 green.**
+**v11.29, suite 796 green.**
 
 **In flight**
 - **Per-effect-slider keyframes** (unnumbered, oldest actionable). **Three of six done** — Distortion
@@ -78,6 +78,9 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 - **#464** — filters get multi-select-then-Add. The effects browser already does this; reuse it.
 
 **Waiting on Ezra — note, do not re-ask**
+- **#202** — one more perf readout **taken while playing**. The ladder is cleared (tested, v11.29) and
+  his scene costs 163ms/frame on a fast Mac, so the slowness is workload, not a fault. His tier-0
+  reading means the ladder was never consulted, which only happens on a sample taken while paused.
 - **#387** — what was he doing in the 9.5s recording, playing or scrubbing? Measured: 96.2% of frames
   visually identical, a 1.10s freeze at 8.43s. The app IS stuttering; his report is confirmed.
 - **#454 second half** — remove "Save whole look as preset…" entirely (recommended), or cut it to

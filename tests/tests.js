@@ -28423,6 +28423,53 @@
     } finally { P.fps = fps0; FM.playing = playing0; }
   });
 
+  test('the quality ladder actually steps down when shedding pixels helps — and gives up when it does not', { item: '202' }, function () {
+    /* QUEUE 202. His third on-device sample: 10.7 fps, render 294.69ms, gap 311.92ms — and
+     * "QUALITY tier 0 (6 available) · mode smooth". Every existing test of this ladder checks the
+     * BUDGET (what counts as a late frame). None checked the thing that sample actually questioned:
+     * whether the ladder ever STEPS DOWN. A ladder that measures correctly and never acts is worth
+     * less than no ladder at all, because it looks like it is working.
+     * Driven through the real entry point rather than by playing for real, which the note on the test
+     * below says is slow and flaky. */
+    if (!FM._notePlaybackCost || !FM.playbackQualityInfo) throw new Error('the ladder is not reachable from the suite');
+    const playing0 = FM.playing, mode0 = FM.settings.get('playbackQuality');
+    const tier = () => FM.playbackQualityInfo().tier;
+    const reset = () => { FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.settings.set('playbackQuality', 'auto'); };
+    try {
+      FM.playing = true;
+      FM.settings.set('playbackQuality', 'auto');
+
+      /* 1. WHEN DROPPING HELPS, IT MUST KEEP DROPPING. Cost falls as the tier rises, which is how this
+       * scene really behaves — measured on his shape (9 shape layers, 24 effects): 1458k px 163.5ms,
+       * 365k px 34.6ms, 91k px 6.8ms, i.e. very nearly linear in pixel count. So shedding pixels is
+       * genuinely worth it here and the ladder must find that out. */
+      reset();
+      for (let i = 0; i < 120; i++) { const c = 294.69 * Math.pow(0.6, tier()); FM._notePlaybackCost(c, c * 1.06); }
+      const helped = tier();
+      if (helped < 2) throw new Error('with shedding pixels genuinely helping, the ladder only reached tier ' + helped +
+        ' — it is not adapting, which is exactly what his 10.7fps-at-tier-0 sample looked like');
+      if (FM.playbackQualityInfo().effective >= 1) throw new Error('the ladder moved tier but the EFFECTIVE scale is still 1, so no pixels were actually shed — the tier is decorative');
+
+      /* 2. WHEN IT DOES NOT HELP, IT MUST STOP. Otherwise it walks all the way down and hands him a
+       * soft picture for nothing — a worse bug than the lag, and one this codebase has already had. */
+      reset();
+      for (let i = 0; i < 120; i++) FM._notePlaybackCost(294.69, 311.92);
+      if (tier() > 1) throw new Error('when shedding pixels bought nothing the ladder still walked to tier ' + tier() + ' — it is softening the picture for no gain');
+
+      /* 3. CONTROL — healthy frames must never provoke a drop. Without this the first assertion could
+       * pass on a ladder that simply drops on everything, which is the failure mode that shipped once
+       * (a single small shape with no effects walked down two rungs). */
+      reset();
+      for (let i = 0; i < 120; i++) FM._notePlaybackCost(2.0, 16.7);
+      if (tier() > 0) throw new Error('healthy 2ms frames pushed the ladder to tier ' + tier() + ' — it is softening the preview for no reason');
+    } finally {
+      FM.playing = playing0;
+      FM.settings.set('playbackQuality', mode0);
+      reset();
+      FM.settings.set('playbackQuality', mode0);
+    }
+  });
+
   test('playback feeds the ladder a frame interval at all', { item: 'play-gap' }, function () {
     /* The bug his sample exposed: notePlaybackCost was called with no gap argument during playback,
        so `_gapAvg` never moved off zero and the ladder watched only main-thread render time — the

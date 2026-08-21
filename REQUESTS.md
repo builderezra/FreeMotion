@@ -7615,6 +7615,36 @@ better still, keep working inside the turn rather than parking work for a later 
       still can't fix"*. So readouts exist earlier in the history — FIND AND USE THOSE before asking
       him for another. Asking again for something he has already sent is the failure this file exists
       to prevent.
+      📐 **THE LADDER WAS THE FIRST THING TO CHECK, AND IT IS NOT BROKEN — v11.29, measured and now
+      guarded by a test.** The entry said *"a ladder that measures correctly and never steps down is
+      worth more than any single effect optimisation"*, so it was driven directly through
+      `notePlaybackCost` (newly exposed as `FM._notePlaybackCost`; the production render loop already
+      calls it every frame, so it is a real seam):
+      · **When shedding pixels genuinely helps, it adapts** — tier walks 0→1→0→1→2→3, effective scale
+        0.48, and the fed cost falls 294ms → 63ms. Not locked.
+      · **When shedding pixels buys nothing, it tries once, reverts, and LOCKS.** That is correct: it
+        stops softening the picture for no gain.
+      · **Healthy 2ms frames never provoke a drop.**
+      All three are now a test, and removing the step-down turns it red.
+      📐 **AND THE COST IS ALMOST PERFECTLY PIXEL-BOUND, which settles what the ladder is worth here.**
+      His scene shape rebuilt exactly (9 shape layers, 24 effects) and rendered at five canvas sizes:
+      ```
+      1458k px (his)  163.5 ms      365k px   34.6 ms
+       730k px         63.1 ms      182k px   19.8 ms
+                                     91k px    6.8 ms
+      ```
+      Near-linear in pixel count — so dropping from his 1458k to 365k is a **4.7x speedup**. The ladder
+      is exactly the right mechanism for this scene and it does work.
+      🔴 **SO HIS "tier 0 of 6 at 10.7 fps" MEANS THE LADDER NEVER RAN, not that it is stuck.**
+      `notePlaybackCost` returns immediately unless the app is playing or dragging, and v10.18 taught the
+      readout to say so outright. **The next reading he sends settles it — and it must be taken WHILE
+      PLAYING.** Do not spend another round on the ladder itself.
+      ⚠️ **The other half is worth telling him plainly: that scene is beyond real-time on ANY device.**
+      163ms a frame on a fast desktop Mac is 6 fps before his phone is even involved — his device
+      reported 294ms, which is the same order and entirely plausible. 24 effects across 9 layers at
+      1458k pixels is simply a very expensive frame. The honest answer is not "the app is broken" but
+      "the preview has to shed pixels to keep up, and that is what the ladder is for" — plus, possibly,
+      warning him when a scene's cost has passed what the preview can hold at full resolution.
 - [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two

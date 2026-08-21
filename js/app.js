@@ -229,6 +229,13 @@ window.FM = window.FM || {};
     return FM.playing ? (1000 / Math.max(1, Math.min(120, projFps))) : (1000 / 60);
   }
   FM._costBudgetMs = costBudgetMs;
+  /* The ladder's own input, exposed so the suite can drive it directly (queue 202). Every existing
+     test of this ladder checks the BUDGET — what counts as a late frame — and none checks the thing
+     Ezra's sample actually questioned: whether it ever STEPS DOWN. Driving real playback to find out
+     is slow and flaky (the note on 'playback feeds the ladder a frame interval at all' says so), and
+     the production render loop already calls this on every frame, so it is a real seam rather than a
+     decoration. */
+  FM._notePlaybackCost = notePlaybackCost;
 
   function notePlaybackCost(ms, gapMs) {
     if (!FM.playing && !_inMotion) return;
