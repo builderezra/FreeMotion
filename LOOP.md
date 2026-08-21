@@ -40,41 +40,46 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.48** — queue **467**, a bug hunt finding. Suite **811/811 green**, pushed and verified.
+**Last shipped: v11.48** (queue 467). **This tick: a hunt that found NOTHING — and that is a real result,
+recorded so it is not repeated blind.** No version bump, no app code changed.
 
 **0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim: *"When you finish the last
-thing, do a bug and issue hunt. Also look for potential ideas and things to do."*). Findings get their
-OWN numbered entry — 260's rule: "a hunt that files its findings into a single bullet is a hunt whose
-findings rot."
+thing, do a bug and issue hunt. Also look for potential ideas and things to do."*). Findings get their OWN
+numbered entry — 260's rule. **No findings this tick means no entry to file, not an entry saying nothing.**
 
-**HUNT LOG — areas swept, so they are not re-checked blind every session:**
-- **All 27 audio effects** (v11.47 tick), offline render, static defaults AND every parameter animated
-  min→max: no throws, no NaN, no silence. Also proves v11.45's whole-window hook disturbed none of them.
-- **Project import, hostile files** (this tick). CLEAN: prototype pollution via `__proto__` /
-  `constructor` in a layer or the project; remote and `javascript:` `fillImage` URLs (dropped);
-  prototype-chain effect types `constructor` / `toString` (dropped); the 2000-layer refusal.
-  FOUND: **#467**, layer timing never validated → a broken file imports as a 0-second empty project.
-- **Text to Voice settings persistence** (v11.47 tick). Survives save/reload. FOUND: **#466** next to it.
+**HUNT LOG — swept and CLEAN, do not re-check blind:**
+- **All 27 audio effects** (v11.47 tick): offline render, static AND every param animated min→max. No
+  throws, no NaN, no silence. Also proves v11.45's whole-window hook disturbed none of the other 26.
+- **Project import, hostile files** (v11.48 tick). CLEAN on prototype pollution (`__proto__`,
+  `constructor`, in a layer and in the project), remote and `javascript:` `fillImage` (dropped),
+  prototype-chain effect types (dropped), the 2000-layer refusal. FOUND **#467**.
+- **Undo / redo across all four recent features** (this tick): Text to Voice settings, the split stairs
+  chain buttons, the toggle-then-Add filter flow, and an audio-effect keyframe diamond. **All correct**,
+  undo and redo both.
+- **The queue-217 structural claim, VERIFIED rather than trusted** (this tick): `reIdLayers` really is the
+  single gate every batch of foreign layers passes, so #467's timing fix protects template insert, element
+  insert and project duplicate too — not only file import. Driven through `_reIdLayers` directly.
+- **Timeline at 10 s / 10 min / 60 min** (this tick): no throw, no unbounded DOM, scroll extent scales
+  sanely. ⚠️ No timing claim from this — the preview pane reports `document.hidden` and throttles, so its
+  numbers are worthless (rule 11).
 
-**STILL UN-SWEPT — start here next tick:** the export pipeline end-to-end with the new reverb bank;
-undo/redo across the newer panels (filters, faves, TTS); the timeline at very long durations; template /
-element insert with a hostile pack (same door as import, different key).
+**STILL UN-SWEPT — start here next tick:** the export pipeline end-to-end with the new reverb bank; a
+hostile TEMPLATE PACK through the real insert UI (the data path is verified, the UI path is not); the
+audio-fx live preview path (`applyAt`), which no hunt has touched.
 
-**⚠️ THE SEAM LESSON, THIRD TIME NOW — a passing test can prove a function works and NOTHING about
-whether anything calls it.** #467's mutation SURVIVED at first: deleting the sanitiser's call site left
-every assertion green, because the test drove the function directly. Previous outings: #382's cost
-counter, #455's rendered ruler, #394's call site. **Whenever a fix is "new function + one call site",
-assert through the REAL entry point, not the function.**
-
-**Probe discipline, earned the hard way:** check the SHAPE of what a function returns before believing
-what you read out of it (three wrong readings in one tick — `serializeScene` is async, `storage.load()`
-returns a boolean); round every sample index; and take a CLEAN CONTROL through the same probe before
-calling anything a bug — "no clip element found" is usually a wrong selector, not a defect.
+**⚠️ THE REAL FINDING THIS TICK WAS ABOUT ME, and it is now in BUG-HUNT.md §8b/§8c where a hunt will look.**
+Five probe errors in two ticks, all one shape — assuming an API or DOM shape and reading a falsy result as
+a defect. `serializeScene` is ASYNC; `storage.load()` returns a BOOLEAN and loads into `FM.scene`;
+`.flt-commit` is a CONTAINER whose inner button does the work. One nearly became a report that project
+saving was broken, and one "the filter Add button does nothing" was entirely my click landing on a div.
+**The rule now written at the top of BUG-HUNT.md: before believing any negative, put a KNOWN-GOOD case
+through the identical probe. If the control also reads empty, the probe is broken — and it is, about half
+the time.**
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says
-it feels better on his device); **whether an animated reverb stutters while previewing on his phone**;
-and **392** — his verdict on Text to Voice, plus the cloud-vs-record choice.
+it feels better on his device); **whether an animated reverb stutters while previewing on his phone**; and
+**392** — his verdict on Text to Voice, plus the cloud-vs-record choice.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no

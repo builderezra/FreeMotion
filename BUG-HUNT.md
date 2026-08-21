@@ -1,7 +1,12 @@
-# ⚠️ READ FIRST — eight ways a measurement lied, all on 20 Aug 2026
+# ⚠️ READ FIRST — ten ways a measurement lied (20 Aug 2026, extended 22 Aug)
 
 Every one of these produced a confident WRONG answer that survived until something forced a second look.
 They are listed by SYMPTOM, because that is how you meet them.
+
+**Roughly half of everything a hunt "finds" is the probe, not the code.** On 22 Aug five readings in two
+ticks were wrong this way and only two of the tick's findings were real bugs. Read §8b and §8c before
+writing a probe against storage or a commit bar, and read the control rule at the end of this section
+before reporting anything as broken.
 
 1. **"The screen renders nothing / the sheet is empty."** `tests/_shot.sh` uses `--virtual-time-budget`,
    under which a CSS transition never completes — so a sheet that slides up is photographed still parked
@@ -23,9 +28,30 @@ They are listed by SYMPTOM, because that is how you meet them.
    ten clauses, 418 clause 2). An entry records what was ASKED, not what is still missing, and nothing
    keeps the two in step. Read the file the entry names before building.
 
+8b. **"The saved file is missing my field" / "the project came back without X."** Three wrong readings in
+   one tick (22 Aug), every one an assumed RETURN SHAPE rather than a real defect:
+   · `FM.storage.serializeScene()` is **async** — un-awaited, `.layers` is `undefined`, and it looks
+     exactly like the serialiser is dropping your field. It is not; it keeps whole layer objects.
+   · `FM.storage.load()` returns a **boolean** and loads into `FM.scene`. It does not return the document,
+     so `back.layers` is undefined and every field reads as lost.
+   · Filtering that undefined list then "confirmed" it. *(One of these nearly became a report to Ezra that
+     project saving was broken. It was fine.)*
+   **Check what a function RETURNS before believing what you read out of it.**
+
+8c. **"The button does nothing."** `.flt-commit` / `.fxb-commit` is a **container DIV** holding
+   `.fxb-commit-clear` and `.fxb-commit-go`. Clicking the container does nothing at all, which reads
+   identically to a broken feature — the filter Add flow was "found broken" this way and is fine.
+   Click the inner `button`, and confirm the label first (`"Add 1 filter"` tells you the pick registered).
+
 8. **"The element moved hundreds of pixels."** The timeline REBUILDS on resize — the add row and its +
    are replaced — so an element reference held across the resize measures a DETACHED node as all-zeros.
    A probe reported the + moving −453.5px that way. Re-query by selector after anything that can rebuild.
+
+**BEFORE BELIEVING ANY NEGATIVE, RUN THE CLEAN CONTROL THROUGH THE SAME PROBE.** Nearly every entry
+above is a probe that returned "nothing there" for a reason that had nothing to do with the code. The
+cheapest possible guard is to point the identical probe at a case that is KNOWN GOOD and check it comes
+back positive: a valid project alongside the corrupt one, a working layer alongside the suspect one. If
+the control also reads empty, the probe is broken — and that is the answer roughly half the time.
 
 **The one rule underneath all eight:** a measurement that CANNOT fail is not evidence. Before believing
 a probe, ask what it would have shown if the thing were broken — and if the answer is "the same", the
