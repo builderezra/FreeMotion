@@ -13847,8 +13847,7 @@ wait for them to report back."*
       Mutation-checked both ways that matter: flattening the button back to a notch is caught by height,
       and swapping the gold for grey is caught by a warmth test on the computed gradient — "has a
       background" alone would have passed while missing the half he asked for by name.
-- [ ] **463 — In the filters menu, rows like TUFF should be ONE row you swipe sideways, not two stacked
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **463 — ✅ **DONE v11.41.** In the filters menu, rows like TUFF should be ONE row you swipe sideways, not two stacked
       rows.** (21 Aug, with a screenshot.) His words, verbatim: *"Make in the filters menu for rows like
       tuff where there's two lines just one line and you scroll left and right swiping to see the
       others"*.
@@ -13857,6 +13856,26 @@ wait for them to report back."*
       the section costs one row of height and the rest is reached by swiping.
       Applies to "rows like tuff" — i.e. the filter sections generally, not only that one.
 
+      ✅ **DONE v11.41 — measured at 380px: Tuff is 8 tiles in ONE row, 722px of rail inside 356px.**
+      The sections were `display: grid; repeat(4, 1fr)`, so Tuff's eight wrapped to two rows and that one
+      section cost double the height — which is what pushed the rest of the list off his screen.
+      Now a horizontal rail: same tiles, same 82px width, one row, the rest a swipe away with
+      `scroll-snap` so it settles on a filter rather than half of one.
+      **Only the long sections changed.** Cinematic / Retro / Light / Stylised (4 each) and Black-White /
+      Punchy (3 each) measure one row and do not scroll — exactly as before.
+      **Built on `.te-font-rail`'s pattern**, the sideways scroller the text editor's font picker already
+      uses, rather than a second kind of rail that would drift from it later.
+      · `flex: 0 0 auto` with an explicit width is load-bearing: a flex child in a scroller SHRINKS by
+        default, which would have put all eight back on screen at a quarter size — the opposite of the
+        fix, and invisible unless measured. That is one of the two mutations.
+      · Desktop keeps a slim scrollbar (`hover: hover and pointer: fine`) because there is no swipe with
+        a mouse, and a rail you cannot scroll with the device in your hand is worse than a grid.
+      **Both mutation directions caught:** back to a grid → "wrapped onto 2 rows"; tiles squashed to fit
+      → "does not scroll sideways".
+      ⚠️ Process note: the two mutation runs were chained into ONE command and blew the 500s timeout
+      (each is ~4 minutes). They finished correctly in the background and `mutate.sh` restored the tree
+      on its trap, but nothing was measured or shipped until `.mutation-in-progress` cleared. **Run them
+      one per call.**
 - [ ] **464 — Adding filters should be multi-select-then-Add, exactly like the main effects menu.**
       **STATUS: 🟢 READY — nothing is stopping this**
       (21 Aug.) His words, verbatim: *"When adding filters make it so that you can toggle them select and

@@ -24691,6 +24691,47 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a long filter section is one swipeable row, not two stacked ones (queue 463)', { item: '463' }, async function () {
+    /* Ezra, with a screenshot of the TUFF section: *"Make in the filters menu for rows like tuff where
+     * there's two lines just one line and you scroll left and right swiping to see the others"*.
+     * The sections were a 4-column grid, so TUFF's eight filters wrapped to two rows and the section
+     * cost double the height — with the rest of the list pushed off the screen behind it. */
+    if (!FM.filters || !FM.filters.sections) throw new Error('FM.filters is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { name: 'fltprobe', shape: 'rect', x: 200, y: 200, shapeW: 120, shapeH: 90, fill: '#cc22cc', start: 0, duration: 5 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('filters');
+      await sleep(420);
+      const grids = [].slice.call(document.querySelectorAll('.flt-grid'))
+        .filter(g => g.getBoundingClientRect().width > 0);
+      if (!grids.length) throw new Error('no filter sections rendered — the probe is not looking at the filters view');
+
+      /* CONTROL — there must BE a section long enough to overflow, or "nothing wrapped" is also what
+         you would read from a list too short to wrap. TUFF has eight; if that ever changes this test
+         should say so rather than quietly pass. */
+      const longest = grids.reduce((a, b) => (b.children.length > a.children.length ? b : a));
+      if (longest.children.length < 5) throw new Error('no filter section has more than 4 tiles any more, so this test cannot tell a rail from a grid');
+
+      grids.forEach((g) => {
+        const tops = {};
+        [].slice.call(g.children).forEach((t) => { tops[Math.round(t.getBoundingClientRect().top)] = 1; });
+        const rows = Object.keys(tops).length;
+        if (rows > 1) throw new Error('a filter section wrapped onto ' + rows + ' rows — that is the two lines he asked to be one');
+      });
+
+      // …and the long one must actually be swipeable, or its extra tiles are simply unreachable.
+      if (!(longest.scrollWidth > longest.clientWidth + 2)) {
+        throw new Error('the longest section (' + longest.children.length + ' tiles) does not scroll sideways — its tiles have been squashed to fit instead, which is the opposite of the fix');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('the Faves control is a real gold button, not a notch (queue 462)', { item: '462' }, async function () {
     /* Ezra, with the strip circled: *"Make the faves menu a big button and not just this small notch,
      * and give it some nice shiny golden background colours"*. It was a transparent full-width strip

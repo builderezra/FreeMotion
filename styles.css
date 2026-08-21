@@ -6355,7 +6355,33 @@ body.fm-pushing #toast { z-index: 213; }
    thumbnails exist this becomes a tile grid; until then the words are the preview. */
 /* Tiles, matching .fxb-grid / .fxb-tile in the effects browser (queue 220) — same four columns, same
    62px picture, same rhythm, so the three subsections read as one place rather than three designs. */
-.flt-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+/* ONE ROW YOU SWIPE, NOT TWO YOU STACK (queue 463). Ezra, with a screenshot of the TUFF section:
+   *"Make in the filters menu for rows like tuff where there's two lines just one line and you scroll
+   left and right swiping to see the others"*.
+   It was a 4-column grid, so a section of seven or eight filters wrapped to two rows and every section
+   cost double the height — his screenshot shows TUFF taking two rows of four while the rest of the
+   list is pushed off screen.
+   A horizontal rail instead: same tiles, same size, one row, swipe for the rest. Built on the pattern
+   the text editor's font rail already uses (`.te-font-rail`) rather than a new one, so the scroll feel,
+   the hidden scrollbar and the touch behaviour match something already in the app.
+   `scroll-snap` on the tiles so a swipe settles on a filter rather than half of one, and `flex: 0 0 auto`
+   with an explicit width because a flex child in a scroller shrinks to fit otherwise — which would put
+   all eight back on screen at a quarter of the size, i.e. the opposite of the fix. */
+.flt-grid {
+  display: flex; gap: 10px; margin-bottom: 14px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+  padding-bottom: 2px;
+}
+.flt-grid::-webkit-scrollbar { display: none; }
+.flt-grid > .flt-tile { flex: 0 0 auto; width: calc((100% - 30px) / 4); scroll-snap-align: start; }
+/* A desktop pointer has no swipe, so the rail keeps a visible bar there — a scroller that cannot be
+   scrolled with the device you are holding is worse than a grid. Touch keeps the clean edge. */
+@media (hover: hover) and (pointer: fine) {
+  .flt-grid { scrollbar-width: thin; }
+  .flt-grid::-webkit-scrollbar { display: block; height: 6px; }
+  .flt-grid::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+}
 .flt-tile {
   position: relative; background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 11px; padding: 0 0 7px; overflow: hidden; cursor: pointer;
