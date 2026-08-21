@@ -269,6 +269,9 @@ window.FM = window.FM || {};
      * would be noise. */
     const dropped = [];
     const nameOf = l => l.name || l.type || l.id;
+    // Is this the whole project, or a sub-range the user deliberately chose? Decides whether a clip
+    // outside the range is a surprise worth reporting or the user's own instruction. See below.
+    const wholeProject = (from <= 0.001) && (to >= (P.duration || 0) - 0.001);
     for (const layer of scene.layers) {
       const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
       if (hiddenOrSolo) continue;                        // correct and intentional — not reported
@@ -292,7 +295,26 @@ window.FM = window.FM || {};
       const buf = makeClipBuffer(oac, m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, buf.duration);
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
-      if (oEnd <= oStart) continue;
+      /* THE FOURTH SILENT LOSS (queue 215, v11.21) — and the only one of the four that survived a
+       * layer having everything right. v7.90 made "the mixer could not read this clip" speak, v7.91
+       * made "the browser cannot encode AAC" speak, and the encode-before-mux change made "the
+       * soundtrack failed to encode" speak. This one skipped a layer whose file, media record and
+       * decoded buffer were all PERFECT, purely because its window did not overlap the exported range
+       * — and said nothing, because a bare `continue` here never reached the `dropped` list.
+       * MEASURED: one good audio layer moved to start=10s and exported 0-2s returns mix = null with
+       * dropped = [], i.e. a file with no soundtrack and not one word anywhere about why.
+       * Reported ONLY when the export covers the whole project. Exporting a chosen sub-range and
+       * leaving out a clip outside it is exactly what the user asked for, and warning about that
+       * would be noise — and a diagnostic that cries wolf stops being read, which is how the last one
+       * died. A clip outside the WHOLE project is a genuine surprise: it is the shape of #394, where a
+       * layer dragged too far right ends up past the end of the timeline. */
+      if (oEnd <= oStart) {
+        if (wholeProject) {
+          dropped.push(nameOf(layer) + ' (sits at ' + layer.start.toFixed(2) + '\u2013' + clipEnd.toFixed(2) +
+                       's, outside the exported ' + from.toFixed(2) + '\u2013' + to.toFixed(2) + 's)');
+        }
+        continue;
+      }
       any = true;
       const node = oac.createBufferSource(); node.buffer = buf;
       const gain = oac.createGain();

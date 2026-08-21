@@ -9304,6 +9304,62 @@
     }
   });
 
+  test('export: a clip sitting past the end of the project is NAMED, not muted in silence', { item: '215' }, async function () {
+    /* QUEUE 215, THE FOURTH SILENT LOSS — the one that survived three previous fixes because the layer
+     * has nothing wrong with it. Ezra, 21 Aug: "I exported a video that was making audio in the
+     * project... just be an mp4 video to camera role export." The project HAD sound; the file did not.
+     * v7.90 made "could not read this clip" speak. v7.91 made "this browser cannot encode AAC" speak.
+     * Encode-before-mux made "the soundtrack failed to encode" speak. None of them fire here: the
+     * media record, the File and the decoded buffer are all perfect, and the layer is skipped by a
+     * bare `continue` purely because its window does not overlap the exported range.
+     * MEASURED BEFORE THE FIX: one good audio layer at start=10s, exported 0-2s, returned mix = null
+     * with dropped = [] — an mp4 with no soundtrack and not one word about why, anywhere. */
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext, so the mixer cannot be exercised at all');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    try {
+      const oac = new OAC(2, 48000, 48000);
+      const buf = oac.createBuffer(2, 48000, 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * 0.5; }
+      const L = FM.makeLayer('video', { name: 'Whoosh', start: 0, duration: 1 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', file: new File([new Uint8Array(8)], 'w.wav', { type: 'audio/wav' }),
+                           audioBuffer: buf, duration: 1, width: 2, height: 2 });
+      FM.scene.project.duration = 2;
+
+      // CONTROL 1 — in range: a real mix, and NOT reported. If this fails the probe is not exercising
+      // the mixer at all and every verdict below is worthless.
+      FM._lastAudioDrops = null;
+      const inRange = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+      if (!inRange) throw new Error('a good audio layer inside the range produced no mix — this probe is not measuring the mixer');
+      if (FM._lastAudioDrops && FM._lastAudioDrops.length) throw new Error('a perfectly good in-range clip was reported as dropped: ' + JSON.stringify(FM._lastAudioDrops));
+
+      // THE BUG — the same layer, dragged out past the end of the project (the shape of #394).
+      L.start = 10;
+      FM._lastAudioDrops = null;
+      const out = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+      if (out) throw new Error('the probe expected no mix here; the scenario is not what it thinks it is');
+      const drops = FM._lastAudioDrops;
+      if (!drops || !drops.length) throw new Error('a clip past the end of the project was skipped and NOT reported — the export loses all sound in silence, which is the whole of 215');
+      if (!/Whoosh/.test(drops.join(' '))) throw new Error('the report does not name the layer: ' + JSON.stringify(drops));
+      if (!/outside/i.test(drops.join(' '))) throw new Error('the report names the layer but not the reason: ' + JSON.stringify(drops));
+
+      // CONTROL 2 — the noise guard. Exporting a chosen SUB-RANGE and leaving out a clip outside it is
+      // exactly what the user asked for. Warning about that would make the diagnostic cry wolf, and a
+      // diagnostic that cries wolf stops being read — which is how the previous one quietly died.
+      FM.scene.project.duration = 30;      // the clip at 10-11s is now INSIDE the project...
+      FM._lastAudioDrops = null;
+      await FM.exporter.buildAudioMix(FM.scene, 0, 2);   // ...but the user asked for only 0-2s
+      if (FM._lastAudioDrops && FM._lastAudioDrops.length) throw new Error('a clip outside a deliberately chosen sub-range was reported: ' + JSON.stringify(FM._lastAudioDrops));
+    } finally {
+      FM.scene.project.duration = dur0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll();
+    }
+  });
+
   test('PC add menu: it has a surface of its own, and it costs the panel no scrollbar', { item: 'addmenu-bg' }, async function () {
     /* Queue 236. Ezra: "on the PC version, for the background of the add menu, you should make it have,
      * like, a cool pattern and design, kind of like the home screen page, but slightly different."

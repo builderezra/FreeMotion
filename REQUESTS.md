@@ -7284,6 +7284,25 @@ better still, keep working inside the turn rather than parking work for a later 
       dropped (the v7.91 second silent loss); the muxer committing an empty audio track; or `m.file`
       being absent on a layer whose media came back from IndexedDB rather than a fresh pick.
       **Measure, do not read:** build the scene, export, count audio samples in the output.
+      **v11.21 — THE FOURTH SILENT LOSS, FOUND AND MADE TO SPEAK. Entry stays OPEN.**
+      Measured, not read: a video layer with a valid media record, a real File and a decoded
+      audioBuffer, sitting outside the exported range, made `buildAudioMix` return `null` with
+      `dropped = []` — an mp4 with no audio track and **not one word anywhere about why**. The three
+      earlier fixes (v7.90 unreadable clip, v7.91 AAC unavailable, encode-before-mux) all stay silent
+      in this case, because nothing is wrong with the layer. The bare `continue` on `oEnd <= oStart`
+      never reached the `dropped` list.
+      It now names the clip and its position versus the exported range — but ONLY when the export
+      covers the whole project. Leaving a clip out of a deliberately chosen sub-range is what the user
+      asked for, and warning there would make the diagnostic cry wolf. Both directions mutation-checked:
+      removing the report goes red, and reporting unconditionally goes red on the noise control.
+      **Why this is not a tick.** It does not explain HIS export — he had one video layer with sound,
+      inside the project, and preview played it. It closes the last place the answer could hide without
+      leaving a trace. **If it happens again there will now be something to read**, and that message is
+      the next piece of evidence.
+      ⚠️ **Worth telling him:** this failure is the shape of **#394** — a clip dragged out past the end
+      of the timeline would export silently. If his timeline had a clip out there, that is the cause.
+      **NEXT, if it recurs:** ask for the toast text. No toast at all + a silent file now means the mix
+      was built and the loss is in the muxer, which is the one region still without a witness.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
 
       **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
