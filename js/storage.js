@@ -321,6 +321,14 @@ window.FM = window.FM || {};
       let scene = readJSON(curKey(), null);
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       adoptRev(scene.rev);        // this tab is now level with what is on disk (#306)
+      /* RE-CLAMP ON EVERY OPEN (queue 470). This is the door EVERY project comes through, every time, and
+         until now it trusted whatever was in storage — the note just below says as much about layers.
+         Dimensions are different from layers in one decisive way: a bad one is not a wrong picture, it is
+         a device that cannot open the project at all, and cannot open it again on the next launch either.
+         So the cheap half is done here unconditionally (six numeric clamps on ONE object, not a walk over
+         every layer): whatever route wrote an absurd size — the template bug this was found with, a
+         corrupted doc, a build that predates a clamp — opening it repairs it instead of dying on it. */
+      clampProjectDims(scene.project);
       FM.scene.project = scene.project;
       FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
       // The AUTOSAVE path sanitises nothing — applyScene (the .fmproj import) is the only caller of
@@ -1545,6 +1553,13 @@ window.FM = window.FM || {};
          Kept on the project object, so it saves and reloads with the doc, AND mirrored onto the index entry
          so the Home card can offer the update without reading every project's document to find out. */
       FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name, notes: [], fromTemplate: tid });
+      /* CLAMP AGAIN, BECAUSE THIS LINE JUST THREW THE FIRST CLAMP AWAY (queue 470).
+         `projects.create()` above clamps the width/height it is handed — and then the assign replaces the
+         whole project object with the pack's RAW one, so a template carrying 16000x16000 at 999fps landed
+         in the live scene unclamped and `autosave()` below wrote it to disk. Measured, end to end, through
+         this exact call. What that costs is in clampProjectDims' own note: ~1GB per canvas, an OOM crash
+         on open, and — being the current project — a crash again on every relaunch. A brick. */
+      clampProjectDims(FM.scene.project);
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
       await hydratePack(re.layers, pack.media, re.map);

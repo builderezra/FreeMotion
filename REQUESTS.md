@@ -11695,6 +11695,38 @@ wait for them to report back."*
       ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
+- [x] **470 — 🚨 A template could create a project the app cannot open — and it would crash again on
+      every relaunch.** ✅ **DONE v11.50.** (22 Aug — found by a bug hunt on the template insert path, not
+      reported by Ezra. **The most serious thing the recent hunts have found.**)
+      **What happened.** `clampProjectDims` has bounded project size since the OOM fix, and its own note
+      says why: a 16000-wide project allocates ~1GB per canvas, OOM-crashes mobile Safari on open, and —
+      being the CURRENT project — crashes again on every relaunch. A brick, with no obvious way back in.
+      Starting a new project from a TEMPLATE walked straight past it. `useAsNew()` calls
+      `projects.create()`, which clamps correctly — and then the next line replaces the whole live project
+      with the pack's RAW object, discarding that clamp. Measured end to end through the real API:
+      **16000×16000 at 999fps reached the live scene AND was written to disk** by the `autosave()` that
+      follows, and it appeared in the projects index too.
+      **What was FINE, and it is worth recording:** the LAYERS inside a template are properly sanitised —
+      the queue-217 re-id gate really is the door every batch of foreign layers passes, and it repaired
+      both the timing (#467) and the keyframe order (#468) of a hostile pack on the way in. Only the
+      PROJECT object had no guard on this route. `applyScene` (the .fmproj import) was never affected.
+      **Two fixes, and the second matters more:**
+      1. `useAsNew()` re-clamps after the assign that threw the first clamp away.
+      2. **Every project re-clamps its dimensions on OPEN.** This is the door every project comes through,
+         every time, and it trusted whatever was in storage — so anything already saved in a bad state now
+         REPAIRS on the way in instead of killing the app. Without this the fix would protect new arrivals
+         and leave anyone already bricked with no way back. Cheap enough to be unconditional: six numeric
+         clamps on one object, not a walk over every layer.
+      ⚠️ **Control:** an ordinary 1080×1920 @30 project opens as exactly that — the clamp must never resize
+      real work. Mutation-checked by removing the clamp on open.
+      ⚠️ **The test broke three OTHER tests first, and the fix is worth knowing.** Opening a project
+      replaces the live scene, so the suite carried on inside an empty probe project ("no layer to work
+      from"). Restoring `fm.currentProject` was not enough either: `open()` also pins storage's internal
+      `boundId` and adopts the doc revision that the #306 stale-tab guard reads, so a later test failed
+      with "a normal save did not reach disk". **Re-OPENING the original project is what re-pins them.**
+      **This matters more the moment templates are shared** (queue 427, his own request) — a template from
+      someone else is exactly the untrusted input this door was missing.
+
 - [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **WAITING ON EZRA — a one-word answer, and it is a taste call, not a bug.**

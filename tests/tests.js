@@ -24695,6 +24695,71 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a project can never open at a size that cannot be opened (queue 470)', { item: '470' }, async function () {
+    /* Found by a bug hunt on the last untested door for foreign data: a TEMPLATE PACK.
+     * `clampProjectDims` has bounded project size since the OOM fix, and its own note says why — a
+     * 16000-wide project allocates ~1GB per canvas, OOM-crashes mobile Safari on open, and, being the
+     * current project, crashes AGAIN on every relaunch. A brick.
+     * MEASURED: `templates.useAsNew()` called `projects.create()`, which clamps — and then replaced the
+     * whole live project with the pack's RAW object, throwing that clamp away. 16000x16000 at 999fps
+     * reached the live scene AND was written to disk by the autosave that follows.
+     * The layers were fine: the queue-217 re-id gate really is the door they all pass, and it repaired
+     * their timing and keyframes. It is only the PROJECT that had no guard on this route. */
+    if (!FM.storage || !FM.projects) throw new Error('FM.storage / FM.projects are not reachable');
+    const MAXW = 7680, MAXF = 120;
+    const made = [];
+    /* PUT THE RUN BACK EXACTLY AS IT WAS. Opening a project REPLACES the live scene, so without this the
+       suite carries on inside an empty probe project and the next three tests fail with "no layer to work
+       from" — which is what happened the first time this test ran. A test that damages the run is worse
+       than no test; the same lesson is recorded on the media-sweep test. */
+    const prevProject = localStorage.getItem('fm.currentProject');
+    const prevScene = { project: FM.scene.project, layers: FM.scene.layers.slice(),
+                        selectedId: FM.scene.selectedId, selectedIds: (FM.scene.selectedIds || []).slice() };
+    const plant = (id, project) => {
+      localStorage.setItem('fm.proj.' + id, JSON.stringify({ project: project, layers: [], selectedId: null, selectedIds: [] }));
+      const idx = JSON.parse(localStorage.getItem('fm.projects') || '[]');
+      idx.unshift({ id: id, name: project.name, created: 1, modified: 1, width: project.width, height: project.height });
+      localStorage.setItem('fm.projects', JSON.stringify(idx));
+      made.push(id);
+    };
+    try {
+      /* THE STRUCTURAL HALF: every project comes through open(), whatever wrote it. A doc already on disk
+         with an impossible size — written by the template bug above, by a corrupted write, or by a build
+         that predates the clamp — must REPAIR on open rather than kill the app. Without this the fix
+         would only protect new arrivals and leave anyone already bricked with no way back in. */
+      plant('p_test_brick', { name: 'bricked', width: 16000, height: 16000, fps: 999, duration: 5 });
+      const opened = await FM.projects.open('p_test_brick');
+      if (!opened) throw new Error('the oversized project would not open at all');
+      const P = FM.scene.project;
+      if (!(P.width <= MAXW && P.height <= MAXW)) throw new Error('a project stored at 16000x16000 opened at ' + P.width + 'x' + P.height + ' — that is ~1GB per canvas, so it crashes on open and again on every relaunch');
+      if (!(P.fps <= MAXF)) throw new Error('a project stored at 999fps opened at ' + P.fps + 'fps');
+
+      /* THE CONTROL, and it is the half that matters most: an ordinary project must open at exactly its
+         own size. A clamp that quietly resizes real work would be far worse than the bug it fixes. */
+      plant('p_test_fine', { name: 'fine', width: 1080, height: 1920, fps: 30, duration: 5 });
+      await FM.projects.open('p_test_fine');
+      const G = FM.scene.project;
+      if (!(G.width === 1080 && G.height === 1920 && G.fps === 30)) throw new Error('an ordinary 1080x1920@30 project opened as ' + G.width + 'x' + G.height + '@' + G.fps + ' — the clamp is rewriting good work');
+    } finally {
+      made.forEach(id => localStorage.removeItem('fm.proj.' + id));
+      try {
+        const idx = JSON.parse(localStorage.getItem('fm.projects') || '[]').filter(e => made.indexOf(e.id) < 0);
+        localStorage.setItem('fm.projects', JSON.stringify(idx));
+      } catch (e) {}
+      /* …and hand the run back the project it was working in. Re-setting the localStorage key is NOT
+         enough: `open()` also pins storage's internal binding (`boundId`) and adopts the doc's revision,
+         which is what the #306 stale-tab guard reads — leaving those pointing at a deleted probe project
+         made a later test's "a normal save did not reach disk" fail. Re-OPENING is what re-pins them. */
+      try { if (prevProject) await FM.projects.open(prevProject); } catch (e) {}
+      FM.scene.project = prevScene.project;
+      FM.scene.layers.length = 0; prevScene.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = prevScene.selectedId; FM.scene.selectedIds = prevScene.selectedIds;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('import: keyframes from a file are ordered and complete, and a good project is untouched (queue 468)', { item: '468' }, function () {
     /* Found by a bug hunt. `FM.evalProp` assumes a keyframe list is sorted by time and that every entry
      * has a value — both true of anything this app writes, and neither guaranteed by a FILE.
