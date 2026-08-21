@@ -3752,6 +3752,27 @@ better still, keep working inside the turn rather than parking work for a later 
       near 0.98 while head stays near 0.35), then extend to Bit Crush and Lo-Fi.**
       His answer stands and is not being re-asked — *"I just want options"*, *"put a warning next to it"*.
       The warning is still the plan; it just has to be a warning on something that actually works.
+      ✅ **TWO OF THE SIX DONE — v11.27. Distortion Drive and Bit Crush Bits are keyframable, and they
+      sweep CLEANLY rather than clicking.**
+      The mechanism is a crossfaded shaper bank: you cannot ramp a curve (swapping one is a step change,
+      which is exactly why these clicked), but you can ramp a GAIN. So K shapers are built across the
+      range and the two nearest are crossfaded with real AudioParams — schedulable in both the live and
+      offline contexts. Bit Crush uses 16 entries for 1..16 bits, so every entry is an exact bit depth
+      and there is no interpolation error at all.
+      **Measured, 4s sweep 0 -> 100 on Distortion:** halfway through, the render measures 0.9628 against
+      a static drive-50's 0.9627 — it passes through the RIGHT values, not merely different ones. Worst
+      sample-to-sample jump 0.4923 vs a static drive-100's 0.4931, i.e. **the click is gone**, so no
+      warning label is needed for these two after all.
+      ⚠️ **A cost bug was caught by the test's own counter and is worth remembering.** The first version
+      guarded on `when == null`, but the STATIC path calls `set(key, value, 0)` — `when` is 0, not null —
+      so every plain Distortion in every project silently allocated a 12-shaper bank. The audio was
+      identical, so no sound-based assertion could ever have seen it. It asks `FM.isAnimated` now, and
+      the suite counts banks and asserts a static param builds ZERO. Mutation-checked both ways.
+      **STILL OPEN — the other four.** Lo-Fi Amount is next and is nearly the same shape, but its knob
+      also drives two biquad frequencies (real AudioParams that can simply be ramped) as well as the
+      curve, so it needs the bank plus two ramps. **Reverb Size/Decay rebuild an impulse response and
+      Pitch Shift is a third mechanism again — neither is this fix**, and neither should be attempted by
+      copying it.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than

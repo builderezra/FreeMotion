@@ -220,6 +220,60 @@ window.FM = window.FM || {};
     return { dry: dry, wet: wet, set: multi([[wet.gain, null], [dry.gain, x => 1 - x]]) };
   }
 
+  /* ---- A CURVE THAT CAN BE ANIMATED (the unnumbered per-effect-slider entry) ----------------------
+   * Ezra: *"each effect slider having its own key frames still doesn't exist fully"*, and later, on the
+   * six audio sliders that were left out: *"I just want options... put a warning next to it"*.
+   * WHY THEY WERE LEFT OUT, AND WHY THE FLAG ALONE WOULD HAVE BEEN A LIE. Distortion, Bit Crush and
+   * Lo-Fi do not drive an AudioParam — they REBUILD A TRANSFER CURVE. The scheduler calls
+   * `u.set(key, value, when)` sixty times a second across the render; an AudioParam honours `when` and
+   * lands in the future, but a custom setter that rebuilds a curve applies instantly, so all sixty
+   * values would be applied during schedule() and the LAST one would win. Measured before this existed:
+   * a drive animated 0 -> 100 rendered byte-identical to a static drive of 0 (head RMS 0.3504, tail
+   * 0.3536, against 0.9737/0.9816 for a static 100). Keyframe diamonds that do nothing.
+   * WHAT THIS DOES. You cannot ramp a curve — swapping one is a step change, which is exactly why these
+   * effects click when swept (measured at 6.8x, 2.8x and 1.7x worse than static). But you CAN ramp a
+   * GAIN. So: build K shapers spanning the range once, feed the input to all of them, and crossfade
+   * between the two nearest with real AudioParams. Schedulable in both the live and offline contexts,
+   * and the crossfade is what removes the click rather than merely warning about it.
+   * THE STATIC PATH IS UNTOUCHED. The bank is built lazily, on the first SCHEDULED call, and a project
+   * whose drive is a plain number never creates a single extra node — so nothing already made changes. */
+  function curveBank(s, input, dest, makeCurve, lo, hi, steps, over) {
+    const N = Math.max(3, steps || 12);
+    let built = null, muted = false;
+    function ensure() {
+      if (built) return built;
+      // Counted so the suite can prove a STATIC param never builds one. The picture — or here the
+      // sound — cannot police that on its own: a bank that merely reproduces the static value renders
+      // identically while costing N shapers. See the same lesson in the motion-blur work (queue 382).
+      FM._curveBanksBuilt = (FM._curveBanksBuilt || 0) + 1;
+      built = [];
+      for (let i = 0; i < N; i++) {
+        const v = lo + (hi - lo) * (i / (N - 1));
+        const n = s.shaper(makeCurve(v), over || '4x');
+        const g = s.gain(0);
+        input.connect(n); n.connect(g); g.connect(dest);
+        built.push({ v: v, g: g.gain });
+      }
+      return built;
+    }
+    return {
+      at: function (v, when, ramp, staticGain) {
+        const b = ensure();
+        // Hand over from the single static shaper the first time, or its output would sum with the
+        // bank's and the effect would be applied twice.
+        if (!muted) { muted = true; try { staticGain.setValueAtTime(0, Math.max(0, when)); } catch (e) {} }
+        const span = (hi - lo) / (N - 1);
+        let idx = Math.floor((v - lo) / span);
+        if (idx < 0) idx = 0; if (idx > N - 2) idx = N - 2;
+        const w = Math.max(0, Math.min(1, (v - b[idx].v) / span));
+        for (let i = 0; i < N; i++) {
+          const target = i === idx ? 1 - w : (i === idx + 1 ? w : 0);
+          try { ramp ? b[i].g.linearRampToValueAtTime(target, when) : b[i].g.setValueAtTime(target, when); } catch (e) {}
+        }
+      },
+    };
+  }
+
   function P(key, label, min, max, step, def, unit, kf) {
     return { key: key, label: label, min: min, max: max, step: step, def: def, unit: unit || '', keyframable: !!kf };
   }
@@ -445,38 +499,67 @@ window.FM = window.FM || {};
   /* ---- Character ---- */
   DEFS.push({
     type: 'distortion', label: 'Distortion', category: 'char',
-    params: [P('drive', 'Drive', 0, 100, 1, 30, '', false), MIX(1)],
+    params: [P('drive', 'Drive', 0, 100, 1, 30, '', true), MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       let drive = initNum(inst, 'drive', 30, 0, 100);
       const sh = s.shaper(driveCurve(drive), '4x');
+      const shg = s.gain(1);            // the static shaper's own level, so the bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(wd.wet); wd.wet.connect(out);
+      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      const bank = curveBank(s, input, wd.wet, driveCurve, 0, 100);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
-          drive: function (v) { v = clamp(v, 0, 100); if (v !== drive) { drive = v; sh.curve = driveCurve(v); } },
+          drive: function (v, when, ramp) {
+            v = clamp(v, 0, 100);
+            /* STATIC MUST NEVER BUILD THE BANK. `when == null` is NOT the test — the static path calls
+               set(key, value, 0), so `when` is 0 and not null, and an early version of this built a
+               12-shaper bank for every plain Distortion in every project. The counter added for the
+               suite caught it on the first measurement. The honest question is whether the PARAM is
+               animated, so ask that. */
+            if (!FM.isAnimated(inst.params && inst.params.drive)) {
+              if (v !== drive) { drive = v; sh.curve = driveCurve(v); }
+              return;
+            }
+            bank.at(v, when, ramp, shg.gain);
+          },
           mix: wd.set,
         },
       });
     },
   }, {
     type: 'bitcrush', label: 'Bit Crush', category: 'char',
-    params: [P('bits', 'Bits', 1, 16, 1, 6, '', false), MIX(1)],
+    params: [P('bits', 'Bits', 1, 16, 1, 6, '', true), MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       let bits = initNum(inst, 'bits', 6, 1, 16);
       const sh = s.shaper(crushCurve(bits), 'none');   // oversampling would interpolate the steps back out
+      const shg = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(wd.wet); wd.wet.connect(out);
+      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* 16 entries for 1..16 bits, so every bank entry IS an exact bit depth and the crossfade only
+         ever runs between two whole values — no interpolation error anywhere. 'none' matters as much
+         here as it does above: oversampling would interpolate the very steps this effect exists to
+         make. This is also the effect the entry measured as the worst clicker (6.8x), and the reason
+         it clicks is that at low bit counts one step changes every output sample — which a gain
+         crossfade smooths and a curve swap cannot. */
+      const bank = curveBank(s, input, wd.wet, crushCurve, 1, 16, 16, 'none');
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
-          bits: function (v) { v = clamp(Math.round(v), 1, 16); if (v !== bits) { bits = v; sh.curve = crushCurve(v); } },
+          bits: function (v, when, ramp) {
+            v = clamp(Math.round(v), 1, 16);
+            if (!FM.isAnimated(inst.params && inst.params.bits)) {   // see the note on distortion's drive
+              if (v !== bits) { bits = v; sh.curve = crushCurve(v); }
+              return;
+            }
+            bank.at(v, when, ramp, shg.gain);
+          },
           mix: wd.set,
         },
       });

@@ -3480,6 +3480,68 @@
     }
   });
 
+  test('audio: a keyframed Distortion/Bit Crush actually sweeps, and a static one costs nothing extra', { item: 'audio-kf-curve' }, async function () {
+    /* The unnumbered "per-effect-slider keyframes" entry. Ezra: *"each effect slider having its own key
+     * frames still doesn't exist fully"*, and on the six that were left out, *"I just want options"*.
+     * Distortion, Bit Crush and Lo-Fi do not drive an AudioParam — they REBUILD A TRANSFER CURVE, and a
+     * custom setter that rebuilds a curve applies instantly however it is scheduled. So simply flipping
+     * `keyframable` would have applied all 60 scheduled values during schedule(), let the LAST one win,
+     * and shown keyframe diamonds that did nothing. MEASURED before the fix: a drive animated 0 -> 100
+     * rendered byte-identical to a static drive of 0.
+     * The fix crossfades between a bank of shapers with real gain AudioParams, because you cannot ramp a
+     * curve but you can ramp a gain — which also removes the click these effects were measured to have.
+     * This test renders real audio and checks the SOUND, not the plumbing. */
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext — the audio chain cannot be exercised at all');
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, SECS = 4;
+    async function render(type, key, val) {
+      const oac = new OAC(1, SR * SECS, SR);
+      const buf = oac.createBuffer(1, SR * SECS, SR);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(2 * Math.PI * 220 * i / SR) * 0.5;
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const params = { mix: 1 }; params[key] = val;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: [{ type: type, enabled: true, params: params }] }, 0);
+      if (!chain) throw new Error('no chain built for ' + type);
+      src.connect(chain.input); chain.output.connect(oac.destination);
+      FM._curveBanksBuilt = 0;
+      chain.schedule(0, SECS); src.start(0);
+      const banks = FM._curveBanksBuilt;
+      const out = await oac.startRendering(), c = out.getChannelData(0);
+      const rms = (a, b) => { let t = 0; for (let i = a; i < b; i++) t += c[i] * c[i]; return Math.sqrt(t / (b - a)); };
+      return { early: rms(2400, 4800), mid: rms(96000, 98400), late: rms(187200, 189600), banks: banks };
+    }
+
+    // CONTROL — the effect must actually do something, or every verdict below is measuring silence.
+    const d0 = await render('distortion', 'drive', 0);
+    const d50 = await render('distortion', 'drive', 50);
+    const d100 = await render('distortion', 'drive', 100);
+    if (Math.abs(d50.mid - d0.mid) < 0.2) throw new Error('static drive 0 and 50 render the same (' + d0.mid.toFixed(4) + ' vs ' + d50.mid.toFixed(4) + ') — this probe is not exercising Distortion');
+
+    // THE BUG — a keyframed drive must MOVE, and must pass through the right values on the way.
+    const da = await render('distortion', 'drive', { kf: [{ t: 0, v: 0 }, { t: SECS, v: 100 }] });
+    if (da.late - da.early < 0.3) throw new Error('a keyframed drive did not sweep: early ' + da.early.toFixed(4) + ' late ' + da.late.toFixed(4) + ' — the curve rebuild is ignoring the schedule, which is the whole bug');
+    if (Math.abs(da.mid - d50.mid) > 0.05) throw new Error('halfway through a 0->100 sweep the sound is ' + da.mid.toFixed(4) + ' but a static drive of 50 is ' + d50.mid.toFixed(4) + ' — it is moving, but not through the right values');
+    if (Math.abs(da.late - d100.late) > 0.05) throw new Error('the end of the sweep is ' + da.late.toFixed(4) + ' but a static drive of 100 is ' + d100.late.toFixed(4));
+
+    // Bit Crush, the same mechanism on an integer parameter (16 entries = every bit depth exactly).
+    const b16 = await render('bitcrush', 'bits', 16), b2 = await render('bitcrush', 'bits', 2);
+    if (Math.abs(b2.mid - b16.mid) < 0.02) throw new Error('static 16-bit and 2-bit render the same — the Bit Crush half of this probe is blind');
+    const ba = await render('bitcrush', 'bits', { kf: [{ t: 0, v: 16 }, { t: SECS, v: 2 }] });
+    if (Math.abs(ba.late - b2.late) > 0.02) throw new Error('a keyframed bit depth ended at ' + ba.late.toFixed(4) + ' instead of 2-bit\'s ' + b2.late.toFixed(4));
+
+    /* THE COST, which the sound cannot police. A bank that merely reproduces the static value renders
+     * IDENTICALLY while allocating N shapers per effect — so the audio assertions above would all pass
+     * with every plain Distortion in every project paying for twelve. An early version of this fix did
+     * exactly that, because the static path calls set(key, value, 0) and `when` is 0, not null. */
+    if (d50.banks !== 0) throw new Error('a STATIC drive built ' + d50.banks + ' shaper bank(s) — every plain Distortion in every project is now allocating N extra shapers for nothing');
+    if (b16.banks !== 0) throw new Error('a STATIC bit depth built ' + b16.banks + ' shaper bank(s)');
+    // …and the control for that control: the animated one MUST build one, or the counter is dead and
+    // the two assertions above would pass while proving nothing.
+    if (da.banks !== 1) throw new Error('an ANIMATED drive built ' + da.banks + ' banks, expected 1 — the counter is not measuring the path it claims to');
+  });
+
   test('audio fades: the gain envelope is finite, in range, and has one peak', { item: 'fade-sweep' }, function () {
     /* BUG HUNT (21 Aug). `FM.fadeWindows` / `FM.fadeMul` shape the gain of every clip in the preview mix
        AND in the export. The suite had 28 audio tests and **none** touched either function, while the
