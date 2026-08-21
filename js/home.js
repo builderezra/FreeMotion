@@ -2198,6 +2198,16 @@ window.FM = window.FM || {};
       if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
+      /* AND END ANY SKETCH IN PROGRESS (queue 453, v11.23 — the half v11.22 missed).
+       * v11.22 cleared the sketch when a project was OPENED, which fixed coming back. It did nothing
+       * about LEAVING, and measured, leaving was the uglier half: with a freehand sketch running,
+       * FM.home.open() left drawTool.active true and painted the drawing overlay (365x649) and its
+       * toolbar (357x52) ON TOP OF THE HOME SCREEN — the project's drawing chrome over your project
+       * list. Ezra's report opens with exactly this: "when you leave a project mid drawing".
+       * This is the honest home for it: open() is already where closing a project unwinds playback,
+       * group context and the viewport. The sketch is one more thing that must not outlive the
+       * project, and it belongs beside them rather than only at the far end of the round trip. */
+      if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
       /* METADATA NOW, PICTURE LATER (queue 128, the closing half). This used to be
        * `touchCurrent(true)` — a forced thumbnail capture — and startPop() is the LAST line of this
        * function, so every millisecond here is a millisecond in which the finger has lifted and

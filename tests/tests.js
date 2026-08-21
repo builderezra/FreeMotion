@@ -8961,8 +8961,27 @@
       if (FM.drawTool.mode) throw new Error('the sketch mode survived opening a project: ' + FM.drawTool.mode);
       if (bodyHas('drawing')) throw new Error('body.drawing survived opening a project, so the drawing chrome is still over the new project');
       if (bodyHas('draw-vector')) throw new Error('body.draw-vector survived opening a project');
+
+      /* THE OTHER HALF OF THE ROUND TRIP, and the one v11.22 missed (v11.23). His report opens with
+       * "when you leave a project mid drawing" — LEAVING, not returning. Measured before the fix:
+       * FM.home.open() with a freehand sketch running left drawTool.active true and painted the
+       * drawing overlay at 365x649 and its toolbar at 357x52 OVER THE HOME SCREEN. Clearing the sketch
+       * only on the way back in makes the round trip end clean while the middle of it is visibly
+       * wrong, which is why both ends are asserted here rather than just the one that closes. */
+      FM.startDraw('freehand');
+      await sleep(60);
+      if (!FM.drawTool.active) throw new Error('the second half of this test never started a sketch, so it proves nothing');
+      FM.home.open();
+      await sleep(140);
+      const overlay = document.querySelector('#draw-overlay, .draw-overlay');
+      const seen = overlay && getComputedStyle(overlay).display !== 'none' && overlay.getBoundingClientRect().width > 0;
+      if (FM.drawTool.active) throw new Error('leaving to the home screen left the sketch active — the drawing tool is running over your project list');
+      if (bodyHas('drawing')) throw new Error('body.drawing survived leaving to the home screen');
+      if (seen) throw new Error('the drawing overlay is still painted over the home screen');
     } finally {
       try { FM.drawTool._stop(); } catch (e) {}
+      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(80);
     }
   });
 

@@ -3805,6 +3805,20 @@ better still, keep working inside the turn rather than parking work for a later 
       **EZRA, 21 Aug, on moving export off the main thread:** *"idk what the pure talking about"* — the
       question was asked in jargon and that is my fault, not his. RE-ASKED in plain terms; his answer to
       the re-asked version is what counts. Do not treat this as declined.
+      **ANSWERED BY EZRA, 21 Aug — he wants it, and his reasoning matters:** *"if there's a thing to
+      make exporting safer then do it, currently I've barely done many exports anyway so the current
+      system may not be safe"*. This REVERSES the earlier recommendation to leave it.
+      **Read what he actually said:** he is not asking for the freeze to go away — he is saying he has
+      barely exercised export, so its safety is UNPROVEN, and he would rather it were made safe. That
+      is a different and better-scoped job than "move the compositor to a worker".
+      **So do the safety work first, and the worker only if it is still wanted after:**
+      · Crash-resume already exists (v7.53-v7.55) and #215's four silent-audio-loss fixes are part of
+        this same "export must not lie to you" family.
+      · The untested ground is what he has not done: long exports, backgrounding the app mid-export,
+        low storage, an export interrupted by a call. **Those are testable without touching the
+        11,700-line compositor.**
+      · The worker move (OffscreenCanvas) is the expensive, risky half. Put it to him again with the
+        real cost ONCE the cheap safety work is done and measured.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls
@@ -10787,6 +10801,16 @@ wait for them to report back."*
       an 11,000-line file. It wants a session of its own rather than the tail of a long one — the trap
       CLAUDE.md names about #47b. Everything above is the reading that session would otherwise repeat.
 
+      **ANSWERED BY EZRA, 21 Aug — unambiguous:** *"yes why not do this? I ask you to do it, make it
+      happen"*. So **BUILD IT**, and it is no longer blocked on a decision.
+      Motion blur currently smears only movement that comes from keyframes; movement produced by an
+      EFFECT (a shake, a wobble, an orbit) is not smeared, so those read unnaturally sharp next to
+      keyframed motion that is.
+      **NEEDS ITS OWN SESSION — this is a compositor change, not a parameter.** The blur is computed
+      from the transform before `layer.effects` run, so making it see effect-driven movement means
+      changing the ORDER the renderer does things in, in js/compositor.js — the most load-bearing file
+      in the app and the one the handover explicitly warns about. Do not attempt it inside a loop tick
+      between other items.
 - [x] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** ✅ **v10.29.** (18 Aug.) His
       words, verbatim: *"When I grab on a layer and try dragging it up on the effects menu it doesn't work,
       but if I press on the dots in the side it does, and this would make sense but the fact that it kinda
@@ -12874,7 +12898,7 @@ wait for them to report back."*
       passed its tests and its measurements too; what closed it was moving the field somewhere iOS
       cannot cover rather than measuring the keyboard more accurately. **He named this the oldest thing
       still not done.**
-- [ ] **453 — Leaving a project mid-drawing leaves you stuck in the sketch mode, in THAT project and in
+- [x] **453 — ✅ **DONE v11.22 + v11.23.** Leaving a project mid-drawing leaves you stuck in the sketch mode, in THAT project and in
       others.** (21 Aug, from his phone.) His words, verbatim: *"Also when you leave a project mid
       drawing it still has you in the drawing menu sketching menu when you load back in and if you load
       another project it's also doing the drawing thing still"*.
@@ -12892,6 +12916,16 @@ wait for them to report back."*
       the pattern that works.
 
 
+      **BOTH CLAUSES FIXED, AND THE SECOND ONE ONLY BECAUSE IT WAS CHECKED.** v11.22 cleared the sketch
+      when a project is OPENED (covers "load back in" and "load another project"). v11.23 cleared it
+      when you LEAVE — measured, `FM.home.open()` with a sketch running left the drawing overlay at
+      365x649 and its toolbar at 357x52 painted over the home screen. v11.22 alone would have been
+      ticked with half the bug still visible.
+      **The interesting part for next time:** the teardown was never missing. `FM.drawTool._stop` had
+      been exported for releases and the SUITE HAD BEEN CALLING IT in three separate tests. Nothing in
+      the app ever did. A function only tests call is not a seam, it is a decoration — and three green
+      tests were quietly proving a code path the product never used.
+      Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
 - [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
       phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
       down, presets are just for effects not anything else, if it says preset remove any other function
