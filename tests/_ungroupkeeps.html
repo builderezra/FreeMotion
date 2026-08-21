@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>ungroup keeps the picture (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.ungroup bakes only the group's x/y/rotation/scale onto its members
+   and drops everything else the group was carrying — opacity, hidden state, effects, blend.
+   Same invariant as the split family: an edit that is not supposed to change the picture must not
+   change the picture. Measured on real pixels. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.ungroup&&w.FM.makeLayer&&w.FM.renderScene&&w.FM.groupSelection)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function ink(FM,doc,W,H){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,1);
+  var d=ctx.getImageData(0,0,W,H).data, n=0, sum=0;
+  for(var i=0;i<d.length;i+=4){ if(d[i]>25||d[i+1]>25||d[i+2]>25){ n++; sum+=d[i]; } }
+  return {n:n, mean: n?sum/n:0};
+}
+function run(FM){
+  var doc=f.contentDocument, W=200,H=120, L=[];
+  FM.scene.project.width=W; FM.scene.project.height=H;
+  function build(mut){
+    FM.scene.layers.length=0;
+    var a=FM.makeLayer('shape',{name:'a',shape:'rect',x:40,y:H/2,shapeW:30,shapeH:30,fill:'#ffffff'});
+    var b=FM.makeLayer('shape',{name:'b',shape:'rect',x:120,y:H/2,shapeW:30,shapeH:30,fill:'#ffffff'});
+    [a,b].forEach(function(l){l.start=0;l.duration=10;FM.scene.layers.push(l);});
+    FM.scene.selectedIds=[a.id,b.id]; FM.scene.selectedId=a.id;
+    FM.groupSelection();
+    var g=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+    if(!g) throw new Error('no group was created');
+    mut(g);
+    return g;
+  }
+  var cases=[
+    ['group opacity 0.35', function(g){ g.transform.opacity=0.35; }],
+    ['group hidden (eye off)', function(g){ g.visible=false; }],
+  ];
+  cases.forEach(function(c){
+    var g;
+    try { g=build(c[1]); } catch(e){ L.push('  '+c[0]+': SETUP FAILED — '+e.message); return; }
+    var before=ink(FM,doc,W,H);
+    FM.ungroup(g.id);
+    var still=FM.scene.layers.some(function(l){return l.type==='group';});
+    var after=ink(FM,doc,W,H);
+    var dn=Math.abs(after.n-before.n), dm=Math.abs(after.mean-before.mean);
+    L.push('  '+c[0].padEnd(26)+'ink '+before.n+' -> '+after.n+'   mean '+before.mean.toFixed(0)+' -> '+after.mean.toFixed(0)
+           +(still?'   (group NOT removed!)':'')
+           +((dn>20||dm>12)?'   <-- PICTURE CHANGED':'   ok'));
+  });
+  // CONTROL: a plain group with nothing special must survive ungroup unchanged, or the probe is measuring noise
+  var g0=build(function(){});
+  var b0=ink(FM,doc,W,H); FM.ungroup(g0.id); var a0=ink(FM,doc,W,H);
+  var ctlOk=Math.abs(a0.n-b0.n)<=20 && Math.abs(a0.mean-b0.mean)<=12;
+  out.textContent=(ctlOk?'control: an ordinary group ungroups with no change to the picture  ✔\n\n':'CONTROL FAILED: even a plain group changes the picture on ungroup ('+b0.n+'/'+b0.mean.toFixed(0)+' -> '+a0.n+'/'+a0.mean.toFixed(0)+') — readings below are not trustworthy\n\n')+L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

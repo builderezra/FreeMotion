@@ -3530,6 +3530,67 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('ungroup: the picture does not change — opacity and a hidden group come with it', { item: 'ungroup-look' }, function () {
+    /* BUG HUNT (21 Aug), third verified lead from BUG-HUNT §34, and the same family as the earlier
+       ungroup fix: that one caught the group's POSITION being thrown away, this catches everything else.
+       Measured (tests/_ungroupkeeps.html): a group at 35% opacity snapped its members to full brightness
+       (mean 89 -> 255), and a HIDDEN group put everything inside it back on screen (ink 0 -> 1800).
+       The plain-group CONTROL is the load-bearing part: if an ordinary ungroup moved the picture at all,
+       these two readings would just be measuring the harness. */
+    const layers0 = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 200, H = 120;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const ink = () => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 1);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0, sum = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 25 || d[i + 1] > 25 || d[i + 2] > 25) { n++; sum += d[i]; }
+        return { n: n, mean: n ? sum / n : 0 };
+      };
+      const build = mut => {
+        FM.scene.layers.length = 0;
+        const a = FM.makeLayer('shape', { name: 'a', shape: 'rect', x: 40, y: H / 2, shapeW: 30, shapeH: 30, fill: '#ffffff' });
+        const b = FM.makeLayer('shape', { name: 'b', shape: 'rect', x: 120, y: H / 2, shapeW: 30, shapeH: 30, fill: '#ffffff' });
+        [a, b].forEach(l => { l.start = 0; l.duration = 10; FM.scene.layers.push(l); });
+        FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+        FM.groupSelection();
+        const g = FM.scene.layers.filter(l => l.type === 'group')[0];
+        if (!g) throw new Error('groupSelection did not make a group');
+        mut(g);
+        return g;
+      };
+      const run = (what, mut) => {
+        const g = build(mut);
+        const before = ink();
+        FM.ungroup(g.id);
+        if (FM.scene.layers.some(l => l.type === 'group')) throw new Error(what + ': the group was not removed');
+        const after = ink();
+        return { what: what, dn: Math.abs(after.n - before.n), dm: Math.abs(after.mean - before.mean), before: before, after: after };
+      };
+      // CONTROL first: an ordinary group must ungroup with no change at all.
+      const ctl = run('a plain group', () => {});
+      if (ctl.dn > 20 || ctl.dm > 12) throw new Error('CONTROL FAILED: even a plain group changes the picture on ungroup (' +
+        ctl.before.n + '/' + ctl.before.mean.toFixed(0) + ' -> ' + ctl.after.n + '/' + ctl.after.mean.toFixed(0) + ') — nothing below can be trusted');
+      if (!(ctl.before.n > 500)) throw new Error('CONTROL FAILED: the shapes never rendered (ink ' + ctl.before.n + ')');
+
+      [['a group at 35% opacity', g => { g.transform.opacity = 0.35; }],
+       ['a hidden group', g => { g.visible = false; }]].forEach(([what, mut]) => {
+        const r = run(what, mut);
+        if (r.dn > 20 || r.dm > 12) throw new Error('ungrouping ' + what + ' changed the picture: ink ' +
+          r.before.n + ' -> ' + r.after.n + ', mean ' + r.before.mean.toFixed(0) + ' -> ' + r.after.mean.toFixed(0));
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('captions: EVERY way of moving a clip edge leaves the cues where they were', { item: 'edge-cues' }, function () {
     /* BUG HUNT (21 Aug). FM.trimLayerHead re-bases captions when the head moves; FM.extendClipTo made
        the same three head writes and did not — the exact "two copies of the rule come to disagree"

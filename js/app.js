@@ -2415,12 +2415,48 @@ window.FM = window.FM || {};
     return { baked: baked, skipped: 0 };
   }
 
+  /* WHAT ELSE THE GROUP WAS CARRYING (bug hunt, 21 Aug). bakeGroupTransform above settles WHERE the
+   * members end up; this settles how they LOOK, and ungroup was dropping both of these outright.
+   * Measured by rendering (tests/_ungroupkeeps.html), with a plain group as the control:
+   *   · a group at 35% opacity → its members snapped to full brightness (mean 89 → 255)
+   *   · a HIDDEN group → everything inside it reappeared (ink 0 → 1800)
+   * Both fold exactly onto the members: opacity multiplies, hidden is inherited. Kept OUT of
+   * bakeGroupTransform on purpose — that one returns early when the transform is identity, and a group
+   * can easily be faded or hidden without ever having been moved.
+   * The group's EFFECTS are deliberately NOT baked, because they do not fold: a group effect runs once
+   * over the composited group, and running it again on each member is a different picture, not the same
+   * one. Same for a blend mode, and for an ANIMATED group opacity. Those are named out loud instead of
+   * disappearing quietly — the same discipline as the animated-position toast below. */
+  function bakeGroupLook(g) {
+    const gt = g.transform || {};
+    const animOp = !!(FM.isAnimated && FM.isAnimated(gt.opacity));
+    let gop = 1;
+    if (!animOp) { const v = FM.evalProp(gt.opacity, 0); gop = (typeof v === 'number' && isFinite(v)) ? v : 1; }
+    const hidden = g.visible === false;
+    const lost = [];
+    if (animOp) lost.push('its fading');
+    if (Array.isArray(g.effects) && g.effects.some(e => e && e.enabled !== false)) lost.push('its effects');
+    if (g.blendMode && g.blendMode !== 'normal') lost.push('its blend mode');
+    FM.scene.layers.forEach(l => {
+      if (l.parent !== g.id) return;
+      if (hidden) l.visible = false;
+      const t = l.transform; if (!t) return;
+      if (gop !== 1 && !(FM.isAnimated && FM.isAnimated(t.opacity))) {
+        const lo = FM.evalProp(t.opacity, 0);
+        t.opacity = ((typeof lo === 'number' && isFinite(lo)) ? lo : 1) * gop;
+      }
+    });
+    return lost;
+  }
+
   FM.ungroup = function (id) {
     const g = FM.scene.layers.find(l => l.id === id);
     if (!g || g.type !== 'group') return;
     if (FM.groupContext === id) FM.exitGroup(true);
     const bake = bakeGroupTransform(g);                     // BEFORE the members are re-parented
+    const lost = bakeGroupLook(g);                          // …and so is everything that is not position
     if (bake.skipped === -1 && FM.toast) FM.toast('This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions', 6000);
+    else if (lost.length && FM.toast) FM.toast('Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually', 6000);
     FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);

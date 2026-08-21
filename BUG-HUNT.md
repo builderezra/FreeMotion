@@ -1849,3 +1849,31 @@ of `extendClipTo` alone would not catch the fifth caller; this one does.
 range from itself, not from the window"* red, which the mutation cannot possibly affect (it removed a caption
 re-base). That test is flaky. It has not recurred since, but a flaky test in a suite that gates every ship is
 worth a section of its own if it comes back.
+
+## 37. Ungroup dropped the group's opacity and its hidden state (21 Aug, v11.07) — REAL BUG, third verified lead from §34
+
+An earlier hunt caught `FM.ungroup` throwing away the group's POSITION. It only ever fixed the transform.
+`bakeGroupTransform` handles x/y/rotation/scale — and returns early when those are identity, which is exactly
+the case for a group that was faded or hidden but never moved.
+
+**Measured** (`tests/_ungroupkeeps.html`), with a plain group as the control:
+
+| case | ink | mean brightness |
+|---|---|---|
+| control: an ordinary group | 1800 → 1800 | 255 → 255 ✔ |
+| a group at 35% opacity | 1800 → 1800 | **89 → 255** |
+| a hidden group | **0 → 1800** | 0 → 255 |
+
+A hidden group put every layer inside it back on screen.
+
+**Fix:** a second bake, `bakeGroupLook`, deliberately kept OUT of `bakeGroupTransform` because of that early
+return. Opacity multiplies onto each member, hidden is inherited.
+
+**What is deliberately NOT baked, and is now said out loud.** A group's EFFECTS do not fold: the effect runs
+once over the composited group, and running it again on each member is a different picture, not the same one.
+Same for a blend mode, and for an animated group opacity. Those three are named in a toast on the way out —
+the same discipline as the existing animated-position toast, and the opposite of what the code did before,
+which was to drop all of it in silence.
+
+**Both halves mutation-checked** (drop the hidden inheritance; drop the opacity multiply) — each turns the
+test red on its own.
