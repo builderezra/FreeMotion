@@ -11750,7 +11750,7 @@ wait for them to report back."*
       🔗 **Related to 215:** a clip stranded past the end is exactly the shape that made an export come
       out silent, and v11.21 taught the mixer to name it. This stops it happening by accident.
 - [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
       **Clauses:**
@@ -11827,6 +11827,31 @@ wait for them to report back."*
       the one reason that could count, and it is his call once it is put to him plainly.
       **Also a standing instruction, wider than this entry:** when offering him options, give him ALL of
       them and mark the best one *recommended*, rather than pre-filtering to the one I would pick.
+      📐 **BOTH SHIPPED FORMATS VERIFIED END TO END, 21 Aug — nobody had actually checked them.**
+      | | 2s stereo 48kHz | valid container | browser decodes it back |
+      |---|---|---|---|
+      | **WAV** | 384,044 bytes — byte-exact against 44 + 2s x 48000 x 2ch x 2B | ✅ `RIFF/WAVE` | — |
+      | **M4A** | **8,689 bytes** | ✅ `ftypisom` | ✅ reads back 2.07s |
+      Both options are present in the export dialog on both layouts ("Audio only (WAV)" / "Audio only
+      (M4A)"), so nothing is hidden from him. **M4A is 44x smaller than WAV at the same length.**
+
+      ⏳ **WAITING ON EZRA — MP3 is one decision, and my recommendation is NO. His condition was
+      *"if its a bad idea for any reason then no"*, so here is the reason.**
+      · **MP3 is the only format the browser cannot encode** — measured in `tests/_audiocodecs.html`:
+        neither WebCodecs `AudioEncoder` nor MediaRecorder will produce it. AAC and Opus both work.
+      · So MP3 means **shipping a JavaScript encoder library** (lamejs-class, ~100 KB), which then also
+        has to be cached by the service worker or exporting breaks offline — in an app whose whole
+        premise is no build step, no npm, and nothing leaving the device.
+      · **And it buys no capability.** M4A/AAC plays on iOS, Android, Windows, macOS, the web, every
+        editor and every social platform, and is smaller than MP3 at the same quality. There is no
+        place in 2026 that accepts MP3 and refuses M4A.
+      **So the trade is ~100 KB, a dependency and offline complexity, for zero things he could not
+      already do.** That is the "bad idea for a reason" his own condition asked about.
+      **Options, recommended first:**
+      1. **Leave it — WAV + M4A is the complete set.** *(recommended)*
+      2. Add MP3 anyway via a CDN library, service-worker cached. Real work, and it makes the app carry
+         a dependency it has never had.
+      **If he says leave it, this entry is DONE — all three clauses answered.**
 - [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
       not itself"*
