@@ -40,31 +40,41 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.46** — queue **392**, Text to Voice. Suite **810/810 green**, pushed and verified.
-Three mutations caught: moving the button below the trio, trusting a saved voice name, and drawing the
-voice picker before `getVoices()` resolves.
+**Last shipped: v11.46** (Text to Voice). Since then, one tooling change with no version bump: the queue
+classifier. Suite **810/810 green**, pushed and verified.
 
-**392 is PARTLY done and stays open.** Clauses 2 and 3 (the position, and a simple testable version) are
-shipped. Clause 1 is half — it speaks, but cannot become an audio layer. Clause 4 (expose it as an effect
-in the audio + text effect menus) is his conditional fallback — *"if it's really bad maybe just leave it
-as an effect"* — so it waits on his verdict rather than a guess.
-**The wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
-stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
-audio layer → nothing in the export. Do not try to work around this; the two real routes are BYOK cloud
-TTS or record/import a voiceover, and **both are decisions only Ezra can make.**
+**⛔ THE ACTIONABLE QUEUE IS EMPTY. 0 actionable, 24 blocked on Ezra, 3 held, 1 big, 3 standing notes,
+1 long-term.** Per the loop's own rule: **do not manufacture work.** If a tick finds nothing actionable,
+say so in one line and stop. An empty queue is not an emergency and not a licence to invent a feature.
 
-**THE ACTIONABLE QUEUE IS NOW EMPTY.** Everything else open is blocked on him, held by him, a standing
-note, or a long-term idea. Per rule: do not manufacture work. If a tick finds nothing actionable, say so
-in one line and stop — bug hunts are the fallback he authorised, but an empty queue is not an emergency.
+**What changed this tick, and why it was worth a tick.** `ANSWERED BY EZRA` was STICKY FOREVER: once an
+entry contained it anywhere, every blocking phrase in it counted as stale history and the entry could
+never block again. That is right for prose his answer superseded and wrong the moment a PARTIAL SHIP
+raises a fresh question — #392 shipped one clause of four, asked him to choose between cloud TTS and
+recording a voiceover, and came back ACTIONABLE with nothing that could be done. Three earlier cures for
+this same shape were all explicit markers a future session had to REMEMBER to write, which this project
+treats as no safeguard at all.
+**The rule now uses a property the file already has:** entries are append-only, so they are chronological.
+His answer silences only what PRECEDES it; blocking prose written after it has not been superseded by
+anything. Verified against all 32 open entries — exactly one moved (#392, correctly) and nothing else.
+It self-heals: his next `ANSWERED BY EZRA` resets the tail and the entry becomes workable again.
+**And it can no longer rot silently:** `python3 tools/_classify.py` self-tests all 11 rules — each case
+is a bug that really happened — and `tools/ship.sh` REFUSES to push when any of them fails. Proven by
+breaking the new rule and watching the gate exit 1.
 
-**Waiting on Ezra** — the list is long enough that it is now the bottleneck, not the work:
+**Waiting on Ezra — this is the bottleneck now, not the work:**
 432 template icon letter, 456 create-button letter, 460 the two options, 454 second half, 202 perf readout
 while playing, 387, 215, 250 does the slam still look wrong, 342, 391, 395 MP3 yes/no, 429, 418, 223
-follow-ups; the unnumbered **"Editing lags"** entry (all fixes in — open only until he says it feels
-better on his own device); **whether an animated reverb stutters while previewing on his phone** (v11.45
-could not measure it); and now **392's clause 4 plus the cloud-vs-record decision**.
+follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on
+his own device); **whether an animated reverb stutters while previewing on his phone** (v11.45 could not
+measure that); and **392** — his verdict on the shipped Text to Voice, plus the cloud-vs-record choice.
 
-**Probe lessons still worth keeping:** round every sample index (`48000 * 2.3` is not an integer); a
-surviving mutation is a hole in the TEST; check whether an effect already does the thing at rest before
-calling an artifact new; and two assertions can fail against CORRECT code by measuring a moment the
-animation has already left.
+**392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
+stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
+audio layer → nothing in an export. The only two real routes are BYOK cloud TTS or record/import a
+voiceover, and **both are decisions only Ezra can make.**
+
+**Probe lessons worth keeping:** round every sample index (`48000 * 2.3` is not an integer); a surviving
+mutation is a hole in the TEST, not proof the code is fine; check whether an effect already does the thing
+at rest before calling an artifact new; and an assertion can fail against CORRECT code by measuring a
+moment the animation has already left.
