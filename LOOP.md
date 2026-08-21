@@ -40,53 +40,56 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.49** (queue 468). **This tick: no bug — group/parent transforms verified and PINNED.**
-No app code changed, no version bump. Suite **815/815 green**, pushed and verified.
+**Last shipped: v11.50** — queue **470**, and it is the most serious thing the hunts have found. Suite
+**816/816 green**, pushed and verified. Mutation-checked.
 
 **0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim).
 
-**THIS TICK — group / parent transform chains at depth. All correct:**
-- **Translation composes exactly** at nesting depth 1–4 (+30 on the outermost group moves the grandchild
-  by exactly 30), and each level contributes (+10 at three levels = +30).
-- **Scale does BOTH things** — resizes the child AND pushes it further from the origin (40×40 at 200
-  becomes 80×80 at 400). A chain that only resized in place would look plausible and be wrong.
-- **Rotation composes** — a 360° turn returns the child to the identical position and size, and the
-  quarter turns land exactly where the arithmetic predicts.
-- **Cycles are safe.** `applyParentChain` guards with a `seen` Set; a parent cycle, a self-parent and a
-  missing parent id each render without throwing and without hanging.
-**Now pinned by a test** — the chain had STRUCTURAL cover (orphans, split parents, cycle termination) but
-nothing measured the GEOMETRY, which is the entire point of grouping and is silent when wrong.
+**THIS TICK — the template insert path, the last untested door for foreign data. FOUND #470:**
+`templates.useAsNew()` called `projects.create()` (which clamps the project size correctly) and then
+replaced the whole live project with the pack's RAW object, throwing that clamp away. A template carrying
+**16000×16000 at 999fps reached the live scene and was autosaved to disk.** Per `clampProjectDims`' own
+note that is ~1GB per canvas: an OOM crash on open, and — being the CURRENT project — a crash again on
+every relaunch. A brick.
+**Fixed twice over:** the template path re-clamps, AND **every project re-clamps on OPEN**, so anything
+already saved in a bad state repairs on the way in rather than taking the app down. The second is the
+structural half — without it the fix would only protect new arrivals.
+**What was FINE and is worth not re-checking:** the LAYERS in a hostile template pack were properly
+sanitised. The queue-217 re-id gate really is the door every batch of foreign layers passes, and it
+repaired both #467 timing and #468 keyframe order on the way in. Only the PROJECT object lacked a guard.
 
-**⚠️ THREE WRONG READINGS THIS TICK, ALL ONE MISTAKE: a canvas too small to hold the answer.** "The group's
-scale doesn't resize the child", "rotation makes it vanish", "scale on two groups draws nothing" — every one
-was the child leaving a 200×200 frame, exactly as the arithmetic says it should. On a 1000×1000 canvas the
-same code measured perfectly. **When a probe reports "nothing there", check the thing is still INSIDE the
-frame before believing it** — the test now carries an explicit `offFrame` guard so it can never make that
-mistake silently. Related to §8b/§8c in BUG-HUNT.md; the discipline is the same one those entries teach.
+**⚠️ TWO REFUTED BY READING, IN MINUTES, BEFORE ANY PROBE:** `projects.create()` already clamps (its own
+comment says why), and `applyScene` already clamps. Both hypotheses died in one `sed` of the source. The
+one that survived reading is the one that turned out to be real. **Read first when the question is "does
+this call the guard".**
+
+**⚠️ THE TEST BROKE THREE OTHER TESTS FIRST — and restoring localStorage was NOT enough.** Opening a
+project replaces the live scene (later tests: "no layer to work from"), and `open()` also pins storage's
+internal `boundId` and adopts the doc revision the #306 stale-tab guard reads — so a fourth test failed
+with "a normal save did not reach disk". **Re-OPENING the original project in `finally` is what re-pins
+them.** Any future test that opens a project must do the same.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
 - **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
-  newest features**; **the queue-217 re-id gate**; **timeline at 10 s / 10 min / 60 min**; **the LIVE audio
-  path for all six newly-keyframable params**; **the EXPORT audio path end-to-end**; **exportFitRect + the
-  frame loop**; **the service worker's caching rules**; **clip frame boundaries** (pinned); **keyframe
-  evaluation** (FOUND #468); **the full 380px per-category phone sweep** (FOUND #469, a question);
-  **group/parent transform chains at depth** (this tick — pinned).
+  newest features**; **timeline at 10 s / 10 min / 60 min**; **the LIVE audio path for all six
+  newly-keyframable params**; **the EXPORT audio path end-to-end**; **exportFitRect + the frame loop**;
+  **the service worker's caching rules**; **clip frame boundaries** (pinned); **keyframe evaluation**
+  (FOUND #468); **the full 380px per-category phone sweep** (FOUND #469, a question);
+  **group/parent transform chains at depth** (pinned); **the template insert path** (this tick — FOUND
+  #470; layers clean, project object was not).
 
-**STILL UN-SWEPT:** a hostile TEMPLATE PACK through the real insert UI; the phone sweep for a TEXT layer's
-own categories (Customise Text / Captions — see §8e for why they need care).
+**STILL UN-SWEPT:** the ELEMENTS insert path (same family as templates — check whether it assigns a
+project object anywhere; the grep says it does not, so this is likely a quick read rather than a probe);
+the phone sweep for a TEXT layer's own categories (Customise Text / Captions — see §8e).
 
-**Running tally, said plainly:** across eleven hunts — **three real bugs** (#466, #467, #468), **one question
-for him** (#469), **three coverage gaps closed** (exporter scheduling, clip frame edges, group transforms),
-**one safeguard built**, **fourteen probe/harness errors** caught before they reached him.
+**Running tally, said plainly:** across twelve hunts — **four real bugs** (#466, #467, #468, **#470**),
+**one question for him** (#469), **three coverage gaps closed**, **one safeguard built**, **fifteen
+probe/harness errors** caught before they reached him.
 
-**⚠️ SAID FOUR TIMES NOW.** The queue has been 0-actionable for ELEVEN ticks. The hunts are still producing
-— but three of the last four produced TESTS for things that already worked, not fixes for things that did
-not. That is worth something and it is not worth as much as one answer from him. **#469 needs one word.**
-
-**Waiting on Ezra:** 469 (one word), 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395, 429,
-418, 223; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on his
-device); **whether an animated reverb stutters while previewing on his phone**; and **392** — his verdict on
-Text to Voice, plus the cloud-vs-record choice.
+**Waiting on Ezra:** 469 (one word), 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395,
+429, 418, 223; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on
+his device); **whether an animated reverb stutters while previewing on his phone**; and **392** — his
+verdict on Text to Voice, plus the cloud-vs-record choice.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
