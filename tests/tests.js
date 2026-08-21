@@ -3530,6 +3530,50 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('effect clipboard: a copied effect does not paste a layer reference from another project', { item: 'fxclip-src' }, function () {
+    /* BUG HUNT (21 Aug), thirteenth verified lead from BUG-HUNT §34. FM.fxClipboard lives in
+       localStorage, so it survives across projects — and the effects that point AT a layer carried that
+       layer's id with them. Pasted into a different project the reference named a layer that does not
+       exist: measured, 4 of 4 (tests/_fxclipsrc.html). The clipboard already sanitised the effect's TYPE
+       and its parameter VALUES; this was the one field it never checked.
+       THE SAME-PROJECT CASE IS THE CONTROL and is asserted too: clearing the reference unconditionally
+       would pass a dead-reference check while breaking copy-paste of a matte within one project, which
+       is what people actually do with it. */
+    const layers0 = FM.scene.layers.slice();
+    const saved = (() => { try { return localStorage.getItem(FM.fxClipboard._key); } catch (e) { return null; } })();
+    try {
+      const withSource = ['lumamatte', 'compoundblur', 'matchgrade', 'displacementmap', 'polardisplace']
+        .map(id => FM.fxRegistry.makeInstance(id))
+        .filter(fx => fx && fx.params && ('source' in fx.params));
+      if (!withSource.length) throw new Error('CONTROL FAILED: no effect with a `source` parameter exists in the registry, so nothing is being tested');
+
+      withSource.forEach(inst => {
+        // project 1 — a real matte layer, and the effect pointing at it
+        FM.scene.layers.length = 0;
+        const matte = FM.makeLayer('shape', { name: 'matte', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+        matte.start = 0; matte.duration = 5; FM.scene.layers.push(matte);
+        inst.params.source = matte.id;
+        if (!FM.fxClipboard.copy(inst)) throw new Error('CONTROL FAILED: the clipboard refused to copy ' + inst.type);
+
+        // CONTROL: pasted back into the SAME project, the reference must survive
+        const same = FM.fxClipboard.read()[0];
+        if (!same || same.params.source !== matte.id) throw new Error(inst.type + ': pasting inside the same project lost the layer reference (' + (same && same.params.source) + ') — a matte copied and pasted here would stop working');
+
+        // project 2 — that layer does not exist any more
+        FM.scene.layers.length = 0;
+        const other = FM.makeLayer('shape', { name: 'other', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+        other.start = 0; other.duration = 5; FM.scene.layers.push(other);
+        const pasted = FM.fxClipboard.read()[0];
+        const src = pasted && pasted.params ? pasted.params.source : undefined;
+        if (src && !FM.layerById(FM.scene, src)) throw new Error(inst.type + ': pasted carrying a layer id from the other project (' + src + ')');
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      try { if (saved === null) localStorage.removeItem(FM.fxClipboard._key); else localStorage.setItem(FM.fxClipboard._key, saved); } catch (e) {}
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('duplicate: copying two linked layers together rewires the copies to each other', { item: 'dup-batch-refs' }, async function () {
     /* BUG HUNT (21 Aug), twelfth verified lead from BUG-HUNT §34. duplicateSelection copies the selection
        ONE LAYER AT A TIME, and each pass only remaps ids within its own group subtree — so selecting two

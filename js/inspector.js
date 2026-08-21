@@ -353,7 +353,19 @@ window.FM = window.FM || {};
         // nothing and cannot be edited — drop those rather than land them.
         // Name-checked AND value-checked (queue 218): the registry test below only ever proved the
         // effect exists, never that its parameters were sane.
-        return sanitizeFxList(list.filter(fx => fx && fx.type && FM.fxRegistry.get(fx.type)));
+        const usable = sanitizeFxList(list.filter(fx => fx && fx.type && FM.fxRegistry.get(fx.type)));
+        /* A LAYER REFERENCE FROM ANOTHER PROJECT (bug hunt, 21 Aug). This clipboard lives in
+         * localStorage, so it survives across projects — and the effects that point AT a layer (Luma
+         * Matte, Compound Blur, Match Grade, Polar Displacement) carried that layer's id with them.
+         * Pasted somewhere else, the reference named a layer that does not exist: measured, 4 of 4
+         * (tests/_fxclipsrc.html). The type and the parameter VALUES were already checked on the way
+         * out; this was the one field that was not.
+         * Cleared only when it does NOT resolve here, so pasting within the same project — the common
+         * case — still keeps the matte it was pointing at. */
+        usable.forEach(fx => {
+          if (fx && fx.params && fx.params.source && !FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
+        });
+        return usable;
       } catch (e) { return []; }
     },
     count() { return this.read().length; },

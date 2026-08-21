@@ -1772,7 +1772,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **Multi-layer Duplicate leaves every copy's cross-layer link pointing at the ORIGINALS (no idMap)**    
       ➜ **REAL — fixed v11.16, see §46**
       `app.js:2586` — Add a shape ("Box") and a text layer ("Title"). On Title, layer menu → Parent → Box. Select both rows, then ⋯ → "Duplicate 2 layers" (js/app.js:4376, or the keyboard shortcut at js/app.js:5340). Since queue 156 a duplicate lands exactly on its original, so nothing looks wrong yet. Now drag "Box copy
-- [ ] **Copied effects / saved layer presets carry a layer id across projects; the effect then silently renders nothing**  
+- [x] **Copied effects / saved layer presets carry a layer id across projects; the effect then silently renders nothing**    
+      ➜ **REAL — fixed v11.17, see §47**
       `inspector.js:341` — In project A, put Luma Matte on a clip and pick "Logo" as its source; the clip is cut to the logo's luma. Press Copy in the effects header. Open project B, select any clip, press Paste. The toast says "Pasted 1 effect", the Luma Matte row appears in the stack — and the clip renders as the full uncut
 - [x] **Head-trimming a speed-ramped clip uses a flat multiply where the ramp needs integrating — the remaining footage jumps**    
       ➜ **REAL (same bug) — fixed v11.13, see §43**
@@ -2179,3 +2180,25 @@ reference to clear and a non-batch ref is a deliberate link both copies may legi
 
 **Same root cause as §36, §42 and §43:** a rule that lives in more than one place, and a caller that has
 none of them. That is four of the twelve verified defects in this run.
+
+## 47. A copied effect pasted a layer reference from another project (21 Aug, v11.17) — REAL, thirteenth verified §34 lead
+
+`FM.fxClipboard` lives in `localStorage`, so it outlives the project you copied from. The effects that point
+AT a layer — Luma Matte, Compound Blur, Match Grade, Polar Displacement — carry that layer's id with them.
+
+**Measured** (`tests/_fxclipsrc.html`): copy in project 1, paste in project 2 — **4 of 4** arrived naming a
+layer that does not exist there.
+
+The clipboard already sanitised the effect's **type** (queue 218 added a registry check) and its parameter
+**values**. This was the one field nobody had thought of.
+
+**Fix:** clear `params.source` when it does not resolve in the current scene — the same rule paste uses for
+dead refs.
+
+**The same-project case is the control, and it is not decoration.** Clearing the reference unconditionally
+passes a dead-reference check perfectly while breaking copy-and-paste of a matte *within* one project, which
+is the thing the feature is actually for. The mutation proving this is the one worth keeping: making the
+clear unconditional turns the test red on the CONTROL assertion, not on the bug assertion.
+
+This is the second defect in this run (with §41's seam keyframes) where the obvious one-line fix would have
+been quietly worse than the bug.

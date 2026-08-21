@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>copied effect source ref (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.fxClipboard survives in localStorage across projects, and an effect
+   that references another LAYER (Luma Matte, Compound Blur, Match Grade, Displacement Map, Polar
+   Displacement) carries that layer's id with it. Copy the effect in one project, paste it in another, and
+   the reference points at a layer that does not exist here. The clipboard already sanitises the effect's
+   TYPE and its parameter VALUES on the way out — it just never checked this one. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.fxClipboard&&w.FM.fxRegistry&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function run(FM){
+  var L=[], bad=0, checked=0;
+  ['lumamatte','compoundblur','matchgrade','displacementmap','polardisplace','luma'].forEach(function(id){
+    var inst=FM.fxRegistry.makeInstance(id);
+    if(!inst || !inst.params || !('source' in inst.params)) return;
+    checked++;
+    // PROJECT 1: a real layer, and an effect pointing at it
+    FM.scene.layers.length=0;
+    var matte=FM.makeLayer('shape',{name:'matte',shape:'rect',x:10,y:10,shapeW:20,shapeH:20,fill:'#fff'});
+    matte.start=0; matte.duration=5; FM.scene.layers.push(matte);
+    inst.params.source=matte.id;
+    if(!FM.fxClipboard.copy(inst)){ L.push('  '+id.padEnd(18)+'clipboard refused the copy'); return; }
+    // PROJECT 2: a different project — that layer does not exist here
+    FM.scene.layers.length=0;
+    var other=FM.makeLayer('shape',{name:'other',shape:'rect',x:10,y:10,shapeW:20,shapeH:20,fill:'#fff'});
+    other.start=0; other.duration=5; FM.scene.layers.push(other);
+    var pasted=FM.fxClipboard.read()[0];
+    var src=pasted && pasted.params ? pasted.params.source : undefined;
+    var dead = !!src && !FM.layerById(FM.scene, src);
+    if(dead) bad++;
+    L.push('  '+id.padEnd(18)+(dead?'❌ pastes pointing at a layer from the OTHER project ('+String(src).slice(-6)+')'
+                                   :'✅ no dead reference ('+(src?String(src).slice(-6):'cleared')+')'));
+  });
+  L.push('');
+  if(!checked) L.push('CONTROL FAILED: no effect with a `source` parameter was found in the registry — nothing was tested.');
+  else L.push(bad? '❌ '+bad+' of '+checked+' layer-referencing effects paste a dead reference across projects'
+                 : '✅ every layer-referencing effect pastes clean');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>
