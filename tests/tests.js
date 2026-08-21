@@ -3531,6 +3531,51 @@
     const ba = await render('bitcrush', 'bits', { kf: [{ t: 0, v: 16 }, { t: SECS, v: 2 }] });
     if (Math.abs(ba.late - b2.late) > 0.02) throw new Error('a keyframed bit depth ended at ' + ba.late.toFixed(4) + ' instead of 2-bit\'s ' + b2.late.toFixed(4));
 
+    /* LO-FI — the hybrid. Its one knob drives two biquad frequencies (real AudioParams, which simply
+     * ramp) AND a transfer curve (which cannot ramp and needs the bank). Both halves must move together
+     * or the band closes while the crush stays put. The signal here carries a 6 kHz partial as well as
+     * the fundamental, so the closing low-pass is actually measurable. */
+    const rich = (i) => { for (let k = 0; k < i.length; k++) i[k] = Math.sin(2 * Math.PI * 220 * k / SR) * 0.4 + Math.sin(2 * Math.PI * 6000 * k / SR) * 0.3; };
+    async function renderRich(val) {
+      const oac = new OAC(1, SR * SECS, SR);
+      const buf = oac.createBuffer(1, SR * SECS, SR); rich(buf.getChannelData(0));
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: [{ type: 'lofi', enabled: true, params: { amount: val, mix: 1 } }] }, 0);
+      src.connect(chain.input); chain.output.connect(oac.destination);
+      FM._curveBanksBuilt = 0;
+      chain.schedule(0, SECS); src.start(0);
+      const banks = FM._curveBanksBuilt;
+      const out = await oac.startRendering(), c = out.getChannelData(0);
+      const rms = (a, b) => { let t = 0; for (let i = a; i < b; i++) t += c[i] * c[i]; return Math.sqrt(t / (b - a)); };
+      /* BRIGHTNESS, not loudness. Broadband RMS is dominated by the crush curve and is nearly blind to
+       * the filters — a mutation that stopped the low-pass following the sweep SURVIVED the loudness
+       * assertion. The first difference of the samples is a cheap high-pass, so its RMS tracks the high
+       * end specifically, which is exactly what closing a low-pass takes away. */
+      const bright = (a, b) => { let t = 0; for (let i = a + 1; i < b; i++) { const dd = c[i] - c[i - 1]; t += dd * dd; } return Math.sqrt(t / (b - a - 1)); };
+      return { early: rms(2400, 7200), mid: rms(94000, 98800), midBright: bright(94000, 98800),
+               lateBright: bright(184800, 189600), banks: banks };
+    }
+    const l0 = await renderRich(0), lh = await renderRich(0.5);
+    if (Math.abs(lh.mid - l0.mid) < 0.05) throw new Error('static Lo-Fi at 0 and 0.5 sound the same — the Lo-Fi half of this probe is blind');
+    const la = await renderRich({ kf: [{ t: 0, v: 0 }, { t: SECS, v: 1 }] });
+    if (Math.abs(la.mid - lh.mid) > 0.03) throw new Error('halfway through a Lo-Fi 0->1 sweep the sound is ' + la.mid.toFixed(4) + ' but a static 0.5 is ' + lh.mid.toFixed(4) + ' — the curve is not passing through the right values');
+    // CONTROL for the brightness metric: it must actually separate open from closed, or the assertion
+    // below is measuring nothing.
+    /* NOT "open is brighter" — measured, it is not. At amount 0 the high end reads 0.1637 and at 0.5 it
+     * reads 0.2536, because the crush curve manufactures harmonics faster than the closing filter
+     * removes them. The control only needs the metric to TELL THE TWO APART; which way round is not
+     * the point and assuming it cost a red tree. */
+    if (Math.abs(l0.midBright - lh.midBright) < lh.midBright * 0.2) throw new Error('the brightness metric cannot tell amount 0 (' + l0.midBright.toFixed(4) + ') from amount 0.5 (' + lh.midBright.toFixed(4) + ') — it is dead and proves nothing');
+    /* ASSERT NEAR THE END, NOT THE MIDDLE, and the reason is worth keeping. At the midpoint the
+     * low-pass has only closed to 12 kHz, which passes this signal's 6 kHz partial untouched — so a
+     * mutation that stopped the filter following SURVIVED a midpoint check twice. The cutoff reaches
+     * about 4.5 kHz near the end of the sweep, and there the partial is genuinely removed. Measure
+     * where the thing you are testing actually does something. */
+    const l97 = await renderRich(0.97);
+    if (Math.abs(la.lateBright - l97.lateBright) > l97.lateBright * 0.3) throw new Error('near the end of the sweep the HIGH END measures ' + la.lateBright.toFixed(4) + ' but a static 0.97 measures ' + l97.lateBright.toFixed(4) + ' — the filters are not following the curve, so the band stays open while the crush moves');
+    if (l0.banks !== 0) throw new Error('a STATIC Lo-Fi amount built ' + l0.banks + ' shaper bank(s)');
+    if (la.banks !== 1) throw new Error('an ANIMATED Lo-Fi amount built ' + la.banks + ' banks, expected 1');
+
     /* THE COST, which the sound cannot police. A bank that merely reproduces the static value renders
      * IDENTICALLY while allocating N shapers per effect — so the audio assertions above would all pass
      * with every plain Distortion in every project paying for twelve. An early version of this fix did

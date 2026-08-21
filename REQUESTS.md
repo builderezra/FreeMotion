@@ -3773,6 +3773,28 @@ better still, keep working inside the turn rather than parking work for a later 
       curve, so it needs the bank plus two ramps. **Reverb Size/Decay rebuild an impulse response and
       Pitch Shift is a third mechanism again — neither is this fix**, and neither should be attempted by
       copying it.
+      ✅ **THREE OF SIX — v11.28 adds Lo-Fi Amount.** It was the hybrid: one knob driving two biquad
+      frequencies (real AudioParams, which ramp) AND a transfer curve (which cannot, and uses the bank).
+      The bank feeds from the LOW-PASS, not the input, so the animated path gets the same filtered signal
+      the static one does. Measured: halfway through a 0 → 1 sweep it matches a static 0.5 exactly.
+      ⚠️ **The test needed THREE goes before it could see the bug it was written for, and each failure is
+      a lesson worth more than the feature:**
+      1. Broadband RMS is dominated by the crush curve and nearly blind to the filters — a mutation that
+         stopped the low-pass following the sweep SURVIVED it.
+      2. A brightness metric (RMS of the first difference) was added with the control "open must be
+         brighter than half-closed". **Measured, that is FALSE** — 0.1637 at amount 0 against 0.2536 at
+         0.5, because the crush manufactures harmonics faster than the closing filter removes them. The
+         control fired, the tree went red, and the assumption was wrong rather than the code. The control
+         now only requires the metric to TELL THE TWO APART, which is all it needs to do.
+      3. Even then the mutation survived a MIDPOINT check, because at amount 0.5 the low-pass has only
+         closed to 12 kHz and the probe's 6 kHz partial passes it untouched. **The filter genuinely does
+         nothing there.** Asserting near the END of the sweep, where the cutoff reaches ~4.5 kHz, catches
+         it: 0.4041 mutated against 0.2807 correct.
+      **The rule: measure where the thing you are testing actually does something.** A correct metric
+      pointed at the wrong moment is still a dead assertion.
+      **STILL OPEN — the last three.** Reverb Size and Reverb Decay rebuild an impulse response (a bank
+      of convolvers is a different and much heavier proposition) and Pitch Shift is a third mechanism
+      again. **Neither is this fix, and neither should be attempted by copying it.**
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than

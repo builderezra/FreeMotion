@@ -566,7 +566,7 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'lofi', label: 'Lo-Fi', category: 'char',
-    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', false), MIX(1)],
+    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', true), MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -574,6 +574,7 @@ window.FM = window.FM || {};
       const hp = s.biquad('highpass', 20, 0.7);
       const lp = s.biquad('lowpass', 20000, 0.7);
       const sh = s.shaper(null, 'none');
+      const shg = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       // One knob closes the band toward 500–4000 Hz while the curve adds crush and drive together.
       const shape = function (a) {
@@ -583,11 +584,30 @@ window.FM = window.FM || {};
       };
       shape(amount);
       input.connect(wd.dry).connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(wd.wet); wd.wet.connect(out);
+      input.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* THE HYBRID CASE (the per-effect-slider entry). Lo-Fi's one knob drives THREE things, and they
+         are not the same kind of thing: two biquad frequencies, which are real AudioParams and simply
+         ramp, and a transfer curve, which cannot be ramped at all and needs the crossfaded bank the
+         other two Character effects use. Both halves have to move together or the band closes while the
+         crush stays put.
+         The bank feeds from `lp`, NOT from the input — the shapers must receive the already-filtered
+         signal, exactly as the static `sh` does. Feeding it from the input would leave the animated
+         path unfiltered and quietly brighter than the static one. */
+      const bank = curveBank(s, lp, wd.wet, lofiCurve, 0, 1, 12, 'none');
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
-          amount: function (v) { v = clamp(v, 0, 1); if (v !== amount) { amount = v; shape(v); } },
+          amount: function (v, when, ramp) {
+            v = clamp(v, 0, 1);
+            if (!FM.isAnimated(inst.params && inst.params.amount)) {   // see the note on distortion's drive
+              if (v !== amount) { amount = v; shape(v); }
+              return;
+            }
+            const hz1 = 20 + v * 480, hz2 = 20000 - v * 16000;
+            try { ramp ? hp.frequency.linearRampToValueAtTime(hz1, when) : hp.frequency.setValueAtTime(hz1, when); } catch (e) {}
+            try { ramp ? lp.frequency.linearRampToValueAtTime(hz2, when) : lp.frequency.setValueAtTime(hz2, when); } catch (e) {}
+            bank.at(v, when, ramp, shg.gain);
+          },
           mix: wd.set,
         },
       });

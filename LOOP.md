@@ -27,20 +27,22 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 9. **A green run proves nothing unless the probe exercised the code.** Every new assertion carries a
    control that fails if the thing being measured was not happening. Mutation-check both directions
    where a lazy fix would be wrong.
-10. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
+10. **Measure where the thing you are testing actually does something.** A correct metric pointed at
+    the wrong moment is a dead assertion — a low-pass mutation survived a midpoint check twice because
+    at that point the filter had not closed far enough to touch the test signal at all.
+11. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.
 
 ## STATE — keep this current
 
-**v11.27, suite 795 green. List: 46 open, 20 actionable.**
+**v11.28, suite 795 green.**
 
 **In flight**
-- **Per-effect-slider keyframes** (unnumbered, oldest actionable). Distortion Drive and Bit Crush Bits
-  DONE in v11.27 via a crossfaded shaper bank — they sweep through the right values (0.9628 against a
-  static drive-50's 0.9627) and the click is gone. **Lo-Fi Amount is next**: same bank, plus two biquad
-  frequencies that are real AudioParams and can just be ramped. Reverb Size/Decay and Pitch Shift are
-  different mechanisms — do NOT copy the bank to them.
+- **Per-effect-slider keyframes** (unnumbered, oldest actionable). **Three of six done** — Distortion
+  Drive and Bit Crush Bits (v11.27), Lo-Fi Amount (v11.28), all via the crossfaded shaper bank in
+  js/audio-fx.js (`curveBank`). Reverb Size/Decay rebuild an impulse response and Pitch Shift is a third
+  mechanism again — **do NOT copy the bank to them**; they need their own answer or his say-so to drop.
 - **#460 is the one to jump to if it reproduces** — see below.
 
 **Newest in (21 Aug, from his phone — they WAIT their turn, oldest-first)**
