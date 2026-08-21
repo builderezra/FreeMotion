@@ -9,6 +9,18 @@ HTTPS URL with no stored credentials and fails with "could not read Username", w
 points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
 against `git rev-parse ssh/main` — do not trust the push output alone.
 
+**The app is live at <https://builderezra.github.io/FreeMotion/>** — GitHub Pages off `main`, which is
+why pushing matters: that URL is what his phone loads and what the installed PWA updates from. Nothing in
+the repo recorded it until 22 Aug, so every session had to guess or ask. To confirm a release actually
+reached him (the push landing is not the same as the deploy landing):
+
+```bash
+curl -s https://builderezra.github.io/FreeMotion/index.html | grep -o '>v[0-9][0-9.]*<'
+```
+
+Pages takes a minute or so after a push, so a check straight after `ship.sh` can show the previous
+version — that is normal, not a failure.
+
 ## ⚠️ SAFEGUARDS MUST BE STRUCTURAL, NOT REMEMBERED
 
 His words, after watching me write myself a note about a mistake I had just made twice:
