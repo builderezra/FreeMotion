@@ -24695,6 +24695,79 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('audio: a keyframed Pitch Shift actually glides, and a static one costs nothing extra', { item: 'audio-kf-pitch' }, async function () {
+    /* The unnumbered "per-effect-slider keyframes" entry, and the last of the six audio sliders it
+     * lists. Pitch Shift is NOT the crossfaded-shaper-bank fix the other three got — the entry says
+     * twice that it must not be attempted by copying that, and it is right: there is no transfer curve
+     * here. All seven of the values this knob drives are already real AudioParams, so the only reason it
+     * could not be keyframed is that the setter assigned `.value` and threw `when` away — every value
+     * the scheduler sent landed at once and the last one won.
+     * So this measures PITCH, which is the thing the slider claims to control. Zero-crossing rate is a
+     * fair estimator here because the probe tone is a sine; against the app's own chain, a 220 Hz input
+     * at +12 st must come back at ~440. */
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext — the audio chain cannot be exercised at all');
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, SECS = 4, F0 = 220;
+    async function render(val) {
+      const oac = new OAC(1, SR * SECS, SR);
+      const buf = oac.createBuffer(1, SR * SECS, SR);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(2 * Math.PI * F0 * i / SR) * 0.5;
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: [{ type: 'pitch', enabled: true, params: { semitones: val, mix: 1 } }] }, 0);
+      if (!chain) throw new Error('no pitch chain built');
+      src.connect(chain.input); chain.output.connect(oac.destination);
+      FM._pitchGlides = 0;
+      chain.schedule(0, SECS); src.start(0);
+      const glides = FM._pitchGlides;
+      const out = await oac.startRendering();
+      return { c: out.getChannelData(0), glides: glides };
+    }
+    /* Math.round on every index, and that is not defensive habit — it is a bug this probe already had.
+       48000 * 2.3 is 110399.99999999999, so a fractional index read undefined, every comparison against
+       it was false, and the window reported ZERO crossings. It looked exactly like a dropout in the
+       middle of the sweep, and it was the measuring tape. */
+    const hz = (c, a, b) => {
+      a = Math.round(a); b = Math.round(b);
+      let n = 0; for (let i = a + 1; i < b; i++) if ((c[i - 1] < 0) !== (c[i] < 0)) n++;
+      return n / 2 / ((b - a) / SR);
+    };
+    const rms = (c, a, b) => { a = Math.round(a); b = Math.round(b); let t = 0; for (let i = a; i < b; i++) t += c[i] * c[i]; return Math.sqrt(t / (b - a)); };
+    const around = (c, t) => hz(c, SR * (t - 0.2), SR * (t + 0.2));
+
+    // CONTROL — the effect must actually move the pitch, or every verdict below is measuring nothing.
+    const s0 = await render(0), s12 = await render(12);
+    const p0 = around(s0.c, 2), p12 = around(s12.c, 2);
+    if (Math.abs(p0 - F0) > F0 * 0.05) throw new Error('a static 0 st does not come back at the input pitch (' + p0.toFixed(1) + ' Hz vs ' + F0 + ') — the pitch probe is not measuring pitch');
+    if (Math.abs(p12 - 2 * F0) > F0 * 0.08) throw new Error('a static +12 st reads ' + p12.toFixed(1) + ' Hz, not an octave up (' + 2 * F0 + ') — the pitch probe is blind');
+    /* THE COST GUARD. A static param must never take the scheduling path. Sound cannot police this:
+       scheduling one unchanging value 120 times renders identically to assigning it once, so without a
+       counter the expensive path could run for every clip in every project and no assertion would see
+       it. That is not hypothetical — the Distortion bank shipped exactly that bug, because it guarded on
+       `when == null` while the static path passes when = 0. */
+    if (s0.glides !== 0 || s12.glides !== 0) throw new Error('a STATIC pitch took the scheduling path (' + s0.glides + '/' + s12.glides + ' glides) — every plain Pitch Shift in every project now pays for animation it does not use');
+
+    // THE BUG — a keyframed semitones must glide, and pass through the RIGHT pitches on the way.
+    const a = await render({ kf: [{ t: 0, v: 0 }, { t: SECS, v: 12 }] });
+    if (!a.glides) throw new Error('a keyframed semitones never reached the scheduling path — the diamonds would do nothing');
+    const at1 = around(a.c, 1), at3 = around(a.c, 3);
+    const want1 = F0 * Math.pow(2, 3 / 12), want3 = F0 * Math.pow(2, 9 / 12);   // 0->12 over 4s: 3 st at 1s, 9 st at 3s
+    if (Math.abs(at1 - p0) < 20) throw new Error('one second into a 0->12 sweep the pitch is still ' + at1.toFixed(1) + ' Hz, the value it STARTED at — this is the "renders at its first value for the whole clip" bug');
+    if (Math.abs(at1 - want1) > want1 * 0.06) throw new Error('at 1s the sweep should be near ' + want1.toFixed(1) + ' Hz (3 st) but measures ' + at1.toFixed(1));
+    if (Math.abs(at3 - want3) > want3 * 0.06) throw new Error('at 3s the sweep should be near ' + want3.toFixed(1) + ' Hz (9 st) but measures ' + at3.toFixed(1));
+    if (!(at3 > at1)) throw new Error('the sweep did not rise: ' + at1.toFixed(1) + ' Hz at 1s, ' + at3.toFixed(1) + ' Hz at 3s');
+
+    /* NO NEW HOLES IN THE SOUND. A glide that silences the clip for a moment would pass every pitch
+       assertion above. The bar is deliberately low and the reason is measured: this granular shifter
+       ALREADY dips on its own — a static +9 st has a 10 ms window down at 0.042 RMS — so demanding the
+       animated render beat that would be testing the shifter's comb, not the animation. What must not
+       happen is actual silence. The first 0.5s is skipped because the delay lines start empty. */
+    let worst = 1, W = Math.round(SR * 0.01);
+    for (let i = Math.round(SR * 0.5); i + W < a.c.length; i += W) worst = Math.min(worst, rms(a.c, i, i + W));
+    if (worst < 0.02) throw new Error('the glide drops the sound to ' + worst.toFixed(4) + ' RMS over 10 ms — that is a hole you would hear');
+  });
+
   test('the stairs button is two — one chaining down, one chaining up (queue 465)', { item: '465' }, async function () {
     /* Ezra, with the button scribbled over and a line drawn down its middle: *"Split this button into
      * two, one stairs down and one stairs up."* The icon was three strokes descending to the right and

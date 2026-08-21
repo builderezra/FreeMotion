@@ -3825,6 +3825,38 @@ better still, keep working inside the turn rather than parking work for a later 
       **STILL OPEN — the last three.** Reverb Size and Reverb Decay rebuild an impulse response (a bank
       of convolvers is a different and much heavier proposition) and Pitch Shift is a third mechanism
       again. **Neither is this fix, and neither should be attempted by copying it.**
+      ✅ **FOUR OF SIX — v11.44 adds Pitch Shift Semitones, and it was the CHEAPEST of the six, not the
+      dearest.** The entry's warning was right that the shaper bank must not be copied here, but the
+      reason cuts the other way: there is no transfer curve in this effect at all. All seven values the
+      knob drives — two delay times, two LFO depths, and the three gains that run the bypass — are
+      already real AudioParams. The only thing stopping the slider being keyframed was that the setter
+      assigned `.value` and ignored `when`, so the scheduler's thirty values a second all applied during
+      `schedule()` and the last one won. The whole fix is to schedule instead of assign: no bank, no
+      extra nodes, no warning needed.
+      **It glides through fractional semitones.** Dragged by hand it still steps in whole semitones (the
+      slider's step is 1 st) but an animated one interpolates, because rounding an animated value would
+      turn a rise into a staircase of twelve step changes in delay time — which is precisely the clicking
+      the other three had to be rescued from. Crossing 0 st stays continuous by construction: the slide
+      distance goes to zero as the ratio goes to one, so the up/down branches meet there, and the one
+      genuinely binary thing (the 0 st bypass) ramps across a scheduling step instead of switching.
+      **Measured against the app's own chain:** static +12 st returns 439 Hz from a 220 Hz tone; a
+      keyframed 0 → 12 over 4s reads 257 Hz at 1s and 366 Hz at 3s, against 261.6 and 370 expected —
+      inside 1.5% at every sampled point. A static instance records ZERO scheduling calls, which is the
+      counter that stops this repeating the Distortion bug where every plain instance in every project
+      silently paid for animation it never used. Both directions mutation-checked.
+      ⚠️ **Two probe failures worth more than the result, both mine:**
+      1. The sweep appeared to DROP OUT completely at 2.5s — zero crossings, NaN energy. `48000 × 2.3`
+         is `110399.99999999999`, so the probe indexed the buffer at a fraction, read `undefined`, and
+         every comparison against it was false. The tape, not the audio. Indices are rounded now and the
+         test says why.
+      2. The animated render's quietest 10 ms looked alarming (0.049 RMS) until the same measurement was
+         run on STATIC values: a static +9 st dips to 0.042 on its own. Those nulls are the granular
+         shifter's own comb, not something animation introduced, so the test asserts "no actual silence"
+         rather than a bar the effect never cleared in the first place.
+      **STILL OPEN — Reverb Size and Reverb Decay only.** They rebuild an impulse response, they cost
+      ~12.5 ms a frame, and they are the two that need the warning Ezra asked for
+      (*"if audio key frames break the project and lag too much just put a warning next to it before
+      use"*). No further input needed — that answer already covers them.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       **STATUS: 🔵 BIG — wants a session of its own**
       Chunk-replay resume is proven; not landed.

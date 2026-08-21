@@ -738,7 +738,7 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'pitch', label: 'Pitch Shift', category: 'char',
-    params: [P('semitones', 'Semitones', -12, 12, 1, 0, 'st', false), MIX(1)],
+    params: [P('semitones', 'Semitones', -12, 12, 1, 0, 'st', true), MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -762,9 +762,13 @@ window.FM = window.FM || {};
       input.connect(gB); gB.connect(wB); wB.connect(wd.wet);
       wd.wet.connect(out);
       let st = Math.round(initNum(inst, 'semitones', 0, -12, 12));
+      /* The seven values the knob drives, as functions of v. Written once and read by BOTH paths below,
+         because the static and animated versions differing by a stray sign is the kind of bug that only
+         ever shows up as "the export sounds wrong", long after anyone would connect it to this. */
+      const dOf = function (v) { const r = Math.pow(2, v / 12); return Math.abs(1 - r) * G; };   // one grain's slide
+      const upOf = function (v) { return Math.pow(2, v / 12) > 1; };
       const shape = function (v) {
-        const ratio = Math.pow(2, v / 12), up = ratio > 1;
-        const D = Math.abs(1 - ratio) * G;   // one grain's worth of slide, so the ramp's slope IS 1 − ratio
+        const up = upOf(v), D = dOf(v);   // the ramp's slope IS 1 − ratio
         gA.delayTime.value = up ? D : 0; gB.delayTime.value = up ? D : 0;
         mA.gain.value = up ? -D : D; mB.gain.value = up ? -D : D;
         // At 0 st both lines carry the identical dry signal, and two equal-POWER windows over identical
@@ -772,11 +776,48 @@ window.FM = window.FM || {};
         lA.gain.value = v ? 1 : 0; wA.gain.value = v ? 0 : 1;
         lB.gain.value = v ? 1 : 0;
       };
+      /* ---- THE ANIMATED PATH (the unnumbered per-effect-slider entry) ----------------------------
+       * Pitch Shift is the last of the six, and it is NOT the crossfaded-shaper-bank fix that Distortion,
+       * Bit Crush and Lo-Fi got — the entry warns twice against copying it here, and it is right: there
+       * is no transfer curve to swap. All seven targets above are ALREADY real AudioParams. The only
+       * reason this slider could not be keyframed is that the setter assigned `.value` and threw `when`
+       * away, so the scheduler's thirty values a second all landed at once and the last one won.
+       * The whole fix is therefore to schedule rather than assign. No bank, no extra nodes, nothing to
+       * warn about — this is the cheapest of the six, not the most expensive.
+       * IT GLIDES THROUGH FRACTIONAL SEMITONES rather than stepping between whole ones. The static path
+       * rounds, because the slider's step is 1 st, but rounding an ANIMATED value would turn a rise into
+       * a staircase of twelve jumps, each a step change in delayTime — which is the clicking the other
+       * three had to be rescued from. Ramped through, it is a portamento, and it still passes through the
+       * exact whole numbers at the keyframes themselves.
+       * Crossing zero stays continuous, and not by luck: D → 0 as v → 0, so the `up` flip happens exactly
+       * where its two branches meet. The bypass pair is the one truly binary thing here, and it RAMPS
+       * across a scheduling step (33 ms) instead of switching, so leaving 0 st is a crossfade. */
+      const animated = function () { return FM.isAnimated(inst && inst.params ? inst.params.semitones : undefined); };
+      const glide = function (v, when, ramp) {
+        // Counted so the suite can prove a STATIC pitch never takes this path. Sound alone cannot police
+        // that: scheduling one value 120 times renders identically to assigning it once. Same lesson as
+        // the shaper-bank counter above, and as the motion-blur slice counter in queue 382.
+        FM._pitchGlides = (FM._pitchGlides || 0) + 1;
+        const up = upOf(v), D = dOf(v), on = v ? 1 : 0;
+        const at = function (ap, x) {
+          try { ramp ? ap.linearRampToValueAtTime(x, when) : ap.setValueAtTime(x, when); } catch (e) {}
+        };
+        at(gA.delayTime, up ? D : 0); at(gB.delayTime, up ? D : 0);
+        at(mA.gain, up ? -D : D); at(mB.gain, up ? -D : D);
+        at(lA.gain, on); at(wA.gain, 1 - on); at(lB.gain, on);
+      };
       shape(st);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
-          semitones: function (v) { v = Math.round(clamp(v, -12, 12)); if (v !== st) { st = v; shape(v); } },
+          semitones: function (v, when, ramp) {
+            /* Gated on isAnimated, NOT on `when` — the static path calls set(key, value, 0), so `when`
+               is 0 and not null. Guarding on `when == null` is exactly the bug the Distortion bank
+               shipped with, where every static instance in every project quietly took the expensive
+               path while sounding identical. */
+            if (!animated()) { v = Math.round(clamp(v, -12, 12)); if (v !== st) { st = v; shape(v); } return; }
+            glide(clamp(v, -12, 12), Math.max(0, when || 0), !!ramp);
+          },
           mix: wd.set,
         },
       });
