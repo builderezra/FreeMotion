@@ -40,46 +40,48 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.48** (queue 467). **This tick: no bug — one refuted by reading, one invariant pinned.**
-No app code changed, no version bump. Suite **813/813 green**, pushed and verified.
+**Last shipped: v11.49** — queue **468**, a bug hunt finding. Suite **814/814 green**, pushed and verified.
+Both directions mutation-checked (unwiring the call site; removing the sort).
 
 **0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN numbered
 entry; **no findings means no entry.**
 
-**THIS TICK:**
-- **Service worker — hypothesis REFUTED BY READING, in two minutes.** The guess was that `js/tts.js` (added
-  v11.46) had been left out of a precache list. There IS no precache list, deliberately: the worker keys on
-  the full URL including `?v=`, so there is nothing to keep in sync, and unversioned assets never get
-  cached at all. That design and last tick's cache-buster gate reinforce each other — the gate guarantees
-  the `?v=` promise the worker relies on. **Reading the file cost nothing; writing a probe first would have
-  cost twenty minutes.**
-- **Clip boundaries — correct, and now PINNED.** A clip is drawn on the exact frame it starts and not on
-  the frame it ends, so a 2 s clip at 30fps is exactly 60 frames (30–89). Verified through real pixels from
-  `FM.renderScene`, which is how the exporter draws. **Nothing tested this**, and a slip either way is one
-  frame of flicker at every clip edge — miserable to diagnose from a report, invisible in a still. The new
-  test counts the frames; the `t <= end` mutation (a clip rendering 61 frames) is caught by it ALONE, out
-  of 813 tests.
+**THIS TICK — keyframe evaluation at its boundaries.** Every WELL-FORMED case is correct: the value at an
+exact keyframe time is that keyframe's value, it holds rather than extrapolating outside the range, a
+linear midpoint is the midpoint, a lone keyframe is a constant. **Two file-only shapes were not:** unsorted
+keyframes collapse an animation to a CONSTANT (evalProp walks in order and returns the first entry at every
+time), and a `null` value evaluates to NaN at its own time. Fixed at import by a generic `{kf:[…]}` walk —
+**#468**.
+**Confirmed the app cannot produce either**, which is why this is a file concern rather than a live bug:
+`toggleProp` substitutes 0 for a missing fallback, and all 199 visual effects and 60 audio params carry a
+default. Checking that FIRST is what kept the entry honest — it would have been easy to write this up as
+something he was hitting.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
 - **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
   newest features**; **the queue-217 re-id gate, verified not trusted**; **timeline at 10 s / 10 min /
   60 min**; **the LIVE audio path for all six newly-keyframable params**; **the EXPORT audio path
-  end-to-end** including a clip starting mid-export; **exportFitRect + the frame loop**; **the service
-  worker's caching rules**; **clip frame boundaries**.
+  end-to-end**; **exportFitRect + the frame loop**; **the service worker's caching rules**; **clip frame
+  boundaries** (pinned by a test); **keyframe evaluation** (this tick — well-formed cases all correct).
 
 **STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data path
-is verified via `_reIdLayers`, the UI path is not); keyframe evaluation at exact keyframe times (same
-off-by-one family as the clip edges, and equally untested); the phone layout of the newest panels at 380px
-under a LONG project (many layers).
+is verified via `_reIdLayers`, the UI path is not); the phone layout of the newest panels at 380px under a
+LONG project (many layers); group/parent transform chains at depth.
 
-**⚠️ THE CHEAPEST TOOL IS READING THE SOURCE.** Two ticks running, a probe written against an assumed shape
-cost a round trip (`exportFitRect` returns `{dx,dy,dw,dh}`, not `{x,y,w,h}` — nine false failures). This
-tick the service-worker hypothesis died in one `grep` of the file's own header comment. **Read first when
-the question is "what does this do"; probe when the question is "does it actually happen".**
+**⚠️ THE CONTROL CAUGHT ME TWICE THIS TICK.** A hand-written layer JSON "proved" a null keyframe blanked the
+picture — until the GOOD control drew nothing either, because my hand-built layer was missing fields the
+renderer needs. Rebuilt with `FM.makeLayer` (the real constructor), both drew, and the true symptom turned
+out to be milder: the layer is MISPLACED, not missing. **Build fixtures with the app's own constructors;
+a hand-rolled object is a fixture that only proves itself.**
 
-**Running tally, said plainly:** across seven hunts — **two real bugs** (#466, #467), **two coverage gaps
-closed** (exporter scheduling, clip frame edges), **one safeguard built** (cache-buster gate), and **eight
-probe errors** caught before they reached him.
+**Running tally, said plainly:** across eight hunts — **three real bugs** (#466, #467, #468), **two coverage
+gaps closed** (exporter scheduling, clip frame edges), **one safeguard built** (cache-buster gate), and
+**nine probe errors** caught before they reached him.
+
+**⚠️ WORTH SAYING TO HIM, and it has now been said twice:** the queue has been 0-actionable for eight ticks.
+Hunting is his standing fallback and it is still finding things, but three of the last four findings were
+malformed-FILE robustness rather than anything he can see today. **A few one-word answers would unblock more
+real work than another sweep.**
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it
