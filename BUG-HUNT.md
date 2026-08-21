@@ -1,4 +1,4 @@
-# ⚠️ READ FIRST — ten ways a measurement lied (20 Aug 2026, extended 22 Aug)
+# ⚠️ READ FIRST — eleven ways a measurement lied (20 Aug 2026, extended 22 Aug)
 
 Every one of these produced a confident WRONG answer that survived until something forced a second look.
 They are listed by SYMPTOM, because that is how you meet them.
@@ -42,6 +42,18 @@ before reporting anything as broken.
    `.fxb-commit-clear` and `.fxb-commit-go`. Clicking the container does nothing at all, which reads
    identically to a broken feature — the filter Add flow was "found broken" this way and is fine.
    Click the inner `button`, and confirm the label first (`"Add 1 filter"` tells you the pick registered).
+
+8d. **"The animated audio parameter never moves."** A Web Audio node that is **not connected through to
+   `ctx.destination` is never processed**, so its `AudioParam.value` never advances and every read comes
+   back as the construction-time default — indistinguishable from automation that is simply broken. Seen
+   22 Aug: a live pitch-shift probe read `delayTime` as 0 at every scene time and looked like a dead
+   feature. Connect `chain.output` to a **zero-gain** sink into the destination (silent but pulled) and
+   feed the input; the same probe then read 0 → 0.0414 → 0.1, matching the predicted values exactly.
+   Note the near-miss: `ctx.currentTime` DOES advance in a hidden pane, so the audio clock looks healthy
+   and invites the wrong conclusion. The tell is a bare `GainNode` — `setValueAtTime(0.25)` on an
+   unconnected one still reads `1`.
+   *(The control rule below is what caught this: the Echo/Delay `time` control — a parameter known to
+   work — read stale in exactly the same way, which proved the probe was blind rather than the code.)*
 
 8. **"The element moved hundreds of pixels."** The timeline REBUILDS on resize — the add row and its +
    are replaced — so an element reference held across the resize measures a DETACHED node as all-zeros.
