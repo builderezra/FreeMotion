@@ -3530,6 +3530,59 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('group: grouping a GROUP with another layer does not re-stack the picture', { item: 'group-stack' }, function () {
+    /* BUG HUNT (21 Aug), fourth verified lead from BUG-HUNT §34. groupSelection pulled the selected
+       MEMBERS contiguous under the new row, but a member that is itself a group has children which are
+       not in the selection — they stayed where they were in the layer array while their group row moved.
+       The layer array IS the stacking order, so a structural edit that draws nothing silently re-stacked
+       the picture: measured, the overlap pixel went from red to blue, i.e. a layer that was behind came
+       to the front (tests/_groupstack.html).
+       THE CONTROL MATTERS AND IS WHY THIS READS A PIXEL, NOT A LAYER ARRAY. The first version of the
+       probe sampled the exact CORNER of the shapes — anchors are centred, so it read the background at
+       every stage and reported a clean. A background reading is now a hard failure, not a pass. */
+    const layers0 = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 200, H = 120, PX = 60, PY = 40;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const pixel = () => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 1);
+        const d = ctx.getImageData(PX, PY, 1, 1).data;
+        return d[0] + ',' + d[1] + ',' + d[2];
+      };
+      FM.scene.layers.length = 0;
+      // c1 and Z occupy exactly the same box (centre-anchored, x 30..90 / y 20..60); c2 sits away from it.
+      const c1 = FM.makeLayer('shape', { name: 'c1', shape: 'rect', x: 60, y: 40, shapeW: 60, shapeH: 40, fill: '#ff0000' });
+      const c2 = FM.makeLayer('shape', { name: 'c2', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#00ff00' });
+      const Z  = FM.makeLayer('shape', { name: 'Z',  shape: 'rect', x: 60, y: 40, shapeW: 60, shapeH: 40, fill: '#0000ff' });
+      [c1, c2, Z].forEach(l => { l.start = 0; l.duration = 10; FM.scene.layers.push(l); });
+
+      const raw = pixel();
+      if (raw === '0,0,0') throw new Error('CONTROL FAILED: nothing is drawn at the sample point, so every reading would be the background');
+
+      FM.scene.selectedIds = [c1.id, c2.id]; FM.scene.selectedId = c1.id;
+      FM.groupSelection();
+      const G1 = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G1) throw new Error('groupSelection did not make the first group');
+      const before = pixel();
+      if (before !== raw) throw new Error('grouping two plain layers already changed the picture: ' + raw + ' -> ' + before);
+
+      FM.scene.selectedIds = [G1.id, Z.id]; FM.scene.selectedId = G1.id;
+      FM.groupSelection();
+      if (FM.scene.layers.filter(l => l.type === 'group').length !== 2) throw new Error('the second group was not created');
+      const after = pixel();
+      if (after !== before) throw new Error('grouping a group with another layer re-stacked the picture: the overlap went ' +
+        before + ' -> ' + after + ' (stack is now ' + FM.scene.layers.map(l => l.name).join(' | ') + ')');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('ungroup: the picture does not change — opacity and a hidden group come with it', { item: 'ungroup-look' }, function () {
     /* BUG HUNT (21 Aug), third verified lead from BUG-HUNT §34, and the same family as the earlier
        ungroup fix: that one caught the group's POSITION being thrown away, this catches everything else.

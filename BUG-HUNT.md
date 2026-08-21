@@ -1877,3 +1877,35 @@ which was to drop all of it in silence.
 
 **Both halves mutation-checked** (drop the hidden inheritance; drop the opacity multiply) — each turns the
 test red on its own.
+
+## 38. Grouping a group re-stacked the composition (21 Aug, v11.08) — REAL BUG, fourth verified lead from §34
+
+`FM.groupSelection` pulls the selected members contiguous under the new group row. A member that is itself a
+group has CHILDREN which are not in the selection, so they stayed at their old index while their group row
+moved — and `scene.layers` order **is** the stacking order.
+
+**Measured** (`tests/_groupstack.html`), sampling one pixel where two shapes overlap exactly:
+
+| step | layer array | overlap pixel |
+|---|---|---|
+| three plain shapes | `c1 \| c2 \| Z` | red (c1 in front) |
+| group c1+c2 | `Group \| c1 \| c2 \| Z` | red |
+| group that group with Z | `Group \| Group \| Z \| c1 \| c2` | **blue (Z in front)** |
+
+A layer that was behind came to the front, from an edit that draws nothing.
+
+**Fix:** the movers are now the members *plus every descendant of a member group*, taken in current array
+order. Computed BEFORE the re-parent, because after it a top-level member's `parent` is the new group, which
+is not in `scene.layers` yet — `FM.isAncestor`'s walk would break at the first hop and find nothing.
+
+### The probe reported a clean first, again
+
+The first run read `0,0,0` at every stage and passed. Shape anchors are centred, so c1/Z occupy x 30..90,
+y 20..60 — and the sample point (90,60) was the exact corner. It was measuring the background.
+
+The array reorder was visible in the same output (`Group | c1 | c2 | Z` → `Group | Group | Z | c1 | c2`) and
+that is what saved it: the structure had plainly changed while the "picture" had not, which is not a
+combination that happens. **A background reading is now a hard failure in both the probe and the suite test.**
+
+That is three false cleans in this hunt — §33 (wrong effect record), §35's control, and this one. Every one
+came from the probe not exercising the thing it claimed to measure, never from bad arithmetic.

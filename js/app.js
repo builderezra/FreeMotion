@@ -2361,12 +2361,29 @@ window.FM = window.FM || {};
     // a member (a camera, or an ancestor caught by the guard above), and if its children checked the
     // selection they would keep pointing at a non-member and the new group would come out empty.
     const memberIds = new Set(members.map(l => l.id));
+    /* A MEMBER THAT IS ITSELF A GROUP BRINGS ITS WHOLE SUBTREE (bug hunt, 21 Aug). Only the selected
+     * members were pulled contiguous under the new row; a member group's CHILDREN are not in the
+     * selection, so they stayed where they were in the array while their group row moved — and the
+     * layer array IS the stacking order, so the picture silently re-stacked.
+     * Measured (tests/_groupstack.html): group two shapes, then group THAT group with a layer sitting
+     * below them, and the overlap pixel went from red to blue — a layer that was behind came to the
+     * front, from a structural edit that draws nothing.
+     * Computed BEFORE the re-parent below: after it, a top-level member's parent is `g`, which is not
+     * in scene.layers yet, so FM.isAncestor's walk would break at the first hop and find nothing. */
+    const movingIds = new Set();
+    FM.scene.layers.forEach(l => {
+      if (memberIds.has(l.id)) { movingIds.add(l.id); return; }
+      for (let i = 0; i < members.length; i++) {
+        if (members[i].type === 'group' && FM.isAncestor(FM.scene, members[i].id, l.id)) { movingIds.add(l.id); return; }
+      }
+    });
+    const moving = FM.scene.layers.filter(l => movingIds.has(l.id));   // current array order = current stacking
     members.forEach(l => { if (!l.parent || !memberIds.has(l.parent)) l.parent = g.id; });
-    // Pull members contiguous directly under the group row (top-most member's slot).
-    const topIdx = FM.scene.layers.findIndex(l => members.includes(l));
-    FM.scene.layers = FM.scene.layers.filter(l => !members.includes(l));
+    // Pull them contiguous directly under the group row (top-most mover's slot).
+    const topIdx = FM.scene.layers.findIndex(l => movingIds.has(l.id));
+    FM.scene.layers = FM.scene.layers.filter(l => !movingIds.has(l.id));
     FM.scene.layers.splice(Math.max(0, Math.min(topIdx, FM.scene.layers.length)), 0, g);
-    Array.prototype.splice.apply(FM.scene.layers, [FM.scene.layers.indexOf(g) + 1, 0].concat(members));
+    Array.prototype.splice.apply(FM.scene.layers, [FM.scene.layers.indexOf(g) + 1, 0].concat(moving));
     FM.selectMode = false;
     FM.selectLayer(g.id);
     if (FM.toast) FM.toast(opts.mask ? 'Masking group — its top layer clips the rest' : 'Grouped ' + members.length + ' layers');

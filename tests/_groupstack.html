@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>grouping a group re-stacks (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.groupSelection pulls the selected MEMBERS contiguous under the new
+   group row, but a member that is itself a group has CHILDREN which are not in the selection — they stay
+   where they were in the layer array while their group row moves. Claimed effect: the stack silently
+   re-orders, so a layer that was behind now draws in front.
+   Measured on real pixels at a deliberate overlap: whichever shape is on top owns that pixel. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.groupSelection&&w.FM.makeLayer&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function pixel(FM,doc,W,H,x,y){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,1);
+  var d=ctx.getImageData(x,y,1,1).data;
+  return d[0]+','+d[1]+','+d[2];
+}
+function names(FM){ return FM.scene.layers.map(function(l){return l.name;}).join(' | '); }
+function run(FM){
+  var doc=f.contentDocument, W=200,H=120, L=[];
+  FM.scene.project.width=W; FM.scene.project.height=H;
+  FM.scene.layers.length=0;
+  // c1 and c2 will be grouped; Z overlaps c1 exactly and starts BELOW it in the stack
+  var c1=FM.makeLayer('shape',{name:'c1',shape:'rect',x:60,y:40,shapeW:60,shapeH:40,fill:'#ff0000'});
+  var c2=FM.makeLayer('shape',{name:'c2',shape:'rect',x:10,y:10,shapeW:20,shapeH:20,fill:'#00ff00'});
+  var Z =FM.makeLayer('shape',{name:'Z', shape:'rect',x:60,y:40,shapeW:60,shapeH:40,fill:'#0000ff'});
+  [c1,c2,Z].forEach(function(l){l.start=0;l.duration=10;FM.scene.layers.push(l);});
+  /* Shapes are ANCHORED CENTRE (anchorX/anchorY 0.5), so c1/Z occupy x 30..90, y 20..60 — the first
+     version of this probe sampled (90,60), the exact corner, read the background at every stage and
+     reported a clean. Sample the CENTRE, and refuse to draw any conclusion from a background pixel. */
+  var PX=60, PY=40;      // dead centre of the c1/Z overlap
+  L.push('stack: '+names(FM));
+  var raw=pixel(FM,doc,W,H,PX,PY);
+  L.push('overlap pixel with no groups at all: '+raw);
+  if(raw==='0,0,0'){ out.textContent=L.join('\n')+'\n\nCONTROL FAILED: nothing is drawn at the sample point, so every reading below would be the background. The probe cannot judge anything.'; document.title='DONE'; return; }
+  // 1) group c1 + c2
+  FM.scene.selectedIds=[c1.id,c2.id]; FM.scene.selectedId=c1.id;
+  FM.groupSelection();
+  var G1=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+  if(!G1){ out.textContent='SETUP FAILED: no first group'; document.title='DONE'; return; }
+  var before=pixel(FM,doc,W,H,PX,PY);
+  L.push('');
+  L.push('after grouping c1+c2:  '+names(FM));
+  L.push('overlap pixel:         '+before);
+  // CONTROL: the first grouping must not have changed the picture either
+  L.push('');
+  // 2) now group THAT group together with Z
+  FM.scene.selectedIds=[G1.id,Z.id]; FM.scene.selectedId=G1.id;
+  FM.groupSelection();
+  var after=pixel(FM,doc,W,H,PX,PY);
+  L.push('after grouping G1+Z:   '+names(FM));
+  L.push('overlap pixel:         '+after);
+  L.push('');
+  L.push(before!==after
+    ? '❌ grouping a group with another layer RE-STACKED the picture: the overlap went '+before+' -> '+after
+    : '✅ the stack is unchanged by grouping a group');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>
