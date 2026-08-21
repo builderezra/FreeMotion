@@ -24691,6 +24691,51 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the speed ruler moves in 5% steps, not 10x jumps (queue 455)', { item: '455' }, function () {
+    /* Ezra: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way the fuck
+     * down"* — and "10x at a time" turned out to be literally exact.
+     * The speed row is 1%..100000% (queue 184 widened it so 1000x was reachable, and there is a test
+     * that keeps that reach). `tickQuantum` coarsens any ruler so it never exceeds ~100 notches, which
+     * is right for a bounded parameter: across that span it returns **1000**, i.e. one notch = 1000% =
+     * ten times speed. The comment on SPD_MIN/SPD_MAX promised the opposite — "the ruler still moves 5%
+     * per step" — and that promise was true when written and broken later by a range change two hundred
+     * lines away. Nothing failed; the ruler simply became unusable for ordinary speeds. */
+    if (typeof FM._tickQuantum !== 'function') throw new Error('FM._tickQuantum is not exposed');
+
+    // The bug, as arithmetic: left to itself this row quantises to ten times speed per notch.
+    const auto = FM._tickQuantum(1, 100000, 5, '');
+    if (auto < 500) throw new Error('tickQuantum no longer coarsens the speed span (got ' + auto + ') — if the RANGE shrank, the 1000x reach may have been lost; check that before relaxing this test');
+
+    /* CONTROLS — ordinary rows must be untouched. If these move, the override has leaked out of the
+     * speed row and every scrubber in the app has changed feel. */
+    if (FM._tickQuantum(0, 100, 1, '') !== 1) throw new Error('a 0-100 row no longer steps by 1');
+    if (FM._tickQuantum(-360, 360, 1, '°') !== 15) throw new Error('an angle row no longer steps by 15 degrees');
+
+    /* AND THE RENDERED RULER MUST ACTUALLY USE IT — end to end, not "the row asks" and "the helper
+     * works" as two separate facts. A first version asserted exactly those two and a mutation that made
+     * tickStrip IGNORE the row's request sailed straight through: the call passed 5, tickQuantum still
+     * returned 1000 on its own, and nothing connected them. The strip stamps the notch it really used,
+     * so this reads the finished control. */
+    const L = FM.makeLayer('shape', { name: 'spdprobe', shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 60, fill: '#fff', start: 0, duration: 5 });
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('speed');
+      const rows = [].slice.call(document.querySelectorAll('.prop-row--scrub'));
+      const spd = rows.filter(r => /speed/i.test(((r.querySelector('label') || {}).textContent || '')))[0];
+      if (!spd) throw new Error('the Speed % row did not render, so this cannot check the ruler it builds');
+      const strip = spd.querySelector('.fx-scrub');
+      if (!strip || !strip.dataset.q) throw new Error('the speed ruler does not report the notch it used');
+      const used = +strip.dataset.q;
+      if (used !== 5) throw new Error('the speed ruler is stepping by ' + used + '% (' + (used / 100) + 'x per notch) — he reported this as "it goes up 10x at a time"');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+    }
+  });
+
   test('rotation and the two tilts keyframe independently (queue 419)', { item: '419' }, async function () {
     /* Ezra, with all three rotate readouts circled and the rail diamond circled beside them:
      * *"The key frames for these three things are all interacting with each other and causing issues,

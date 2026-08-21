@@ -123,7 +123,7 @@ window.FM = window.FM || {};
    * properties are read by the compositor as RAW numbers (layer.shapeW is read at four places in
    * compositor.js and never through evalProp). A diamond here would create keyframes the renderer
    * ignores — a control that appears to work and does nothing, which is worse than not offering it. */
-  function rangeRow(label, get, set, min, max, step, onCommit) {
+  function rangeRow(label, get, set, min, max, step, onCommit, qForce) {
     step = step || 1;
     const prec = step >= 1 ? 0 : (step >= 0.1 ? 1 : 2);
     const wrap = el('div', 'prop-wrap');
@@ -131,7 +131,7 @@ window.FM = window.FM || {};
     row.appendChild(el('label', null, label));
     const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.value = (+get()).toFixed(prec);
     const strip = tickStrip({
-      min: min, max: max, step: step, unit: '', dflt: null, read: () => +get(),
+      min: min, max: max, step: step, unit: '', dflt: null, q: qForce || 0, read: () => +get(),
       apply: (v) => { set(v); val.value = v.toFixed(prec); FM.requestRender(); },
       // onCommit fires on RELEASE — it is safe to rebuild the inspector there, and doing it per-frame
       // would tear the control out from under the finger still dragging it.
@@ -532,6 +532,14 @@ window.FM = window.FM || {};
     return (isFinite(s) && s > 0) ? s : q;     // fine: the parameter's REAL step, which is the floor
   }
   FM._scrubGrid = scrubGrid;
+  // Exposed so the suite can assert the SPEED row's notch directly (queue 455). Driving the strip with
+  // synthetic pointer events is unreliable here for the reasons scrubGrid's own note gives — the
+  // momentum glide and the touch direction lock both interfere — and the defect was arithmetic: a
+  // widened range silently coarsened the quantum from 5% to 1000%.
+  FM._tickQuantum = tickQuantum;
+  // The Speed % row lives in buildCategory, not fillPanel. Its SOURCE is what proves the row asks for
+  // its own notch — the arithmetic seam above only proves what tickQuantum would return if it did not.
+  FM._buildCategorySrc = function () { return String(buildCategory); };
 
   function fineRate(clientY, strip) {
     const r = strip.getBoundingClientRect();
@@ -674,7 +682,17 @@ window.FM = window.FM || {};
   // re-scrolls the ruler (call after a typed value).
   function tickStrip(o) {
     const strip = el('div', 'fx-scrub');
-    const q = tickQuantum(o.min, o.max, o.step, o.unit);
+    /* A ROW MAY FORCE ITS OWN NOTCH (queue 455). tickQuantum coarsens so a ruler never exceeds ~100
+       notches, which is right for a bounded parameter and catastrophic for the speed row: widening
+       speed to 0.01x-1000x (queue 184) took span/step from 60 to 20,000, so the quantum jumped from
+       5% to **1000% — ten times speed per notch**, which is precisely what Ezra reported: *"The speed
+       slider goes WAY too fast, it goes up 10x at a time, slow this way the fuck down"*.
+       The comment on SPD_MIN/SPD_MAX already promised the opposite — "the ruler still moves 5% per
+       step so ordinary speeds feel exactly as they did, and 1000x is reached by typing in the box".
+       That promise was true when it was written and was broken by an interaction two hundred lines
+       away. `q` lets the row keep it. */
+    const q = (o.q > 0) ? o.q : tickQuantum(o.min, o.max, o.step, o.unit);
+    strip.dataset.q = String(q);   // the notch this row actually uses — read by the suite (queue 455)
     const ruler = el('div', 'fx-scrub-ticks');
     ruler.style.width = ((o.max - o.min) / q) * TICK + 'px';
     const marks = [];
@@ -4478,7 +4496,7 @@ window.FM = window.FM || {};
         const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, FM.evalProp(layer.speed, FM.time) || 1)); } catch (e) {} }
         FM.seekVideosToTime();
         FM.timeline.rebuild();
-      }, SPD_MIN * 100, SPD_MAX * 100, 5, () => FM.inspector.refresh()));
+      }, SPD_MIN * 100, SPD_MAX * 100, 5, () => FM.inspector.refresh(), 5));
       if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
       spRow.appendChild(spCenter);
       body.appendChild(spRow);

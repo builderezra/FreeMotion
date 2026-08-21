@@ -13503,8 +13503,7 @@ wait for them to report back."*
       Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
-- [ ] **455 — The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **455 — ✅ **DONE v11.35.** The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
       His words, verbatim: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way
       the fuck down"*.
       So a single drag step is changing speed by something like 10x, which makes every value between
@@ -13517,6 +13516,28 @@ wait for them to report back."*
       asked for while making 1.5x reachable.
       Check the step granularity too — "goes up 10x at a time" may be a step size as much as a curve.
 
+      ✅ **DONE v11.35 — and "10x at a time" was literally, arithmetically exact.**
+      `tickQuantum(1, 100000, step 5)` returns **1000**. One notch of the ruler = 1000% = **ten times
+      speed**. He was describing the number precisely.
+      **The cause is an interaction, not a mistake, and that is what makes it worth recording.** Every
+      ruler coarsens its notch so it never runs past ~100 of them — correct for a bounded parameter.
+      When queue 184 widened speed to 0.01x-1000x *at his request*, span/step went from 60 to 20,000 and
+      the quantum jumped 5% → 1000%. **The comment on SPD_MIN/SPD_MAX still promised the opposite** —
+      *"the ruler still moves 5% per step so ordinary speeds feel exactly as they did, and 1000x is
+      reached by typing in the box"*. That promise was TRUE when written and was broken by a change two
+      hundred lines away, silently, with nothing to fail.
+      **The fix keeps both halves of that promise:** a row may now force its own notch (`q`), and the
+      speed row asks for 5%. The full 0.01x–1000x range is untouched, so the test that guards the 1000x
+      reach still passes, and the box still takes typed extremes.
+      **Nothing else moved:** opacity still steps by 1, angles by 15°, a 0–2000 width by 20 — asserted,
+      not assumed, because a change to a shared helper is exactly how every scrubber in the app changes
+      feel at once.
+      ⚠️ **THE TEST TOOK THREE GOES AND THE SAME LESSON LANDED A THIRD TIME TODAY.** Version one proved
+      the arithmetic (`tickQuantum` returns 1000 unaided). Version two added "and the row asks for 5".
+      **A mutation making `tickStrip` IGNORE the row's request survived both** — the call passed 5, the
+      helper worked, and nothing tested the wire between them. The strip now stamps the notch it really
+      used and the test reads the FINISHED control, which catches both directions.
+      **Two facts either side of a seam are not a test of the seam.**
 - [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
       **STATUS: 🟢 READY — nothing is stopping this**
       better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
