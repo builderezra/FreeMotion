@@ -33,13 +33,20 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE — keep this current
 
-**v11.26, suite 794 green. List: 36 open, 11 actionable.**
+**v11.26, suite 794 green. List: 38 open, 12 actionable.**
 
 **In flight**
 - **Per-effect-slider keyframes** (unnumbered, oldest actionable). Measured: the six rebuild-style audio
   params render at their START value; flipping `keyframable` would make the LAST keyframe win with
   diamonds that do nothing. Next step is the crossfaded shaper bank for Distortion, proven by tail RMS
   reaching ~0.98 while head stays ~0.35, then Bit Crush and Lo-Fi. Full design is in the entry.
+
+**Newest in (21 Aug, from his phone — they WAIT their turn, oldest-first)**
+- **#418 restated** — undo/redo icons: the ring-plus-triangle-head shape from his image, thinner stroke.
+- **#455** — the speed slider jumps ~10x a step. Do not shrink the range (1000x is deliberate and
+  tested); the range needs a log mapping so 1.5x is reachable.
+- **#456** — the two rainbow Create buttons must differ in colour, both still animated, and the
+  in-project one needs a better animation than a slow spin. Show him options with one marked recommended.
 
 **Waiting on Ezra — note, do not re-ask**
 - **#387** — what was he doing in the 9.5s recording, playing or scrubbing? Measured: 96.2% of frames

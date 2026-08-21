@@ -12212,6 +12212,15 @@ wait for them to report back."*
       🔗 v10.22 (#410) has just re-centred these two glyphs; whatever replaces them must stay centred on
       y=12 in the 24×24 box or the `transport-vcentre` test goes red — which is the point of that test.
 
+      🔁 **RESTATED WITH A NEW IMAGE, 21 Aug — his words, verbatim:** *"I want the undo redo buttons to
+      look more like this but with skinnier lines"*.
+      **The image he sent:** two circular arrows on a near-black background, facing each other — each is
+      a roughly 300° ring with a solid triangular arrowhead at the end of the sweep, drawn in a VERY
+      thick white stroke (the ring gap and the head are about equally heavy). Left one sweeps
+      anticlockwise (undo), right one clockwise (redo).
+      **So the shape is right and the WEIGHT is wrong** — he wants that exact ring-plus-triangle-head
+      form, drawn with a THINNER stroke than the reference. This is his second time asking about these
+      buttons, so treat the icon geometry as the deliverable, not the button chrome.
 - [ ] **419 — Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
       to be independent.** (19 Aug, phone screenshot at v10.22 with all three readouts circled, plus the
       ◆ keyframe button on the left rail circled.) His words, verbatim:
@@ -13128,6 +13137,36 @@ wait for them to report back."*
       Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
+- [ ] **455 — The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
+      His words, verbatim: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way
+      the fuck down"*.
+      So a single drag step is changing speed by something like 10x, which makes every value between
+      unreachable — you cannot land on 1.5x or 2x, which are the ones anyone actually wants.
+      ⚠️ **Related and worth reading first: the speed range was deliberately widened to reach 1000x** —
+      there is a test called "the speed range reaches the 1000x he asked for". So the fix is NOT to
+      shrink the range. It is that a slider spanning 0.1x to 1000x cannot be linear, and probably is:
+      the useful part of the range (roughly 0.25x-4x) needs most of the travel, with the extremes
+      compressed into the ends. A logarithmic mapping is the normal answer, and it keeps the 1000x he
+      asked for while making 1.5x reachable.
+      Check the step granularity too — "goes up 10x at a time" may be a step size as much as a curve.
+
+- [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
+      better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
+      create button in the menu and in the project that are both rainbow to be different colours not the
+      same (both moving)  and the one in the project that moves currently just spins In a slow circle
+      which is lazy, make it something more visually creative and cool"*.
+      **Three clauses — tick separately:**
+      1. [ ] The Create button on the home/menu screen and the one inside a project must use DIFFERENT
+             colour sets, not the same rainbow.
+      2. [ ] BOTH must still be animated — "(both moving)" is explicit, so this is not "make one static".
+      3. [ ] The in-project one currently just rotates its gradient slowly. He calls that lazy and wants
+             something genuinely more interesting. **This is a taste call and he has asked for
+             creativity, so it is worth showing him more than one option rather than picking silently** —
+             his standing instruction of the same day: *"I just want options. Yu can just say recommended
+             next to the best option"*.
+      Both buttons appear in his screenshots: the home screen's floating ＋ (a soft rainbow disc, bottom
+      centre) and the in-project one in the top-right of the editor toolbar.
+
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.
