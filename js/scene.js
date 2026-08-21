@@ -572,12 +572,14 @@ window.FM = window.FM || {};
    * keyframe. So the child kept following the HEAD half, which had stopped moving: measured, a child
    * froze at the cut and drifted 80px out of place by the end (tests/_splitparent.html), while the
    * tail half carried on across the screen in plain sight.
-   * The halves therefore carry a shared `splitOf` lineage, and a parent lookup picks the half that
-   * actually covers the time being asked about.
+   * The halves therefore carry a shared `splitOf` lineage, and a lookup picks the half that actually
+   * covers the time being asked about. Named for CLIPS rather than parents because the same question is
+   * asked by anything that references a layer by id across time — an Audio Drive behavior reading from a
+   * music clip hit the identical fault and is the second caller.
    * COST: `!p.splitOf` is the first thing tested, so a project that has never split a parent pays one
    * property read per lookup and never scans. That matters — this is called per parented layer per
    * frame, and slow playback is an open complaint. */
-  FM.parentAt = function (scene, pid, t) {
+  FM.clipAt = function (scene, pid, t) {
     const p = FM.layerById(scene, pid);
     if (!p || !p.splitOf) return p;
     const covers = l => t >= (l.start || 0) - 1e-9 && t <= (l.start || 0) + (l.duration || 0) + 1e-9;

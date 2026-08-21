@@ -3530,6 +3530,66 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: an Audio Drive behavior keeps driving across a cut in its source', { item: 'split-audiodrive' }, async function () {
+    /* BUG HUNT (21 Aug), fifth verified lead from BUG-HUNT §34 and the only one TWO independent lenses
+       reported. An Audio Drive behavior stores the source clip's id, and an envelope is gated to its own
+       clip's span — so once the music was split, the behavior kept reading from the HEAD half and
+       returned exactly 0 for everything past the cut. Whatever it was driving sat dead at its base value
+       for the whole second half, silently, and autosaved that way.
+       Measured end to end against a REAL decoded fixture, not argued from the code
+       (tests/_splitaudiodrive.html): 19/19 samples driven before the cut, 9/9 dead after.
+       The CONTROL is the first assertion: if the behavior was not driving BEFORE the split, "it is not
+       driving after" means nothing. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const ab = await fetch('tests/_fixtures/vad/music-only.wav').then(r => r.arrayBuffer());
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = await ac.decodeAudioData(ab);
+      const OPTS = { band: 'overall', gain: 1, attack: 0.005 + 0.4 * 0.055, release: 0.03 + 0.4 * 0.37 };
+
+      FM.scene.layers.length = 0;
+      const M = FM.makeLayer('video', { name: 'music' });
+      M.start = 0; M.duration = Math.min(10, buf.duration); M.trimStart = 0;
+      FM.scene.layers.push(M);
+      FM.media.set(M.id, { kind: 'video', audioBuffer: buf, duration: buf.duration, width: 2, height: 2 });
+
+      const S = FM.makeLayer('shape', { name: 'driven', shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
+      S.start = 0; S.duration = M.duration;
+      S.behaviors = [{ type: 'audio', enabled: true, prop: 'x', params: { sourceId: M.id, band: 'overall', gain: 1, amount: 200, smooth: 0.4 } }];
+      FM.scene.layers.push(S);
+
+      await FM.audioEnvelopePrewarm(M, OPTS);
+      const times = []; for (let t = 0.5; t < M.duration - 0.2; t += 0.5) times.push(+t.toFixed(2));
+      const drive = () => times.map(t => +(FM.behaviorValue(S, 'x', 50, t) - 50).toFixed(3));
+      const before = drive();
+      const nz = before.filter(v => Math.abs(v) > 0.5).length;
+      if (nz < times.length * 0.5) throw new Error('CONTROL FAILED: the behavior was barely driving before the split (' + nz + '/' + times.length + ' non-zero) — nothing below can be judged');
+
+      const cut = M.duration / 2;
+      FM.time = cut;
+      await FM.splitLayer(M.id);
+      const halves = FM.scene.layers.filter(l => l.type === 'video');
+      if (halves.length !== 2) throw new Error('the music did not split into two halves (' + halves.length + ')');
+      /* The app gives the tail half its own media inside splitLayer (reloadMediaTo, which it awaits);
+         this fixture's record is synthetic with no File behind it, so there is nothing for that clone to
+         copy. Mirroring it is standing in for the app's own plumbing — what is under test here is the
+         behavior resolving ACROSS the cut, which is the claim. */
+      halves.forEach(l => { if (!FM.media.get(l.id)) FM.media.set(l.id, { kind: 'video', audioBuffer: buf, duration: buf.duration, width: 2, height: 2 }); });
+      for (const h of halves) await FM.audioEnvelopePrewarm(h, OPTS);
+
+      const after = drive();
+      const dead = times.filter((t, i) => t > cut && Math.abs(after[i]) < 0.001 && Math.abs(before[i]) > 0.5).length;
+      const past = times.filter(t => t > cut).length;
+      if (dead) throw new Error('the behavior went dead after the cut: ' + dead + '/' + past + ' samples past the split read exactly 0');
+      let worst = 0, worstT = null;
+      times.forEach((t, i) => { const d = Math.abs(after[i] - before[i]) / Math.max(Math.abs(before[i]), 1); if (d > worst) { worst = d; worstT = t; } });
+      if (worst > 0.25) throw new Error('the split changed how hard the behavior drives by ' + (worst * 100).toFixed(0) + '% at t=' + worstT);
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('duplicate: a copied group is stacked the same way inside as the original', { item: 'dup-group-order' }, async function () {
     /* BUG HUNT (21 Aug). This one was a LEAD THAT DIED — it was claimed that duplicating a group whose
        subtree is interleaved in the layer array hands back a copy stacked differently inside. Measured

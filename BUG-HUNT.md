@@ -1935,3 +1935,44 @@ reversing the copied subtree — the test goes red with `red -> blue`.
 
 The interleaved case is no longer reachable from grouping (v11.08 fixed the thing that created it), but older
 saved documents can still carry the shape, so it stays.
+
+## 40. Splitting a music clip killed every Audio Drive behavior past the cut (21 Aug, v11.10) — REAL BUG, fifth verified §34 lead
+
+The one lead **two independent lenses reported**, which was the only cross-check any of the twenty got. It
+measured exactly as described.
+
+An Audio Drive behavior stores the source clip's id (`params.sourceId`) and `FM.audioEnvelopeSampleAt` gates
+an envelope to its own clip's span. Split the music and the behavior still pointed at the head half, so
+everything past the cut sampled 0 and the driven property sat at its base value — silently, and it autosaved
+that way.
+
+**Measured end to end against a real decoded fixture** (`tests/_splitaudiodrive.html`, `music-only.wav`):
+
+| | samples driven | samples dead |
+|---|---|---|
+| before the split | **19 / 19** | 0 |
+| after the split, past the cut | 0 | **9 / 9** |
+
+**Fix:** `audioDelta` resolves the source through `FM.clipAt(scene, id, t)` — the same lineage seam built for
+the parent chain in §35. It was renamed from `parentAt` here, because it turned out not to be a parent
+question at all: it is the question **anything that references a layer by id across time** has to ask, and
+this was the second caller. Free for anything never split (one property read, no scan).
+
+### The probe was wrong twice before it was right, in both directions
+
+1. After the fix it still read **dead**. Cause: `js/behaviors.js` was edited without bumping its `?v=`
+   cache-buster, so the page kept serving the old file.
+2. After bumping, still dead. Diagnostics — added rather than guessed — showed `FM.clipAt` returning the
+   correct tail half, but that half had **`media=NONE`**. The fixture's media record is synthetic with no
+   `File` behind it, so `reloadMediaTo` had nothing to clone. A limitation of the probe, not the app.
+
+Both would have been read as "the fix does not work" without printing what the code was actually seeing.
+The diagnostics stayed in.
+
+### What is NOT claimed
+
+The second half of the lead was that each half's envelope is peak-normalised over its own span, so the drive
+DEPTH could change across a cut. Measured here at **0.3%** worst case across all samples, i.e. not visible —
+but this fixture's loud moments fall in both halves. A clip whose peak sits entirely in one half could differ
+by more. That is inherent to per-clip normalisation, is not fixed, and the test's 25% tolerance would catch
+it if it ever became severe.

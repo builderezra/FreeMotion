@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>split x audio drive (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out, and the ONLY one two independent lenses reported: an Audio Drive
+   behavior stores the source clip's id, and FM.audioEnvelopeSampleAt returns 0 outside that clip's own
+   span. Split the music and the behavior still points at the HEAD half — so past the cut it reads 0 and
+   whatever it was driving sits dead at its base value.
+   End-to-end with a REAL decoded audio fixture, not a composed argument. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.splitLayer&&w.FM.behaviorValue&&w.FM.audioEnvelopePrewarm)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+async function run(FM){
+  var W=f.contentWindow, L=[];
+  var ab=await W.fetch('tests/_fixtures/vad/music-only.wav').then(function(r){return r.arrayBuffer();});
+  var ac=new (W.AudioContext||W.webkitAudioContext)();
+  var buf=await ac.decodeAudioData(ab);
+  L.push('fixture decoded: '+buf.duration.toFixed(2)+'s');
+
+  FM.scene.layers.length=0;
+  var M=FM.makeLayer('video',{name:'music'});
+  M.start=0; M.duration=Math.min(10, buf.duration); M.trimStart=0;
+  FM.scene.layers.push(M);
+  FM.media.set(M.id,{kind:'video', audioBuffer:buf, duration:buf.duration, width:2, height:2});
+
+  var S=FM.makeLayer('shape',{name:'driven',shape:'rect',x:50,y:50,shapeW:20,shapeH:20,fill:'#fff'});
+  S.start=0; S.duration=M.duration;
+  S.behaviors=[{type:'audio',enabled:true,prop:'x',params:{sourceId:M.id,band:'overall',gain:1,amount:200,smooth:0.4}}];
+  FM.scene.layers.push(S);
+
+  await FM.audioEnvelopePrewarm(M,{band:'overall',gain:1,attack:0.005+0.4*0.055,release:0.03+0.4*0.37});
+  var times=[]; for(var t=0.5;t<M.duration-0.2;t+=0.5) times.push(+t.toFixed(2));
+  function drive(){ return times.map(function(t){ return +(FM.behaviorValue(S,'x',50,t)-50).toFixed(3); }); }
+  var before=drive();
+  var nz=before.filter(function(v){return Math.abs(v)>0.5;}).length;
+  L.push('drive before split: '+before.join(' '));
+  if(nz<times.length*0.5){ out.textContent=L.join('\n')+'\n\nCONTROL FAILED: the behavior barely moved before the split ('+nz+'/'+times.length+' samples non-zero) — nothing below can be judged.'; document.title='DONE'; return; }
+  L.push('control: '+nz+'/'+times.length+' samples driven before the split  ✔');
+
+  var cut=M.duration/2;
+  FM.time=cut;
+  await FM.splitLayer(M.id);
+  var halves=FM.scene.layers.filter(function(l){return l.type==='video';});
+  L.push('');
+  L.push('after split: '+halves.length+' music halves, spans '+halves.map(function(l){return l.start.toFixed(1)+'..'+(l.start+l.duration).toFixed(1);}).join(', '));
+  // DIAGNOSTICS: a dead reading can mean the fix does not work, or that this probe simply failed to give
+  // the tail half any audio. Distinguish the two before concluding anything.
+  halves.forEach(function(l){
+    var m=FM.media.get(l.id);
+    L.push('   half '+l.id.slice(-6)+' splitOf='+(l.splitOf?l.splitOf.slice(-6):'none')+'  media='+(m?('yes, audioBuffer='+(m.audioBuffer?'yes':'NO')):'NONE'));
+  });
+  /* The real app hands the tail half its own media inside splitLayer (reloadMediaTo, which it awaits).
+     This probe's source record is a synthetic one with no File behind it, so there is nothing for that
+     clone to copy — which is a limitation of the PROBE, not of the app. Mirror the record onto every
+     half so what is being measured is the behavior's resolution across the cut, which is the claim. */
+  halves.forEach(function(l){ if(!FM.media.get(l.id)) FM.media.set(l.id,{kind:'video',audioBuffer:buf,duration:buf.duration,width:2,height:2}); });
+  var probe=FM.clipAt?FM.clipAt(FM.scene, halves[0].id, cut+0.5):null;
+  L.push('   FM.clipAt(head, t past the cut) -> '+(probe?probe.id.slice(-6)+' spanning '+probe.start.toFixed(1)+'..'+(probe.start+probe.duration).toFixed(1):'null'));
+  for(var i=0;i<halves.length;i++) await FM.audioEnvelopePrewarm(halves[i],{band:'overall',gain:1,attack:0.005+0.4*0.055,release:0.03+0.4*0.37});
+  var after=drive();
+  L.push('drive after  split: '+after.join(' '));
+  L.push('');
+  var deadAfterCut=0, totalAfterCut=0;
+  times.forEach(function(t,i){ if(t>cut){ totalAfterCut++; if(Math.abs(after[i])<0.001 && Math.abs(before[i])>0.5) deadAfterCut++; } });
+  var worst=0, worstT=null;
+  times.forEach(function(t,i){ var base=Math.max(Math.abs(before[i]),1); var d=Math.abs(after[i]-before[i])/base; if(d>worst){worst=d;worstT=t;} });
+  L.push('worst relative change across ALL samples: '+(worst*100).toFixed(1)+'% at t='+worstT);
+  L.push(deadAfterCut>0
+    ? '❌ the behavior went DEAD after the cut: '+deadAfterCut+'/'+totalAfterCut+' samples past the split now read exactly 0'
+    : '✅ the behavior keeps driving across the cut');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

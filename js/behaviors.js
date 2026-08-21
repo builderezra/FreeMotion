@@ -139,7 +139,12 @@ window.FM = window.FM || {};
     const scene = FM.scene; if (!scene) return 0;
     const srcId = params.sourceId;
     if (typeof srcId !== 'string' || !srcId) return 0;
-    const src = FM.layerById(scene, srcId);
+    /* THE HALF THAT COVERS t, not merely the id that was stored (bug hunt, 21 Aug). An envelope is
+     * gated to its own clip's span, so once the music was SPLIT this kept reading from the head half
+     * and returned exactly 0 for everything past the cut — measured end to end against a real decoded
+     * fixture: 19/19 samples driven before, 9/9 samples dead after (tests/_splitaudiodrive.html).
+     * Same seam the parent chain uses, and free for anything never split. */
+    const src = FM.clipAt ? FM.clipAt(scene, srcId, t) : FM.layerById(scene, srcId);
     if (!src) return 0;
     const band = BANDS[params.band] ? params.band : 'overall';
     const gain = num(params.gain, 1);
