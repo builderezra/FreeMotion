@@ -1259,12 +1259,31 @@ window.FM = window.FM || {};
    * It MULTIPLIES the user's own fades rather than replacing them, so a clip that already fades out
    * over a second is unaffected: it is at zero long before this envelope starts. */
   const DECLICK_S = 0.045;
+  /* …EXCEPT AT A SEAM (bug hunt, 21 Aug). The two halves of a split are the same continuous audio butted
+   * together, so there is no discontinuity to protect against — but each half applied its own 45ms ramp
+   * to its own new edge, and the two met as a V-shaped duck to COMPLETE SILENCE about 90ms wide, right at
+   * the cut. Measured (tests/_splitdeclick.html): a flat 1.00 across the same window before the split,
+   * and 1.00 → 0.00 → 1.00 after it. Preview only — the export does not build the envelope this way —
+   * which is worse rather than better, because it makes the render sound different from the edit.
+   * Only an edge that actually TOUCHES a sibling half is exempt, so dragging the halves apart brings the
+   * de-click straight back. Gated on `splitOf`: a clip that was never split never scans. */
+  function seamAt(layer, edgeT) {
+    if (!layer.splitOf || !FM.scene) return false;
+    const ls = FM.scene.layers;
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (l === layer || l.splitOf !== layer.splitOf) continue;
+      if (Math.abs((l.start || 0) - edgeT) < 1e-3) return true;                        // a sibling starts here
+      if (Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3) return true;    // …or ends here
+    }
+    return false;
+  }
   function declickGain(layer, t, m, now) {
     let k = 1;
     const into = t - layer.start;
     const left = (layer.start + layer.duration) - t;
-    if (into < DECLICK_S) k = Math.min(k, Math.max(0, into) / DECLICK_S);
-    if (left < DECLICK_S) k = Math.min(k, Math.max(0, left) / DECLICK_S);
+    if (into < DECLICK_S && !seamAt(layer, layer.start)) k = Math.min(k, Math.max(0, into) / DECLICK_S);
+    if (left < DECLICK_S && !seamAt(layer, layer.start + layer.duration)) k = Math.min(k, Math.max(0, left) / DECLICK_S);
     /* …and the same courtesy when playback STARTS mid-clip, which the clip-relative terms above cannot
      * see. Scrubbing into the middle of a song and pressing play used to open the element at full
      * volume on an arbitrary sample — the same click, in the one place you notice it most. */

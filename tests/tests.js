@@ -3530,6 +3530,62 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: the cut does not duck the sound to silence in preview', { item: 'split-declick' }, async function () {
+    /* BUG HUNT (21 Aug), eleventh verified lead from BUG-HUNT §34 and the last of the split family.
+       The 45ms anti-click ramp is measured from each clip's OWN edges. The two halves of a split are the
+       same continuous audio butted together, so each applied its ramp to its own new edge and the two met
+       as a V-shaped duck to COMPLETE SILENCE about 90ms wide, right at the cut. Preview only — the export
+       does not build the envelope this way — which is worse rather than better, because the render then
+       sounds different from the edit.
+       Measured (tests/_splitdeclick.html): a flat 1.00 across the window before, 1.00 -> 0.00 -> 1.00
+       after. The pre-split flatness IS the control and is asserted first.
+       And the exemption must be NARROW: pulling the halves apart has to bring the de-click back, or this
+       "fix" would have silently removed the click protection from every clip that had ever been split. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('video', { name: 'song' });
+      A.start = 0; A.duration = 10; A.trimStart = 0;
+      FM.scene.layers.push(A);
+      FM.media.set(A.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+
+      const gainAt = t => {
+        let g = null;
+        FM.scene.layers.forEach(l => {
+          if (t >= l.start - 1e-9 && t <= l.start + l.duration + 1e-9) {
+            const v = FM._declickGain(l, t, null, 0);
+            g = (g === null) ? v : Math.max(g, v);
+          }
+        });
+        return g === null ? 0 : g;
+      };
+      const times = []; for (let t = 4.9; t <= 5.101; t += 0.01) times.push(+t.toFixed(3));
+
+      const before = times.map(gainAt);
+      if (Math.min(...before) < 0.99) throw new Error('CONTROL FAILED: the gain already dips mid-clip before any split (' + Math.min(...before).toFixed(2) + ')');
+
+      FM.time = 5;
+      await FM.splitLayer(A.id);
+      if (FM.scene.layers.length !== 2) throw new Error('the split did not produce two halves');
+      const after = times.map(gainAt);
+      const lo = Math.min(...after);
+      if (lo < 0.99) throw new Error('the cut ducks the sound to ' + lo.toFixed(2) + ' of full across ~' +
+        (after.filter(v => v < 0.99).length * 10) + 'ms');
+
+      /* Now pull the halves apart. These are two separate clips with a gap between them, so the anti-click
+         ramp MUST come back — an exemption that survived this would have quietly disabled click protection
+         on every clip that had ever been split. */
+      const tail = FM.scene.layers.filter(l => l.start > 0)[0];
+      if (!tail) throw new Error('could not find the tail half');
+      tail.start += 2;
+      const apart = FM._declickGain(tail, tail.start + 0.005, null, 0);
+      if (!(apart < 0.5)) throw new Error('after moving the halves apart the anti-click ramp did not come back (gain ' + apart.toFixed(2) + ' 5ms into a clip that now starts on its own)');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('maxDurForSource: no speed value can put a NaN duration into the scene', { item: 'maxdur-safe' }, function () {
     /* BUG HUNT (21 Aug), tenth verified lead from BUG-HUNT §34, and the THIRD function in this family to
        have the same hole. FM.speedAt and FM.layerSourceAdvance were both fixed earlier for dividing or

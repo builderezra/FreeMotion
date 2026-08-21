@@ -1757,7 +1757,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **Splitting the audio source of an Audio-drive behavior kills the behavior from the cut onward**    
       ➜ **REAL (same bug as above) — fixed v11.10, see §40**
       `audio-react.js:296` — Import a music track and a logo. On the logo add a behavior -> Audio drive, pick the music layer as 'Audio from' (the picker at js/inspector.js:3959 / js/behaviors.js:66), set it to pump scale. Play: the logo pumps for the whole song. Now select the music clip, park the playhead halfway and Split at
-- [ ] **Split inserts a 90ms dip to silence at the cut in preview — the 45ms de-click envelope is measured from each clip's own edges**  
+- [x] **Split inserts a 90ms dip to silence at the cut in preview — the 45ms de-click envelope is measured from each clip's own edges**    
+      ➜ **REAL — fixed v11.15, see §45**
       `app.js:1266` — Drop a continuous music track (or a video with continuous room tone) on the timeline, play it and hear it run smoothly. Park the playhead mid-clip and Split at playhead, then play across the cut. You hear a short dip/blip — a ~90ms V-shaped duck all the way to silence straddling the cut — that was n
 - [x] **Head-trimming a speed-RAMPED clip moves the picture: trimStart is advanced by the instantaneous rate at the new head instead of the integral of the ramp**    
       ➜ **REAL — fixed v11.13, see §43**
@@ -2113,3 +2114,35 @@ a constant would also satisfy.
 That is three functions with one root cause. **The pattern is not "a speed bug"** — it is that `x || 1` reads
 as a null-guard and is not one, for any property that can legitimately be an object. Worth grepping for
 whenever a new animatable property is added.
+
+## 45. A cut ducked the sound to silence in preview (21 Aug, v11.15) — REAL, eleventh verified §34 lead, and the last of the split family
+
+The 45ms anti-click ramp (`declickGain`) is measured from each clip's own edges. The two halves of a split
+are the same continuous audio butted together, so each applied its ramp to its own new edge and the two met
+as a **V-shaped duck to complete silence, ~90ms wide, right at the cut**.
+
+**Measured** (`tests/_splitdeclick.html`), sampling every 10ms across t=4.90…5.10:
+
+| | gain across the window |
+|---|---|
+| before the split | `1.00` throughout (the control) |
+| after the split | `1.00 … 0.89 0.67 0.44 0.22 **0.00** 0.22 0.44 0.67 0.89 … 1.00` |
+
+Preview only — the export does not build the envelope this way. That makes it worse, not better: the render
+sounds different from the edit, which is the hardest kind of fault to trust your own ears about.
+
+**Fix:** an edge that actually TOUCHES a sibling half of the same split lineage is exempt, because there is
+no discontinuity there to protect against. Gated on `splitOf`, so a clip never split never scans.
+
+**The exemption had to be narrow, and the test enforces it.** After checking the seam is flat, the test pulls
+the halves apart and demands the ramp COMES BACK. Without that, a fix that exempted "any clip that has ever
+been split" would pass — and would have silently removed click protection from every clip he had ever cut.
+Mutation-checked in both directions: restoring the ramp at the seam fails the first assertion; making the
+exemption unconditional fails the second.
+
+---
+
+**The split family is now closed.** Eleven measured defects, §31–§45, from one question asked repeatedly:
+*what else is anchored to a clip's edges, or references a clip by id across time?* Fades, text animation,
+effect clocks, parent links, captions, audio-drive behaviors, bounce rings, speed-ramp source mapping, and
+the anti-click envelope — every one of them assumed a clip is never divided.
