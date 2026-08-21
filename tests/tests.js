@@ -24715,6 +24715,7 @@
     const prevProject = localStorage.getItem('fm.currentProject');
     const prevScene = { project: FM.scene.project, layers: FM.scene.layers.slice(),
                         selectedId: FM.scene.selectedId, selectedIds: (FM.scene.selectedIds || []).slice() };
+    const madeTemplates = [];
     const plant = (id, project) => {
       localStorage.setItem('fm.proj.' + id, JSON.stringify({ project: project, layers: [], selectedId: null, selectedIds: [] }));
       const idx = JSON.parse(localStorage.getItem('fm.projects') || '[]');
@@ -24740,7 +24741,27 @@
       await FM.projects.open('p_test_fine');
       const G = FM.scene.project;
       if (!(G.width === 1080 && G.height === 1920 && G.fps === 30)) throw new Error('an ordinary 1080x1920@30 project opened as ' + G.width + 'x' + G.height + '@' + G.fps + ' — the clamp is rewriting good work');
+
+      /* THE TEMPLATE DOOR ITSELF — the route the bug actually came down, and it went UNTESTED when the
+         fix shipped. Deleting the clamp from `useAsNew` left the whole suite green, so the exact defect
+         could have walked back in. Found by mutation-checking my own fix a tick later; the lesson is that
+         a two-part fix needs a test for BOTH parts, and "the suite is green" says nothing about the part
+         no assertion touches. This drives the real API end to end. */
+      if (FM.templates && FM.templates.save && FM.templates.useAsNew) {
+        plant('p_test_tplsrc', { name: 'tplsrc', width: 16000, height: 16000, fps: 999, duration: 5 });
+        const okSave = await FM.templates.save('__probe_oversize_template', 'p_test_tplsrc');
+        if (!okSave) throw new Error('could not save the probe template, so the template door is untested');
+        const meta = FM.templates.list().filter(t => t.name === '__probe_oversize_template')[0];
+        madeTemplates.push(meta.id);
+        const newPid = await FM.templates.useAsNew(meta.id);
+        if (newPid) made.push(newPid);
+        const TP = FM.scene.project;
+        if (!(TP.width <= MAXW && TP.height <= MAXW && TP.fps <= MAXF)) {
+          throw new Error('a template carrying ' + TP.width + 'x' + TP.height + '@' + TP.fps + ' created a project at that size — projects.create() clamps and then the pack\'s raw project object replaces it, so the clamp is thrown away and autosave writes the result to disk');
+        }
+      }
     } finally {
+      for (const tid of madeTemplates) { try { await FM.templates.remove(tid); } catch (e) {} }
       made.forEach(id => localStorage.removeItem('fm.proj.' + id));
       try {
         const idx = JSON.parse(localStorage.getItem('fm.projects') || '[]').filter(e => made.indexOf(e.id) < 0);

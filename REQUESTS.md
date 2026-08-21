@@ -11726,6 +11726,15 @@ wait for them to report back."*
       with "a normal save did not reach disk". **Re-OPENING the original project is what re-pins them.**
       **This matters more the moment templates are shared** (queue 427, his own request) — a template from
       someone else is exactly the untrusted input this door was missing.
+      ⚠️ **FOLLOW-UP, 22 Aug: HALF THIS FIX SHIPPED UNTESTED and it was caught by mutation-checking my own
+      work a tick later.** The fix has two parts — the clamp on OPEN and the clamp in `useAsNew` — and only
+      the first had an assertion. Deleting the `useAsNew` clamp left all 816 tests green, so the exact
+      defect could have walked straight back in. The test now drives `templates.save` → `useAsNew` end to
+      end and fails on that mutation. **The lesson, recorded because it generalises: a two-part fix needs a
+      test for BOTH parts, and "the suite is green" says nothing about the part no assertion touches.**
+      **Also swept clean in the same pass** (recorded so it is not re-checked): the ELEMENTS insert path.
+      `elements.insert()` goes through the same re-id gate and never touches the project object — a hostile
+      element pack had its timing and keyframe order repaired and left the project untouched.
 
 - [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
