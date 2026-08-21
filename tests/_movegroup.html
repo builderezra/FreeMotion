@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>move a group clip (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: FM.moveClipTo moves the group's BAR and its own keyframes but leaves the
+   layers inside where they were in time — so the group's window and its contents desync.
+   Measured two ways: the members' start times, and what is actually ON SCREEN at the new time. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.moveClipTo&&w.FM.groupSelection&&w.FM.renderScene)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function ink(FM,doc,t,W,H){
+  var c=doc.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  FM.renderScene(ctx,FM.scene,t);
+  var d=ctx.getImageData(0,0,W,H).data, n=0;
+  for(var i=0;i<d.length;i+=4) if(d[i]>120&&d[i+1]>120&&d[i+2]>120) n++;
+  return n;
+}
+function run(FM){
+  var doc=f.contentDocument, W=200,H=120, L=[];
+  FM.scene.project.width=W; FM.scene.project.height=H;
+  FM.scene.layers.length=0;
+  var a=FM.makeLayer('shape',{name:'a',shape:'rect',x:60,y:60,shapeW:30,shapeH:30,fill:'#ffffff'});
+  var b=FM.makeLayer('shape',{name:'b',shape:'rect',x:140,y:60,shapeW:30,shapeH:30,fill:'#ffffff'});
+  [a,b].forEach(function(l){l.start=1;l.duration=3;FM.scene.layers.push(l);});
+  FM.scene.selectedIds=[a.id,b.id]; FM.scene.selectedId=a.id;
+  FM.groupSelection();
+  var G=FM.scene.layers.filter(function(l){return l.type==='group';})[0];
+  if(!G){out.textContent='SETUP FAILED';document.title='DONE';return;}
+  L.push('before:  group '+G.start.toFixed(2)+'..'+(G.start+G.duration).toFixed(2)+
+         '   members '+[a,b].map(function(l){return l.start.toFixed(2)+'..'+(l.start+l.duration).toFixed(2);}).join(', '));
+  var inkAtOld=ink(FM,doc,2,W,H);
+  L.push('ink inside the group window (t=2): '+inkAtOld);
+  if(!inkAtOld){out.textContent=L.join('\n')+'\n\nCONTROL FAILED: nothing drawn inside the group window.';document.title='DONE';return;}
+
+  // move the whole group clip to start at t=6
+  FM.time=6;
+  var moved=FM.moveClipTo(G, 6);
+  L.push('');
+  L.push('moveClipTo returned '+moved);
+  L.push('after:   group '+G.start.toFixed(2)+'..'+(G.start+G.duration).toFixed(2)+
+         '   members '+[a,b].map(function(l){return l.start.toFixed(2)+'..'+(l.start+l.duration).toFixed(2);}).join(', '));
+  /* Sample INSIDE the window the group actually landed in, not a guessed time: moveClipTo anchors the
+     edge NEAREST the playhead, so with the playhead past the clip it is the END that lands on it. The
+     first version of this probe hardcoded t=7, read 0 because that is outside the new span, and called a
+     working fix a failure. */
+  var midNew=G.start+G.duration/2;
+  var inkAtNew=ink(FM,doc,midNew,W,H);
+  var inkStillOld=ink(FM,doc,2,W,H);
+  L.push('ink at the group\'s NEW window (t='+midNew.toFixed(2)+'): '+inkAtNew);
+  L.push('ink back at the OLD window (t=2):   '+inkStillOld);
+  L.push('');
+  var desync = (Math.abs(a.start-G.start)>0.01) || inkAtNew===0 || inkStillOld>0;
+  L.push(desync
+    ? '❌ moving the group left its contents behind — the bar moved, the layers inside did not'
+    : '✅ the group and its contents moved together');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

@@ -1745,21 +1745,27 @@ the same root shape as §31–§33 — *an edit maintains the thing it edits, bu
 (parent links, behavior `sourceId`, effect-source layer ids) or *a clip-relative clock/offset that is not
 re-based*. Verify oldest-highest-impact first; delete any that measurement refutes.
 
-- [ ] **Splitting a parent clip freezes every layer parented to it**  
+- [x] **Splitting a parent clip freezes every layer parented to it**    
+      ➜ **REAL — fixed v11.05, see §35**
       `app.js:2916` — Parent a text/shape layer to an animated video or shape clip (Inspector > Parent), keyframe the parent moving across the whole 8s, park the playhead at 4s and press Split (S / the transport split button, or Cut-at-playhead which splits every clip under the playhead). Before the split the child rides
-- [ ] **Splitting a clip re-scales and then kills every audio-driven behavior reading from it**  
+- [x] **Splitting a clip re-scales and then kills every audio-driven behavior reading from it**    
+      ➜ **REAL — fixed v11.10, see §40**
       `audio-react.js:175` — Put an Audio Drive behavior on a shape or logo, source = the music video clip, prop = scale. Play: it pulses to the beat for the whole clip. Now split ONLY the music clip at its midpoint. The logo now pulses at a visibly different depth for the whole first half (renormalised to that half's peak) and
-- [ ] **Split silences and then shrinks a Bounce behavior at and after the cut**  
+- [x] **Split silences and then shrinks a Bounce behavior at and after the cut**    
+      ➜ **REAL — fixed v11.11, see §41**
       `behaviors.js:126` — Give a layer position keyframes at 0s, 1s and 4s (0 -> 100 -> 400) and add a Bounce behavior on that prop with a low Decay (0.5) so the ring is long. Scrub 2s-4s and watch it wobble. Split at 2s: the wobble vanishes instantly at the cut, and the bounce at the 4s landing is noticeably smaller than be
-- [ ] **Splitting the audio source of an Audio-drive behavior kills the behavior from the cut onward**  
+- [x] **Splitting the audio source of an Audio-drive behavior kills the behavior from the cut onward**    
+      ➜ **REAL (same bug as above) — fixed v11.10, see §40**
       `audio-react.js:296` — Import a music track and a logo. On the logo add a behavior -> Audio drive, pick the music layer as 'Audio from' (the picker at js/inspector.js:3959 / js/behaviors.js:66), set it to pump scale. Play: the logo pumps for the whole song. Now select the music clip, park the playhead halfway and Split at
 - [ ] **Split inserts a 90ms dip to silence at the cut in preview — the 45ms de-click envelope is measured from each clip's own edges**  
       `app.js:1266` — Drop a continuous music track (or a video with continuous room tone) on the timeline, play it and hear it run smoothly. Park the playhead mid-clip and Split at playhead, then play across the cut. You hear a short dip/blip — a ~90ms V-shaped duck all the way to silence straddling the cut — that was n
 - [ ] **Head-trimming a speed-RAMPED clip moves the picture: trimStart is advanced by the instantaneous rate at the new head instead of the integral of the ramp**  
       `timeline.js:2438` — Drop a 4s video at t=0. In Speed, keyframe 0.5x at t=0 and 2.0x at t=4 (a linear ramp). Grab the clip's LEFT trim grip and drag it 2.0s to the right. Expected: the frame now at the head is the one that was at project t=2, i.e. 1.75s into the source (the integral). Actual: trimStart becomes 2 x speed
-- [ ] **FM.extendClipTo does not re-base caption cues, so extending a caption track's head slides every caption earlier and out of sync**  
+- [x] **FM.extendClipTo does not re-base caption cues, so extending a caption track's head slides every caption earlier and out of sync**    
+      ➜ **REAL — fixed v11.06, see §36**
       `app.js:2841` — Make a caption track over a voice-over — say the clip starts at 1.0s and a cue sits at local 1.2-1.5, i.e. on screen from project 2.2s to 2.5s, matching the words. Park the playhead at 0.0s (before the clip, so the quick row swaps to the Move/Extend pair) and press 'Extend the start of the clip to t
-- [ ] **FM.moveClipTo abandons a group's members: the bar and the group's own keyframes move, the layers inside do not**  
+- [x] **FM.moveClipTo abandons a group's members: the bar and the group's own keyframes move, the layers inside do not**    
+      ➜ **REAL — fixed v11.12, see §42**
       `app.js:2792` — Group three layers that span 2-5s, then keyframe the group's X so it slides in from t=2 to t=3. Select the GROUP bar, park the playhead at 8s and press the 'Move clip right to the playhead' quick-row button (or the right tl-nudge). The group bar jumps to 5-8s and its two position keyframes move to 5
 - [ ] **Multi-layer Duplicate leaves every copy's cross-layer link pointing at the ORIGINALS (no idMap)**  
       `app.js:2586` — Add a shape ("Box") and a text layer ("Title"). On Title, layer menu → Parent → Box. Select both rows, then ⋯ → "Duplicate 2 layers" (js/app.js:4376, or the keyboard shortcut at js/app.js:5340). Since queue 156 a duplicate lands exactly on its original, so nothing looks wrong yet. Now drag "Box copy
@@ -1775,11 +1781,14 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
       `compositor.js:7071` — Add Time Warp Scan (defaults: Freeze, duration 2.5s) to a video layer. Scrub to about half way through the scan so the top half of the frame is visibly frozen. Press Play. The frozen half instantly goes transparent — a hole showing whatever is beneath the layer — and it stays a hole for the rest of
 - [ ] **A layer used as a Luma Matte source renders twice per frame, and Temporal Denoise silently degrades to no denoising on the second render**  
       `compositor.js:7268` — Layer A = grainy video with Temporal Denoise (strength 0.85). Layer B = a shape, positioned BELOW A in the timeline stack, with Luma Matte pointing at A as its matte source. Scrub or play: A's grain comes back on screen — the denoiser stops visibly doing anything — and moving B above A in the stack
-- [ ] **Grouping a group with another layer silently re-stacks the scene — the member group's children are left behind in the layer array**  
+- [x] **Grouping a group with another layer silently re-stacks the scene — the member group's children are left behind in the layer array**    
+      ➜ **REAL — fixed v11.08, see §38**
       `app.js:2366` — Put a photo/background shape at the bottom of the stack and two shapes above it that overlap it. Select the two shapes and tap Group (they now sit inside a group). Now multi-select the group row and the background layer and tap Group again. Nothing about either layer's transform changed, but the bac
-- [ ] **Ungroup carries the group's position but throws away its opacity, hidden state, effects, blend, fill and border**  
+- [x] **Ungroup carries the group's position but throws away its opacity, hidden state, effects, blend, fill and border**    
+      ➜ **REAL — fixed v11.07, see §37**
       `app.js:2418` — Group three shapes, drag the group's opacity down to 30% (the whole group dims, because it now renders as a unit). Right-click the group row → Ungroup. The three shapes snap back to 100% opacity. Same with an effect: put a Gaussian blur on the group, ungroup, the blur is gone. Most striking version:
-- [ ] **Duplicating a group with a nested group inside it can hand you a copy stacked in a different order than the original**  
+- [x] **Duplicating a group with a nested group inside it can hand you a copy stacked in a different order than the original**    
+      ➜ **REFUTED by measurement — see §39**
       `app.js:2531` — With a group G2 containing a nested group G1 (holding shapes A and B) plus a loose overlapping shape C, arranged so C draws above A and B, duplicate G2 from the layer menu. The duplicate lands exactly on the original, but in the copy C is drawn BEHIND A and B — the copy and the original overlap diff
 
 Two of these (the Audio Drive behavior dying after a split) were reported INDEPENDENTLY by two
@@ -2005,3 +2014,32 @@ Gated on `layer.splitOf`, so a clip that has never been split does not pay for a
 fix, and it was close to being recorded as verified-but-not-fixed on those grounds. It went in because the
 gate makes it free for everything else and because it completes the invariant the whole §31–§41 run is
 about — a cut changes nothing you can see or hear.
+
+## 42. Moving a group clip left its contents behind (21 Aug, v11.12) — REAL BUG, seventh verified §34 lead
+
+`FM.moveLayerToPlayhead` carries a group's members — its own comment says *"a group bar carries its
+members"*. `FM.moveClipTo` did not. The same shape as §36: two movers of the same thing, one of them
+missing half the rule.
+
+**Measured** (`tests/_movegroup.html`):
+
+| | group bar | layers inside | ink at t=2 |
+|---|---|---|---|
+| before | 1.00 .. 4.00 | 1.00 .. 4.00 | 1800 |
+| after `moveClipTo` | **3.00 .. 6.00** | **1.00 .. 4.00** | **1800 — unmoved** |
+
+The bar slid, the composition did not, and the group's window no longer contained its own contents.
+
+**Fix:** the movers are the layer plus its group descendants (locked members excepted), each with its
+keyframes shifted — exactly what `moveLayerToPlayhead` does.
+
+### The probe called a working fix a failure
+
+After the fix the members moved correctly and the probe still printed ❌. Cause: it sampled a hardcoded
+`t=7`, assuming the group would move to START at the playhead. `moveClipTo` anchors the edge NEAREST the
+playhead, so with the playhead past the clip it is the END that meets it — the group landed at 3..6 and
+t=7 is outside it.
+
+Worth recording as the mirror image of the other probe failures in this run: three times a probe reported a
+false CLEAN, and once it reported a false FAILURE. Both come from the probe encoding an assumption the code
+never made. The test now samples the midpoint of wherever the clip actually landed.

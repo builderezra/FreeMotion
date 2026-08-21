@@ -3530,6 +3530,60 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('move: moving a GROUP clip takes the layers inside it along', { item: 'move-group' }, function () {
+    /* BUG HUNT (21 Aug), seventh verified lead from BUG-HUNT §34. FM.moveLayerToPlayhead already knew a
+       group bar carries its members — its own comment says so — and FM.moveClipTo did not. Same shape as
+       the caption rule in §36: a second mover of the same thing, with half the rule missing.
+       Measured (tests/_movegroup.html): the bar went 1..4 -> 3..6 while both layers inside stayed at
+       1..4, so the picture never moved and the group's window no longer held its own contents.
+       Asserted on PIXELS as well as start times, because "the numbers changed" is not the same claim as
+       "the composition moved". */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 200, H = 120;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const ink = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 120 && d[i + 1] > 120 && d[i + 2] > 120) n++;
+        return n;
+      };
+      FM.scene.layers.length = 0;
+      const a = FM.makeLayer('shape', { name: 'a', shape: 'rect', x: 60, y: 60, shapeW: 30, shapeH: 30, fill: '#ffffff' });
+      const b = FM.makeLayer('shape', { name: 'b', shape: 'rect', x: 140, y: 60, shapeW: 30, shapeH: 30, fill: '#ffffff' });
+      [a, b].forEach(l => { l.start = 1; l.duration = 3; FM.scene.layers.push(l); });
+      FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+      FM.groupSelection();
+      const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G) throw new Error('groupSelection did not make a group');
+
+      const inkOld = ink(2);
+      if (!inkOld) throw new Error('CONTROL FAILED: nothing is drawn inside the group window, so no move can be judged');
+
+      FM.time = 6;
+      if (!FM.moveClipTo(G, 6)) throw new Error('CONTROL FAILED: moveClipTo did nothing');
+
+      // Sample where the group ACTUALLY landed — moveClipTo anchors the edge nearest the playhead, so
+      // with the playhead past the clip it is the END that meets it, not the start.
+      [a, b].forEach(l => {
+        if (Math.abs(l.start - G.start) > 0.01) throw new Error('a layer inside the group stayed behind: group at ' +
+          G.start.toFixed(2) + ', "' + l.name + '" at ' + l.start.toFixed(2));
+      });
+      const inkNew = ink(G.start + G.duration / 2);
+      if (!inkNew) throw new Error('the group moved but nothing renders inside its new window');
+      if (ink(2) > 0) throw new Error('the contents are still drawing at the group’s OLD time');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: a Bounce keeps ringing across the cut', { item: 'split-bounce' }, async function () {
     /* BUG HUNT (21 Aug), sixth verified lead from BUG-HUNT §34 and the smallest of them. A Bounce rings
        off the jump between consecutive keyframes and returns 0 when there is no prior keyframe. A split

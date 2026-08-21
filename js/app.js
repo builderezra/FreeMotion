@@ -2841,8 +2841,20 @@ window.FM = window.FM || {};
     const anchor = FM.clipPlayheadSide(layer, t) > 0 ? layer.start + layer.duration : layer.start;
     const d = t - anchor;
     if (Math.abs(d) < 1e-6) return false;
-    layer.start = layer.start + d;
-    if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(layer, d);
+    /* A GROUP BAR CARRIES ITS MEMBERS (bug hunt, 21 Aug). FM.moveLayerToPlayhead below already knew
+     * this — its own comment says "a group bar carries its members" — and this one did not, which is the
+     * same shape of fault as the caption rule in FM.extendClipTo: a second mover of the same thing that
+     * had lost half the rule. Measured (tests/_movegroup.html): the bar went 1..4 -> 3..6 while both
+     * layers inside stayed at 1..4, so the picture never moved at all and the group's window no longer
+     * contained its own contents.
+     * Members' keyframes are in absolute project time, so they shift with their clip exactly the way
+     * moveLayerToPlayhead shifts them. */
+    const movers = [layer];
+    if (layer.type === 'group' && FM.groupDescendants) FM.groupDescendants(layer.id).forEach(m => { if (m && !m.locked) movers.push(m); });
+    movers.forEach(l => {
+      l.start = l.start + d;
+      if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d);
+    });
     return true;
   };
 
