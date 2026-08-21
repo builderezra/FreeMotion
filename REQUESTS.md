@@ -13245,6 +13245,80 @@ wait for them to report back."*
       His phrase "made ages ago" means this has been attempted before — find the earlier entry and read
       what was tried, rather than starting from scratch.
 
+- [ ] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** (21 Aug,
+      with a screenshot.) His words, verbatim: *"Effects in this image STILLLLLLLLLL don't work"*.
+      **The nine L's are the point.** The same complaint is already recorded from 13 Aug — *"There's a
+      shit load of effects in the colour & light section that blatantly do nothing and don't work"* — and
+      that is the SAME CATEGORY he has just photographed. So a previous pass either did not fix it or
+      fixed something adjacent. **Do not start by assuming the earlier work was wrong; start by
+      measuring, because there is no measurement on file.**
+      **His screenshot:** the Colouring category, on a flat magenta rectangle layer. Visible tiles —
+      Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert, Glow, Vignette, Tint,
+      Duotone, Gamma, and more below. Eight carry numbered badges (8,7,6,5,4,3,2,1 = the order he
+      selected them) and stars (favourites), so he had **eight effects selected at once** and saw
+      nothing happen.
+      **THE METHOD IS ALREADY WRITTEN and must be followed exactly** — it is recorded against the
+      earlier report: render a test frame WITH and WITHOUT each effect in the category and count changed
+      pixels. Three conditions that make or break that harness:
+      · **Test at a STRONG setting as well as the default**, or an effect whose default is a no-op
+        (amount 0) is wrongly condemned.
+      · **Include a control effect known to work**, or a broken harness reads as "everything is broken".
+      · **Build instances through `FM.fxRegistry.makeInstance`** — a probe that hand-rolls
+        `{id, params:{}}` runs NO effect and reports a confident clean. That has already happened once
+        (§33 in BUG-HUNT) and reported 0.00 for all seven effects it was testing.
+      ⚠️ **A flat single-colour SHAPE is a hard case and may be part of the answer.** On a uniform magenta
+      fill, several of these are genuinely near-invisible — Vignette darkens edges that have no detail,
+      Glow needs highlights, Duotone maps a luminance range that a flat fill barely spans. **Grayscale
+      and Invert are NOT in that group**: both must visibly change a magenta rectangle, so start with
+      those two — if they work, the bug is narrower than "the category is broken"; if they do not, it is
+      wider. Say which, with numbers, before changing any code.
+
+- [ ] **461 — Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
+      (21 Aug, with a screenshot.) His words, verbatim: *"Make an icon for each section that resembles
+      the overall theme in some way, like for colouring you could do an interesting colour palette but do
+      something distinct for each one"*, and immediately after: *"Instead of how it is rn with random
+      colours"*.
+      **So the gradient-only tiles are the thing he is replacing, not decorating.** Today each category
+      tile is a coloured gradient with a name and a count (his screenshot: Colouring 43, Blur 19,
+      Warping 28, Generative 19, Stylize 19, Drawing / Edge 16, Shakes / Movement 7, Repetition 5,
+      Keying 11, Opacity / …). The colours carry no meaning, which is his complaint.
+      **Each icon must be DISTINCT and must say what the category does** — his own example is a colour
+      palette for Colouring. Obvious directions for the rest: a lens/blur disc for Blur, a warped grid
+      for Warping, scattered particles for Generative, a shaking frame for Shakes / Movement, a repeated
+      tile for Repetition, a green screen swatch for Keying, a pen nib for Drawing / Edge.
+      Vanilla SVG, drawn inline like the app's other icons — no icon font, no image files.
+
+- [ ] **462 — The FAVES strip should be a proper button with a shiny gold look, not a thin notch.**
+      (21 Aug, with a screenshot; he circled it in red.) His words, verbatim: *"Make the faves menu a big
+      button and not just this small notch, and give it some nice shiny golden background colours"*.
+      Today it is a slim full-width strip reading "FAVES · 34 ▾" with a small drag pill above it, sitting
+      between the effect tiles and the CATEGORIES heading. He wants it to read as a real, tappable
+      button — bigger — and gold, which also matches the gold stars already used to mark favourites.
+      "Shiny" implies a gradient with a highlight, not a flat fill.
+
+- [ ] **463 — In the filters menu, rows like TUFF should be ONE row you swipe sideways, not two stacked
+      rows.** (21 Aug, with a screenshot.) His words, verbatim: *"Make in the filters menu for rows like
+      tuff where there's two lines just one line and you scroll left and right swiping to see the
+      others"*.
+      His screenshot shows the TUFF section as two rows of four (Blackout, Cold Steel, Bloodline, Static
+      / Nightdrive, Overdrive, Whiteout, Ash). He wants a single horizontally-scrolling rail instead, so
+      the section costs one row of height and the rest is reached by swiping.
+      Applies to "rows like tuff" — i.e. the filter sections generally, not only that one.
+
+- [ ] **464 — Adding filters should be multi-select-then-Add, exactly like the main effects menu.**
+      (21 Aug.) His words, verbatim: *"When adding filters make it so that you can toggle them select and
+      then have to press add, like the main effects menu, this is good so I can see them all quickly and
+      not have to add then delete and go back. And so you can add multiple at once if you're heart
+      desires"*.
+      **He has given the reason as well as the request, and the reason is the spec:** today tapping a
+      filter applies it immediately, so trying several means add → look → delete → go back, over and
+      over. He wants to toggle a selection, see them all, and commit once.
+      ✅ **The pattern already exists** — the main effects browser does this, with numbered selection
+      badges and an "Add N effects" button (both visible in his other screenshots, along with "Clear" and
+      "Add naked"). **Reuse that, do not invent a second one**, and check whether the same component can
+      simply be pointed at the filter list.
+      Ties into **463**: both are about the filters menu behaving like the effects menu.
+
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.

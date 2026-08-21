@@ -33,13 +33,15 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE — keep this current
 
-**v11.26, suite 794 green. List: 41 open, 15 actionable.**
+**v11.27, suite 795 green. List: 46 open, 20 actionable.**
 
 **In flight**
-- **Per-effect-slider keyframes** (unnumbered, oldest actionable). Measured: the six rebuild-style audio
-  params render at their START value; flipping `keyframable` would make the LAST keyframe win with
-  diamonds that do nothing. Next step is the crossfaded shaper bank for Distortion, proven by tail RMS
-  reaching ~0.98 while head stays ~0.35, then Bit Crush and Lo-Fi. Full design is in the entry.
+- **Per-effect-slider keyframes** (unnumbered, oldest actionable). Distortion Drive and Bit Crush Bits
+  DONE in v11.27 via a crossfaded shaper bank — they sweep through the right values (0.9628 against a
+  static drive-50's 0.9627) and the click is gone. **Lo-Fi Amount is next**: same bank, plus two biquad
+  frequencies that are real AudioParams and can just be ramped. Reverb Size/Decay and Pitch Shift are
+  different mechanisms — do NOT copy the bank to them.
+- **#460 is the one to jump to if it reproduces** — see below.
 
 **Newest in (21 Aug, from his phone — they WAIT their turn, oldest-first)**
 - **#418 restated** — undo/redo icons: the ring-plus-triangle-head shape from his image, thinner stroke.
@@ -57,6 +59,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 - **#459** — the open-project animation must be a SEQUENCE (card swipes left, THEN the project comes in
   from the right), not both at once. ⚠️ Fights queue 128, which split them ON PURPOSE to remove 113ms of
   dead time. Measure the total before and after and say so.
+
+**Newest in (21 Aug, phone) — they wait their turn unless noted**
+- **#460 🚨** — effects in the Colouring list still do nothing; he has reported this before ("STILLLLLLLLLL").
+  The measurement method is already written in the entry. **Start with Grayscale and Invert on his flat
+  magenta rect** — those two MUST change it, so they separate "the category is broken" from "these
+  effects are subtle on a flat fill". Numbers before code.
+- **#461** — an icon per effect category that suits its theme, replacing the meaningless gradients.
+- **#462** — the FAVES notch becomes a real gold button.
+- **#463** — filter sections like TUFF become one sideways-swiping rail, not two stacked rows.
+- **#464** — filters get multi-select-then-Add. The effects browser already does this; reuse it.
 
 **Waiting on Ezra — note, do not re-ask**
 - **#387** — what was he doing in the 9.5s recording, playing or scrubbing? Measured: 96.2% of frames
