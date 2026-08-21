@@ -40,7 +40,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE — keep this current
 
-**v11.30, suite 796 green.**
+**v11.31, suite 796 green. REQUESTS.md now carries generated STATUS labels — `tools/status.sh`, refreshed by ship.sh.**
 
 **In flight**
 - **Per-effect-slider keyframes** (unnumbered, oldest actionable). **Three of six done** — Distortion

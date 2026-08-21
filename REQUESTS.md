@@ -7060,6 +7060,31 @@ better still, keep working inside the turn rather than parking work for a later 
       2. Adding a (possibly edited) element INTO a normal project stays available from the Add menu.
       This also answers the question that was put to him badly — there is nothing to "ask", because the
       dump-into-the-current-project behaviour is simply wrong.
+      ✅ **HIS 21 AUG EXPLANATION IS ALREADY THE BEHAVIOUR — VERIFIED BY RUNNING IT, 21 Aug.**
+      He re-described what he wants: *"in the elements menu tapping on it will open an element project
+      that is editable, when you edit it and are done you leave then open up a normal project and then
+      you can add an element in."* That is exactly what clauses 1 and 2 shipped (v9.91 / v9.89), so
+      **nothing was built** — it was driven end to end instead, because an entry records what was ASKED,
+      not what is still missing.
+      | step | result |
+      |---|---|
+      | save an element from a project | ✅ |
+      | tap it in the Elements tab | ✅ creates an `elementDraft` project |
+      | its layers arrive in that draft | ✅ the source layer came through by name |
+      | the draft becomes the project you are editing | ✅ `currentId` is the draft |
+      | the draft is flagged so it stays out of Projects | ✅ `elementDraft: true` |
+      | adding one INTO a normal project | ✅ `FM.elements.insert`, via Add → Elements and the ⋯ menu |
+      Probe data was removed afterwards; nothing of his was touched.
+      🔴 **SO THE ONLY THING LEFT IN THIS ENTRY IS CLAUSE 3, AND IT IS STILL NOT A SPECIFICATION.**
+      *"You need to put a lot more effort into the elements feature"* — every concrete thing he has since
+      described is already built, so asking him to repeat the description again will not move it.
+      **What to ask instead, once, and it should be specific:** with an element open and editable, and
+      Add → Elements putting one into a project, **what does he try to do that he cannot?** Name the
+      action, not the feature. Candidates worth putting to him as options rather than an open question:
+      browsing/organising elements (folders, rename, reorder), previewing one before adding it, editing
+      an element that is already IN a project and having the change follow, or sharing them as files
+      (which is where **343** landed).
+      **Do not guess at clause 3 and do not rebuild clauses 1-2.** They work.
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
       **STATUS: 💡 LATER — long-term ideas only**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
