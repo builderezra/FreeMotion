@@ -24842,6 +24842,70 @@
     }
   });
 
+  test('export: an animated Reverb reaches the real mix, anchored to the clip\'s own time', { item: 'audio-kf-reverb' }, async function () {
+    /* A HUNT FOUND THIS PATH UNTESTED, not broken — so this is here to keep it that way. Everything else
+     * about the reverb bank drives `buildAudioFxChain` directly, which is what the exporter does but is
+     * not the exporter. The gap between "the chain is right" and "the exported file is right" is where
+     * queue 215 lived for weeks: four separate silent audio losses, each one a `continue` in this very
+     * mixer that dropped a perfectly good clip and said nothing.
+     * The hard case is the second one below. A clip that starts PARTWAY through the export has its
+     * keyframes in scene time while the bank lays its cross-fade across the whole export window; if that
+     * mapping slips, the rooms are right and the moment is wrong — silent, and invisible in any test that
+     * only exports from zero. */
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext — the mix cannot be built at all');
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const SR = 48000;
+    const layers0 = FM.scene.layers.slice();
+    const made = [];
+    try {
+      const ac = new OAC(2, 128, SR);   // just to mint buffers
+      const clicks = (secs) => {
+        const b = ac.createBuffer(2, Math.round(SR * secs), SR);
+        for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch);
+          for (let t = 0; t < secs; t += 0.5) { const i = Math.round(t * SR); for (let k = 0; k < 64; k++) d[i + k] = (k < 32 ? 0.8 : -0.8); } }
+        return b;   // a click train: the tail after each click IS the room, so decay is directly readable
+      };
+      const mk = (id, start, dur, fx) => {
+        const l = FM.makeLayer('video', { name: id, start: start, duration: dur });
+        l.id = id; l.audioFx = fx || [];
+        FM.media.set(id, { kind: 'video', file: { name: 'probe.mp4', size: 1000, type: 'video/mp4' }, audioBuffer: clicks(dur + 1) });
+        made.push(id);
+        return l;
+      };
+      const scene = (ls, dur) => ({ project: { name: 'p', width: 1080, height: 1920, fps: 30, duration: dur }, layers: ls });
+      const rms = (c, a, b) => { a = Math.round(a); b = Math.round(b); let t = 0; for (let i = a; i < b; i++) t += c[i] * c[i]; return Math.sqrt(t / (b - a)); };
+      const tailAt = (mix, t) => rms(mix.audioBuffer.getChannelData(0), SR * (t + 0.30), SR * (t + 0.45));
+      const rv = (d) => [{ type: 'reverb', enabled: true, params: { size: 0.5, decay: d, mix: 1 } }];
+
+      // CONTROLS through the REAL mixer — a small room and a big one must differ, or nothing below means anything.
+      const shortMix = await FM.exporter.buildAudioMix(scene([mk('T1', 0, 4, rv(0.4))], 4), 0, 4);
+      const longMix = await FM.exporter.buildAudioMix(scene([mk('T2', 0, 4, rv(6))], 4), 0, 4);
+      if (!shortMix || !longMix) throw new Error('the exporter produced no mix at all for a clip with audio — this is the queue-215 silent-loss shape');
+      const sT = tailAt(shortMix, 3), lT = tailAt(longMix, 3);
+      if (!(lT > sT * 4)) throw new Error('a 6 s and a 0.4 s room export the same tail (' + lT.toFixed(5) + ' vs ' + sT.toFixed(5) + ') — this probe cannot see decay');
+
+      // 1. an animated room must actually open across the exported file
+      const anim = () => [{ type: 'reverb', enabled: true, params: { size: 0.5, decay: { kf: [{ t: 0, v: 0.4 }, { t: 4, v: 6 }] }, mix: 1 } }];
+      const aMix = await FM.exporter.buildAudioMix(scene([mk('T3', 0, 4, anim())], 4), 0, 4);
+      if (!aMix) throw new Error('a clip with a keyframed reverb exported NO MIX');
+      const a0 = tailAt(aMix, 0), a3 = tailAt(aMix, 3);
+      if (!(a3 > a0 * 2)) throw new Error('the exported room never opened: ' + a0.toFixed(5) + ' at the start, ' + a3.toFixed(5) + ' near the end');
+
+      /* 2. THE HARD ONE — the clip starts at 4 s of an 8 s export and its keyframes run 4→8 in SCENE
+         time. It must be silent before it starts, and open across ITS OWN span rather than the export's. */
+      const lateFx = [{ type: 'reverb', enabled: true, params: { size: 0.5, decay: { kf: [{ t: 4, v: 0.4 }, { t: 8, v: 6 }] }, mix: 1 } }];
+      const lMix = await FM.exporter.buildAudioMix(scene([mk('T4', 4, 4, lateFx)], 8), 0, 8);
+      if (!lMix) throw new Error('a clip starting mid-export produced no mix');
+      if (rms(lMix.audioBuffer.getChannelData(0), 0, Math.round(SR * 3.5)) > 0.002) throw new Error('there is sound before the clip starts — the mix is not anchored to scene time');
+      const l0 = tailAt(lMix, 4), l3 = tailAt(lMix, 7);
+      if (!(l3 > l0 * 2)) throw new Error('a clip starting mid-export never opened its room: ' + l0.toFixed(5) + ' at 4s, ' + l3.toFixed(5) + ' at 7s — the bank is sampling the export window instead of the clip\'s keyframes');
+    } finally {
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+    }
+  });
+
   test('audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is', { item: 'audio-kf-reverb' }, async function () {
     /* The last two of the six in the unnumbered per-effect-slider entry, and the two Ezra's answer was
      * really about: *"if audio key frames break the project and lag too much just put a warning next to

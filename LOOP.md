@@ -40,44 +40,43 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.48** (queue 467). **Second hunt in a row that found NOTHING BROKEN** — recorded as a
-result, not padded into one. No version bump, no app code changed this tick.
+**Last shipped: v11.48** (queue 467). **Third hunt in a row with no bug in the target area** — but this one
+closed a real COVERAGE gap, which is the more useful outcome. No app code changed, no version bump.
 
-**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim: *"When you finish the last
-thing, do a bug and issue hunt. Also look for potential ideas and things to do."*). Findings get their OWN
-numbered entry. **No findings means no entry** — never file an entry that says nothing.
+**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN
+numbered entry; **no findings means no entry.**
+
+**THIS TICK — the exporter's own audio assembly**, driven through the real `FM.exporter.buildAudioMix`
+seam rather than through `buildAudioFxChain` (which is what the exporter does, but is not the exporter).
+All correct: an animated reverb reaches the exported mix and opens across it; a clip starting at 4 s of an
+8 s export is silent before it starts and opens across ITS OWN keyframe span, with a tail profile identical
+to the same clip at zero; two clips build two banks and the mix is not silent.
+**AND THE GAP THAT MATTERED:** nothing anywhere tested that the exporter *schedules automation at all*.
+Deleting `chain.schedule(from, to)` from `exporter.js` left the ENTIRE suite green — every one of the 60
+keyframed audio params would have silently exported at its first value, in every export, forever. There is
+now a test that fails on exactly that (mutation-checked). This is the queue-215 shape again: not a crash,
+just sound quietly not being what it should be.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
-- **All 27 audio effects** (v11.47 tick): offline, static AND every param animated min→max. No throws, no
-  NaN, no silence. Proves v11.45's whole-window hook disturbed none of the other 26.
+- **All 27 audio effects** (v11.47 tick): offline, static AND every param animated min→max.
 - **Project import, hostile files** (v11.48 tick): prototype pollution, remote / `javascript:` fillImage,
-  prototype-chain effect types, the 2000-layer refusal — all clean. FOUND **#467**.
-- **Undo / redo across the four newest features** (prev tick): TTS settings, split stairs, toggle-then-Add
-  filters, audio-effect keyframe diamond. All correct both directions.
-- **The queue-217 gate, VERIFIED not trusted** (prev tick): `reIdLayers` really is the single door, so
-  #467's fix covers template insert, element insert and project duplicate too.
-- **Timeline at 10 s / 10 min / 60 min** (prev tick): no throw, no unbounded DOM, sane scroll extent.
-- **THE LIVE AUDIO PATH — all six newly-keyframable params** (this tick), driven through `applyAt` exactly
-  as the app drives it, on a real connected AudioContext: reverb's room follows the playhead (0.5 s → 6 s,
-  ONE convolver — the bank is correctly export-only); pitch's delay line tracks to four decimals
-  (0 → 0.0414 → 0.1 against predicted 0.0414 / 0.1); distortion, bit crush and lo-fi each build their bank
-  when animated and **none** when static. Also confirmed structurally: `schedule()` is called ONLY by
-  `exporter.js`, so the reverb's offline-vs-live quantum split cannot leak between paths.
+  prototype-chain effect types, the 2000-layer refusal. FOUND **#467**.
+- **Undo / redo across the four newest features**; **the queue-217 re-id gate, verified not trusted**;
+  **timeline at 10 s / 10 min / 60 min** (all prev tick).
+- **The LIVE audio path, all six newly-keyframable params** (prev tick), on a real connected context.
+- **The EXPORT audio path end-to-end** (this tick), including a clip starting mid-export.
 
-**STILL UN-SWEPT — start here next tick:** `exporter.js`'s own per-clip wiring end-to-end (the chain's
-audio is verified, the exporter's assembly around it is not); a hostile TEMPLATE PACK through the real
-insert UI (the data path is verified, the UI path is not).
+**STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data
+path is verified via `_reIdLayers`, the UI path is not); the video/frame side of export (everything swept
+so far has been audio); the service worker / PWA update path.
 
-**⚠️ NEW PROBE TRAP, now BUG-HUNT.md §8d — and the control rule caught it one tick after being written.**
-A Web Audio node not connected through to `ctx.destination` is never processed, so `AudioParam.value`
-never advances and reads as the construction-time default — identical to broken automation. A live pitch
-probe read a flat 0 and looked like a dead feature; connected through a zero-gain sink it read exactly
-right. The near-miss: `ctx.currentTime` DOES advance in a hidden pane, so the audio clock looks healthy
-and invites the wrong conclusion. **What saved it was running a KNOWN-GOOD parameter through the identical
-probe** — Echo/Delay's `time` read stale too, which proved the probe blind rather than the code.
+**⚠️ A LESSON ABOUT MUTATIONS, worth keeping.** `mutate.sh` reported CAUGHT for the scene-time-anchoring
+mutation — but by a DIFFERENT test than the one named, and it said so. The new export test was weaker than
+intended for that case. **A green "CAUGHT" is not proof that YOUR test works; check which assertion fired.**
+The tool prints this; read it.
 
-**Running tally, said plainly:** across four hunts — **two real bugs** (#466, #467) and **seven probe
-errors** caught before they reached him. Expect roughly half of what a hunt "finds" to be the probe.
+**Running tally, said plainly:** across five hunts — **two real bugs** (#466, #467), **one coverage gap
+closed** (exporter scheduling), and **seven probe errors** caught before they reached him.
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it
