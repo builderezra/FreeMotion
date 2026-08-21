@@ -1,0 +1,66 @@
+  test('motion blur smears movement an EFFECT makes, not just keyframed movement (queue 382)', { item: '382' }, function () {
+    /* Ezra: "Motion blur should work when other effects make a layer move, currently it doesn't, like
+     * shake effects."
+     * WHY IT NEVER DID. Shake, Wiggle, Swing, Spin, Pulse, Drift and Orbit move a layer by displacing
+     * it AT DRAW TIME, on its plate; they never touch the transform matrix. Motion blur rasterised the
+     * layer ONCE at t and re-projected that single plate through M(tau)·M(t)⁻¹ — so the shake was baked
+     * into the plate identically in every slice, and there was nothing to smear. Worse, the early-out
+     * asked the matrix "did this move?", the matrix said no, and the whole thing handed straight back
+     * to the ordinary sharp draw.
+     * The fix re-renders the layer at each sub-time when a mover is present. This test measures the
+     * PICTURE, not the plumbing, because the plumbing was never the thing he could see. */
+    if (!FM.fxRegistry || !FM.fxRegistry.makeInstance) throw new Error('no fx registry');
+    const P = { width: 200, height: 200, fps: 30, duration: 5, bg: '#000000' };
+    const mk = () => FM.makeLayer('shape', { name: 'sq', shape: 'rect', x: 100, y: 100, shapeW: 30, shapeH: 30, fill: '#ffffff', start: 0, duration: 5 });
+    const lit = (L, t) => {
+      const c = offscreen(P.width, P.height);
+      const g = c.getContext('2d');
+      FM.renderScene(g, { project: P, layers: [L] }, t);
+      const d = g.getImageData(0, 0, P.width, P.height).data;
+      let n = 0, sx = 0, sy = 0;
+      for (let i = 0, px = 0; i < d.length; i += 4, px++) {
+        // by COLOUR, not alpha: the project paints its own background, so an alpha test lights the
+        // whole canvas and reports nonsense.
+        if (d[i] > 40) { n++; sx += px % P.width; sy += (px / P.width) | 0; }
+      }
+      return { n: n, cx: n ? sx / n : 0, cy: n ? sy / n : 0 };
+    };
+
+    const shake = () => { const f = FM.fxRegistry.makeInstance('shake'); f.params.amount = 25; f.params.speed = 14; return f; };
+
+    // CONTROL 1 — the shake must actually be moving the square. If this fails, every verdict below is
+    // measuring a still picture and means nothing (the exact false-clean shape recorded in HANDOVER).
+    const a = mk(); a.effects = [shake()];
+    const p1 = lit(a, 1.0), p2 = lit(a, 1.37);
+    if (!p1.n || !p2.n) throw new Error('the square did not render at all — this probe is blind');
+    if (Math.hypot(p2.cx - p1.cx, p2.cy - p1.cy) < 2) {
+      throw new Error('the shake is not moving the square between t=1.0 and t=1.37 (centre moved ' +
+        Math.hypot(p2.cx - p1.cx, p2.cy - p1.cy).toFixed(2) + 'px) — the probe is not exercising the effect');
+    }
+
+    // THE BUG — same layer, same instant, motion blur added. A smear covers MORE ground than the sharp
+    // shape it is a smear of; before the fix the two were pixel-identical because the blur bailed out.
+    const b = mk();
+    const ob = FM.fxRegistry.makeInstance('objectblur');
+    ob.params.shutter = 1.5; ob.params.samples = 16;
+    b.effects = [shake(), ob];
+    const sharp = lit(a, 1.0), blurred = lit(b, 1.0);
+    if (blurred.n <= sharp.n) {
+      throw new Error('motion blur changed nothing on a shaking layer: ' + sharp.n + ' lit pixels sharp, ' +
+        blurred.n + ' blurred. The shake moves it and the blur cannot see it — which is queue 382 exactly.');
+    }
+
+    // CONTROL 2 — THE CHEAP PATH MUST BE UNTOUCHED. A layer that nothing is moving must still take the
+    // early-out and draw once, byte-for-byte as before. Without this, "make the blur see more" quietly
+    // becomes "pay for N renders of every still layer in the project".
+    const still = mk();
+    const ob2 = FM.fxRegistry.makeInstance('objectblur');
+    ob2.params.shutter = 1.5; ob2.params.samples = 16;
+    const plain = lit(still, 1.0);
+    still.effects = [ob2];
+    const withBlur = lit(still, 1.0);
+    if (withBlur.n !== plain.n) {
+      throw new Error('a motionless layer with no mover rendered differently with blur on (' + plain.n +
+        ' vs ' + withBlur.n + ' lit pixels) — the no-motion early-out has been broken');
+    }
+  });

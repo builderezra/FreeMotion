@@ -10811,6 +10811,40 @@ wait for them to report back."*
       changing the ORDER the renderer does things in, in js/compositor.js — the most load-bearing file
       in the app and the one the handover explicitly warns about. Do not attempt it inside a loop tick
       between other items.
+      🔬 **ATTEMPTED 21 Aug, NOT SHIPPED — and the entry's own diagnosis above turned out to be WRONG in
+      the way that matters. Read this before writing any code, because it changes which fix is possible.**
+      **What the diagnosis above says:** the shake's displacement is *baked into the plate* at time t, so
+      re-projecting that one plate cannot smear it.
+      **What is actually true, measured:** the shake is not in the plate AT ALL. Instrumenting
+      `drawMotionBlur` and rendering a square carrying `[shake, objectblur]` shows it is reached exactly
+      once, with `layer.effects === ["objectblur"]` — **the shake has already been peeled off.**
+      `drawLayer` strips canvas effects one at a time and the motion-blur dispatch sits at the BASE of
+      that recursion (js/compositor.js ~10894, and the comment there says so: *"This point is the BASE of
+      the recursion"*). So the order is **shake WRAPS blur**, not blur wraps shake: the blur smears a
+      still layer, and the shake then displaces the already-blurred result. That is why it looks sharp.
+      **So neither route in the plan above works as written.** Route 1 (expose each mover's displacement
+      for the blur to sample) and Route 2 (re-render the plate at each sub-time) both assume the blur can
+      see the mover. It cannot — by the time it runs, the mover is gone from the layer it is handed.
+      **THE REAL FIX IS A DISPATCH-ORDER CHANGE:** when a layer carries a mover, the blur has to be
+      dispatched ABOVE the canvas-effect recursion rather than at its base, so that the plate it renders
+      at each sub-time still contains the mover. Once that holds, Route 2 becomes about six lines — a
+      plate rendered at `tau` is already in REAL space and carries the transform AND the effects at
+      `tau`, so it needs no delta matrix and `D` collapses to the identity.
+      ⚠️ **The risk is the reason this was not just done:** hoisting that dispatch reorders the render
+      path for every layer that has motion blur, in an 11.7k-line file, and the existing blur WORKS —
+      keyframed movement measures 900 lit pixels sharp against 1020 blurred. Breaking that to fix the
+      mover case would be a bad trade. It needs its own session with a before/after image comparison over
+      several effect stacks, not a loop tick.
+      ✅ **A ready-made failing test is saved at `/tmp/test382.js`** (and is reproduced in the session
+      transcript). It renders a shaking square with and without motion blur and asserts the blurred one
+      covers more ground; it carries two controls — one that fails if the shake is not actually moving
+      the square, and one that fails if the no-motion early-out has been broken so that still layers
+      start paying for N renders. **It currently fails with "1326 lit pixels sharp, 1326 blurred", which
+      is the bug stated as a number.** It is NOT in the suite, because a red test cannot ship and there
+      is no pending-test mechanism in this repo. Paste it back in as the first move of the real attempt.
+      **Measured facts to start from:** keyframed blur works (900 → 1020 lit px). Shake blur does nothing
+      (1331 → 1331). `FM._layerMotionBetween` returns exactly 0 for a shaking layer, confirming the
+      matrix cannot see movers. The dispatch is js/compositor.js:10894.
 - [x] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** ✅ **v10.29.** (18 Aug.) His
       words, verbatim: *"When I grab on a layer and try dragging it up on the effects menu it doesn't work,
       but if I press on the dots in the side it does, and this would make sense but the fact that it kinda
