@@ -40,34 +40,31 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.45** — the unnumbered **per-effect-slider keyframes** entry is **CLOSED**. Reverb
-Size and Decay were the last two of six; counted from the live registry, **499/499 visual and 60/60
-audio params are keyframable, none excluded**. Suite **809/809 green**, pushed and verified.
-Four mutations caught: sampling the export window instead of the keyframes, tightening the room-dedupe
-key, leaving the original room un-muted (double reverb), and a linear instead of equal-power crossfade.
+**Last shipped: v11.46** — queue **392**, Text to Voice. Suite **810/810 green**, pushed and verified.
+Three mutations caught: moving the button below the trio, trusting a saved voice name, and drawing the
+voice picker before `getVoices()` resolves.
 
-**One mutation SURVIVED and was left alone deliberately** — removing `!isAnim()` from the bank guard.
-A static reverb is protected by three independent conditions (no keyframe span → no valid window →
-identical rooms collapse), so no single mutation can make one build a bank. Over-determined, not dead.
+**392 is PARTLY done and stays open.** Clauses 2 and 3 (the position, and a simple testable version) are
+shipped. Clause 1 is half — it speaks, but cannot become an audio layer. Clause 4 (expose it as an effect
+in the audio + text effect menus) is his conditional fallback — *"if it's really bad maybe just leave it
+as an effect"* — so it waits on his verdict rather than a guess.
+**The wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
+stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
+audio layer → nothing in the export. Do not try to work around this; the two real routes are BYOK cloud
+TTS or record/import a voiceover, and **both are decisions only Ezra can make.**
 
-**Lessons from this tick, all of them about probes rather than code:**
-- **TWO assertions failed against CORRECT code**, both by measuring the sweep at a moment it had already
-  left — "it must still sound like the room it started in", asserted a third of the way through a
-  four-second sweep. Before believing a red test on new code, check the moment, not just the metric.
-- **A surviving mutation is a hole in the TEST.** Leaving the original room un-muted applies the reverb
-  twice, and every case swept the room OPEN, where the leftover is the quiet room and invisible. The
-  closing sweep is what made it visible (0.01720 against 0.00042).
-- **`48000 * 2.3` is `110399.99999999999`.** Round every sample index; a fractional one reads `undefined`
-  and looks exactly like an audio dropout.
-- Before calling an artifact new, **measure whether the effect already does it at rest**.
+**THE ACTIONABLE QUEUE IS NOW EMPTY.** Everything else open is blocked on him, held by him, a standing
+note, or a long-term idea. Per rule: do not manufacture work. If a tick finds nothing actionable, say so
+in one line and stop — bug hunts are the fallback he authorised, but an empty queue is not an emergency.
 
-**Next item:** run `./tools/next.sh`. With this entry closed the actionable list is likely down to
-**392 (text to voice)**, which the classifier marks as needing its own session and which still wants a
-decision from Ezra on cloud vs the browser's built-in voices.
+**Waiting on Ezra** — the list is long enough that it is now the bottleneck, not the work:
+432 template icon letter, 456 create-button letter, 460 the two options, 454 second half, 202 perf readout
+while playing, 387, 215, 250 does the slam still look wrong, 342, 391, 395 MP3 yes/no, 429, 418, 223
+follow-ups; the unnumbered **"Editing lags"** entry (all fixes in — open only until he says it feels
+better on his own device); **whether an animated reverb stutters while previewing on his phone** (v11.45
+could not measure it); and now **392's clause 4 plus the cloud-vs-record decision**.
 
-**Waiting on Ezra:** 432 template icon letter, 456 create-button letter, 460 the two options, 454 second
-half, 202 perf readout while playing, 387, 215, 250 does the slam still look wrong, 342, 391, 395 MP3
-yes/no, 429, 418, 223 follow-ups. Plus the unnumbered **"Editing lags"** entry (both measured causes and
-the memory leak are FIXED; open only until he says whether it feels better on his own device) and now
-**whether an animated reverb stutters while PREVIEWING on his phone** — the one thing v11.45 could not
-measure for him.
+**Probe lessons still worth keeping:** round every sample index (`48000 * 2.3` is not an integer); a
+surviving mutation is a hole in the TEST; check whether an effect already does the thing at rest before
+calling an artifact new; and two assertions can fail against CORRECT code by measuring a moment the
+animation has already left.
