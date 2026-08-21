@@ -48,6 +48,9 @@ for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' 
     exit 1
   fi
 done
+# Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
+# A label written by hand is true the day it is written and misleading a week later.
+./tools/status.sh >/dev/null 2>&1 || true
 
 echo "→ running the suite (3-4 minutes)…"
 OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"

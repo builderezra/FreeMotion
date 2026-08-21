@@ -139,32 +139,12 @@ python3 - "$F" <<'PY'
 import re, sys
 lines = open(sys.argv[1]).read().split('\n')
 starts = [i for i, l in enumerate(lines) if re.match(r'^- \[[ x]\] ', l)]
-HELD    = re.compile(r'⚠️ *HELD|Held because|Log don.t do yet|held at (his|your) request|deliberately not being done', re.I)
-BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line from (him|you)|your call|your word|'
-                     r'needs? (his|your) (decision|word|call)|decision for you|say the word|Ask him|'
-                     r'would settle it|from you would close it|LEFT OPEN for your eye|still worth your ears|'
-                     r'waiting on (his|your)|ASKED HIM|STAYS OPEN|is his call|his call alone|'
-                     # …and the big one the first version missed: items that are FIXED and left open only
-                     # until he confirms on his own device. They read as actionable and are not — there is
-                     # nothing to build, only something for him to look at.
-                     r'Left OPEN rather than ticked|left open until|until (he|you) confirm|say so and (it|this) is live|'
-                     r'if it still|next time it happens|one line from (him|you)|REAL-DEVICE report|'
-                     # …and the plainest block of all: the thing the request refers to never arrived.
-                     r'IS NOT IN THE INBOX|did not come through|never arrived|no screenshot|reference image', re.I)
-BIG     = re.compile(r'wants a session of its own|Not started deliberately|days of work', re.I)
-# …and entries that are NOT WORK AT ALL. Some exist as a receipt — a standing instruction he has had to
-# repeat, kept so it does not live only in a chat log — and some say in their own words that they no
-# longer hold the queue. Both used to land in ACTIONABLE, because nothing about them looks blocked, and
-# that sends the next session to read a reminder instead of building something.
-STANDING = re.compile(r'Nothing to build|this is the receipt|Standing reminder|no longer holds the queue|'
-                      r'standing instruction', re.I)
-# …and entries whose REMAINING clauses are all marked by him as ideas rather than requests. #277 had
-# nine of ten clauses shipped with the last one written "potentially"; #343's two open clauses both say
-# "(long term)". Both were topping the actionable list looking like days of work. If every unticked
-# clause is hedged that way, the entry is not queued work — the ticked ones are the real state.
-CLAUSE  = re.compile(r'^\s*\d+\. \[ \]')
-HEDGED  = re.compile(r'\(long term\)|\(Idea|potentially|eventually|one day', re.I)
-buckets = {'ACTIONABLE': [], 'blocked on Ezra': [], 'held by Ezra': [], 'needs its own session': [], 'standing note (no build)': [], 'only long-term ideas left': []}
+# THE CLASSIFIER LIVES IN ONE PLACE — tools/_classify.py — because tools/status.sh writes the same
+# verdict into REQUESTS.md for Ezra to read. Two copies of this rule would drift, and a rule living in
+# two places is the most expensive bug shape in this project.
+sys.path.insert(0, 'tools')
+from _classify import classify, BUCKETS
+buckets = {k: [] for k in BUCKETS}
 for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
@@ -172,22 +152,7 @@ for n, i in enumerate(starts):
     m = re.match(r'- \[ \] \*\*(\d+[a-z]?)', lines[i])
     tag = m.group(1) if m else '(unnumbered)'
     title = re.sub(r'\*\*', '', lines[i][6:])[:64]
-    open_clauses = [l for l in body.split('\n') if CLAUSE.match(l)]
-    hedged_only = bool(open_clauses) and all(HEDGED.search(l) for l in open_clauses)
-    # AN ANSWER FROM HIM OUTRANKS EVERY "waiting on him" PHRASE IN THE ENTRY (21 Aug).
-    # The blocked test matches prose anywhere in the body — "your call", "say the word", "would settle
-    # it". When he finally answers, that prose is still sitting there, in the history that this file
-    # exists to keep. So six entries he had just answered still counted as blocked on him, and every
-    # oldest-first listing would have skipped them: answered, and unreachable. That is the same shape
-    # as the `[0-9]` bug this whole script was written to kill — the tool quietly hiding work.
-    # An entry carrying "ANSWERED BY EZRA" is by definition not waiting on Ezra. Held still wins, since
-    # he can answer and still say "not yet", and so does a standing note, which never had work in it.
-    answered = 'ANSWERED BY EZRA' in body
-    key = ('only long-term ideas left' if hedged_only else
-           'standing note (no build)' if STANDING.search(body) else
-           'held by Ezra' if HELD.search(body) else
-           'blocked on Ezra' if (BLOCKED.search(body) and not answered) else
-           'needs its own session' if BIG.search(body) else 'ACTIONABLE')
+    key = classify(body)
     buckets[key].append((tag, title, i + 1))
 for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
     print('%-22s %d' % (k + ':', len(buckets[k])))

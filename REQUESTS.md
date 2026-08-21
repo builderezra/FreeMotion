@@ -246,6 +246,7 @@ better still, keep working inside the turn rather than parking work for a later 
       and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
       along, which is why "it feels janky" kept not matching anything a profiler pointed at.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO. PARTLY ANSWERED v7.62 — the app now tells you why; whether it FIXES your file is still unknown.** His words: *"Added a screen
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
       case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
@@ -733,6 +734,7 @@ better still, keep working inside the turn rather than parking work for a later 
       this rules out is a *new* regression from tonight — it says nothing about the lag you already had.
 
 - [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
       many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,
       idk if you're working on it or think it should be fine but just letting you know it's not fine."*
@@ -1512,6 +1514,7 @@ better still, keep working inside the turn rather than parking work for a later 
       (v8.00–8.01) and a clamped two-finger pan (v8.02–8.03), so if it feels broken again it will be a
       new report with new evidence rather than this one.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       better."* From the screenshot: (a) TWO separate confirm buttons on screen at once — the blue ✓ in
       the top bar and another ✓ in the bar above the keyboard; (b) that second bar also carries ^ and v
       arrows and eats a row of space on an already-cramped phone; (c) the size says 225 pt but the
@@ -1552,6 +1555,7 @@ better still, keep working inside the turn rather than parking work for a later 
       here and which nothing in our DOM can produce. (c) depends on your project's aspect. Only (d) is
       shipped.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
       it's the only thing in the timeline."* "Only thing in the timeline" rules out mixing, layer count,
       render load and effect cost — this is the audio path failing on its own. "Sometimes" means a RACE,
@@ -1593,6 +1597,7 @@ better still, keep working inside the turn rather than parking work for a later 
       It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
       CPU throttle all played.
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
       tested adding a voice memo."* This is a REAL-DEVICE report, and that matters: the two measured
       causes behind the earlier lag item were fixed at v6.33 and the desktop numbers came back fine, so
@@ -2675,6 +2680,7 @@ better still, keep working inside the turn rather than parking work for a later 
         magnifier, at the identical magnitude you spotted there. All three glyphs now measure 0.00.
 
 - [ ] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** His words:
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       *"the slam easter egg on pc is competely broken now"* — told to me mid-task with *"dont let this
       distract you but also dont forget to log it"*, so it is written down here and waits its turn
       rather than jumping the queue.
@@ -2754,7 +2760,7 @@ better still, keep working inside the turn rather than parking work for a later 
       a finding, it is the same false alarm the 16 Aug attempt logged** (62.3px stuck, same cause).
       Checked `document.hidden` before believing it this time. **Do not report slam motion from this
       environment** — it can verify the STATIC facts (no scale, overhang present) and nothing else.
-      ✅ **So: nothing measurable is broken, and this is waiting on his eye, not on work.**
+      ✅ **So: nothing measurable is broken. WAITING ON HIS EYE, not on work.**
       He has not looked at it since v8.54 as far as this file records. **Ask him to trigger it once on
       the PC and say whether it still looks wrong.** If it does, the next step is the one the entry
       already names — treat it as a rebuild of the effect, and offer turning it off on desktop if it
@@ -2837,6 +2843,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Still open rather than closed, because his original report said a RESTART was needed to get it
       back, and nothing measured here needs one. That detail is the part still unexplained.
 - [ ] **Editing lags, and gets bad fast.** *Status (v6.33):* the two measured causes are fixed —
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       playback went 95.09 → 17.43 ms/frame on a 6-layer comp (5.5x, dropped frames 191 → 3) and
       forced layouts per tap are now FLAT with layer count instead of linear (211 → 5 at 80 layers).
       Left open until Ezra confirms it feels better on his own device and projects.
@@ -3629,6 +3636,7 @@ better still, keep working inside the turn rather than parking work for a later 
       which looks odd next to the "Colouring" rename you asked for in 83. Say the word and I'll
       change it — it's your app's voice, not mine to decide.
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
+      **STATUS: 🟢 READY — nothing is stopping this**
       exist fully"*. **Measured, and it is more finished than that** — here is exactly where it stands,
       because "doesn't exist fully" needed a number rather than another guess.
       **Visual effects: 499 of 499 sliders are keyframable.** Verified end to end, not just counted:
@@ -3818,6 +3826,7 @@ better still, keep working inside the turn rather than parking work for a later 
       of convolvers is a different and much heavier proposition) and Pitch Shift is a third mechanism
       again. **Neither is this fix, and neither should be attempted by copying it.**
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
+      **STATUS: 🔵 BIG — wants a session of its own**
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
       start it badly at the end of a long session.
@@ -4042,6 +4051,7 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.** ⚠️ **THE PROPOSAL TABLE IS NOW COMPLETE (v9.16).**
+      **STATUS: 📌 NOTE — nothing to build**
       All 105 proposed effect upgrades are built except Gaussian Blur (needs a compositing path, not a
       slider) and five the plan itself says to skip. **What is genuinely left in that file is three
       NEW FEATURES — Corner Pin, LUT import and Curves — each needing a new kind of control (on-canvas
@@ -4234,6 +4244,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 ### Held, on purpose
 - [ ] **The visual identity pass before any public release.** The UI is modelled on Alight Motion and
+      **STATUS: ⏸️ HELD — you asked to leave this**
       has to be made our own before publishing. See [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md).
       *Held because* copying AM was the fast way to build and the app should be worth publishing
       before we spend time on identity — but this gets raised the moment Ezra mentions launching,
@@ -4585,6 +4596,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **Phone is untouched**, as the entry always said it should be.
 
 - [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
       trying to play back stuff, this is related to the long on going lag issues with freemotion."*
       **Taking his diagnosis seriously — it is the most useful thing in the report.** Scratchy popping on
@@ -7004,6 +7016,7 @@ better still, keep working inside the turn rather than parking work for a later 
       no `background-position`, and it is paused with a project open.
 
 - [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
+      **STATUS: 🟢 READY — nothing is stopping this**
       Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
       well in the element section it just adds the element to ur open project, you can't even open it as
       a project and edit it. You need to put a lot more effort into the elements feature"*.
@@ -7048,6 +7061,7 @@ better still, keep working inside the turn rather than parking work for a later 
       This also answers the question that was put to him badly — there is nothing to "ask", because the
       dump-into-the-current-project behaviour is simply wrong.
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
+      **STATUS: 💡 LATER — long-term ideas only**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
       > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
@@ -7251,6 +7265,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 - [ ] **206 — Shapes need SENSIBLE edit points, not a million dots. ⚠️ HELD — he is doing this one WITH
+      **STATUS: ⏸️ HELD — you asked to leave this**
       me, and asked me not to start it.** His words: *"in alight motion, each shape has sensible edit
       points that are actually useful and make sense, in ours only some shapes have that but most have
       just got a million little edit dots, which is finicky as shit, so we're going to have to fix that
@@ -7276,6 +7291,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"later"*. Still HELD, by his choice. Do not start it alone —
       his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
+      **STATUS: 🟢 READY — nothing is stopping this**
       exported and got no audio even tho the video had audio."*
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the
       app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
@@ -7454,6 +7470,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **NEXT, if it recurs:** ask for the toast text. No toast at all + a silent file now means the mix
       was built and the loss is in the muxer, which is the one region still without a witness.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
+      **STATUS: 🟢 READY — nothing is stopping this**
 
       **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
       Verbatim:
@@ -7668,6 +7685,7 @@ better still, keep working inside the turn rather than parking work for a later 
       "the preview has to shed pixels to keep up, and that is what the ladder is for" — plus, possibly,
       warning him when a scene's cost has passed what the preview can hold at full resolution.
 - [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
       thirds of the screen empty black below them, no canvas, no timeline. So on finishing a vector
@@ -7975,7 +7993,7 @@ better still, keep working inside the turn rather than parking work for a later 
       delay deliberately and this one is a complaint about a delay.
 
 
-- [ ] **352 — Clean up this file: get rid of what is not needed.** (17 Aug.) His words, verbatim:
+- [x] **352 — ✅ **DONE v11.31.** Clean up this file: get rid of what is not needed.** (17 Aug.) His words, verbatim:
       *"Do you ever waste time going through the project file trying to find what you need? if so feel
       free to spend some time cleaning it up and getting rid of un needed stuff, before you do tho, ima
       compact the chat, so when you finish up with waht ur doing just lmk and then compact the chat and
@@ -8002,7 +8020,33 @@ better still, keep working inside the turn rather than parking work for a later 
       I guess"*. So: **LABELS ONLY, NO PRUNING.** Add a one-line STATUS to the top of long entries
       (open / waiting on you / done vN) so the current state is the first thing he reads. **Do NOT delete
       or condense any entry** — the history is the point, and he has just confirmed it.
+      ✅ **DONE v11.31 — labels only, nothing deleted, exactly as he asked.**
+      Every OPEN entry now carries a one-line **STATUS** as its first line: 🟢 READY / 🟠 NEEDS YOU /
+      ⏸️ HELD / 🔵 BIG / 📌 NOTE / 💡 LATER. Closed entries get none — they already say ✅ DONE vN.
+      **It is GENERATED, not typed** (`tools/status.sh`), and `tools/ship.sh` regenerates it on every
+      ship. A hand-written label is true the day it is written and misleading a week later — it would
+      tell him something is waiting on him long after he answered. This cannot rot.
+      **Verified non-destructive:** all 439 entry headers unchanged, and every line other than the 46
+      inserted ones byte-identical. Running it twice changes nothing.
+      🔴 **AND IT IMMEDIATELY FOUND FIVE ITEMS THAT HAD GONE INVISIBLE — caused by my own logging.**
+      The classifier treats "standing instruction" as "nothing to build". When his answers were logged,
+      the phrase *"his standing instruction of the same day"* was written into **#342, #395, #419, #432
+      and #456** — and all five instantly read as no-work and vanished from the actionable list. Real
+      requests, made unreachable by a note ABOUT them. **That is the same shape as the `[0-9]` bug that
+      tools/next.sh was written to kill, and it was introduced by the logging discipline this file
+      demands.** Fixed properly: an entry that IS a standing note says so in its HEADER (#353 does); one
+      that merely mentions his instruction does not. ACTIONABLE went 19 → 24.
+      Two more overrides earned the same way, both mirroring the existing answered-beats-blocked rule:
+      · **`HOLD LIFTED`** — a hold's original words stay in the entry forever, so lifting one has to be
+        explicit. #419 was still "held" days after he said *"just make it what I want"*.
+      · **`WAITING ON HIS EYE`** — looking is not answering. #250's bug is fixed and only his eye is
+        outstanding, but he had answered a different question about it, which promoted it to actionable;
+        the next tick would have rebuilt a working effect on a report that predates its own fix.
+      ⚠️ **The classifier now lives in ONE place, `tools/_classify.py`**, imported by both `next.sh` and
+      `status.sh`. Two copies of that rule would drift, which is this project's most expensive bug shape.
+      `next.sh`'s output was verified byte-identical before and after the extraction.
 - [ ] **353 — Standing instructions for the loop, restated after the compact.** (17 Aug.) His words,
+      **STATUS: 📌 NOTE — nothing to build**
       verbatim: *"Continue with the list, ticking one thing off at a time from top to bottom, oldest
       first, use workflows if you need, make sure you don't wait too long to wait for one of the work
       flow people to reply because sometimes they freeze and you just do nothing for hours, so make it
@@ -10226,6 +10270,7 @@ wait for them to report back."*
       hits them. Treat this entry as closed unless he reports one.
       ✅ **CLOSED 21 Aug — *"dont test all the effects urself ill just tell you if the others arent behaving as one when i see it"*.** The behaviour half shipped; he does not want a sweep of the rest.
 - [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
+      **STATUS: ⏸️ HELD — you asked to leave this**
       a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
       sketching so you can draw many things at once but you still have the edit points thing and didn't
       do the other stuff I asked and when you're actually drawing and start a second line you can't see
@@ -11279,6 +11324,7 @@ wait for them to report back."*
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
 - [ ] **387 — 🚨 PHONE: pressing on a layer to scrub is still laggy, and PLAYBACK is a buggy mess while
+      **STATUS: 🟢 READY — nothing is stopping this**
       scrubbing is fine.** (18 Aug, *"On mobile"*.) His words, verbatim: *"The issue of scrubbing when
       pressing on a layer being laggy for some reason is still an issue, so you need to be careful where you
       place ur finger on the timeline to avoid slowness."* and *"And also for some reason a video will
@@ -11533,6 +11579,7 @@ wait for them to report back."*
         Worth keeping: "inset: 0" is not the outside of a bordered box, and on a 1px border at 3x that
         is the difference between tracing an edge and hovering just inside it.
 - [ ] **391 — The Edit Text menu is still a bit broken.** (18 Aug, phone screenshot at v9.87 with the
+      **STATUS: 🟢 READY — nothing is stopping this**
       keyboard up.) His words, verbatim: *"edit text menu still a bit broken and also"* (the sentence runs
       into #392, which is the separate request below).
       **Not specific enough to act on, and the shot shows a known non-bug**, so this needs one line from him
@@ -11546,6 +11593,7 @@ wait for them to report back."*
       covered elsewhere. Search the file for the Edit Text clauses before asking him again; if it truly
       is covered, merge this entry into the one that covers it rather than leaving both open.
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
+      **STATUS: 🟢 READY — nothing is stopping this**
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
       text to voice and make a whole menu and feature for this"*.
       **The button goes in the row he circled** — the strip directly under the clip, above the
@@ -11590,6 +11638,7 @@ wait for them to report back."*
       frozen. Lower the z-index; do not remove it.
 
 - [ ] **394 — Dragging a layer too far right BREAKS the project timeline.** (18 Aug, via the phone inbox.)
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim: *"Found a glitch where when you drag a layer to the right too far it breaks the
       project timeline"*
       **Clauses:**
@@ -11631,6 +11680,7 @@ wait for them to report back."*
       stranded somewhere off-screen with nothing bounding it. Look for a missing clamp on the drag
       against the project duration.
 - [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
+      **STATUS: 🟢 READY — nothing is stopping this**
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
       **Clauses:**
@@ -12006,6 +12056,7 @@ wait for them to report back."*
       who narrows a desktop window past 700px gets that wrapped row for real.
 
 - [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
       (19 Aug, via the phone inbox.) His words, verbatim, in full:
 
@@ -12307,6 +12358,7 @@ wait for them to report back."*
       the big centred + from #354, which he asked for and likes.
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🚨 **20 Aug — HIS IMAGES ARE NOT REACHING ME AT ALL. This is not one lost attachment.** In his own
       words while answering 429: *"maybe my images arent going through"*. That explains this entry, and the
       missing screenshots on 428 and 429 too. **The phone inbox is a TEXT file** (iCloud/GitHub), so an
@@ -12341,6 +12393,7 @@ wait for them to report back."*
       form, drawn with a THINNER stroke than the reference. This is his second time asking about these
       buttons, so treat the icon geometry as the deliverable, not the button chrome.
 - [ ] **419 — Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
+      **STATUS: 🟢 READY — nothing is stopping this**
       to be independent.** (19 Aug, phone screenshot at v10.22 with all three readouts circled, plus the
       ◆ keyframe button on the left rail circled.) His words, verbatim:
 
@@ -12368,6 +12421,11 @@ wait for them to report back."*
       gets recked idc, just make it what I want"*. So **SPLIT THEM.** "This changes existing projects"
       is not a reason to hold anything back — he has now said so twice. Stop pricing backward
       compatibility into decisions; price only whether the result is what he wants.
+      ✅ **HOLD LIFTED, 21 Aug.** The "Log don't do yet" above was from 18 Aug. He has since answered
+      this directly — *"like I said before I don't care about my projects I just want stuff to be good,
+      if my old stuff gets recked idc, just make it what I want"* — which is the go-ahead, and it also
+      removes the only reason the entry was hedged (that splitting the keyframes changes existing
+      projects). **Split them.**
 - [x] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
       would make things worse.** ✅ **v10.56 — measured at his own 440 first, and it was worth doing.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
       > Move the two arrow buttons that jump you through the project closer towards the centre, I feel they are too far away from the time play button and too close to the undo redo buttons
@@ -12504,6 +12562,7 @@ wait for them to report back."*
       proved the assertion dead before that was fixed.
 
 - [ ] **425 — PC: the trash / copy / parent buttons belong on the RIGHT of the row, not the left, and their
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       background is too subtle.** (19 Aug, PC screenshot at v10.31.) His words, verbatim:
 
       > THE three buttons on pc with trash copy and parent need to be on the right side not left and also the background they have is too subtle
@@ -12628,6 +12687,7 @@ wait for them to report back."*
       **Do not "fix" it by adding `!important`** — that hides the cause, and the cause is the interesting
       part here. Reproduce it in the live app first and find out which of the three it is.
 - [ ] **428 — The Media and Audio sections are broken.** (20 Aug, via the phone inbox.) His words,
+      **STATUS: 🟢 READY — nothing is stopping this**
       verbatim:
 
       > These sections are broken now media audio
@@ -12678,6 +12738,7 @@ wait for them to report back."*
       (Import audio / Sound effects / Record voice), six .wav tiles, and then roughly a third of the
       sheet is empty space above the page dots. That empty band IS what he means by broken.
 - [ ] **429 — No lines or special colouring past the cut-off, and the little + must not move while you
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       swipe the timeline.** (20 Aug, via the phone inbox.) His words, verbatim:
 
       > After this cut off point I don't want the lines or special colouring. And also the little plus button is moving around and stuff when I swipe on the time line, should be stiff
@@ -12887,6 +12948,7 @@ wait for them to report back."*
 
 
 - [ ] **431 — The Media and Audio panels squash the buttons above them.** (20 Aug, phone screenshot at
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       v10.71 of the ADD sheet on the Media tab.) His words, verbatim: *"Media and audio panels now make
       the top bottoms too small"*.
       **Read as: "top buttons", not "bottoms".** In the screenshot the Media tab shows the five tab icons,
@@ -12902,6 +12964,7 @@ wait for them to report back."*
       it next to a dense grid. His screenshot is the layout to measure — v10.71, 6 media tiles.
 
 - [ ] **432 — The template icon looks bad.** (20 Aug.) His words, verbatim: *"Reminder to log things -
+      **STATUS: 🟢 READY — nothing is stopping this**
       including template icon looks shit"*.
       Two things in one message, and both are recorded rather than one:
       1. [ ] **The standing instruction, restated:** log everything he says, as he says it. Already the
@@ -13230,6 +13293,7 @@ wait for them to report back."*
       tests were quietly proving a code path the product never used.
       Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
 - [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
       down, presets are just for effects not anything else, if it says preset remove any other function
       than just saving what effects the layer has"*.
@@ -13273,6 +13337,7 @@ wait for them to report back."*
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
 - [ ] **455 — The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way
       the fuck down"*.
       So a single drag step is changing speed by something like 10x, which makes every value between
@@ -13286,6 +13351,7 @@ wait for them to report back."*
       Check the step granularity too — "goes up 10x at a time" may be a step size as much as a curve.
 
 - [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
+      **STATUS: 🟢 READY — nothing is stopping this**
       better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
       create button in the menu and in the project that are both rainbow to be different colours not the
       same (both moving)  and the one in the project that moves currently just spins In a slow circle
@@ -13303,6 +13369,7 @@ wait for them to report back."*
       centre) and the in-project one in the top-right of the editor toolbar.
 
 - [ ] **457 — The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
+      **STATUS: 🟢 READY — nothing is stopping this**
       verbatim: *"Also I never wanted a rainbow export button change it back to what it was"*.
       **This is a revert, not a redesign.** Something gave the export button a rainbow treatment that he
       did not ask for — find the commit that did it and restore the previous appearance.
@@ -13314,6 +13381,7 @@ wait for them to report back."*
       when it arrived — the honest fix is whatever it looked like before that change.
 
 - [ ] **458 — 🚨 Save and Discard in the project's settings-cog menu do nothing.** (21 Aug.) His words,
+      **STATUS: 🟢 READY — nothing is stopping this**
       verbatim: *"Save and discard button in the settings cog menu in the project doesn't work"*.
       **Two buttons, both dead, in the menu people reach for when they want to keep or abandon work — so
       this is a data-loss-shaped bug even if nothing is actually lost.** Treat it as high priority
@@ -13326,6 +13394,7 @@ wait for them to report back."*
       it closes without doing the thing. Those are different bugs.
 
 - [ ] **459 — The open-a-project animation is still not right: it should be a SEQUENCE, not both at
+      **STATUS: 🟢 READY — nothing is stopping this**
       once.** (21 Aug.) His words, verbatim: *"Also the animation made ages ago for when you open a
       project still isn't just right - I want it so the project swipes to the left first with a smooth
       animation that is well designed, and then after it does the swipe to the left the project opens
@@ -13344,6 +13413,7 @@ wait for them to report back."*
       what was tried, rather than starting from scratch.
 
 - [ ] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** (21 Aug,
+      **STATUS: 🟢 READY — nothing is stopping this**
       with a screenshot.) His words, verbatim: *"Effects in this image STILLLLLLLLLL don't work"*.
       **The nine L's are the point.** The same complaint is already recorded from 13 Aug — *"There's a
       shit load of effects in the colour & light section that blatantly do nothing and don't work"* — and
@@ -13442,6 +13512,7 @@ wait for them to report back."*
          honest, more work, and still leaves him with a tile that does nothing.
       **Do NOT "fix" any of these effects' code. There is nothing wrong with it.**
 - [ ] **461 — Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (21 Aug, with a screenshot.) His words, verbatim: *"Make an icon for each section that resembles
       the overall theme in some way, like for colouring you could do an interesting colour palette but do
       something distinct for each one"*, and immediately after: *"Instead of how it is rn with random
@@ -13457,6 +13528,7 @@ wait for them to report back."*
       Vanilla SVG, drawn inline like the app's other icons — no icon font, no image files.
 
 - [ ] **462 — The FAVES strip should be a proper button with a shiny gold look, not a thin notch.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (21 Aug, with a screenshot; he circled it in red.) His words, verbatim: *"Make the faves menu a big
       button and not just this small notch, and give it some nice shiny golden background colours"*.
       Today it is a slim full-width strip reading "FAVES · 34 ▾" with a small drag pill above it, sitting
@@ -13465,6 +13537,7 @@ wait for them to report back."*
       "Shiny" implies a gradient with a highlight, not a flat fill.
 
 - [ ] **463 — In the filters menu, rows like TUFF should be ONE row you swipe sideways, not two stacked
+      **STATUS: 🟢 READY — nothing is stopping this**
       rows.** (21 Aug, with a screenshot.) His words, verbatim: *"Make in the filters menu for rows like
       tuff where there's two lines just one line and you scroll left and right swiping to see the
       others"*.
@@ -13474,6 +13547,7 @@ wait for them to report back."*
       Applies to "rows like tuff" — i.e. the filter sections generally, not only that one.
 
 - [ ] **464 — Adding filters should be multi-select-then-Add, exactly like the main effects menu.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (21 Aug.) His words, verbatim: *"When adding filters make it so that you can toggle them select and
       then have to press add, like the main effects menu, this is good so I can see them all quickly and
       not have to add then delete and go back. And so you can add multiple at once if you're heart
@@ -13488,6 +13562,7 @@ wait for them to report back."*
       Ties into **463**: both are about the filters menu behaving like the effects menu.
 
 - [ ] **465 — Split the stairs button in the timeline toolbar into TWO: stairs down and stairs up.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       (21 Aug, with a screenshot; he scribbled over the button and drew a line down its middle to show
       the split.) His words, verbatim: *"Split this button into two, one stairs down and one stairs up."*
       **What his screenshot shows:** the row of buttons under the TIMELINE heading at the bottom of the
