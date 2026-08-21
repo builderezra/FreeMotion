@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>denoise x repeat render (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: a layer used as a Luma Matte source is rendered TWICE in a frame. The
+   temporal denoiser advances only when t is strictly greater than the last time it saw, so the second
+   render at the SAME t takes the "nothing to average with" path — which also STASHES, overwriting the
+   frame history with an un-denoised frame. The damage is not limited to the matte: every following frame
+   averages against that raw frame.
+   Measured as an invariant that needs no matte at all — rendering the same frame twice must not change
+   what the NEXT frame looks like. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.renderScene&&w.FM.fxRegistry&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function run(FM){
+  var doc=f.contentDocument, W=160,H=90, L=[];
+  function build(){
+    FM.scene.layers.length=0;
+    FM.scene.project.width=W; FM.scene.project.height=H;
+    var S=FM.makeLayer('shape',{name:'s',shape:'rect',x:0,y:0,shapeW:400,shapeH:400,fill:'#808080'});
+    S.start=0; S.duration=10;
+    var grain=FM.fxRegistry.makeInstance('grain')||FM.fxRegistry.makeInstance('filmgrain');
+    var dn=FM.fxRegistry.makeInstance('temporaldenoise');
+    if(!dn) return null;
+    S.effects=grain?[grain,dn]:[dn];
+    FM.scene.layers.push(S);
+    return S;
+  }
+  function frame(t){
+    var c=doc.createElement('canvas'); c.width=W; c.height=H;
+    var ctx=c.getContext('2d',{willReadFrequently:true});
+    FM.renderScene(ctx,FM.scene,t);
+    return ctx.getImageData(0,0,W,H).data;
+  }
+  function diff(a,b){ var s=0; for(var i=0;i<a.length;i+=4) s+=Math.abs(a[i]-b[i]); return s/(a.length/4); }
+  if(!build()){ out.textContent='CONTROL FAILED: no temporaldenoise effect in the registry.'; document.title='DONE'; return; }
+  /* CONTROL FIRST. A flat grey layer with no grain gives 0.000 whether the denoiser ran or not — the
+     same shape of false clean this hunt has already hit three times. Prove there IS something to denoise
+     and that the denoiser is in the stack. */
+  var S=FM.scene.layers[0];
+  var names=(S.effects||[]).map(function(e){return e.type;}).join(', ');
+  L.push('effects on the layer: '+names);
+  var g1=FM.fxRegistry.makeInstance('grain')||FM.fxRegistry.makeInstance('filmgrain');
+  L.push('a grain effect exists in the registry: '+(g1?'yes':'NO'));
+  // clean run: three consecutive frames
+  frame(1.00);
+  var cleanT2=frame(1.04);
+  var cleanT3=frame(1.08);
+  var moves=diff(cleanT2,cleanT3);
+  L.push('frame-to-frame change in the clean run: '+moves.toFixed(3));
+  if(!(moves>0.5)){ out.textContent=L.join('\n')+'\n\nCONTROL FAILED: consecutive frames are identical, so there is no noise for the denoiser to act on and a difference of 0 proves nothing.'; document.title='DONE'; return; }
+  L.push('');
+  // repeat run: the SAME frames, but frame 2 is rendered twice (as a matte source would be)
+  build();
+  frame(1.00); frame(1.04); frame(1.04);
+  var repeatT3=frame(1.08);
+  var d=diff(cleanT3,repeatT3);
+  L.push('mean per-pixel difference at the NEXT frame after a repeat render: '+d.toFixed(3));
+  L.push('');
+  L.push(d>0.5
+    ? '❌ rendering a frame twice changes what the following frame looks like — the denoiser\'s history was overwritten with a raw frame'
+    : '✅ a repeat render leaves the following frame identical');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

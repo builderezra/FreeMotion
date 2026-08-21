@@ -7261,6 +7261,24 @@ window.FM = window.FM || {};
       const spatial = Math.max(0, (p.spatial == null ? 0.6 : FM.evalProp(p.spatial, t)) * (ps == null ? 1 : ps));
       const rec = _mfRec(((layer && layer.id) || '_anon') + ':dn', W, H);
       const advance = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;
+      /* THE SAME FRAME, RENDERED AGAIN (bug hunt, 21 Aug). A layer that feeds a Luma Matte — or a
+       * Compound Blur, Match Grade or Displacement Map — is rendered TWICE inside one frame: once for
+       * itself and once as the source. The second call arrives with t === rec.t, which is neither an
+       * advance nor a seek, so it fell through to the "nothing to average with" path below — and that
+       * path STASHES, replacing the frame history with an un-denoised frame. The damage was not confined
+       * to the matte: every following frame then averaged against raw pixels. Measured at 1.45x more
+       * frame-to-frame noise in the denoised layer (tests/_dnmatte.html).
+       * The first call's OUTPUT is exactly what this call should produce, and rec.cv already holds it —
+       * so reuse it rather than re-deriving it. Identity transform and `copy` because rec.cv is a
+       * device-pixel snapshot of the whole plate, which is how stash() took it. */
+      if (rec.t >= 0 && Math.abs(t - rec.t) <= 1e-4) {
+        B.save();
+        B.setTransform(1, 0, 0, 1, 0, 0);
+        B.globalAlpha = 1; B.globalCompositeOperation = 'copy'; B.filter = 'none';
+        B.drawImage(rec.cv, 0, 0);
+        B.restore();
+        return;
+      }
       // Stash the OUTPUT, not the input. Averaging each frame with the raw previous one is a two-tap
       // filter and cannot remove more than 29% of the grain however hard you push it; feeding the
       // result back makes it an exponential moving average, which is what a real temporal denoiser

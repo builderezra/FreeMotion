@@ -1787,7 +1787,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **Preview resolution change wipes Time Warp's frozen frame but not its progress marker — the scanned band turns into a hole**    
       ➜ **REAL — fixed v11.18, see §48**
       `compositor.js:7071` — Add Time Warp Scan (defaults: Freeze, duration 2.5s) to a video layer. Scrub to about half way through the scan so the top half of the frame is visibly frozen. Press Play. The frozen half instantly goes transparent — a hole showing whatever is beneath the layer — and it stays a hole for the rest of
-- [ ] **A layer used as a Luma Matte source renders twice per frame, and Temporal Denoise silently degrades to no denoising on the second render**  
+- [x] **A layer used as a Luma Matte source renders twice per frame, and Temporal Denoise silently degrades to no denoising on the second render**    
+      ➜ **REAL — fixed v11.19, see §49**
       `compositor.js:7268` — Layer A = grainy video with Temporal Denoise (strength 0.85). Layer B = a shape, positioned BELOW A in the timeline stack, with Luma Matte pointing at A as its matte source. Scrub or play: A's grain comes back on screen — the denoiser stops visibly doing anything — and moving B above A in the stack
 - [x] **Grouping a group with another layer silently re-stacks the scene — the member group's children are left behind in the layer array**    
       ➜ **REAL — fixed v11.08, see §38**
@@ -2230,3 +2231,44 @@ big size renders on its own is the only thing that isolates the fault.
 **The class is worth naming:** a cache reset that drops *most* of the state that depended on the thing it
 just invalidated. Every field in that line was added because something referred to the canvas — `u` referred
 to it too, and was simply never added.
+
+## 49. Feeding a Luma Matte switched off Temporal Denoise (21 Aug, v11.19) — REAL, fifteenth and LAST §34 lead
+
+A layer that feeds a Luma Matte — or a Compound Blur, Match Grade or Displacement Map — is rendered **twice
+inside one frame**: once for itself, once as the source. The denoiser advances only when `t` is strictly
+greater than the last time it saw, so the second call was neither an advance nor a seek and fell through to
+the "nothing to average with" path. That path **stashes**, replacing the frame history with an un-denoised
+frame — so the damage was not confined to the matte: every following frame averaged against raw pixels.
+
+**Measured** (`tests/_dnmatte.html`), as frame-to-frame change on the half of the canvas where the denoised
+layer sits alone:
+
+| | frame-to-frame change |
+|---|---|
+| no matte consumer | 4.492 |
+| used as a Luma Matte source | **6.495** — 1.45× |
+
+**Fix:** the first call's output is exactly what the second should produce, and `rec.cv` already holds it.
+Reuse it instead of re-deriving it.
+
+### The first probe for this reported a clean, and was measuring the wrong thing
+
+Attempt one called `FM.renderScene` twice at the same `t` on the theory that this models a double render. It
+returned **0.000** — with a valid control showing grain present and frames genuinely differing by 5.838. The
+control was fine; the *model* was wrong. Separate `renderScene` calls do not reproduce a double render that
+happens **inside** one frame.
+
+That is a different failure from the three earlier false cleans in this run. Those were probes that did not
+exercise the code at all, and a control caught them. This one exercised the code correctly and exercised the
+**wrong scenario** — which no control can catch, because the control only proves the probe is measuring
+something real, never that it is measuring the thing that was claimed.
+
+**The lesson worth keeping: build the actual scenario, not an analogy to it.** The second probe wired a real
+Luma Matte to a real denoised layer and the defect appeared immediately.
+
+---
+
+**§34 IS NOW FULLY DRAINED.** Twenty leads from the 21 Aug fan-out: **fourteen real and fixed** (§35–§49),
+**one refuted by measurement** (§39), five folded into others as duplicates. Every fix carries a mutation-
+checked test. The fan-out's own refutation stage killed nothing, which is why every one was re-measured here
+by hand — and the final tally, roughly 14 real to 1 false, says the leads were good and the refuter was not.

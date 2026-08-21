@@ -3530,6 +3530,71 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('Temporal Denoise: feeding a Luma Matte does not defeat the denoiser', { item: 'denoise-matte' }, function () {
+    /* BUG HUNT (21 Aug), fifteenth and LAST §34 lead. A layer that feeds a Luma Matte — or a Compound
+       Blur, Match Grade or Displacement Map — is rendered TWICE inside one frame. The second call arrives
+       with t equal to the last time the denoiser saw, which is neither an advance nor a seek, so it fell
+       through to the "nothing to average with" path — and that path STASHES, replacing the frame history
+       with an un-denoised frame. Every following frame then averaged against raw pixels.
+       A denoiser's job is to reduce FRAME-TO-FRAME change, so that is what is measured, on the half of
+       the canvas where the denoised layer sits alone. Measured at 1.45x more noise.
+       TWO CONTROLS, because the first probe for this reported a clean and was wrong: the no-matte case
+       must actually churn (or there is nothing to compare), and the effects must actually exist in the
+       registry (or nothing was built at all). */
+    const layers0 = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 160, H = 90;
+      const build = withMatte => {
+        FM.scene.layers.length = 0;
+        FM.scene.project.width = W; FM.scene.project.height = H;
+        const grain = FM.fxRegistry && (FM.fxRegistry.makeInstance('filmgrain') || FM.fxRegistry.makeInstance('grain'));
+        const dn = FM.fxRegistry && FM.fxRegistry.makeInstance('temporaldenoise');
+        const lm = FM.fxRegistry && FM.fxRegistry.makeInstance('lumamatte');
+        if (!grain || !dn || !lm) return null;
+        const S = FM.makeLayer('shape', { name: 'src', shape: 'rect', x: 40, y: 45, shapeW: 70, shapeH: 80, fill: '#808080' });
+        S.start = 0; S.duration = 10; S.effects = [grain, dn];
+        FM.scene.layers.push(S);
+        const M = FM.makeLayer('shape', { name: 'consumer', shape: 'rect', x: 120, y: 45, shapeW: 70, shapeH: 80, fill: '#ffffff' });
+        M.start = 0; M.duration = 10;
+        lm.params.source = withMatte ? S.id : '';
+        M.effects = [lm];
+        FM.scene.layers.push(M);
+        return S;
+      };
+      const frame = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        return ctx.getImageData(0, 0, W, H).data;
+      };
+      // only the LEFT half, where the denoised layer is on its own — the consumer's own pixels are
+      // a different picture and would swamp the reading
+      const churnLeft = (a, b) => {
+        let s = 0, n = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) { const i = (y * W + x) * 4; s += Math.abs(a[i] - b[i]); n++; }
+        return s / n;
+      };
+      const run = withMatte => {
+        if (!build(withMatte)) return null;
+        frame(1);
+        return churnLeft(frame(1.04), frame(1.08));
+      };
+
+      const alone = run(false);
+      if (alone === null) throw new Error('CONTROL FAILED: filmgrain, temporaldenoise or lumamatte is missing from the registry — nothing was built');
+      if (!(alone > 0.2)) throw new Error('CONTROL FAILED: the denoised layer barely changes between frames on its own (' + alone.toFixed(3) + '), so there is nothing to compare against');
+      const asSource = run(true);
+      const ratio = asSource / alone;
+      if (ratio > 1.25) throw new Error('being used as a matte source defeats the denoiser: ' + ratio.toFixed(2) +
+        'x more frame-to-frame noise (' + asSource.toFixed(3) + ' vs ' + alone.toFixed(3) + ')');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('Time Warp: a preview resolution change does not punch a hole in the picture', { item: 'timewarp-resize' }, function () {
     /* BUG HUNT (21 Aug), fourteenth verified lead from BUG-HUNT §34. _mfRec wipes its canvas when the
        preview size changes — setting canvas.width clears it — and resets every other piece of history
