@@ -4753,6 +4753,11 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   background: linear-gradient(to top, var(--panel, #10141d) 68%, rgba(16, 20, 29, 0));
 }
 .fxb-commit.hidden { display: none; }
+/* THE SAME BAR, IN THE INSPECTOR (queue 464). `.fxb-commit` is `position:absolute` against the effects
+   SHEET; the filters list lives in the inspector panel, which has no such box, so an absolute bar would
+   anchor to whatever happens to be positioned above it. Sticky instead: it rides the bottom of the
+   panel while you scroll the list, which is what an absolute bar was imitating in the sheet. */
+.flt-commit { position: sticky; bottom: 0; margin-top: 6px; }
 .fxb-commit-clear {
   flex: 0 0 auto; padding: 9px 14px; border-radius: 10px;
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13px;

@@ -13876,8 +13876,7 @@ wait for them to report back."*
       (each is ~4 minutes). They finished correctly in the background and `mutate.sh` restored the tree
       on its trap, but nothing was measured or shipped until `.mutation-in-progress` cleared. **Run them
       one per call.**
-- [ ] **464 — Adding filters should be multi-select-then-Add, exactly like the main effects menu.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **464 — ✅ **DONE v11.42.** Adding filters should be multi-select-then-Add, exactly like the main effects menu.**
       (21 Aug.) His words, verbatim: *"When adding filters make it so that you can toggle them select and
       then have to press add, like the main effects menu, this is good so I can see them all quickly and
       not have to add then delete and go back. And so you can add multiple at once if you're heart
@@ -13891,6 +13890,23 @@ wait for them to report back."*
       simply be pointed at the filter list.
       Ties into **463**: both are about the filters menu behaving like the effects menu.
 
+      ✅ **DONE v11.42 — tap marks, the bar adds. Verified: three taps, ZERO effects on the layer.**
+      A tile used to `makeInstance` → `fitToLayer` → push → switch back to the stack, all on the tap.
+      That is the loop he described: add, look, delete, go back, three times to compare three looks.
+      **The badge and the button are the effects browser's own classes** (`.fxb-pick`, `.fxb-commit-go`),
+      so the two menus count and read identically rather than becoming two dialects of one idea — which
+      is what the entry asked for. **The BAR needed its own positioning**: `.fxb-commit` is
+      `position:absolute` against the effects SHEET, and the filters list lives in the inspector panel
+      where there is no such box, so it would have anchored to whatever happened to be positioned above
+      it. `.flt-commit` is sticky instead, which is what the absolute bar was imitating in the sheet.
+      **Applied in the order he numbered them.** The badges are numbers, so any other order would make
+      them a lie — and filters stack, so the order changes the result. Mutation-checked by reversing it.
+      Picks clear when the view changes, matching the effects browser's `close()`.
+      ⚠️ **AN EXISTING TEST ENCODED THE OLD BEHAVIOUR AND WAS UPDATED, NOT DELETED.** *"filters tab:
+      tapping a filter adds it and returns you to the stack with it open"* — the first half is exactly
+      what he asked to change, the second half is still true and still worth guarding. It now picks, then
+      presses Add, then makes the same assertions about landing back on the stack with the filter open.
+      Deleting it would have quietly dropped a guarantee nobody asked to lose.
 - [ ] **465 — Split the stairs button in the timeline toolbar into TWO: stairs down and stairs up.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       (21 Aug, with a screenshot; he scribbled over the button and drew a line down its middle to show

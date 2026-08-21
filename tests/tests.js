@@ -24691,6 +24691,57 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('filters are toggle-then-Add, and nothing applies until you press it (queue 464)', { item: '464' }, async function () {
+    /* Ezra: *"When adding filters make it so that you can toggle them select and then have to press add,
+     * like the main effects menu, this is good so I can see them all quickly and not have to add then
+     * delete and go back. And so you can add multiple at once if you're heart desires"*.
+     * A tile used to apply its filter on tap AND jump back to the stack, so comparing three looks meant
+     * add / look / delete / go back, three times. The reason he gave IS the spec, so the assertion that
+     * matters most is that tapping changes NOTHING on the layer. */
+    if (!FM.filters || !FM.inspector) throw new Error('filters or inspector unreachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { name: 'mfprobe', shape: 'rect', x: 200, y: 200, shapeW: 120, shapeH: 90, fill: '#cc22cc', start: 0, duration: 5 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('filters');
+      await sleep(400);
+      const tiles = [].slice.call(document.querySelectorAll('.flt-tile[data-fltid]'))
+        .filter(t => t.getBoundingClientRect().width > 0);
+      if (tiles.length < 3) throw new Error('fewer than 3 filter tiles rendered — this cannot test multi-select');
+      const bar = document.querySelector('.flt-commit');
+      if (!bar) throw new Error('no commit bar in the filters view');
+      if (!bar.classList.contains('hidden')) throw new Error('the commit bar is showing with nothing picked — an "Add 0 filters" button does nothing');
+
+      tiles[0].click(); tiles[1].click(); tiles[2].click();
+      await sleep(160);
+
+      /* THE WHOLE POINT — three taps and the layer is untouched. */
+      if ((L.effects || []).length !== 0) throw new Error('tapping filter tiles applied ' + L.effects.length + ' of them straight away — that is the add-then-delete loop he asked to be rid of');
+      const badges = [].slice.call(document.querySelectorAll('.flt-tile .fxb-pick')).map(b => b.textContent);
+      if (badges.join(',') !== '1,2,3') throw new Error('the picks are not numbered 1,2,3 — got [' + badges.join(',') + ']');
+      if (bar.classList.contains('hidden')) throw new Error('the commit bar stayed hidden with three filters picked');
+
+      // untoggling renumbers rather than leaving a hole
+      tiles[1].click(); await sleep(140);
+      const after = [].slice.call(document.querySelectorAll('.flt-tile .fxb-pick')).map(b => b.textContent);
+      if (after.join(',') !== '1,2') throw new Error('after untoggling the middle pick the badges read [' + after.join(',') + '] instead of 1,2');
+
+      // …and Add applies them, in the order they were picked
+      const wanted = [].slice.call(document.querySelectorAll('.flt-tile.is-picked'))
+        .map(t => (t.querySelector('.flt-name') || {}).textContent);
+      bar.querySelector('.fxb-commit-go').click();
+      await sleep(400);
+      const got = (L.effects || []).map(e => e.name || e.type);
+      if (got.length !== wanted.length) throw new Error('picked ' + wanted.length + ' filters, ' + got.length + ' landed on the layer');
+      if (got.join('|') !== wanted.join('|')) throw new Error('filters applied in a different order than they were numbered: picked [' + wanted.join(', ') + '] got [' + got.join(', ') + ']');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('a long filter section is one swipeable row, not two stacked ones (queue 463)', { item: '463' }, async function () {
     /* Ezra, with a screenshot of the TUFF section: *"Make in the filters menu for rows like tuff where
      * there's two lines just one line and you scroll left and right swiping to see the others"*.
@@ -29815,7 +29866,14 @@
     });
   });
 
-  test('filters tab: tapping a filter adds it and returns you to the stack with it open', { item: 'fx-library' }, async function () {
+  test('filters tab: adding a filter returns you to the stack with it open', { item: 'fx-library' }, async function () {
+    /* THE TAP NO LONGER ADDS (queue 464, v11.42). Ezra asked for filters to work like the effects menu —
+       toggle a selection, then press Add — *"so I can see them all quickly and not have to add then
+       delete and go back"*. So the tap SELECTS and the commit bar applies.
+       This test is not about that (queue 464's own test covers the selection); it is about what happens
+       AFTER the add, which is unchanged and still worth guarding: you come back to the stack with the
+       new filter open, rather than being left staring at the list you just picked from wondering whether
+       anything happened. Only the trigger moved. */
     await withFilterLayer(async function (L) {
       visibleFxPill(/^Filters$/).click();
       await sleep(140);
@@ -29823,8 +29881,12 @@
       var wanted = (rows[2].querySelector('.flt-name') || {}).textContent;
       rows[2].click();
       await sleep(160);
+      var bar = document.querySelector('.flt-commit');
+      if (!bar || bar.classList.contains('hidden')) throw new Error('picking a filter did not raise the Add bar');
+      bar.querySelector('.fxb-commit-go').click();
+      await sleep(220);
       var box = (L.effects || [])[0];
-      if (!box || !FM.isFxContainer(box)) throw new Error('tapping "' + wanted + '" did not add a filter');
+      if (!box || !FM.isFxContainer(box)) throw new Error('adding "' + wanted + '" did not put a filter on the layer');
       if (box.name !== wanted) throw new Error('it added "' + box.name + '" instead of "' + wanted + '"');
       if (!box._expanded) throw new Error('the filter landed closed');
       // …and the panel came back to the stack, rather than leaving you staring at the list you just

@@ -1458,6 +1458,49 @@ window.FM = window.FM || {};
        the same definitions — nothing is reordered and nothing is removed from its section. Two calls to
        one builder rather than two builders, because two would be two chances for a fave tile and its
        twin in the category below to stop behaving the same way. */
+    /* TOGGLE, THEN ADD — like the effects menu (queue 464). Ezra: *"When adding filters make it so that
+       you can toggle them select and then have to press add, like the main effects menu, this is good so
+       I can see them all quickly and not have to add then delete and go back. And so you can add multiple
+       at once if you're heart desires"*.
+       He gave the reason as well as the request and the reason IS the spec: tapping a filter used to
+       apply it immediately AND jump back to the stack, so trying three looks meant add, look, delete, go
+       back, three times over.
+       The badge and the button are the effects browser's own classes (`.fxb-pick`, `.fxb-commit-go`), so
+       the two menus look and count the same rather than becoming two dialects of one idea. The BAR needs
+       its own positioning: `.fxb-commit` is `position:absolute` against the effects sheet, and there is
+       no such sheet here — see `.flt-commit` in styles.css. */
+    const paintFilterPicks = () => {
+      const host = document.querySelector('.insp-body') || document;
+      host.querySelectorAll('.flt-tile[data-fltid]').forEach(t => {
+        const n = _fltPicks.indexOf(t.dataset.fltid);
+        let b = t.querySelector('.fxb-pick');
+        if (n < 0) { if (b) b.remove(); t.classList.remove('is-picked'); return; }
+        if (!b) { b = el('span', 'fxb-pick'); t.appendChild(b); }
+        b.textContent = String(n + 1);
+        t.classList.add('is-picked');
+      });
+      const bar = host.querySelector('.flt-commit');
+      if (bar) {
+        bar.classList.toggle('hidden', !_fltPicks.length);
+        const go = bar.querySelector('.fxb-commit-go');
+        if (go) go.textContent = _fltPicks.length === 1 ? 'Add 1 filter' : 'Add ' + _fltPicks.length + ' filters';
+      }
+    };
+
+    const applyFilter = (id) => {
+      const f = FM.filters.get(id);
+      if (!f) return { ok: false, why: 'gone' };
+      const box = FM.filters.makeInstance(id);
+      if (!box) return { ok: false, why: 'unavailable', name: (f && f.name) || id };
+      const fitted = FM.fxRegistry.fitToLayer(box, layer);
+      if (!fitted) return { ok: false, why: 'unsuited', name: f.name };
+      if (!layer.effects) layer.effects = [];
+      layer.effects.forEach(e => { e._expanded = false; });
+      fitted._expanded = true;
+      layer.effects.push(fitted);
+      return { ok: true, name: f.name, dropped: box.effects.length - fitted.effects.length };
+    };
+
     const mkTile = (f) => {
 
         /* A TILE, matching the effects and audio browsers (queue 220). He asked for the section to work
@@ -1482,24 +1525,11 @@ window.FM = window.FM || {};
         // On the tile itself these would be three lines of text under a 62px picture at 380px wide, so
         // they move to the title — still there when you want them, not shouting over the grid.
         row.title = f.name + (f.desc ? ' — ' + f.desc : '') + (made.length ? '\nMade of: ' + made.join(' · ') : '');
+        row.dataset.fltid = f.id;
         row.addEventListener('click', () => {
-          const box = FM.filters.makeInstance(f.id);
-          if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
-          const fitted = FM.fxRegistry.fitToLayer(box, layer);
-          if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
-          if (!layer.effects) layer.effects = [];
-          layer.effects.forEach(e => { e._expanded = false; });
-          fitted._expanded = true;
-          layer.effects.push(fitted);
-          // Back to the stack, with the new filter open — adding a look and then still staring at the
-          // list of looks is the same "did that do anything?" the effect browser had to fix.
-          fxTab = 'visual';
-          afterFx();
-          if (FM.toast) {
-            FM.toast(fitted.effects.length < box.effects.length
-              ? 'Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer'
-              : 'Added “' + f.name + '”');
-          }
+          const i = _fltPicks.indexOf(f.id);
+          if (i >= 0) _fltPicks.splice(i, 1); else _fltPicks.push(f.id);
+          paintFilterPicks();
         });
       /* THE STAR (clauses 3 and 4). On the tile rather than in a menu: it is a per-filter thing he can
          change while looking at the grid, and a menu would be two taps to express a preference.
@@ -1542,6 +1572,40 @@ window.FM = window.FM || {};
       list.forEach(f => wrap.appendChild(mkTile(f)));
       s.appendChild(wrap);
     });
+
+    /* The commit bar. Hidden until something is picked — an empty "Add 0 filters" sitting under the
+       grid would be a control that does nothing, which is worse than no control. */
+    const bar = el('div', 'fxb-commit flt-commit hidden');
+    const clear = el('button', 'fxb-commit-clear', 'Clear');
+    clear.type = 'button';
+    clear.addEventListener('click', () => { _fltPicks = []; paintFilterPicks(); });
+    const go = el('button', 'fxb-commit-go', 'Add 1 filter');
+    go.type = 'button';
+    go.addEventListener('click', () => {
+      if (!_fltPicks.length) return;
+      const picks = _fltPicks.slice();
+      _fltPicks = [];
+      let added = 0, dropped = 0; const failed = [];
+      // IN THE ORDER HE PICKED THEM. The badges are numbered, so applying them in any other order would
+      // make the numbers a lie — and filters stack, so the order changes the result.
+      picks.forEach(id => {
+        const r = applyFilter(id);
+        if (r.ok) { added++; dropped += (r.dropped || 0); }
+        else failed.push(r.name || id);
+      });
+      // Back to the stack once, at the end — not once per filter.
+      fxTab = 'visual';
+      afterFx();
+      if (FM.toast) {
+        const what = added === 1 ? '1 filter' : added + ' filters';
+        FM.toast(failed.length
+          ? 'Added ' + what + ' — ' + failed.length + ' did not suit this layer'
+          : (dropped ? 'Added ' + what + ' — ' + dropped + ' part(s) did not suit this layer' : 'Added ' + what));
+      }
+    });
+    bar.appendChild(clear); bar.appendChild(go);
+    s.appendChild(bar);
+    setTimeout(paintFilterPicks, 0);   // after the section is in the DOM
     return s;
   }
 
@@ -1778,6 +1842,7 @@ window.FM = window.FM || {};
   // TAB, not a view — the browser, the panel and the per-parameter easing sub-view all read it, and a
   // separate 'audiofx' view would have had to be kept in sync with all three.
   let fxTab = 'visual';
+  let _fltPicks = [];   // filters toggled but not yet added (queue 464); cleared whenever the view changes
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
@@ -5319,7 +5384,8 @@ window.FM = window.FM || {};
     // 'audiofx' is no longer a view of its own (queue 45) — it is the Effects card's audio TAB. The
     // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
     // audio browser ask for, and because a project/session could have persisted it.
-    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
+    openCategory(key) { _fltPicks = [];   // leaving the filters view drops an uncommitted selection, the same way the effects browser's close() clears its own (queue 464)
+      if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       /* The canvas overlay has to be told (queue 205). Opening a section that owns the canvas changes
          whether the selection box should be showing, and nothing else was going to ask — the overlay
          only updates on a render or a canvas gesture, so without this the outline stayed up until you
