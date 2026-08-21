@@ -1415,7 +1415,7 @@ window.FM = window.FM || {};
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
                   group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
                 }
-                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
+                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
                 /* Ezra, twice: "I still need it so I can drag clips on the timeline without it opening
                    up the editing panel." The selectLayer above is deliberate — you must be able to SEE
                    which clip you grabbed — but on a phone the inspector sheet is DERIVED from the
@@ -1446,7 +1446,7 @@ window.FM = window.FM || {};
       // else: NOT selected here any more. A mouse press that turns into a drag must not change the
       // selection; a press that turns out to be a plain click selects on release, below.
       if (layer.locked) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for
-      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
+      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       if (FM.playing) FM.pause();
     });
@@ -2531,6 +2531,41 @@ window.FM = window.FM || {};
     return primaryOrigStart + minDelta;
   }
   FM._groupDragFloor = groupDragFloor;
+  FM._applyClipMoveAtSrc = function () { return String(applyClipMoveAt); };
+
+  /* AND ONE CEILING FOR THE WHOLE SELECTION (queue 394). Ezra: *"Found a glitch where when you drag a
+   * layer to the right too far it breaks the project timeline"*, and with a screenshot: *"it just keeps
+   * going past the timeline"*.
+   * There was a floor and NO ceiling — a clip could be dragged arbitrarily far right, stranding it in
+   * empty space with nothing bounding it, and the ruler and scroll width grew to follow. His screenshot
+   * shows exactly that: a clip sitting off beyond the right-hand edge with every other row empty.
+   * THE RULE: no clip may START later than the project's end AS IT WAS WHEN THE DRAG BEGAN. You can
+   * still move a clip to the end and extend the project — that is how a project gets longer, and each
+   * drag extends it by at most one clip's length — but you cannot open a void larger than the whole
+   * project in one gesture.
+   * Measured from the drag's START, never from the live duration, for the same reason the auto-scroll
+   * brake a thousand lines down says so: autoFitDuration grows the project as the clip moves, so a
+   * ceiling read live would be pushed right by the very drag it is meant to bound, and never bind.
+   * SHARED, exactly like the floor. Clamping each clip against its own limit is what silently broke
+   * multi-clip sync before (see the note in applyClipMoveAt) — the short one stops, the long ones carry
+   * on, and the arrangement moves by an amount nobody dragged. So: find the smallest delta ANY member
+   * can take, and bound the primary by that. The selection stops as a unit.
+   * A clip that ALREADY starts past the end (an older project, an import) is never yanked backwards —
+   * the ceiling can only ever be at or ahead of where it started. */
+  function groupDragCeil(primaryOrigStart, group, projDur) {
+    let maxDelta = projDur - primaryOrigStart;
+    (group || []).forEach(g => {
+      const d = projDur - g.origStart;
+      if (d < maxDelta) maxDelta = d;
+    });
+    return primaryOrigStart + Math.max(0, maxDelta);
+  }
+  FM._groupDragCeil = groupDragCeil;
+  // Exposed so the suite can assert the DRAG actually applies the ceiling, not merely that the
+  // arithmetic is right. Removing the clamp from the call site left the helper untouched and a
+  // helper-only test passed happily — a function only the tests call is a decoration, not a seam.
+  // A real clip drag cannot be driven in the suite's iframe (clip rects come back 0 there), so the
+  // call site is checked the way this file already checks pause(): on its source.
 
   function applyClipMoveAt(x, shiftKey, quiet) {
     if (!clipMove || !tracksEl) return;
@@ -2552,9 +2587,13 @@ window.FM = window.FM || {};
        single-clip drag is unchanged. */
     const floor = groupDragFloor(clipMove.layer.duration, clipMove.origStart,
       (clipMove.group || []).map(g => ({ duration: g.layer.duration, origStart: g.origStart })));
-    const raw = Math.max(floor, clipMove.origStart + dx / pps);
+    // The ceiling (queue 394). `origProjDur` is the project's length when the drag began — see the note
+    // on groupDragCeil for why it must not be read live.
+    const ceil = groupDragCeil(clipMove.origStart, clipMove.group,
+      (clipMove.origProjDur != null ? clipMove.origProjDur : (FM.scene.project.duration || 0)));
+    const raw = Math.min(ceil, Math.max(floor, clipMove.origStart + dx / pps));
     const sr = shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl, clipMove.sup);   // Shift bypasses snap; co-dragged clips excluded; just-snapped targets suppressed
-    clipMove.layer.start = Math.max(floor, sr.v);
+    clipMove.layer.start = Math.min(ceil, Math.max(floor, sr.v));
     if (sr.snapped) showSnap(sr.guide); else hideSnap();
     const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
     if (clipEl) clipEl.style.left = (PAD + clipMove.layer.start * pps) + 'px';
@@ -2689,7 +2728,7 @@ window.FM = window.FM || {};
        * passes is the exact kind of dead test this feature has already produced. The layer's start is
        * put back, so nothing survives the call. */
       const save = L.start;
-      clipMove = { layer: L, origStart: L.start, startX: 0, moved: true, group: [], _excl: {}, sup: null };
+      clipMove = { layer: L, origStart: L.start, origProjDur: (FM.scene.project.duration || 0), startX: 0, moved: true, group: [], _excl: {}, sup: null };
       try { applyClipMoveAt(0, false, quiet !== false); }
       finally { L.start = save; clipMove = null; hideSnap(); }
       return true;

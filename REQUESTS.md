@@ -7016,7 +7016,7 @@ better still, keep working inside the turn rather than parking work for a later 
       no `background-position`, and it is paused with a project open.
 
 - [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
       well in the element section it just adds the element to ur open project, you can't even open it as
       a project and edit it. You need to put a lot more effort into the elements feature"*.
@@ -7085,6 +7085,8 @@ better still, keep working inside the turn rather than parking work for a later 
       an element that is already IN a project and having the change follow, or sharing them as files
       (which is where **343** landed).
       **Do not guess at clause 3 and do not rebuild clauses 1-2.** They work.
+      ⏳ **WAITING ON EZRA — what does he try to do with elements that he cannot?** Everything he has
+      described concretely is built and verified. Options were put to him rather than an open question.
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
       **STATUS: 💡 LATER — long-term ideas only**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
@@ -7316,7 +7318,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"later"*. Still HELD, by his choice. Do not start it alone —
       his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       exported and got no audio even tho the video had audio."*
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the
       app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
@@ -7494,8 +7496,11 @@ better still, keep working inside the turn rather than parking work for a later 
       of the timeline would export silently. If his timeline had a clip out there, that is the cause.
       **NEXT, if it recurs:** ask for the toast text. No toast at all + a silent file now means the mix
       was built and the loss is in the muxer, which is the one region still without a witness.
+      ⏳ **WAITING ON EZRA — the toast text if a silent export happens again.** All four known silent
+      losses now name themselves on screen (v11.21 closed the last one). No toast AND a silent file would
+      mean the mix was built and the loss is in the muxer — the one region still without a witness.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
 
       **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
       Verbatim:
@@ -7709,6 +7714,10 @@ better still, keep working inside the turn rather than parking work for a later 
       1458k pixels is simply a very expensive frame. The honest answer is not "the app is broken" but
       "the preview has to shed pixels to keep up, and that is what the ladder is for" — plus, possibly,
       warning him when a scene's cost has passed what the preview can hold at full resolution.
+      ⏳ **WAITING ON EZRA — one performance readout taken WHILE PLAYING.** The ladder is cleared by
+      measurement (v11.29) and his scene costs 163ms/frame on a fast Mac, so the slowness is workload.
+      His tier-0 reading means the ladder was never consulted, which only happens on a paused sample.
+      There is nothing to build until that reading arrives.
 - [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
@@ -11349,7 +11358,7 @@ wait for them to report back."*
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
 - [ ] **387 — 🚨 PHONE: pressing on a layer to scrub is still laggy, and PLAYBACK is a buggy mess while
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       scrubbing is fine.** (18 Aug, *"On mobile"*.) His words, verbatim: *"The issue of scrubbing when
       pressing on a layer being laggy for some reason is still an issue, so you need to be careful where you
       place ur finger on the timeline to avoid slowness."* and *"And also for some reason a video will
@@ -11480,6 +11489,9 @@ wait for them to report back."*
       2. **`tests/_framediff.swift` is now the instrument for this whole class of report.** Any screen
          recording he sends can be turned into hard numbers. It should be used before any more profiling.
       3. Only then profile — and profile the PLAY path, per the asymmetry above.
+      ⏳ **WAITING ON EZRA — was he PLAYING or SCRUBBING in the 9.5s recording?** Measured: 96.2% of its
+      frames are visually identical with a 1.10s freeze, so the stutter is real and confirmed. His own
+      report says scrubbing is fine and play is a mess, so that one word decides where to look next.
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
@@ -11604,7 +11616,7 @@ wait for them to report back."*
         Worth keeping: "inset: 0" is not the outside of a bordered box, and on a 1px border at 3x that
         is the difference between tracing an edge and hovering just inside it.
 - [ ] **391 — The Edit Text menu is still a bit broken.** (18 Aug, phone screenshot at v9.87 with the
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       keyboard up.) His words, verbatim: *"edit text menu still a bit broken and also"* (the sentence runs
       into #392, which is the separate request below).
       **Not specific enough to act on, and the shot shows a known non-bug**, so this needs one line from him
@@ -11617,6 +11629,9 @@ wait for them to report back."*
       **ANSWERED BY EZRA, 21 Aug:** *"i think we already discussed"* — he believes this is already
       covered elsewhere. Search the file for the Edit Text clauses before asking him again; if it truly
       is covered, merge this entry into the one that covers it rather than leaving both open.
+      ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
+      entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
+      naming what is wrong with it turns this into work.
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
       **STATUS: 🟢 READY — nothing is stopping this**
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
@@ -11652,6 +11667,11 @@ wait for them to report back."*
       ⚠️ Worth telling him: a good TTS voice normally means a cloud service (a key, a bill, data leaving
       the device). The browser's built-in `speechSynthesis` is free, offline and instant but sounds
       robotic and CANNOT be recorded to a file on iOS. That constraint decides the shape of this.
+      🔵 **NEEDS ITS OWN SESSION, and a decision he has not been given yet.** A good text-to-speech voice
+      normally means a cloud service — a key, a bill, and text leaving the device, which breaks the app's
+      local-only premise. The browser's built-in `speechSynthesis` is free, offline and instant but sounds
+      robotic and **cannot be recorded to a file on iOS**, which matters because the point is putting the
+      voice on the timeline. That constraint decides the whole shape and he should pick before it starts.
 - [x] **393 — The "Loading …" bar sits ON TOP of the pop-up menus.** ✅ **v9.94.** (18 Aug, phone screenshot at v9.93:
       the "Loading IMG_2596" pill covering the Edit Shape card in the category grid.) His words, verbatim:
       *"Make it so the loading bar goes behind the pop up menus, so it isn't obstructing."*
@@ -11662,8 +11682,7 @@ wait for them to report back."*
       cannot see at all is worse than one partly covered — it is the only thing telling him the app has not
       frozen. Lower the z-index; do not remove it.
 
-- [ ] **394 — Dragging a layer too far right BREAKS the project timeline.** (18 Aug, via the phone inbox.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **394 — ✅ **DONE v11.32.** Dragging a layer too far right BREAKS the project timeline.** (18 Aug, via the phone inbox.)
       His words, verbatim: *"Found a glitch where when you drag a layer to the right too far it breaks the
       project timeline"*
       **Clauses:**
@@ -11704,6 +11723,32 @@ wait for them to report back."*
       past the end of the project and the timeline just keeps extending after it**, leaving the content
       stranded somewhere off-screen with nothing bounding it. Look for a missing clamp on the drag
       against the project duration.
+      ✅ **DONE v11.32 — there was a floor and no ceiling.**
+      A clip could be dragged before 0 only so far (`groupDragFloor`), and to the right **without any
+      bound at all** — so it could be pushed as far as the gesture lasted, stranded in empty space, with
+      the ruler and scrollable width growing after it. His screenshot is exactly that: one clip out past
+      the right-hand edge, every other row empty at the playhead.
+      **The rule: no clip may start later than the project's end AS IT WAS WHEN THE DRAG BEGAN.** Moving
+      a clip to the end and extending the project still works — that is how a project gets longer, one
+      clip-length at a time — but a single gesture cannot open a void larger than the whole project.
+      Read from the drag's START, never live: `autoFitDuration` grows the project as the clip moves, so a
+      live ceiling would be pushed right by the very drag it bounds and never bind. That is the same trap
+      the auto-scroll brake already documents a thousand lines below.
+      **Shared across the selection, mirroring the floor.** Clamping each clip against its own limit is
+      what silently broke multi-clip sync before — the constrained one stops, the others carry on, and
+      the arrangement moves by an amount nobody dragged. Measured: primary at 2s with a second clip at 8s
+      in a 10s project stops the primary at **4s**, not 10s.
+      **A clip already past the end is never yanked backwards** — an older project or an import can hold
+      one, and moving his work unasked would be worse than the bug.
+      ⚠️ **The first test passed while the fix was deleted, and that is the part worth remembering.** It
+      tested `groupDragCeil`'s arithmetic only; removing the clamp from the drag left the helper correct
+      and simply unused, and every assertion stayed green — *a function only the tests call is a
+      decoration, not a seam*. A real clip drag cannot be driven in the suite (clip rects come back 0 in
+      its iframe), so the call site is asserted on its SOURCE, the way this file already checks `pause()`.
+      Both directions mutation-checked: removing either clamp is caught, and so is breaking the shared
+      group bound.
+      🔗 **Related to 215:** a clip stranded past the end is exactly the shape that made an export come
+      out silent, and v11.21 taught the mixer to name it. This stops it happening by accident.
 - [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
       **STATUS: 🟢 READY — nothing is stopping this**
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)

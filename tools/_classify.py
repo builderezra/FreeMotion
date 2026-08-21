@@ -80,7 +80,14 @@ def classify(body):
     # all?" / "yes i want it"), and `answered` promoted it to actionable. The next loop tick would then
     # have rebuilt a working effect on the strength of a report predating its own fix. An entry that
     # says it needs him to LOOK stays waiting on him however many other questions he has answered.
-    needs_eye = 'WAITING ON HIS EYE' in body or 'LEFT OPEN for your eye' in body
+    # Generalised from "his eye" to anything still needed FROM him (21 Aug). #202 wants a performance
+    # readout taken while playing, #215 the toast text if a silent export recurs, #387 whether he was
+    # playing or scrubbing, #342 what "more effort" means. All four had ANSWERED BY EZRA somewhere in
+    # their history — he HAS answered things about them — so `answered` promoted every one to
+    # actionable, and each topped the oldest-first list again on the next tick with nothing that could
+    # be done. An explicit marker beats inference, exactly as HOLD LIFTED does.
+    needs_eye = ('WAITING ON HIS EYE' in body or 'LEFT OPEN for your eye' in body
+                 or 'WAITING ON EZRA' in body)
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else

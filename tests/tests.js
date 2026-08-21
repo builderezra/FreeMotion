@@ -24685,6 +24685,52 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
+    /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
+     * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.
+     * There was a floor (a clip cannot be dragged before 0) and NO ceiling, so a clip could be pushed
+     * arbitrarily far right and stranded in empty space with the ruler and scroll width growing after
+     * it. His screenshot is exactly that: one clip out beyond the right edge, every other row empty.
+     * THE RULE: no clip may start later than the project's end as it was when the drag began. Moving a
+     * clip to the end and extending the project still works — that is how a project gets longer — but a
+     * single gesture cannot open a void bigger than the whole project. */
+    if (typeof FM._groupDragCeil !== 'function') throw new Error('FM._groupDragCeil is not exposed — the suite cannot check the ceiling');
+    var ceil = FM._groupDragCeil;
+
+    // a lone clip may travel to the project end, and no further
+    if (Math.abs(ceil(2, [], 10) - 10) > 1e-6) throw new Error('a clip starting at 2s in a 10s project should stop at 10s, got ' + ceil(2, [], 10));
+
+    /* SHARED, LIKE THE FLOOR — and this is the assertion with teeth. Clamping each clip against its own
+     * limit is what silently broke multi-clip sync before (see the floor test below): the constrained
+     * one stops while the others keep going, and the arrangement moves by an amount nobody dragged.
+     * Primary at 2s with a second clip at 8s in a 10s project: the second can only move 2s, so the
+     * PRIMARY must stop at 4s even though on its own it could reach 10s. */
+    var shared = ceil(2, [{ origStart: 8 }], 10);
+    if (Math.abs(shared - 4) > 1e-6) throw new Error('with a second clip at 8s in a 10s project the selection should stop with the primary at 4s, got ' + shared + ' — the group is not stopping as a unit, which is how the arrangement silently changes');
+
+    /* NEVER DRAG ANYTHING BACKWARDS. A project made before this existed — or an import — can hold a clip
+     * that already starts past the end. Yanking it back to the ceiling the moment it is touched would
+     * move his work without being asked, which is a worse bug than the one being fixed. */
+    if (Math.abs(ceil(14, [], 10) - 14) > 1e-6) throw new Error('a clip already at 14s in a 10s project was pulled back to ' + ceil(14, [], 10));
+
+    // CONTROL: the ceiling must not be so tight that ordinary dragging hits it. A clip at 1s with a
+    // neighbour at 2s in a 10s project still has 8s of travel — if this ever reads ~0 the feature is
+    // broken in the other direction and clips would refuse to move at all.
+    var room = ceil(1, [{ origStart: 2 }], 10) - 1;
+    if (room < 5) throw new Error('an ordinary drag has only ' + room.toFixed(2) + 's of travel — the ceiling is clamping normal movement, which is worse than the bug');
+
+    /* AND THE DRAG MUST ACTUALLY USE IT. Everything above tests the arithmetic; a first version stopped
+     * there, and deleting the clamp from the drag itself left every assertion green — the helper was
+     * still correct, just no longer called. A real clip drag cannot be driven here (clip rects come
+     * back 0 inside the suite's iframe, recorded in the clip-label test), so the call site is checked
+     * on its source, exactly as this file already checks pause() for a missing argument. */
+    if (typeof FM._applyClipMoveAtSrc !== 'function') throw new Error('the drag call site is not reachable — the arithmetic above proves nothing about what the drag does');
+    var src = FM._applyClipMoveAtSrc();
+    var clamps = (src.match(/Math\.min\(\s*ceil\s*,/g) || []).length;
+    if (clamps < 2) throw new Error('applyClipMoveAt clamps against the ceiling ' + clamps + ' time(s); it must do so BOTH where the raw position is computed and where layer.start is finally written, or snapping can push the clip straight back past the end');
+    if (!/groupDragCeil\(/.test(src)) throw new Error('applyClipMoveAt never calls groupDragCeil — it is using some other bound, or none');
+  });
+
   test('timeline: dragging a multi-selection keeps the clips\u2019 relative timing (BUG-HUNT)', { item: 'tl-groupdrag' }, function () {
     if (typeof FM._groupDragFloor !== 'function') throw new Error('FM._groupDragFloor is not exposed \u2014 the suite cannot check the shared floor, which is the whole of what was wrong');
     /* NOTE for whoever mutation-tests this: putting the old per-clip `Math.max(-(dur-0.1), ...)` back
