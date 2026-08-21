@@ -1632,6 +1632,12 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
      half a word, so the label is bounded and allowed to wrap instead. */
   overflow: hidden;
 }
+/* The category's icon (queue 461). Sized so the tile still reads label-first at a glance — the icon
+   identifies the section, the word confirms it. A soft drop keeps a light stroke legible against the
+   brighter end of every tile gradient. */
+.fxb-banner-ico { display: block; width: 26px; height: 26px; margin-bottom: 1px; opacity: .96;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.fxb-banner-ico svg { width: 100%; height: 100%; display: block; }
 .fxb-banner-label { display: block; overflow-wrap: anywhere; max-width: 100%; }
 /* Category colours (v6.13). Ezra: "make the colours for all of the effects brighter and more pretty."
    The hues were never the problem — the ALPHA was. Every banner was rgba at .16–.32 over a near-black

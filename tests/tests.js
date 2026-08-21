@@ -24691,6 +24691,51 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('every effect category has its own distinct icon (queue 461)', { item: '461' }, async function () {
+    /* Ezra: *"Make an icon for each section that resembles the overall theme in some way, like for
+     * colouring you could do an interesting colour palette but do something distinct for each one"*,
+     * and *"Instead of how it is rn with random colours"*. The tiles carried a colour and a word; the
+     * colour is per-category but says nothing you can read, which is the complaint.
+     * Two things are asserted, and the second is the one with teeth: every tile has an icon, and NO TWO
+     * ARE THE SAME. A shared fallback glyph would satisfy "every tile has an icon" while leaving the
+     * sections exactly as indistinguishable as he found them. */
+    if (!FM.fxBrowser || !FM.fxBrowser.open) throw new Error('the effects browser is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { name: 'icoprobe', shape: 'rect', x: 200, y: 200, shapeW: 120, shapeH: 90, fill: '#cc22cc', start: 0, duration: 5 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open();
+      await sleep(420);
+      /* SCOPE TO THE VISIBLE GRID. A document-wide query found 16 tiles for 12 categories in the suite
+         frame — other panels of the app are alive in there. This is the same trap #428 recorded, where
+         a document-wide selector clicked the PARKED add-menu while reading the visible one; the note
+         there says to scope every query, and this is that. */
+      const grids = [].slice.call(document.querySelectorAll('.fxb-cats'))
+        .filter(g => g.getBoundingClientRect().width > 0);
+      if (!grids.length) throw new Error('no visible category grid — the browser did not open, so nothing below is measuring it');
+      const tiles = [].slice.call(grids[0].querySelectorAll('.fxb-banner'));
+      const expected = (FM.fxRegistry.categories() || []).length;
+      if (!expected) throw new Error('the registry reports no categories');
+      if (tiles.length !== expected) throw new Error('the visible grid has ' + tiles.length + ' category tiles for ' + expected + ' categories');
+
+      const shapes = {};
+      tiles.forEach((t) => {
+        const svg = t.querySelector('.fxb-banner-ico svg');
+        if (!svg) throw new Error('the "' + t.dataset.cat + '" tile has no icon');
+        const d = svg.innerHTML.replace(/\s+/g, '');
+        if (!d) throw new Error('the "' + t.dataset.cat + '" icon is empty');
+        if (shapes[d]) throw new Error('"' + t.dataset.cat + '" and "' + shapes[d] + '" draw the SAME icon — a shared fallback leaves the sections as indistinguishable as they were');
+        shapes[d] = t.dataset.cat;
+      });
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('opening a project is two moves, not one — the list leaves before the project arrives (queue 459)', { item: '459' }, async function () {
     /* Ezra: *"I want it so the project swipes to the left first with a smooth animation that is well
      * designed, and then after it does the swipe to the left the project opens from the right smoothly

@@ -13688,7 +13688,7 @@ wait for them to report back."*
       by construction and the hold must engage. Both mutation directions caught; removing the release
       also trips an existing push test.
 - [ ] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** (21 Aug,
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       with a screenshot.) His words, verbatim: *"Effects in this image STILLLLLLLLLL don't work"*.
       **The nine L's are the point.** The same complaint is already recorded from 13 Aug — *"There's a
       shit load of effects in the colour & light section that blatantly do nothing and don't work"* — and
@@ -13786,8 +13786,12 @@ wait for them to report back."*
       2. **Tell him when an effect cannot act** — a quiet note on the row ("no highlights to glow"). More
          honest, more work, and still leaves him with a tile that does nothing.
       **Do NOT "fix" any of these effects' code. There is nothing wrong with it.**
-- [ ] **461 — Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ⏳ **WAITING ON EZRA — which of the two options.** Nothing in Colouring is broken (43 of 43 work,
+      measured). What is left is his pick: **visible-by-default settings (recommended)** so an effect
+      shows something the instant it is tapped, or **a note when an effect cannot act** on the current
+      layer. Do not start either without his word, and do not "fix" any effect's code — there is
+      nothing wrong with it.
+- [x] **461 — ✅ **DONE v11.39.** Give every effect CATEGORY its own icon that suits its theme, instead of random colours.**
       (21 Aug, with a screenshot.) His words, verbatim: *"Make an icon for each section that resembles
       the overall theme in some way, like for colouring you could do an interesting colour palette but do
       something distinct for each one"*, and immediately after: *"Instead of how it is rn with random
@@ -13802,6 +13806,25 @@ wait for them to report back."*
       tile for Repetition, a green screen swatch for Keying, a pen nib for Drawing / Edge.
       Vanilla SVG, drawn inline like the app's other icons — no icon font, no image files.
 
+      ✅ **DONE v11.39 — twelve icons, one per category, each drawn for what its section does.**
+      Colouring a painter's palette (his own example) · Blur one sharp circle beside one gone soft ·
+      Warping a straight grid pushed out of true · Generative a spark and scattered dots · Stylize a cut
+      gem · Drawing / Edge a pen nib · Shakes / Movement a shape held still with its edges thrown about ·
+      Repetition the same tile four times · Keying a figure inside a frame · Opacity a panel solid down
+      one side and see-through down the other · Text a letter · 3D a plane with depth.
+      **Drawn to the app's existing icon family** — 24 viewBox, 1.7 stroke, round caps — so they sit with
+      the add-menu tabs rather than looking imported. **Deliberately no cube anywhere: the Elements tab
+      already owns that silhouette**, and 3D takes a tilted plane instead.
+      **The tile colours are kept.** They are per-category and considered — the Text one is deliberately
+      neutral, with a note saying a hue there "would be an invented meaning" — so the icon supplies the
+      meaning his message says is missing. ⚠️ **If he meant REPLACE the colours rather than add to them,
+      that is a one-line follow-up and he should say.**
+      **The test asserts every tile has an icon AND that no two are the same** — a single shared fallback
+      glyph would satisfy "they all have icons" while leaving the sections exactly as indistinguishable
+      as he found them. Mutation-checked by pointing every tile at the fallback: caught.
+      ⚠️ **A document-wide selector found 16 tiles for 12 categories in the suite frame** — other panels
+      of the app are alive in there. Scoped to the VISIBLE grid, which is the same fix #428 already
+      recorded for the add menu.
 - [ ] **462 — The FAVES strip should be a proper button with a shiny gold look, not a thin notch.**
       **STATUS: 🟢 READY — nothing is stopping this**
       (21 Aug, with a screenshot; he circled it in red.) His words, verbatim: *"Make the faves menu a big

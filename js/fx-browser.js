@@ -1059,9 +1059,51 @@ window.FM = window.FM || {};
   function buildCategories() {
     const sec = el('div', 'fxb-section');
     sec.appendChild(el('div', 'fxb-sec-title', 'Categories'));
+  /* ONE ICON PER CATEGORY (queue 461). Ezra: *"Make an icon for each section that resembles the overall
+   * theme in some way, like for colouring you could do an interesting colour palette but do something
+   * distinct for each one"*, and *"Instead of how it is rn with random colours"*.
+   * The tiles carried a colour and a word and nothing else, and the colours are per-category but carry
+   * no meaning you can read — which is his complaint. The colours are kept (they are deliberate; the
+   * Text one is even deliberately neutral, see styles.css) and the icon is what says what the section
+   * IS.
+   * Drawn to the app's existing icon family — 24 viewBox, 1.7 stroke, round caps — so they sit with the
+   * add-menu tabs rather than looking imported. Every silhouette is distinct from every other AND from
+   * the five add-menu tabs: no cube here, because Elements already owns that shape. */
+  const CAT_ICON = {
+    // a painter's palette, his own example
+    color: '<path d="M12 3.4c-4.9 0-8.9 3.5-8.9 7.9 0 3.1 2.3 4.7 4.5 4.7h1.5a1.8 1.8 0 0 1 1.4 3c-.5.7-.2 1.7.9 1.7 4.9 0 8.9-3.9 8.9-8.7s-4-8.6-8.3-8.6z"/><circle cx="8.1" cy="9.1" r=".95"/><circle cx="12" cy="7.4" r=".95"/><circle cx="15.9" cy="9.6" r=".95"/>',
+    // one sharp edge, one that has gone soft
+    blur: '<circle cx="9.3" cy="12" r="4.1"/><circle cx="15.6" cy="12" r="5.3" stroke-dasharray="2.1 2.5"/>',
+    // a straight grid pushed out of true
+    distort: '<path d="M3.4 8.6c2.9-2.4 5.7 2.4 8.6 0s5.7 2.4 8.6 0M3.4 15.4c2.9-2.4 5.7 2.4 8.6 0s5.7 2.4 8.6 0"/>',
+    // something being made out of nothing
+    proc: '<path d="M12 3.5l1.1 2.7 2.7 1.1-2.7 1.1L12 11.1l-1.1-2.7-2.7-1.1 2.7-1.1z"/><circle cx="6.2" cy="15.2" r="1.5"/><circle cx="11.9" cy="17.7" r="1.1"/><circle cx="17.4" cy="13.8" r="1.8"/>',
+    // a cut gem — a look applied over the top
+    stylize: '<path d="M12 3.6l4.7 4.1-4.7 12.2-4.7-12.2z"/><path d="M7.5 7.7h9"/>',
+    // a pen nib
+    drawing: '<path d="M5.9 18.4l1.6-4.9 8.6-8.6a1.9 1.9 0 0 1 2.7 2.7l-8.6 8.6z"/><path d="M14.6 6.4l3.1 3.1"/>',
+    // held still in the middle, thrown about at the edges
+    move: '<rect x="9.1" y="7.4" width="5.8" height="9.2" rx="1.4"/><path d="M5.9 9.6v4.8M3.2 11.1v1.8M18.1 9.6v4.8M20.8 11.1v1.8"/>',
+    // the same tile, again
+    repeat: '<rect x="3.9" y="3.9" width="6.8" height="6.8" rx="1.4"/><rect x="13.3" y="3.9" width="6.8" height="6.8" rx="1.4"/><rect x="3.9" y="13.3" width="6.8" height="6.8" rx="1.4"/><rect x="13.3" y="13.3" width="6.8" height="6.8" rx="1.4"/>',
+    // the subject you are keeping, inside the frame you are dropping
+    matte: '<rect x="3.4" y="4.4" width="17.2" height="15.2" rx="2"/><circle cx="12" cy="10.3" r="2.2"/><path d="M8.9 16.4a3.9 3.9 0 0 1 6.2 0"/>',
+    // solid on one side, see-through on the other
+    opacity: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 4v16"/><path d="M14.6 7.6h2.8M14.6 11.2h2.8M14.6 14.8h2.8"/>',
+    // a letter
+    text: '<path d="M6.4 18.6L12 5.2l5.6 13.4"/><path d="M8.5 14.2h7"/>',
+    // depth WITHOUT a cube — Elements already owns that silhouette
+    threed: '<path d="M3.4 14.7l8.6-4.2 8.6 4.2-8.6 4.2z"/><path d="M12 10.5V4.4"/><path d="M9.5 6.8L12 4.3l2.5 2.5"/>',
+    other: '<circle cx="12" cy="12" r="7.6"/><path d="M12 8.2v4.4l3 1.8"/>',
+  };
+  const catIcon = (key) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (CAT_ICON[key] || CAT_ICON.other) + '</svg>';
+
     const list = el('div', 'fxb-cats');
     FM.fxRegistry.categories().forEach(cat => {
       const b = el('button', 'fxb-banner'); b.dataset.cat = cat.key;
+      const ico = el('span', 'fxb-banner-ico'); ico.innerHTML = catIcon(cat.key);
+      b.appendChild(ico);
       b.appendChild(el('span', 'fxb-banner-label', cat.label));
       b.appendChild(el('span', 'fxb-banner-count', String(FM.fxRegistry.byCategory(cat.key).length)));
       b.addEventListener('click', () => openCategory(cat));
