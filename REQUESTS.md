@@ -13607,8 +13607,7 @@ wait for them to report back."*
       matters is what lands on the element. It carries a control that a + button is STILL a rainbow,
       because "export is not a rainbow" is equally what you would read if the disc had been deleted
       app-wide, and it measures the arrow's luminance. Both mutation directions caught.
-- [ ] **458 — 🚨 Save and Discard in the project's settings-cog menu do nothing.** (21 Aug.) His words,
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **458 — ✅ **DONE v11.37.** 🚨 Save and Discard in the project's settings-cog menu do nothing.** (21 Aug.) His words,
       verbatim: *"Save and discard button in the settings cog menu in the project doesn't work"*.
       **Two buttons, both dead, in the menu people reach for when they want to keep or abandon work — so
       this is a data-loss-shaped bug even if nothing is actually lost.** Treat it as high priority
@@ -13620,6 +13619,32 @@ wait for them to report back."*
       ⚠️ Reproduce it FIRST and say exactly what "doesn't work" turned out to mean — nothing happens, or
       it closes without doing the thing. Those are different bugs.
 
+      ✅ **DONE v11.37 — AND I CAUSED IT. This was my regression, shipped in v11.25, and he found it.**
+      **What he saw:** the cog menu's buttons said "Discard" and "Save" and did nothing at all.
+      **Why:** they were DUPLICATES. The v11.25 preset removal ran `s[:i] + s[j:]` where `j` came from
+      `s.find(end_marker)` — **searching from the START of the file instead of forward from `i`**. So it
+      landed on an EARLIER `<div class="dialog-actions">` and, instead of deleting a region, copied one.
+      **31 ids ended up duplicated, including entire second copies of `#canvas-dialog` and
+      `#export-dialog`.** index.html went 985 → 1126 lines. `getElementById` returns the FIRST match, so
+      every listener bound to the first copy and the one actually on screen was inert — which is exactly
+      "Save and discard don't work", and why the cog menu was wearing the export dialog's buttons at all.
+      **It shipped through ELEVEN releases (v11.25 → v11.36) with the suite green every time**, because
+      nothing in the suite had ever looked for a duplicate id. A duplicate id cannot announce itself: the
+      page renders, nothing throws, and one of the two copies is simply dead.
+      **The repair was a rebuild, not a patch:** index.html was reconstructed from the last good commit,
+      the v11.25 intent re-applied correctly (searching FORWARD from the anchor this time), and every
+      cache-buster and the version label carried across from the broken file so nothing else regressed.
+      970 lines, zero duplicate ids, cog menu back to App settings / Cancel / Apply, and Discard / Save
+      back where they belong on the export card.
+      🔒 **THE STRUCTURAL FIX — a test that fails on ANY duplicate id in the page.** One DOM pass, run
+      every ship. Per his own rule: *"every safe guard needs to be structural"*. It carries a control
+      that the document is actually populated (an empty page also has no duplicates), and it exempts SVG
+      paint definitions inside `<defs>` — the add menu legitimately renders twice, nothing calls
+      getElementById on a gradient, and those are instead asserted to be IDENTICAL to their twins, since
+      a diverging duplicate silently steals the fill.
+      ⚠️ **The lesson for whoever edits this file next: `s.find(marker)` searches from position 0.**
+      Cutting a region needs `s.find(end, i + len(start))`. Getting it wrong does not raise — it
+      duplicates, silently, and the app still boots.
 - [ ] **459 — The open-a-project animation is still not right: it should be a SEQUENCE, not both at
       **STATUS: 🟢 READY — nothing is stopping this**
       once.** (21 Aug.) His words, verbatim: *"Also the animation made ages ago for when you open a

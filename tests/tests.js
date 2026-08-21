@@ -24691,6 +24691,54 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('no element id appears twice in the page (queue 458)', { item: '458' }, function () {
+    /* Ezra: *"Save and discard button in the settings cog menu in the project doesn't work"*.
+     * They did nothing because they were DUPLICATES. A bad edit in v11.25 wrote `s[:i] + s[j:]` with
+     * `j` found by searching from the START of the file rather than forward from `i`, so instead of
+     * deleting a region it copied one: 31 ids ended up duplicated, including whole second copies of
+     * #canvas-dialog and #export-dialog. `getElementById` returns the FIRST match, so every listener
+     * bound to the first copy and the visible one was inert.
+     * IT SHIPPED THROUGH ELEVEN RELEASES WITH THE SUITE GREEN, because nothing here had ever looked.
+     * That is what makes this a structural test rather than a fix: a duplicate id cannot announce
+     * itself — the page renders, nothing throws, and one of the two copies is simply dead.
+     * Cheap enough to run every time: one pass over the DOM. */
+    /* PAINT DEFINITIONS ARE A DIFFERENT ANIMAL and are handled separately below. An SVG gradient inside
+     * <defs> is referenced by `url(#id)` from within its own icon, and the add menu genuinely renders
+     * twice (the phone sheet and the parked PC panel), so its icons' gradients legitimately appear
+     * twice. Nothing calls getElementById on them, so they cannot produce a dead listener. They can
+     * still bite if the two copies ever DIVERGE — a duplicate gradient id silently steals the fill,
+     * which js/addmenu.js warns about in as many words — so they are checked for that instead. */
+    const isDef = (el) => !!el.closest && !!el.closest('defs');
+    const seen = Object.create(null), dupes = [], defDupes = Object.create(null);
+    const all = document.querySelectorAll('[id]');
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i], id = el.id;
+      if (!id) continue;
+      if (isDef(el)) { (defDupes[id] = defDupes[id] || []).push(el); continue; }
+      if (seen[id]) { if (dupes.indexOf(id) < 0) dupes.push(id); }
+      else seen[id] = 1;
+    }
+    // …and a duplicated paint definition must be IDENTICAL to its twin, or one icon is silently
+    // wearing the other's colours.
+    Object.keys(defDupes).forEach((id) => {
+      const list = defDupes[id];
+      if (list.length < 2) return;
+      const first = list[0].innerHTML;
+      for (let i = 1; i < list.length; i++) {
+        if (list[i].innerHTML !== first) {
+          throw new Error('two different paint definitions share the id "' + id + '" — every reference to it resolves to the FIRST, so one icon is wearing the other\'s colours');
+        }
+      }
+    });
+    // CONTROL: the probe must actually be looking at a populated document. A page that never loaded
+    // has no duplicate ids either, and would pass this silently.
+    if (all.length < 50) throw new Error('only ' + all.length + ' elements carry an id — the document is not built, so "no duplicates" proves nothing');
+    if (dupes.length) {
+      throw new Error(dupes.length + ' id(s) appear more than once: ' + dupes.slice(0, 12).join(', ')
+        + (dupes.length > 12 ? ' …' : '') + '. getElementById returns the first, so every listener binds to one copy and the other is dead — this is how the cog menu\'s Save and Discard did nothing.');
+    }
+  });
+
   test('the export button is not a rainbow, and the + buttons still are (queue 457)', { item: '457' }, async function () {
     /* Ezra: *"Also I never wanted a rainbow export button change it back to what it was"*.
      * `#btn-export` and `.m-export` used to HEAD the selector that carried the app's shared neutral
