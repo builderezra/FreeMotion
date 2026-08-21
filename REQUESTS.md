@@ -3715,6 +3715,43 @@ better still, keep working inside the turn rather than parking work for a later 
       **EZRA, 21 Aug:** *"what do you even want me to say? Seems everything's fine"*. Fair — he had
       already answered it ("put a warning next to it"), and the question was re-asked at him needlessly.
       **No further input needed: build all six with a warning on the expensive ones.** Do not ask again.
+      🔬 **STARTED 21 Aug — and "put a warning on it and ship it" turns out NOT to be available, because
+      the flag is not the feature. Measured, not assumed.**
+      Rendering a 220 Hz tone through Distortion in an OfflineAudioContext, RMS of the first 0.25s vs the
+      last 0.25s:
+      ```
+      static  drive 0     head 0.3504   tail 0.3536
+      static  drive 100   head 0.9737   tail 0.9816
+      ANIMATED 0 -> 100   head 0.3504   tail 0.3536     <- identical to static drive 0
+      ```
+      So today an animated rebuild-style param renders at its value AT THE START, for the whole clip.
+      That is honest, and it is what `keyframable: false` means: `schedule()` takes the else branch and
+      calls `b.u.set(key, valueAt(inst, p, fromScene), 0)`.
+      **Why simply flipping the flag to true would be a LIE, not a warning-worthy compromise.** The 30 Hz
+      scheduling loop calls `b.u.set(key, v, ctxTime)`. For a real AudioParam that becomes
+      `setValueAtTime(v, when)` and lands in the future. For these six it lands on a CUSTOM setter, and
+      distortion's ignores `when` entirely:
+      `drive: function (v) { if (v !== drive) { drive = v; sh.curve = driveCurve(v); } }`
+      So all 60 scheduled values would be applied instantly during `schedule()`, the LAST one would win,
+      and the whole render would come out at the final keyframe — with keyframe diamonds on screen the
+      entire time. Diamonds that do nothing is the exact failure this project keeps being bitten by.
+      **THE REAL FIX, and it is buildable — a crossfaded shaper bank.** A curve swap is a step change,
+      which is why these click; you cannot ramp a curve. But you CAN ramp gains. Build K shapers with
+      curves at K sampled values across the range, feed the input to all of them, and crossfade between
+      their gains with `linearRampToValueAtTime` — real AudioParams, so it schedules properly in both the
+      live and offline contexts, and the crossfade is what removes the click the entry measured
+      (Bit Crush 6.8x, Distortion 2.8x, Lo-Fi 1.7x).
+      · Applies to Distortion Drive, Bit Crush Bits and Lo-Fi Amount — all three are "rebuild the
+        transfer curve" effects and share one mechanism.
+      · **Reverb Size/Decay are NOT this shape** — they rebuild an impulse response, and a bank of K
+        convolvers is a different and much heavier proposition. Keep them out unless he asks again.
+      · Pitch Shift Semitones is a third shape again (grain/playback-rate), also not this mechanism.
+      · **The static path must stay byte-identical** — build the bank only when the param is actually
+        animated, or every existing project's audio changes.
+      **NEXT TICK: build the bank for Distortion, prove it with the measurement above (tail RMS must end
+      near 0.98 while head stays near 0.35), then extend to Bit Crush and Lo-Fi.**
+      His answer stands and is not being re-asked — *"I just want options"*, *"put a warning next to it"*.
+      The warning is still the plan; it just has to be a warning on something that actually works.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
