@@ -1,0 +1,65 @@
+<!doctype html><meta charset="utf-8">
+<title>In-project Create button — options</title>
+<style>
+ body{margin:0;background:#0b1016;color:#e8ecf4;font:14px/1.45 -apple-system,system-ui,sans-serif;padding:20px}
+ h1{font-size:16px;margin:0 0 4px} p{color:#8fa0b6;font-size:12px;margin:0 0 18px;max-width:760px}
+ .row{display:flex;align-items:center;gap:22px;padding:16px 8px;border-bottom:1px solid #1b2430}
+ .nm{width:150px;font-weight:600;font-size:13px}
+ .desc{color:#8fa0b6;font-size:12px;flex:1}
+ .btn{position:relative;width:86px;height:86px;border-radius:50%;isolation:isolate;flex:0 0 auto;
+      box-shadow:0 0 30px rgba(154,120,255,.4),0 0 14px rgba(90,199,237,.34),inset 0 0 0 1px rgba(255,255,255,.5)}
+ .btn i,.btn u{position:absolute;inset:0;border-radius:50%;display:block}
+ .btn .sheen{background:radial-gradient(120% 100% at 30% 16%,rgba(255,255,255,.9),rgba(255,255,255,0) 55%);z-index:2}
+ .btn svg{position:absolute;inset:0;margin:auto;width:38px;height:38px;z-index:3;stroke:#06121c;stroke-width:2.6;
+          stroke-linecap:round;fill:none}
+ /* CURRENT — one conic disc, spinning */
+ .cur i{background:conic-gradient(from 210deg,#7FD4FF 0deg,#9BE88A 84deg,#FFC86B 168deg,#F5A8E4 252deg,#C86BFF 306deg,#7FD4FF 360deg);
+        animation:turn 34s linear infinite}
+ /* A — counter-rotating pair, warm palette */
+ .a i{background:conic-gradient(from 0deg,#FF9E6B 0deg,#FFD36B 90deg,#FF6BAA 200deg,#C86BFF 290deg,#FF9E6B 360deg);
+      animation:turn 26s linear infinite}
+ .a u{background:conic-gradient(from 180deg,rgba(255,255,255,0) 0deg,rgba(255,235,200,.55) 60deg,rgba(255,255,255,0) 130deg,rgba(255,180,220,.45) 250deg,rgba(255,255,255,0) 330deg);
+      animation:turnb 17s linear infinite;mix-blend-mode:screen;z-index:1}
+ /* B — drifting pools (no rotation at all) */
+ .b i{background:
+     radial-gradient(58% 58% at 34% 38%,rgba(120,240,190,.95),rgba(60,200,170,.34) 54%,transparent 78%),
+     radial-gradient(52% 52% at 72% 32%,rgba(255,180,120,.95),rgba(240,140,90,.34) 50%,transparent 76%),
+     radial-gradient(56% 56% at 50% 74%,rgba(190,140,255,.92),rgba(150,100,255,.30) 52%,transparent 78%),
+     linear-gradient(158deg,#1a2740,#0d1626);
+   background-size:150% 150%,150% 150%,150% 150%,100% 100%;
+   animation:pools 15s ease-in-out infinite alternate}
+ /* C — slow breathing hue, one disc, no spin */
+ .c i{background:conic-gradient(from 40deg,#6BE3C0 0deg,#7FD4FF 100deg,#B48CFF 200deg,#FF9BD2 280deg,#6BE3C0 360deg);
+      animation:breathe 9s ease-in-out infinite alternate}
+ /* D — comet sweep over a still ramp */
+ .d i{background:conic-gradient(from 210deg,#7FD4FF 0deg,#9BE88A 84deg,#FFC86B 168deg,#F5A8E4 252deg,#C86BFF 306deg,#7FD4FF 360deg)}
+ .d u{background:conic-gradient(from 0deg,rgba(255,255,255,0) 0turn,rgba(255,255,255,0) .62turn,
+      rgba(255,255,255,.75) .80turn,rgba(255,255,255,0) .95turn,rgba(255,255,255,0) 1turn);
+      animation:turn 5.5s linear infinite;z-index:1}
+ @keyframes turn{to{transform:rotate(360deg)}}
+ @keyframes turnb{to{transform:rotate(-360deg)}}
+ @keyframes pools{from{background-position:38% 50%,62% 36%,45% 64%,0 0}
+                  to{background-position:47% 41%,53% 45%,55% 56%,0 0}}
+ @keyframes breathe{from{filter:hue-rotate(0deg) saturate(1)}to{filter:hue-rotate(38deg) saturate(1.25)}}
+ .home{outline:2px dashed #2c3d52;outline-offset:6px}
+ .cap{font-size:11px;color:#6f8299;margin-top:6px}
+</style>
+<h1>In-project Create button — options</h1>
+<p>Left: the HOME button, unchanged, for comparison — the two are currently identical, which is what you want broken.
+Each option below is the in-project one. All keep moving. Watch for 10 seconds: the current one is a plain rotation.</p>
+<div id="out"></div>
+<script>
+const plus='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+const rows=[
+ ['HOME (unchanged)','cur home','The rainbow ramp, rotating once every 34s. This one stays as it is.'],
+ ['CURRENT in-project','cur','Identical disc, identical 34s rotation — the "lazy slow circle".'],
+ ['A · warm + counter-sweep','a','Different palette (warm: amber → pink → violet) and a second, faster sheen turning the OTHER way. Two speeds reads as depth rather than a wheel.'],
+ ['B · drifting pools','b','No rotation at all — three colour pools breathe and rearrange. This is the same technique as the editor + aura, which you have never complained about.'],
+ ['C · breathing hue','c','A still ramp whose colours slowly shift hue and saturation. Calmest of the four.'],
+ ['D · comet sweep','d','Ramp holds still; a white comet runs round the rim. Matches the signature glint you asked for elsewhere.'],
+];
+document.getElementById('out').innerHTML=rows.map(([n,c,d])=>
+ `<div class="row"><div class="nm">${n}</div>
+  <div class="btn ${c}"><i></i><u></u><span class="sheen" style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(120% 100% at 30% 16%,rgba(255,255,255,.9),rgba(255,255,255,0) 55%);z-index:2"></span>${plus}</div>
+  <div class="desc">${d}</div></div>`).join('');
+</script>

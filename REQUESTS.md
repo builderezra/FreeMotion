@@ -13539,7 +13539,7 @@ wait for them to report back."*
       used and the test reads the FINISHED control, which catches both directions.
       **Two facts either side of a seam are not a test of the seam.**
 - [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
       create button in the menu and in the project that are both rainbow to be different colours not the
       same (both moving)  and the one in the project that moves currently just spins In a slow circle
@@ -13556,6 +13556,30 @@ wait for them to report back."*
       Both buttons appear in his screenshots: the home screen's floating ＋ (a soft rainbow disc, bottom
       centre) and the in-project one in the top-right of the editor toolbar.
 
+      📐 **FOUND BOTH BUTTONS AND THE ANIMATION HE MEANS — and there is a CONFLICT with two earlier
+      requests of his that he should know about before choosing.**
+      · Home: `#hm-new`. In-project: `.tl-addrow--empty .tl-addrow-plus` (the big + in an empty
+        timeline). **They share the identical conic ramp** — `from 210deg, #7FD4FF / #9BE88A / #FFC86B /
+        #F5A8E4 / #C86BFF` — and the identical animation, `fm-plus-turn 34s linear infinite`.
+      · **That is literally "just spins in a slow circle".** One disc, one rotation, 34s a turn.
+      ⚠️ **BOTH THINGS HE IS NOW ASKING TO UNDO WERE HIS OWN EARLIER REQUESTS:**
+      **v10.30 (#384) made the two buttons the same disc ON PURPOSE**, and **#398 was his**: *"Make the
+      colours in the new add button actually move in a subtle but satisfying way"* — the 34s spin is the
+      answer to that, and the note explains it animated BOTH because splitting a deliberately-joined pair
+      would have been wrong. He is entitled to change his mind; it is recorded so nobody "fixes" it back.
+      🎨 **FOUR OPTIONS DRAWN AND SENT — `tests/_createbtn.html`**, each animated live beside the
+      unchanged home button so the difference is visible rather than described:
+      · **A · warm + counter-sweep** ⭐ **recommended** — warm palette (amber → pink → violet) plus a
+        second, faster sheen turning the OTHER way. Satisfies BOTH clauses at once: different colours,
+        and two speeds read as depth rather than a wheel.
+      · **B · drifting pools** — no rotation at all, three colour pools breathe and rearrange. Same
+        technique as the editor's + aura, which he has never complained about.
+      · **C · breathing hue** — a still ramp whose hue and saturation drift. The calmest.
+      · **D · comet sweep** — ramp holds still, a white comet runs the rim; matches the signature glint
+        he asked for elsewhere. ⚠️ **D keeps the CURRENT palette, so it fails clause 1 on its own** and
+        would need a colour change alongside.
+      ⏳ **WAITING ON EZRA — a letter, or a mix (e.g. "B's colours with D's comet").**
+      Clause 2 is satisfied by all four: every option still moves.
 - [ ] **457 — The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
       **STATUS: 🟢 READY — nothing is stopping this**
       verbatim: *"Also I never wanted a rainbow export button change it back to what it was"*.
