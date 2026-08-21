@@ -40,53 +40,53 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.49** (queue 468). **This tick: the 380px sweep FINISHED — no bug, one question filed
-for Ezra (#469).** No app code changed, no version bump.
+**Last shipped: v11.49** (queue 468). **This tick: no bug — group/parent transforms verified and PINNED.**
+No app code changed, no version bump. Suite **815/815 green**, pushed and verified.
 
-**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN numbered
-entry.
+**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim).
 
-**THE PHONE SWEEP IS DONE — all eight inspector categories at 380px with a 12-layer project.** No
-horizontal overflow anywhere, nothing clipped, every control reachable. **Last tick's unanswered question
-is answered:** the scroll container is **`#inspector-panel`** (`<aside class="panel open">`,
-`overflow-y: auto`), so content below the fold IS reachable — the earlier "cannot confirm" is resolved.
+**THIS TICK — group / parent transform chains at depth. All correct:**
+- **Translation composes exactly** at nesting depth 1–4 (+30 on the outermost group moves the grandchild
+  by exactly 30), and each level contributes (+10 at three levels = +30).
+- **Scale does BOTH things** — resizes the child AND pushes it further from the origin (40×40 at 200
+  becomes 80×80 at 400). A chain that only resized in place would look plausible and be wrong.
+- **Rotation composes** — a 360° turn returns the child to the identical position and size, and the
+  quarter turns land exactly where the arithmetic predicts.
+- **Cycles are safe.** `applyParentChain` guards with a `seen` Set; a parent cycle, a self-parent and a
+  missing parent id each render without throwing and without hanging.
+**Now pinned by a test** — the chain had STRUCTURAL cover (orphans, split parents, cycle termination) but
+nothing measured the GEOMETRY, which is the entire point of grouping and is silent when wrong.
 
-**⚠️ AND LAST TICK'S FAILURE WAS ENTIRELY SELF-INFLICTED — now BUG-HUNT.md §8f.**
-`FM.inspector.openCategory(k)` rebuilds the panel **synchronously in ~7 ms**; the sheet is already open so
-nothing animates. Measured immediately vs after a 450 ms settle: identical in every respect. The sweep that
-timed out THREE times with `sleep(250)` between categories finished all eight **in one call with no sleeps
-at all**. A whole tick was spent waiting for an animation that does not happen. **Before adding a settle
-wait, measure whether anything settles.**
-
-**#469 FILED, and deliberately NOT acted on.** The ◆ keyframe buttons are 18×18 with zero padding
-(Apple's guidance is 44×44). A false alarm was separated out in the same pass and recorded: the 15×15
-checkboxes ARE wrapped in `<label>`, so their real target is the full 356×21 row — those are fine. The hit
-area of the diamonds could be grown invisibly, **but the nearest neighbour is 9.8 px away and it is the
-BACK button**, so growing it to the full gap would make taps meant for Back create keyframes instead.
-Trading "hard to hit" for "adds animation you did not ask for" is his call, not mine. Three options with a
-recommendation are in the entry; **it is a one-word answer and "leave it" closes it.**
+**⚠️ THREE WRONG READINGS THIS TICK, ALL ONE MISTAKE: a canvas too small to hold the answer.** "The group's
+scale doesn't resize the child", "rotation makes it vanish", "scale on two groups draws nothing" — every one
+was the child leaving a 200×200 frame, exactly as the arithmetic says it should. On a 1000×1000 canvas the
+same code measured perfectly. **When a probe reports "nothing there", check the thing is still INSIDE the
+frame before believing it** — the test now carries an explicit `offFrame` guard so it can never make that
+mistake silently. Related to §8b/§8c in BUG-HUNT.md; the discipline is the same one those entries teach.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
 - **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
-  newest features**; **the queue-217 re-id gate, verified not trusted**; **timeline at 10 s / 10 min /
-  60 min**; **the LIVE audio path for all six newly-keyframable params**; **the EXPORT audio path
-  end-to-end**; **exportFitRect + the frame loop**; **the service worker's caching rules**; **clip frame
-  boundaries** (pinned by a test); **keyframe evaluation** (FOUND #468); **the full 380px per-category
-  phone sweep** (this tick — FOUND #469, a question rather than a defect).
+  newest features**; **the queue-217 re-id gate**; **timeline at 10 s / 10 min / 60 min**; **the LIVE audio
+  path for all six newly-keyframable params**; **the EXPORT audio path end-to-end**; **exportFitRect + the
+  frame loop**; **the service worker's caching rules**; **clip frame boundaries** (pinned); **keyframe
+  evaluation** (FOUND #468); **the full 380px per-category phone sweep** (FOUND #469, a question);
+  **group/parent transform chains at depth** (this tick — pinned).
 
-**STILL UN-SWEPT:** a hostile TEMPLATE PACK through the real insert UI; group/parent transform chains at
-depth; the phone sweep for a TEXT layer's own categories (Customise Text / Captions — skipped here because
-opening `element` on a text layer launches the full-screen editor, see §8e).
+**STILL UN-SWEPT:** a hostile TEMPLATE PACK through the real insert UI; the phone sweep for a TEXT layer's
+own categories (Customise Text / Captions — see §8e for why they need care).
 
-**Running tally, said plainly:** across ten hunts — **three real bugs** (#466, #467, #468), **one question
-for him** (#469), **two coverage gaps closed**, **one safeguard built**, **eleven probe/harness errors**
-caught before they reached him.
+**Running tally, said plainly:** across eleven hunts — **three real bugs** (#466, #467, #468), **one question
+for him** (#469), **three coverage gaps closed** (exporter scheduling, clip frame edges, group transforms),
+**one safeguard built**, **fourteen probe/harness errors** caught before they reached him.
 
-**⚠️ SAID THREE TIMES NOW:** the queue has been 0-actionable for TEN ticks. #469 is at least a cheap one —
-one word. The others: 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395, 429, 418, 223;
-the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on his device);
-and **whether an animated reverb stutters while previewing on his phone**; and **392** — his verdict on Text
-to Voice, plus the cloud-vs-record choice.
+**⚠️ SAID FOUR TIMES NOW.** The queue has been 0-actionable for ELEVEN ticks. The hunts are still producing
+— but three of the last four produced TESTS for things that already worked, not fixes for things that did
+not. That is worth something and it is not worth as much as one answer from him. **#469 needs one word.**
+
+**Waiting on Ezra:** 469 (one word), 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395, 429,
+418, 223; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on his
+device); **whether an animated reverb stutters while previewing on his phone**; and **392** — his verdict on
+Text to Voice, plus the cloud-vs-record choice.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no

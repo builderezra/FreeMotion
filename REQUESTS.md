@@ -11696,6 +11696,7 @@ wait for them to report back."*
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
 - [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **WAITING ON EZRA — a one-word answer, and it is a taste call, not a bug.**
       (22 Aug — found by a bug hunt of the 380px layout, not reported by him. He has never complained
       about this, which is worth stating up front: it is a measurement, not a symptom.)

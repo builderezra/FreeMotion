@@ -24899,6 +24899,75 @@
     }
   });
 
+  test('a group carries its children — translate, scale and rotate compose through nesting', { item: 'group-transform-chain' }, function () {
+    /* A hunt found this correct and UNTESTED. The parent chain already has STRUCTURAL cover — orphaned
+     * parents, split parents, a cycle terminating — but nothing measured the GEOMETRY: that moving a
+     * group actually moves what is inside it, by the right amount, through more than one level.
+     * That is the whole point of grouping, it is silent when wrong (things land in the wrong place rather
+     * than erroring), and `applyParentChain` composes it by hand for every layer on every frame.
+     * Measured through REAL PIXELS from FM.renderScene, with the canvas sized to the project so no
+     * fit-scaling is in play and nothing can drift off-frame unnoticed. */
+    if (!FM.renderScene) throw new Error('FM.renderScene is not reachable');
+    const W = 400, H = 400;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const build = () => {
+      const P = { name: 'p', width: W, height: H, fps: 30, duration: 4 };
+      const G1 = FM.makeLayer('group', { name: 'G1', start: 0, duration: 4 });
+      const G2 = FM.makeLayer('group', { name: 'G2', start: 0, duration: 4 }); G2.parent = G1.id;
+      const S = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 4 });
+      S.parent = G2.id;
+      return { scene: { project: P, layers: [G1, G2, S], selectedId: null, selectedIds: [] }, G1: G1, G2: G2, S: S };
+    };
+    const stat = (scene) => {
+      ctx.clearRect(0, 0, W, H);
+      FM.renderScene(ctx, scene, 0);
+      const d = ctx.getImageData(0, 0, W, H).data;
+      let n = 0, sx = 0, sy = 0, minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (d[(y * W + x) * 4 + 3] > 8) { n++; sx += x; sy += y; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+      }
+      return { n: n, cx: n ? sx / n : null, cy: n ? sy / n : null, w: n ? maxx - minx + 1 : 0,
+               offFrame: n === 0 || minx <= 0 || miny <= 0 || maxx >= W - 1 || maxy >= H - 1 };
+    };
+
+    // CONTROL — the probe must see the shape, whole and inside the frame, or every reading below is noise.
+    const base = stat(build().scene);
+    if (base.n === 0) throw new Error('the probe sees nothing at all — the fixture never rendered');
+    if (base.offFrame) throw new Error('the control fixture is already touching the frame edge, so any later "it moved" reading could just be clipping');
+    if (Math.abs(base.w - 40) > 2) throw new Error('the control square measures ' + base.w + 'px, not 40 — the fixture is not what this test thinks it is');
+
+    // 1. TRANSLATE the OUTERMOST group: the child must move by exactly that much, through two levels.
+    { const f = build(); f.G1.transform.x = (f.G1.transform.x || 0) + 30;
+      const moved = stat(f.scene);
+      if (moved.offFrame) throw new Error('the translated child left the frame — the fixture cannot measure this');
+      const dx = moved.cx - base.cx;
+      if (Math.abs(dx - 30) > 1) throw new Error('moving the outer group by 30 moved its grandchild by ' + dx.toFixed(1) + 'px'); }
+
+    // 2. Each level CONTRIBUTES: 10 at each of two groups must total 20.
+    { const f = build(); f.G1.transform.x = 10; f.G2.transform.x = 10;
+      const moved = stat(f.scene);
+      const dx = moved.cx - base.cx;
+      if (Math.abs(dx - 20) > 1) throw new Error('10 on each of two nested groups moved the child ' + dx.toFixed(1) + 'px, not 20 — the levels are not composing'); }
+
+    /* 3. SCALE must do BOTH things: make the child bigger AND push it further from the origin. Checking
+       only the size would pass a chain that scaled in place, which is a different picture entirely. */
+    { const f = build(); f.G1.transform.scale = 2;
+      const sc = stat(f.scene);
+      if (sc.offFrame) throw new Error('the scaled child left the frame — widen the fixture rather than trusting this');
+      if (Math.abs(sc.w - base.w * 2) > 2) throw new Error('a group scaled by 2 made its child ' + sc.w + 'px wide, not ' + (base.w * 2));
+      if (Math.abs(sc.cx - base.cx * 2) > 2) throw new Error('a group scaled by 2 left its child centred at ' + sc.cx.toFixed(1) + ', not ' + (base.cx * 2).toFixed(1) + ' — it resized in place instead of scaling the space'); }
+
+    /* 4. A FULL TURN IS THE IDENTITY. This is the cheap, exact check on rotation: quarter turns swing the
+       child to negative coordinates and off-frame (that is correct geometry, not a bug — it cost a probe
+       three wrong readings before the arithmetic was worked out), but 360 must land back precisely. */
+    { const f = build(); f.G1.transform.rotation = 360;
+      const r = stat(f.scene);
+      if (r.n === 0) throw new Error('a 360-degree rotation made the child vanish');
+      if (Math.abs(r.cx - base.cx) > 1.5 || Math.abs(r.cy - base.cy) > 1.5) throw new Error('a full turn left the child at ' + r.cx.toFixed(1) + ',' + r.cy.toFixed(1) + ' instead of ' + base.cx.toFixed(1) + ',' + base.cy.toFixed(1));
+      if (Math.abs(r.w - base.w) > 2) throw new Error('a full turn changed the child\'s size from ' + base.w + ' to ' + r.w); }
+  });
+
   test('a clip occupies exactly its own frames — no flicker at either edge', { item: 'clip-frame-edges' }, function () {
     /* A hunt found this correct and UNTESTED, so this is here to keep it that way. The rule is one line in
      * scene.js (`t >= start && t < start + duration`) and every part of the app leans on it — the preview,
