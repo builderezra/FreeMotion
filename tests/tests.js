@@ -3530,6 +3530,58 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('Time Warp: a preview resolution change does not punch a hole in the picture', { item: 'timewarp-resize' }, function () {
+    /* BUG HUNT (21 Aug), fourteenth verified lead from BUG-HUNT §34. _mfRec wipes its canvas when the
+       preview size changes — setting canvas.width clears it — and resets every other piece of history
+       that referred to it, but NOT Time Warp's progress marker `u`. So after a resolution change the
+       effect still believed the bar had swept that far and drew the frozen band out of an accumulator
+       that had just been emptied. Measured: 70% of the picture gone, as a transparent hole
+       (tests/_twresize.html).
+       THE CONTROL IS A FRESH RENDER AT THE SAME SIZE — that is what the frame is supposed to look like,
+       so a difference is the bug and not the resize. Comparing the two sizes to each other directly
+       would only measure that they are different sizes. */
+    const layers0 = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const build = () => {
+        FM.scene.layers.length = 0;
+        const S = FM.makeLayer('shape', { name: 's', shape: 'rect', x: 0, y: 0, shapeW: 400, shapeH: 400, fill: '#ffffff' });
+        S.start = 0; S.duration = 10;
+        const inst = FM.fxRegistry && FM.fxRegistry.makeInstance('timewarp');
+        if (!inst) return null;
+        S.effects = [inst];
+        FM.scene.layers.push(S);
+        return S;
+      };
+      const inkAt = (W, H, t) => {
+        FM.scene.project.width = W; FM.scene.project.height = H;
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 120 && d[i + 1] > 120 && d[i + 2] > 120) n++;
+        return n;
+      };
+      const sweep = (W, H) => { [0.2, 0.6, 1, 1.4].forEach(t => inkAt(W, H, t)); return inkAt(W, H, 1.8); };
+
+      if (!build()) throw new Error('CONTROL FAILED: no timewarp effect in the registry, so nothing is being tested');
+      const reference = sweep(240, 135);                 // swept entirely at the big size, never resized
+      if (!reference) throw new Error('CONTROL FAILED: the reference render has no ink at all');
+
+      build();
+      sweep(120, 68);                                    // accumulate at a lower preview scale…
+      const afterResize = inkAt(240, 135, 1.8);          // …then the preview resolution changes
+      const lost = (reference - afterResize) / reference;
+      if (lost > 0.1) throw new Error('a resolution change punched a hole in the picture: ' + (lost * 100).toFixed(0) +
+        '% of the ink is missing (' + afterResize + ' vs ' + reference + ')');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('effect clipboard: a copied effect does not paste a layer reference from another project', { item: 'fxclip-src' }, function () {
     /* BUG HUNT (21 Aug), thirteenth verified lead from BUG-HUNT §34. FM.fxClipboard lives in
        localStorage, so it survives across projects — and the effects that point AT a layer carried that

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>time warp x preview resize (bug hunt)</title></head>
+<body style="margin:0;background:#0b1218;color:#cfe;font:12px/1.6 ui-monospace">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="out" style="padding:12px;white-space:pre-wrap">measuring…</pre>
+<script>
+/* LEAD from the 21 Aug fan-out: _mfRec wipes its canvas when the preview size changes and resets t, acc,
+   prev and tPrev — but NOT Time Warp's progress marker `u`. So after a resolution change the effect still
+   believes the bar has already swept that far, draws the frozen band out of a now-EMPTY accumulator, and
+   the scanned band becomes a transparent hole.
+   CONTROL: the same render done with a FRESH record at the same size. That is what the picture should
+   look like, so any difference is the bug and not the resize itself. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.renderScene&&w.FM.fxRegistry&&w.FM.makeLayer)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+var f=document.getElementById('app'), out=document.getElementById('out');
+f.onload=function(){waitFM(f.contentWindow).then(run).catch(function(e){out.textContent='ERR '+e.message+'\n'+e.stack;});};
+function run(FM){
+  var doc=f.contentDocument, L=[];
+  function build(){
+    FM.scene.layers.length=0;
+    var S=FM.makeLayer('shape',{name:'s',shape:'rect',x:0,y:0,shapeW:400,shapeH:400,fill:'#ffffff'});
+    S.start=0; S.duration=10;
+    var inst=FM.fxRegistry.makeInstance('timewarp');
+    if(!inst) return null;
+    S.effects=[inst];
+    FM.scene.layers.push(S);
+    return S;
+  }
+  function inkAt(W,H,t){
+    FM.scene.project.width=W; FM.scene.project.height=H;
+    var c=doc.createElement('canvas'); c.width=W; c.height=H;
+    var ctx=c.getContext('2d',{willReadFrequently:true});
+    FM.renderScene(ctx,FM.scene,t);
+    var d=ctx.getImageData(0,0,W,H).data,n=0;
+    for(var i=0;i<d.length;i+=4) if(d[i]>120&&d[i+1]>120&&d[i+2]>120) n++;
+    return n;
+  }
+  function sweep(W,H){ [0.2,0.6,1.0,1.4].forEach(function(t){ inkAt(W,H,t); }); return inkAt(W,H,1.8); }
+
+  if(!build()){ out.textContent='CONTROL FAILED: no timewarp effect in the registry.'; document.title='DONE'; return; }
+  // 1) the reference: sweep entirely at the BIG size, with a record that was never resized
+  for (var k in (FM._mflow||{})) {}
+  var fresh = sweep(240,135);
+  L.push('reference — swept entirely at 240x135, never resized:   ink '+fresh);
+  if(!fresh){ out.textContent=L.join('\n')+'\n\nCONTROL FAILED: the reference render has no ink at all.'; document.title='DONE'; return; }
+
+  // 2) the real sequence: sweep SMALL first (as a lower preview scale would), then change size
+  build();
+  sweep(120,68);                       // accumulate at the small size
+  var afterResize = inkAt(240,135,1.8);  // …then the preview resolution changes
+  L.push('after sweeping at 120x68 then switching to 240x135:  ink '+afterResize);
+  L.push('');
+  var lost = fresh>0 ? (fresh-afterResize)/fresh : 0;
+  L.push(lost>0.10
+    ? '❌ the scanned band is a hole after a resolution change — '+(lost*100).toFixed(0)+'% of the picture is missing'
+    : '✅ the picture survives a resolution change');
+  out.textContent=L.join('\n');
+  document.title='DONE';
+}
+</script></body></html>

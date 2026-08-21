@@ -1784,7 +1784,8 @@ re-based*. Verify oldest-highest-impact first; delete any that measurement refut
 - [x] **maxDurForSource is the one speed site still doing raw `|| 1` division — a malformed imported speed prop writes NaN straight into layer.duration on media replace**    
       ➜ **REAL — fixed v11.14, see §44**
       `scene.js:693` — Load a `.fmotion.json` whose video layer has `"speed": {"keys":[{"t":0,"v":1}]}` (the load path deliberately does not re-sanitise, per the note at js/scene.js:680-683). Right-click the clip → Replace media, pick any video: the clip's duration becomes NaN and the clip disappears from the timeline / t
-- [ ] **Preview resolution change wipes Time Warp's frozen frame but not its progress marker — the scanned band turns into a hole**  
+- [x] **Preview resolution change wipes Time Warp's frozen frame but not its progress marker — the scanned band turns into a hole**    
+      ➜ **REAL — fixed v11.18, see §48**
       `compositor.js:7071` — Add Time Warp Scan (defaults: Freeze, duration 2.5s) to a video layer. Scrub to about half way through the scan so the top half of the frame is visibly frozen. Press Play. The frozen half instantly goes transparent — a hole showing whatever is beneath the layer — and it stays a hole for the rest of
 - [ ] **A layer used as a Luma Matte source renders twice per frame, and Temporal Denoise silently degrades to no denoising on the second render**  
       `compositor.js:7268` — Layer A = grainy video with Temporal Denoise (strength 0.85). Layer B = a shape, positioned BELOW A in the timeline stack, with Luma Matte pointing at A as its matte source. Scrub or play: A's grain comes back on screen — the denoiser stops visibly doing anything — and moving B above A in the stack
@@ -2202,3 +2203,30 @@ clear unconditional turns the test red on the CONTROL assertion, not on the bug 
 
 This is the second defect in this run (with §41's seam keyframes) where the obvious one-line fix would have
 been quietly worse than the bug.
+
+## 48. Time Warp punched a hole in the picture on a preview resolution change (21 Aug, v11.18) — REAL, fourteenth verified §34 lead
+
+`_mfRec` wipes its canvas when the preview size changes — setting `canvas.width` clears it — and resets
+`t`, `acc`, `prev` and `tPrev`, every other piece of history that referred to that canvas. It did not reset
+Time Warp's progress marker `u`. So the effect still believed the bar had swept that far, took the
+"nothing jumped" path, and drew the frozen band out of an accumulator that had just been emptied.
+
+**Measured** (`tests/_twresize.html`):
+
+| | ink at t=1.8 |
+|---|---|
+| swept entirely at 240×135, never resized (**reference**) | 27200 |
+| swept at 120×68, then switched to 240×135 | **8200** |
+
+**70% of the picture gone**, as a transparent hole where the scanned band should be.
+
+**Fix:** one line — `r.u = null` joins the reset that was already there. The next call then takes the
+`jumped` branch, which repaints the whole scanned band at the new size.
+
+**The control is a fresh render at the same size**, not a comparison between the two sizes. Comparing 120×68
+against 240×135 would only measure that they contain different numbers of pixels; comparing against what the
+big size renders on its own is the only thing that isolates the fault.
+
+**The class is worth naming:** a cache reset that drops *most* of the state that depended on the thing it
+just invalidated. Every field in that line was added because something referred to the canvas — `u` referred
+to it too, and was simply never added.

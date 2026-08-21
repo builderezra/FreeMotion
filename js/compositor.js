@@ -7068,7 +7068,14 @@ window.FM = window.FM || {};
       if (keys.length > 12) { let old = keys[0]; keys.forEach(k => { if (_mflow[k].at < _mflow[old].at) old = k; }); delete _mflow[old]; }   // bounded cache
       r = _mflow[id] = { cv: document.createElement('canvas'), t: -1, at: 0, acc: null, prev: null, tPrev: -1 };
     }
-    if (r.cv.width !== W || r.cv.height !== H) { r.cv.width = W; r.cv.height = H; r.t = -1; r.acc = null; r.prev = null; r.tPrev = -1; }
+    /* `u` GOES WITH THEM (bug hunt, 21 Aug). Setting canvas.width WIPES the canvas, and this reset
+     * already drops every other piece of history that referred to it — but Time Warp's progress marker
+     * `u` survived, so after a preview resolution change the effect still believed the bar had swept
+     * that far and drew the frozen band out of an accumulator that had just been cleared. Measured: 70%
+     * of the picture missing, as a transparent hole where the scanned band should be
+     * (tests/_twresize.html). Nulling it makes the next call take the `jumped` branch, which repaints
+     * the whole scanned band at the new size. */
+    if (r.cv.width !== W || r.cv.height !== H) { r.cv.width = W; r.cv.height = H; r.t = -1; r.acc = null; r.prev = null; r.tPrev = -1; r.u = null; }
     return r;
   }
   function _mfGrayOf(cv, FW, FH, useB) {
