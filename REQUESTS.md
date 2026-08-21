@@ -914,6 +914,8 @@ better still, keep working inside the turn rather than parking work for a later 
       see this: was the note **rotated or scaled**, was it in **Edit Points**, or had it been **squished /
       had an effect on it**? Any of those could push ink past the box in a way a plain layer does not.
       Staying open until then rather than being closed on a clean measurement of the wrong thing.
+      **ANSWERED BY EZRA, 21 Aug:** *"idk leave it"*. CLOSED by his choice — not reproduced, and he
+      does not want it chased. Do not re-open it unless he reports it again.
 - [x] **115 — Dragging a clip to the screen edge should auto-scroll the timeline. DONE v7.56.** His words: *"When
       dragging a layer and you get to the end of the screen, make it so the screen moves so you can keep
       dragging a layer to the left or right without needing to let go and then scroll etc, like how we
@@ -3484,6 +3486,8 @@ better still, keep working inside the turn rather than parking work for a later 
       browser. Worth confirming before building the desktop half.
       **Reference:** he compares it to CapCut.
 
+      **EZRA, 21 Aug:** *"idk what you're talking about"* — my question, not his problem. RE-EXPLAINED
+      in plain terms. Not declined.
 - [x] **264 — Land the parameter-extremes sweep as a permanent test. DONE 16 Aug — test-only, so no
       version bump: nothing in the app changed. (Idea from the 16 Aug hunt.)**
       The hunt that found 261/262/263 was one script: render every one of the **197 effects** with a
@@ -5723,6 +5727,9 @@ better still, keep working inside the turn rather than parking work for a later 
       **Next time it happens the question is unchanged and now sharper:** does the offline-copy message
       appear? If NO — as before — this is now the leading suspect and v10.68 should have removed it.
 
+      **ANSWERED BY EZRA, 21 Aug:** *"I think it's fine"*. So the old-project-comes-back-on-refresh
+      data loss is NOT happening on the current build. Downgraded from 🚨. Left open only as a watch
+      item — if he reports it once more, chase it properly, because it was never explained.
 - [x] **307 — Four things about the Add-layer row (PC and mobile).** ✅ **v9.55 + v9.56 — all four.** (17 Aug.) His words, verbatim:
       *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
       page for it's like a little plus button to come back like it's a small non-issue really but
@@ -6885,6 +6892,9 @@ better still, keep working inside the turn rather than parking work for a later 
              decides the shape of all of it.
 
 
+      **EZRA, 21 Aug:** *"idk what could it ask"* — he does not want to design it, he wants OPTIONS.
+      Per his standing instruction of the same day: give him all of them and mark one *recommended*,
+      rather than asking an open question he has to fill in.
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
@@ -6937,6 +6947,19 @@ better still, keep working inside the turn rather than parking work for a later 
       should show the template's hero image — still open).
 
 
+      **ANSWERED BY EZRA, 21 Aug — and this is a much bigger ask than the entry implied:** *"youll be
+      able to do what alight motion has just in our style, where you can give people a link to ur
+      projects or templates for them to use"*.
+      **⚠️ THIS BREAKS THE APP'S CORE CONSTRAINT AND HE NEEDS TO KNOW THAT BEFORE IT IS BUILT.**
+      FreeMotion is local-only by design: localStorage + IndexedDB, no backend, nothing leaves the
+      device. **A shareable link is by definition a thing that leaves the device** — the project has to
+      be hosted somewhere a stranger's phone can fetch it. That means a server, storage, a bill, and
+      somebody's data sitting on it. There is no version of "give people a link" that stays local.
+      There IS a middle option worth putting to him: **export a project as a FILE** (a .fmp bundle he
+      can send by AirDrop/iMessage/email) which the app can import. That gives sharing without any
+      infrastructure. Real links need a host, and that is a decision about money and privacy, not code.
+      **Do not start building either half without asking him which.** Note also "in our style" —
+      see BEFORE-PUBLISHING.md, which he is implicitly agreeing matters.
 - [x] **344 — The "Custom elements" card's ring should be multi-coloured like its own icon.** ✅ **v9.93.** (17 Aug,
       screenshot of the Add sheet's Elements tab.) His words, verbatim: *"Also just for the ring around
       custom elements make it have multiple colours like the logo itself but keep the background the
@@ -7431,6 +7454,10 @@ better still, keep working inside the turn rather than parking work for a later 
       *(Two flaws found by running it rather than testing it: with the tab hidden rAF never fires, so
       the probe hung forever and left Measure disabled — there is a wall-clock deadline now; and the
       first real report warned "NOT USABLE" at the top and said "looks healthy" at the bottom.)*
+      **ANSWERED BY EZRA, 21 Aug:** *"I sent a couple readouts already I'll send more later if you
+      still can't fix"*. So readouts exist earlier in the history — FIND AND USE THOSE before asking
+      him for another. Asking again for something he has already sent is the failure this file exists
+      to prevent.
 - [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
@@ -9994,6 +10021,14 @@ wait for them to report back."*
       **Also confirmed by this message: #315 clause 1 is FIXED** — he says the multi-stroke case works
       now. That entry was left open because I could not reproduce the failure; his word closes it.
 
+      **ANSWERED BY EZRA, 21 Aug — a concrete reproducible bug at last:** *"sketching still glitches
+      when you draw an extra line, basically it'll draw the line but be hidden until you press done"*.
+      So: draw one line, then draw ANOTHER line in the same sketch session, and the second line is
+      drawn but INVISIBLE until Done is pressed, at which point it appears. That is a live-preview
+      repaint problem on the second and subsequent strokes, not a data problem — the stroke clearly
+      survives, since Done reveals it. Look at what the draw tool repaints between strokes: the first
+      stroke is almost certainly being committed to a layer that redraws, and later strokes appended to
+      a buffer that is only flushed on commit.
 - [x] **362 — The canvas rail's zoom control: up/down arrows instead of + and −, and say "Full" at 100%.** ✅ **v10.08, both clauses.**
       (18 Aug, phone screenshot at v9.81 with the control circled in red.) His words, verbatim:
       *"With the highlighted area make it up and down arrows instead of plus and minus and when it's at
@@ -11009,6 +11044,22 @@ wait for them to report back."*
       ⏭️ **Clause 2 remains the open half, and it is blocked on Ezra**, exactly as the v10.62 round said: it
       needs one clip off his phone, or a screen recording of the playback.
 
+      **ANSWERED BY EZRA WITH A SCREEN RECORDING, 21 Aug:** *"here it is attached"* —
+      `ScreenRecording_08212026_134735_1.mp4`, 9.55s, 573 frames.
+      **MEASURED FROM THE FILE ITSELF** (no ffmpeg on this Mac; the MP4 sample tables were parsed
+      directly — `stsz` frame sizes and `stts` frame timing):
+      · **60.0 fps for the entire recording, 573 frames over 9.55s. No dropped frames.**
+      · **No frozen periods at all.** Only 6 of 573 frames (1.0%) show a near-static screen, and no two
+        of them are adjacent — the longest run of "screen did not change" is ONE frame, i.e. 16ms.
+      · On-screen change ramps 8k→24k bytes/frame to about the 5-6s mark and back down, so something is
+        genuinely animating throughout — the screen is not stalling and then catching up.
+      **What that does and does not prove.** It rules out a frame stall or a freeze — the compositor is
+      putting a fresh, different frame on the glass every 16ms for the whole clip. It does NOT rule out
+      the picture updating in coarse jumps while the UI around it stays smooth, because a coarse jump
+      makes frames BIGGER, not smaller, and would look like change rather than absence of it.
+      **So the next question is narrow and worth asking before any more work:** was the lag he means
+      actually captured in these 9.55 seconds? If yes, the symptom is not dropped frames and every
+      profile so far has been looking for the wrong thing.
 - [x] **388 — The "Basic" blend group holds only "Normal" — drop the group and show Normal on its own.** ✅ **v10.31.**
       (18 Aug, phone screenshot at v9.83 of Blending / Opacity.) His words, verbatim: *"In this blending menu
       make it so that the basic tab with normal as an option is just normal with no tab, it's a waste of time
@@ -11142,6 +11193,9 @@ wait for them to report back."*
       **So: which part is broken?** The size readout (160 pt against small-looking text) is the other half
       of #98 and is still open. If he means something else, it is new.
 
+      **ANSWERED BY EZRA, 21 Aug:** *"i think we already discussed"* — he believes this is already
+      covered elsewhere. Search the file for the Edit Text clauses before asking him again; if it truly
+      is covered, merge this entry into the one that covers it rather than leaving both open.
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
       text to voice and make a whole menu and feature for this"*.

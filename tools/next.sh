@@ -18,6 +18,38 @@
 # rule. Numbered items follow in numeric order.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+
+# ---- THE INBOX GATE (v11.21) --------------------------------------------------------------------
+# REFUSES TO HAND OUT WORK WHILE INBOX.md HAS ANYTHING IN IT.
+#
+# WHY. On 21 Aug Ezra spent an hour and a half unable to reach a running loop. Direct messages could
+# not drain into cron-driven turns, and INBOX.md — the channel built precisely so he could throw
+# requests in from his phone — went unread: that session called next.sh 230 times in its last 20MB of
+# transcript and read INBOX.md ONCE. Six releases shipped without him seeing any of them. He had to
+# stop it by hand-editing this script into a wall.
+#
+# CLAUDE.md says to drain INBOX.md at the start of every loop item. That instruction is a hope that
+# the next session reads it, and it was not read. This is the same rule with teeth: the loop cannot
+# get its next job without the inbox being empty first, so a message from him STOPS THE LOOP by
+# existing. Per his own standing rule — "every safe guard needs to be structural, in fact anything
+# that is important even slightly that could be forgotten needs to be structural."
+#
+# Draining is: move each item into REQUESTS.md with a number, then clear the list below the ---.
+INBOX_BODY="$(sed -n '/^---$/,$p' INBOX.md 2>/dev/null | sed '1d' | tr -d '[:space:]')"
+if [ -n "$INBOX_BODY" ]; then
+  echo "=============================================================================="
+  echo "⛔  STOP — INBOX.md IS NOT EMPTY. Ezra has said something. Read it FIRST."
+  echo "=============================================================================="
+  echo
+  sed -n '/^---$/,$p' INBOX.md | sed '1d'
+  echo
+  echo "=============================================================================="
+  echo "Drain it before taking any item: log each request VERBATIM into REQUESTS.md with"
+  echo "a number, clear everything below the --- in INBOX.md, then run this again."
+  echo "No next item will be handed out until then. This is deliberate, not a bug."
+  echo "=============================================================================="
+  exit 2
+fi
 F="REQUESTS.md"
 
 # A MALFORMED ENTRY IS AN INVISIBLE ENTRY. Item 211 sat glued to the end of another entry's last
