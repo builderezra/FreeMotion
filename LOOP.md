@@ -40,41 +40,42 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.46** (Text to Voice). Since then, one tooling change with no version bump: the queue
-classifier. Suite **810/810 green**, pushed and verified.
+**Last shipped: v11.47** — queue **466**, a bug hunt finding. Suite **810/810 green**, pushed and verified.
 
-**⛔ THE ACTIONABLE QUEUE IS EMPTY. 0 actionable, 24 blocked on Ezra, 3 held, 1 big, 3 standing notes,
-1 long-term.** Per the loop's own rule: **do not manufacture work.** If a tick finds nothing actionable,
-say so in one line and stop. An empty queue is not an emergency and not a licence to invent a feature.
+**⚠️ AN EMPTY QUEUE IS NOT A REASON TO STOP — correcting what this file said last tick.** It claimed
+"say so in one line and stop", which was too absolute and would have wasted this tick. His standing
+instruction (queue **260**, verbatim) is: *"When you finish the last thing, do a bug and issue hunt. Also
+look for potential ideas and things to do."* That is exactly the empty-queue case, so **0 actionable →
+BUG HUNT**, not silence. Findings get their OWN numbered entry (also 260's rule: "a hunt that files its
+findings into a single bullet is a hunt whose findings rot").
 
-**What changed this tick, and why it was worth a tick.** `ANSWERED BY EZRA` was STICKY FOREVER: once an
-entry contained it anywhere, every blocking phrase in it counted as stale history and the entry could
-never block again. That is right for prose his answer superseded and wrong the moment a PARTIAL SHIP
-raises a fresh question — #392 shipped one clause of four, asked him to choose between cloud TTS and
-recording a voiceover, and came back ACTIONABLE with nothing that could be done. Three earlier cures for
-this same shape were all explicit markers a future session had to REMEMBER to write, which this project
-treats as no safeguard at all.
-**The rule now uses a property the file already has:** entries are append-only, so they are chronological.
-His answer silences only what PRECEDES it; blocking prose written after it has not been superseded by
-anything. Verified against all 32 open entries — exactly one moved (#392, correctly) and nothing else.
-It self-heals: his next `ANSWERED BY EZRA` resets the tail and the entry becomes workable again.
-**And it can no longer rot silently:** `python3 tools/_classify.py` self-tests all 11 rules — each case
-is a bug that really happened — and `tools/ship.sh` REFUSES to push when any of them fails. Proven by
-breaking the new rule and watching the gate exit 1.
+**This hunt, for the record so it is not repeated blind.** Swept all **27 audio effects** through an
+offline render — static defaults AND every parameter animated min→max at once — checking for throws,
+NaN/Inf, silence and absurd peaks. **All clean**, which also proves the new whole-window scheduler hook
+from v11.45 disturbed none of the other 26 effects. The one flag (gain peaking at 8.68 when animated to
+maximum) is the probe being naive: a gain effect at maximum gain is *supposed* to be loud.
+Then checked an assumption I had PUBLISHED but never verified — that Text to Voice settings survive a
+save. They do. But the check found a different, real bug next to it: **#466**, my own regression from
+v11.46, where changing the Speed erased the saved voice.
 
-**Waiting on Ezra — this is the bottleneck now, not the work:**
-432 template icon letter, 456 create-button letter, 460 the two options, 454 second half, 202 perf readout
-while playing, 387, 215, 250 does the slam still look wrong, 342, 391, 395 MP3 yes/no, 429, 418, 223
-follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on
-his own device); **whether an animated reverb stutters while previewing on his phone** (v11.45 could not
-measure that); and **392** — his verdict on the shipped Text to Voice, plus the cloud-vs-record choice.
+**THREE probe errors in a row while chasing it, all mine, all the same shape — assuming a return type
+instead of looking:** `serializeScene` is ASYNC (un-awaited, so `.layers` was undefined and it looked
+like the field was being dropped); `storage.load()` returns a BOOLEAN and loads into `FM.scene` rather
+than returning the doc; and the first "autosave loses it" reading came from filtering a list that was
+never there. **Every one produced a confident wrong conclusion, and one of them nearly became a report
+that the save path was broken.** BUG-HUNT.md's rule, again: a measurement that cannot fail is not
+evidence. Check the SHAPE of what a function returns before believing what you read out of it.
+
+**Next tick:** the queue will still be 0 actionable, so hunt again. Areas NOT yet swept: the export
+pipeline end-to-end with the new reverb bank; undo/redo across the newer panels; project import of a
+hostile .fmotion.json; the timeline at very long durations.
+
+**Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
+395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says
+it feels better on his device); **whether an animated reverb stutters while previewing on his phone**;
+and **392** — his verdict on Text to Voice, plus the cloud-vs-record choice.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
 audio layer → nothing in an export. The only two real routes are BYOK cloud TTS or record/import a
 voiceover, and **both are decisions only Ezra can make.**
-
-**Probe lessons worth keeping:** round every sample index (`48000 * 2.3` is not an integer); a surviving
-mutation is a hole in the TEST, not proof the code is fine; check whether an effect already does the thing
-at rest before calling an artifact new; and an assertion can fail against CORRECT code by measuring a
-moment the animation has already left.
