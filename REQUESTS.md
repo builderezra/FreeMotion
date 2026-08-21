@@ -12966,6 +12966,29 @@ wait for them to report back."*
       thumbnails conflict he settled the same day with *"presets are fine as they are"* — that answer
       was about the effects presets, which is exactly the one kind he is keeping.
 
+      **SWEPT AND HALF DONE — v11.25. Entry stays OPEN on one question.**
+      Four things in the app used the word "preset". The sweep, and what happened to each:
+      1. **Effect presets** (`FM.effectPresets` / `FM.fxPresets`, the "Your presets" section in the
+         effects browser) — **KEPT.** This is the one kind you are keeping, and nothing about saving or
+         applying a layer's effects changed. Verified still exported after the removal.
+      2. **Canvas / project presets** (`FM.canvasPresets`, stored at `fm.canvasPresets`) — **REMOVED.**
+         This is what he circled: the "YOUR PRESETS" row on the New Project sheet, plus the
+         "Save project as preset…" button in Canvas settings that fed it. Gone from index.html,
+         js/home.js, js/app.js, js/storage.js and styles.css, with its three tests. Anything he had
+         saved in it (his "Cool loop") is gone with it.
+         ⚠️ **This was #183 — a feature HE asked for.** Removed on his instruction, not tidied away.
+      3. **Ease / graph presets** — **KEPT, and correctly.** The word appears only in CSS class names
+         (`es-preset`) and internal variables. Nothing on screen ever says "preset" — the labels are
+         "Bezier", "Bounce", "Steps". His rule is about what the app SAYS, and it says nothing here.
+      4. **Layer "look" presets** (`FM.layerPresets`) — **STILL THERE, and this is the open question.**
+         The layer menu offers *"Save whole look as preset…"*, which saves the layer's look AND its
+         animations. That is more than "just saving what effects the layer has", so by his rule it
+         should go — but it is a different feature from the one he circled and he may not have had it
+         in mind. **Two options, and he should pick: remove it entirely (recommended — it matches the
+         rule he stated), or keep it and cut it down to effects only.**
+      Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
+      viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
+      purpose, because the tests guarding the deleted feature went with it.
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.

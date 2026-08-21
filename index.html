@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=551">
+<link rel="stylesheet" href="styles.css?v=552">
 <link rel="stylesheet" href="theme-glass.css?v=31">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.24</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.25</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -591,14 +591,6 @@
         <div class="hm-dlg-scroll">
           <div class="hm-fld-label">Name</div>
           <input id="hm-new-name" type="text" placeholder="Project name" spellcheck="false">
-          <!-- Canvas presets saved from the editor's Canvas settings (queue 183). Shown ABOVE the
-               aspect chips because picking one sets every control below it — arriving after the
-               fields it overwrites would read as a second, contradictory answer. Hidden entirely
-               until there is at least one, so a first run looks exactly as it always did. -->
-          <div id="hm-np-presets" class="hm-np-presets hidden">
-            <div class="hm-fld-label">Your presets</div>
-            <div id="hm-np-preset-row" class="hm-np-preset-row" role="list"></div>
-          </div>
           <div class="hm-fld-label">Aspect ratio</div>
           <div class="hm-aspects">
             <button class="hm-aspect active" data-aspect="9:16"><span class="ac-frame ac-916"></span>9:16<span>Phone</span></button>
@@ -850,13 +842,162 @@
            pixel coordinates it had, so resizing scattered a finished composition with no warning. This
            row is shown only when there is actually something to move (see cvUpdate). -->
       <label class="field hidden" id="cv-scale-row"><span>Scale the layers to fit</span><input id="cv-scale" type="checkbox" checked aria-label="Move and resize the existing layers to match the new canvas size"></label>
+      <div class="dialog-actions">
+        <button id="xr-discard" class="btn">Discard</button>
+        <button id="xr-save" class="btn btn-accent">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="export-dialog" class="hidden">
+    <div class="export-card">
+      <div class="export-title">Export</div>
+      <label class="field"><span>Format</span>
+        <select id="exp-format">
+          <option value="mp4">MP4 video</option>
+          <option value="gif">Animated GIF</option>
+          <option value="frames">PNG frames (ZIP)</option>
+          <!-- Ezra: "The button to save a frame as a PNG should just be inside of the export menu
+               when you press the export button." It IS an export — one frame instead of all of them —
+               so it belongs on the format list rather than three levels deep in the ⋯ menu. Handled
+               as a special case in the export handler: no encoder, no progress dialog, just the
+               current frame straight to a file. -->
+          <option value="frame">This frame (PNG)</option>
+          <!-- Audio only (queue 216). Ezra: "Add an export option to just export audio." WAV rather
+               than m4a: the mix already comes out of OfflineAudioContext as raw samples, and WAV
+               needs no codec at all — which matters here, because #215 established that a browser
+               can refuse to encode AAC and hand you a silent file with nothing to show for it. A
+               soundtrack export that cannot fail for want of a codec is worth more than a smaller
+               one that sometimes does. -->
+          <option value="audio">Audio only (WAV)</option>
+          <!-- …and M4A (queue 395). Ezra: "I want more export options like mp3 or whatever". MP3 is the
+               one format no browser will encode (measured — tests/_audiocodecs.html), so it would need a
+               CDN library; AAC in an .m4a is native, is what the MP4 path already uses, and comes out
+               roughly a tenth the size of the WAV. WAV stays FIRST and stays the default, because it
+               cannot fail for want of a codec and #215 is the record of what that costs. If this browser
+               cannot encode AAC, the export says so and writes the WAV instead of a broken file. -->
+          <option value="audiom4a">Audio only (M4A)</option>
+        </select>
+      </label>
+      <label class="field"><span>Resolution</span>
+        <select id="exp-res"><!-- options built per-project in showExportDialog (named presets + sizes) --></select>
+      </label>
+      <!-- Custom output size (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
+           Hidden until "Custom…" is chosen in the list above, so the ordinary export is not made busier
+           by a control almost nobody needs. The frame is CONTAINED in whatever size you type — never
+           cropped — because an export that silently discards part of your work is not a size option. -->
+      <label class="field hidden" id="exp-custom-field"><span>Custom size</span>
+        <span class="exp-custom">
+          <input type="number" id="exp-cw" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export width">
+          <span class="exp-x">×</span>
+          <input type="number" id="exp-ch" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export height">
+        </span>
+      </label>
+      <label class="field"><span>Frame rate</span>
+        <select id="exp-fps">
+          <!-- Ordered, and matched to the canvas picker (queue 119/120). Ezra: "This menu is all over
+               the shop, needs to be ordered", then "Yeah match it". Ascending, same rates as Canvas
+               settings — 24 and 12 go with it.
+               "Same as project" is FIRST and is the default (queue 141). Ezra: "if you made a custom fps
+               or other things etc there's no way to export at that." He was right: this list was a fixed
+               set with, in its own former comment, "no Custom on this dialog" — so a project built at a
+               custom frame rate could not be rendered out at it by any route. Its label is filled in
+               per-project by showExportDialog, the same way the resolution list already builds "Full". -->
+          <option value="project" selected>Same as project</option>
+          <option value="15">15 fps</option>
+          <option value="25">25 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="50">50 fps</option>
+          <option value="60">60 fps (smooth)</option>
+          <option value="120">120 fps</option>
+        </select>
+      </label>
+      <label class="field"><span>Quality</span>
+        <select id="exp-quality">
+          <option value="0.18" selected>High</option>
+          <option value="0.1">Medium</option>
+          <option value="0.05">Low</option>
+        </select>
+      </label>
+      <label class="field"><span>Range</span>
+        <select id="exp-range">
+          <option value="whole">Whole project</option>
+          <option value="loop">Loop region (if set)</option>
+          <option value="clip">Selected clip only</option>
+        </select>
+      </label>
+      <!-- A PICKER, NOT A TICK (queue 174). Ezra: "make it say export just this layer, and also make it
+           so when you press it, it isn't a tick but it's a button and it lets you select what layer."
+           The tick could only ever solo whatever happened to be SELECTED, so choosing a different layer
+           meant closing the dialog, selecting it, and reopening. The button carries the choice itself,
+           which is why it also had to stop depending on the selection. The old checkbox is GONE rather
+           than hidden: a hidden one still got laid out (a stylesheet rule outranks the `hidden`
+           attribute here) and sat adrift in the column, which the dialog's own alignment test caught. -->
+      <label class="field"><span>Export just this layer</span>
+        <button type="button" id="exp-solo-btn" class="btn">All layers</button>
+      </label>
+      <label class="field" id="exp-transparent-field"><span>Transparent background</span>
+        <input type="checkbox" id="exp-transparent">
+      </label>
+      <div class="export-note hidden" id="exp-gif-note">GIF caps size (max 640px) and colours (256 per frame).</div>
+      <div class="dialog-actions">
+        <button id="exp-cancel" class="btn">Cancel</button>
+        <button id="exp-go" class="btn btn-accent">Export MP4</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="canvas-dialog" class="hidden">
+    <div class="export-card">
+      <div class="export-title">Canvas settings</div>
+      <div class="aspect-row" id="aspect-row">
+        <button class="aspect-chip" data-aspect="16:9"><span class="ac-frame ac-169"></span>16:9</button>
+        <button class="aspect-chip" data-aspect="9:16"><span class="ac-frame ac-916"></span>9:16</button>
+        <button class="aspect-chip" data-aspect="4:5"><span class="ac-frame ac-45"></span>4:5</button>
+        <button class="aspect-chip" data-aspect="1:1"><span class="ac-frame ac-11"></span>1:1</button>
+        <button class="aspect-chip" data-aspect="4:3"><span class="ac-frame ac-43"></span>4:3</button>
+        <button class="aspect-chip" data-aspect="custom"><span class="ac-frame ac-custom"></span>Custom</button>
+      </div>
+      <label class="field" id="cv-res-row"><span>Resolution</span>
+        <select id="cv-res">
+          <option value="720">720p</option>
+          <option value="1080" selected>1080p (FHD)</option>
+          <option value="1440">1440p (QHD)</option>
+          <option value="2160">2160p (4K)</option>
+        </select>
+      </label>
+      <div class="field hidden" id="cv-custom-size"><span>Width × Height</span><span style="display:flex;align-items:center;gap:6px"><input id="cv-cw" type="number" min="16" max="7680" step="2" value="1080" class="cv-num"><span>×</span><input id="cv-ch" type="number" min="16" max="7680" step="2" value="1920" class="cv-num"></span></div>
+      <label class="field"><span>Frame rate</span>
+        <select id="cv-fps">
+          <option value="15">15 fps</option>
+          <option value="25">25 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="50">50 fps</option>
+          <option value="60">60 fps</option>
+          <option value="120">120 fps</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <div class="field hidden" id="cv-custom-fps"><span>Custom fps</span><input id="cv-fps-num" type="number" min="1" max="120" step="1" value="30" class="cv-num" aria-label="Custom frame rate, 1 to 120"></div>
+      <div class="field"><span>Background</span>
+        <span class="hm-bg-row">
+          <button class="hm-bg-sw cv-bg-sw" data-bg="#000000" style="background:#000000" aria-label="Black background" title="Black"></button>
+          <button class="hm-bg-sw cv-bg-sw" data-bg="#ffffff" style="background:#ffffff" aria-label="White background" title="White"></button>
+          <button class="hm-bg-sw cv-bg-sw" data-bg="#0b0e14" style="background:#0b0e14" aria-label="Charcoal background" title="Charcoal"></button>
+          <button class="hm-bg-sw cv-bg-sw hm-bg-none" data-bg="none" aria-label="Transparent background" title="Transparent"></button>
+          <input id="cv-bg" type="color" value="#000000" aria-label="Custom background colour" title="Custom colour">
+        </span>
+      </div>
+      <div class="field"><span>Size</span><span id="cv-size" class="cv-size" role="status" aria-live="polite">1080 × 1920</span></div>
+      <!-- Changing the size used to move the FRAME and leave the work behind: every layer kept the
+           pixel coordinates it had, so resizing scattered a finished composition with no warning. This
+           row is shown only when there is actually something to move (see cvUpdate). -->
+      <label class="field hidden" id="cv-scale-row"><span>Scale the layers to fit</span><input id="cv-scale" type="checkbox" checked aria-label="Move and resize the existing layers to match the new canvas size"></label>
       <!-- Save project as preset (queue 183). A row of its own under Size, because it acts on
            everything above it rather than being another setting. The saved list appears here only
            when there IS one — an empty "Presets" heading on a first run is noise. -->
       <div class="field cv-preset-row"><span>Preset</span>
-        <button type="button" id="cv-save-preset" class="cv-preset-save">Save project as preset…</button>
       </div>
-      <div id="cv-preset-list" class="cv-preset-list hidden" role="list" aria-label="Saved canvas presets"></div>
       <div class="dialog-actions">
         <!-- The door to the APP's settings (v6.13). The cog now opens THIS dialog on desktop as well as
              on the phone — before, the same gear icon meant "canvas" on a phone and "app preferences" on
@@ -910,11 +1051,11 @@
   <script src="js/audio-fx-live.js?v=3"></script>
   <script src="js/audio-fx-browser.js?v=9"></script>
   <script src="js/history.js?v=29"></script>
-  <script src="js/storage.js?v=15.08"></script>
+  <script src="js/storage.js?v=16.08"></script>
   <script src="js/export-resume.js?v=3"></script>
   <script src="js/medialib.js?v=5"></script>
   <script src="js/template-fill.js?v=1"></script>
-  <script src="js/home.js?v=147"></script>
+  <script src="js/home.js?v=148"></script>
   <script src="js/graph-editor.js?v=16"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -924,7 +1065,7 @@
   <script src="js/shortcuts.js?v=78"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=50"></script>
-  <script src="js/app.js?v=343"></script>
+  <script src="js/app.js?v=344"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>
