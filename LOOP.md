@@ -40,43 +40,46 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.48** (queue 467). **This tick: no bug found — a SAFEGUARD built instead.** No app code
-changed, no version bump.
+**Last shipped: v11.48** (queue 467). **This tick: no bug — one refuted by reading, one invariant pinned.**
+No app code changed, no version bump. Suite **813/813 green**, pushed and verified.
 
 **0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim). Findings get their OWN numbered
 entry; **no findings means no entry.**
 
-**⚠️ NEW GATE IN `tools/ship.sh`: a changed `js/*.js` or `styles.css` MUST have its `?v=` bumped in
-index.html, or the push is refused.** CLAUDE.md has warned about this for months — *"a missed buster reads
-as 'the fix does not work' — it has"* — and the only thing enforcing it was remembering, which this project
-treats as no safeguard at all. Forty commits were scanned and NONE had missed one, so this is not a fix for
-a present mess: it is a lock on a door that has been open the whole time. The failure it prevents is the
-worst kind of silent — code correct, suite green, push landed, and the phone serves the OLD file, so a good
-fix reads as broken. Proven both ways: edited a file with the buster untouched → refused; bumped it → passed.
-New files are exempt (no previous `?v=` to differ from). Recorded in CLAUDE.md beside the other safeguards.
-
-**THIS TICK'S SWEEP — the video side of export.** `exportFitRect` correct across 11 cases including
-degenerates (aspect preserved, centred, fits, letterbox flag honest). The frame loop reads correctly:
-`totalFrames = round((end-start)*fps)`, `t = start + f/fps`, so frame f covers [f/fps, (f+1)/fps). All 69
-local assets in index.html carry a buster.
+**THIS TICK:**
+- **Service worker — hypothesis REFUTED BY READING, in two minutes.** The guess was that `js/tts.js` (added
+  v11.46) had been left out of a precache list. There IS no precache list, deliberately: the worker keys on
+  the full URL including `?v=`, so there is nothing to keep in sync, and unversioned assets never get
+  cached at all. That design and last tick's cache-buster gate reinforce each other — the gate guarantees
+  the `?v=` promise the worker relies on. **Reading the file cost nothing; writing a probe first would have
+  cost twenty minutes.**
+- **Clip boundaries — correct, and now PINNED.** A clip is drawn on the exact frame it starts and not on
+  the frame it ends, so a 2 s clip at 30fps is exactly 60 frames (30–89). Verified through real pixels from
+  `FM.renderScene`, which is how the exporter draws. **Nothing tested this**, and a slip either way is one
+  frame of flicker at every clip edge — miserable to diagnose from a report, invisible in a still. The new
+  test counts the frames; the `t <= end` mutation (a clip rendering 61 frames) is caught by it ALONE, out
+  of 813 tests.
 
 **HUNT LOG — swept and CLEAN, do not re-check blind:**
 - **All 27 audio effects**; **project import with hostile files** (FOUND #467); **undo/redo across the four
   newest features**; **the queue-217 re-id gate, verified not trusted**; **timeline at 10 s / 10 min /
   60 min**; **the LIVE audio path for all six newly-keyframable params**; **the EXPORT audio path
-  end-to-end** including a clip starting mid-export; **exportFitRect + the frame loop** (this tick).
+  end-to-end** including a clip starting mid-export; **exportFitRect + the frame loop**; **the service
+  worker's caching rules**; **clip frame boundaries**.
 
 **STILL UN-SWEPT — start here next tick:** a hostile TEMPLATE PACK through the real insert UI (the data path
-is verified via `_reIdLayers`, the UI path is not); the service worker's own cache list vs index.html; the
-compositor's behaviour at clip boundaries (does a clip appear in the exact frame it starts?).
+is verified via `_reIdLayers`, the UI path is not); keyframe evaluation at exact keyframe times (same
+off-by-one family as the clip edges, and equally untested); the phone layout of the newest panels at 380px
+under a LONG project (many layers).
 
-**⚠️ §8b CAUGHT ME AGAIN THIS TICK, in my own notes.** The first `exportFitRect` probe assumed `{x,y,w,h}`
-and reported NINE failures; the real shape is `{dx,dy,dw,dh,letterboxed}`. Every one was `undefined`
-arithmetic. **Read the function before writing the probe** — it is three lines and would have cost nothing.
+**⚠️ THE CHEAPEST TOOL IS READING THE SOURCE.** Two ticks running, a probe written against an assumed shape
+cost a round trip (`exportFitRect` returns `{dx,dy,dw,dh}`, not `{x,y,w,h}` — nine false failures). This
+tick the service-worker hypothesis died in one `grep` of the file's own header comment. **Read first when
+the question is "what does this do"; probe when the question is "does it actually happen".**
 
-**Running tally, said plainly:** across six hunts — **two real bugs** (#466, #467), **one coverage gap
-closed** (exporter scheduling), **one safeguard built** (cache-buster gate), and **eight probe errors**
-caught before they reached him.
+**Running tally, said plainly:** across seven hunts — **two real bugs** (#466, #467), **two coverage gaps
+closed** (exporter scheduling, clip frame edges), **one safeguard built** (cache-buster gate), and **eight
+probe errors** caught before they reached him.
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says it

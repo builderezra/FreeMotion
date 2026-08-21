@@ -24842,6 +24842,45 @@
     }
   });
 
+  test('a clip occupies exactly its own frames — no flicker at either edge', { item: 'clip-frame-edges' }, function () {
+    /* A hunt found this correct and UNTESTED, so this is here to keep it that way. The rule is one line in
+     * scene.js (`t >= start && t < start + duration`) and every part of the app leans on it — the preview,
+     * the exporter's frame loop, the audio mixer. A slip either way is a single frame: the clip's first
+     * frame missing, or one extra frame after it ends. That is a flicker, which is about the most
+     * miserable thing to diagnose from a bug report and would never be noticed in a still.
+     * Measured through REAL PIXELS from `FM.renderScene`, not by asking the helper whether it agrees with
+     * itself — the exporter draws frames this way, so this is what actually lands in the file. */
+    if (!FM.renderScene) throw new Error('FM.renderScene is not reachable');
+    const P = { name: 'p', width: 200, height: 200, fps: 30, duration: 4 };
+    const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 100, y: 100, shapeW: 120, shapeH: 120, fill: '#ffffff', start: 1, duration: 2 });
+    const scene = { project: P, layers: [L], selectedId: null, selectedIds: [] };
+    const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+    const ctx = cv.getContext('2d');
+    const litAt = (t) => {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      FM.renderScene(ctx, scene, t);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++;
+      return n;
+    };
+    // CONTROL — the probe must be able to see the clip at all, or every "dark" reading below is meaningless.
+    const mid = litAt(2);
+    if (mid < 1000) throw new Error('the probe cannot see the clip even in the middle of it (' + mid + ' lit pixels) — every dark reading below would be a false pass');
+
+    const fps = 30, at = f => f / fps;
+    // The frame it STARTS on must be lit. Losing this one is the "my clip flashes in late" bug.
+    if (litAt(at(29)) > 0) throw new Error('the clip is already on screen at ' + at(29) + 's, before its start at 1.0s');
+    if (litAt(at(30)) < 1000) throw new Error('the clip is MISSING from the very frame it starts on (t=1.0) — one frame of flicker at every clip start');
+    // …and the frame it ENDS on must not be. A 2 s clip at 30fps is exactly 60 frames: 30 through 89.
+    if (litAt(at(89)) < 1000) throw new Error('the clip is missing from its LAST frame (t=' + at(89) + ') — a 2 s clip is rendering as shorter than 2 s');
+    if (litAt(at(90)) > 0) throw new Error('the clip is STILL on screen at t=3.0, one frame past its end — a 2 s clip is rendering 61 frames');
+
+    // Count them, so the invariant is stated as a number rather than four spot checks.
+    let frames = 0;
+    for (let f = 0; f < 120; f++) if (litAt(at(f)) > 0) frames++;
+    if (frames !== 60) throw new Error('a 2-second clip at 30fps rendered ' + frames + ' frames, not 60');
+  });
+
   test('export: an animated Reverb reaches the real mix, anchored to the clip\'s own time', { item: 'audio-kf-reverb' }, async function () {
     /* A HUNT FOUND THIS PATH UNTESTED, not broken — so this is here to keep it that way. Everything else
      * about the reverb bank drives `buildAudioFxChain` directly, which is what the exporter does but is
