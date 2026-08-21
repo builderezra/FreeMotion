@@ -24759,8 +24759,23 @@
          clamped to the range the spec allows (outside it a browser may drop the utterance entirely). */
       T.tts = { voice: 'NoSuchVoice</scr' + 'ipt>', rate: 99, pitch: -5 };
       const clean = FM.tts.settingsOf(T);
-      if (clean.voice !== '') throw new Error('an unknown voice name survived validation as "' + clean.voice + '"');
       if (clean.rate > FM.tts.RATE.max || clean.pitch < FM.tts.PITCH.min) throw new Error('rate/pitch were not clamped: ' + clean.rate + '/' + clean.pitch);
+      /* An unknown name is REPORTED but never RESOLVED — resolve() is the only door to the speech engine
+         and it answers null for anything the browser does not list. */
+      if (FM.tts.resolve(T.tts.voice) !== null) throw new Error('an unknown voice name resolved to something the speech engine would accept');
+      if (FM.tts.resolve('') !== null) throw new Error('an empty voice name resolved to a voice');
+
+      /* HIS CHOSEN VOICE MUST SURVIVE A SETTING HE DID NOT TOUCH (queue 466, found by a bug hunt and it
+         was a regression in the version that introduced this feature). settingsOf() used to resolve the
+         voice against the installed list and return '' when it did not match — which conflated "what did
+         he pick" with "is that voice installed right now". Those come apart for the first moments of
+         every page, because getVoices() starts EMPTY: reopening the project and nudging the speed slider
+         before the list arrived pushed his choice through update(), found no match, and wiped it.
+         An UNINSTALLED name reproduces that exact path deterministically — same unmatched branch, no
+         timing needed — so this is the real regression test and not an approximation of one. */
+      T.tts = { voice: 'A Voice This Device Does Not Have', rate: 1, pitch: 1 };
+      FM.tts.update(T, { rate: 1.2 });
+      if (T.tts.voice !== 'A Voice This Device Does Not Have') throw new Error('changing the SPEED erased the saved voice (now "' + T.tts.voice + '") — a setting he never touched was destroyed by one he did');
 
       // Nothing to say = say nothing. An empty layer must not start the engine.
       const E = FM.makeLayer('text', { text: '   ', start: 0, duration: 2 });

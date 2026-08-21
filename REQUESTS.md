@@ -11695,6 +11695,30 @@ wait for them to report back."*
       ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
+- [x] **466 — Text to Voice forgot your chosen voice.** ✅ **DONE v11.47.** (22 Aug — found by a bug
+      hunt, not reported by Ezra. His standing instruction from 260 covers it: *"When you finish the last
+      thing, do a bug and issue hunt. Also look for potential ideas and things to do."*)
+      **A regression in v11.46, the version that introduced the feature — mine, one tick old.**
+      **What went wrong, in plain terms:** pick a voice, close the project, open it again, and nudge the
+      Speed slider straight away — your chosen voice is gone, back to the device default, with nothing
+      said. Changing one setting destroyed another you had not touched.
+      **Why.** The browser hands over its voice list ASYNCHRONOUSLY: `getVoices()` answers with an EMPTY
+      list for the first moments of every page and fills in a beat later. The code read the saved voice by
+      looking it up in that list and returning "none" when it did not match — which quietly conflates two
+      different questions: *what did he choose* and *is that voice installed right now.* They agree almost
+      always, and come apart exactly in the window before the list arrives. Saving the settings then wrote
+      the "none" back over the real answer.
+      **Fix:** the saved name is kept as what it is — his choice — and is only matched against the
+      installed list at the single point where a voice is actually handed to the speech engine. An unknown
+      or hostile name still resolves to nothing and falls back to the device default, so nothing was
+      loosened; it just no longer erases the setting on the way past.
+      Also fixed alongside it: pressing Play in that same early window used to speak in the WRONG voice
+      (silently falling back), and now waits for the list; and Stop pressed during that wait no longer
+      lets the speech start afterwards.
+      **The regression test does not depend on timing** — it uses a voice name this device does not have,
+      which takes the identical unmatched branch, so it fails deterministically. Mutation-checked by
+      restoring the old behaviour.
+
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says

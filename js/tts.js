@@ -39,6 +39,8 @@
 
   let _voices = [];
   let _speakingId = null;   // the layer currently being read, so the button can say "Stop"
+  let _pending = false;     // claimed, but the voice list is still loading — still "speaking" to the UI
+  let _token = 0;           // cancels a speak that was still waiting on voices when Stop was pressed
 
   function available() { return !!(SYN && UTT); }
 
@@ -82,18 +84,31 @@
     return Math.max(lo, Math.min(hi, v));
   }
 
-  /* Read the layer's saved settings, VALIDATED rather than trusted. A .fmproj is a file like any other
-     and an imported one can carry whatever it likes here; the voice is resolved by matching against the
-     browser's own list, so an unknown name falls back to the default instead of reaching the engine. */
+  /* Read the layer's saved settings, VALIDATED rather than trusted — a .fmproj is a file like any other
+     and an imported one can carry whatever it likes here.
+     THE VOICE IS RETURNED AS THE NAME HE CHOSE, NOT AS A RESOLVED VOICE (queue 466). The first version
+     matched it against the installed list here and returned '' when it did not match, which quietly
+     conflated two different questions: *what did he pick* and *is that voice installed right now*. They
+     come apart at the worst moment — `getVoices()` is EMPTY for the first moments of a page — so
+     reopening the project and nudging the speed slider before the list arrived ran his choice through
+     `update()`, found no match, and **erased the voice he had saved**. Reproduced, then fixed.
+     Resolution now happens only where it is actually needed, at `resolve()` below, so an unknown name
+     still never reaches the engine — it just no longer destroys his setting on the way past. */
   function settingsOf(layer) {
     const raw = (layer && layer.tts && typeof layer.tts === 'object') ? layer.tts : {};
-    const wanted = typeof raw.voice === 'string' ? raw.voice : '';
-    const match = _voices.filter(function (v) { return v.name === wanted; })[0] || null;
     return {
-      voice: match ? match.name : '',        // '' = whatever the device would pick on its own
+      voice: typeof raw.voice === 'string' ? raw.voice : '',   // '' = whatever the device would pick
       rate: clamp(raw.rate, RATE.min, RATE.max, RATE.def),
       pitch: clamp(raw.pitch, PITCH.min, PITCH.max, PITCH.def),
     };
+  }
+
+  /* Name → an installed voice, or null. THE one place a saved string is trusted enough to hand to the
+     speech engine, and it is a lookup in the browser's own list, so an unknown or hostile name simply
+     finds nothing and the device default is used. */
+  function resolve(name) {
+    if (typeof name !== 'string' || !name) return null;
+    return _voices.filter(function (v) { return v.name === name; })[0] || null;
   }
 
   function update(layer, patch) {
@@ -117,33 +132,45 @@
     return typeof layer.text === 'string' ? layer.text.trim() : '';
   }
 
-  function speaking() { return !!(_speakingId && SYN && (SYN.speaking || SYN.pending)); }
+  function speaking() { return !!(_speakingId && (_pending || (SYN && (SYN.speaking || SYN.pending)))); }
   function speakingId() { return speaking() ? _speakingId : null; }
 
   function stop() {
-    _speakingId = null;
+    _speakingId = null; _pending = false;
+    _token++;   // …so a speak still waiting on the voice list does not start after Stop was pressed
     if (!available()) return;
     try { SYN.cancel(); } catch (e) {}
   }
 
   /* Speak the layer's text. `onChange` fires on start and on finish so a button can redraw itself —
-     there is no way to poll this cheaply and .speaking lies briefly right after cancel(). */
+     there is no way to poll this cheaply and .speaking lies briefly right after cancel().
+     WAITS FOR THE VOICE LIST IF IT HAS NOT ARRIVED (queue 466). `getVoices()` is empty for the first
+     moments of a page, so pressing Play quickly used to fall back to the device default and say the
+     line in the wrong voice — silently, which is the worst way for it to be wrong. */
   function speak(layer, onChange) {
     if (!available()) return false;
     const words = textOf(layer);
     if (!words) return false;
     stop();   // one global queue: without this a second press QUEUES behind the first instead of replacing it
-    const s = settingsOf(layer);
-    let u;
-    try { u = new UTT(words); } catch (e) { return false; }
-    const v = _voices.filter(function (x) { return x.name === s.voice; })[0];
-    if (v) { u.voice = v; u.lang = v.lang || u.lang; }
-    u.rate = s.rate; u.pitch = s.pitch;
-    const done = function () { if (_speakingId === layer.id) { _speakingId = null; if (onChange) onChange(); } };
-    u.onend = done; u.onerror = done;
-    _speakingId = layer.id;
-    try { SYN.speak(u); } catch (e) { _speakingId = null; return false; }
-    if (onChange) onChange();
+    const mine = ++_token;
+    _speakingId = layer.id; _pending = true;
+    if (onChange) onChange();   // the button flips to Stop immediately, even while voices load
+    const go = function () {
+      // Stopped, or a newer press superseded this one, while we were waiting for the list.
+      if (mine !== _token) return;
+      _pending = false;
+      const s = settingsOf(layer);
+      let u;
+      try { u = new UTT(words); } catch (e) { _speakingId = null; if (onChange) onChange(); return; }
+      const v = resolve(s.voice);
+      if (v) { u.voice = v; u.lang = v.lang || u.lang; }
+      u.rate = s.rate; u.pitch = s.pitch;
+      const done = function () { if (_speakingId === layer.id) { _speakingId = null; if (onChange) onChange(); } };
+      u.onend = done; u.onerror = done;
+      try { SYN.speak(u); } catch (e) { _speakingId = null; }
+      if (onChange) onChange();
+    };
+    if (_voices.length) go(); else load().then(go);
     return true;
   }
 
@@ -153,6 +180,7 @@
     voices: voices,
     sorted: sorted,
     settingsOf: settingsOf,
+    resolve: resolve,
     update: update,
     textOf: textOf,
     speak: speak,
