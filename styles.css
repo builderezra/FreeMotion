@@ -1139,6 +1139,16 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    a little on a small screen is the trade he asked for: "it should all just fit on the screen nice and
    you shouldn't need to scroll up and down". */
 .addmenu--sheet .addmenu-grid--fill { min-height: 100%; grid-auto-rows: minmax(clamp(50px, 8.5vh, 64px), 1fr); }
+/* A SPARSE PAGE DROPS TO TWO COLUMNS so it fills as two proper rows instead of one stretched sliver
+   (queue 428). Three cards at three columns is one 64px row with ~196px dead beneath it; the same three
+   at two columns are 173x126 — the ratio the fill note in js/addmenu.js measures as the good one. */
+/* `.addmenu-page .addmenu-grid` sets three columns and lands LATER in this file at the same
+   specificity, so it wins on source order — the first version of this rule was overridden and left a
+   hole in the top-right instead of two even columns. Matched through .addmenu-page too, so it outranks
+   it by class count rather than by being moved (moving it would work until someone reorders the file). */
+.addmenu--sheet .addmenu-page .addmenu-grid--cols2 { grid-template-columns: repeat(2, 1fr); }
+/* …and an odd card out spans the row, so the grid ends flush rather than with a hole in it. */
+.addmenu--sheet .addmenu-page .addmenu-grid--cols2 > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 /* …and the two wrappers between the body and the grid need a height for that 100% to mean anything.
    The pager and the page were both content-sized (208px), so the grid's `min-height: 100%` resolved
    against the very height it was trying to grow past and nothing moved — measured, after the rule

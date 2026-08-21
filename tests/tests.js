@@ -21796,19 +21796,25 @@
           const br = box.getBoundingClientRect(), gr = grid.getBoundingClientRect();
           const c0 = grid.children[0].getBoundingClientRect();
           const ratio = c0.width / c0.height;
-          if (grid.classList.contains('addmenu-grid--fill')) {
+          /* EVERY TAB FILLS NOW (queue 428, v11.34). This used to have two branches: a filled page had
+             to leave no band, and a SHORT page was expected not to fill — "one row keeps its natural
+             size and the sheet simply has room to spare, which is honest". Ezra overruled that with a
+             screenshot of the Audio tab: *"fill it but those tabs are still broken as per attached
+             image"*. A sparse page now drops to two columns and fills as two rows, so there is no
+             short page left to check and the old `checkedShort` requirement could never be met.
+             The overcorrection guard it carried is still exactly right and is kept — it just applies
+             to every tab now instead of only the short ones. That guard is the reason filling was
+             refused the first time (a stretched single row measured 113x260, a 0.43 sliver), so losing
+             it while making everything fill would drop the one check that made the old decision sound. */
+          {
             checkedFull++;
+            if (ratio < 0.6) throw new Error(t.textContent.trim() + ': cards stretched to ' + ratio.toFixed(2) + ':1 — a sliver, which is what filling a single row wrongly produces');
             const band = br.bottom - gr.bottom;
             if (band > 8) throw new Error(t.textContent.trim() + ': ' + Math.round(band) + 'px of dead band under the grid — the whole complaint');
             if (!(ratio < 1.7)) throw new Error(t.textContent.trim() + ': cards are still ' + ratio.toFixed(2) + ':1 — no squarer than the 1.73 he complained about');
-          } else {
-            checkedShort++;
-            // the overcorrection guard: a short page must NOT stretch into a sliver
-            if (ratio < 0.6) throw new Error(t.textContent.trim() + ': a short page stretched to ' + ratio.toFixed(2) + ':1 — a sliver, which is the opposite of "more square"');
           }
         }
         if (!checkedFull) throw new Error('no tab filled the sheet, so this test proved nothing about the band');
-        if (!checkedShort) throw new Error('no short tab was checked, so the overcorrection guard proved nothing');
       } finally {
         // Leave it shut — an add sheet left open covers the timeline for whatever runs next. The
         // sheet is driven by an `open` class, not `hidden`; adding `hidden` left it open and the

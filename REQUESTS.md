@@ -12805,8 +12805,7 @@ wait for them to report back."*
       and NOT the one he reported — #402 was about yellow and about grey text, both of which are fixed.
       **Do not "fix" it by adding `!important`** — that hides the cause, and the cause is the interesting
       part here. Reproduce it in the live app first and find out which of the three it is.
-- [ ] **428 — The Media and Audio sections are broken.** (20 Aug, via the phone inbox.) His words,
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **428 — ✅ **DONE v11.34.** The Media and Audio sections are broken.** (20 Aug, via the phone inbox.) His words,
       verbatim:
 
       > These sections are broken now media audio
@@ -12856,6 +12855,33 @@ wait for them to report back."*
       His screenshot is the Add sheet on the Sound effects tab: the five tab icons, three action tiles
       (Import audio / Sound effects / Record voice), six .wav tiles, and then roughly a third of the
       sheet is empty space above the page dots. That empty band IS what he means by broken.
+      ✅ **DONE v11.34 — the dead band is gone, and it was filled without stretching anything.**
+      Measured at 380px before: Media and Audio showed three 113x64 cards in ONE row inside a 354x260
+      body — **196px of nothing beneath them**. Elements, with nine cards, filled the same box exactly.
+      **The obvious fix was already tried and rejected on measurement, and that reasoning still stands:**
+      stretching a single row to 260px gives a 113x260 card at ratio 0.43 — a sliver, worse than the gap.
+      js/addmenu.js says so in the fill note. **What it never considered was dropping a COLUMN.**
+      A sparse page now uses two columns instead of three, so the same three cards fill as two rows at
+      **173x126, ratio 1.37** — which is the exact ratio that same note measures and calls good. The odd
+      card out spans the full width, so the grid ends flush instead of with a hole in the corner.
+      Elements (9 cards, 113x81) and Shape (15 cards) are untouched.
+      ⚠️ **The CSS rule needed extra specificity and the first version silently lost.**
+      `.addmenu-page .addmenu-grid` sets three columns and sits LATER in styles.css at equal specificity,
+      so it won on source order: the layout "worked" but left two cards and a hole in the top-right.
+      Matched through `.addmenu-page` so it outranks by class count rather than by position — moving the
+      rule would work until someone reorders the file.
+      ⚠️ **AN EXISTING TEST HAD TO BE UPDATED, NOT DELETED, AND IT CAUGHT THIS CHANGE HONESTLY.**
+      `addsheet-fill` required at least one SHORT tab to exist, to prove a short page was not being
+      stretched into a sliver. Every tab fills now, so that requirement could never be met again. The
+      guard itself is the reason filling was refused the first time, so it was kept and widened to apply
+      to every tab rather than dropped — losing it while making everything fill would have thrown away
+      the one check that made the old decision sound.
+      A duplicate test written for this was removed in favour of updating that one: two tests measuring
+      the same thing is the drift this project keeps paying for.
+      Both mutation directions caught: no fill → 186px band; wrong column count → 4.48:1 cards.
+      🔎 **His second clause was *"those tabs are still broken as per attached image"*, read here as the
+      empty band, since that is what his screenshot shows and what this entry had been holding. If he
+      meant something else about those two tabs, it is a fresh report.**
 - [ ] **429 — No lines or special colouring past the cut-off, and the little + must not move while you
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       swipe the timeline.** (20 Aug, via the phone inbox.) His words, verbatim:

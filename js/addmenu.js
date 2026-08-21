@@ -1205,7 +1205,20 @@ window.FM = window.FM || {};
            * So one row keeps its natural size and the sheet simply has room to spare, which is honest.
            * Better a little empty space than a card stretched to four times its height pretending the
            * space is used. */
-          if (Math.ceil(pageOpts.length / COLS) >= 2) grid.classList.add('addmenu-grid--fill');
+          /* …AND A SPARSE PAGE GETS FEWER COLUMNS RATHER THAN A TALLER ROW (queue 428, v11.34).
+           * Ezra, with a screenshot of the Audio tab: *"fill it but those tabs are still broken as per
+           * attached image"* — so the dead band is the complaint and "fill" is the instruction, which
+           * settles the three-way choice the entry had been holding (fill / centre / shorter).
+           * The reasoning above is still right: stretching ONE row to 260px gives a 113x260 sliver, and
+           * that is worse than the gap. What it did not consider is dropping a column. Measured on the
+           * sheet at 380px, Audio's three cards: 3 columns is one row of 113x64 with 196px dead beneath;
+           * 2 columns is two rows of 173x126, ratio 1.37 — which is the exact ratio the table above
+           * calls his case and calls good. Same cards, no stretching, no gap.
+           * The odd card out spans the full width rather than leaving a hole, so the grid reads as
+           * finished instead of interrupted. */
+          var _rows = Math.ceil(pageOpts.length / COLS);
+          if (_rows >= 2) grid.classList.add('addmenu-grid--fill');
+          else if (pageOpts.length >= 1) grid.classList.add('addmenu-grid--fill', 'addmenu-grid--cols2');
           page.appendChild(grid); pager.appendChild(page);
         }
         bodyEl.appendChild(pager);
