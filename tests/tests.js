@@ -24685,6 +24685,61 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('rotation and the two tilts keyframe independently (queue 419)', { item: '419' }, async function () {
+    /* Ezra, with all three rotate readouts circled and the rail diamond circled beside them:
+     * *"The key frames for these three things are all interacting with each other and causing issues,
+     * make em independent"*.
+     * The three are already SEPARATE properties (rotation / rotationX / rotationY) and each number box
+     * writes only its own — what was shared is the DIAMOND. It keys MT_PROPS[mode], and for rotate that
+     * is all three, so keyframing a spin also animated a tilt that was merely sitting at an angle.
+     * Rotation, X tilt and Y tilt are three independent axes that happen to share a panel — unlike x/y,
+     * which are two halves of one position and must travel together. */
+    if (!FM.inspector || !FM.inspector.openCategory) throw new Error('the inspector is not reachable');
+    const L = FM.makeLayer('shape', { name: 'kfrot', shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 60, fill: '#fff', start: 0, duration: 5 });
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM._mtMode, t0 = FM.time;
+    const anim = k => FM.isAnimated(L.transform[k]);
+    const rail = () => document.querySelector('.mt-rail-left .mt-kf');
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM._mtMode = 'rotate';
+
+      // THE BUG — a STATIC tilt must not be dragged into a rotation keyframe.
+      L.transform.rotation = 0; L.transform.rotationX = 20; L.transform.rotationY = 0;
+      FM.time = 0; FM.inspector.openCategory('transform'); await sleep(260);
+      if (!rail()) throw new Error('no keyframe diamond on the rail — this probe cannot press the thing it is testing');
+      rail().click(); await sleep(160);
+      if (!anim('rotation')) throw new Error('pressing the diamond did not keyframe rotation at all — the probe is not exercising the control');
+      if (anim('rotationX')) throw new Error('keyframing rotation also animated a STATIC X tilt — that is queue 419 exactly');
+      // …and nothing was lost by leaving it out: the tilt still holds its angle.
+      if (Math.abs(FM.evalProp(L.transform.rotationX, 1.0) - 20) > 0.01) throw new Error('the untouched tilt no longer reads 20 degrees');
+
+      /* CONTROL 1 — an ALREADY-ANIMATED tilt must still be carried. Without this the fix could be
+       * "never key the tilt", which would orphan a real animation the moment you touched rotation. */
+      L.transform.rotation = 0; L.transform.rotationX = 20; L.transform.rotationY = 0;
+      FM.time = 0; FM.toggleKeyframe(L, 'rotationX', 0);
+      FM.time = 2; FM.toggleKeyframe(L, 'rotationX', 2);
+      if (!anim('rotationX')) throw new Error('the control could not animate the tilt, so it proves nothing');
+      FM.time = 1; FM.inspector.openCategory('transform'); await sleep(260);
+      rail().click(); await sleep(160);
+      if (!FM.hasKeyframeAt(L.transform.rotationX, 1)) throw new Error('an already-animated X tilt was NOT given a keyframe alongside rotation — a live animation would be orphaned mid-way');
+
+      /* CONTROL 2 — MOVE MODE MUST BE UNCHANGED. x and y are two halves of one position and a
+       * non-default z travels with them; if this ever goes false the fix has leaked out of rotate and
+       * broken position keyframing, which is far worse than the bug. */
+      const M = FM.makeLayer('shape', { name: 'kfmove', shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 5 });
+      FM.scene.layers.push(M); FM.selectLayer(M.id); FM._mtMode = 'move';
+      M.transform.z = 120; FM.time = 0; FM.inspector.openCategory('transform'); await sleep(260);
+      rail().click(); await sleep(160);
+      if (!FM.isAnimated(M.transform.x) || !FM.isAnimated(M.transform.y)) throw new Error('a position keyframe no longer keys x and y');
+      if (!FM.isAnimated(M.transform.z)) throw new Error('a non-default z is no longer carried by a position keyframe — the rotate fix has leaked into Move');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM._mtMode = mode0; FM.time = t0;
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.

@@ -12487,8 +12487,7 @@ wait for them to report back."*
       **So the shape is right and the WEIGHT is wrong** — he wants that exact ring-plus-triangle-head
       form, drawn with a THINNER stroke than the reference. This is his second time asking about these
       buttons, so treat the icon geometry as the deliverable, not the button chrome.
-- [ ] **419 — Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **419 — ✅ **DONE v11.33.** Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
       to be independent.** (19 Aug, phone screenshot at v10.22 with all three readouts circled, plus the
       ◆ keyframe button on the left rail circled.) His words, verbatim:
 
@@ -12521,6 +12520,31 @@ wait for them to report back."*
       if my old stuff gets recked idc, just make it what I want"* — which is the go-ahead, and it also
       removes the only reason the entry was hedged (that splitting the keyframes changes existing
       projects). **Split them.**
+      ✅ **DONE v11.33 — it was the BUTTON, not the values, exactly as this entry suspected.**
+      The entry said to find out which before designing anything, and it is worth recording that the
+      check took two minutes: `rotation`, `rotationX` and `rotationY` are three separate properties, each
+      number box already writes only its own (`kfKey: 'rotation'` / `'rotationX'` / `'rotationY'`), and
+      nothing is stored as a shared triple. **So clause 3's migration worry never applied — no scene
+      format changed and no existing project is re-interpreted.**
+      **What WAS shared: the rail diamond.** It keys `MT_PROPS[mode]`, and `MT_PROPS.rotate` is all
+      three. Measured before the fix: a layer with a STATIC 20° X tilt, keyframe the rotation, and both
+      came out animated. Removing hit all three unconditionally, so clearing a spin key took the tilt's.
+      **Two changes, both narrow:**
+      1. **Rotate no longer sweeps a static-but-non-default channel into a keyframe** (`MT_SWEEP_STATIC`).
+         Move and Scale still do, and must: x/y are two halves of one position and scale/scaleX/scaleY
+         are one size, so keying `scale` while leaving a 1.5 `scaleX` unkeyed would let a later keyframe
+         change the aspect on its own. Rotation and the tilts are independent axes sharing a panel.
+      2. **The diamond honours the SELECTED ROW.** Tapping a row's label already picked "which property's
+         keyframes you are editing" (`kfSel`) and the button simply never read it. With a row selected it
+         keys that row alone, and the button's lit state follows the same scope.
+      **Verified, with controls:** static tilt untouched and still reading 20°; an already-ANIMATED tilt
+      still carried (a key added at the playhead, so a live animation is never orphaned); Move mode
+      unchanged with x, y and a non-default z all keyed. Both mutation directions caught — making rotate
+      sweep again reproduces his bug, and switching sweeping off everywhere breaks position keyframing.
+      ⚠️ **A control failure here was MY PROBE, not the code, and the distinction cost a measurement:**
+      `FM.setTransform(L,'rotationX',v,t)` does NOT create a keyframe — it sets the value, leaving a plain
+      number. The "already-animated tilt" control read false until it was rebuilt with `FM.toggleKeyframe`.
+      Use toggleKeyframe to animate a property in a probe.
 - [x] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
       would make things worse.** ✅ **v10.56 — measured at his own 440 first, and it was worth doing.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
       > Move the two arrow buttons that jump you through the project closer towards the centre, I feel they are too far away from the time play button and too close to the undo redo buttons

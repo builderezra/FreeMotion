@@ -3031,6 +3031,17 @@ window.FM = window.FM || {};
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
   const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'], anchor: [] };
+  /* WHETHER A NON-DEFAULT BUT STILL *STATIC* CHANNEL GETS SWEPT INTO A KEYFRAME (queue 419).
+   * For Move and Scale it must: x/y are two halves of one position, and scale/scaleX/scaleY are one
+   * size — keying `scale` while leaving a 1.5 scaleX unkeyed would let a later keyframe change the
+   * aspect on its own. They are components of one thing, so they travel together.
+   * ROTATION IS NOT LIKE THAT. Rotation, X tilt and Y tilt are three independent axes that happen to
+   * share a panel. Sweeping a static 20-degree tilt into a spin keyframe is what Ezra reported:
+   * *"The key frames for these three things are all interacting with each other and causing issues,
+   * make em independent"*. Measured before this: keyframing rotation on a layer with a static X tilt
+   * left BOTH animated. Nothing is lost by leaving it out — an unkeyed static tilt simply stays at 20
+   * degrees throughout, which is what it did before anyone pressed the diamond. */
+  const MT_SWEEP_STATIC = { move: 1, scale: 1, skew: 1, rotate: 0, anchor: 0 };
   const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, anchorX: 0.5, anchorY: 0.5 };
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
@@ -3496,19 +3507,42 @@ window.FM = window.FM || {};
     // left rail: keyframe + easing
     const left = el('div', 'mt-rail mt-rail-left');
     const props = MT_PROPS[mode];
-    const anyAnim = props.some(k => FM.isAnimated(layer.transform[k]));
-    const onHere = props.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+    /* THE DIAMOND FOLLOWS THE SELECTED ROW (queue 419). Ezra, with all three rotate readouts circled:
+     * *"The key frames for these three things are all interacting with each other and causing issues,
+     * make em independent"*.
+     * The three ARE separate properties — `rotation`, `rotationX`, `rotationY` — and each number box
+     * already writes only its own. What was shared is this BUTTON: it keys `MT_PROPS[mode]`, so in
+     * rotate mode one press touched all three. Adding also swept in any tilt merely sitting at a
+     * non-default angle, so keyframing a spin quietly made a static tilt animated; removing hit all
+     * three unconditionally, so clearing a rotation key took a tilt key with it.
+     * The machinery to say WHICH one was already here and simply unread: tapping a row's label selects
+     * that property (`kfSel`, "tap to pick which property's keyframes you are editing"). So the diamond
+     * now honours it — with a row selected it keys that row alone, and the button's own lit state
+     * follows the same scope so it cannot claim a keyframe that belongs to a different channel.
+     * Deliberately ADDITIVE: with nothing selected every mode behaves exactly as before, so a plain
+     * position keyframe still keys x and y together, which is right and is what AM does. */
+    const _selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
+    const scoped = (_selK && props.indexOf(_selK) >= 0) ? [_selK] : null;
+    const stateProps = scoped || props;
+    const anyAnim = stateProps.some(k => FM.isAnimated(layer.transform[k]));
+    const onHere = stateProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
     kfBtn.addEventListener('click', () => {
       // recompute at CLICK time — the build-time value goes stale the moment the playhead scrubs
       // (the panel isn't rebuilt on scrub), which made the diamond silently no-op or delete
-      const add = !props.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+      // Re-read the selection at CLICK time for the same reason the value is re-read: the panel is not
+      // rebuilt when the row selection changes underneath a held panel.
+      const selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
+      const only = (selK && props.indexOf(selK) >= 0) ? [selK] : null;
+      const judge = only || props;
+      const add = !judge.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
       // Add: only the mode's primary channels + any extra channel already in use (animated or
       // moved off its default). Remove: every channel, so stray keyframes can always be cleaned up.
-      const usable = add
-        ? props.filter(k => MT_PRIMARY[mode].indexOf(k) >= 0 || FM.isAnimated(layer.transform[k]) || (layer.transform[k] != null && layer.transform[k] !== MT_DEF[k]))
-        : props;
+      const usable = only ? only : (add
+        ? props.filter(k => MT_PRIMARY[mode].indexOf(k) >= 0 || FM.isAnimated(layer.transform[k])
+                            || (MT_SWEEP_STATIC[mode] && layer.transform[k] != null && layer.transform[k] !== MT_DEF[k]))
+        : props);
       usable.forEach(k => {
         if (layer.transform[k] == null) layer.transform[k] = MT_DEF[k];
         const has = FM.hasKeyframeAt(layer.transform[k], FM.time);
