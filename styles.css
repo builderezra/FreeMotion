@@ -2500,7 +2500,17 @@ body.fm-playing #time-readout {
   }
   body.sel-multi .align-big .qr-btn svg { width: 24px; height: 24px; flex: 0 0 auto; }
   body.sel-multi .align-big .qr-cap { display: block; }
+  /* The down/up pair share one row (queue 465) — see the note in inspector.js. Four full-width rows in
+     Studio's 264px band measured 34px each, under the phone's own strip; three rows keeps them at 48. */
+  body.sel-multi .align-big .align-chainpair { display: flex; flex: 1; min-height: 0; gap: 10px; }
+  /* Tighter than a full-width row on purpose: at half the panel a 13.5px caption beside a 24px icon
+     clipped "Chain down" by a few pixels — measured, not guessed. */
+  body.sel-multi .align-big .align-chainpair .qr-btn { flex: 1; min-width: 0; padding: 0 10px; gap: 8px; font-size: 12.5px; }
+  body.sel-multi .align-big .align-chainpair .qr-cap { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+/* On a phone the row is a horizontal icon strip and the pair is not a sub-group of anything — contents
+   drops the wrapper out of the layout entirely so the four buttons space themselves as siblings. */
+.align-chainpair { display: contents; }
 
 .cap-title { font-size: 11px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 7px; }
 .cap-list { display: flex; flex-direction: column; gap: 7px; }

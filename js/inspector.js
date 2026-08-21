@@ -2563,22 +2563,47 @@ window.FM = window.FM || {};
        to fill half a panel cannot — at that size an icon with no word beside it just looks like an
        unfinished button, and "start together" vs "end together" is exactly the pair a mirrored glyph
        fails to distinguish. The full sentence stays on the title, so nothing is lost. */
-    function tb(title, cap, icon, fn) {
+    function tb(title, cap, icon, fn, parent) {
       const b = el('button', 'qr-btn'); b.title = title;
       b.innerHTML = svgIcon(icon) + '<span class="qr-cap"></span>';
       b.querySelector('.qr-cap').textContent = cap;   // textContent, never interpolated into the HTML above
-      b.addEventListener('click', fn); tbar.appendChild(b);
+      b.addEventListener('click', fn); (parent || tbar).appendChild(b);
     }
     tb('Start together — all clips begin at the same time', 'Start together', 'M5 4v16M9 7h10M9 12h7M9 17h11', () => {
       const s0 = Math.min.apply(null, layers.map(l => l.start));
       layers.forEach(l => setStart(l, s0));
       done();
     });
-    tb('One after another — each clip starts where the previous ends', 'One after another', 'M3 6h6M9 12h6M15 18h6', () => {
+    /* TWO STAIRCASES, NOT ONE (queue 465). Ezra, with the button scribbled over and a line drawn down
+       its middle: *"Split this button into two, one stairs down and one stairs up."*
+       The icon `M3 6h6 M9 12h6 M15 18h6` is three strokes descending to the right — stairs going DOWN —
+       and the action chains the clips in ROW ORDER, so the top row goes first and each next one starts
+       later: the picture and the behaviour already agreed. What was missing is the other direction.
+       Up is the same action from the bottom row: the LAST row starts first and the chain climbs. Not a
+       reversal of the clips themselves, which would reorder his layers — only of which end the chain
+       starts from, so the stack is untouched and just the timings differ.
+       Kept as two separate buttons rather than one that toggles: a toggle would have to say which way it
+       is currently pointing, and a button whose meaning depends on a state you cannot see is the thing
+       the "start together / end together" pair either side of it deliberately avoids. */
+    /* The two of them share ONE row on desktop (.align-chainpair), where the others take a row each.
+       Not decoration — a measurement: this panel is a 264px band in Studio, so a fourth full-width row
+       took every button from 48px down to 34px, thinner than the phone's own 36px strip and the exact
+       "make them big" complaint from queue 169 coming back by a different door. Side by side they cost
+       one row between them and everything stays 48px. It also happens to say the true thing about them,
+       that they are one control split down the middle, which is how he described it.
+       `display: contents` on the phone, so the compact icon strip is laid out exactly as before. */
+    const chain = el('div', 'align-chainpair');
+    tb('One after another, down — the top clip starts first and each next one follows', 'Chain down', 'M3 6h6M9 12h6M15 18h6', () => {
       let t = Math.min.apply(null, layers.map(l => l.start));
       rowOrder.forEach(l => { setStart(l, t); t += l.duration; });
       done();
-    });
+    }, chain);
+    tb('One after another, up — the bottom clip starts first and the chain climbs', 'Chain up', 'M3 18h6M9 12h6M15 6h6', () => {
+      let t = Math.min.apply(null, layers.map(l => l.start));
+      rowOrder.slice().reverse().forEach(l => { setStart(l, t); t += l.duration; });
+      done();
+    }, chain);
+    tbar.appendChild(chain);
     tb('End together — all clips finish at the same time', 'End together', 'M19 4v16M5 7h10M8 12h7M4 17h11', () => {
       const e0 = Math.max.apply(null, layers.map(l => l.start + l.duration));
       layers.forEach(l => setStart(l, e0 - l.duration));

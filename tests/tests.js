@@ -9968,7 +9968,11 @@
         const acts = document.querySelector('#inspector .align-clipacts');
         if (acts && acts.getBoundingClientRect().height > 0) throw new Error('the inspector is still showing its own copy of the clip actions on desktop');
         const big = [].slice.call(document.querySelectorAll('#inspector .align-big .qr-btn'));
-        if (big.length !== 3) throw new Error('expected three align buttons, got ' + big.length);
+        /* Four since v11.43, not three: queue 465 split the "one after another" stairs button into a
+           down and an up. The number is not the point of this line — the point is that the section is
+           filled by THESE buttons and not by a surviving copy of the playhead pair, so it moves with a
+           deliberate change to the row and would still catch a stray button appearing beside them. */
+        if (big.length !== 4) throw new Error('expected four align buttons, got ' + big.length);
         /* "fill up the whole section" is a claim about the SECTION, so measure the section. A height
            threshold alone is not enough and this is not a guess: with the fill rule deleted the buttons
            still measure 49px — over any sensible "bigger than the phone's 36" bar — while leaving 468px
@@ -24691,6 +24695,54 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the stairs button is two — one chaining down, one chaining up (queue 465)', { item: '465' }, async function () {
+    /* Ezra, with the button scribbled over and a line drawn down its middle: *"Split this button into
+     * two, one stairs down and one stairs up."* The icon was three strokes descending to the right and
+     * the action chained clips in ROW order, so picture and behaviour already agreed — what was missing
+     * was the other direction.
+     * The assertion that matters most is the last one: UP must not reorder his layers. Reversing the
+     * stack would also produce an ascending chain and would be a far worse thing to do to his project
+     * than the bug being fixed. */
+    if (!FM.selectionIds) throw new Error('FM.selectionIds is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, selIds0 = FM.scene.selectedIds;
+    try {
+      const mk = (n, d) => FM.makeLayer('shape', { name: n, shape: 'rect', x: 150, y: 150, shapeW: 60, shapeH: 40, fill: '#fff', start: 0, duration: d });
+      const A = mk('A', 1), B = mk('B', 2), C = mk('C', 3);   // different lengths, or a wrong order still lines up
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B, C);
+      FM.scene.selectedIds = [A.id, B.id, C.id];
+      FM.scene.selectedId = A.id;
+      FM.inspector.refresh();
+      await sleep(320);
+
+      const btns = () => [].slice.call(document.querySelectorAll('.align-row .qr-btn'));
+      const find = (re) => btns().filter(b => re.test(b.title))[0];
+      const down = find(/one after another, down/i), up = find(/one after another, up/i);
+      if (!down) throw new Error('there is no "one after another, down" button');
+      if (!up) throw new Error('there is no "one after another, up" button — the stairs button was never split');
+
+      const reset = async () => { [A, B, C].forEach(l => { l.start = 0; }); FM.refreshAll(); FM.inspector.refresh(); await sleep(220); };
+
+      await reset(); down.click(); await sleep(260);
+      if (!(A.start === 0 && B.start === 1 && C.start === 3)) {
+        throw new Error('down chained to A@' + A.start + ' B@' + B.start + ' C@' + C.start + ', expected 0 / 1 / 3');
+      }
+      await reset(); up.click(); await sleep(260);
+      if (!(C.start === 0 && B.start === 3 && A.start === 5)) {
+        throw new Error('up chained to C@' + C.start + ' B@' + B.start + ' A@' + A.start + ', expected 0 / 3 / 5');
+      }
+      // …and it climbed by starting from the other END, not by reordering his stack.
+      if (FM.scene.layers.map(l => l.name).join('') !== 'ABC') {
+        throw new Error('the layer stack came out as ' + FM.scene.layers.map(l => l.name).join('') + ' — "up" reordered his layers instead of just retiming them');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedIds = selIds0;
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('filters are toggle-then-Add, and nothing applies until you press it (queue 464)', { item: '464' }, async function () {
     /* Ezra: *"When adding filters make it so that you can toggle them select and then have to press add,
      * like the main effects menu, this is good so I can see them all quickly and not have to add then

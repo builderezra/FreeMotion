@@ -13907,8 +13907,7 @@ wait for them to report back."*
       what he asked to change, the second half is still true and still worth guarding. It now picks, then
       presses Add, then makes the same assertions about landing back on the stack with the filter open.
       Deleting it would have quietly dropped a guarantee nobody asked to lose.
-- [ ] **465 — Split the stairs button in the timeline toolbar into TWO: stairs down and stairs up.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **465 — Split the stairs button in the timeline toolbar into TWO: stairs down and stairs up.** ✅ **DONE v11.43.**
       (21 Aug, with a screenshot; he scribbled over the button and drew a line down its middle to show
       the split.) His words, verbatim: *"Split this button into two, one stairs down and one stairs up."*
       **What his screenshot shows:** the row of buttons under the TIMELINE heading at the bottom of the
@@ -13921,6 +13920,20 @@ wait for them to report back."*
       so this row is timeline/clip operations. Find the actual handler and say what it does today — if it
       is a toggle, splitting it is trivial; if it cycles through more than two states, ask him which two
       he means rather than guessing.
+      **RESOLVED — nothing to ask.** The button was neither a toggle nor a cycle: it did one thing, once.
+      It is "one after another", which lines the selected clips up end to end, and it chained them in ROW
+      order, so the top clip went first and each next one started later. Its icon is three strokes
+      descending to the right, so picture and behaviour already agreed — there was simply no way to ask
+      for the opposite, which is what the second button now is.
+      **What "up" does, precisely:** it starts the chain from the BOTTOM clip and climbs. It does not
+      reverse your layers — the stack stays exactly as you arranged it and only the start times change.
+      That distinction is the thing the test guards, because reversing the stack would also produce a
+      climbing chain and would be a far worse thing to do to a project.
+      **On PC they share one row.** Four full-width rows in Studio's short inspector band squeezed every
+      button from 48px down to 34px — thinner than the phone's own strip, and the "make them big" problem
+      from 169 coming back sideways. Down and up sit side by side as one split control, so everything
+      stays 48px. On the phone the row is four equal icon buttons, measured at 380px: 81px each, one row,
+      nothing cut off.
       Related in spirit to **425** (he wanted the trash / copy / parent buttons moved on PC) — the same
       toolbar family, so check that entry for anything already known about this row.
 
