@@ -40,35 +40,36 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.47** — queue **466**, a bug hunt finding. Suite **810/810 green**, pushed and verified.
+**Last shipped: v11.48** — queue **467**, a bug hunt finding. Suite **811/811 green**, pushed and verified.
 
-**⚠️ AN EMPTY QUEUE IS NOT A REASON TO STOP — correcting what this file said last tick.** It claimed
-"say so in one line and stop", which was too absolute and would have wasted this tick. His standing
-instruction (queue **260**, verbatim) is: *"When you finish the last thing, do a bug and issue hunt. Also
-look for potential ideas and things to do."* That is exactly the empty-queue case, so **0 actionable →
-BUG HUNT**, not silence. Findings get their OWN numbered entry (also 260's rule: "a hunt that files its
-findings into a single bullet is a hunt whose findings rot").
+**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim: *"When you finish the last
+thing, do a bug and issue hunt. Also look for potential ideas and things to do."*). Findings get their
+OWN numbered entry — 260's rule: "a hunt that files its findings into a single bullet is a hunt whose
+findings rot."
 
-**This hunt, for the record so it is not repeated blind.** Swept all **27 audio effects** through an
-offline render — static defaults AND every parameter animated min→max at once — checking for throws,
-NaN/Inf, silence and absurd peaks. **All clean**, which also proves the new whole-window scheduler hook
-from v11.45 disturbed none of the other 26 effects. The one flag (gain peaking at 8.68 when animated to
-maximum) is the probe being naive: a gain effect at maximum gain is *supposed* to be loud.
-Then checked an assumption I had PUBLISHED but never verified — that Text to Voice settings survive a
-save. They do. But the check found a different, real bug next to it: **#466**, my own regression from
-v11.46, where changing the Speed erased the saved voice.
+**HUNT LOG — areas swept, so they are not re-checked blind every session:**
+- **All 27 audio effects** (v11.47 tick), offline render, static defaults AND every parameter animated
+  min→max: no throws, no NaN, no silence. Also proves v11.45's whole-window hook disturbed none of them.
+- **Project import, hostile files** (this tick). CLEAN: prototype pollution via `__proto__` /
+  `constructor` in a layer or the project; remote and `javascript:` `fillImage` URLs (dropped);
+  prototype-chain effect types `constructor` / `toString` (dropped); the 2000-layer refusal.
+  FOUND: **#467**, layer timing never validated → a broken file imports as a 0-second empty project.
+- **Text to Voice settings persistence** (v11.47 tick). Survives save/reload. FOUND: **#466** next to it.
 
-**THREE probe errors in a row while chasing it, all mine, all the same shape — assuming a return type
-instead of looking:** `serializeScene` is ASYNC (un-awaited, so `.layers` was undefined and it looked
-like the field was being dropped); `storage.load()` returns a BOOLEAN and loads into `FM.scene` rather
-than returning the doc; and the first "autosave loses it" reading came from filtering a list that was
-never there. **Every one produced a confident wrong conclusion, and one of them nearly became a report
-that the save path was broken.** BUG-HUNT.md's rule, again: a measurement that cannot fail is not
-evidence. Check the SHAPE of what a function returns before believing what you read out of it.
+**STILL UN-SWEPT — start here next tick:** the export pipeline end-to-end with the new reverb bank;
+undo/redo across the newer panels (filters, faves, TTS); the timeline at very long durations; template /
+element insert with a hostile pack (same door as import, different key).
 
-**Next tick:** the queue will still be 0 actionable, so hunt again. Areas NOT yet swept: the export
-pipeline end-to-end with the new reverb bank; undo/redo across the newer panels; project import of a
-hostile .fmotion.json; the timeline at very long durations.
+**⚠️ THE SEAM LESSON, THIRD TIME NOW — a passing test can prove a function works and NOTHING about
+whether anything calls it.** #467's mutation SURVIVED at first: deleting the sanitiser's call site left
+every assertion green, because the test drove the function directly. Previous outings: #382's cost
+counter, #455's rendered ruler, #394's call site. **Whenever a fix is "new function + one call site",
+assert through the REAL entry point, not the function.**
+
+**Probe discipline, earned the hard way:** check the SHAPE of what a function returns before believing
+what you read out of it (three wrong readings in one tick — `serializeScene` is async, `storage.load()`
+returns a boolean); round every sample index; and take a CLEAN CONTROL through the same probe before
+calling anything a bug — "no clip element found" is usually a wrong selector, not a defect.
 
 **Waiting on Ezra — still the bottleneck:** 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391,
 395, 429, 418, 223 follow-ups; the unnumbered **"Editing lags"** (all fixes in — open only until he says
