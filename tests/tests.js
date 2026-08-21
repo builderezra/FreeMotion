@@ -9911,13 +9911,27 @@
       // it. Measuring the dock instead is the same number on the phone and the right one everywhere.
       const sr = stage.getBoundingClientRect();
       const topPad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
-      const want = dockEl ? Math.max(0, sr.bottom - (dockEl.getBoundingClientRect().top - 12)) : 0;
+      /* #439 (v11.20): the field moved from ABOVE THE KEYBOARD to UNDER THE TOOLBAR, so the bottom
+       * lift now clears the KEYBOARD LINE and nothing else. The dock's height has not vanished from
+       * the sums — it moved into padding-TOP, which the overlap assertion below checks from the other
+       * side. Reading the dock's top here, as this did while the dock lived at the bottom, now
+       * measures a band near the TOP of the screen and asks an 820px window for a 715px bottom pad. */
+      const vvNow = window.visualViewport;
+      const kbTop = (vvNow.offsetTop || 0) + vvNow.height;
+      const want = Math.max(0, sr.bottom - (kbTop - 12));
       const room = Math.max(0, sr.height - topPad - 120);
       const expect = Math.min(want, room);
       if (Math.abs(padB - expect) > 2) {
         throw new Error('#stage is padded ' + Math.round(padB) + 'px at the bottom; its box ends at y ' +
-          Math.round(sr.bottom) + ' and the docked field starts at y ' + Math.round(dockEl ? dockEl.getBoundingClientRect().top : 0) +
+          Math.round(sr.bottom) + ' and the keyboard line is at y ' + Math.round(kbTop) +
           ', so it wants ' + Math.round(want) + 'px and the stage has room for ' + Math.round(room) + 'px — expected ' + Math.round(expect));
+      }
+      // …and the picture must clear the field, which is now ABOVE it. This is the same complaint from
+      // the other side: text hidden behind chrome is the bug, and it does not matter whose chrome.
+      if (dockEl) {
+        const db = dockEl.getBoundingClientRect().bottom, ct = cv.getBoundingClientRect().top;
+        if (ct < db - 1) throw new Error('the preview starts at y ' + Math.round(ct) + ' but the docked field ends at y ' +
+          Math.round(db) + ' — the picture is behind the field you are typing into');
       }
       // …and the lift must never eat the preview entirely. A picture partly behind the keyboard beats
       // no picture at all, which is what a short screen used to get.
@@ -10043,18 +10057,25 @@
 
       // 1. The two fixed elements — these were already right, and must stay right.
       if (Math.abs(br.top - OT) > 1) throw new Error('the toolbar is at screen y ' + S(br.top) + ', not on the visible top edge' + where);
-      if (Math.abs(dr.bottom - (OT + H)) > 1) throw new Error('the docked field ends at screen y ' + S(dr.bottom) + ', not on the keyboard line (' + H + ')' + where);
+      /* #439 (v11.20): the field is docked UNDER THE TOOLBAR, not on the keyboard line. iOS stacks its
+       * own chrome on that line — the ˄ ˅ ✓ accessory strip and the predictive row — none of which is
+       * visible to visualViewport, so a field placed there is covered by something no measurement from
+       * script can see. That is why 73 measurements all said the layout was correct while Ezra's photo
+       * showed it was not. Under the toolbar the field is in a band nothing else can claim.
+       * MOVING THIS ASSERTION BACK TO THE KEYBOARD LINE RE-INTRODUCES #439. */
+      if (Math.abs(dr.top - br.bottom) > 1) throw new Error('the docked field starts at screen y ' + S(dr.top) + ', not directly under the toolbar (' + S(br.bottom) + ')' + where);
+      if (dr.bottom > OT + H + 1) throw new Error('the docked field ends at screen y ' + S(dr.bottom) + ', below the keyboard line (' + H + ') — the field itself is off screen' + where);
       // 2. The canvas — the half that was wrong. None of it may hang above the toolbar or below the
       //    dock, which is what made two thirds of the phone an empty black void.
-      if (cr.top < br.bottom - 1) throw new Error('the preview starts at screen y ' + S(cr.top) + ', above the toolbar, so the top of the picture — where the text is — is hidden behind it' + where);
-      if (cr.bottom > dr.top + 1) throw new Error('the preview runs to screen y ' + S(cr.bottom) + ', under the docked field' + where);
+      if (cr.top < dr.bottom - 1) throw new Error('the preview starts at screen y ' + S(cr.top) + ', above the docked field, so the top of the picture — where the text is — is hidden behind it' + where);
+      if (cr.bottom > OT + H + 1) throw new Error('the preview runs to screen y ' + S(cr.bottom) + ', below the keyboard line' + where);
       if (cr.height < 20) throw new Error('the preview collapsed to ' + Math.round(cr.height) + 'px tall' + where);
       // 3. …and it is centred in the band the editor leaves for it: the visible gap between toolbar
       //    and dock, intersected with #stage's own box (in a desktop window the stage's grid row can
       //    end well above the dock, and padding neither can nor should stretch it down there).
-      const top = Math.max(br.bottom, sr.top), bot = Math.min(dr.top, sr.bottom);
+      const top = Math.max(dr.bottom, sr.top), bot = Math.min(OT + H, sr.bottom);
       const off = (cr.top + cr.bottom) / 2 - (top + bot) / 2;
-      if (Math.abs(off) > 12) throw new Error('the preview sits ' + Math.round(off) + 'px off the centre of the band between the toolbar and the dock — offsetTop/2 is ' + (OT / 2) + 'px' + where);
+      if (Math.abs(off) > 12) throw new Error('the preview sits ' + Math.round(off) + 'px off the centre of the band between the docked field and the keyboard — offsetTop/2 is ' + (OT / 2) + 'px' + where);
 
       // 4. Leaving the editor hands #stage back exactly as it was found. Both paddings are inline
       //    styles now; a forgotten padding-top strands the canvas hundreds of px down the stage for

@@ -888,8 +888,11 @@ body.text-editing .sb-wrap { display: none !important; }
 .te-swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255,255,255,.35); display: block; }
 .te-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 800; font-size: 17px; min-width: 46px; }
 
-.te-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-  background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(0,0,0,.4); }
+/* #439: docked UNDER THE TOP TOOLBAR, not above the keyboard — js/text-edit.js drives `top`.
+ * The safe-area bottom padding, the top border and the upward shadow all belonged to a bar sitting on
+ * the bottom edge; at the top of the screen they are dead height and a shadow cast the wrong way. */
+.te-dock { position: fixed; left: 0; right: 0; top: 0; bottom: auto; z-index: 80; padding: 8px 10px;
+  background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
 #te-input { width: 100%; box-sizing: border-box; min-height: 52px; max-height: 30vh; resize: none; padding: 11px 13px;
   background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text);
   font-size: 16px; line-height: 1.35; font-family: inherit; outline: none; }
@@ -957,7 +960,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   /* Inside the card these two are ROWS, not screen edges. Their fixed positioning, edge shadows and
    * safe-area padding are all phone furniture; a card carries its own border and shadow. */
   .te-bar  { position: static; padding: 8px 10px; background: none; box-shadow: none; }
-  .te-dock { position: static; padding: 8px 10px; background: none; border-top: 0; box-shadow: none; }
+  .te-dock { position: static; top: auto; padding: 8px 10px; background: none; border-top: 0; border-bottom: 0; box-shadow: none; }
   /* Capped. The font button absorbing every spare pixel is correct on a 380px phone bar, where filling
    * the row is the design; in a 560px card it just makes one button enormous again. */
   .te-font { max-width: 220px; }

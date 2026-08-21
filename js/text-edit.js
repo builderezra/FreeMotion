@@ -1,5 +1,5 @@
 /* FreeMotion — Text edit mode (Alight Motion style).
- * A focused, full-screen text-entry mode: a big text field docked above the mobile keyboard + a
+ * A focused, full-screen text-entry mode: a big text field docked under the top toolbar (#439) + a
  * compact top toolbar with exactly four controls — Align · Font · Size · Colour — and a ✓ Done.
  * Everything else (bold/italic, spacing, line-height, curve, outline, animation, captions) stays in
  * the inspector's "Edit Text" category, matching AM (it keeps those out of the focused text bar too).
@@ -17,7 +17,7 @@ window.FM = window.FM || {};
   let cueNav = null;                 // the ‹ n/N › strip shown on a caption track
 
   /* ---- which editor am I? --------------------------------------------------
-   * PHONE: a full-screen takeover — toolbar on the top edge, field docked above the keyboard, the
+   * PHONE: a full-screen takeover — toolbar on the top edge, field docked just under it (#439), the
    * app grid collapsed to one cell. DESKTOP: one floating card at the bottom of the stage, with the
    * app left exactly as it was.
    *
@@ -314,7 +314,7 @@ window.FM = window.FM || {};
     // The phone pins these two with inline top/bottom. Clear them: a window dragged across 700px
     // mid-edit would otherwise leave a stale offset fighting the card's flex column.
     if (bar) bar.style.top = '';
-    if (dock) dock.style.bottom = '';
+    if (dock) { dock.style.bottom = ''; dock.style.top = ''; }
     /* DOCKED IN THE SIDE COLUMN — the answer to "makes it smaller" (#147).
      * v6.96 moved the Aa panel here and fixed the half he was looking at; the CARD was still costing
      * the canvas a band at the bottom of the stage. Measured at 1280x860: 169px of #stage padding out
@@ -385,7 +385,19 @@ window.FM = window.FM || {};
     // Re-pin the top toolbar to the top of the VISIBLE (visual) viewport, and the dock just above the
     // keyboard, so neither gets shoved off-screen.
     if (bar) bar.style.top = m.fixedTop + 'px';
-    if (dock) dock.style.bottom = m.fixedBottom + 'px';
+    const barH = bar ? Math.round(bar.getBoundingClientRect().height) : 0;
+    /* #439 — THE FIELD IS DOCKED UNDER THE TOOLBAR, NOT ABOVE THE KEYBOARD.
+     * It used to sit at m.fixedBottom, i.e. flush on top of the keyboard. That position is measured
+     * correctly — 73 measurements across 12 keyboard geometries all agreed — and it is still the wrong
+     * place to put it, because the band directly above the keys is not ours. iOS stacks its own chrome
+     * there (the ˄ ˅ ✓ accessory strip, and the predictive/candidate row), and that chrome is drawn
+     * over the page, is not reported by visualViewport, and cannot be measured from script at all.
+     * So every fix that kept the field down there was fighting for a strip it could never win.
+     * Ezra, with a screenshot, 21 Aug: "simply moving it up on the screen instead of trying to interact
+     * with the keyboard would fix - do what you thinks best but whatever ur doing rn isn't working."
+     * Anchored under the toolbar the field is in a band nothing else can claim, so the entire class of
+     * bug disappears rather than being re-measured. DO NOT move this back to fixedBottom. */
+    if (dock) { dock.style.top = (m.fixedTop + barH) + 'px'; dock.style.bottom = 'auto'; }
     // While editing, the whole layout is fixed-position and there is nothing to scroll to — but iOS
     // scrolls the DOCUMENT anyway to bring the focused field into view, which is what "pushes the
     // screen down" is. body{overflow:hidden} does not stop that on iOS; putting the scroll back does.
@@ -395,7 +407,6 @@ window.FM = window.FM || {};
     // safe-area inset, and the dock also grows with the field's own line count; a fixed guess either
     // crops the canvas or leaves a dead band.
     const stage = document.getElementById('stage');
-    const barH = bar ? Math.round(bar.getBoundingClientRect().height) : 0;
     const dockH = dock ? Math.round(dock.getBoundingClientRect().height) : 0;
     if (stage) {
       // BOTH paddings, from the same measurement. Re-computing only the BOTTOM one was the v5.89
@@ -414,10 +425,13 @@ window.FM = window.FM || {};
       // both numbers are measured from the BORDER box (r), which the padding never moves. Measure
       // the canvas instead of the stage here and every pass chases the last one — a real 8.6px/pass
       // drift, which is what tests/_kbdevice.py --mutate padtop-feedback exists to catch.
-      const topPad = Math.min(FM.screen.padTop(r, barH, m), Math.max(0, r.height - MIN_PREVIEW));
+      // The canvas now clears the toolbar AND the field above it, and only the keyboard below it.
+      // Both numbers moved together: the dock left the bottom, so its height left padBottom and
+      // joined padTop. Splitting that change would either overlap the field or leave a dead band.
+      const topPad = Math.min(FM.screen.padTop(r, barH + dockH + 12, m), Math.max(0, r.height - MIN_PREVIEW));
       const room = Math.max(0, r.height - topPad - MIN_PREVIEW);
       stage.style.paddingTop = topPad + 'px';
-      stage.style.paddingBottom = Math.min(FM.screen.padBottom(r, dockH + 12, m), room) + 'px';
+      stage.style.paddingBottom = Math.min(FM.screen.padBottom(r, 12, m), room) + 'px';
     }
     positionPop();
     // The selection box is positioned from the canvas's live bounding rect, and nothing tells it the

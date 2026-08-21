@@ -3539,6 +3539,9 @@ better still, keep working inside the turn rather than parking work for a later 
       *(Related: **#37** — "merging the two is queue 37's real job" — turned out to be already DONE and
       merely un-ticked, found on 14 Aug. So that half of this entry has resolved itself; what is left is
       only the thumbnails-versus-player question, which is still yours.)*
+      **ANSWERED BY EZRA, 21 Aug:** *"presets are fine as they are"*. So the THUMBNAILS STAY and the
+      full-screen preview player is NOT wanted. The old NEXT-SESSION.md line that says "do not build
+      preset thumbnails" is overruled by him directly — this conflict is settled, close it.
 - [x] **68 — Speed should retime keyframes.** **DONE v6.39.** Changing Speed already re-timed the
       clip but left every keyframe where it was, so a 2x speed-up halved the bar and left the
       animation running past the end of it. Now the whole animation stretches with the clip. And
@@ -3785,6 +3788,9 @@ better still, keep working inside the turn rather than parking work for a later 
       it goes to the front; otherwise I will keep it behind the smaller items.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
       your word to jump the queue — asked three times now, and I still rate it the most serious open item.
+      **EZRA, 21 Aug, on moving export off the main thread:** *"idk what the pure talking about"* — the
+      question was asked in jargon and that is my fault, not his. RE-ASKED in plain terms; his answer to
+      the re-asked version is what counts. Do not treat this as declined.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls
@@ -4704,6 +4710,9 @@ better still, keep working inside the turn rather than parking work for a later 
       substantial piece of work. If you only ever caption voice recordings, it already does the job. Say
       the word and it goes; I am not attached to it.
 
+      **ANSWERED BY EZRA, 21 Aug:** *"keep it for now"*. So auto-detect speech STAYS as a
+      voice-recording tool. Not to be deleted, and not to be improved either — closing the music/voice
+      gap needs a real speech-music discriminator and he has not asked for that.
 - [x] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (v7.02) (14 Aug,
       screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
       for a split second there's a black bar at the bottom then it fixes itself."*
@@ -7081,6 +7090,8 @@ better still, keep working inside the turn rather than parking work for a later 
         opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
       · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
         the same polygons), so the tile and the shape cannot drift apart while we work.
+      **ANSWERED BY EZRA, 21 Aug:** *"later"*. Still HELD, by his choice. Do not start it alone —
+      his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
       exported and got no audio even tho the video had audio."*
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the
@@ -7225,6 +7236,21 @@ better still, keep working inside the turn rather than parking work for a later 
       **So when it happens to you again, read the toast and the console line and send me those** — that
       is the whole answer, and it takes one screenshot.
 
+
+      **ANSWERED BY EZRA, 21 Aug — his words, verbatim:** *"I exported a video that was making audio in
+      the project, it would have normal settings and just be an mp4 video to camera role export"*.
+      **What this settles, and it is a lot:**
+      · **It is a VIDEO layer with its own audio**, not a sound effect and not a separate audio layer.
+        So the earlier "sound effects come from a path the mixer cannot see" theory is DEAD — a video
+        layer is exactly what `buildAudioMix`'s `layer.type !== 'video'` guard lets through.
+      · **The project WAS making audio** — preview had sound. So decode works and the media record is
+        real. The loss is on the EXPORT path only, which is separate code from preview by design.
+      · **Normal settings, MP4, to camera roll.** No exotic codec, and the camera-roll route is the
+        share/save path rather than a plain download.
+      **So the surviving suspects, in order:** the AAC encode probe failing and the whole mix being
+      dropped (the v7.91 second silent loss); the muxer committing an empty audio track; or `m.file`
+      being absent on a layer whose media came back from IndexedDB rather than a fresh pick.
+      **Measure, do not read:** build the scene, export, count audio samples in the output.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
 
       **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
@@ -7703,6 +7729,8 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **To be done WITH him after he compacts the chat** — his words, and it is his record, so the
       shape of it is his call rather than something to do unilaterally while he is not looking.
 
+      **EZRA, 21 Aug:** *"idk what ur talking about"* — asked in my words, not his. RE-EXPLAINED to him
+      in plain terms; his answer to the re-asked version is what counts. Not declined.
 - [ ] **353 — Standing instructions for the loop, restated after the compact.** (17 Aug.) His words,
       verbatim: *"Continue with the list, ticking one thing off at a time from top to bottom, oldest
       first, use workflows if you need, make sure you don't wait too long to wait for one of the work
@@ -9921,6 +9949,10 @@ wait for them to report back."*
          openCategory and then only `FM.timeline.rebuild()`. If refreshAll re-renders the inspector back
          to the category grid, that ordering is the whole bug — and it would explain "sometimes".
 
+      **ANSWERED BY EZRA, 21 Aug:** *"dont test all the effects urself ill just tell you if the others
+      arent behaving as one when i see it"*. So: the behaviour half is done and that is enough for now.
+      **Do NOT sweep the remaining effects for one-ness** — he will report any that misbehave when he
+      hits them. Treat this entry as closed unless he reports one.
 - [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
       a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
       sketching so you can draw many things at once but you still have the edit points thing and didn't
@@ -11174,6 +11206,13 @@ wait for them to report back."*
       clip legitimately belongs at 5 minutes in a long project) and guessing it would trade his bug for a
       limit he never asked for.
 
+      **ANSWERED BY EZRA WITH A SCREENSHOT, 21 Aug:** *"it looks like the second image, it just keeps
+      going past the timeline"*. His screenshot shows a text clip sitting far off to the RIGHT, beyond
+      the right-hand edge of the visible timeline, while every other layer row is empty at the playhead.
+      So "breaks" does NOT mean blank, frozen, or a vanished clip — **it means a clip can be dragged out
+      past the end of the project and the timeline just keeps extending after it**, leaving the content
+      stranded somewhere off-screen with nothing bounding it. Look for a missing clamp on the drag
+      against the project duration.
 - [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
@@ -11243,6 +11282,14 @@ wait for them to report back."*
       (lamejs or similar). Everything else worth having is now shipped, so the only question left is
       whether he wants that specific extension enough to add a dependency for it.
 
+      **ANSWERED BY EZRA, 21 Aug:** *"i dont see why not having all the options, i mean if its a bad
+      idea for any reason then no but I just want options. Yu can just say recommended next to the best
+      option"*. So **MP3 IS WANTED**, alongside the M4A that already shipped. His conditional matters:
+      he wants it *unless there is a real reason not to*, and shipping an MP3 encoder means adding a
+      library (lamejs or similar) to a project whose whole premise is no npm and no build step — that is
+      the one reason that could count, and it is his call once it is put to him plainly.
+      **Also a standing instruction, wider than this entry:** when offering him options, give him ALL of
+      them and mark the best one *recommended*, rather than pre-filtering to the one I would pick.
 - [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
       not itself"*
@@ -11890,6 +11937,11 @@ wait for them to report back."*
       is written down in full and deliberately NOT started; it waits for him to release it rather than
       taking its turn in the queue.
 
+      **ANSWERED BY EZRA, 21 Aug — and it is a STANDING instruction, not just about this entry:**
+      *"like I said before I don't care about my projects I just want stuff to be good, if my old stuff
+      gets recked idc, just make it what I want"*. So **SPLIT THEM.** "This changes existing projects"
+      is not a reason to hold anything back — he has now said so twice. Stop pricing backward
+      compatibility into decisions; price only whether the result is what he wants.
 - [x] **420 — Move the two skip-through arrows closer to the centre — but only slightly, and skip it if it
       would make things worse.** ✅ **v10.56 — measured at his own 440 first, and it was worth doing.** (19 Aug, via the phone inbox.) His words, verbatim, both messages:
       > Move the two arrow buttons that jump you through the project closer towards the centre, I feel they are too far away from the time play button and too close to the undo redo buttons
@@ -12190,6 +12242,12 @@ wait for them to report back."*
       he taps into those two tabs. Everything above says the tabs function, so the answer decides whether
       this is a layout job or a hunt for something the probes cannot see.
 
+      **ANSWERED BY EZRA WITH A SCREENSHOT, 21 Aug:** *"fill it but those tabs are still broken as per
+      attached image"*. Two things: **FILL the spare height** on a sparse tab (so not "centre in it" and
+      not "let it be shorter" — that settles the three-way choice), and **the tabs are still wrong**.
+      His screenshot is the Add sheet on the Sound effects tab: the five tab icons, three action tiles
+      (Import audio / Sound effects / Record voice), six .wav tiles, and then roughly a third of the
+      sheet is empty space above the page dots. That empty band IS what he means by broken.
 - [ ] **429 — No lines or special colouring past the cut-off, and the little + must not move while you
       swipe the timeline.** (20 Aug, via the phone inbox.) His words, verbatim:
 
@@ -12672,6 +12730,26 @@ wait for them to report back."*
       has changed is that the app's own layout is now ruled out with 73 measurements, so the search has
       somewhere new to go.
 
+
+      **ANSWERED BY EZRA WITH A SCREENSHOT, 21 Aug — his words, verbatim:** *"first image show the issue
+      with the text - simply moving it up on the screen instead of trying to interact with the keyboard
+      would fix - do what you thinks best but whatever ur doing rn isn't working"*.
+      **This overturns the previous conclusion.** 73 measurements across 12 keyboard geometries said our
+      layout was correct and the culprit was iOS's own accessory bar. Ezra's screenshot shows the app's
+      strip (˄ ˅ ✓) and the field crushed into the band directly above the keys, with a large empty gap
+      left between the canvas and the strip — so the docking maths is winning the measurement and losing
+      the screen.
+      **His instruction is a DESIGN change, not another measurement: stop docking the field to the top of
+      the keyboard, and move the text UP the screen instead.** A field docked just above the keyboard is
+      always at the mercy of whatever chrome iOS stacks there; a field placed high — under the toolbar,
+      near the canvas — cannot be covered by keyboard chrome at all, so the whole class of bug goes away.
+      **Do not re-measure the keyboard to settle this.** That approach has now failed 73 times, and he has
+      said plainly that it is not working.
+      **SHIPPED v11.20 — awaiting his confirmation on the phone.** The field is docked under the top
+      toolbar instead of on the keyboard line. Verified at 380px: toolbar 0-57, field 57-145, canvas
+      173-792, no overlap; suite green 794/794 with both keyboard tests re-pointed at the new position.
+      **Do not tick this until Ezra confirms on a real iPhone** — every previous attempt also passed its
+      tests, and that is exactly how this entry survived so long.
 - [x] **440 — Move the colour button in the text toolbar.** ✅ **DONE v10.79.** (20 Aug, phone screenshot at v10.71 with an
       arrow drawn from the white swatch to the far left of the bar.) His words, verbatim: *"As per image,
       move the colouring button from there to there"*.
