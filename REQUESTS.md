@@ -10754,7 +10754,7 @@ wait for them to report back."*
       would pass a colour-only check perfectly. Mutation-checked: widening the reset reports *"scale went
       from 3.5 to 1, and he asked for one specific group only"*.
 
-- [ ] **382 — Motion blur should smear movement that EFFECTS cause, like shakes.** (18 Aug.) His words,
+- [x] **382 — ✅ **DONE v11.26.** Motion blur should smear movement that EFFECTS cause, like shakes.** (18 Aug.) His words,
       verbatim: *"Motion blur should work when other effects make a layer move, currently it doesn't, like
       shake effects"*.
       **He is right, and this is a known structural gap rather than a bug** — it is the same one as
@@ -10845,6 +10845,27 @@ wait for them to report back."*
       **Measured facts to start from:** keyframed blur works (900 → 1020 lit px). Shake blur does nothing
       (1331 → 1331). `FM._layerMotionBetween` returns exactly 0 for a shaking layer, confirming the
       matrix cannot see movers. The dispatch is js/compositor.js:10894.
+      ✅ **DONE v11.26 — and the fix was a DISPATCH-ORDER change, exactly as the corrected diagnosis said.**
+      `shake` (and wiggle/swing/spin/pulse/drift/orbit) are POSTFX entries. `applyPostFx` peels them off
+      one at a time and recurses; the blur dispatched at the BASE of that recursion, so it received a
+      layer whose effects were down to `["objectblur"]` — the mover was already gone. The blur smeared a
+      still layer and the shake then displaced the blurred result.
+      **THE SAME FIX AS SQUISH, FOR THE SAME REASON.** Squish was pinned innermost and Ezra reported it
+      in almost the same words — *"if a shake makes it move the squish doesn't do anything"*. A
+      wrap-the-whole-layer effect belongs OUTSIDE the things that move the layer. The blur now dispatches
+      outermost. Second half: when a mover is present the plate is re-rendered at each sub-time instead
+      of one plate being re-projected — the plate is drawn in REAL space, so a plate made at `tau`
+      carries the transform AND the effects at `tau` and needs no delta matrix.
+      **Cost, stated rather than hidden:** a blurred layer that also carries pixel effects now has those
+      effects INSIDE the smear rather than painted over it — more truthful, and it does change existing
+      projects (the same trade Squish made). A shaking layer with blur on costs N renders a frame
+      instead of one, paid only when both are switched on together.
+      **Mutation-checked in both directions, and the second one found a hole in the test itself:**
+      disabling the re-render path is caught; forcing EVERY layer down it **survived**, because sixteen
+      identical plates average back to the same picture — the image was right while the app did sixteen
+      times the work invisibly. The expensive path is now counted (`FM._mbSliceRenders`) and the test
+      asserts a motionless layer never enters it, with a control that fails if the counter is dead.
+      A picture assertion cannot police a cost regression; that is worth remembering.
 - [x] **383 — Dragging an effect row should work from anywhere on it, not just the dots.** ✅ **v10.29.** (18 Aug.) His
       words, verbatim: *"When I grab on a layer and try dragging it up on the effects menu it doesn't work,
       but if I press on the dots in the side it does, and this would make sense but the fact that it kinda

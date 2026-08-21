@@ -2083,8 +2083,14 @@ window.FM = window.FM || {};
      * back to the ordinary single draw, which is byte-identical to blur-off.
      * The threshold is in DEVICE pixels (× plateScale) so a reduced preview does not blur what the
      * screen could not show anyway. */
+    /* A MOVER'S MOTION IS INVISIBLE TO THE MATRIX (queue 382). layerMotionBetween compares the layer's
+     * transform at two times, and Shake/Wiggle/Swing/Spin/Pulse/Drift/Orbit never touch the transform —
+     * they displace the layer as they draw it. Measured: FM._layerMotionBetween returns exactly 0 for a
+     * violently shaking layer. So this early-out, asked "did it move?", said no and handed a shaking
+     * layer straight back to the ordinary sharp draw. A layer carrying a mover skips it. */
+    const _hasMoverFx = (layer.effects || []).some(e => e && e.enabled !== false && MOVER_FX[e.type]);
     const _travel = layerMotionBetween(layer, t - dt / 2, t + dt / 2, scene);
-    if (_travel != null && _travel * plateScale(ctx) < 0.75) return false;
+    if (!_hasMoverFx && _travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = P.width, PH = P.height, ps = plateScale(ctx);
 
@@ -2106,12 +2112,18 @@ window.FM = window.FM || {};
     // Slice count follows the actual travel: a 2px move does not need 24 samples, and a whip-pan
     // wants every one it can get. 1.5 device px per slice keeps the trail continuous.
     const travelPx = (_travel == null ? 0 : _travel) * ps;
-    const N = Math.max(2, Math.min(samples, Math.ceil(travelPx / 1.5)));
+    /* Same blind spot: travelPx cannot see a mover either, so scaling the slice count by it would give
+     * a violent shake the 2-slice minimum. With a mover present the user's own sample setting is used —
+     * predictable, and it is the dial they reached for when they wanted more quality. */
+    const N = _hasMoverFx ? Math.max(2, samples)
+                          : Math.max(2, Math.min(samples, Math.ceil(travelPx / 1.5)));
 
     // The plate has to hold the layer where it sits at t PLUS room for where the slices push it, or
     // the smear would be clipped at the comp edge. Margin is the travel itself, capped so a wild
     // move cannot allocate the world.
-    const m = Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
+    // No margin on the mover path: nothing is re-projected there, so nothing is pushed past the comp
+    // edge and there is no smear to clip. Each slice is rendered complete instead.
+    const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
     const EW = Math.max(1, Math.round((PW + 2 * m) * ps)), EH = Math.max(1, Math.round((PH + 2 * m) * ps));
     const d = _mbDepth++;
     try {
@@ -2130,7 +2142,9 @@ window.FM = window.FM || {};
          the same dispatch, find the same effect and call this function again, forever. Nulling
          `motionBlur` alone was enough while the only route in was the flag; it is not any more. */
       const tmp = Object.assign({}, layer, { motionBlur: null, effects: (layer.effects || []).filter(e => !e || e.type !== 'objectblur'), blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-      drawLayer(pctx, tmp, t, scene);
+      // On the mover path the plate is re-rendered per sub-time inside the loop, so a single
+      // rasterisation at `t` would only be thrown away.
+      if (!_hasMoverFx) drawLayer(pctx, tmp, t, scene);
 
       const AW = Math.max(1, Math.round(PW * ps)), AH = Math.max(1, Math.round(PH * ps));
       if (acc.width !== AW || acc.height !== AH) { acc.width = AW; acc.height = AH; }
@@ -2148,6 +2162,37 @@ window.FM = window.FM || {};
       for (let k = 0; k < N; k++) {
         const tau = t + ((k + 0.5) / N - 0.5) * dt;
         if (tau < lo || tau >= hi) continue;    // outside the clip's life — partial shutter coverage is real, so it simply contributes less
+        /* TWO WAYS TO MAKE A SUB-FRAME (queue 382).
+         * RE-PROJECTION (default): one plate at `t`, pushed through D = M(tau)·M(t)⁻¹. Enormously
+         * cheaper, and useless for a mover — the mover's displacement sits inside that one plate and is
+         * therefore identical in every slice, so re-projecting only slides the same shaken picture.
+         * RE-RENDER (mover present): rasterise the layer afresh at each sub-time. The plate is drawn in
+         * REAL space, so a plate made at `tau` already carries the transform AND every effect as they
+         * stand at `tau` — no delta matrix is needed and D collapses to the identity. Now that the
+         * dispatch is outermost, `tmp` still holds the mover, which is what makes this work at all.
+         * It costs N full renders instead of one, and is reached only when the layer genuinely carries
+         * a mover AND motion blur is on. The cheaper alternative — copying all seven movers'
+         * displacement formulas somewhere the blur can sample them — can silently drift from the
+         * effects it imitates. This cannot: it calls the effects themselves. */
+        if (_hasMoverFx) {
+          /* A COUNTER, because the picture cannot police the cost. The suite's "a still layer must not
+           * change" control passes whether the layer is drawn once or sixteen times — sixteen identical
+           * plates average back to the same picture — so a mutation making EVERY layer take this path
+           * survived it. The expensive path has to be observable to be guarded. */
+          FM._mbSliceRenders = (FM._mbSliceRenders || 0) + 1;
+          pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, EW, EH);
+          baseT(pctx);
+          pctx.globalAlpha = 1; pctx.globalCompositeOperation = 'source-over'; pctx.filter = 'none';
+          drawLayer(pctx, tmp, tau, scene);
+          actx.save();
+          baseT(actx);
+          actx.globalAlpha = 1 / N;
+          actx.globalCompositeOperation = 'lighter';
+          actx.drawImage(plate, 0, 0, PW, PH);
+          actx.restore();
+          drawn++;
+          continue;
+        }
         const Mk = layerCTM(layer, tau, scene);
         if (!Mk) continue;
         const D = new DOMMatrix([Mk.a, Mk.b, Mk.c, Mk.d, Mk.e, Mk.f]).multiply(MtInv);
@@ -10829,6 +10874,27 @@ window.FM = window.FM || {};
         ? pp0.filter(e => e.type !== 'squish').concat(pp0.filter(e => e.type === 'squish'))
         : pp0;
       const outer = pp[pp.length - 1];
+      /* MOTION BLUR (OBJECT) DISPATCHES OUTERMOST NOW (queue 382), not at the base of the recursion.
+       * Ezra: "Motion blur should work when other effects make a layer move, currently it doesn't, like
+       * shake effects."
+       * Shake, Wiggle, Swing, Spin, Pulse, Drift and Orbit are POSTFX entries (see the table ~line
+       * 2224). `applyPostFx` peels them off one at a time and recurses, and the blur used to dispatch at
+       * the BASE of that recursion — so by the time it ran, `layer.effects` was down to `["objectblur"]`
+       * and the mover was GONE. Measured with the dispatch instrumented: reached once, effects
+       * `["objectblur"]`, on a layer carrying `[shake, objectblur]`.
+       * So the blur was never "failing to see motion baked into its plate" — the motion was not in the
+       * plate at all. The order was shake-WRAPS-blur: the blur smeared a perfectly still layer and the
+       * shake then displaced the already-blurred result, which is exactly why it looked sharp.
+       * THIS IS THE SQUISH FIX, AGAIN, FOR THE SAME REASON. Squish was pinned innermost and Ezra
+       * reported the same symptom in the same words — "if a shake makes it move the squish doesn't do
+       * anything" — because innermost it measured the layer BEFORE the shake moved it. Outermost, it
+       * sees where the layer actually ends up. A wrap-the-whole-layer effect belongs outside the things
+       * that move the layer, and motion blur is the other one of those.
+       * Cost of the move, stated plainly: a blurred layer that also carries pixel effects now has those
+       * effects INSIDE the smear rather than painted over it. That is the more correct picture and it
+       * does change existing projects — the same trade Squish made. */
+      const _ob = (layer.effects || []).filter(e => e && e.type === 'objectblur' && e.enabled !== false)[0];
+      if (scene && _ob && layer.type !== '_flat') { if (drawMotionBlur(ctx, layer, t, scene, _ob.params || {})) return; }
       // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
       // Render the content at a neutral transform, blur it there, then composite with the REAL
       // transform — so panning/zooming/rotating the clip to reframe it never smears the picture.
@@ -10846,8 +10912,6 @@ window.FM = window.FM || {};
        shape for "an effect that drives the renderer", not a new one.
        This point is the BASE of the recursion — line ~10609 returns while any post-fx remains — which is
        why the blur has always composited innermost, and why the migration unshifts it to index 0. */
-    const _ob = (layer.effects || []).filter(e => e && e.type === 'objectblur' && e.enabled !== false)[0];
-    if (scene && _ob && layer.type !== '_flat') { if (drawMotionBlur(ctx, layer, t, scene, _ob.params || {})) return; }
     if (scene && layer.motionBlur && layer.motionBlur.enabled) { if (drawMotionBlur(ctx, layer, t, scene)) return; }
     // A feathered mask needs an offscreen pass (clip() is hard-edged only).
     if (scene && layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0) { drawFeatheredMaskLayer(ctx, layer, t, scene); return; }
