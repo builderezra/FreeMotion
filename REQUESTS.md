@@ -7670,7 +7670,7 @@ better still, keep working inside the turn rather than parking work for a later 
       and I do not have your exact route — you may have reached it from somewhere I did not. **If you
       finish a vector drawing and still land in a full-height panel, say so and it is live again**;
       otherwise it closes with v7.35.
-- [ ] **223 — The splash video is 2.8 MB, about as much as the whole app's code.** Found while
+- [x] **223 — ✅ **DONE v11.30.** The splash video is 2.8 MB, about as much as the whole app's code.** Found while
       answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
       that is images and video — almost all of it `splash.mp4`, which is decoration. The app's entire
       JavaScript is 2.82 MB, so the intro costs us more bytes than the editor does.
@@ -7690,6 +7690,30 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Needs ffmpeg, which is not on the Mac. Either ask him to run one line (`brew install ffmpeg`),
       or use the AVFoundation route that `tests/_framediff.swift` already proves works — AVAssetExport
       can re-encode without installing anything, which is the cheaper ask.
+      ✅ **DONE v11.30 — 2,843,490 bytes → 649,336. A 77% cut, and the intro is unchanged.**
+      He said *"I have no idea, do what's best"*, so: re-encoded, not shortened and not removed.
+      **What it was:** 2048x2048, 60fps, 7575 kbps, 3.00s, H.264, no audio.
+      **What it is:** 1280x1280, 60fps, 1727 kbps, 3.00s. Same length, same frames (180), same look.
+      **Why 1280:** the CSS sizes it `min(100vw, 100dvh)` — the screen's SHORT side. On his phone that is
+      440 CSS px at dpr 3 = **1320 device px**, so 2048 was above anything he could ever see. Quality
+      plateaus at 35.5 dB PSNR regardless of bitrate (2000k and 6000k are identical), which confirms the
+      ceiling is the intended downscale rather than compression.
+      **Blacks verified preserved** — mean corner 0.00 before and after. That mattered specifically: the
+      splash's black is deliberately matched to the page ground (`html.splash-on { background: #000 }`)
+      to hide a seam, and a lifted black level would have brought that seam back.
+      🔴 **A BROKEN FILE WAS NEARLY SHIPPED, and only a control caught it.** The first encode used H.264
+      **High profile with B-frames** (`AVVideoAllowFrameReorderingKey: true`). It decoded perfectly —
+      right size, right duration, `readyState` 4, no error from `play()` — **and never advanced a single
+      frame.** `currentTime` stayed at 0. Nothing about the file looked wrong; only playing the ORIGINAL
+      alongside it revealed that one played and one did not.
+      **Main profile with `AllowFrameReordering: false` plays and is the same size.** The encoder is kept
+      at `tools/reencode-video.swift` with that setting baked in.
+      ⚠️ **Two process notes worth more than the megabytes.** (1) A video that loads, reports the right
+      duration and throws no error can still be dead — **always play it against a known-good control**.
+      (2) A bitrate sweep was run against the ALREADY-REPLACED splash.mp4 and produced a nonsense result
+      (higher bitrate reading as worse quality) because it was measuring generation loss. Re-encode from
+      the ORIGINAL every time; keep it until the job is finished.
+      **Poster still to look at if he wants more:** `splash-poster.png` is 292 KB, untouched here.
 - [x] **345 — The anchor point should be placeable ANYWHERE, not just inside the layer.** ✅ **v9.93.** (17 Aug.)
       His words, verbatim: *"The anchor currently has a limit on where you can place it but you should
       be able to put it anywhere"*.
