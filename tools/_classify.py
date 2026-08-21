@@ -17,6 +17,10 @@ BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line fro
                      r'needs? (his|your) (decision|word|call)|decision for you|say the word|Ask him|'
                      r'would settle it|from you would close it|LEFT OPEN for your eye|still worth your ears|'
                      r'waiting on (his|your)|ASKED HIM|STAYS OPEN|is his call|his call alone|'
+                     # …and the plain ways a PARTIAL SHIP says it, which the list above all missed:
+                     # "waiting on him" (not "his"), and a decision named as still outstanding.
+                     r'waiting on (him|ezra)|decisions? only ezra can|decision (he|you) still owes?|'
+                     r'his verdict|still waiting on|only he can (decide|answer|say)|'
                      # …and the big one the first version missed: items that are FIXED and left open only
                      # until he confirms on his own device. They read as actionable and are not — there is
                      # nothing to build, only something for him to look at.
@@ -88,8 +92,70 @@ def classify(body):
     # be done. An explicit marker beats inference, exactly as HOLD LIFTED does.
     needs_eye = ('WAITING ON HIS EYE' in body or 'LEFT OPEN for your eye' in body
                  or 'WAITING ON EZRA' in body)
+    # A NEW QUESTION OUTRANKS AN OLD ANSWER — the fourth outing for one bug shape (22 Aug, #392).
+    # `answered` is STICKY FOREVER: once an entry contains "ANSWERED BY EZRA" anywhere, every blocking
+    # phrase in it is treated as stale history, so the entry can never block again. That is right for
+    # the prose his answer superseded, and wrong the moment a PARTIAL SHIP raises a fresh question —
+    # #392 shipped one of four clauses, asked him to choose between cloud TTS and recording a voiceover,
+    # and came back ACTIONABLE with nothing that could be done. The three previous cures were all
+    # explicit markers a future session had to REMEMBER to write, which is precisely the kind of
+    # safeguard this project treats as no safeguard at all.
+    # The fix uses a property the file already has: entries are append-only, so they are chronological.
+    # Blocking prose written AFTER his last answer has not been superseded by it — nothing came later.
+    # So the answer only silences what precedes it. When there is no answer, `tail` is the whole body and
+    # this is exactly the old rule.
+    tail = body.rsplit('ANSWERED BY EZRA', 1)[-1] if answered else body
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
-            'blocked on Ezra' if (needs_eye or (BLOCKED.search(body) and not answered)) else
+            'blocked on Ezra' if (needs_eye or BLOCKED.search(tail)) else
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
+
+
+# ── SELF-TEST ───────────────────────────────────────────────────────────────────────────────────────
+# `python3 tools/_classify.py` and it checks its own rules. tools/ship.sh runs this and REFUSES to
+# push when it fails, because every rule in this file was written to cure a specific bug and nothing
+# else would notice if one stopped working. Each case below IS one of those bugs, in its own words.
+_CASES = [
+    # The bug this file was extracted to fix: two copies of the rule drifting apart. Nothing to assert
+    # there — but these are the behaviours that must survive any future edit.
+    ('- [ ] **1 — plain** something to build', 'ACTIONABLE',
+     'an ordinary entry with no signals must be workable — the conservative default'),
+    ('- [ ] **2 — x** it is your call whether to do this', 'blocked on Ezra',
+     'an unanswered question blocks'),
+    ('- [ ] **3 — x** it is your call.\nANSWERED BY EZRA: do it', 'ACTIONABLE',
+     'his answer un-blocks the prose that came BEFORE it (21 Aug: six answered entries were unreachable)'),
+    ('- [ ] **4 — x** ANSWERED BY EZRA: do it\nlater: shipped half; the rest is waiting on him',
+     'blocked on Ezra',
+     'a question raised AFTER his answer still blocks (22 Aug, #392: a partial ship came back actionable)'),
+    ('- [ ] **5 — x** ⚠️ HELD AT HIS REQUEST\nANSWERED BY EZRA: yes', 'held by Ezra',
+     'held outranks answered — he can answer and still say not yet'),
+    ('- [ ] **6 — x** ⚠️ HELD AT HIS REQUEST\nHOLD LIFTED', 'ACTIONABLE',
+     'a lifted hold is workable again (#419 stayed held after "just make it what I want")'),
+    ('- [ ] **7 — x** ANSWERED BY EZRA: yes\nWAITING ON EZRA to look at it', 'blocked on Ezra',
+     'looking is not answering (#250: fixed, needs only his eye, promoted by an unrelated answer)'),
+    ('- [ ] **8 — Standing reminder** about the thing', 'standing note (no build)',
+     'a standing note in the HEADER is not work'),
+    # The phrase must sit in the BODY here, not the header — that distinction IS the rule. Writing this
+    # case with "standing instruction" in the header line failed, correctly, and is worth recording: a
+    # header saying it IS a standing note should match; a body merely quoting one must not.
+    ('- [ ] **9 — x** real work\n      per his standing instruction of the same day, logged here',
+     'ACTIONABLE',
+     'MENTIONING a standing note must not hide the entry (21 Aug: it hid five real items)'),
+    ('- [ ] **10 — x** wants a session of its own', 'needs its own session', 'big items are flagged, not hidden'),
+    ('- [ ] **11 — x**\n 1. [ ] do this (long term)\n 2. [ ] and this (long term)', 'only long-term ideas left',
+     'an entry whose every open clause is hedged is not queued work (#277, #343)'),
+]
+
+if __name__ == '__main__':
+    import sys as _s
+    bad = 0
+    for body, want, why in _CASES:
+        got = classify(body)
+        if got != want:
+            bad += 1
+            print('FAIL: expected %-26s got %-26s — %s' % (want, got, why))
+    if bad:
+        print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, len(_CASES)))
+        _s.exit(1)
+    print('classifier self-test: %d/%d ok' % (len(_CASES), len(_CASES)))

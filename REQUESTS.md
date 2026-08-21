@@ -11696,7 +11696,7 @@ wait for them to report back."*
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
       text to voice and make a whole menu and feature for this"*.
       **The button goes in the row he circled** — the strip directly under the clip, above the

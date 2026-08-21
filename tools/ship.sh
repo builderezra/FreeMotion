@@ -48,6 +48,17 @@ for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' 
     exit 1
   fi
 done
+# THE CLASSIFIER MUST PROVE ITSELF BEFORE IT LABELS ANYTHING (22 Aug). tools/_classify.py decides what
+# the loop picks up next AND what STATUS Ezra reads in REQUESTS.md, and every rule in it was written to
+# cure a real bug — an answered item that had become unreachable, a hold that would not lift, five real
+# items hidden by a phrase in a note about them. Nothing else in this repo would notice if one of those
+# rules stopped working; the symptom is silence, which is the worst kind. So it self-tests, here, before
+# it is allowed to write a label or hand out work.
+if ! python3 tools/_classify.py; then
+  echo "❌ THE QUEUE CLASSIFIER IS BROKEN — not committing, not pushing."
+  echo "   Each failing case above is a bug that already happened once. Fix tools/_classify.py first."
+  exit 1
+fi
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
 ./tools/status.sh >/dev/null 2>&1 || true
