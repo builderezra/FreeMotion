@@ -24695,6 +24695,86 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('text to voice: the button is where he drew it, and the menu reads the layer\'s own words (queue 392)', { item: '392' }, async function () {
+    /* Ezra: *"Where I outlined add a button that says text to voice and make a whole menu and feature for
+     * this"*, and then, once told what the browser can and cannot do: *"...if this is too hard then don't
+     * do it but atleast a simple option for me to test"*. This is that simple option.
+     * The POSITION is half the request and is asserted as such — he drew the button onto the strip
+     * directly under the clip, above the trim/split trio, so "it exists somewhere" is not the test.
+     * What is deliberately NOT claimed anywhere: that this reaches an export. It cannot — the browser
+     * speaks to the speakers and offers no way to record it — and the panel says so in as many words. */
+    if (!FM.tts) throw new Error('FM.tts is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    try {
+      const T = FM.makeLayer('text', { text: 'Perth is sunny today', start: 0, duration: 4 });
+      const S = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 4 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(T, S);
+
+      const show = async (l) => {
+        FM.scene.selectedIds = [l.id]; FM.scene.selectedId = l.id;
+        if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+        FM.timeline.rebuild(); FM.inspector.refresh();
+        await sleep(320);
+      };
+
+      await show(T);
+      const btn = document.querySelector('#inspector .tts-open');
+      if (!btn) throw new Error('a text layer has no Text to Voice button — the thing he actually asked for is missing');
+      if (!/text to voice/i.test(btn.textContent)) throw new Error('the button does not say "text to voice", it says "' + btn.textContent.trim() + '"');
+      /* THE POSITION, which is the half of the request most likely to be quietly dropped. He drew it on
+         the strip under the clip, ABOVE the three trim/split buttons — not merely somewhere on screen. */
+      const quick = document.querySelector('#inspector .quick-row');
+      if (!quick) throw new Error('the trim/split row is missing, so the button\'s position cannot be checked');
+      const rb = btn.getBoundingClientRect(), rq = quick.getBoundingClientRect();
+      if (!(rb.bottom <= rq.top + 1)) throw new Error('the Text to Voice button sits at y=' + Math.round(rb.bottom) + ', below the trim/split row at y=' + Math.round(rq.top) + ' — he drew it ABOVE that row');
+      if (rb.right > window.innerWidth + 1) throw new Error('the button runs off the right edge at ' + window.innerWidth + 'px wide');
+
+      // …and NOWHERE else: there is nothing for it to read on a shape.
+      await show(S);
+      if (document.querySelector('#inspector .tts-open')) throw new Error('a shape layer is offering Text to Voice, and it has no text to read');
+
+      // THE MENU.
+      await show(T);
+      document.querySelector('#inspector .tts-open').click();
+      await sleep(700);   // the voice list resolves asynchronously — getVoices() is [] on a cold page
+      const pv = document.querySelector('#inspector .tts-preview');
+      if (!pv || pv.textContent.indexOf('Perth is sunny today') < 0) throw new Error('the menu does not show the text it would read; it shows "' + (pv ? pv.textContent : 'nothing') + '"');
+      const vsel = document.querySelector('#inspector .tts-select');
+      if (!vsel) throw new Error('the menu has no voice picker');
+      if (vsel.options.length < 2) throw new Error('the voice picker holds ' + vsel.options.length + ' entries — it was drawn before the voices resolved and never refilled');
+      if (document.querySelectorAll('#inspector .tts-range').length < 2) throw new Error('the menu is missing the speed/pitch controls');
+      /* THE HONEST NOTE IS PART OF THE FEATURE, not decoration. Without it this is a button that implies
+         a voice in your video and does not deliver one. */
+      const note = document.querySelector('#inspector .tts-note');
+      if (!note || !/not be in an export/i.test(note.textContent)) throw new Error('the menu does not say the voice will not be in an export — that omission is the difference between a feature and a lie');
+
+      // The controls must actually write to the layer, or the settings vanish on reselect.
+      const r = document.querySelectorAll('#inspector .tts-range')[0];
+      r.value = '1.4'; r.dispatchEvent(new Event('input'));
+      if (Math.abs(FM.tts.settingsOf(T).rate - 1.4) > 0.001) throw new Error('moving the speed slider did not reach the layer: ' + FM.tts.settingsOf(T).rate);
+
+      /* A SAVED PROJECT IS A FILE, AND A FILE CAN SAY ANYTHING. These values are read back out and handed
+         to the speech engine, so they are validated at the point of use rather than trusted: an unknown
+         voice name falls back to the device default instead of reaching the engine, and rate/pitch are
+         clamped to the range the spec allows (outside it a browser may drop the utterance entirely). */
+      T.tts = { voice: 'NoSuchVoice</scr' + 'ipt>', rate: 99, pitch: -5 };
+      const clean = FM.tts.settingsOf(T);
+      if (clean.voice !== '') throw new Error('an unknown voice name survived validation as "' + clean.voice + '"');
+      if (clean.rate > FM.tts.RATE.max || clean.pitch < FM.tts.PITCH.min) throw new Error('rate/pitch were not clamped: ' + clean.rate + '/' + clean.pitch);
+
+      // Nothing to say = say nothing. An empty layer must not start the engine.
+      const E = FM.makeLayer('text', { text: '   ', start: 0, duration: 2 });
+      if (FM.tts.speak(E, function () {})) { FM.tts.stop(); throw new Error('a text layer with no words still started speaking'); }
+    } finally {
+      try { FM.tts.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.timeline.rebuild(); FM.inspector.refresh();
+      await sleep(120);
+    }
+  });
+
   test('audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is', { item: 'audio-kf-reverb' }, async function () {
     /* The last two of the six in the unnumbered per-effect-slider entry, and the two Ezra's answer was
      * really about: *"if audio key frames break the project and lag too much just put a warning next to

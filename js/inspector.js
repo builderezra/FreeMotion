@@ -2385,6 +2385,107 @@ window.FM = window.FM || {};
     const l = FM.selectedLayer(FM.scene);
     return l ? l.id + ':' + (FM.clipPlayheadSide ? FM.clipPlayheadSide(l) : 0) : null;
   }
+  /* ---- TEXT TO VOICE (queue 392) -----------------------------------------------------------------
+   * The button he drew, and the menu behind it. Everything user-supplied here goes in through
+   * textContent — the layer's own words are displayed back to him, and voice names come from the
+   * platform, so neither may be interpolated into markup.
+   */
+  function ttsButtonRow(layer) {
+    const row = el('div', 'tts-row');
+    const b = el('button', 'tts-open');
+    b.innerHTML = svgIcon('M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3');
+    b.appendChild(el('span', 'tts-open-cap', 'Text to Voice'));
+    b.title = 'Read this text out loud';
+    b.addEventListener('click', () => { view = 'tts'; FM.inspector.refresh(); });
+    row.appendChild(b);
+    return row;
+  }
+
+  function ttsPanel(layer, body) {
+    const T = FM.tts;
+    if (!T || !T.available()) {
+      body.appendChild(el('div', 'insp-hint', 'This device has no built-in voices, so there is nothing to read your text with.'));
+      return;
+    }
+    const words = T.textOf(layer);
+
+    // What will actually be read — his own text, shown back so there is no doubt what the button does.
+    const pv = el('div', 'tts-preview');
+    pv.textContent = words || 'This layer has no text yet — type something into it first.';
+    if (!words) pv.classList.add('tts-preview-empty');
+    body.appendChild(pv);
+
+    const set = T.settingsOf(layer);
+    const commit = () => { if (FM.history) FM.history.commit(); };
+
+    // VOICE. Built empty and filled once the list resolves, because getVoices() answers [] on a cold
+    // page on some platforms and fills in later — a picker drawn once from that is permanently empty.
+    const vWrap = el('div', 'tts-field');
+    vWrap.appendChild(el('label', 'tts-label', 'Voice'));
+    const sel = el('select', 'tts-select');
+    sel.appendChild(el('option', '', 'Loading voices…'));
+    sel.disabled = true;
+    vWrap.appendChild(sel);
+    body.appendChild(vWrap);
+    T.load().then(() => {
+      const cur = T.settingsOf(layer);
+      sel.textContent = '';
+      const auto = el('option', '', 'Device default');
+      auto.value = '';
+      sel.appendChild(auto);
+      T.sorted().forEach(v => {
+        const o = el('option', '');
+        o.value = v.name;
+        o.textContent = v.name + ' — ' + (v.lang || '');   // textContent: a voice name is platform data
+        sel.appendChild(o);
+      });
+      sel.value = cur.voice;
+      sel.disabled = false;
+    });
+    sel.addEventListener('change', () => { T.update(layer, { voice: sel.value }); commit(); });
+
+    // SPEED and PITCH — plain sliders, the same shape as every other control in this panel family.
+    function slider(label, key, lo, hi, step, val, fmt) {
+      const w = el('div', 'tts-field');
+      const head = el('div', 'tts-slider-head');
+      head.appendChild(el('label', 'tts-label', label));
+      const out = el('span', 'tts-val', fmt(val));
+      head.appendChild(out);
+      w.appendChild(head);
+      const r = el('input', 'tts-range');
+      r.type = 'range'; r.min = String(lo); r.max = String(hi); r.step = String(step); r.value = String(val);
+      r.addEventListener('input', () => { const v = +r.value; out.textContent = fmt(v); const patch = {}; patch[key] = v; T.update(layer, patch); });
+      r.addEventListener('change', commit);
+      w.appendChild(r);
+      body.appendChild(w);
+    }
+    slider('Speed', 'rate', T.RATE.min, T.RATE.max, 0.05, set.rate, v => v.toFixed(2) + '×');
+    slider('Pitch', 'pitch', T.PITCH.min, T.PITCH.max, 0.05, set.pitch, v => v.toFixed(2));
+
+    // PLAY / STOP — one button, because it is one thing with two states, and the speech engine is a
+    // single global queue: starting a second read cancels the first rather than layering it.
+    const play = el('button', 'tts-play');
+    const paint = () => {
+      const on = FM.tts.speakingId() === layer.id;
+      play.classList.toggle('on', on);
+      play.textContent = '';
+      play.innerHTML = svgIcon(on ? 'M7 6h4v12H7zM13 6h4v12h-4z' : 'M8 5l11 7-11 7z');
+      play.appendChild(el('span', 'tts-play-cap', on ? 'Stop' : 'Play it'));
+    };
+    play.disabled = !words;
+    play.addEventListener('click', () => {
+      if (FM.tts.speakingId() === layer.id) { FM.tts.stop(); paint(); return; }
+      FM.tts.speak(layer, paint);
+    });
+    paint();
+    body.appendChild(play);
+
+    /* THE HONEST BIT, and it is not small print. The browser will speak this text but gives no way to
+       record what it says, so there is nothing to put on the timeline and nothing to export. Saying so
+       here is the whole difference between a feature and a button that lies. */
+    body.appendChild(el('div', 'insp-hint tts-note', FM.tts.EXPORT_NOTE));
+  }
+
   function quickRow(layer) {
     const row = el('div', 'quick-row');
     function qbtn(title, icon, opts, fn) {
@@ -2776,6 +2877,8 @@ window.FM = window.FM || {};
      * that can be animated, i.e. anything. So the control does something on every type, which is what
      * queue 38 actually asked for; hiding it was the cheap answer to that, not the right one. */
     if (v === 'speed') return true;
+    // Text to Voice reads a text layer aloud, so it exists on nothing else (queue 392).
+    if (v === 'tts') return layer.type === 'text';
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'cameraopts') return layer.type === 'camera';   // the lens belongs to the camera and nothing else
     // Effects is the ONE view a song may still open, because since queue 45 the audio stack lives
@@ -4474,6 +4577,7 @@ window.FM = window.FM || {};
 
   function buildCategory(key, layer, body) {
     if (key === 'cameraopts') { camPanel(layer, body); return; }
+    if (key === 'tts') { ttsPanel(layer, body); return; }
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
       if (layer.type !== 'camera') body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits (the camera ignores a parent) (#11)
@@ -5551,7 +5655,14 @@ window.FM = window.FM || {};
         // the controls that don't need to exist when you select multiple layers"). A multi-selection
         // gets the actions that genuinely apply to all of it — trim, split, move, align — and nothing
         // that would quietly touch just one.
-        if (!multi) { root.appendChild(quickRow(layer)); root.appendChild(categoryGrid(layer)); }
+        if (!multi) {
+          /* TEXT TO VOICE sits ABOVE the trim/split trio (queue 392). His instruction was about a place,
+             not just a button — *"add a button that says text to voice"*, drawn onto the strip directly
+             under the clip — so it goes in that strip and above the three, rather than wherever there
+             happened to be room. Text layers only; it has nothing to read anywhere else. */
+          if (layer.type === 'text' && FM.tts && FM.tts.available()) root.appendChild(ttsButtonRow(layer));
+          root.appendChild(quickRow(layer)); root.appendChild(categoryGrid(layer));
+        }
         else root.appendChild(alignRow());
       } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {
         // Easing curve editor — an INLINE sub-view of Move & Transform (same sheet), not a screen.
@@ -5608,7 +5719,7 @@ window.FM = window.FM || {};
         root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
-        const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
+        const backLabel = (view === 'element') ? elementLabel(layer) : (view === 'tts') ? 'Text to Voice' : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
         back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
         // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape

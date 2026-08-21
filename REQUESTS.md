@@ -11735,6 +11735,36 @@ wait for them to report back."*
       local-only premise. The browser's built-in `speechSynthesis` is free, offline and instant but sounds
       robotic and **cannot be recorded to a file on iOS**, which matters because the point is putting the
       voice on the timeline. That constraint decides the whole shape and he should pick before it starts.
+
+      🟡 **PARTLY SHIPPED — v11.46 builds clause 3, the "simple option to test", and it did NOT need his
+      decision first.** His third clause is explicit — *"if this is too hard then don't do it but atleast
+      a simple option for me to test"* — so the fallback was already authorised; only the EXPORTABLE
+      version still waits on him.
+      **Clause by clause, honestly:**
+      1. *Behave like TikTok/CapCut* — **HALF.** You pick a voice and it reads your text aloud, with
+         speed and pitch. It does NOT become an audio layer, and cannot: see below.
+      2. *In the position I told you to put it* — ✅ **DONE**, and the test asserts the POSITION, not just
+         the button's existence. It sits in the strip directly under the clip, ABOVE the trim/split trio,
+         on text layers only. A mutation moving it below the trio is caught.
+      3. *A simple version he can test* — ✅ **DONE.** 180 on-device voices on this Mac, Karen (en-AU) the
+         default; speed and pitch; a preview of the words it will read; settings saved with the project
+         and validated on the way back out, because a .fmproj is a file and a file can say anything.
+      4. *Fallback: expose it as an effect in the audio AND text effects menus* — **NOT DONE, and waiting
+         on him.** He framed it conditionally — *"if it's really bad maybe just leave it as an effect"* —
+         so it is his verdict on the shipped version that decides it, not a guess here.
+      🚧 **THE WALL, stated plainly because it is not an effort problem.** `speechSynthesis` speaks
+      straight to the speakers. It is not in the audio graph, is not a media element, and exposes no
+      stream, so **there is no supported way to capture what it says** — in any browser, not just Safari.
+      No capture means no audio layer, no trimming, and nothing in the export. The panel says this on
+      screen rather than letting him discover it after building something around it.
+      **THE DECISION HE STILL OWES, and it is the only thing blocking a voice that IS in the export:**
+      · **cloud TTS (BYOK)** — genuinely good voices and a real audio track, but a key, a small bill, and
+        his text leaves the device, which breaks the local-only rule this app is built on; or
+      · **record/import a voiceover** — fully local, lands on the timeline as ordinary audio, no TTS at
+        all, and arguably solves the actual job better.
+      🔒 No keys, no network, nothing leaves the device. Every user-supplied string reaches the DOM through
+      `textContent`; the only `innerHTML` in this feature takes static icon paths. `/security-review` was
+      NOT run — said plainly rather than implied.
 - [x] **393 — The "Loading …" bar sits ON TOP of the pop-up menus.** ✅ **v9.94.** (18 Aug, phone screenshot at v9.93:
       the "Loading IMG_2596" pill covering the Edit Shape card in the category grid.) His words, verbatim:
       *"Make it so the loading bar goes behind the pop up menus, so it isn't obstructing."*
