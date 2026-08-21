@@ -174,10 +174,19 @@ for n, i in enumerate(starts):
     title = re.sub(r'\*\*', '', lines[i][6:])[:64]
     open_clauses = [l for l in body.split('\n') if CLAUSE.match(l)]
     hedged_only = bool(open_clauses) and all(HEDGED.search(l) for l in open_clauses)
+    # AN ANSWER FROM HIM OUTRANKS EVERY "waiting on him" PHRASE IN THE ENTRY (21 Aug).
+    # The blocked test matches prose anywhere in the body — "your call", "say the word", "would settle
+    # it". When he finally answers, that prose is still sitting there, in the history that this file
+    # exists to keep. So six entries he had just answered still counted as blocked on him, and every
+    # oldest-first listing would have skipped them: answered, and unreachable. That is the same shape
+    # as the `[0-9]` bug this whole script was written to kill — the tool quietly hiding work.
+    # An entry carrying "ANSWERED BY EZRA" is by definition not waiting on Ezra. Held still wins, since
+    # he can answer and still say "not yet", and so does a standing note, which never had work in it.
+    answered = 'ANSWERED BY EZRA' in body
     key = ('only long-term ideas left' if hedged_only else
            'standing note (no build)' if STANDING.search(body) else
            'held by Ezra' if HELD.search(body) else
-           'blocked on Ezra' if BLOCKED.search(body) else
+           'blocked on Ezra' if (BLOCKED.search(body) and not answered) else
            'needs its own session' if BIG.search(body) else 'ACTIONABLE')
     buckets[key].append((tag, title, i + 1))
 for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):

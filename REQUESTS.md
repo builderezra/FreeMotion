@@ -891,7 +891,7 @@ better still, keep working inside the turn rather than parking work for a later 
       is one tap away under Custom. The AI's own fps snapping was moved to the same list, so it cannot
       land the project on a rate the menu can no longer re-pick.
 
-- [ ] **114 — Music note shape: the bottom falls off.** His words: *"Music note shape needs a slight fix,
+- [x] **114 — Music note shape: the bottom falls off.** His words: *"Music note shape needs a slight fix,
       the bottom part is falling off."* Screenshot at v6.73: the note HEAD (the filled ellipse) hangs
       below and left of the layer's own selection box, so the shape's geometry is drawn outside the box
       that is supposed to contain it. That means the bounds are wrong, not the drawing — check the path's
@@ -916,6 +916,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Staying open until then rather than being closed on a clean measurement of the wrong thing.
       **ANSWERED BY EZRA, 21 Aug:** *"idk leave it"*. CLOSED by his choice — not reproduced, and he
       does not want it chased. Do not re-open it unless he reports it again.
+      ✅ **CLOSED 21 Aug — *"idk leave it"*.** Not reproduced (all 54 shapes fit their box), and he does not want it chased. Reopen only if he reports it again.
 - [x] **115 — Dragging a clip to the screen edge should auto-scroll the timeline. DONE v7.56.** His words: *"When
       dragging a layer and you get to the end of the screen, make it so the screen moves so you can keep
       dragging a layer to the left or right without needing to let go and then scroll etc, like how we
@@ -3337,7 +3338,7 @@ better still, keep working inside the turn rather than parking work for a later 
       The test asserts the two states paint the **same** thing rather than checking for a hard-coded
       colour, so restyling the surface later cannot fail it for the wrong reason.
 
-- [ ] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
+- [x] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
       spec + a screenshot he drew on.)** ✅ **NINE OF HIS TEN CLAUSES ARE SHIPPED (v8.68–v8.70 and the
       v10.32–v10.40 follow-ups). The only thing left is clause 10, which he wrote as an IDEA — "potentially"
       — not a request, and half of it already exists.** So this entry is effectively done and should not be
@@ -3490,6 +3491,9 @@ better still, keep working inside the turn rather than parking work for a later 
 
       **EZRA, 21 Aug:** *"idk what you're talking about"* — my question, not his problem. RE-EXPLAINED
       in plain terms. Not declined.
+      **ANSWERED BY EZRA, 21 Aug:** *"just ignore and I'll tell you in the future"*. **PARKED at his
+      request** — do not chase the tenth clause, do not ask again. He will raise it when he hits it.
+      ✅ **CLOSED 21 Aug — *"just ignore and I'll tell you in the future"*.** Parked at his request. Do not chase the tenth clause.
 - [x] **264 — Land the parameter-extremes sweep as a permanent test. DONE 16 Aug — test-only, so no
       version bump: nothing in the app changed. (Idea from the 16 Aug hunt.)**
       The hunt that found 261/262/263 was one script: render every one of the **197 effects** with a
@@ -3532,7 +3536,7 @@ better still, keep working inside the turn rather than parking work for a later 
       in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,
       older system (saved effect stacks, no tiles, empty on a fresh install) and is untouched. If the
       menu you meant was that one, say so and I will move it — merging the two is queue 37's real job.
-- [ ] **A documented conflict, your call.** An older `NEXT-SESSION.md` said in bold *"Supersedes the old
+- [x] **A documented conflict, your call.** An older `NEXT-SESSION.md` said in bold *"Supersedes the old
       thumbnail spec — do not build preset thumbnails"* and specced a full-screen preview player instead.
       I built the thumbnails because that is what you asked for that night. The engine behind them is
       exactly what that player would need, so nothing is wasted either way.
@@ -3548,6 +3552,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"presets are fine as they are"*. So the THUMBNAILS STAY and the
       full-screen preview player is NOT wanted. The old NEXT-SESSION.md line that says "do not build
       preset thumbnails" is overruled by him directly — this conflict is settled, close it.
+      ✅ **CLOSED 21 Aug — *"presets are fine as they are"*.** The thumbnails stay; the full-screen preview player is not wanted. The old NEXT-SESSION.md line saying "do not build preset thumbnails" is overruled by him directly.
 - [x] **68 — Speed should retime keyframes.** **DONE v6.39.** Changing Speed already re-timed the
       clip but left every keyframe where it was, so a 2x speed-up halved the bar and left the
       animation running past the end of it. Now the whole animation stretches with the clip. And
@@ -3707,6 +3712,9 @@ better still, keep working inside the turn rather than parking work for a later 
       Distortion Drive, Bit Crush Bits, Lo-Fi Amount, Pitch Shift Semitones. Measured costs to put in
       the warning: Reverb ~12.5ms per frame (75% of the frame budget); Bit Crush, Distortion and Lo-Fi
       click audibly when swept (6.8x, 2.8x and 1.7x worse than static).
+      **EZRA, 21 Aug:** *"what do you even want me to say? Seems everything's fine"*. Fair — he had
+      already answered it ("put a warning next to it"), and the question was re-asked at him needlessly.
+      **No further input needed: build all six with a warning on the expensive ones.** Do not ask again.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
@@ -4700,7 +4708,7 @@ better still, keep working inside the turn rather than parking work for a later 
       One thing worth knowing: a cue's array is created only when something is put in it, so merely
       scrolling past a cue does not write `effects: []` into your project file.
 
-- [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
+- [x] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
       His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
       could be soemthing way to hard to do and would be better to not add it then add a shit version for
       now."*
@@ -4741,6 +4749,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"keep it for now"*. So auto-detect speech STAYS as a
       voice-recording tool. Not to be deleted, and not to be improved either — closing the music/voice
       gap needs a real speech-music discriminator and he has not asked for that.
+      ✅ **CLOSED 21 Aug — *"keep it for now"*.** Auto-detect speech stays exactly as it is: a voice-recording tool. Not deleted, and not to be improved either — closing the music/voice gap needs a real speech-music discriminator he has not asked for.
 - [x] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (v7.02) (14 Aug,
       screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
       for a split second there's a black bar at the bottom then it fixes itself."*
@@ -5616,7 +5625,7 @@ better still, keep working inside the turn rather than parking work for a later 
       inside its circle. Related in kind to 296 (the + not centred in its circle) — worth checking
       whether both come from the same icon-drawing helper before fixing either separately.
 
-- [ ] **306 — 🚨 AN OLDER VERSION OF HIS PROJECT COMES BACK ON REFRESH. He says he reported this ages
+- [x] **306 — 🚨 AN OLDER VERSION OF HIS PROJECT COMES BACK ON REFRESH. He says he reported this ages
       ago and it is still not fixed.** (17 Aug.) His words, verbatim: *"I just had the glitch again we're
       an older version of our project shows up when you refresh this still needs to be fixed. I said
       ages ago this needs to be urgently fixed and you still haven't done it."*
@@ -5754,6 +5763,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"I think it's fine"*. So the old-project-comes-back-on-refresh
       data loss is NOT happening on the current build. Downgraded from 🚨. Left open only as a watch
       item — if he reports it once more, chase it properly, because it was never explained.
+      ✅ **CLOSED 21 Aug — *"I think it's fine"*.** Not happening on the current build. It was never explained, so if he reports it once more, chase it properly rather than closing it again.
 - [x] **307 — Four things about the Add-layer row (PC and mobile).** ✅ **v9.55 + v9.56 — all four.** (17 Aug.) His words, verbatim:
       *"Just had a glitch on PC with the ad layers here button like disappeared and had to refresh my
       page for it's like a little plus button to come back like it's a small non-issue really but
@@ -6311,7 +6321,7 @@ better still, keep working inside the turn rather than parking work for a later 
       asserting a clip at t=0 lands on the line — in both the group and no-group layouts. The suite was
       green for the whole ten months this was live, because nothing had ever asserted it.
 
-- [ ] **328 — Standing reminder from him, restated 17 Aug.** His words: *"Also remember to add stuff to
+- [x] **328 — ✅ **CLOSED at his request.** Standing reminder from him, restated 17 Aug.** His words: *"Also remember to add stuff to
       the list and keep going from oldest first"*. Nothing to build — kept as an entry because it is the
       third time he has had to say it, and a repeated instruction that lives only in a chat log is one
       more thing to forget. The structural version already exists (`tools/next.sh`, and the rules at the
@@ -6323,6 +6333,10 @@ better still, keep working inside the turn rather than parking work for a later 
       **373** because it reopened that entry's own clause 6 rather than being a new subject.
 
 
+      **ANSWERED BY EZRA, 21 Aug:** *"the August reminder - if it is hurting then close it"*. It is —
+      it is a standing note with nothing to build, and it now shows up in every oldest-first listing as
+      if it were work. **CLOSED.** The instruction itself is not lost: it is enforced structurally by
+      `tools/next.sh` (oldest-first ordering, and the INBOX gate), which is stronger than an entry.
 - [x] **329 — Two save buttons in the Presets card: what is the difference?** ✅ **v9.75.** Not the
       merge — there IS a difference, so the condition you set was not met — but you were right that
       something was wrong: neither the buttons nor the headings said which was which.
@@ -6919,6 +6933,18 @@ better still, keep working inside the turn rather than parking work for a later 
       **EZRA, 21 Aug:** *"idk what could it ask"* — he does not want to design it, he wants OPTIONS.
       Per his standing instruction of the same day: give him all of them and mark one *recommended*,
       rather than asking an open question he has to fill in.
+      **ANSWERED BY EZRA, 21 Aug — he explained what he actually wants, verbatim:** *"let me explain
+      elements again- in the elements menu tapping on it will open an element project that is editable,
+      when you edit it and are done you leave then open up a normal project and then you can add an
+      element in."*
+      **So it is NOT a dialog asking "add here or open as new?" — the answer is neither.** An element is
+      its own EDITABLE PROJECT. Tapping one in the Elements menu OPENS it as a project you can edit like
+      any other. You leave it, open a normal project, and only THEN add the element into that project.
+      Two distinct jobs, and the second is what makes the first useful:
+      1. Tapping an element opens it as an editable project (not a dump into whatever is currently open).
+      2. Adding a (possibly edited) element INTO a normal project stays available from the Add menu.
+      This also answers the question that was put to him badly — there is nothing to "ask", because the
+      dump-into-the-current-project behaviour is simply wrong.
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
@@ -6984,6 +7010,14 @@ better still, keep working inside the turn rather than parking work for a later 
       infrastructure. Real links need a host, and that is a decision about money and privacy, not code.
       **Do not start building either half without asking him which.** Note also "in our style" —
       see BEFORE-PUBLISHING.md, which he is implicitly agreeing matters.
+      **ANSWERED BY EZRA, 21 Aug — he chose the option that needs no backend, verbatim:** *"maybe not
+      links then and instead just project files that people can download like what's already in"*.
+      ✅ **This removes the whole architectural problem.** No server, no hosting, no bill, no user data
+      leaving the device — FreeMotion stays local-only, which was the constraint the link idea broke.
+      **The job: export a project (or template) as a FILE, and import one.** "Like what's already in"
+      points at the existing project save/load — so the format probably exists already and this may be
+      mostly plumbing plus a share sheet. **Check what `FM.storage` / "Save project file…" already
+      writes before building a new format.**
 - [x] **344 — The "Custom elements" card's ring should be multi-coloured like its own icon.** ✅ **v9.93.** (17 Aug,
       screenshot of the Add sheet's Elements tab.) His words, verbatim: *"Also just for the ring around
       custom elements make it have multiple colours like the logo itself but keep the background the
@@ -7539,6 +7573,13 @@ better still, keep working inside the turn rather than parking work for a later 
       I should quietly optimise away. Say which and it is quick.
 
 
+      **ANSWERED BY EZRA, 21 Aug:** *"I have no idea, do what's best"*. So the call is mine:
+      **RE-ENCODE IT, don't shorten it and don't remove it.** Re-encoding is the only one of the three
+      options that costs him nothing he can see — same intro, same length, same look, fewer bytes. His
+      intro is his; changing how it PLAYS was never mine to decide, and now does not need to be.
+      ⚠️ Needs ffmpeg, which is not on the Mac. Either ask him to run one line (`brew install ffmpeg`),
+      or use the AVFoundation route that `tests/_framediff.swift` already proves works — AVAssetExport
+      can re-encode without installing anything, which is the cheaper ask.
 - [x] **345 — The anchor point should be placeable ANYWHERE, not just inside the layer.** ✅ **v9.93.** (17 Aug.)
       His words, verbatim: *"The anchor currently has a limit on where you can place it but you should
       be able to put it anywhere"*.
@@ -7801,6 +7842,10 @@ better still, keep working inside the turn rather than parking work for a later 
 
       **EZRA, 21 Aug:** *"idk what ur talking about"* — asked in my words, not his. RE-EXPLAINED to him
       in plain terms; his answer to the re-asked version is what counts. Not declined.
+      **ANSWERED BY EZRA, 21 Aug:** *"don't clean up unless it's just labeling stuff for quick finding
+      I guess"*. So: **LABELS ONLY, NO PRUNING.** Add a one-line STATUS to the top of long entries
+      (open / waiting on you / done vN) so the current state is the first thing he reads. **Do NOT delete
+      or condense any entry** — the history is the point, and he has just confirmed it.
 - [ ] **353 — Standing instructions for the loop, restated after the compact.** (17 Aug.) His words,
       verbatim: *"Continue with the list, ticking one thing off at a time from top to bottom, oldest
       first, use workflows if you need, make sure you don't wait too long to wait for one of the work
@@ -9934,7 +9979,7 @@ wait for them to report back."*
       Two tests, both mutation-checked: a typo'd subject key (which renders as the stand-in with nothing
       logged) and a tile canvas wearing any other class both fail loudly now.
 
-- [ ] **360 — Mask does not behave like an effect; the Done button in an effect group throws away your
+- [x] **360 — Mask does not behave like an effect; the Done button in an effect group throws away your
       picks; and adding an effect often does not take you to it.** (18 Aug.) His words, verbatim:
       *"The mask effect because I'm sure you didn't originally design it as an effect. It doesn't work
       like an effect. I can't swipe it away to delete it or minimise it and then also in the effects menu
@@ -10023,6 +10068,7 @@ wait for them to report back."*
       arent behaving as one when i see it"*. So: the behaviour half is done and that is enough for now.
       **Do NOT sweep the remaining effects for one-ness** — he will report any that misbehave when he
       hits them. Treat this entry as closed unless he reports one.
+      ✅ **CLOSED 21 Aug — *"dont test all the effects urself ill just tell you if the others arent behaving as one when i see it"*.** The behaviour half shipped; he does not want a sweep of the rest.
 - [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
       a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
       sketching so you can draw many things at once but you still have the edit points thing and didn't
@@ -12327,7 +12373,7 @@ wait for them to report back."*
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
 
-- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
+- [x] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
       v10.32.) His words, verbatim:
 
       > when extending the add pannel it makes the three dots at the bottom go down
@@ -12365,6 +12411,7 @@ wait for them to report back."*
       back on the list with a real reproduction to work from.
       **ANSWERED BY EZRA, 21 Aug:** *"fixed"*. ✅ The guard that shipped works — the Add panel no
       longer pushes the page dots off the bottom for him. Closing this.
+      ✅ **CLOSED 21 Aug — *"fixed"*.** The guard works on his phone.
 - [x] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
       ✅ **CLOSED 20 Aug at v10.66 — THE ANOMALY IS NOT REAL, AND THE ORIGINAL MEASUREMENT WAS WRONG.**
       Re-measured live across a real play (`tests/_pillcolour.html`), sampling every 150ms: paused, the
