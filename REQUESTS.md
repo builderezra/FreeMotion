@@ -13109,7 +13109,7 @@ wait for them to report back."*
       it next to a dense grid. His screenshot is the layout to measure — v10.71, 6 media tiles.
 
 - [ ] **432 — The template icon looks bad.** (20 Aug.) His words, verbatim: *"Reminder to log things -
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       including template icon looks shit"*.
       Two things in one message, and both are recorded rather than one:
       1. [ ] **The standing instruction, restated:** log everything he says, as he says it. Already the
@@ -13121,6 +13121,28 @@ wait for them to report back."*
       clearly at the ~24px it is actually used at and show him, rather than guessing at a style. The other
       four marks in that row (cube, shapes, picture, music note) are the family it has to sit in.
 
+      🎨 **FOUR ALTERNATIVES DRAWN AND PUT TO HIM, 21 Aug — `tests/_tmplicon.html`.**
+      **Not redrawn-and-shipped, deliberately: this is the THIRD time he has rejected this icon.**
+      Queue 267 set the palette (with two amendments about which lines get which colour), queue 375
+      changed the SHAPE because it was *"identical to alight motions just with colour"*, and now
+      *"template icon looks shit"*. Guessing a fourth time alone is how the first three went.
+      His standing instruction of 21 Aug covers exactly this: *"I just want options. Yu can just say
+      recommended next to the best option"*.
+      **The page renders each candidate at its REAL 24px, at 4x, and sitting in the row beside Elements /
+      Shape / Media / Audio** — because the whole failure mode of an icon is that it reads at 4x and
+      turns to mud at the size it is actually used, and because it has to survive its neighbours.
+      · **CURRENT** — an orange frame, a cyan crossbar, a violet block. At 24px the crossbar and the
+        block merge into a smudge; it is the weakest of the five at real size.
+      · **A · stacked cards** — two offset cards. Says "a copy you take", but three nested shapes is busy
+        at 24px.
+      · **B · frame + play** ⭐ **recommended** — cleanest silhouette at real size, says "a ready-made
+        thing you can play", shares no outline with the cube, the shapes, the picture or the note, and is
+        nothing like AM's band-over-two-panes.
+      · **C · folded card** — reads as a document; the fold is nearly invisible at 24px.
+      · **D · frame + sparkle** — reads well but a sparkle suggests AI or effects, which is a different
+        part of the app.
+      Palette unchanged in all four — the orange frame and the cyan/violet accents are his from 267.
+      ⏳ **WAITING ON EZRA — a letter, or "none of these".**
 - [x] **433 — Wasted space under the clip in the solo view, and a press that did not open the edit menu.**
       ✅ **BOTH DONE — v10.73.**
       (20 Aug, phone screenshot at v10.71 with the empty band circled in orange.) His words, verbatim:

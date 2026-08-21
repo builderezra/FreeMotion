@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8">
+<title>Template icon options</title>
+<style>
+  body{margin:0;background:#0b1016;color:#e8ecf4;font:14px/1.4 -apple-system,system-ui,sans-serif;padding:18px}
+  h1{font-size:15px;margin:0 0 4px} p{color:#8fa0b6;margin:0 0 16px;font-size:12px}
+  .row{display:flex;align-items:center;gap:18px;padding:12px 10px;border-bottom:1px solid #1b2430}
+  .nm{width:120px;font-weight:600}
+  .real{width:44px;height:44px;display:grid;place-items:center;background:#121a24;border:1px solid #22303f;border-radius:10px}
+  .big{width:96px;height:96px;display:grid;place-items:center}
+  svg{display:block}
+  .fam{display:flex;gap:10px;align-items:center;margin-left:8px}
+  .fam .real{width:40px;height:40px}
+  .lab{font-size:11px;color:#7c8ea6;width:100px}
+</style>
+<h1>Template tab icon — options at real size (24px) and 4×</h1>
+<p>Family it must sit in, right: Elements · Shape · Media · Audio. Palette is the one you already chose — orange frame, cyan and violet accents.</p>
+<div id="out"></div>
+<script>
+const G = `<defs>
+ <linearGradient id="H" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7FE9F5"/><stop offset="1" stop-color="#0EA5C6"/></linearGradient>
+ <linearGradient id="V" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#D8B4FE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>
+ <linearGradient id="B" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>
+</defs>`;
+const opts = [
+ ['CURRENT', `<rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4" stroke="url(#V)"/><path d="M4 8.6h16" stroke="url(#H)"/><rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#B)"/>`],
+ ['A · stacked cards', `<rect x="3.2" y="6.4" width="12.4" height="12.4" rx="2" stroke="url(#V)"/><path d="M8.4 3.2h9.6a2 2 0 0 1 2 2v9.6" stroke="url(#H)"/><rect x="6.6" y="9.8" width="5.6" height="5.6" rx="1.2" stroke="url(#B)"/>`],
+ ['B · frame + play', `<path d="M10.2 9.6l5 2.6-5 2.6z" stroke="url(#V)" stroke-linejoin="round"/><path d="M4 8.2h16" stroke="url(#H)"/><rect x="4" y="4" width="16" height="16" rx="2.4" stroke="url(#B)"/>`],
+ ['C · folded card', `<path d="M6.6 12.4h7M6.6 15.6h4.4" stroke="url(#H)"/><path d="M14.6 3.6v4.2h4.2" stroke="url(#V)"/><path d="M14.6 3.6H6.4a1.8 1.8 0 0 0-1.8 1.8v13.2a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8V7.8z" stroke="url(#B)"/>`],
+ ['D · frame + sparkle', `<path d="M12 9.4l1.15 2.55L15.7 13.1l-2.55 1.15L12 16.8l-1.15-2.55L8.3 13.1l2.55-1.15z" stroke="url(#V)" stroke-linejoin="round"/><path d="M4 7.8h16" stroke="url(#H)"/><rect x="4" y="4" width="16" height="16" rx="2.4" stroke="url(#B)"/>`],
+];
+const fam = [
+ ['Elements', `<path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z" stroke="#9d7cf0"/><path d="M3.8 7.3L12 12l8.2-4.7M12 12v9.4" stroke="#9d7cf0"/>`],
+ ['Shape', `<rect x="3.5" y="3.5" width="10" height="10" rx="1.6" stroke="#5bc8f5"/><circle cx="15" cy="15" r="5.5" stroke="#5bc8f5"/>`],
+ ['Media', `<rect x="3" y="5" width="18" height="14" rx="2" stroke="#63d29a"/><circle cx="8.5" cy="10" r="1.6" stroke="#63d29a"/><path d="M4.5 17l5-5 4 4 3-2 3.5 3.5" stroke="#63d29a"/>`],
+ ['Audio', `<circle cx="7.5" cy="17" r="2.6" stroke="#f472b6"/><circle cx="17" cy="14.5" r="2.6" stroke="#f472b6"/><path d="M10.1 17V6.4l9.5-2v10.1" stroke="#f472b6"/>`],
+];
+const svg=(inner,size)=>`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round">${G}${inner}</svg>`;
+let h='';
+for(const [name,inner] of opts){
+  h+=`<div class="row"><div class="nm">${name}</div>
+    <div class="real">${svg(inner,24)}</div>
+    <div class="big">${svg(inner,88)}</div>
+    <div class="lab">next to the family →</div>
+    <div class="fam">${fam.map(f=>`<div class="real">${svg(f[1],24)}</div>`).join('')}
+      <div class="real" style="border-color:#3d5a75">${svg(inner,24)}</div></div>
+  </div>`;
+}
+document.getElementById('out').innerHTML=h;
+</script>
