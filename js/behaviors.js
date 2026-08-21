@@ -118,8 +118,25 @@ window.FM = window.FM || {};
   function bounceDelta(layer, key, params, t) {
     const p = layer.transform && layer.transform[key];
     if (!FM.isAnimated || !FM.isAnimated(p)) return 0;
-    const kf = p.kf;
+    let kf = p.kf;
     if (!kf || kf.length < 2) return 0;
+    /* ACROSS A SPLIT, the ring has to carry on (bug hunt, 21 Aug). A split gives the tail half a synthetic
+     * boundary keyframe at the cut, which becomes kf[0] — and `i <= 0` below then returns 0, so a bounce
+     * triggered before the cut fell silent at it. Measured: 8.9px of ring lost at the seam
+     * (tests/_splitbounce.html).
+     * The lineage's keyframes are read as one list with the SEAM keyframes dropped, because they are not
+     * transitions the user made: leaving them in makes `jump` come out 0 (the seam holds the interpolated
+     * value on both sides), which masks the real transition just as effectively as having no keyframe.
+     * Gated on `splitOf`, so a layer that has never been split does not pay for this at all. */
+    if (layer.splitOf && FM.clipAt && FM.scene) {
+      const prev = FM.clipAt(FM.scene, layer.id, (layer.start || 0) - 1e-4);
+      const pp = prev && prev !== layer && prev.transform && prev.transform[key];
+      const pk = pp && pp.kf;
+      if (pk && pk.length) {
+        const merged = pk.concat(kf).filter(k => k && !k.split);
+        if (merged.length >= 2) kf = merged;
+      }
+    }
     let i = -1;
     for (let j = 0; j < kf.length; j++) { if (kf[j].t <= t) i = j; else break; }
     if (i <= 0) return 0;                       // before the first move, or no prior keyframe to jump from

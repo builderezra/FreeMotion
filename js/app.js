@@ -2984,7 +2984,10 @@ window.FM = window.FM || {};
         const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
         p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
         if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) {
-          const nk = { t: t, v: v, e: (b && b.e) || 'linear' };   // inherit the cut segment's easing, not hardcoded linear
+          // `split: 1` marks this as a SEAM keyframe rather than one the user placed. A Bounce behavior
+          // rings off the jump between consecutive keyframes, and an unmarked seam masks the real
+          // transition that triggered the ring — see bounceDelta in js/behaviors.js (bug hunt, 21 Aug).
+          const nk = { t: t, v: v, e: (b && b.e) || 'linear', split: 1 };   // inherit the cut segment's easing, not hardcoded linear
           if (b && b.bez) nk.bez = b.bez.slice();
           p.kf.push(nk);
         }

@@ -3530,6 +3530,48 @@
     if (!sawReal) throw new Error('no combination produced BOTH a real fade-in and a real fade-out, so the overlap rule was never exercised');
   });
 
+  test('split: a Bounce keeps ringing across the cut', { item: 'split-bounce' }, async function () {
+    /* BUG HUNT (21 Aug), sixth verified lead from BUG-HUNT §34 and the smallest of them. A Bounce rings
+       off the jump between consecutive keyframes and returns 0 when there is no prior keyframe. A split
+       hands the tail half a synthetic boundary keyframe at the cut, which becomes kf[0] — so a ring
+       triggered before the cut fell silent at it. Measured at 8.9px lost at the seam
+       (tests/_splitbounce.html): real, but the tail of an already-decaying ring, which is why the fix is
+       gated on `splitOf` and costs an unsplit layer nothing.
+       CONTROL: the bounce has to be ringing BEFORE the split, or "it is not ringing after" is vacuous. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const S = FM.makeLayer('shape', { name: 'ball', shape: 'rect', x: 0, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
+      S.start = 0; S.duration = 10;
+      // hold, JUMP at t=4, hold — the ring lives after the jump and straddles a cut at t=5
+      S.transform.x = { kf: [{ t: 2, v: 0, e: 'linear' }, { t: 4, v: 100, e: 'linear' }, { t: 9, v: 100, e: 'linear' }] };
+      S.behaviors = [{ type: 'bounce', enabled: true, prop: 'x', params: { elastic: 0.5, freq: 3, decay: 1 } }];
+      FM.scene.layers.push(S);
+
+      const times = [4.1, 4.3, 4.6, 5.2, 5.5, 6, 6.5, 7, 8];
+      const ringOn = lay => times.map(t => {
+        const host = FM.scene.layers.filter(l => t >= l.start - 1e-9 && t <= l.start + l.duration + 1e-9)[0] || lay;
+        const base = FM.evalProp(host.transform.x, t);
+        return +(FM.behaviorValue(host, 'x', base, t) - base).toFixed(3);
+      });
+      const before = ringOn(S);
+      const live = before.filter(v => Math.abs(v) > 0.5).length;
+      if (live < 4) throw new Error('CONTROL FAILED: the bounce was barely ringing to begin with (' + live + '/' + times.length + ') — nothing can be judged');
+
+      FM.time = 5;
+      await FM.splitLayer(S.id);
+      if (FM.scene.layers.length !== 2) throw new Error('the split did not produce two halves');
+      const after = ringOn(S);
+      let worst = 0, worstT = null;
+      times.forEach((t, i) => { const d = Math.abs(after[i] - before[i]); if (d > worst) { worst = d; worstT = t; } });
+      if (worst > 1) throw new Error('the split changed the bounce by ' + worst.toFixed(2) + 'px at t=' + worstT +
+        ' (was ' + before[times.indexOf(worstT)] + ', now ' + after[times.indexOf(worstT)] + ')');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: an Audio Drive behavior keeps driving across a cut in its source', { item: 'split-audiodrive' }, async function () {
     /* BUG HUNT (21 Aug), fifth verified lead from BUG-HUNT §34 and the only one TWO independent lenses
        reported. An Audio Drive behavior stores the source clip's id, and an envelope is gated to its own

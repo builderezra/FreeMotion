@@ -1976,3 +1976,32 @@ DEPTH could change across a cut. Measured here at **0.3%** worst case across all
 but this fixture's loud moments fall in both halves. A clip whose peak sits entirely in one half could differ
 by more. That is inherent to per-clip normalisation, is not fixed, and the test's 25% tolerance would catch
 it if it ever became severe.
+
+## 41. A Bounce stopped ringing at a cut (21 Aug, v11.11) — REAL BUG, sixth verified §34 lead, and the smallest
+
+`bounceDelta` rings off the jump between consecutive keyframes and bails with `if (i <= 0) return 0`. The
+split inserts a synthetic boundary keyframe at the cut, which becomes `kf[0]` of the tail half — so a ring
+triggered before the cut fell silent at it.
+
+**Measured** (`tests/_splitbounce.html`), control first (4/9 samples ringing before the split):
+
+| t | before | after |
+|---|---|---|
+| 4.1 | 43.03 | 43.03 |
+| 4.6 | −26.10 | −26.10 |
+| 5.2 | **−8.85** | **0** |
+
+Real, and honestly small: 8.9px, on the tail of an already-decaying ring.
+
+**The fix needed a marker, and that is the interesting part.** The obvious approach — read the lineage's
+keyframes as one list — does not work on its own: the seam keyframe holds the *interpolated* value on both
+sides, so `jump` comes out 0 and the real transition is masked just as thoroughly as by having no keyframe.
+Seam keyframes are therefore marked `split: 1` at the cut and dropped from the bounce's view, because they
+are not transitions the user made.
+
+Gated on `layer.splitOf`, so a clip that has never been split does not pay for any of it.
+
+**Scope note, stated rather than hidden:** this was the least severe find of the day and the most invasive
+fix, and it was close to being recorded as verified-but-not-fixed on those grounds. It went in because the
+gate makes it free for everything else and because it completes the invariant the whole §31–§41 run is
+about — a cut changes nothing you can see or hear.
