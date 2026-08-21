@@ -864,6 +864,46 @@ window.FM = window.FM || {};
   }
   FM.storage._sanitizeTiming = sanitizeTiming;   // seam: the suite drives the real function
 
+  /* KEYFRAMES FROM A FILE (queue 468, found by a bug hunt).
+   * `FM.evalProp` assumes a keyframe list is sorted by time and that every entry HAS a value. Both are
+   * true of anything this app writes — `toggleProp` inserts in order and substitutes 0 for a missing
+   * fallback, and all 199 visual effects plus all 60 audio params carry a default, so the app cannot
+   * produce either shape. A FILE can. Measured:
+   *   · **unsorted** keyframes make `evalProp` return the FIRST entry's value at every time — the whole
+   *     animation silently collapses to a constant. This is the worse of the two: the movement is simply
+   *     gone, with nothing to see or undo.
+   *   · a keyframe whose `v` is `null` (perfectly legal JSON) evaluates to NaN at exactly its own time,
+   *     which puts the layer somewhere it should not be rather than crashing — wrong, quietly.
+   * WHY A GENERIC WALK rather than a list of properties. Animated props are scattered — transform
+   * channels, speed, volume, per-effect params, per-audio-effect params, text colour — and a hand-kept
+   * list is a second source of truth that goes stale the moment anything new becomes keyframable. That is
+   * the exact bug shape this codebase keeps paying for. Anything shaped `{kf:[…]}` is repaired, wherever
+   * it lives, so a future animatable property is covered without anyone remembering.
+   * ⚠️ A STRING VALUE IS LEGAL and must survive: colour keyframes lerp '#rrggbb' channel-wise. Only a
+   * MISSING value is dropped. */
+  function sanitizeKeyframes(node, depth) {
+    if (!node || typeof node !== 'object' || (depth || 0) > 8) return;
+    if (Array.isArray(node.kf)) {
+      const kept = node.kf.filter(function (f) {
+        return f && typeof f === 'object' && isFinite(+f.t) && f.v !== null && f.v !== undefined;
+      });
+      // Sorted by time, because evalProp walks the list in order and a file need not be.
+      kept.sort(function (a, b) { return (+a.t) - (+b.t); });
+      kept.forEach(function (f) { f.t = +f.t; });
+      if (!kept.length) delete node.kf;              // no usable keyframes → not an animation at all
+      else node.kf = kept;
+    }
+    const keys = Object.keys(node);
+    for (let i = 0; i < keys.length; i++) {
+      const v = node[keys[i]];
+      if (v && typeof v === 'object') {
+        if (Array.isArray(v)) { for (let j = 0; j < v.length; j++) sanitizeKeyframes(v[j], (depth || 0) + 1); }
+        else sanitizeKeyframes(v, (depth || 0) + 1);
+      }
+    }
+  }
+  FM.storage._sanitizeKeyframes = sanitizeKeyframes;   // seam: the suite drives the real function
+
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
@@ -875,6 +915,7 @@ window.FM = window.FM || {};
       sanitizeCamera(l);
       sanitizeUnsafeValues(l);
       sanitizeTiming(l);
+      sanitizeKeyframes(l, 0);
     });
   }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a

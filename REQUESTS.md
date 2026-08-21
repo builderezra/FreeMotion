@@ -11695,6 +11695,32 @@ wait for them to report back."*
       ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
       entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
       naming what is wrong with it turns this into work.
+- [x] **468 — A damaged project file silently loses its animations.** ✅ **DONE v11.49.**
+      (22 Aug — found by a bug hunt sweeping keyframe evaluation at its boundaries, not reported by Ezra.)
+      **Two shapes, both file-only, and the first is the bad one:**
+      · **Keyframes out of order collapse the whole animation to a CONSTANT.** `FM.evalProp` walks the
+        list in order and returns the first entry's value at every time. Measured: `[{t:4,v:30},{t:0,v:10},
+        {t:2,v:20}]` reads 30 at t=0, t=2 AND t=4. The movement is simply gone — no error, nothing to undo.
+      · A keyframe whose `v` is `null` — perfectly legal JSON — evaluates to **NaN at exactly its own
+        time**, putting the layer somewhere it should not be rather than crashing.
+      **CONFIRMED THE APP CANNOT PRODUCE EITHER, which is why this is a file concern and not a live bug:**
+      `toggleProp` substitutes 0 for a missing fallback (verified — it writes `{t,v:0,e:'linear'}`), and all
+      **199 visual effects and 60 audio params carry a default**, so there is no route to a valueless
+      keyframe from the UI. It matters because sharing projects and templates is something he has asked for
+      (queue 427), which turns "a file I made" into "a file someone sent me" — the same argument as 467.
+      **Fix: a generic walk at import.** Anything shaped `{kf:[…]}` is repaired wherever it lives —
+      transform channels, speed, volume, per-effect params, per-audio-effect params, text colour. A
+      hand-kept list of properties would be a second source of truth that goes stale the moment something
+      new becomes keyframable, which is the exact bug shape this codebase keeps paying for. Out-of-order
+      keyframes are sorted, incomplete ones dropped, and a list with nothing usable stops claiming to be
+      an animation at all.
+      ⚠️ **A STRING VALUE IS LEGAL AND MUST SURVIVE.** Colour keyframes hold `'#rrggbb'` and are lerped
+      channel-wise, so a rule demanding numbers would have deleted every animated colour in every project.
+      The test carries an animated colour specifically to catch that.
+      ⚠️ **Byte-identity control:** a good project — mixed easings, animated colour, animated speed, an
+      animated effect param — comes through completely unchanged. Both directions mutation-checked
+      (unwiring the call site; removing the sort).
+
 - [x] **467 — A damaged project file imports as an empty-looking project.** ✅ **DONE v11.48.**
       (22 Aug — found by a bug hunt sweeping the import path with hostile files, not reported by Ezra.)
       **What happened:** a `.fmotion.json` carrying a layer whose `duration` was not a number — a string,

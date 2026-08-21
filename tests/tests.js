@@ -24695,6 +24695,63 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('import: keyframes from a file are ordered and complete, and a good project is untouched (queue 468)', { item: '468' }, function () {
+    /* Found by a bug hunt. `FM.evalProp` assumes a keyframe list is sorted by time and that every entry
+     * has a value — both true of anything this app writes, and neither guaranteed by a FILE.
+     * MEASURED before the fix: UNSORTED keyframes make evalProp return the first entry's value at every
+     * time, so the whole animation silently collapses to a CONSTANT — the movement simply gone, nothing
+     * to see and nothing to undo. And a keyframe whose value is `null` (legal JSON) evaluates to NaN at
+     * exactly its own time, putting the layer somewhere it should not be.
+     * Confirmed the app itself cannot produce either: toggleProp substitutes 0 for a missing fallback,
+     * and all 199 visual effects and 60 audio params carry a default. This is a file-only shape — which
+     * matters more now that sharing projects and templates is something Ezra has asked for (queue 427). */
+    if (!FM.storage || !FM.storage._sanitizeKeyframes) throw new Error('FM.storage._sanitizeKeyframes is not reachable');
+    const san = FM.storage._sanitizeKeyframes;
+
+    // CONTROL FIRST — the defect must be real, or the repair below proves nothing.
+    const unsorted = { transform: { x: { kf: [{ t: 4, v: 30 }, { t: 0, v: 10 }, { t: 2, v: 20 }] } } };
+    const beforeVals = [0, 2, 4].map(t => FM.evalProp(unsorted.transform.x, t));
+    if (!(beforeVals[0] === beforeVals[2])) throw new Error('unsorted keyframes did NOT flatten the animation, so this test is guarding a defect that no longer exists — re-measure before deleting it');
+    san(unsorted, 0);
+    const afterVals = [0, 2, 4].map(t => FM.evalProp(unsorted.transform.x, t));
+    if (!(afterVals[0] === 10 && afterVals[1] === 20 && afterVals[2] === 30)) throw new Error('after repair an unsorted animation still reads ' + afterVals.join(',') + ' instead of 10,20,30');
+
+    // A valueless keyframe must never reach evalProp as NaN.
+    const nulled = { transform: { x: { kf: [{ t: 0, v: null }, { t: 4, v: 140 }] } } };
+    san(nulled, 0);
+    [0, 2, 4].forEach(t => {
+      const v = FM.evalProp(nulled.transform.x, t);
+      if (typeof v === 'number' && !isFinite(v)) throw new Error('a null keyframe value still evaluates to NaN at t=' + t + ' — the layer lands somewhere it should not be');
+    });
+
+    /* IT MUST REACH EVERYWHERE ANIMATION LIVES, not just the transform. Animated props are scattered
+       across transform channels, speed, volume, per-effect params, per-audio-effect params and text
+       colour, so the repair is a generic walk — a hand-kept list of properties would go stale the moment
+       something new became keyframable, which is the bug shape this codebase keeps paying for. */
+    const deep = { effects: [{ type: 'blur', params: { radius: { kf: [{ t: 4, v: 40 }, { t: 0, v: 0 }] } } }],
+                   audioFx: [{ type: 'reverb', params: { decay: { kf: [{ t: 4, v: 6 }, { t: 0, v: 0.4 }] } } }] };
+    san(deep, 0);
+    if (deep.effects[0].params.radius.kf.map(f => f.t).join(',') !== '0,4') throw new Error('an EFFECT parameter\'s keyframes were not repaired — the walk does not reach effect params');
+    if (deep.audioFx[0].params.decay.kf.map(f => f.t).join(',') !== '0,4') throw new Error('an AUDIO effect parameter\'s keyframes were not repaired — the walk does not reach audio params');
+
+    /* THE CONTROL THAT MATTERS MOST: a good project must come through BYTE-IDENTICAL. A sanitiser that
+       quietly rewrites valid work is worse than the bug it fixes. Colour keyframes are the trap here —
+       they hold STRINGS ('#rrggbb', lerped channel-wise), so a rule that demanded numbers would delete
+       every animated colour in the project. */
+    const good = { transform: { x: { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 2, v: 20, e: 'easeIn' }, { t: 4, v: 30 }] }, opacity: 1 },
+                   color: { kf: [{ t: 0, v: '#ff0000' }, { t: 3, v: '#0000ff' }] },
+                   speed: { kf: [{ t: 0, v: 1 }, { t: 4, v: 2 }] },
+                   effects: [{ type: 'blur', params: { radius: { kf: [{ t: 0, v: 0 }, { t: 4, v: 40 }] }, mix: 0.5 } }] };
+    const before = JSON.stringify(good);
+    san(good, 0);
+    if (JSON.stringify(good) !== before) throw new Error('a perfectly good project was rewritten on import:\n  before ' + before + '\n  after  ' + JSON.stringify(good));
+
+    // …and it must be WIRED IN, not merely correct. (A mutation survived this exact gap on queue 467.)
+    const viaImport = [{ id: 'W2', type: 'shape', start: 0, duration: 4, transform: { x: { kf: [{ t: 4, v: 30 }, { t: 0, v: 10 }] } } }];
+    FM.storage._sanitizeLayers(viaImport);
+    if (viaImport[0].transform.x.kf.map(f => f.t).join(',') !== '0,4') throw new Error('the import path does not call the keyframe sanitiser — a file\'s animations stay broken however well the repair itself works');
+  });
+
   test('import: a layer\'s timing is always a number, and a good project is untouched (queue 467)', { item: '467' }, function () {
     /* Found by a bug hunt, not reported. The project's own width/height/fps/duration have been clamped
      * since the OOM-brick fix, but the LAYER's start and duration never were — an asymmetry rather than
