@@ -30,13 +30,17 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 10. **Measure where the thing you are testing actually does something.** A correct metric pointed at
     the wrong moment is a dead assertion — a low-pass mutation survived a midpoint check twice because
     at that point the filter had not closed far enough to touch the test signal at all.
-11. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
+11. **The preview pane reports `document.hidden: true` even when fronted, so CSS animations and
+    timers are throttled in it.** Anything time-based measured there is worthless — a slam animation
+    sampled at six points returned the same frozen transform every time and looked exactly like a bug.
+    Check `document.hidden` before believing any timing measurement.
+12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.
 
 ## STATE — keep this current
 
-**v11.29, suite 796 green.**
+**v11.30, suite 796 green.**
 
 **In flight**
 - **Per-effect-slider keyframes** (unnumbered, oldest actionable). **Three of six done** — Distortion
@@ -78,6 +82,9 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 - **#464** — filters get multi-select-then-Add. The effects browser already does this; reuse it.
 
 **Waiting on Ezra — note, do not re-ask**
+- **#250** — the slam's screen-breaking bug was fixed in v8.54 and re-verified 21 Aug (no scale in any
+  keyframe, both guard tests green). Only his EYE is outstanding: trigger it once on the PC and say
+  whether it still looks wrong.
 - **#202** — one more perf readout **taken while playing**. The ladder is cleared (tested, v11.29) and
   his scene costs 163ms/frame on a fast Mac, so the slowness is workload, not a fault. His tier-0
   reading means the ladder was never consulted, which only happens on a sample taken while paused.

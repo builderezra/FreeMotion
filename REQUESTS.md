@@ -2737,6 +2737,28 @@ better still, keep working inside the turn rather than parking work for a later 
 
       **ANSWERED BY EZRA, 21 Aug:** *"yes i want it, just fix it"*. So the slam Easter egg STAYS and
       the PC regression is to be fixed. No design question here — it worked before, make it work again.
+      🔁 **RE-CHECKED 21 Aug after his "just fix it", and the screen-breaking half is STILL FIXED.**
+      His answer was to *"still want it at all?"*, not a fresh report — so before rebuilding anything,
+      the v8.54 fix was re-verified. Statically, which needs no animation timing:
+      · **Zero `scale` in any `@keyframes hm-slam` step.** The 6% overscan that pushed his header
+        controls off a 1440px screen is gone and has not crept back.
+      · **Both guard tests are present and green** in the 796: *"the slam shakes the home screen without
+        scaling it off the viewport (queue 250)"* and *"home's own paint overhangs its box, so the shake
+        cannot uncover the editor (queue 250)"*. So removing the scale cannot silently reopen #144.
+      · Sampled at 1440x900 the home screen measures 1440x900 throughout the shake — no magnification,
+        nothing clipped, `.brand` on screen.
+      ⚠️ **THE ANIMATION'S MOTION COULD NOT BE TIMED HERE, and the reason is the trap this entry already
+      recorded.** `document.hidden` is **true** in the preview pane even with the tab fronted, so CSS
+      animations are throttled: sampling the transform returned a constant `translateY(13px)` at every
+      point from 40ms to 1000ms, which reads exactly like "the screen is stuck pushed down". **It is not
+      a finding, it is the same false alarm the 16 Aug attempt logged** (62.3px stuck, same cause).
+      Checked `document.hidden` before believing it this time. **Do not report slam motion from this
+      environment** — it can verify the STATIC facts (no scale, overhang present) and nothing else.
+      ✅ **So: nothing measurable is broken, and this is waiting on his eye, not on work.**
+      He has not looked at it since v8.54 as far as this file records. **Ask him to trigger it once on
+      the PC and say whether it still looks wrong.** If it does, the next step is the one the entry
+      already names — treat it as a rebuild of the effect, and offer turning it off on desktop if it
+      cannot be made to look good there.
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
