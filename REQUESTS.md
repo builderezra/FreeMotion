@@ -1,47 +1,40 @@
 # Ezra's requests — the running list
 
-> ## 📌 HANDOVER — written 18 Aug at v9.94, before a context compact
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.50
 >
-> **State:** v9.94, 659 tests green, tree clean, `HEAD == ssh/main`. 70 items open.
-> **Next actionable item: #349** (the "tuff" car-photo filters — the cars were removed from the ordinary
-> filter tiles in v9.82 specifically so they could land there on purpose).
+> **State:** v11.50, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
+> why nothing has shipped for you lately except bugs I found myself.
 >
-> **HE HAS A PHONE INBOX NOW — DRAIN IT AT THE START OF EVERY LOOP ITEM:**
-> ```
-> ./tools/inbox.sh          # shows anything unlogged
-> ./tools/inbox.sh --done   # marks it drained, AFTER moving it into this file
-> ```
-> It reads two places (an iCloud text file and the Shortcuts app's own container, because his shortcut
-> writes to whichever it feels like) and screenshots land in `iCloud Drive/FreeMotion-shots`. It appends a
-> marker instead of deleting — deleting raced iCloud and resurrected old requests twice.
+> **The fastest ones. A letter or one word each, and each unblocks real work:**
 >
-> **He asked for PACE.** *"you're going really slow, I'm paying for a lot of usage and you're not doing
-> much."* The fix that worked: **batch several queue items into ONE suite run and one release**. The suite
-> is 3-4 minutes; shipping one item per run is the bottleneck, not the work.
+> | # | The question | If you can't decide |
+> |---|---|---|
+> | **469** | Are the ◆ keyframe buttons fiddly to tap on your phone? **A** leave them · **B** same look, bigger invisible target · **C** visibly bigger | **B** if you've ever mis-tapped one, **A** if not |
+> | **460** | Colouring effects "still do nothing" — but all 43 measurably work. Which of the two options in the entry? | Send one screenshot of the exact effect + slider |
+> | **432** | The template icon: pick a letter, or "none of these" | — |
+> | **456** | The two rainbow Create buttons: pick a letter, or a mix ("B's colours with D's comet") | — |
+> | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
+> | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
+> | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
+> | **387** | Phone lag: is scrubbing fine and *playback* bad, or are both bad? That one word decides where I look | — |
+> | **391** | The Edit Text menu is "still a bit broken" — which part? | — |
+> | **342** | What do you try to do with elements that you can't? | — |
+> | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
 >
-> **Two things I got wrong today that are already corrected in their entries — do not re-derive them:**
-> · **#347's recorded diagnosis was WRONG** (it blamed `mtScrub`; his sliders are `tickStrip`, which
->   already clamps). The entry now says where to actually look. It is still OPEN.
-> · **#345's UI clamp is UNGUARDED.** Its test proves the renderer honours an out-of-box anchor, which was
->   never broken — it passes with the fix reverted. Written into the entry as a gap.
+> **Two only your phone can answer, and both are about work already finished:**
+> - **"Editing lags"** — every measured cause and the memory leak are FIXED. Does it actually feel
+>   better on your device now? It stays open until you say.
+> - **An animated reverb** (new in v11.45) — does it stutter while you *preview* it? The export is
+>   proven correct; the live smoothness is a thing only your ears can judge.
 >
-> **Three test mistakes made more than once today — worth not making a fourth time:**
-> 1. **Measuring where the rule does not apply.** A z-index that only exists inside a phone media query
->    reads 0 at desktop width; a test that checks it there fails for its own reasons and blames the code.
-> 2. **`offsetParent` is null for `position: fixed`** — a menu-visibility check using it read '' every
->    time, and BOTH its assertions passed vacuously.
-> 3. **A test that cannot find its subject reports the subject as broken.** Two tests hunted for controls
->    under the wrong selector/mode and produced confident wrong failures.
-> **The mutation check is what caught all of these. Run it on every new assertion, without exception.**
-
-> ## ⚠️ OLDEST FIRST
-> The next item to work on is the **lowest-numbered open `- [ ]` entry in this file**. New requests are
-> added at the bottom and wait their turn. The file is NOT in numeric order — find the next one with:
-> ```bash
-> grep -n "^- \[ \] \*\*[0-9]" REQUESTS.md | sed 's/^\([0-9]*\):- \[ \] \*\*\([0-9]*\).*/\2 (line \1)/' | sort -n | head
-> ```
-> Only two things jump the queue: he says so explicitly, or the build is broken. Blocked on a decision
-> from him is **not** done — say so, and move to the next-oldest.
+> **The rest** (95, 96, 98, 125, 129, 148, 179, 206, 361, 406, 418, 425, 429, 431, 454, and the visual
+> identity pass) are further down with their line numbers — most want a screenshot or a "does this still
+> happen on your phone".
+>
+> **Nothing is being quietly dropped.** Everything above is written up in full below, with what was
+> measured and what is still unknown. If you'd rather I just picked defaults and shipped, say so and I
+> will — the recommendations in the right-hand column are what I'd choose.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment

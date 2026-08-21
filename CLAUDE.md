@@ -34,6 +34,11 @@ by remembering:
   has"* — and nothing enforced it. The failure is the worst kind of silent: the code is right, the suite
   is green, the push lands, and the phone serves the OLD file, so a perfectly good fix reads as broken.
   New files are exempt (no previous `?v=` to differ from).
+- **The summary at the top of REQUESTS.md must carry the version being shipped, or ship.sh refuses.**
+  That block is written for Ezra and is the first thing he opens. One sat there for four days quoting
+  v9.94, "659 tests green", "70 items open" and a next-actionable item that had long since shipped, while
+  the app was on v11.50 with 816 tests. Nothing noticed because prose has no test. The stamp is now
+  checked against `index.html`'s version.
 - **`python3 tools/_classify.py` self-tests the queue classifier, and ship.sh refuses if any rule fails.**
   Every rule in it cures a real bug — an answered item gone unreachable, a hold that would not lift, five
   real items hidden by a phrase in a note about them — and nothing else in the repo would notice if one

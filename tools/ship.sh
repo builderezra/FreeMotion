@@ -88,6 +88,24 @@ if [ -n "$BUSTER_MISS" ]; then
   exit 1
 fi
 
+# ---- THE SUMMARY EZRA READS MUST NOT BE STALE (22 Aug) -------------------------------------------
+# WHY. The block at the top of REQUESTS.md is the first thing he sees, and it is written for HIM. One sat
+# there from 18 Aug for four days quoting v9.94, "659 tests green", "70 items open" and a "next actionable
+# item" that had long since shipped — while the app was on v11.50 with 816 tests. Nothing noticed, because
+# nothing was watching: it is prose, and prose has no test.
+# So the stamp is checked against the version being shipped. It costs one line to update and it stops the
+# one file he actually opens from lying to him about where things stand.
+# `class="ver"` contains a literal v, so a loose grep matches that too — anchor on the delimiters.
+REQ_VER="$(grep -o 'at v[0-9][0-9.]*' REQUESTS.md | head -1 | sed 's/^at //')"
+APP_VER="$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')"
+if [ -n "$REQ_VER" ] && [ "$REQ_VER" != "$APP_VER" ]; then
+  echo "❌ THE SUMMARY AT THE TOP OF REQUESTS.md IS STALE — not committing, not pushing."
+  echo "   It says $REQ_VER; this build is $APP_VER."
+  echo "   That block is the first thing Ezra reads. Update its state line (version, test count, what is"
+  echo "   waiting on him) and the stamp, then ship again. A previous one misled him for four days."
+  exit 1
+fi
+
 # THE CLASSIFIER MUST PROVE ITSELF BEFORE IT LABELS ANYTHING (22 Aug). tools/_classify.py decides what
 # the loop picks up next AND what STATUS Ezra reads in REQUESTS.md, and every rule in it was written to
 # cure a real bug — an answered item that had become unreachable, a hold that would not lift, five real

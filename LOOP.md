@@ -40,49 +40,45 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**Last shipped: v11.50** (queue 470). **This tick: no new bug — the hunt list is EXHAUSTED, and a gap in my
-own fix was found and closed.** No app code changed, no version bump. Suite **816/816 green**, pushed.
+**Last shipped: v11.50** (queue 470). **This tick: no code change — the bottleneck was addressed instead.**
+Suite **816/816 green**, pushed and verified.
 
-**0 actionable → BUG HUNT** (his standing instruction, queue 260 verbatim).
+**0 actionable, hunt list exhausted (13 ticks).** So this tick used the OTHER half of his standing
+instruction (queue 260): *"Also look for potential ideas and things to do."* The most valuable thing
+available was not another sweep — it was making his 28 pending decisions actually answerable.
 
-**⚠️ THE BIGGEST FINDING THIS TICK WAS ABOUT LAST TICK'S FIX.** #470 had TWO halves — the clamp on project
-OPEN and the clamp in `templates.useAsNew` — and **only the first was tested**. Deleting the `useAsNew`
-clamp left all 816 tests green, so the exact bug shipped one tick earlier could have walked straight back
-in. Found by mutation-checking my own fix rather than trusting that it was covered. Now pinned end to end.
-**Generalise it: a two-part fix needs a test for BOTH parts. "The suite is green" says nothing about the
-part no assertion touches.** Mutation-check EACH half of a multi-site fix, not the fix.
+**WHAT CHANGED:**
+1. **The top of REQUESTS.md is now "WHAT I NEED FROM YOU"** — a table of the 11 fastest questions, each
+   with a recommended default, plus the two only his phone can answer. It replaces a **stale handover from
+   18 Aug** that had been sitting there for four days quoting v9.94, "659 tests green", "70 items open",
+   a next-actionable item that had long since shipped, and tooling (`tools/inbox.sh`) that no longer
+   exists. That block is the first thing he opens, and it was lying to him.
+2. **ship.sh now REFUSES if that summary's version stamp is behind the build.** Prose has no test, which
+   is exactly how the last one rotted unnoticed. Proven both ways. Recorded in CLAUDE.md beside the other
+   safeguards.
 
-**THIS TICK — the last two un-swept items, both CLEAN:**
-- **The ELEMENTS insert path.** Refuted by reading first (it never touches the project object), then
-  confirmed end to end: a hostile element pack had its timing (#467) and keyframe order (#468) repaired by
-  the re-id gate, and the project was untouched.
-- **The TEXT-layer panels at 380px** — all eight categories including Captions, plus the full-screen text
-  editor itself: no horizontal overflow, no unreachable controls, no small tap targets. (16 controls read
-  as "below the viewport" — that is the PARKED add-menu sheet, correctly off-screen. A probe that measures
-  the whole page will find other surfaces; scope it or expect false positives.)
+**⚠️ ONE ERROR CAUGHT IN MY OWN SUMMARY BEFORE IT SHIPPED:** I wrote "28 items open" when 28 is the number
+WAITING ON HIM and 33 are open. Corrected. Writing a summary for him is exactly where a sloppy number does
+the most damage, because it is the one thing he actually reads.
 
-**✅ THE HUNT LIST IS NOW EXHAUSTED.** Every door and panel enumerated across twelve ticks has been swept:
-all 27 audio effects; project import with hostile files; undo/redo across the newest features; the
-queue-217 re-id gate; the timeline at 10 s / 10 min / 60 min; the live audio path; the export audio path
-end-to-end; exportFitRect and the frame loop; the service worker; clip frame boundaries; keyframe
-evaluation; the 380px sweep for BOTH shape and text layers plus the text editor; group/parent transforms at
-depth; the template insert path; the elements insert path.
-**Nothing obvious is left to sweep.** A further hunt needs a NEW angle (fuzzing, long-session memory,
-multi-tab, or a real-device report) rather than another item off this list — and the honest read is that
-the returns no longer justify inventing one.
+**HUNT LIST: EXHAUSTED.** Every door and panel enumerated has been swept — all 27 audio effects; project
+import; template AND element insert; undo/redo; the timeline at 60 min; the live and export audio paths;
+exportFitRect and the frame loop; the service worker; clip frame boundaries; keyframe evaluation; the full
+380px sweep for shape AND text layers plus the text editor; group transforms at depth.
+**A further hunt needs a NEW angle** (fuzzing, long-session memory, multi-tab, or a real-device report),
+not another item off this list. Do not manufacture one.
 
-**Running tally, said plainly:** across thirteen hunts — **four real bugs** (#466, #467, #468, #470), **one
-question for him** (#469), **four coverage gaps closed** (exporter scheduling, clip frame edges, group
-transforms, and half of #470's own fix), **one safeguard built**, **sixteen probe/harness errors** caught
-before they reached him.
+**Running tally:** across thirteen hunts — **four real bugs** (#466, #467, #468, #470), **one question for
+him** (#469), **four coverage gaps closed**, **two safeguards built** (cache-buster gate, stale-summary
+gate), **sixteen probe/harness errors** caught before they reached him.
 
-**⚠️ THE LOOP IS OUT OF WORK IT CAN DO ALONE.** Thirteen ticks, 0 actionable throughout, list exhausted.
-Say so plainly rather than manufacturing a fourteenth sweep.
+**⚠️ THE LOOP IS OUT OF WORK IT CAN DO ALONE.** Say so plainly each tick rather than inventing a sweep.
+If a tick genuinely has nothing, ONE LINE is the correct output.
 
-**Waiting on Ezra:** 469 (one word), 432, 456, 460, 454 second half, 202, 387, 215, 250, 342, 391, 395,
-429, 418, 223; the unnumbered **"Editing lags"** (all fixes in — open only until he says it feels better on
-his device); **whether an animated reverb stutters while previewing on his phone**; and **392** — his
-verdict on Text to Voice, plus the cloud-vs-record choice.
+**Waiting on Ezra** — now listed for him at the top of REQUESTS.md with recommended defaults:
+469, 460, 432, 456, 250, 395, 392, 387, 391, 342, 215; the unnumbered **"Editing lags"**; **whether an
+animated reverb stutters while previewing**; and the slower ones (95, 96, 98, 125, 129, 148, 179, 206,
+361, 406, 418, 425, 429, 431, 454, the visual identity pass).
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
