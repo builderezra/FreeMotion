@@ -1971,7 +1971,14 @@ window.FM = window.FM || {};
     const key = layer.id + '#' + idx + '#' + JSON.stringify(fx, FM.jsonReplacer);
     if (fx._noopKey === key) return;                      // already measured for exactly these settings
     clearTimeout(noopTimer);
-    noopTimer = setTimeout(function () {
+    noopTimer = setTimeout(function tick() {
+      /* NEVER WHILE HE IS PLAYING OR EXPORTING (queue 477, found by hunting my own work at v11.81).
+         This check is two FULL-RESOLUTION renders. The timer fires 400ms after a settings change, so
+         changing a slider and immediately pressing play — or Export — drops both of them straight onto
+         the main thread in the middle of a render he is watching or waiting on. That is a stutter, from
+         the man who has reported lag for weeks, bought for a hint nobody is reading at that moment.
+         Deferred rather than dropped: it re-arms and measures once he stops. */
+      if (FM.playing || FM._exporting) { noopTimer = setTimeout(tick, NOOP_SETTLE); return; }
       const live = FM.layerById ? FM.layerById(FM.scene, layer.id) : layer;
       const lfx = live && live.effects && live.effects[idx];
       if (!lfx) return;

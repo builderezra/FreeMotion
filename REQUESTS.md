@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.81
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.82
 >
-> **State:** v11.81, **852 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.82, **853 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4580,6 +4580,18 @@ better still, keep working inside the turn rather than parking work for a later 
       asserted by counting calls, since with a stable full-res answer there is no flicker left to detect.
       ⚠️ **`null` means "could not tell" and must never be read as "it works"** — an absent answer is not
       a negative one.
+      🔎 **HUNT FINDING, v11.82 — my own code, one tick old.** The check had **no guard for playback or
+      export**. It is two full-resolution renders on a 400ms timer, so changing a slider and pressing play
+      inside that window drops both onto the main thread during the frames he is watching — a stutter, for
+      a hint nobody is reading at that moment, in the app whose most frequent complaint is stutter.
+      **Deferred, not dropped:** it re-arms and measures once he stops, and the test asserts BOTH — zero
+      calls during an export, and that it still runs afterwards. Mutation-checked.
+      **Two other data-loss hunts in the same sweep came back CLEAN, recorded so they are not re-run:**
+      · **storage full mid-edit** — save does not throw, the work stays in memory, he is told *"Storage
+        full — autosave paused. Use ⚙ → Save project file"*, and the next save after space frees writes
+        everything (verified: both layers on disk).
+      · **a save in flight while the project switches** — no cross-contamination; each project kept
+        exactly its own layers.
       ⚠️ **(Superseded history kept below.)** BUILT v11.79 AND WITHDRAWN THE NEXT TICK — a real fault, found by hunting my own work.
       **What was right:** the detection. It renders the layer twice, once with the one effect bypassed,
       and compares all four channels. On his exact `#cc22cc` fill it correctly flagged channelremap,

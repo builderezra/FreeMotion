@@ -39439,4 +39439,60 @@
       await sleep(60);
     }
   });
+
+  /* Queue 477 — found by hunting my own work one tick after shipping it.
+   * The no-op check is two FULL-RESOLUTION renders, fired 400ms after a settings change. Nothing stopped
+   * it landing in the middle of PLAYBACK or an EXPORT: change a slider, press play within the settle
+   * window, and both renders drop onto the main thread during the frames he is watching. That is a
+   * stutter bought for a hint nobody is reading at that moment — and stutter is the single thing he has
+   * reported most often.
+   * It defers rather than drops: it re-arms and measures once he stops. */
+  test('the no-op check never runs while playing or exporting (queue 477)', { item: '477' }, async function () {
+    if (!FM.fxThumbs || typeof FM.fxThumbs.effectDoesNothing !== 'function') throw new Error('the no-op seam is not reachable');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const saved = { layers: FM.scene.layers.slice(), playing: FM.playing, exporting: FM._exporting };
+    const real = FM.fxThumbs.effectDoesNothing;
+    let calls = 0;
+    FM.fxThumbs.effectDoesNothing = function (l, i) { calls++; return real.call(FM.fxThumbs, l, i); };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'probe', x: 540, y: 960, shapeW: 700, shapeH: 700, fill: '#cc22cc' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('channelremap');
+      if (!inst) throw new Error('channelremap has no registry instance');
+      inst._expanded = true;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      await sleep(150);
+      const cards = [].slice.call(document.querySelectorAll('.cat-card')).filter(c => c.offsetParent);
+      const fxCard = cards.find(c => /effects/i.test(c.textContent || ''));
+      if (!fxCard) throw new Error('no Effects card — cannot open the effect row');
+      fxCard.click();
+      await sleep(200);
+
+      // Pretend an export is running, then change the settings and wait past the settle window.
+      FM._exporting = true;
+      calls = 0;
+      inst.params.mix = 0.55;
+      FM.inspector.refresh();
+      await sleep(700);                       // well past the 400ms settle
+      const duringExport = calls;
+
+      // CONTROL: with the export finished it must actually measure — deferred, not abandoned.
+      FM._exporting = false;
+      await sleep(900);
+      const afterwards = calls;
+
+      if (duringExport !== 0) throw new Error('the full-resolution check ran ' + duringExport + ' time(s) DURING an export — two whole renders stolen from the render he is waiting on');
+      if (afterwards === 0) throw new Error('the check never ran once the export finished — it was dropped rather than deferred, so the hint would simply never appear');
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM._exporting = saved.exporting; FM.playing = saved.playing;
+      FM.scene.layers = saved.layers;
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
 })();
