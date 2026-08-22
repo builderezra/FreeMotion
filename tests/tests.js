@@ -24703,6 +24703,64 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419)', { item: '419' }, async function () {
+    /* His words: *"The key frames for these three things are all interacting with each other and causing
+     * issues, make em independent."* v11.33 fixed the ADD side and the row-scoped path, and the
+     * POLISH-LOG told him *"clearing a spin keyframe took the tilt's with it"* was fixed — true only when
+     * a ROW is selected, which it is not by default (`kfSel` is null, and every panel or mode change
+     * clears it).
+     * MEASURED before this: rotationX animated 20→60, `rotation` static, playhead on the tilt's first
+     * key, nothing selected. The rail diamond titled itself "Remove keyframe at playhead" — on the
+     * strength of a channel it is not for — and ONE press deleted the tilt's t=0 key, collapsing the
+     * animation to 60 everywhere, while `rotation` was never keyed at all.
+     * ⚠️ The existing queue-419 test presses the rail three times and every press is an ADD, which is
+     * why nothing caught this. This one sets the trap deliberately. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const setup = async () => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 150, y: 150, shapeW: 60, shapeH: 40, fill: '#fff', start: 0, duration: 4 });
+      FM.scene.layers.push(L);
+      FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id]; FM.selectMode = false;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.inspector.refresh(); await sleep(220);
+      FM.inspector.openCategory('transform'); await sleep(300);
+      const rot = [].slice.call(document.querySelectorAll('#inspector .mt-mode')).filter(b => /rotate/i.test(b.title || b.textContent))[0];
+      if (!rot) throw new Error('there is no Rotate mode button — the panel did not open');
+      rot.click(); await sleep(260);
+      return L;
+    };
+    const rail = () => document.querySelector('#inspector .mt-rail-left .mt-kf') || document.querySelector('#inspector .mt-kf');
+    try {
+      const L = await setup();
+      L.transform.rotationX = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 60, e: 'linear' }] };
+      FM.time = 0;
+      FM.inspector.refresh(); await sleep(300);
+      const btn = rail();
+      if (!btn) throw new Error('the rail diamond is not on screen');
+      if (/remove/i.test(btn.title)) throw new Error('the diamond says "' + btn.title + '" because the TILT has a key here — rotation has none, so pressing it destroys the tilt instead of keying rotation');
+
+      btn.click(); await sleep(320);
+      if (!FM.isAnimated(L.transform.rotationX)) throw new Error('one press flattened the tilt animation entirely — it is now ' + JSON.stringify(L.transform.rotationX));
+      const kfs = L.transform.rotationX.kf.map(k => k.t + ':' + k.v).join(' ');
+      if (!/0:20/.test(kfs) || !/2:60/.test(kfs)) throw new Error('the tilt keyframes were altered by pressing the ROTATION diamond: ' + kfs);
+      if (!FM.hasKeyframeAt(L.transform.rotation, 0)) throw new Error('the press did not key rotation — the button did nothing it looked like it would do');
+
+      /* THE CONTROL, and without it this could pass by making the diamond never remove anything: with
+         rotation ITSELF keyed here, the button must still offer to take it away. */
+      const L2 = await setup();
+      FM.time = 1;
+      FM.toggleProp(L2.transform, 'rotation', 1, 0);
+      FM.inspector.refresh(); await sleep(300);
+      if (!/remove/i.test(rail().title)) throw new Error('with rotation keyed at the playhead the diamond says "' + rail().title + '" — it can no longer remove its own keyframe');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.inspector.refresh(); await sleep(120);
+    }
+  });
+
   test('a video or image Outline actually draws (queue 386)', { item: '386' }, async function () {
     /* His words: *"Outlines should still be a toggle option on videos and clips, not just shadow"*.
      * Half of it shipped at v10.64 — `canBorder` includes media, so the Outline & Shadows card offers

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.63
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.64
 >
-> **State:** v11.63, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.64, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,27 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **419b — A tilt keyframe turned the rotation diamond into a delete button.** ✅ **DONE v11.64.**
+      (22 Aug — the unfixed half of #419, found by re-auditing closed requests against the code.)
+      His words: *"The key frames for these three things are all interacting with each other and causing
+      issues, make em independent."* v11.33 fixed the ADD side and the row-scoped path — **and the
+      POLISH-LOG told him the rest was fixed too** (*"clearing a spin keyframe took the tilt's with it.
+      Now: keyframing rotation keys rotation"*). That was true only when a ROW is selected, which it is
+      not by default: `kfSel` starts null and every panel or mode change clears it.
+      **Measured loss.** `rotationX` animated 20 → 60, `rotation` static, playhead on the tilt's first
+      key, nothing selected: the rail diamond titled itself **"Remove keyframe at playhead"** — on the
+      strength of a channel it is not for — and ONE press deleted the tilt's t=0 key, so the tilt read 60
+      everywhere and the animation was gone, while `rotation` was never keyed at all.
+      **Fix: the button decides on the channels it is ABOUT (`MT_PRIMARY[mode]`), not on every channel in
+      the panel** — and the lit state and title follow the same judgement, so it can no longer announce
+      the wrong action before you press it. **What it ACTS on is unchanged:** the add path still sweeps in
+      an already-animated channel so rotation and a moving tilt stay in step, and remove still reaches
+      every channel so a stray key can always be cleaned up.
+      ⚠️ **The existing #419 test presses the rail three times and every press is an ADD**, which is
+      exactly why nothing caught this. The new one sets the trap deliberately, and carries a control —
+      with rotation itself keyed there, the diamond must still offer to remove it, or "fixed" could just
+      mean "it never deletes anything any more". Mutation-checked.
 
 - [x] **386b — The Outline toggle on videos and images drew nothing at all.** ✅ **DONE v11.63.**
       (22 Aug — found by re-auditing closed requests against the code.)

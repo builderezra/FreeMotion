@@ -3772,7 +3772,14 @@ window.FM = window.FM || {};
     const scoped = (_selK && props.indexOf(_selK) >= 0) ? [_selK] : null;
     const stateProps = scoped || props;
     const anyAnim = stateProps.some(k => FM.isAnimated(layer.transform[k]));
-    const onHere = stateProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+    /* The lit state and the title follow the SAME judgement as the click (queue 419). Before this the
+       diamond titled itself "Remove keyframe at playhead" on the strength of a tilt key while rotation
+       had none — the button announced the wrong action before you touched it. */
+    const litProps = (function () {
+      const p = stateProps.filter(k => MT_PRIMARY[mode] && MT_PRIMARY[mode].indexOf(k) >= 0);
+      return p.length ? p : stateProps;
+    })();
+    const onHere = litProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
     kfBtn.addEventListener('click', () => {
@@ -3782,7 +3789,21 @@ window.FM = window.FM || {};
       // rebuilt when the row selection changes underneath a held panel.
       const selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
       const only = (selK && props.indexOf(selK) >= 0) ? [selK] : null;
-      const judge = only || props;
+      /* WHAT THE BUTTON IS *ABOUT* DECIDES ADD-vs-REMOVE — not every channel in the panel (queue 419,
+         finished 22 Aug). `judge` was the whole of MT_PROPS[mode], so a keyframe on a channel this
+         button is not for could flip it into REMOVE. Measured, and it destroys work: with rotationX
+         animated 20→60, `rotation` static and the playhead on the tilt's first key, one press deleted
+         that key — the tilt collapsed to 60 everywhere and the animation was gone — while `rotation`,
+         the thing the button is for, was never keyed at all. A second press then re-keyed the tilt flat.
+         That is verbatim the half this entry ticked (*"clearing a spin key took the tilt's"*), and the
+         v11.33 POLISH-LOG told him it was fixed — true only when a ROW is selected, which it is not by
+         default (`kfSel` is null and every panel or mode change clears it).
+         Judged on the PRIMARY channels, the button says Add when rotation has no key there, and adds —
+         which is what it looks like it will do. What it ACTS on is unchanged: the add path still sweeps
+         in any already-animated channel so rotation and a moving tilt stay in step, and remove still
+         reaches every channel so a stray key can always be cleaned up. */
+      const primary = props.filter(k => MT_PRIMARY[mode].indexOf(k) >= 0);
+      const judge = only || (primary.length ? primary : props);
       const add = !judge.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
       // Add: only the mode's primary channels + any extra channel already in use (animated or
       // moved off its default). Remove: every channel, so stray keyframes can always be cleaned up.
