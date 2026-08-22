@@ -38286,4 +38286,72 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   });
+
+  /* Queue 47, the next piece of untested ground: a seek that does not land in time.
+   * `seekVideo` waits 1500ms for the video to reach the frame and then gives up and resolves ANYWAY,
+   * so the compositor draws whatever the element still happens to be showing — a duplicate of the
+   * frame before, written into the file as if it were the real one. Nothing recorded it.
+   * That is not hypothetical: the wait was raised from 250ms to 1500ms because it "dropped frames on
+   * big 4K seeks" (#15) — this exact failure, seen, and answered by widening the window rather than by
+   * noticing when it is still missed. A wider window lowers the odds and cannot reach zero; a slow
+   * phone or a long 4K clip is precisely where it will not.
+   * Ezra asked for export to be made SAFER, and safer here does not mean the seek always lands — it
+   * means the export stops quietly claiming footage it never rendered. */
+  test('export: frames the video could not reach in time are counted, not passed off as real (queue 47)', { item: '47' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), dur0 = P.duration, w0 = P.width, h0 = P.height, toast0 = FM.toast;
+    const toasts = [];
+    try {
+      const runWith = async function (seekLands) {
+        FM.toast = function (m) { toasts.push(String(m)); };
+        P.duration = 0.2; P.width = 64; P.height = 64;
+        FM.scene.layers.length = 0;
+        const V = FM.makeLayer('video', { name: '4K clip' });
+        V.start = 0; V.duration = 0.2; V.trimStart = 0; V.trimEnd = 0.2;
+        FM.scene.layers.push(V);
+        /* A stand-in element that TAKES a currentTime but decides whether 'seeked' ever arrives. That
+           is the whole difference between a frame that is real and a frame that is a repeat, and it
+           cannot be staged with a real <video> — a real one always lands eventually, which is why this
+           has never been caught. */
+        const el = {
+          error: null, readyState: 2, currentTime: 0, videoWidth: 64, videoHeight: 64,
+          addEventListener: function (n, f) { if (seekLands && n === 'seeked') setTimeout(f, 5); },
+          removeEventListener: function () {},
+        };
+        FM.media.set(V.id, { file: new Blob(['v']), duration: 5, el: el, audioBuffer: null });
+        FM._lastStaleSeeks = undefined;
+        let blob = null;
+        await FM.exporter.run({ fps: 10, scale: 1, name: 'probe', onReady: async r => { blob = r.blob; } });
+        return { blob: blob, stale: FM._lastStaleSeeks };
+      };
+
+      const missed = await runWith(false);
+      /* The render must SURVIVE a missed seek. Reporting the problem by throwing the export away would
+         be a worse bug than the one being fixed. */
+      if (!missed.blob) throw new Error('a seek that never landed sank the whole export — the video is gone');
+      if (!missed.stale) throw new Error('nothing was recorded at all (_lastStaleSeeks is ' + missed.stale + ') — the miss is still invisible, which is the bug');
+      if (!missed.stale.length) throw new Error('a frame was rendered before the video ever reached it and the tally is EMPTY — the file carries a repeated frame passed off as real');
+      if (!missed.stale.join(' | ').includes('4K clip')) throw new Error('the miss was counted but does not name the layer: ' + JSON.stringify(missed.stale));
+      if (!toasts.some(t => /repeat the frame/i.test(t))) throw new Error('frames were repeated and NOTHING was said on screen: ' + JSON.stringify(toasts));
+
+      /* THE CONTROL, and it is the important half. A counter that fires on every export would satisfy
+         every assertion above while telling him his good exports are broken — and a warning that cries
+         wolf stops being read, which is how the last diagnostic died. Same scene, same stand-in, the
+         one difference being that the seek lands. */
+      toasts.length = 0;
+      const landed = await runWith(true);
+      if (!landed.blob) throw new Error('the control export produced nothing, so the comparison above proves nothing');
+      if (!landed.stale) throw new Error('the control recorded ' + landed.stale + ' rather than an empty tally — the watch did not run at all on this export');
+      if (landed.stale.length) throw new Error('an export whose seeks ALL landed was reported as having ' + landed.stale.length + ' repeated frame(s): ' + JSON.stringify(landed.stale));
+      if (toasts.some(t => /repeat the frame/i.test(t))) throw new Error('a clean export warned about repeated frames anyway: ' + JSON.stringify(toasts));
+    } finally {
+      FM.toast = toast0;
+      FM.scene.layers = layers0;
+      P.duration = dur0; P.width = w0; P.height = h0;
+      FM._lastStaleSeeks = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
 })();

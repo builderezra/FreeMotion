@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.67
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.68
 >
-> **State:** v11.67, **833 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.68, **834 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4112,8 +4112,24 @@ better still, keep working inside the turn rather than parking work for a later 
       project lands exactly there, which is precisely the export he has not tried. It now flags
       `mix-failed` and toasts "exporting WITHOUT SOUND", and the render still completes — a dead
       soundtrack must never bin minutes of video (that is asserted too).
-      Both mutation-checked. **Still untested ground for a later tick:** backgrounding the app
-      mid-export, an export interrupted by a call, and genuinely long renders.
+      Both mutation-checked.
+
+      **✅ SECOND SAFETY PIECE — v11.68: a missed seek was passing a REPEATED FRAME off as real.**
+      `seekVideo` waits 1500ms for a clip to reach the frame and then resolves ANYWAY, so the compositor
+      draws whatever the element still shows — a duplicate of the previous frame, written into the file
+      as if it were the footage. Nothing recorded it. Not hypothetical: that wait was raised from 250ms
+      to 1500ms because it "dropped frames on big 4K seeks" (#15) — this failure, observed, and answered
+      by widening the window instead of noticing when it is still missed. Wider lowers the odds and
+      cannot reach zero. Misses are now counted and named (layer + timestamp), reported once at the end.
+      **A second bug fell out of mutation-testing the first:** a landed seek never cancelled its 1500ms
+      timer, so every frame of a long export parked a live timer AND a leftover from one export could
+      fire during the next, reporting repeated frames on a clean render. Caught because the "always
+      report" mutation SURVIVED — the control could not see it. Fixed; both directions now caught.
+
+      **Still untested ground for a later tick:** backgrounding the app mid-export, an export
+      interrupted by a call, and genuinely long renders. (Note for whoever takes it: LOOP.md rule 11
+      says the preview pane reports `document.hidden: true` — it reports FALSE now, measured at v11.68,
+      so the backgrounded case cannot be staged just by measuring in the pane.)
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

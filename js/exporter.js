@@ -158,18 +158,54 @@ window.FM = window.FM || {};
   // exposed for tests/_mp4sink.html, which checks the assembly against a dense reference buffer
   FM._createMp4Sink = createMp4Sink;
 
-  function seekVideo(m, time) {
+  /* WHEN A SEEK DOES NOT LAND, THE EXPORT SHIPS THE WRONG FOOTAGE AND USED TO SAY NOTHING (queue 47,
+   * v11.68). The 1500ms below is a safety net, and when it fires this resolves anyway — so the
+   * compositor draws whatever frame the element still happens to be showing. That is a DUPLICATE of a
+   * frame you already have, sitting in the file as if it were the real one.
+   * This is not hypothetical: the net was raised from 250ms to 1500ms precisely because it "dropped
+   * frames on big 4K seeks" (#15), which is this failure, observed, and fixed by making the window
+   * wider rather than by noticing when it is still missed. A wider window lowers the odds; it cannot
+   * reach zero, and a slow phone or a long 4K clip is exactly where it will not.
+   * So the misses are COUNTED and named, on the same terms as the audio drops: it cannot make a seek
+   * land, but it can stop the export quietly claiming footage it never rendered. */
+  let _staleSeeks = [];
+
+  function seekVideo(m, time, label) {
     return new Promise(res => {
       const el = m.el;
       if (!el || el.error || el.readyState === 0) { res(); return; }   // undecodable / not ready → seek can never fire; don't burn 1500ms × every frame (export looked hung for 20+ min)
       const target = Math.min(Math.max(time, 0), Math.max(0, (m.duration || 0) - 0.001));
       if (Math.abs(el.currentTime - target) < 1e-4) { res(); return; }  // already on the frame (a no-op seek to a clamped-frozen last frame emits no 'seeked')
-      let done = false;
-      const finish = () => { if (done) return; done = true; el.removeEventListener('seeked', finish); res(); };
+      let done = false, netTimer = 0;
+      /* THE NET IS CANCELLED WHEN THE SEEK LANDS, which it never used to be. Found by a mutation run,
+         not by reading: a landed seek left its 1500ms timer alive, so on a long export every frame
+         parked a live timer, and — the part that actually bites — a timer from one export could fire
+         during the NEXT one and report a repeated frame on a render that was perfectly clean. A
+         diagnostic that cries wolf stops being read, which is how the last one died. */
+      const finish = () => { if (done) return; done = true; clearTimeout(netTimer); el.removeEventListener('seeked', finish); res(); };
       el.addEventListener('seeked', finish);
       try { el.currentTime = target; } catch (e) { finish(); }
-      setTimeout(finish, 1500); // safety net only — export is offline, so give a slow/large seek time to land the right frame before giving up (was 250ms, which dropped frames on big 4K seeks) (#15)
+      // safety net only — export is offline, so give a slow/large seek time to land the right frame
+      // before giving up (was 250ms, which dropped frames on big 4K seeks) (#15)
+      netTimer = setTimeout(() => {
+        _staleSeeks.push((label || 'a video layer') + ' at ' + target.toFixed(2) + 's');
+        finish();
+      }, 1500);
     });
+  }
+
+  function resetSeekWatch() { _staleSeeks = []; FM._lastStaleSeeks = null; }
+
+  /* Said once at the end, not per frame — a 4K export that misses half its seeks would otherwise
+     produce hundreds of identical toasts. The console gets the full list; the toast gets the count,
+     because the count is the part that changes what he does about it. */
+  function reportSeekWatch() {
+    FM._lastStaleSeeks = _staleSeeks.slice();   // the suite reads this rather than scraping toasts
+    if (!_staleSeeks.length) return;
+    console.warn('[export] ' + _staleSeeks.length + ' frame(s) were rendered before the video reached the '
+      + 'right position, so they repeat the frame before them:\n  · ' + _staleSeeks.join('\n  · '));
+    if (FM.toast) FM.toast(_staleSeeks.length + ' frame' + (_staleSeeks.length === 1 ? '' : 's')
+      + ' could not be read from the video in time and repeat the frame before — see the console', 6000);
   }
 
   async function seekAllVideos(scene, t) {
@@ -179,7 +215,7 @@ window.FM = window.FM || {};
       const local = FM.layerLocalTime(layer, t);
       if (local == null) return;
       const m = FM.media.get(layer.id);
-      if (m) ps.push(seekVideo(m, local));
+      if (m) ps.push(seekVideo(m, local, layer.name || layer.type || layer.id));
     });
     await Promise.all(ps);
   }
@@ -639,6 +675,7 @@ window.FM = window.FM || {};
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
       FM._exportCancel = false;
+      resetSeekWatch();
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
@@ -863,6 +900,7 @@ window.FM = window.FM || {};
 
       await encoder.flush();
       encoder.close();
+      reportSeekWatch();   // every frame is in the encoder now, so the tally is final
       // Save the last partial batch. The export is about to finalize, but finalizing is exactly where a
       // long render is most likely to be OOM-killed, and a resume should not have to redo the tail.
       if (recorder) { try { await recorder.settle(); } catch (e) {} }
@@ -940,6 +978,7 @@ window.FM = window.FM || {};
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
       FM._exportCancel = false;
+      resetSeekWatch();
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
@@ -998,6 +1037,7 @@ window.FM = window.FM || {};
         throw new Error('FRAMES_TOO_BIG');   // caller message: shorten the range, drop the fps, or lower the resolution
       }
       FM._exportCancel = false;
+      resetSeekWatch();
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
