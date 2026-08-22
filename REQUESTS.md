@@ -25,7 +25,7 @@
 > | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
 > | **387** | Phone lag: is scrubbing fine and *playback* bad, or are both bad? That one word decides where I look | — |
 > | **391** | The Edit Text menu is "still a bit broken" — which part? | — |
-> | **342** | What do you try to do with elements that you can't? | — |
+> | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
 >
 > **Two only your phone can answer, and both are about work already finished:**
@@ -41,6 +41,12 @@
 > **Nothing is being quietly dropped.** Everything above is written up in full below, with what was
 > measured and what is still unknown. If you'd rather I just picked defaults and shipped, say so and I
 > will — the recommendations in the right-hand column are what I'd choose.
+>
+> ⚠️ **Three of the rows above are still OPEN questions rather than a pick-one (387, 391, 215), which is
+> not what you asked for.** You said *"I just want options. Yu can just say recommended next to the best
+> option"*. 342 was one of those and is fixed; the other three get the same treatment as each comes up
+> the list. If a question here ever reads as homework, that is a bug in how I asked it, not something
+> for you to solve.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
@@ -7572,8 +7578,23 @@ better still, keep working inside the turn rather than parking work for a later 
       an element that is already IN a project and having the change follow, or sharing them as files
       (which is where **343** landed).
       **Do not guess at clause 3 and do not rebuild clauses 1-2.** They work.
-      ⏳ **WAITING ON EZRA — what does he try to do with elements that he cannot?** Everything he has
-      described concretely is built and verified. Options were put to him rather than an open question.
+      ⏳ **WAITING ON EZRA — but the question was ASKED BADLY, and that is my fault, not his.**
+      **22 Aug.** He has now declined this twice — *"idk what could it ask"*, and before that a shrug —
+      and both times what he was handed was an OPEN QUESTION: "what do you try to do that you can't?"
+      His standing instruction of 21 Aug is explicit: *"I just want options. Yu can just say recommended
+      next to the best option"*. This entry even wrote down "candidates worth putting to him as options
+      rather than an open question" — and then left the open question in the block he actually reads.
+      So the entry was not blocked on him. It was blocked on me asking properly.
+      **Re-asked as a pick-one, with a recommendation:**
+      | | what it would mean |
+      |---|---|
+      | **A — preview before you add** ⭐ *recommended* | hold an element card and see it play, so you know which one it is before it lands in your project. Today a card is a name, a layer count and a still of the project it came from — fine with three elements, useless with thirty. Cheapest of these and the one that makes the tab worth opening. |
+      | **B — organise them** | rename, reorder, folders. Real work, and it only starts paying once you have a lot of elements. |
+      | **C — live link** | edit an element and every project already using it updates. Powerful, and the one with teeth: it can silently change a project you finished weeks ago. I would want to build it with an explicit "update the copies?" step rather than silently. |
+      | **D — share them as files** | export/import an element. This is really **343**, so picking it just merges the two. |
+      | **E — nothing, it is fine now** | a completely valid answer. Clauses 1 and 2 shipped and were driven end to end; "a lot more effort" may simply have been about the shell it used to be. |
+      **E is not a cop-out answer** — it closes the entry honestly, and it is genuinely possible that what
+      he wanted is already there. **One letter closes or directs this.**
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
       **STATUS: 💡 LATER — long-term ideas only**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
