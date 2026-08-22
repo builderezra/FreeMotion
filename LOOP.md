@@ -669,6 +669,24 @@ artefact, never the app — a saturating parameter range, a panel that was not o
 **When a bug is deterministic, persistent and convincing but nobody has reported it, weigh the instrument
 first.** He has never once mentioned a seam.
 
+**🔴 23 Aug — I WITHDREW MY OWN "SOLVED" FROM THE PREVIOUS TICK. It was over-claimed.**
+Last tick I proved my probe squashed a 9:16 project into a square canvas, found the difference vanished at
+full resolution, and then wrote *"this also explains the original feature fault"*. **It does not.**
+`rasterFor` uses `Math.min(TW/w, TH/h)` — a UNIFORM scale. `fx-thumbs` never squashed anything, so the
+artefact I found was never on the real path. I fixed a phantom and announced it as the answer, in his file
+and to his face.
+**PROVING YOUR INSTRUMENT WAS FAULTY DOES NOT PROVE IT WAS THE ONLY FAULT.** Two bugs can wear the same
+symptom, and finding one is the moment you are most likely to stop looking.
+✅ **The real cause, re-run on a uniform 74x132 raster and located properly:** 50 differing pixels, all
+solid interior, on exactly **two rows — the shape's top and bottom boundary**, up to 10 levels. Enabling
+an effect routes the layer through an offscreen plate; at a reduced raster the boundary falls on a
+fraction of a pixel and the plate path disagrees with the direct path on those rows. **Zero at full
+resolution**, where the boundary lands on integers — which is exactly why the full-res check misled me.
+**Rule 14 rewritten accordingly, with the retraction kept in it**, because the wrong version of that rule
+would have told the next session to compare at full resolution — expensive, and not the actual fix.
+The rebuild is a THRESHOLD, and the calibration is measured: boundary noise ~0.5% of pixels, a real effect
+~15%. Still to confirm: that a genuinely SUBTLE effect clears the threshold.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
