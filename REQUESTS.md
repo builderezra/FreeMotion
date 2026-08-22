@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.87
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.88
 >
-> **State:** v11.87, **860 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.88, **861 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8728,6 +8728,23 @@ better still, keep working inside the turn rather than parking work for a later 
       settings does not rescale existing layer geometry, which is a separate job and is noted as one.
       A second allocation of the same kind went with it: the onion-skin ghost plate was project-sized
       and REALLOCATED every frame (48 MB thrown away twice a frame on his project).
+
+      ✅ **v11.88 — AND NOW THE APP TELLS HIM, WHICH IS THE HALF THAT NEVER SHIPPED.** Both answers to
+      Finding 1 have existed for a while: v9.27 caps the import so it cannot happen again, and v9.28's
+      **Scale the layers to fit** brings an existing one down with the work intact. The instruction to
+      use it lives in THIS FILE — *"open the big project, Canvas settings, pick a smaller resolution,
+      Apply"* — which is a file he does not read, about a project the app can identify by itself in one
+      comparison. That is the same failure as queue 129's `console.warn`: **the app knew and did not
+      say.** It is also why Finding 1 has sat here as *"still unanswered and still the biggest number in
+      that report"* while the fix was sitting in the cog.
+      Opening such a project now toasts *"This project is 12.2 megapixels — tap to fix the lag"*, and the
+      tap explains the repair and opens Canvas settings for him.
+      ⚠️ **It can only fire on a project BIGGER THAN THE APP'S OWN PICKER OFFERS** — the exact condition
+      `fitProjectSize()` already refuses to create. So it can never scold a comp the app made, or a size
+      he deliberately typed in that is within range; only the ones built unasked before v9.27, which is
+      the case it exists for. Once per project per session, and never mid-export. Three of the five
+      assertions are controls (a 2160p comp, an ordinary 1080×1920, and mid-export), and the mutation
+      that turns `>` into `>=` is caught by the 2160p one.
 
       **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
       Verbatim:

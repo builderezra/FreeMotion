@@ -1313,6 +1313,7 @@ window.FM = window.FM || {};
       if (!ok) { FM.scene.project = Object.assign(FM.newScene().project, { name: (this.list().find(p => p.id === id) || {}).name || 'Untitled' }); if (FM.refreshAll) FM.refreshAll(); }
       if (FM.selectLayer) FM.selectLayer(null);
       if (FM.history) FM.history.reset();
+      if (FM.warnOversizeProject) FM.warnOversizeProject();
       return true;
     },
     async create(opts) {

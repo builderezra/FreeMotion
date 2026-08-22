@@ -39778,4 +39778,55 @@
       P.width = saved.w; P.height = saved.h;
     }
   });
+
+  /* ═══ THE OVERSIZE-PROJECT WARNING (queue 202 Finding 1, and 125 / 95).
+     His own on-device report opens with a 12.2-megapixel project — a photograph's dimensions,
+     inherited from the first image imported into an empty one. The cap (v9.27) and the repair
+     (v9.28) both shipped; nobody ever told HIM. The risk in telling him is scolding a project that
+     is perfectly fine, so the controls are the point. */
+  test('a project bigger than the app would ever build says so, once, and offers the repair (queue 202)', { item: '202' }, async function () {
+    if (typeof FM.warnOversizeProject !== 'function') throw new Error('FM.warnOversizeProject is missing');
+    const P = FM.scene.project;
+    const saved = { w: P.width, h: P.height, n: P.name };
+    const realToast = FM.toast;
+    let msgs = [];
+    FM.toast = (m, ms, onTap) => { msgs.push({ m: m, tappable: typeof onTap === 'function', onTap: onTap }); };
+    try {
+      // HIS PROJECT, exactly: a stock iPhone still imported into an empty comp.
+      P.name = 'probe'; P.width = 3024; P.height = 4032;
+      FM._resetOversizeWarning();
+      if (FM.warnOversizeProject() !== true) throw new Error('a 12.2-megapixel project produced no warning at all — this is Finding 1 of his own report');
+      if (!/12\.2 megapixel/.test(msgs[0].m)) throw new Error('the warning did not name the size: ' + msgs[0].m);
+      if (!msgs[0].tappable) throw new Error('the warning was not tappable, so the repair is unreachable from a phone');
+      msgs[0].onTap();
+      if (!/Scale the layers to fit/.test((msgs[1] || {}).m || '')) throw new Error('tapping it did not explain the repair that keeps his work in place');
+
+      // ONCE per project per session — a warning that nags every open gets dismissed forever.
+      msgs = [];
+      if (FM.warnOversizeProject() !== false || msgs.length) throw new Error('the warning fired twice for the same project in one session');
+
+      /* CONTROL 1 — the largest size the app's OWN picker offers. 2160p portrait is a legitimate,
+         deliberately chosen comp and must never be scolded. */
+      msgs = []; FM._resetOversizeWarning();
+      P.width = 2160; P.height = 3840;
+      if (FM.warnOversizeProject() !== false || msgs.length) throw new Error('a 2160p project — the top size the app itself offers — was called oversize');
+
+      // CONTROL 2 — an ordinary phone comp.
+      msgs = []; FM._resetOversizeWarning();
+      P.width = 1080; P.height = 1920;
+      if (FM.warnOversizeProject() !== false || msgs.length) throw new Error('an ordinary 1080x1920 project was called oversize');
+
+      /* CONTROL 3 — never mid-export. The render is already using every core it has, and a toast
+         about project size at that moment is noise pointed at the wrong thing. */
+      msgs = []; FM._resetOversizeWarning();
+      P.width = 3024; P.height = 4032; FM._exporting = true;
+      const fired = FM.warnOversizeProject();
+      FM._exporting = false;
+      if (fired !== false || msgs.length) throw new Error('the warning fired in the middle of an export');
+    } finally {
+      FM.toast = realToast; FM._exporting = false;
+      P.width = saved.w; P.height = saved.h; P.name = saved.n;
+      FM._resetOversizeWarning();
+    }
+  });
 })();

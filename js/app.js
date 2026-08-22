@@ -1938,6 +1938,46 @@ window.FM = window.FM || {};
    * bigger can still type it into Canvas settings — this governs only the size the app picks unasked.
    */
   const MAX_AUTO_SHORT = 2160;
+
+  /* ═══ TELL HIM HIS PROJECT IS THE PROBLEM, ON THE DEVICE (queue 202 Finding 1, and 125 / 95).
+   *
+   * Finding 1 of his own on-device report is a **12.2-megapixel project** — 3024x4032, a photograph's
+   * dimensions, inherited from the first image he imported, on a four-core phone. Every frame
+   * composites 12.2M pixels. It is still described in queue 202 as *"the biggest number in that
+   * report"*, and both halves of the answer already shipped: v9.27 capped the import so it cannot
+   * happen again, and v9.28 added **Scale the layers to fit** so an existing one can be brought down
+   * with the work intact.
+   *
+   * What never shipped is anyone TELLING HIM. The instruction lives in REQUESTS.md — *"open the big
+   * project, Canvas settings, pick a smaller resolution, Apply"* — which is a file he does not read,
+   * about a project the app can identify by itself in one comparison. Same failure as queue 129's
+   * console.warn: the app knows and does not say.
+   *
+   * The bar: only a project BIGGER THAN THE APP'S OWN PICKER OFFERS, which is exactly the condition
+   * fitProjectSize() already refuses to create. So this can never fire on a comp the app made, or on
+   * anything a person deliberately typed in that is within range — only on the ones that were built
+   * unasked before v9.27, which is the case it exists for. Once per project per session. */
+  let _oversizeTold = '';
+  FM.projectIsOversize = function (P) {
+    P = P || (FM.scene && FM.scene.project);
+    if (!P || !P.width || !P.height) return false;
+    return Math.min(P.width, P.height) > MAX_AUTO_SHORT;
+  };
+  FM.warnOversizeProject = function () {
+    const P = FM.scene && FM.scene.project;
+    if (!P || FM._exporting || !FM.projectIsOversize(P)) return false;
+    const key = (P.name || '') + ':' + P.width + 'x' + P.height;
+    if (_oversizeTold === key) return false;          // already said, this project, this session
+    _oversizeTold = key;
+    const mp = (P.width * P.height / 1e6).toFixed(1);
+    if (FM.toast) FM.toast('This project is ' + mp + ' megapixels — tap to fix the lag', 9000, () => {
+      if (FM.toast) FM.toast('Every frame draws ' + P.width + '×' + P.height + '. Pick a smaller size under Size — leave “Scale the layers to fit” on and your work moves with it.', 11000);
+      const cv = document.getElementById('btn-canvas');
+      if (cv) setTimeout(() => cv.click(), 400);
+    });
+    return true;
+  };
+  FM._resetOversizeWarning = function () { _oversizeTold = ''; };
   const evenDim = v => Math.max(2, Math.round(v / 2) * 2);
   FM.fitProjectSize = function (w, h) {
     w = Math.max(2, Math.round(w || 0)); h = Math.max(2, Math.round(h || 0));
