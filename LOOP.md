@@ -179,6 +179,26 @@ before, because it is no longer chasing an error that did not exist.
 **And "noted, not fixed" in an entry is a lead, not a closed door.** Re-measure those before assuming a
 later release swept them up: two of #148's costs had been fixed by other work, this one had not.
 
+**✅ 22 Aug — #202: the quality ladder is NOT broken, and two measuring traps nearly said it was.**
+Measured end to end in the real app with a pixel-scaled cost: **tier 0 → 1 → 2 → 3, 497k → 130k pixels,
+frame gap 101ms → 32.6ms.** His tier-0-at-10.7fps sample is the other diagnosis v10.18 named — the ladder
+never being ASKED — not a ladder that refuses to act.
+**TRAP 1: state that persists across measurements.** The payoff latch (`_locked`) lives for the life of
+the page, so my second probe inherited it from my first and read "the ladder never steps down". That is a
+bug that was not there. **A second measurement in one page session is not independent — check for carried
+state before believing a negative result.**
+**TRAP 2: an instrument that cannot show the effect.** A flat burn does not shrink when pixels are shed,
+so the ladder is RIGHT to revert — a test built on one reports a defect that does not exist. Same family
+as v11.70's too-clean fake and #96's mock: **when a measurement says "broken", check the instrument
+before the code.**
+**And check for an existing test before writing one.** A test already pinned the DECISION (and better —
+it drives `_notePlaybackCost` directly rather than playing for real). Mine survived only because it
+answers a different question: is the ladder WIRED? Cutting the play loop's one feeding line leaves the
+existing test green and is caught by the new one alone. I proved that with a mutation before shipping it,
+and DELETED my second test, which was both redundant and timing-flaky.
+**`tools/.test-floor` caught the deletion** — a removed test reads as green because nothing failed. Lower
+it deliberately (`echo N > tools/.test-floor`) or the gate refuses.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
