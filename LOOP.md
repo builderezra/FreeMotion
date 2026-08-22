@@ -625,6 +625,22 @@ deep-clones the layer, which may be what confuses it). **Unknown cause + shipped
 · **Withdrawing beats shipping with a known flaw**, and the honest POLISH-LOG entry says so plainly rather
   than quietly reverting.
 
+**🔬 23 Aug — chased #477's withdrawal cause. NOT SOLVED, and the tick's real value is what got RETRACTED.**
+ESTABLISHED: it is not my feature and not `fx-thumbs`. A plain `FM.renderScene` reproduces it — enabled
+vs disabled differ by 308 bytes after a param change, and it persists. Setting the same value BEFORE the
+first render gives 0. So the trigger is the CHANGE, not the value.
+**TWO OF MY OWN FOLLOW-UP PROBES WERE INVALID AND ARE WITHDRAWN — both would have been believed:**
+· the "is it the antialiased edge?" probe set the param before rendering, so it measured the HEALTHY case
+  and returned 0 differing pixels;
+· the "is the cache keyed on layer id?" probe swept brightness **1.3 → 2.2, and both saturate to 255** on
+  that fill, so the two renders were identical for a reason with nothing to do with caching.
+**RULE: A PARAMETER SWEEP ACROSS A CLIPPED RANGE MEASURES NOTHING.** Check the fixture actually moves the
+output before drawing any conclusion from two values — the same shape as the "does the effect do anything"
+control this file already demands of tests, applied to throwaway probes, which is where it keeps slipping.
+**AND: three probes in one tick disagreed with each other. That is the signal to STOP and report**, not to
+run a fourth. Recorded what is established, what is retracted, and the one narrow next step (bisect the
+gap between "set before render" and "changed after render", which reproduces on demand).
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
