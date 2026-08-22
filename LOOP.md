@@ -707,6 +707,23 @@ only part of the layer) collapsed it to 2.3×, with three effects landing exactl
 **Measuring the plan cost one tick; building it would have shipped something that calls every shadow
 effect dead.**
 
+**✅ v11.81 — #477 SHIPPED ON THE SECOND ATTEMPT. Every design decision was forced by a measurement.**
+Full project resolution (reduced-raster noise is 50px, vignette is 115, three shadow effects are exactly
+50 — no threshold works; at full size noise is ZERO). Measured only after a 400ms settle, never on a row
+build. Painted IN PLACE. A 45ms budget, and silence rather than a stutter when it blows.
+**THE SUITE CAUGHT THE ONE I DID NOT SEE COMING:** the settle timer called `FM.inspector.refresh()`, which
+REBUILDS the row — and 400ms after a change lands squarely inside a press-and-hold, cancelling the drag
+that was arming. *"an OPEN effect row can still be dragged to reorder"* went red. **An async callback that
+rebuilds UI will land inside a gesture; update in place instead.**
+**AND A MUTATION SURVIVED FOR A GOOD REASON, which changed the test.** Making the row compute inline again
+passed — because with a stable full-res answer there is no flicker left to detect. The real cost of
+computing inline is two FULL renders per slider step, so the test now COUNTS CALLS and asserts zero.
+**When a mutation survives, ask what the fix actually bought:** the old symptom was gone, so the old
+assertion had nothing to see, and the right assertion was about cost, not appearance.
+**Four ticks on one feature, and it was worth it:** attempt one shipped a plausible-looking check that
+was wrong in a way only real use exposed. The measurements that killed the threshold design (vignette at
+2.3x the floor) would never have shown up in a test written to confirm the design.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
