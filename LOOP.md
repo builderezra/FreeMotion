@@ -345,6 +345,20 @@ so it stayed out. **`tools/.buildable-audit.json` is a lead list; check its evid
 What came out of checking: a cleaner discriminator for any future recording — **two bars = playing, a
 triangle = stopped** — which settles it from the picture with no inference at all.
 
+**✅ 22 Aug — #391 merged into #98, and #98's last open clause SETTLED BY MEASUREMENT.**
+He had already answered #391 with *"i think we already discussed"* — and he was right. The entry claimed
+"no entry covers the Edit Text menu specifically"; #98 covers exactly it. **FOURTH consecutive tick where
+"waiting on Ezra" was wrong** (250 stale blocker, 342 badly-asked, 387 already-answered, 391 duplicate).
+#98 clause (c) said: *"either the pt value is not what is being drawn or the readout is lying — measure
+which"*. **Neither.** Ink height scales 2.03× for 2× the font and 4.00× for 4×, so the renderer is exact
+and the readout is honest. The text looks small because the default is `min(W,H)/6.75` = 160, which is
+8.3% of a 1920-tall frame — a taste call, now a pick-one in his block with a recommendation.
+**THE TRAP, and it nearly became a bug report: `FM.makeLayer('text')` reports a default of 96 in EVERY
+project size**, which reads exactly like "the aspect-aware default was never wired up". It is a bare
+fallback in `js/scene.js`; the real Add Text path passes the 6.75 figure explicitly. **The constructor
+and the app path disagree, so probing the constructor measures nothing about the app.** Check which entry
+point the user actually presses before believing a default.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
