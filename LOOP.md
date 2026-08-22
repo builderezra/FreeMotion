@@ -124,6 +124,23 @@ timer from one export can fire during the next and warn about repeats on a clean
 mutation is not always a weak test; sometimes it is the code telling you something you did not know.**
 Do not reach for a stronger assertion until you understand WHY it survived.
 
+**✅ v11.69 — #47's long-render ground: the save cap was DELETING the render, not just stopping the save.**
+Crash-resume caps persistence at 512 MB so a phone's storage does not fill. But `load()` also refused any
+CAPPED job — so passing the cap threw away every chunk already saved, on the longest renders, which are
+the dearest to redo and the likeliest to be killed. Measured: capped job, 5 good parts on disk, load()
+answering null, against a control under the cap that resumed fine.
+**THE PART WORTH REMEMBERING: an existing test asserted the OPPOSITE, and its reasoning had never been
+measured.** It said a capped resume would "produce a file with a gap in the middle". Resume restarts from
+the SAVED seam, not from where the dead run reached, so there is no gap. Proved end to end before
+touching it — 150 frames, capped at 60, killed at 100, resumed: exactly 90 frames rendered, 5s file,
+pixel-identical to a clean export at ten timestamps across the seam.
+**A red test blocking a change is a claim to CHECK, not an obstacle to route around and not an authority
+to obey.** `mutate.sh` refused to run against the red tree, which is what forced the question — the gate
+did its job. The test was corrected, not deleted: its first half was right.
+**And measure with an instrument that can see the thing.** I tried `performance.memory` on the audio mix
+first; AudioBuffers live off the JS heap, so 10s and 30s both read 0 MB growth. Those numbers were
+discarded rather than reported. A reading of zero is a reading about the instrument.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
