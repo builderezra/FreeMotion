@@ -1184,7 +1184,20 @@ window.FM = window.FM || {};
            from every other one, which is his second complaint in the same entry. Both come out here.
            The machinery was already right beside it: this pager is what the Shape tab uses. A library
            tab simply gets a page that holds exactly two rows, and the spill-over is the next page. */
-        if (isLib) perPage = Math.max(1, 2 * COLS);
+        /* THREE ROWS, not two (queue 473, v11.72). Ezra, with the dead band under the grid scribbled
+           over: *"Since you made the pictures smaller you can probably fit three rows in there now, an
+           extra row below, just take ur time and don't make anything worse"*.
+           THIS REVERSES QUEUE 358, WHICH ASKED FOR TWO — and the reversal is honoured rather than
+           argued because his objection there was to SCROLLING DOWN, not to the number: *"I just meant
+           two rows solid locked in then you scroll left and right to go to the other rows where the
+           spill over will be."* A third row that is equally locked in, with the spill-over still paging
+           sideways, satisfies that sentence and this one.
+           MEASURED BEFORE CHANGING, at 9:16 / 4:5 / 16:9 / 1:1 on a 390px phone: the library body is
+           260px, two rows of 64px tiles use ~136px of it, and the ~125px left over is the band in his
+           screenshot. Three rows come to ~208px and still fit, which is the "don't make anything worse"
+           half — a shorter sheet is the risk #431 was about, and this was checked against the tallest
+           stage (9:16), not just the aspect he happened to send. */
+        if (isLib) perPage = Math.max(1, 3 * COLS);
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';

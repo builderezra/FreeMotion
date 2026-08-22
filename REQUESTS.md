@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.71
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.72
 >
-> **State:** v11.71, **842 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.72, **843 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4524,6 +4524,34 @@ better still, keep working inside the turn rather than parking work for a later 
 ---
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
+
+- [ ] **473 — The media/audio library should be THREE rows now, not two.** (22 Aug, phone screenshot at
+      **STATUS: 🟢 READY — nothing is stopping this**
+      v11.71 with the empty band below the grid scribbled over.) His words, verbatim:
+      > Since you made the pictures smaller you can probably fit three rows in there now, an extra row below, just take ur time and don't make anything worse
+      ⚠️ **THIS REVERSES HIS OWN QUEUE-358 INSTRUCTION, and that must be said rather than quietly
+      obeyed.** #358, in his words: *"When I said I wanted the media and audio rows to be only two rows
+      instead of three I didn't mean two rows fitting on screen then you have to scroll down, I just
+      meant two rows solid locked in then you scroll left and right."* So two-rows-paged-sideways is
+      something he asked for explicitly, and this asks for three.
+      **Reading it as a change of mind, not a slip, because he gives a REASON:** *"since you made the
+      pictures smaller"* — the tiles did get smaller, and his screenshot shows a large dead band under
+      the two rows. #358's objection was to SCROLLING DOWN, not to the number three; a third row that is
+      "solid locked in" with the spill-over still paging sideways honours both sentences.
+      **"Don't make anything worse" is the constraint**, and the concrete risk is #431's: a shorter sheet
+      (a taller stage) has less room, and three rows there could squeeze the tiles or overflow. So this
+      is measured at real project aspects before shipping, not just at the one in his screenshot.
+      ✅ **DONE v11.72.** `perPage` for a library tab is `3 * COLS` instead of `2 * COLS`. Measured at
+      390px on 9:16 / 4:5 / 16:9 / 1:1 — the body is 260px in every case, and with 7+ clips page one
+      goes from 2 rows to **3**, the dead band from **124px to 52px**, nothing overflows, and the tab
+      row keeps all five labels (v11.71's fix, asserted here too so a third row cannot quietly undo it).
+      With 6 clips or fewer nothing changes — there is no third row to draw.
+      ⚠️ **TWO EXISTING TESTS ASSERTED TWO ROWS** — the queue-358 guards. They were UPDATED with the
+      reversal and his reason recorded in both, not deleted: what 358 ruled out was scrolling DOWN, and
+      that is untouched. A third test broke on its own control — its 9-clip fixture no longer overflowed
+      one page, so "every import is still reachable" would have stopped paging at all. Raised to 13,
+      sized to overflow whatever the row count is, so it cannot go quiet again.
+      **He can reverse this in one word** and it is flagged in POLISH-LOG rather than buried here.
 
 - [x] **168 — PC: kill the left side rail, move everything into the transport row. DONE v7.52.** (13 Aug, with two *(logged as #143 by mistake — that number was already used by an earlier shipped item, so it is #168 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #143.)*
       Studio screenshots at v6.86.) His words: *"on pc we can lokey remove the side bar, put export on the

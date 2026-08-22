@@ -1784,7 +1784,7 @@
     }
   });
 
-  test('add menu: every tab opens at the same height, and the library pages two rows at a time', { item: 'addtabs-height' }, function () {
+  test('add menu: every tab opens at the same height, and the library pages three rows at a time', { item: 'addtabs-height' }, function () {
     /* Queue 358, correcting queue 299 / v9.47 — and both of his complaints in that entry are one fault.
        "When I said I wanted the media and audio rows to be only two rows instead of three I didn't mean
        two rows fitting on screen then you have to scroll down, I just meant two rows solid locked in
@@ -1839,9 +1839,16 @@
         throw new Error('the Add sheet changes height by ' + (hi - lo) + 'px between tabs (' + seen.map(x => x.key + ' ' + x.h).join(', ') + ') — it jumps under your thumb every time you change tab');
       }
       seen.filter(x => x.lib).forEach(x => {
-        if (x.rows > 2) throw new Error('the ' + x.key + ' library page holds ' + x.rows + ' rows — he asked for two, with the spill-over one swipe sideways');
+        /* THREE since v11.72 (queue 473), not two. He reversed queue 358 himself, with a reason:
+           *"Since you made the pictures smaller you can probably fit three rows in there now, an extra
+           row below"*. What 358 actually ruled out was SCROLLING DOWN — *"I just meant two rows solid
+           locked in then you scroll left and right"* — and that is untouched: the page still holds a
+           whole number of locked rows and the spill-over still pages sideways. The number moved; the
+           rule did not. Kept as a CEILING rather than an equality so a page short of clips still
+           passes. */
+        if (x.rows > 3) throw new Error('the ' + x.key + ' library page holds ' + x.rows + ' rows — three is the cap, with the spill-over one swipe sideways');
       });
-      // Control: two rows only means something if there was MORE than two rows' worth to place.
+      // Control: the row cap only means something if there was MORE than a page's worth to place.
       const media = seen.filter(x => x.key === 'media')[0];
       if (!media || media.pages < 2) throw new Error('the media library fitted on one page (' + (media && media.pages) + ') — the fixture did not exercise the paging, so "two rows" was free');
     } finally {
@@ -34494,7 +34501,7 @@
      that body is content-sized — so it gained height a row at a time while every other tab stayed put.
      Capped, NOT truncated: showing only the newest four would satisfy "two rows" and quietly make every
      older import unreachable, and one-tap re-adding is the entire point of that list. */
-  test('the recent-clips grid opens at two rows and every import is still reachable', { item: 'addmenu-rows' }, async function () {
+  test('the recent-clips grid opens at three rows and every import is still reachable', { item: 'addmenu-rows' }, async function () {
     await atPhoneWidth(async function () {
       var settle = function () { return new Promise(function (r) { setTimeout(r, 250); }); };
       var realList = FM.mediaLib.list, realThumb = FM.mediaLib.getThumb;
@@ -34502,8 +34509,13 @@
         /* `audio: false` and real w/h ON PURPOSE. mediaLib.isAudio GUESSES from shape when the flag is
            absent, so a dimensionless fixture is filed as a song and lands in the Audio tab — leaving
            Media empty and this test measuring nothing. That cost a whole diagnosis pass. */
+        /* THIRTEEN, not nine. A page holds THREE rows of three since v11.72 (queue 473), so nine clips
+           now fit on one page and the "every import is still reachable" half — the whole point of this
+           test — would never page at all. Its own control caught that when the row count changed, which
+           is the control doing its job: a fixture sized to the old layout measures nothing in the new
+           one. Sized to overflow one page whatever the row count, so it cannot go quiet again. */
         var fake = [];
-        for (var i = 0; i < 9; i++) fake.push({ mid: 'f' + i, name: 'Clip ' + i, kind: 'video', audio: false, w: 640, h: 360, dur: 3 });
+        for (var i = 0; i < 13; i++) fake.push({ mid: 'f' + i, name: 'Clip ' + i, kind: 'video', audio: false, w: 640, h: 360, dur: 3 });
         FM.mediaLib.list = function () { return fake; };
         FM.mediaLib.getThumb = function () { return Promise.resolve(null); };
 
@@ -34534,7 +34546,8 @@
         if (!grid1) throw new Error('the Media tab has no paged grid to measure');
         var cols1 = getComputedStyle(grid1).gridTemplateColumns.trim().split(/\s+/).length;
         var rows1 = Math.ceil(grid1.children.length / cols1);
-        if (rows1 > 2) throw new Error('a Media page holds ' + rows1 + ' rows — he asked for two, with the rest one swipe sideways');
+        // Three since v11.72 (queue 473) — he reversed 358 himself; see the note on the other guard.
+        if (rows1 > 3) throw new Error('a Media page holds ' + rows1 + ' rows — three is the cap, with the rest one swipe sideways');
         if (body.querySelectorAll('.addmenu-page').length < 2) throw new Error('9 clips fitted on a single page — the fixture did not exercise the paging, so "two rows" was free');
 
         /* NOTHING IS LOST — asserted as REACHABILITY rather than against a particular element. The
@@ -38887,6 +38900,75 @@
 
       if (media.labels !== 5) throw new Error('the Media tab shows ' + media.labels + ' of 5 tab labels — the library has squeezed the tab row and clipped the words off, which is his screenshot exactly');
       if (media.rowH < shape.rowH - 1) throw new Error('the tab row is ' + media.rowH.toFixed(1) + 'px on Media against ' + shape.rowH.toFixed(1) + 'px on Shape — the panel below is eating the buttons above it');
+    } finally {
+      FM.mediaLib.list = realList;
+      FM.mediaLib.isAudio = realIsAudio;
+      host.remove();
+    }
+  });
+
+  /* Queue 473 — Ezra, with the dead band under the library grid scribbled over in orange:
+   * *"Since you made the pictures smaller you can probably fit three rows in there now, an extra row
+   * below, just take ur time and don't make anything worse"*.
+   * THIS REVERSES QUEUE 358, which asked for TWO rows, and the reversal is honoured rather than argued:
+   * his objection there was to SCROLLING DOWN, not to the number — *"I just meant two rows solid locked
+   * in then you scroll left and right to go to the other rows where the spill over will be"*. A third
+   * row that is equally locked in, with the spill-over still paging sideways, satisfies both sentences.
+   * MEASURED before changing: the library body is 260px, two rows of 64px tiles use ~136px, and the
+   * ~124px left over is the band in his screenshot. Three rows come to ~208px and still fit.
+   * The second assertion is the "don't make anything worse" half, and it is the one with history:
+   * queue 431 was a squeeze in this exact sheet, so a third row must not push the grid out of its body
+   * or come back at the tab row's expense. */
+  test('the media library shows three rows, and the third one does not overflow the sheet (queue 473)', { item: '473' }, async function () {
+    if (!FM.addMenu || typeof FM.addMenu.render !== 'function') throw new Error('FM.addMenu.render is not reachable');
+    if (!FM.mediaLib) throw new Error('FM.mediaLib is missing');
+    const realList = FM.mediaLib.list, realIsAudio = FM.mediaLib.isAudio;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;bottom:0;width:390px;height:420px;z-index:-1;opacity:0;display:flex;flex-direction:column;overflow:hidden';
+    document.body.appendChild(host);
+    try {
+      const fake = [];
+      for (let i = 0; i < 9; i++) fake.push({ mid: 'probe' + i, name: 'IMG_' + (4500 + i) + '.mov', kind: 'video', dur: 2 + i });
+      FM.mediaLib.list = () => fake.slice();
+      FM.mediaLib.isAudio = () => false;
+
+      FM.addMenu.render(host, { variant: 'sheet' });
+      await sleep(400);
+      const root = host.querySelector('.addmenu');
+      if (root) { root.style.height = '100%'; root.style.minHeight = '0'; }
+      const mainEl = host.querySelector('.addmenu-main');
+      if (mainEl) mainEl.style.minHeight = '0';
+      await sleep(250);
+
+      const row = host.querySelector('.addmenu-tabs');
+      if (!row) throw new Error('the sheet rendered no tab row');
+      const media = [].slice.call(row.children).find(t => /media/i.test(t.textContent || ''));
+      if (!media) throw new Error('no Media tab');
+      media.click();
+      await sleep(500);
+
+      const page1 = host.querySelector('.addmenu-page');
+      if (!page1) throw new Error('the Media tab drew no page');
+      const cards = [].slice.call(page1.querySelectorAll('.addmenu-card'));
+      if (!cards.length) throw new Error('the Media tab drew no library tiles, so this test is not exercising the grid');
+
+      // Rows are counted by distinct top edges — the layout's own answer, not the arithmetic we asked for.
+      const rows = Array.from(new Set(cards.map(c => Math.round(c.getBoundingClientRect().top)))).length;
+      if (rows < 3) throw new Error('page one of the library holds ' + rows + ' row(s) of tiles with 9 clips available — the third row he asked for is not there, and the band under the grid stays empty');
+
+      /* DON'T MAKE ANYTHING WORSE, half one: the grid must stay inside its body. Queue 431 was exactly
+         this sheet running out of height, so a third row is the obvious way to reintroduce it. */
+      const body = host.querySelector('.addmenu-body').getBoundingClientRect();
+      const lowest = Math.max.apply(null, cards.map(c => c.getBoundingClientRect().bottom));
+      if (lowest > body.bottom + 1) throw new Error('the third row hangs ' + (lowest - body.bottom).toFixed(1) + 'px out of the sheet body — the tiles are pushed out of view, which is worse than the empty band');
+
+      /* …and half two: it must not be paid for out of the tab row, which is the regression v11.71 fixed. */
+      const labels = [].slice.call(row.children).filter(tab => {
+        const b = tab.getBoundingClientRect(), l = tab.querySelector('.addmenu-lbl');
+        const lb = l ? l.getBoundingClientRect() : null;
+        return !!(lb && lb.height > 1 && lb.bottom <= b.bottom + 0.5);
+      }).length;
+      if (labels !== 5) throw new Error('the third row cost the tab row its labels (' + labels + ' of 5 readable) — that is queue 431 coming back');
     } finally {
       FM.mediaLib.list = realList;
       FM.mediaLib.isAudio = realIsAudio;
