@@ -4638,8 +4638,32 @@ better still, keep working inside the turn rather than parking work for a later 
       anything" must not mean "does any pixel differ". Boundary noise is **~50 of 9,768 pixels (0.5%)**; a
       real effect on a subject it can act on is **~15%** (channelremap on orange). Anything between one and
       a few percent separates them with an order of magnitude of headroom either way.
-      **Still to confirm before building:** that the same threshold holds for a genuinely SUBTLE effect —
-      the risk is calling something dead that a person can just about see.
+      🔴 **CONFIRMED AND THE THRESHOLD IDEA IS DEAD. Measured before building it, which is the point.**
+      At the 74x132 raster (9,768 px), noise floor = **50 px**:
+      | effect on a subject it can act on | differing px | vs noise |
+      |---|---|---|
+      | brightness 1.05 / channelremap on orange / lightglow | 2,300–2,352 | 47× — trivially separable |
+      | edgeglow | 1,502 | 30× |
+      | **vignette** | **115** | **2.3×** |
+      | **longshadow · radialshadow · dropshadow** | **exactly 50** | **1.0× — identical to noise** |
+      **Effects that act on EVERY pixel are 47× above the floor; effects that act on PART of a layer sit
+      on top of it.** Three shadow effects measure exactly the noise value, because their shadow falls
+      outside the layer and — on this setup — is black on black, which is queue 460's finding again. No
+      threshold can separate "invisible because it matches the background" from "boundary rounding" when
+      both are the same number.
+      ❌ **So a reduced raster cannot answer this question at all**, and erosion does not rescue it either
+      — measured: all 50 noise pixels survive a 2px erode, because the boundary rows are fully opaque with
+      opaque neighbours.
+      ✅ **WHICH LEAVES ONE VIABLE DESIGN, and it is now evidence-based rather than assumed: compare at
+      FULL PROJECT RESOLUTION, where the measured noise is exactly ZERO** (the layer's boundary lands on
+      integers). The cost is two full renders — for a heavy effect, a few hundred milliseconds — so it
+      must be **debounced and off the interaction path**: run it once a few hundred ms after the settings
+      stop changing, never on every panel refresh, and never while a slider is moving.
+      That also fixes the original symptom for free: the hint vanished *while dragging* precisely because
+      it was recomputed on every refresh. Not recomputing during interaction is now a requirement rather
+      than an optimisation.
+      **One more thing measured and worth keeping:** `brightness 1.02` changes **zero** pixels — below
+      8-bit quantisation. Flagging that as "does nothing" is CORRECT, not a false positive.
       **(23 Aug — not a new report from him; the conclusion of #460, which he has raised three times.)** — built the same day it was logged, because #460 is three reports old.**
       **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
       — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
