@@ -8692,6 +8692,25 @@ better still, keep working inside the turn rather than parking work for a later 
       4. **Questions go in the entry and the work continues.** Never block on him; re-ask the next time
          he speaks.
 
+      ✅ **22 Aug — CLAUSE 3 GOT A REAL GATE. "Quality tested as good as possible" now includes the
+      phone, which it never did.** This app is mobile-first and **every gate had only ever run the suite
+      at 1280px.** `tests/_cdp.py --width 380` is documented in the runner's own usage header and
+      **nothing had ever called it** — the option was dead.
+      That is not theoretical: **#431** (the Media/Audio library crushing the tab row and clipping its
+      labels) is a phone-layout bug that shipped, survived THREE passes which each measured a healthy row
+      at desktop width, and was only caught when he sent a screenshot and said *"nothings happened"*.
+      **First: is the suite even green at phone width? YES — 843/843 at 380px.** So a gate was possible
+      all along. `ship.sh` now runs the suite a second time at 380px and refuses on a red, saying
+      explicitly that a failure green at 1280 and red at 380 is a phone-only layout bug.
+      **Skipped when no shipped source changed** (`styles.css` / `index.html` / `js/`), because a
+      tests-only or docs-only commit cannot move a layout and paying five minutes to prove that every
+      time is how a gate gets switched off. Deliberately NOT an allowlist of "UI files" — such a list is
+      right the day it is written and stale by the next module. All eight cases checked.
+      ⚠️ **A CORRECTION TO MY OWN FINDING, recorded because it nearly became a fact.** I first reported
+      "the suite does not finish at 380px in 600s". It does. I had passed `--port 8779`, and `--port` is
+      the DEV SERVER port, not a debug port — so that run was pointed at nothing. **Same lesson as the
+      rest of this week: when a measurement says broken, check the instrument before the code.**
+
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
 - [x] **Voice recorder landed.** Add menu → Audio → "Record voice…". Built weeks ago, lost to the

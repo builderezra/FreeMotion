@@ -134,6 +134,35 @@ fi
 test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
 echo "✅ $SUM"
 
+# ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
+# "make sure everything is quality tested as good as possible" — and this app is MOBILE-FIRST, while
+# every gate here had only ever run the suite at 1280px. `tests/_cdp.py --width 380` has been in the
+# runner's own usage header for months and NOTHING has ever called it.
+# That is not theoretical: queue 431 (the Media/Audio library crushing the tab row and clipping its
+# labels) is a phone-layout bug that shipped, survived THREE passes that each measured a healthy row at
+# desktop width, and was only found when he sent a screenshot and said "nothings happened".
+# Skipped when no shipped source changed — a tests-only or docs-only commit cannot move a layout, and
+# paying five minutes to prove that on every one of them is how a gate gets switched off. Deliberately
+# NOT an allowlist of "UI files": such a list is right the day it is written and stale by the next
+# module, which is the failure mode this file exists to remove.
+PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
+if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
+  echo "→ running the suite again at PHONE width (380px)…"
+  POUT="$(python3 tests/_cdp.py --port 8777 --width 380 2>&1)"
+  PSUM="$(printf '%s' "$POUT" | grep -o '"summary": "[^"]*"' | head -1)"
+  if ! printf '%s' "$POUT" | grep -q '"ok": true'; then
+    echo "❌ SUITE IS RED AT PHONE WIDTH — not committing, not pushing."
+    echo "   It is GREEN at 1280px, so this is a layout that only breaks on a phone — which is the"
+    echo "   one shape of bug this app can least afford, and exactly how queue 431 shipped."
+    printf '%s' "$POUT" | grep -o 'FAIL[^"]*' | head -6
+    exit 1
+  fi
+  test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
+  echo "✅ phone $PSUM"
+else
+  echo "· no shipped source changed — skipping the phone pass"
+fi
+
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2
