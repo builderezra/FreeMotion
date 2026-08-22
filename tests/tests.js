@@ -38750,4 +38750,147 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   });
+
+  /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
+   * He asked for links first, which would have needed a server and broken the app's local-only premise
+   * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and
+   * instead just project files that people can download like what's already in"*.
+   * So a template now saves as the SAME `.fmotion.json` a project saves — which is the whole design:
+   * `importFile` already reads that format, so nothing new was invented and there is no second format
+   * to keep in step. What differs is where the bytes come from. A project serializes the LIVE scene
+   * through `FM.media`; a template has no live scene, so this walks the pack in IndexedDB instead. */
+  test('a template saves as a shareable file the importer can actually read (queue 343)', { item: '343' }, async function () {
+    if (!FM.templates || typeof FM.templates.exportFile !== 'function') throw new Error('FM.templates.exportFile is missing — templates cannot be shared at all');
+    const realCOU = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    let caught = null, downloadName = null, tid = null;
+    const madeProjects = [];
+    try {
+      URL.createObjectURL = b => { caught = b; return 'blob:test'; };
+      HTMLAnchorElement.prototype.click = function () { downloadName = this.download; };
+
+      const pid = await FM.projects.create({ name: 'SourceProj', width: 640, height: 360 });
+      madeProjects.push(pid);
+      FM.scene.layers.length = 0;
+      const badge = FM.makeLayer('shape', { shape: 'rect', name: 'Badge', x: 320, y: 180, shapeW: 120, shapeH: 60, fill: '#e91e63' });
+      badge.start = 0; badge.duration = 2; FM.scene.layers.push(badge);
+      const title = FM.makeLayer('text', { name: 'Title', text: 'Hello', x: 320, y: 80 });
+      title.start = 0; title.duration = 2; FM.scene.layers.push(title);
+      FM.scene.project.duration = 2;
+      FM.storage.markDirty(); await FM.storage.save(); await sleep(150);
+
+      if (!(await FM.templates.save('Probe Template', pid))) throw new Error('could not save a template to export — this test never reached its subject');
+      const meta = FM.templates.list().find(t => t.name === 'Probe Template');
+      if (!meta) throw new Error('the saved template is not in the index');
+      tid = meta.id;
+
+      if (!(await FM.templates.exportFile(tid))) throw new Error('exportFile reported failure on a template that exists');
+      if (!caught) throw new Error('exportFile wrote no file at all');
+      const obj = JSON.parse(await caught.text());
+
+      /* THE POINT OF THE WHOLE THING: whoever he sends it to must be able to open it. `importFile`
+         refuses anything whose `app` is not 'freemotion', so this is that gate, checked against the
+         real value rather than assumed. */
+      if (obj.app !== 'freemotion') throw new Error('the file is stamped app="' + obj.app + '", which importFile refuses — it cannot be opened by the person he sends it to');
+      if (!obj.layers || obj.layers.length !== 2) throw new Error('the template file carries ' + ((obj.layers || []).length) + ' layers, not the 2 it was made from');
+      if (obj.project.width !== 640 || obj.project.height !== 360) throw new Error('the file lost the template’s size (' + obj.project.width + 'x' + obj.project.height + ')');
+
+      /* A template packs the whole PROJECT object, so `pack.project.name` is whatever the project was
+         called when the template was made. Import that and you get a project named "SourceProj" rather
+         than the template you picked. */
+      if (obj.project.name !== 'Probe Template') throw new Error('the file is named after the source project ("' + obj.project.name + '") rather than the template — importing it gives a project with the wrong name');
+      if (!/Probe Template/.test(String(downloadName))) throw new Error('the downloaded file is called "' + downloadName + '"');
+
+      /* The font map has to be BUILT, not merely absent-by-luck. This is what stops the shared-file
+         path quietly drifting from the project path: both call the same `embedFonts`, and a template
+         whose text uses a custom font would otherwise open on someone else's device in a fallback. */
+      if (!obj.fonts || typeof obj.fonts !== 'object') throw new Error('the file carries no fonts map — a template using a custom font would open as the wrong typeface on the device he sends it to');
+      if (!obj.media || typeof obj.media !== 'object') throw new Error('the file carries no media map');
+
+      // CONTROL: it must not cheerfully "succeed" on a template that does not exist.
+      caught = null;
+      if (await FM.templates.exportFile('t_does_not_exist')) throw new Error('exporting a non-existent template reported success');
+      if (caught) throw new Error('exporting a non-existent template still wrote a file');
+    } finally {
+      URL.createObjectURL = realCOU;
+      HTMLAnchorElement.prototype.click = realClick;
+      if (tid) { try { await FM.templates.remove(tid); } catch (e) {} }
+      for (const id of madeProjects) { try { await FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
+  /* Queue 431 — Ezra, twice, the second time angry and with two screenshots of the same project:
+   * *"Media and audio panels now make the top bottoms too small"*, then *"I asked for you to fix the
+   * audio and media menus so many times and nothings happened"*.
+   * On Shape the five tabs show an icon AND a label; on Media the labels are simply GONE and the row is
+   * visibly shorter. Nothing hides them — they are CLIPPED. `.addmenu-main` is a flex column and
+   * `.addmenu-tabs` carried no flex property, so it defaulted to `flex: 0 1 auto`: shrinkable. Media and
+   * Audio are the only tabs that add a pinned action row AND a growing library grid, so they are the
+   * only two that ever ask for more room than there is — and the tab row was the child that gave it up.
+   * `.addmenu-lbl` carries `overflow: hidden`, so the words go first.
+   * MEASURED with six library tiles in a short sheet: the row goes 64.1px -> 20.9px and 5 labels -> 0.
+   * IT ONLY REPRODUCES WITH A LIBRARY AND IN A SHORT SHEET. With an empty library there is no pinned
+   * split and nothing competes for the height, which is why three earlier passes at this entry measured
+   * a healthy row and concluded it "only looks shorter next to a dense grid". The tiles are the subject,
+   * not the backdrop. */
+  test('the ADD tabs keep their labels on Media and Audio, where the library competes for height (queue 431)', { item: '431' }, async function () {
+    if (!FM.addMenu || typeof FM.addMenu.render !== 'function') throw new Error('FM.addMenu.render is not reachable');
+    if (!FM.mediaLib) throw new Error('FM.mediaLib is missing — the library is what this test needs');
+    const realList = FM.mediaLib.list, realIsAudio = FM.mediaLib.isAudio;
+    const host = document.createElement('div');
+    /* SHORT ON PURPOSE. The squeeze only happens when the sheet cannot fit everything, which on his
+       phone is a 9:16 stage plus a six-tile library. A tall host has slack, nothing has to give, and
+       the bug is invisible — the exact reason this went unreproduced. */
+    host.style.cssText = 'position:fixed;left:0;bottom:0;width:390px;height:300px;z-index:-1;opacity:0;display:flex;flex-direction:column;overflow:hidden';
+    document.body.appendChild(host);
+    try {
+      const fake = [];
+      for (let i = 0; i < 6; i++) fake.push({ mid: 'probe' + i, name: 'IMG_' + (4000 + i) + '.mov', kind: 'video', dur: 2 + i });
+      FM.mediaLib.list = () => fake.slice();
+      FM.mediaLib.isAudio = () => false;
+
+      FM.addMenu.render(host, { variant: 'sheet' });
+      await sleep(400);
+      /* CONSTRAIN THE ROOT, or there is no squeeze to see. The real sheet is sized by the space left
+         under the stage; rendered into a bare div the root simply grows to fit its content, every child
+         gets what it asks for, and the bug cannot appear. That is a property of the harness, not of the
+         app — and it is what made the first version of this test pass against its own mutation. */
+      const root = host.querySelector('.addmenu');
+      if (root) { root.style.height = '100%'; root.style.minHeight = '0'; }
+      const mainEl = host.querySelector('.addmenu-main');
+      if (mainEl) mainEl.style.minHeight = '0';
+      await sleep(250);
+      const row = host.querySelector('.addmenu-tabs');
+      if (!row) throw new Error('the sheet rendered no tab row');
+      if (!root || Math.round(root.getBoundingClientRect().height) > 320) throw new Error('the sheet root is ' + (root ? root.getBoundingClientRect().height : '?') + 'px tall — it is not constrained, so nothing competes for height and this test cannot see the defect');
+      const tabOf = k => [].slice.call(row.children).find(t => new RegExp(k, 'i').test(t.textContent || ''));
+
+      const look = async (key) => {
+        const t = tabOf(key);
+        if (!t) throw new Error('no "' + key + '" tab in the row');
+        t.click(); await sleep(420);
+        const rowBox = row.getBoundingClientRect();
+        const labels = [].slice.call(row.children).filter(tab => {
+          const b = tab.getBoundingClientRect(), l = tab.querySelector('.addmenu-lbl');
+          const lb = l ? l.getBoundingClientRect() : null;
+          return !!(lb && lb.height > 1 && lb.bottom <= b.bottom + 0.5);
+        }).length;
+        return { rowH: rowBox.height, labels: labels, tiles: host.querySelectorAll('.addmenu-body .addmenu-card').length };
+      };
+
+      const shape = await look('shape');
+      const media = await look('media');
+
+      /* CONTROLS FIRST. The library has to be ON SCREEN or there is nothing competing for the height,
+         and Shape has to be healthy or the comparison means nothing. */
+      if (!(media.tiles > 0)) throw new Error('the Media tab drew no library tiles, so nothing was competing for the tab row’s height — this test is not exercising the bug');
+      if (shape.labels !== 5) throw new Error('only ' + shape.labels + ' of 5 labels are readable on the SHAPE tab, which has no library — the row is broken everywhere, not just where this entry says');
+
+      if (media.labels !== 5) throw new Error('the Media tab shows ' + media.labels + ' of 5 tab labels — the library has squeezed the tab row and clipped the words off, which is his screenshot exactly');
+      if (media.rowH < shape.rowH - 1) throw new Error('the tab row is ' + media.rowH.toFixed(1) + 'px on Media against ' + shape.rowH.toFixed(1) + 'px on Shape — the panel below is eating the buttons above it');
+    } finally {
+      FM.mediaLib.list = realList;
+      FM.mediaLib.isAudio = realIsAudio;
+      host.remove();
+    }
+  });
 })();

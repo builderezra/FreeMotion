@@ -989,7 +989,18 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 /* ---------- AM-style Add menu (PC inspector no-selection state + mobile + bottom-sheet) ---------- */
 .addmenu { display: flex; gap: 10px; align-items: stretch; }
 .addmenu-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
-.addmenu-tabs { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+/* THE TAB ROW MUST NOT BE SQUEEZED BY WHAT IS UNDER IT (queue 431). Ezra, twice, the second time
+   with two screenshots of the same project side by side: *"Media and audio panels now make the top
+   bottoms too small"* and then *"I asked for you to fix the audio and media menus so many times and
+   nothings happened"*.
+   On Shape the five tabs show an icon and a label; on Media and Audio the labels are simply GONE.
+   Nothing hides them — they are CLIPPED. `.addmenu-main` is a flex column, and this row carried no
+   flex property, so it defaulted to `flex: 0 1 auto` — shrinkable. Media and Audio are the only two
+   tabs that add a pinned action row AND a growing library grid beneath it, so they are the only two
+   that ever ask for more room than there is; the tab row was the one child that would give it up, and
+   `.addmenu-lbl` carries `overflow: hidden`, so the first thing to disappear is the words.
+   `.addmenu-pinned` right below already carries exactly this guard. The tab row never got it. */
+.addmenu-tabs { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; flex: 0 0 auto; }
 .addmenu-tabs::-webkit-scrollbar { display: none; }
 .addmenu-tab, .addmenu-card {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;

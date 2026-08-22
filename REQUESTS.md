@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.70
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.71
 >
-> **State:** v11.70, **840 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.71, **842 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -7596,7 +7596,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **E is not a cop-out answer** — it closes the entry honestly, and it is genuinely possible that what
       he wanted is already there. **One letter closes or directs this.**
 - [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
-      **STATUS: 💡 LATER — long-term ideas only**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
       > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
@@ -7633,9 +7633,25 @@ better still, keep working inside the turn rather than parking work for a later 
              duration, a Replace Media button, Done in the corner. It opens itself once a template has
              become a project, and it stays away entirely when a template has no video or image clips.
              Tapping a slot selects it AND seeks the preview to that clip, so the second tap is not blind.
-      3. [ ] *(long term)* People can **create** templates.
-      4. [ ] *(long term)* Templates can be **shared** — his words: *"so noobs can use them or whoever
-             and get quick easy edits"* — plus ones we make ourselves.
+      3. [x] ✅ **ALREADY TRUE — checked, not built (22 Aug).** The Templates tab's + button saves a
+             template from any project (`FM.templates.save`), and the Elements tab additionally offers
+             "Build a new one…" from nothing. Same shape as clause 1: an entry records what was ASKED,
+             not what is still missing.
+      4. [x] ✅ **DONE v11.71 — templates save as a shareable FILE.** His words: *"so noobs can use them
+             or whoever and get quick easy edits"*, and later, choosing the route himself once he knew
+             links needed a server: *"maybe not links then and instead just project files that people can
+             download like what's already in"*.
+             **"Save template file…" is on the template's ⋯ menu.** It writes the SAME `.fmotion.json` a
+             project writes — so `importFile` already reads it, there is no second format to keep in
+             step, and the app stays local-only: no server, no hosting, no bill.
+             What differs is where the bytes come from: a project serializes the LIVE scene through
+             `FM.media`; a template has no live scene, so this walks its pack in IndexedDB. It carries
+             the layers, the embedded media and the custom fonts the text uses.
+             **The template's own name wins** over the packed project's — a template packs the whole
+             project object, so importing one would otherwise hand you a project called "Untitled 3".
+             `embedFonts` was EXTRACTED rather than copied, so the two exporters cannot drift; the way
+             they would drift is the newer one silently stopping embedding fonts, which nobody notices
+             until someone else opens the file and the type is wrong. Both mutation-checked.
       ⚠️ **Clause 4 is the one with a real constraint attached, and it should be said before anyone
       builds toward it:** this app is deliberately local-only with no backend — nothing leaves the
       device. Sharing templates between people needs either a file you export and send by hand (which
@@ -13843,6 +13859,38 @@ wait for them to report back."*
 
 - [ ] **431 — The Media and Audio panels squash the buttons above them.** (20 Aug, phone screenshot at
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+
+      🔴 **22 AUG — HE RAISED IT AGAIN, ANGRY, WITH TWO SCREENSHOTS. His words, verbatim:**
+      *"I'm sure there's a lot of things I've asked that you've missed and honestly I don't know what
+      you've been doing for the past day or so - I asked for you to fix the audio and media menus so many
+      times and nothings happened and I feel by now it should've, please fix and also give me a summary
+      of everything you've been doing , last time I asked I didn't see ur response"*
+      **The screenshots ARE the answer this entry was 'waiting on'.** Two shots of the ADD sheet at
+      v11.70, same project, same phone: on **Shape** the five tabs show an icon AND a label (Elements /
+      Shape / Media / Audio / Template) in a tall row; on **Media** the labels are GONE and the row is
+      visibly shorter. He circled that row and the Import row under it.
+      **So it is not "the row only looks shorter next to a dense grid" — the labels genuinely vanish.**
+      That is a different defect from the one this entry guessed at, and it is measurable without him.
+      **This jumps the queue: he said "please fix".**
+      ✅ **FIXED v11.71 — and it is one line, which makes three earlier passes at this worth explaining.**
+      **Cause:** `.addmenu-main` is a flex column and `.addmenu-tabs` carried NO flex property, so it
+      defaulted to `flex: 0 1 auto` — shrinkable. Media and Audio are the only tabs that add a pinned
+      action row AND a growing library grid, so they are the only two that ever ask for more height than
+      the sheet has; the tab row was the child that gave it up, and `.addmenu-lbl` has `overflow: hidden`,
+      so the words go first. `.addmenu-pinned`, the very next rule in the file, already carries
+      `flex: 0 0 auto`. The tab row never got it.
+      **MEASURED both ways** at 390px with six library tiles in a 300px sheet:
+      | | tab row | labels |
+      |---|---|---|
+      | before, Media | **20.9px** | **0 of 5** |
+      | after, Media | 64.1px | 5 of 5 |
+      | Shape (control, no library) | 64.1px | 5 of 5 |
+      ⚠️ **WHY IT WAS MISSED THREE TIMES, and this is the lesson:** it only reproduces with a POPULATED
+      library in a SHORT sheet. With an empty library there is no pinned split and nothing competes for
+      the height, so the row measures a healthy 64.1px and every earlier check concluded it "only looks
+      shorter next to a dense grid". **The tiles are the subject, not the backdrop.** My own first
+      attempt at a test rendered into a tall container and its mutation SURVIVED for the same reason.
+      Mutation-checked in the end: removing the one line puts it back to 0 of 5 labels.
       v10.71 of the ADD sheet on the Media tab.) His words, verbatim: *"Media and audio panels now make
       the top bottoms too small"*.
       **Read as: "top buttons", not "bottoms".** In the screenshot the Media tab shows the five tab icons,

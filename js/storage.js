@@ -397,19 +397,27 @@ window.FM = window.FM || {};
         if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
       }
     }
-    // Embed the custom fonts the text layers actually use, so the project still renders correctly when
-    // the .fmotion.json is opened on another device (fonts are otherwise a device-local library).
-    const fonts = {};
-    if (FM.fonts) {
-      const used = new Set(scene.layers.filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
-      for (const f of FM.fonts.list()) {
-        if (!used.has(f.css)) continue;
-        const file = await FM.fonts.getFile(f.id);
-        if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
-      }
-    }
+    const fonts = await embedFonts(scene.layers);
     return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts };
   };
+
+  /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
+     opened on another device (fonts are otherwise a device-local library).
+     EXTRACTED (queue 343) because a second exporter now needs it — sharing a TEMPLATE as a file. Copying
+     these eight lines would have been the easy move and the wrong one: the two would drift, and the way
+     they would drift is that the newer path silently stops embedding fonts, which nobody notices until
+     someone else opens the file and the type is wrong. */
+  async function embedFonts(layers) {
+    const fonts = {};
+    if (!FM.fonts) return fonts;
+    const used = new Set((layers || []).filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
+    for (const f of FM.fonts.list()) {
+      if (!used.has(f.css)) continue;
+      const file = await FM.fonts.getFile(f.id);
+      if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
+    }
+    return fonts;
+  }
 
   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
   // width/height 16000 allocates ~1GB per canvas (main + ghost + ~10 compositor buffers) → OOM-crashes
@@ -1505,6 +1513,39 @@ window.FM = window.FM || {};
     },
     cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === curId() ? makeThumb() : null); },
     async getPack(tid) { try { const db = await openDB(); const p = await idbGet(db, 'tpl:' + tid); db.close(); return p; } catch (e) { return null; } },
+    /* SAVE A TEMPLATE AS A SHAREABLE FILE (queue 343 clause 4). Ezra chose this over links, verbatim:
+       *"maybe not links then and instead just project files that people can download like what's
+       already in"* — which keeps the app local-only: no server, no hosting, no bill, nothing of his on
+       somebody else's machine.
+       It writes the SAME `.fmotion.json` a project writes, so `importFile` already reads it and nothing
+       new had to be invented or versioned. The difference is where the bytes come from: a project
+       serializes the LIVE scene through `FM.media`, and a template has no live scene — its layers and
+       its media files sit in the pack in IndexedDB. So this walks the pack instead.
+       THE TEMPLATE'S OWN NAME WINS over the packed project's. A template packs the whole project object,
+       so `pack.project.name` is whatever the project was called when the template was made — import it
+       and you would get a project named "Untitled 3" rather than the template you chose. */
+    async exportFile(tid) {
+      const pack = await this.getPack(tid);
+      if (!pack || !pack.layers) return false;
+      const meta = this.list().find(t => t.id === tid) || {};
+      const media = {};
+      for (const lid in pack.media) {
+        const rec = pack.media[lid];
+        if (rec && rec.file && rec.file.size <= EMBED_LIMIT) {
+          const durl = await fileToDataURL(rec.file);
+          if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
+        }
+      }
+      const project = Object.assign({}, pack.project, { name: meta.name || pack.project.name || 'Template' });
+      const obj = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
+      const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
       try { const db = await openDB(); await idbDel(db, 'tpl:' + tid); db.close(); } catch (e) {}

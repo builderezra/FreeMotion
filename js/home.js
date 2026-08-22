@@ -1456,6 +1456,13 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'New project from template', action: use },
         { label: 'Duplicate template', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.templates.duplicate(t.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+        // Share it (queue 343). His choice over links: *"just project files that people can download"* —
+        // the same .fmotion.json a project saves, so whoever you send it to can already open it.
+        { label: 'Save template file…', action: async () => {
+          if (FM.toast) FM.toast('Packing…', 1200);
+          const ok = await FM.templates.exportFile(t.id);
+          if (FM.toast) FM.toast(ok ? 'Template file saved — send it to anyone' : 'Could not save that template file');
+        } },
         pinMenuItem('templates', t.id),
         { sep: true },
         { label: 'Delete template…', danger: true, action: async () => { if (!confirm('Delete template "' + t.name + '"?')) return; await FM.templates.remove(t.id); render(); } },
