@@ -359,6 +359,20 @@ fallback in `js/scene.js`; the real Add Text path passes the 6.75 figure explici
 and the app path disagree, so probing the constructor measures nothing about the app.** Check which entry
 point the user actually presses before believing a default.
 
+**✅ 22 Aug — #392: the entry's OWN admission was the work.** It ends with *"`/security-review` was NOT
+run — said plainly rather than implied"*, on a feature that puts his text into the DOM, which CLAUDE.md
+requires a review for. Done: `textContent` everywhere for user text; the three `innerHTML` uses are static
+SVG literals; the one raw-SVG sink in reach takes a BOOLEAN choosing between two literal paths; no
+network, keys or `eval`; saved rate/pitch clamped and the voice name matched against the browser's own
+list. **Clean, nothing to fix** — and recorded so nobody re-runs it.
+**THE LESSON: an honest "not done" written into an entry is a work item, not a disclaimer.** Same shape as
+#215's two "known gap, stated rather than papered over" notes, which were also real work sitting in plain
+sight. **Grep the file for these admissions rather than waiting to trip over them.**
+**And #392 is one where "waiting on Ezra" IS correct** — after four ticks where it was not. Clause 4 is
+explicitly conditional on his verdict of the shipped version (*"if it's really bad maybe just leave it as
+an effect"*), and the export-voice choice costs a key, a bill and the local-only rule. Saying so plainly
+matters as much as catching the false ones: auditing the claim is the rule, not disbelieving it.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
