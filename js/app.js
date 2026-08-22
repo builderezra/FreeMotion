@@ -343,7 +343,61 @@ window.FM = window.FM || {};
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
     if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _gapAvg = 0; _skipCost = 1; resizeCanvas(); }
+    // `spent` is computed HERE, where the ladder's own state lives, and passed in — so the offer's
+    // rule ("the ladder is out of moves and we are still late") can be driven by a test without
+    // reaching into module-private tier bookkeeping.
+    maybeOfferPerfProbe(cost, budget, _playTier >= PLAY_TIERS.length - 1 || !!_locked);
   }
+
+  /* ═══ OFFER THE MEASUREMENT AT THE MOMENT IT IS TRUE (queue 95, 125, 202, and the unnumbered
+   * "editing lags" item — FOUR entries, all stalled on the same missing sentence: "needs a number
+   * from HIS phone").
+   *
+   * `js/perf-probe.js` has existed for a while and is the right tool. Nobody ever ran it, and the
+   * reason is plain once you count the taps: it lives inside App settings, which on a phone is the
+   * cog → the canvas dialog → "App settings…" → scroll. He would have to go looking for a feature
+   * he has no reason to know exists, at a moment when what he actually wants is for the lag to stop.
+   * So the discovery problem was never going to be solved by him remembering. The app already knows
+   * when it is failing — that is what the quality ladder above is for — so it can ask.
+   *
+   * THE BAR IS DELIBERATELY HIGH, because a prompt that cries wolf gets dismissed forever after and
+   * takes the feature with it (the exporter's own note says the same about its diagnostics):
+   *   · PLAYING only. Playback is what he reports; a drag has a different cost regime entirely.
+   *   · The ladder must be SPENT — bottom rung, or latched off because it proved resolution is not
+   *     the bottleneck. While it still has moves left, the honest answer is "it is handling it".
+   *   · Still over budget after that, for ~120 consecutive decisions (a couple of seconds, not a
+   *     stutter). One bad frame is jitter; this is the sustained kind he means by "laggy".
+   *   · ONCE per page load, ever. */
+  const STRUGGLE_HITS = 120;
+  let _struggleHits = 0, _perfOffered = 0;
+  FM._perfOfferState = function () { return { hits: _struggleHits, offered: !!_perfOffered }; };
+  FM._resetPerfOffer = function () { _struggleHits = 0; _perfOffered = 0; };
+
+  function maybeOfferPerfProbe(cost, budget, spent) {
+    if (_perfOffered) return;
+    if (!FM.playing || FM._exporting) return;
+    if (!FM.perfProbe || !FM.perfProbe.run || FM.perfProbe.running) return;
+    // "the ladder has played every card it has, and it is STILL late"
+    if (!(spent && cost > budget)) { _struggleHits = 0; return; }
+    if (++_struggleHits < STRUGGLE_HITS) return;
+    _perfOffered = 1;
+    FM.toast('Playback is struggling — tap to measure what\u2019s slow', 7000, FM.startPerfMeasure);
+  }
+  FM._maybeOfferPerfProbe = maybeOfferPerfProbe;
+
+  /* Shared by the offer above and by the Measure button in App settings, so there is one definition
+   * of what measuring does. It samples while he keeps USING the app — stopping to watch a progress
+   * bar would measure the wrong thing. */
+  FM.startPerfMeasure = function (ms) {
+    if (!FM.perfProbe || !FM.perfProbe.run || FM.perfProbe.running) return false;
+    FM.toast('Measuring for ten seconds — keep using the app', 3200);
+    return FM.perfProbe.run(ms || 10000, (report) => {
+      try { localStorage.setItem('fm.lastPerfReport', report); } catch (e) {}
+      /* No clipboard write here: copying needs a user gesture and this lands ten seconds after the
+       * tap, so it would fail on iOS exactly when it mattered. Point at the button that can. */
+      if (FM.toast) FM.toast('Measurement ready — Settings ▸ App settings ▸ What\u2019s slow ▸ Copy', 6000);
+    });
+  };
   FM.playbackQualityInfo = function () {
     // `factor` is the tier's own value; `effective` is what previewScale() actually applies — the two
     // differ in 'smooth' (floored at tier 2) and 'detail' (always 1), and it was reading the tier
@@ -937,14 +991,28 @@ window.FM = window.FM || {};
       .catch(() => null);
   };
 
-  FM.toast = function (msg, ms) {
+  /* The optional THIRD argument makes a toast tappable. Added for the "playback is struggling"
+   * offer (queue 95/125/202): the app knows the moment it is failing, and that is the only moment
+   * asking him to measure is any use — a minute later he has moved on. Strictly additive, because
+   * 244 call sites pass two arguments and none of them may change behaviour. */
+  FM.toast = function (msg, ms, onTap) {
     const t = document.getElementById('toast'); if (!t) return;
-    t.textContent = msg; t.classList.remove('hidden');
+    t.textContent = msg;
+    t.onclick = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
+    if (typeof onTap === 'function') {
+      t.classList.add('toast-tap');
+      t.setAttribute('role', 'button'); t.setAttribute('tabindex', '0');
+      t.onclick = function () { FM.hideToast(); try { onTap(); } catch (e) {} };
+    }
+    t.classList.remove('hidden');
     const my = ++toastSeq;
     if (ms === undefined) ms = 2200;
     if (ms) setTimeout(() => { if (my === toastSeq) FM.hideToast(); }, ms);
   };
-  FM.hideToast = function () { const t = document.getElementById('toast'); if (t) t.classList.add('hidden'); };
+  FM.hideToast = function () {
+    const t = document.getElementById('toast');
+    if (t) { t.classList.add('hidden'); t.onclick = null; t.classList.remove('toast-tap'); }
+  };
 
   // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).
   // The skip buttons jump between these (and the selected clip's edges).

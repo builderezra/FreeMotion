@@ -2974,6 +2974,17 @@ body.fm-playing #time-readout {
   font-variant-numeric: tabular-nums;
 }
 
+/* A toast that DOES something when you tap it (the "playback is struggling" offer). It has to read
+   as tappable without a button inside it — on a phone the whole pill is the target, and 44px is the
+   smallest thing a thumb reliably hits. */
+#toast.toast-tap {
+  cursor: pointer; border-color: var(--accent); background: var(--panel-2);
+  min-height: 44px; display: flex; align-items: center; gap: 8px;
+  padding: 12px 20px; box-shadow: 0 10px 30px rgba(0,0,0,.6), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+#toast.toast-tap::after { content: '›'; font-size: 17px; line-height: 1; opacity: .8; }
+#toast.toast-tap:active { transform: translateX(-50%) scale(.97); }
+
 /* ============================================================
    TOUCH + MOBILE  (BACKLOG: mobile-touch, mobile-layout — cycle 1)
    ============================================================ */

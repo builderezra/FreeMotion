@@ -39495,4 +39495,84 @@
       await sleep(60);
     }
   });
+
+  /* ═══ THE "PLAYBACK IS STRUGGLING" OFFER (queue 95, 125, 202 + the unnumbered editing-lag item).
+     Four entries are stalled on the same sentence — "needs a number from HIS phone" — and the tool
+     that produces that number has existed for weeks behind four taps nobody had a reason to make.
+     These lock the rule that decides when to ask, because the failure mode is not a crash: it is a
+     prompt that fires on ordinary jitter, gets dismissed, and takes the whole feature with it. */
+  test('a toast is only tappable when it is GIVEN something to do (queue 95)', { item: '95' }, async function () {
+    const el = document.getElementById('toast');
+    if (!el) throw new Error('no #toast element');
+    let ran = 0;
+    FM.toast('tappable', 0, () => { ran++; });
+    if (!el.classList.contains('toast-tap')) throw new Error('an action toast is not marked tappable');
+    if (el.getAttribute('role') !== 'button') throw new Error('an action toast is not announced as a button');
+    el.click();
+    if (ran !== 1) throw new Error('tapping an action toast did not run its action (ran ' + ran + ')');
+    if (!el.classList.contains('hidden')) throw new Error('tapping an action toast left it on screen');
+
+    /* THE CONTROL, and it is the half that matters: 244 existing call sites pass two arguments, and
+       every one of them must keep producing an inert toast. A version that made every toast clickable
+       would pass the assertions above and be a real bug. */
+    FM.toast('plain', 0);
+    if (el.classList.contains('toast-tap')) throw new Error('an ORDINARY toast came out tappable');
+    if (el.onclick) throw new Error('an ORDINARY toast carries a click handler');
+    if (el.hasAttribute('role')) throw new Error('an ORDINARY toast is announced as a button');
+    el.click();
+    if (ran !== 1) throw new Error('clicking an ordinary toast ran the previous toast action');
+    FM.hideToast();
+  });
+
+  test('the struggle offer needs a SPENT ladder, a real overrun and persistence — and fires once (queue 95)', { item: '95' }, async function () {
+    const offer = FM._maybeOfferPerfProbe, state = FM._perfOfferState;
+    if (!offer || !state) throw new Error('the offer is not exposed for testing');
+    const realProbe = FM.perfProbe, realPlaying = FM.playing, realToast = FM.toast;
+    let toasts = 0, lastTap = null;
+    try {
+      FM.perfProbe = { run() { return true; }, running: false };
+      FM.toast = function (msg, ms, onTap) { toasts++; lastTap = onTap; };
+      FM._resetPerfOffer();
+      FM.playing = true;
+
+      const push = (n, cost, budget, spent) => { for (let i = 0; i < n; i++) offer(cost, budget, spent); };
+
+      // 1. A ladder with moves left is not struggling, however late it is — it is still working.
+      push(400, 99, 10, false);
+      if (state().hits !== 0 || toasts) throw new Error('offered while the quality ladder still had rungs to shed');
+
+      // 2. Spent ladder but INSIDE budget — this is the normal healthy bottom of the ladder.
+      push(400, 5, 10, true);
+      if (state().hits !== 0 || toasts) throw new Error('offered while playback was inside its budget');
+
+      // 3. Spent AND late, but briefly — a stutter is not lag, and this is the cry-wolf case.
+      push(40, 99, 10, true);
+      if (toasts) throw new Error('offered after a brief stutter (' + state().hits + ' hits)');
+
+      // 4. ...and a single good frame in the middle resets it, so only SUSTAINED trouble counts.
+      offer(5, 10, true);
+      if (state().hits !== 0) throw new Error('a frame inside budget did not reset the run');
+
+      // 5. Sustained: now it should ask, exactly once, and hand over a tappable action.
+      push(200, 99, 10, true);
+      if (toasts !== 1) throw new Error('sustained struggle produced ' + toasts + ' offers, expected 1');
+      if (typeof lastTap !== 'function') throw new Error('the offer toast was not given an action to run');
+      push(400, 99, 10, true);
+      if (toasts !== 1) throw new Error('the offer fired again in the same session (' + toasts + ' total)');
+
+      // 6. Never while a render is running — it would be measuring the export, not the preview.
+      FM._resetPerfOffer(); toasts = 0; FM._exporting = true;
+      push(400, 99, 10, true);
+      FM._exporting = false;
+      if (toasts) throw new Error('offered in the middle of an export');
+
+      // 7. Never when not playing: a drag is a different cost regime, judged by different rules.
+      FM._resetPerfOffer(); toasts = 0; FM.playing = false;
+      push(400, 99, 10, true);
+      if (toasts) throw new Error('offered while nothing was playing');
+    } finally {
+      FM.perfProbe = realProbe; FM.playing = realPlaying; FM.toast = realToast;
+      FM._exporting = false; FM._resetPerfOffer();
+    }
+  });
 })();

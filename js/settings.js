@@ -408,11 +408,10 @@ window.FM = window.FM || {};
         if (perfBtn.disabled) return;
         perfBtn.disabled = true; copyBtn.disabled = true;
         FM.settings.close();                       // he has to be able to USE the app while it samples
-        if (FM.perfProbe) FM.perfProbe.run(10000, (report) => {
-          last = report;
-          if (FM.toast) FM.toast('Measurement done — reopen Settings to read and copy it', 4000);
-          try { localStorage.setItem('fm.lastPerfReport', report); } catch (e) {}
-        });
+        /* One definition of "measure", shared with the automatic offer that fires when playback is
+           struggling (js/app.js). It stores the report; this panel reads it back from storage when
+           reopened, which is what the `stored` branch below already does. */
+        if (FM.startPerfMeasure) FM.startPerfMeasure(10000);
       });
       copyBtn.addEventListener('click', async () => {
         const text = last || perfOut.textContent;

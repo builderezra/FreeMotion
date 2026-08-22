@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.82
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.83
 >
-> **State:** v11.82, **853 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.83, **855 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -1831,6 +1831,28 @@ better still, keep working inside the turn rather than parking work for a later 
       that long has the ruler measure a 4-second project twice. Only the mutation check caught that.
       Deleted rather than shipped; the instrument (`tests/_tlcost.html`) is committed.*
       **What this half needs is still a number from HIS phone, not another pass here.**
+
+      **v11.83 — SO THE APP NOW ASKS YOU FOR THAT NUMBER, instead of waiting for it.**
+      Four entries — this one, 125, 202 and the original unnumbered "editing lags" — have all ended on
+      the same sentence for weeks: *needs a number from HIS phone.* The tool that produces it has
+      existed the whole time (`js/perf-probe.js`, ten seconds of sampling and a Copy button). Nobody
+      ever ran it, and once you count the taps the reason is obvious: it lives inside App settings,
+      which on a phone is the cog → the canvas dialog → "App settings…" → scroll. **You would have had
+      to go looking for a feature you had no reason to know existed, at the exact moment what you
+      actually wanted was for the lag to stop.** That was never going to happen, and waiting another
+      month for it was not a plan.
+      **So the app watches for the moment instead.** The quality ladder already knows when it is
+      failing. When playback has driven it to the bottom rung (or latched it off as pointless) and
+      frames are STILL late for a couple of seconds straight, a tappable toast offers the measurement:
+      *"Playback is struggling — tap to measure what's slow."* One tap samples for ten seconds while
+      you carry on using it, then tells you where the Copy button is.
+      **The bar is deliberately high — once per session, playing only, ladder spent, sustained.** A
+      prompt that cries wolf gets dismissed forever and takes the feature with it, so the test drives
+      all four conditions and the near-misses: a ladder with rungs left, a spent ladder inside budget,
+      a brief stutter, and a single good frame resetting the run. The tappable toast has its own
+      control test, because 244 existing toasts must stay inert.
+      **What I need from you: press play on a project that lags, wait for the toast, tap it, then send
+      me the text.** That is the number this entry has been waiting on since 14 August.
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
