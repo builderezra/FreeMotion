@@ -153,7 +153,15 @@ in/out marks. It can be honest now, because the trim really does land where the 
 and it reads exactly like the fix failing. Drive `.clip-grip.left` / `.clip-grip.right`, and assert the
 UNTOUCHED edge did not move; that is what tells a trim from a move.
 
-**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ **#153 (the readout + notch strip)**, (a Custom rung on the export frame-rate list — never
+**✅ v11.58 — #153 IS COMPLETE.** The readout (Start · End · Duration over In · Out · Change, Change
+signed) and the frame-notch strip with the landing notch lit. A shape shows a dash for In/Out rather than
+inventing numbers. `pointer-events: none`, asserted.
+**⚠️ THE STRIP HAD TO BE A WINDOW, NOT THE WHOLE CLIP — and the entry's own wording pointed the wrong
+way.** Drawn across the clip's span (what #153 literally describes), the dragged edge is ALWAYS at one end
+of the strip, so "the exact notch it will land on" carries no information, and an 18s clip thinned 551
+ticks into a block. **Build what the request MEANS when the literal reading cannot work — and say so.**
+
+**NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
