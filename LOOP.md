@@ -43,9 +43,14 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 10. **Measure where the thing you are testing actually does something.** A correct metric pointed at
     the wrong moment is a dead assertion — a low-pass mutation survived a midpoint check twice because
     at that point the filter had not closed far enough to touch the test signal at all.
-11. **The preview pane reports `document.hidden: true` even when fronted, so CSS animations and
-    timers are throttled in it.** Anything time-based measured there is worthless — a slam animation
-    sampled at six points returned the same frozen transform every time and looked exactly like a bug.
+11. **CHECK `document.hidden` BEFORE BELIEVING ANY TIMING MEASUREMENT — and check it, do not assume
+    the answer.** This rule used to state flatly that the preview pane reports `document.hidden: true`
+    even when fronted. **Measured at v11.68: it reports FALSE.** So the rule as written would have sent
+    a session either to distrust a perfectly good measurement, or — worse — to believe it had staged a
+    backgrounded-tab test (queue 47 needs one) by measuring in the pane, which it had not.
+    The original observation was real: a slam animation sampled at six points returned the same frozen
+    transform every time and looked exactly like a bug. Throttling happens. It is just not a constant
+    of the pane, so it has to be read at the moment of measuring.
     Check `document.hidden` before believing any timing measurement.
 12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
@@ -106,6 +111,18 @@ reject path went past it unseen. When a guard exists, check which failure shape 
 **Also worth keeping: a mutation that breaks SYNTAX proves nothing.** Removing `try {` left a dangling
 `catch`, the file did not parse, four unrelated tests went red with "not reachable" and it reported
 CAUGHT. A real mutation has to leave the file valid and change only the behaviour.
+
+**✅ v11.68 — #47 again (its safety half is a seam of real bugs, not a checklist).**
+`seekVideo` waits 1500ms for a clip to reach a frame and then resolves ANYWAY — so the compositor draws
+whatever the element still shows: a DUPLICATE of the previous frame, in the file, presented as footage,
+with nothing recorded. The code's own history says it happens — the wait was raised from 250ms because it
+"dropped frames on big 4K seeks". Misses are counted and named now.
+**THE PART WORTH REMEMBERING: a mutation SURVIVED, and it was right to.** Making the counter fire
+unconditionally changed nothing any test could see — because a landed seek never cancelled its 1500ms
+timer, so the push happened AFTER the tally was taken. That was a real bug in my own change (a leftover
+timer from one export can fire during the next and warn about repeats on a clean render). **A surviving
+mutation is not always a weak test; sometimes it is the code telling you something you did not know.**
+Do not reach for a stronger assertion until you understand WHY it survived.
 
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
