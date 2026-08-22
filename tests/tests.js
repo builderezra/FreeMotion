@@ -39128,4 +39128,92 @@
     for (let i = 0; i < fast.length; i++) { const d = Math.abs(fast[i] - ref[i]); if (d > worst) worst = d; }
     if (worst > 4) throw new Error('the rewritten spin streaks differs from the original by ' + worst + '/255 on ordinary content — the identity holds, so this is a real behaviour change, not rounding');
   });
+
+  /* Queue 474 — the SHARED one, and it turned out bigger than either single-effect fix.
+   * Sixteen pixel kernels opened with `d.slice()`: a fresh 5.6 MB array allocated and thrown away on
+   * every invocation. At 1080x1350 that is **133 MB of garbage per frame** with 24 effects — and on a
+   * phone garbage is collected in PAUSES, which is what "playback is a buggy mess while scrubbing is
+   * fine" actually feels like.
+   * They all only READ that copy, so one reused buffer serves them all. Measured after: tiltshift
+   * 74→37ms, zoomstreaks 173→59, lensblur 158→52, spinblur 102→70.
+   * TWO THINGS THIS TEST GUARDS, and the second is the one that could corrupt a picture silently. */
+  test('the shared effect scratch cannot leak between kernels (queue 474)', { item: '474' }, function () {
+    if (!FM._pixelFx || typeof FM._fxScratchInfo !== 'function') throw new Error('the effect scratch seam is missing');
+    const W = 160, H = 120;
+    const mk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < a.length; i += 4) {
+        const px = (i / 4) | 0, x = px % W, y = (px / W) | 0;
+        const b = 128 + 80 * Math.sin(x / 11) * Math.cos(y / 9);
+        a[i] = b | 0; a[i + 1] = (x * 3) % 256; a[i + 2] = (255 - b) | 0; a[i + 3] = ((x * y) % 37 === 0) ? 0 : 255;
+      }
+      return a;
+    };
+    const cases = [
+      ['tiltshift', { center: 0.5, softness: 0.5 }],
+      ['spinblur', { amount: 0.5 }],
+      ['lensblur', { radius: 6 }],
+      ['zoomstreaks', { amount: 0.5 }],
+      ['spinstreaks', { amount: 0.5, decay: 0.6 }],
+      ['chromaticaberration', { amount: 0.5 }],
+      ['dropshadow', {}],
+    ];
+    let exercised = 0;
+    for (const [name, params] of cases) {
+      const fn = FM._pixelFx[name];
+      if (typeof fn !== 'function') continue;
+
+      const alone = mk(); fn(alone, W, H, params, 0);
+
+      // CONTROL: the kernel must actually change the picture, or "the two runs agree" is true of a no-op.
+      const before = mk();
+      let moved = 0;
+      for (let i = 0; i < alone.length; i += 4) if (Math.abs(alone[i] - before[i]) > 2) moved++;
+      if (moved < 200) continue;   // this kernel is a no-op at these params — it proves nothing either way
+      exercised++;
+
+      /* Dirty the shared buffer with a DIFFERENT kernel, then run the same one again. If the scratch
+         leaked — returned without being refilled, or handed to two live users — the second result would
+         carry the other kernel's pixels. */
+      const dirty = mk(); FM._pixelFx.tiltshift(dirty, W, H, { center: 0.15, softness: 0.9 }, 0);
+      const after = mk(); fn(after, W, H, params, 0);
+
+      let worst = 0;
+      for (let i = 0; i < alone.length; i++) { const d = Math.abs(alone[i] - after[i]); if (d > worst) worst = d; }
+      if (worst !== 0) throw new Error(name + ' gave a different picture (off by ' + worst + ') when another effect had used the shared scratch first — the buffer is leaking between kernels, which corrupts whatever renders second');
+    }
+    if (exercised < 4) throw new Error('only ' + exercised + ' kernels actually altered the test image — this test is not exercising the scratch');
+  });
+
+  /* THE OTHER HALF, and it is a source check rather than a behaviour one — deliberately.
+   * A kernel that keeps TWO live copies of the frame cannot share one buffer: handing it the same array
+   * twice would make its two "different" snapshots the same array, and the picture would be wrong in a
+   * way no single-kernel test would notice. Three kernels are like that and are excluded by hand.
+   * This already ALMOST went wrong: the bulk edit that converted the sixteen matched a bare variable name
+   * and converted one of sketch's three copies too. It was caught by counting, and this test is what
+   * stops the next tidy-up from doing it again. */
+  test('kernels that hold more than one frame copy are kept OFF the shared scratch (queue 474)', { item: '474' }, async function () {
+    const src = await fetch('js/compositor.js', { cache: 'no-store' }).then(r => r.text());
+    const ks = [];
+    const re = /^ {4}([a-z0-9_]+): function\(d,W,H,p,t\)/gmi;
+    let m;
+    while ((m = re.exec(src))) ks.push({ name: m[1], at: m.index });
+    if (ks.length < 20) throw new Error('only found ' + ks.length + ' pixel kernels — the scan is not matching the file, so this proves nothing');
+
+    const offenders = [];
+    let onScratch = 0;
+    for (let i = 0; i < ks.length; i++) {
+      const body = src.slice(ks[i].at, i + 1 < ks.length ? ks[i + 1].at : src.length);
+      const shared = (body.match(/fxSrc\(d\)/g) || []).length;
+      const own = (body.match(/d\.slice\(\)/g) || []).length;
+      if (shared) onScratch++;
+      // one shared copy is fine; a shared copy ALONGSIDE another live copy is not, nor is two shared ones
+      if (shared > 1 || (shared === 1 && own > 0)) offenders.push({ kernel: ks[i].name, shared: shared, own: own });
+    }
+    if (offenders.length) {
+      throw new Error('these kernels hold more than one live frame copy while using the shared scratch: ' +
+        JSON.stringify(offenders) + ' — two snapshots that are secretly the same array will render the wrong picture');
+    }
+    if (onScratch < 10) throw new Error('only ' + onScratch + ' kernels are on the shared scratch — the optimisation has been reverted, so this guard is watching nothing');
+  });
 })();

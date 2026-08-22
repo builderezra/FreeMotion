@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.75
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.76
 >
-> **State:** v11.75, **845 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.76, **847 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4650,8 +4650,29 @@ better still, keep working inside the turn rather than parking work for a later 
              The test asserts the MATHS (content-independent, 1e-9 bound on every sample point) with a
              bounded picture check behind it, plus a control that the effect actually altered the image.
              Mutation-checked by flipping one sign in the rotation: caught at 54/255.
-             ⏭️ **Next in this family:** turbulentdisplace (240ms — 12 trig calls per pixel, but a lookup
-             table would NOT be exact, so it needs a different approach), zoomstreaks (173), lensblur (158).
+             ✅ **THIRD, AND THE BIGGEST: the shared frame copy — v11.76.** Sixteen kernels opened with
+             `d.slice()`, a fresh **5.6 MB** array per invocation. At 24 effects that is **133 MB of
+             garbage per frame**, and on a phone garbage is collected in PAUSES — which fits his
+             *"playback is a buggy mess while scrubbing is fine"* far better than steady slowness does.
+             All sixteen only READ the copy (checked per kernel, not assumed), so one reused buffer serves
+             them. Measured at 1080x1350:
+             | effect | before | after |
+             |---|---|---|
+             | zoomstreaks | 173.3ms | **59.2** |
+             | lensblur | 158.4ms | **52.4** |
+             | tiltshift | 74.2ms | **36.7** |
+             | spinblur | 102.4ms | **69.8** |
+             **Three of those were never touched individually** — the win is the allocation, not the
+             algorithm. Isolated, the copy itself is 1.59ms vs 0.24ms; in situ the gain is far larger,
+             because allocating and collecting 5.6 MB costs more than copying it.
+             ⚠️ **boxblur, unsharpmask and sketch are deliberately EXCLUDED** — they hold two or three live
+             copies, and one shared buffer would make their separate snapshots the same array. **A source
+             test now fails if anyone puts them on it**, because the bulk edit that converted the sixteen
+             matched a bare variable name and converted one of sketch's three by accident. Caught by
+             counting; the guard is so the next tidy-up cannot repeat it. Mutation-checked with exactly
+             that edit.
+             ⏭️ **Next:** turbulentdisplace (240ms — 12 trig calls per pixel; a lookup table would not be
+             exact, so it needs a different approach).
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**
