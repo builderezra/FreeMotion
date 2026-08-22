@@ -12724,9 +12724,9 @@ wait for them to report back."*
       > The key frames for these three things are all interacting with each other and causing issues, make em independent
 
       **Clauses:**
-      1. [ ] Keyframing **Rotation** does not write or move keyframes for X tilt or Y tilt.
-      2. [ ] The same for **X tilt**, and for **Y tilt** — each of the three keys only itself.
-      3. [ ] Existing projects keep working: whatever these three share today, changing it must not
+      1. [x] Keyframing **Rotation** does not write or move keyframes for X tilt or Y tilt.
+      2. [x] The same for **X tilt**, and for **Y tilt** — each of the three keys only itself.
+      3. [x] Existing projects keep working: whatever these three share today, changing it must not
              silently re-interpret animation people already have.
       ⚠️ **Read before assuming a shared ◆ is the whole story.** His screenshot circles the three readouts
       AND the single diamond on the rail beside them, which strongly suggests one keyframe control is
@@ -12946,7 +12946,7 @@ wait for them to report back."*
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
 
-- [x] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
+- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
       v10.32.) His words, verbatim:
 
       > when extending the add pannel it makes the three dots at the bottom go down
@@ -13882,9 +13882,9 @@ wait for them to report back."*
       from the right smoothly and slowly, currently it's very cutty and they move at the same time and
       it's just off,"*.
       **The complaint is precise and it is about ORDER, not polish:**
-      1. [ ] The card/home swipes LEFT first, on its own, with a smooth well-designed motion.
-      2. [ ] THEN — after that finishes — the project comes in from the RIGHT, smoothly and slowly.
-      3. [ ] Currently the two overlap ("they move at the same time") and it reads as "cutty".
+      1. [x] The card/home swipes LEFT first, on its own, with a smooth well-designed motion.
+      2. [x] THEN — after that finishes — the project comes in from the RIGHT, smoothly and slowly.
+      3. [x] Currently the two overlap ("they move at the same time") and it reads as "cutty".
       ⚠️ **This fights an existing deliberate decision, and whoever picks it up must read that first.**
       js/home.js's `openProject` was SPLIT ON PURPOSE (queue 128) so the card leaves on the tap while the
       project loads — *"113ms of dead time at phone speed"* was the problem being solved. Sequencing the

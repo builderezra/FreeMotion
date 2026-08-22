@@ -78,6 +78,22 @@ if [ -n "$BAD" ]; then
   echo
 fi
 
+# AN ENTRY TICKED [x] THAT SAYS IT IS STILL OPEN (22 Aug). #426 was marked DONE while its own header read
+# "⚠️ STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced" — so every queue tool here,
+# which matches ^- \[ \], could not see it. Not deprioritised: UNREACHABLE, for weeks, and found only
+# because Ezra pushed back with "you did not meet every task i believe, double check again".
+# Same family as the unnumbered items and the malformed entry above, third cause, same treatment: detected
+# loudly rather than trusted. The checkbox and the prose must agree.
+CONTRA="$(awk '/^- \[x\] /{e=NR; t=$0} /STAYS OPEN|still OPEN|NOT done|remains open/{if (e && NR-e<4) printf "%d:%s\n", e, substr(t,1,100)}' "$F" | sort -u)"
+if [ -n "$CONTRA" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! TICKED [x] BUT THE ENTRY SAYS IT IS STILL OPEN — invisible to every list below:"
+  echo "$CONTRA"
+  echo "!! Untick it so it can be worked, or delete the claim if it really is done."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 # AN OPEN ITEM FILED UNDER "## Done" IS A DONE ITEM, to anyone reading the file — and REQUESTS.md is
 # written for EZRA to read, not only for a script. Six of them were sitting down there on 17 Aug,
 # including "EXPORTED VIDEO CAME OUT WITH NO AUDIO" and the entry this file calls "the most serious
