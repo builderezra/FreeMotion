@@ -192,7 +192,7 @@ window.FM = window.FM || {};
       const L = trimDrag.layer;
       L.start = trimDrag.start; L.duration = trimDrag.dur;
       if (L.type === 'video') L.trimStart = trimDrag.trim;
-      trimDrag = null;
+      trimDrag = null; hideTrimHud();
     }
     if (kfDrag) {
       if (kfDrag.orig) kfDrag.kfs.forEach((k, i) => { k.t = kfDrag.orig[i]; });
@@ -2381,6 +2381,118 @@ window.FM = window.FM || {};
   // Apply a trim to trimDrag.layer for a pointer at clientX. SCROLL-AWARE: the delta counts both finger
   // movement AND how far the timeline has auto-scrolled since the grab, so when the view scrolls out from
   // under the finger the edge keeps tracking it (the screen-edge position stays put while the clip grows).
+  /* ---- THE TRIM READOUT AND ITS NOTCH STRIP (queue 153) ------------------------------------------
+   * His words, with an Alight Motion screenshot: *"When dragging a clip from the edges to extend, in
+   * alight motions there's some differences, it tells you all of this information and also shows on
+   * little notches, by colouring in the exact notch it will land on, because the notches are frames and
+   * the whole thing has to actually line up with the notches."*
+   * Two things, and he was explicit about both:
+   *  · SIX VALUES in two rows — Start · End · Duration, then In · Out · Change, with Change signed.
+   *    Start/End are the clip's place on the TIMELINE; In/Out are the trim points inside the SOURCE,
+   *    which is why AM shows both and why a shape (no source) shows a dash rather than a made-up number.
+   *  · A NOTCH STRIP with the exact landing notch filled, and a coloured mark at each end — pink at the
+   *    in-point, green at the out-point — so it reads as the whole clip's span, not just the edge.
+   * This can only be honest because v11.57 made the trim land on whole frames; before that the strip
+   * would have been drawing a promise the trim did not keep, which the entry itself warned about. */
+  var trimHud = null;
+  function tcOf(t, fps) {
+    var tot = Math.round(Math.abs(t) * fps), ff = tot % fps, sTot = Math.floor(tot / fps);
+    var m = Math.floor(sTot / 60), sec = sTot % 60, p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    return (t < 0 ? '-' : '') + p2(m) + ':' + p2(sec) + ':' + p2(ff);
+  }
+  function ensureTrimHud() {
+    if (trimHud) return trimHud;
+    trimHud = document.createElement('div');
+    trimHud.id = 'tl-trimhud';
+    trimHud.className = 'tl-trimhud hidden';
+    trimHud.innerHTML =
+      '<div class="tth-row">' +
+        '<span class="tth-cell"><i>Start</i><b data-k="start">—</b></span>' +
+        '<span class="tth-cell"><i>End</i><b data-k="end">—</b></span>' +
+        '<span class="tth-cell"><i>Duration</i><b data-k="dur">—</b></span>' +
+      '</div>' +
+      '<div class="tth-row">' +
+        '<span class="tth-cell"><i>In</i><b data-k="in">—</b></span>' +
+        '<span class="tth-cell"><i>Out</i><b data-k="out">—</b></span>' +
+        '<span class="tth-cell"><i>Change</i><b data-k="chg">—</b></span>' +
+      '</div>' +
+      '<div class="tth-notches" data-k="notches"></div>';
+    document.body.appendChild(trimHud);
+    return trimHud;
+  }
+  function updateTrimHud() {
+    if (!trimDrag) return;
+    var hud = ensureTrimHud(), L = trimDrag.layer;
+    var fps = FM.scene.project.fps || 30;
+    var startT = L.start, endT = L.start + L.duration;
+    var set = function (k, v) { var el = hud.querySelector('[data-k="' + k + '"]'); if (el) el.textContent = v; };
+    set('start', tcOf(startT, fps));
+    set('end', tcOf(endT, fps));
+    set('dur', tcOf(L.duration, fps));
+    /* IN/OUT ARE SOURCE TIMES, and only a clip with a source has them. A shape or a text layer gets a
+       dash — inventing a number here would be the readout lying about what it knows. A ramped speed has
+       no single rate, so the out-point is the honest `trimStart + duration x speed` only when it does. */
+    var hasSrc = (L.type === 'video') && (L.trimStart != null);
+    if (hasSrc) {
+      var sp = FM.isAnimated(L.speed) ? null : (L.speed || 1);
+      set('in', tcOf(L.trimStart, fps));
+      set('out', sp == null ? '~' : tcOf(L.trimStart + L.duration * sp, fps));
+    } else { set('in', '—'); set('out', '—'); }
+    // CHANGE is signed, and it is the movement of the edge being dragged — not of the whole clip.
+    var moved = (trimDrag.edge === 'right')
+      ? (endT - (trimDrag.start + trimDrag.dur))
+      : (startT - trimDrag.start);
+    set('chg', (moved >= 0 ? '+' : '') + tcOf(moved, fps));
+
+    /* THE NOTCH STRIP — A WINDOW ROUND THE EDGE, not the whole clip.
+       The first build drew one tick per frame across the clip's whole span, and it was wrong for a
+       reason worth recording: if the strip IS the clip, then the edge being dragged is ALWAYS at one
+       end of it, so "the exact notch it will land on" carries no information at all — and on an
+       18-second clip the 551 ticks thinned into a solid block anyway.
+       So the strip is a window of frames centred on the edge under your finger, one tick per frame, with
+       the landing frame filled in the middle. That is the thing he asked for: *"colouring in the exact
+       notch it will land on, because the notches are frames"*.
+       The in/out marks still appear, but only when those points actually fall inside the window — a mark
+       pinned to the strip's end regardless would be decoration claiming to be information. */
+    var box = hud.querySelector('[data-k="notches"]');
+    if (box) {
+      var SPAN = 20;                                   // frames either side of the edge
+      var edgeT = (trimDrag.edge === 'right') ? endT : startT;
+      var edgeF = Math.round(edgeT * fps);
+      var html = '';
+      for (var k = -SPAN; k <= SPAN; k++) {
+        var x = ((k + SPAN) / (SPAN * 2)) * 100;
+        var isLanding = (k === 0);
+        // every fifth frame reads a little stronger, so the eye can count without labels
+        var cls = 'tth-n' + (isLanding ? ' on' : (((edgeF + k) % 5 === 0) ? ' five' : ''));
+        html += '<i class="' + cls + '" style="left:' + x.toFixed(3) + '%"></i>';
+      }
+      // …and the clip's own ends, shown only if they are inside the window being looked at.
+      var inF = Math.round(startT * fps), outF = Math.round(endT * fps);
+      var place = function (f, cls) {
+        var d = f - edgeF;
+        if (d < -SPAN || d > SPAN) return '';
+        var x = ((d + SPAN) / (SPAN * 2)) * 100;
+        return '<i class="tth-mark ' + cls + '" style="left:' + x.toFixed(3) + '%"></i>';
+      };
+      html += place(inF, 'in') + place(outF, 'out');
+      box.innerHTML = html;
+    }
+
+    // Park it above the clip's lane, clamped so it can never leave the screen.
+    var clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
+    if (clipEl) {
+      var cr = clipEl.getBoundingClientRect(), hr = hud.getBoundingClientRect();
+      var w = hr.width || 200, h = hr.height || 74;
+      var left = Math.min(Math.max(6, cr.left + cr.width / 2 - w / 2), window.innerWidth - w - 6);
+      var top = Math.max(6, cr.top - h - 10);
+      hud.style.left = Math.round(left) + 'px';
+      hud.style.top = Math.round(top) + 'px';
+    }
+    hud.classList.remove('hidden');
+  }
+  function hideTrimHud() { if (trimHud) trimHud.classList.add('hidden'); }
+
   function applyTrimAt(clientX) {
     if (!trimDrag) return;
     const fps = FM.scene.project.fps || 30, pps = pxPerSec();
@@ -2482,6 +2594,7 @@ window.FM = window.FM || {};
       const need = (laneViewW() + HEAD_W) + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2 + 120;
       if ((parseFloat(innerEl.style.width) || 0) < need - 0.5) innerEl.style.width = need + 'px';
     }
+    updateTrimHud();
     FM.requestRender();
   }
 
@@ -3254,7 +3367,7 @@ window.FM = window.FM || {};
         }
         if (trimDrag) {
           if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips after a trim
-          trimDrag = null; hideSnap();
+          trimDrag = null; hideSnap(); hideTrimHud();
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           return;
         }

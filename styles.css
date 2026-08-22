@@ -7451,3 +7451,40 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 .tts-play.on { background: var(--danger, #ff5d6c); color: #2b0509; }
 .tts-play:disabled { opacity: .45; }
 .tts-note { margin-top: 12px; }
+
+/* ---- THE TRIM READOUT (queue 153) ---------------------------------------------------------------
+   Ezra, with an Alight Motion screenshot: *"it tells you all of this information and also shows on
+   little notches, by colouring in the exact notch it will land on, because the notches are frames and
+   the whole thing has to actually line up with the notches."*
+   Fixed-position and pointer-events:none — it floats above the lane while a grip is under your finger,
+   and must never eat the very drag it is reporting on. */
+.tl-trimhud {
+  position: fixed; z-index: 60; pointer-events: none;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 8px 10px 9px; border-radius: 11px;
+  background: color-mix(in srgb, var(--panel-2, #182430) 92%, transparent);
+  border: 1px solid var(--line, #24323f);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  font-variant-numeric: tabular-nums;
+}
+.tl-trimhud.hidden { display: none; }
+.tth-row { display: flex; gap: 12px; }
+.tth-cell { display: flex; flex-direction: column; gap: 1px; min-width: 52px; }
+.tth-cell i { font-style: normal; font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; color: var(--text-faint); }
+.tth-cell b { font-size: 12.5px; font-weight: 600; color: var(--text); }
+/* The strip. 168px wide to match the three columns above it, so the notches line up under the numbers
+   they describe rather than floating at their own width. */
+.tth-notches { position: relative; width: 168px; height: 14px; margin-top: 2px; border-radius: 4px; background: var(--panel-3, #0f1922); overflow: hidden; }
+.tth-n { position: absolute; top: 3px; width: 1px; height: 8px; background: var(--text-faint); opacity: .5; }
+/* THE LANDING NOTCH — the whole point of the strip. Full height, accent-coloured, and wider so it reads
+   as "this one" at a glance rather than as a slightly darker tick among hundreds. */
+.tth-n.on { top: 0; height: 14px; width: 2px; background: var(--accent, #35c5f0); opacity: 1; box-shadow: 0 0 6px var(--accent, #35c5f0); }
+/* The in/out marks, the colours from his screenshot: pink at the in-point, green at the out-point. */
+/* Every fifth frame a touch stronger, so the notches can be counted without labels. */
+.tth-n.five { height: 11px; top: 2px; opacity: .8; }
+/* The clip's own ends — pink in, green out, from his screenshot. Drawn only when they fall inside the
+   window, and BEHIND the landing notch so they can never hide the one thing the strip is for. */
+.tth-mark { position: absolute; top: 0; width: 3px; height: 14px; margin-left: -1px; z-index: 1; }
+.tth-mark.in { background: #ff5d9e; }
+.tth-mark.out { background: #3ddc84; }
+.tth-n.on { z-index: 2; }

@@ -24695,6 +24695,97 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('trimming shows the six numbers and the landing notch (queue 153)', { item: '153' }, async function () {
+    /* The visible half of his request: *"it tells you all of this information and also shows on little
+     * notches, by colouring in the exact notch it will land on"*. Six values in two rows — Start · End ·
+     * Duration, then In · Out · Change with Change signed — and a notch strip with the landing frame
+     * filled.
+     * ⚠️ THE STRIP IS A WINDOW ROUND THE EDGE, and the first build got that wrong in a way worth keeping:
+     * drawn across the CLIP's whole span, the edge being dragged is always at one END of the strip, so
+     * "the exact notch it will land on" carries no information — and an 18s clip thinned 551 ticks into a
+     * solid block. Centred on the edge, the landing notch is the middle one and means something. */
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    const sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const madeMedia = [];
+    try {
+      FM.scene.layers.length = 0;
+      const V = FM.makeLayer('video', { name: 'V', start: 0.5, duration: 2.0 });
+      V.trimStart = 1.5;
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const ac = new OAC(1, 128, 48000);
+      FM.media.set(V.id, { kind: 'video', file: { name: 'p.mp4', size: 1000, type: 'video/mp4' }, duration: 20, audioBuffer: ac.createBuffer(2, 4800, 48000) });
+      madeMedia.push(V.id);
+      FM.scene.layers.push(V);
+      FM.scene.selectedId = V.id; FM.scene.selectedIds = [V.id];
+      FM.scene.project.duration = 12;
+      FM.timeline.rebuild(); await sleep(300);
+
+      const clip = document.querySelector('.clip[data-id="' + V.id + '"]');
+      if (!clip) throw new Error('the clip did not render');
+      const grip = clip.querySelector('.clip-grip.right');
+      if (!grip) throw new Error('no right grip to drag');
+      const r = grip.getBoundingClientRect();
+      const x0 = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pd = (t, x) => new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, isPrimary: true, button: 0 });
+
+      // nothing before the drag
+      const pre = document.getElementById('tl-trimhud');
+      if (pre && !pre.classList.contains('hidden')) throw new Error('the trim readout is showing before any trim started');
+
+      grip.dispatchEvent(pd('pointerdown', x0)); await sleep(60);
+      window.dispatchEvent(pd('pointermove', x0 + 22)); await sleep(160);
+
+      const hud = document.getElementById('tl-trimhud');
+      if (!hud || hud.classList.contains('hidden')) throw new Error('no readout appeared while trimming');
+      const val = (k) => { const el = hud.querySelector('[data-k="' + k + '"]'); return el ? el.textContent.trim() : null; };
+      ['start', 'end', 'dur', 'in', 'out', 'chg'].forEach(k => {
+        const v = val(k);
+        if (!v || v === '—') throw new Error('the "' + k + '" value is empty on a video clip (' + v + ') — a video has all six');
+      });
+      if (!/^[+-]/.test(val('chg'))) throw new Error('Change is not signed: "' + val('chg') + '" — he asked for +00:02:59');
+      /* In/Out are SOURCE times and must differ from the timeline ones, or the readout is showing the
+         same pair of numbers twice and only looks like it knows the difference. */
+      if (val('in') === val('start')) throw new Error('In equals Start — the readout is not distinguishing source time from timeline time');
+
+      // the strip: a window, with exactly one landing notch, and it is the centre one
+      const ticks = hud.querySelectorAll('.tth-n');
+      if (ticks.length < 10) throw new Error('the notch strip drew ' + ticks.length + ' notches — that is not a frame ruler');
+      const landing = hud.querySelectorAll('.tth-n.on');
+      if (landing.length !== 1) throw new Error(landing.length + ' notches are marked as the landing frame — exactly one can be');
+      const lr = landing[0].getBoundingClientRect();
+      const br = hud.querySelector('[data-k="notches"]').getBoundingClientRect();
+      if (Math.abs((lr.left + lr.width / 2) - (br.left + br.width / 2)) > 4) throw new Error('the landing notch is not centred on the edge — if it sits at an end, the strip is showing the whole clip and the notch means nothing');
+
+      // it must never eat the drag it is reporting on
+      if (getComputedStyle(hud).pointerEvents !== 'none') throw new Error('the readout is not pointer-events:none — it would swallow the very drag it reports');
+
+      window.dispatchEvent(pd('pointerup', x0 + 22)); await sleep(200);
+      if (!hud.classList.contains('hidden')) throw new Error('the readout stayed on screen after the trim finished');
+
+      // a SHAPE has no source, so In/Out must be honest about that rather than invent numbers
+      FM.scene.layers.length = 0;
+      const S = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 40, fill: '#fff', start: 0.5, duration: 2 });
+      FM.scene.layers.push(S);
+      FM.scene.selectedId = S.id; FM.scene.selectedIds = [S.id];
+      FM.timeline.rebuild(); await sleep(280);
+      const clip2 = document.querySelector('.clip[data-id="' + S.id + '"]');
+      const grip2 = clip2.querySelector('.clip-grip.right');
+      const r2 = grip2.getBoundingClientRect();
+      const x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height / 2;
+      const pd2 = (t, x) => new PointerEvent(t, { bubbles: true, clientX: x, clientY: y2, pointerId: 1, isPrimary: true, button: 0 });
+      grip2.dispatchEvent(pd2('pointerdown', x2)); await sleep(60);
+      window.dispatchEvent(pd2('pointermove', x2 + 20)); await sleep(150);
+      if (val('in') !== '—') throw new Error('a shape has no source, but In shows "' + val('in') + '" — the readout is inventing a number');
+      window.dispatchEvent(pd2('pointerup', x2 + 20)); await sleep(150);
+    } finally {
+      madeMedia.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.duration = dur0;
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.timeline.rebuild(); await sleep(120);
+    }
+  });
+
   test('a trimmed edge lands on a whole frame (queue 153)', { item: '153' }, async function () {
     /* His words, about Alight Motion's trim: *"the notches are frames and the whole thing has to actually
      * line up with the notches."* That sentence is the requirement, and it is about the RESULT.

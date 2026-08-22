@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.57
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.58
 >
-> **State:** v11.57, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.58, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5053,8 +5053,7 @@ better still, keep working inside the turn rather than parking work for a later 
       area at `var(--stage)`, which is darker than the home ground by design), so ask him which strip he
       means before chasing it.
 
-- [ ] **153 — Trimming should show the numbers and the frame notches, like Alight Motion.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **153 — Trimming should show the numbers and the frame notches, like Alight Motion.** ✅ **DONE v11.57 + v11.58.**
       ⚠️ **THIS ENTRY HAD NO HEADER UNTIL 22 AUG — it sat inside #154's body for eight days**, which is
       why it was never worked: every queue tool here matches `^- \[ \]`, so a request with no header of
       its own is not deprioritised, it is UNREACHABLE. The numbering jumped 152 → 154 and nobody noticed.
@@ -5091,10 +5090,21 @@ better still, keep working inside the turn rather than parking work for a later 
       a trim, and both edges shift together — which reads exactly like the fix failing. Drive
       `.clip-grip.left` / `.clip-grip.right`, and assert the untouched edge did not move, which is what
       tells a trim from a move.
-      **STILL TO BUILD — the visible half:** the six-value readout (`Start · End · Duration` /
-      `In · Out · Change`, Change signed) and the notch strip with the landing notch filled in and
-      coloured marks at the in/out points. It can now be honest, because the trim really does land where
-      the strip would say.
+      ✅ **AND THE VISIBLE HALF IS DONE — v11.58. #153 IS COMPLETE.**
+      A panel above the clip while a grip is under your finger: **Start · End · Duration** (the clip on the
+      TIMELINE) over **In · Out · Change** (the points inside the SOURCE), Change signed as he asked
+      (`+00:02:59`). Under them a frame-notch strip with the landing notch lit, every fifth notch drawn
+      stronger so it can be counted, and pink/green marks for the clip's own ends.
+      ⚠️ **A SHAPE SHOWS A DASH for In/Out** rather than inventing numbers — it has no source, and a
+      readout that makes up a value it cannot know is worse than one that admits the gap.
+      ⚠️ **THE STRIP IS A WINDOW ROUND THE EDGE, and the first build got this wrong in a way worth
+      keeping.** Drawn across the CLIP's whole span — which is what this entry literally describes — the
+      edge being dragged is ALWAYS at one end of the strip, so *"the exact notch it will land on"* carries
+      no information at all; and an 18-second clip thinned 551 ticks into a solid block. Centred on the
+      edge, the landing notch is the middle one and means something. The mutation that moves it back to an
+      end is caught.
+      ⚠️ `pointer-events: none` on the panel, asserted by the test — a readout that swallowed the very
+      drag it reports on would be a lovely way to break trimming.
 
 - [x] **155 — Put the open-project glint on the SELECTED add-menu tab. ALREADY DONE — verified and tested v7.70.** (14 Aug.) His words: *"I want
       the effect that you have on the open project, like with the shiny line going around it, also on
