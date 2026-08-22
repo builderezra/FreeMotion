@@ -171,6 +171,20 @@ wheel pan rather than copied. The control that matters most — one finger still
 gliding" failed once during this tick and passed on the next three runs (including two under mutate.sh).
 It is a timing-sensitive fling test, not caused by this change. If it fails again, it wants its own look.
 
+**✅ v11.60 — #257 done, and it is the most instructive one yet.** The white gradient ring shipped
+correctly at v8.36, then **queue 286 broke it on desktop** by claiming the same `::after` on every panel
+card. The PC card had NO visible outline for weeks — its border is transparent on purpose, because the
+ring IS the edge. 257 now owns `::before`, 286 keeps `::after`, both draw.
+🚨 **257 HAD A TEST AND IT STAYED GREEN THE WHOLE TIME.** It is scoped to `.addmenu--sheet` — the PHONE
+instance — which 286 never touches. **There are TWO add-menu instances in the DOM (BUG-HUNT §2), and a
+test that only ever looks at one will pass while the other is visibly broken.** The new test asserts both
+and REFUSES TO PASS if it never saw the panel one. **Apply that shape wherever a component renders twice.**
+
+**⚠️ FIFTH INSTANCE OF THE SAME ROOT CAUSE: two things sharing one slot.** A stray `selected` (#471), a
+stale fps mirror (#118), a dead preset block (#454), a duplicated clamp (#165.3, pre-empted), and now two
+CSS features on one pseudo-element. **When adding an effect to an element, check what already owns that
+slot.**
+
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
