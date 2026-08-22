@@ -19,7 +19,7 @@
 > | **469** | Are the ◆ keyframe buttons fiddly to tap on your phone? **A** leave them · **B** same look, bigger invisible target · **C** visibly bigger | **B** if you've ever mis-tapped one, **A** if not |
 > | **460** | Colouring effects "still do nothing" — but all 43 measurably work. Which of the two options in the entry? | Send one screenshot of the exact effect + slider |
 > | **432** | The template icon — **the five options are now pictured in the chat** (they had only ever been described in words, which is why this sat). **A** stacked cards · **B** ⭐ frame + play · **C** folded card · **D** frame + sparkle · or "none of these" | **B** — it is the only one that still reads at 24px |
-> | **456** | The two rainbow Create buttons: pick a letter, or a mix ("B's colours with D's comet") | — |
+> | **456** | The Create buttons — **the four options are now pictured in the chat** (they had only been described, which is why this sat). **A** ⭐ warm + counter-sweep · **B** drifting pools · **C** breathing hue · **D** comet *(keeps the current colours, so it fails your "different colours" ask on its own)* · or a mix | **A** — only one with a clearly different palette AND real movement |
 > | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
 > | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
 > | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
@@ -14602,6 +14602,21 @@ wait for them to report back."*
       · **D · comet sweep** — ramp holds still, a white comet runs the rim; matches the signature glint
         he asked for elsewhere. ⚠️ **D keeps the CURRENT palette, so it fails clause 1 on its own** and
         would need a colour change alongside.
+      🔴 **22 Aug — "DRAWN AND SENT" WAS NOT TRUE, AND THAT IS WHY THIS HAS SAT.** The four options were
+      built into `tests/_createbtn.html` — a local file on this machine — and then described to him in
+      words. He cannot open it from his phone. **Same failure as #432, found the same day: a visual
+      choice offered in prose is not a choice.**
+      ✅ **Now actually shown** — the page rendered and screenshotted into the chat, with the HOME button
+      at the top unchanged for comparison, which is the whole point of clause 1.
+      ⚠️ **AND A LIMIT OF THE PICTURES, said rather than glossed: a still cannot show MOTION**, and motion
+      is most of what he asked for (*"both moving"*, *"something more visually creative"*). So the stills
+      settle the COLOUR question and the words have to carry the movement:
+      · **A** — warm amber→pink→violet, plus a second faster sheen turning the opposite way. The only
+        option with a plainly different palette in the still, and two speeds read as depth.
+      · **B** — cool green/teal pools that breathe and rearrange, no rotation at all.
+      · **C** — pink/violet ramp that holds still while its hue drifts. Calmest.
+      · **D** — a white comet runs the rim; **the disc keeps the CURRENT palette**, so on its own it
+        fails clause 1 and would need a colour change with it.
       ⏳ **WAITING ON EZRA — a letter, or a mix (e.g. "B's colours with D's comet").**
       Clause 2 is satisfied by all four: every option still moves.
 - [x] **457 — ✅ **DONE v11.36.** The export button was never meant to be rainbow; put it back.** (21 Aug.) His words,
