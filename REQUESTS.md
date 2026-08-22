@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.50
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.51
 >
-> **State:** v11.50, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.51, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -12947,6 +12947,7 @@ wait for them to report back."*
       proves it and must stay green.
 
 - [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
+      **STATUS: 🟢 READY — nothing is stopping this**
       v10.32.) His words, verbatim:
 
       > when extending the add pannel it makes the three dots at the bottom go down

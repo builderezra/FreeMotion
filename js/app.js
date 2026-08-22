@@ -5202,25 +5202,6 @@ window.FM = window.FM || {};
       }
       cvAspect = 'custom';
     }
-    /* ---- Canvas presets (queue 183) ----------------------------------------------------------
-     * "This settings menu shall have an option that says save project as preset." Saves what THIS
-     * dialog holds — aspect, size, frame rate, background — and nothing else. Applying one writes
-     * the controls rather than the project: you still press Apply, so a mis-tap on a preset is
-     * undone by Cancel exactly like any other change made in here. Making it apply straight to the
-     * project would give this dialog a second, hidden Apply button.
-     *
-     * The names are user text. Every one of them goes in via textContent, never innerHTML — a
-     * project called <img onerror=...> must not be able to run anything when you open a dialog. */
-    function cvCurrentCfg(name) {
-      const s = cvCompute();
-      const fpsSel = document.getElementById('cv-fps'), fpsNum = document.getElementById('cv-fps-num');
-      const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
-      return {
-        name: name, w: s.w, h: s.h,
-        fps: Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30)),
-        bg: cvBg, aspect: cvAspect, res: (document.getElementById('cv-res') || {}).value || '',
-      };
-    }
     const canvasBtn = document.getElementById('btn-canvas');
     if (canvasBtn && cvDialog) {
       const fpsSel = document.getElementById('cv-fps');

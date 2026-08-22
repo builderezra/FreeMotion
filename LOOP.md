@@ -53,28 +53,39 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-**▶️ THE LOOP IS RUNNING — every minute, and it stays that way. See rule 8b: never pause it.**
+**▶️ LOOP RUNNING — every minute, and it stays that way (rule 8b: never pause it).**
 
-**22 Aug — he overruled my decision to stop, and he was right.** I had paused the cron after 16 ticks of
-"0 actionable". His words: *"why would you stop? you did not meet every task i believe, double check
-again and make sure ur unstoppable as a high priority."* Restarted immediately, and the rule is now in the
-rules section so no future tick repeats it.
+**⚠️ 22 Aug — HE WAS RIGHT AND I WAS WRONG. "0 actionable" WAS FALSE.**
+He said *"you did not meet every task i believe, double check again"* and then *"just check extra hard
+theres no leftovers coz looking through uve missed a lot"*. Both were correct.
 
-**AND HIS SECOND POINT IS THE SERIOUS ONE: "you did not meet every task".** The "0 actionable" verdict came
-from `tools/_classify.py` — regexes over prose, written by me. A full independent audit of all 33 open
-entries is running now (agents re-reading each entry AND the code it names, instructed to be adversarial
-towards the NEEDS_EZRA verdict, with a second stage trying to refute every "buildable" claim). The most
-likely miss it is hunting: **multi-clause requests where one clause needs him and the others do not.**
-Results and the work they produce go here as they land.
+**An independent audit of all 34 open entries — agents re-reading each entry AND the code, with a second
+pass trying to REFUTE every claim — found 19 entries with real buildable work.** My classifier had said
+zero. It reads prose with regexes; it cannot tell "clause 3 needs Ezra" from "the whole entry is blocked",
+and that is precisely the miss. **NEVER treat `tools/_classify.py` as proof there is no work. It is a
+hint. When it says 0, AUDIT BY HAND.**
 
-**State: v11.50, 816 tests green, tree clean, `HEAD == ssh/main`, verified live** —
-<https://builderezra.github.io/FreeMotion/> serves v11.50 with this session's fixes.
+**ALSO FOUND, and worse: #426 was ticked `[x]` DONE while its own header read "⚠️ STAYS OPEN".** Every
+queue tool matches `^- \[ \]`, so it was UNREACHABLE for weeks — the exact "nothing rots at the bottom"
+failure next.sh exists to prevent, third distinct cause. Reopened; next.sh now detects the contradiction.
 
-**What the run produced so far:** four real bugs found and fixed (#466 Text to Voice forgot the chosen
-voice; #467 a damaged file imported as an empty project; #468 a damaged file silently lost its animations;
-#470 a template could create a project the app cannot open, crashing on every relaunch), four coverage
-gaps closed, two safeguards built (ship.sh refuses a missed cache-buster; ship.sh refuses a stale
-REQUESTS.md summary), and sixteen probe errors caught before they reached him.
+**THE 19 CONFIRMED-BUILDABLE ITEMS** (each survived an adversarial refutation pass; full first-steps in
+`scratchpad/buildable.json`, and the raw audit in the task output). Work them OLDEST FIRST as always:
+**47** (export safety — he authorised it: *"if there's a thing to make exporting safer then do it"*; the
+smallest piece is telling him when crash-protection has silently switched off), **96** (a song's tail —
+build `tests/_songtail.html`; ⚠️ the auditor's proposed clamp is a REGRESSION, do not apply it),
+**202** (perf readout — record WHICH operation ran late, in js/perf-probe.js only), **206**, **215**,
+**361**, **387**, **406**, **408**, **417**, **418** (the undo/redo icon he sent a picture of —
+index.html:436), **428**, **432**, **456**, **460**, plus the identity pass (docs-only) and two unnumbered.
+
+**✅ v11.51 — first item off that list, and it was his own explicit instruction.** *"presets are just for
+effects not anything else, if it says preset remove any other function"* — a dead `cvCurrentCfg` and its
+"Canvas presets (queue 183)" comment block were still in js/app.js, referenced by nothing. Removed.
+
+**A SECOND AUDIT IS STILL RUNNING:** all **243 CLOSED multi-part requests**, decomposed into his verbatim
+clauses and checked against the code, hunting for halves that were ticked DONE without being built. That
+is the documented failure mode of this file (*"how do you leave all this out"*). Fold its results in here
+when they land.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
