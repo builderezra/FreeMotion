@@ -315,6 +315,20 @@ have inherited it as fact** — which is precisely what rule 11's "a blocker is 
 is about, committed by me one tick after writing it. **When a measurement says broken, check the
 instrument before the code**, and that includes your own command line.
 
+**✅ 22 Aug — #353 CLOSED. A standing instruction of his had been sitting in the request list, not in
+the rules, for five days — and one clause had NO structural home at all.**
+His four clauses: oldest-first, a workflow step/wait limit, quality-test everything, and never block on a
+question. Three had been absorbed into these rules months ago. **Clause 2 — the workflow budget — had
+not, and nothing noticed because no workflow has been launched since he asked.** It is rule 13 now.
+That is the exact shape of failure this file exists to remove: the constraint was written down in the
+one place that would NOT be read at the moment it applies. He wrote it after watching a workflow freeze
+and cost him hours.
+**THE LESSON: a standing instruction in REQUESTS.md is a hope; in LOOP.md it is a rule.** When an entry
+turns out to be an instruction rather than a task, its home is the rules file — and then the entry closes
+instead of holding the queue forever. #353 had been re-read at the top of the list for several ticks.
+Also ticked #473, whose checkbox I had left open while writing "DONE v11.72" in its body — the very shape
+the new next.sh detector was added for, committed by me two ticks after adding it. The gate caught it.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
