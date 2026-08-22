@@ -17,7 +17,7 @@
 > | # | The question | If you can't decide |
 > |---|---|---|
 > | **469** | Are the ◆ keyframe buttons fiddly to tap on your phone? **A** leave them · **B** same look, bigger invisible target · **C** visibly bigger | **B** if you've ever mis-tapped one, **A** if not |
-> | **460** | Colouring effects "still do nothing" — but all 43 measurably work. Which of the two options in the entry? | Send one screenshot of the exact effect + slider |
+> | **460** | ✅ **Answered — see below.** All 43 work; your **flat magenta rectangle on a black background** cannot show several of them (Channel Remap swaps red and blue, which are *identical* in that magenta; Long Shadow's black shadow lands on a black background; Halation needs a highlight). Try them on a photo or a gradient. **#477** will make the app say this itself | — |
 > | **432** | The template icon — **the five options are now pictured in the chat** (they had only ever been described in words, which is why this sat). **A** stacked cards · **B** ⭐ frame + play · **C** folded card · **D** frame + sparkle · or "none of these" | **B** — it is the only one that still reads at 24px |
 > | **456** | The Create buttons — **the four options are now pictured in the chat** (they had only been described, which is why this sat). **A** ⭐ warm + counter-sweep · **B** drifting pools · **C** breathing hue · **D** comet *(keeps the current colours, so it fails your "different colours" ask on its own)* · or a mix | **A** — only one with a clearly different palette AND real movement |
 > | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
@@ -4556,6 +4556,28 @@ better still, keep working inside the turn rather than parking work for a later 
 ---
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
+
+- [ ] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
+      **STATUS: 🟢 READY — nothing is stopping this**
+      broken.** (23 Aug — not a new report from him; the conclusion of #460, which he has raised three
+      times.)
+      **Why this exists.** #460 measured all 43 Colouring effects and found 43 of 43 working. He has still
+      watched nothing happen, three separate times, because **his test subject cannot show some of them**:
+      Channel Remap swaps red and blue, which are identical in his magenta; Halation needs a highlight;
+      Long Shadow's black shadow lands on a black background. Every one of those is correct behaviour and
+      every one of them looks exactly like a broken button.
+      **The job:** when an effect is enabled on a layer and measurably changes nothing at its current
+      settings, say so on its row — one quiet line, with the reason where it is knowable ("no highlight to
+      bloom", "this colour has equal red and blue", "the shadow is the same colour as the background").
+      **The machinery already exists** — `js/fx-thumbs.js` has `contributes(layer)`, which renders a layer
+      with and without something and counts changed pixels, plus `lrender`/`sceneWithout` to do it at tile
+      size. This needs the same comparison scoped to ONE effect rather than the whole layer.
+      ⚠️ **The hard part is not the detection, it is not crying wolf.** An effect that is off, or at
+      amount 0, or genuinely subtle, must not be labelled dead — and the check must cost nothing per
+      frame (compute it when the panel renders, not in the render loop). A diagnostic that fires wrongly
+      stops being read, which this file has already watched happen twice.
+      **Deliberately logged rather than half-built:** it is a feature, not a fix, and a bad version of it
+      is worse than none.
 
 - [x] **476 — PC: the layer-category grid sizes its cards wrongly after you interact with it a while.**
       ✅ **PARTLY DONE v11.77 — the misalignment is fixed; the "sometimes" half did NOT reproduce.**
@@ -14975,6 +14997,26 @@ wait for them to report back."*
       · **radialshadow — WORKS.** 2,176 pixels, same conditions.
       · **halation — WORKS** (34,600 on white). · **matchgrade — WORKS** (5,400 with a source layer).
       **SO: nothing in the Colouring category has been shown to be broken. 43 of 43.**
+
+      💡 **23 Aug — THE ANSWER HE IS OWED, in plain terms, because "43 of 43 work" is not an answer to a
+      man who has watched nothing happen three times.** Read the measurements above together and they say
+      something specific and useful: **his test subject cannot show several of these effects, by design.**
+      He applied eight at once to a **flat magenta `#cc22cc` rectangle**, and on that exact fill:
+      | effect | what it did on his magenta | why |
+      |---|---|---|
+      | **Channel Remap** | **literally nothing** | its default mode swaps RED and BLUE, and in `#cc22cc` red and blue are **both 204** — swapping two identical numbers is a no-op. On orange it changes 7,000 pixels |
+      | **Halation** | **nothing** | it blooms around HIGHLIGHTS and a flat mid-tone has none. 34,600 pixels on white |
+      | **Long Shadow** / **Radial Shadow** | **invisible** | their shadow is BLACK by default, and the project background is black — the shadow lands perfectly and cannot be seen. Change the shadow colour and it appears |
+      | **Match Grade** | nothing | it needs a source layer to match; it has nothing to copy until you give it one |
+      **So on a flat rectangle on a black background, a handful of the Colouring effects genuinely
+      produce no visible change, and the app never says so.** That is not the effects being broken — but
+      from where he is sitting it is indistinguishable from it, and telling him "they all work" without
+      this is useless.
+      **What to test them on instead:** anything with light and shade in it — a photo or video clip, or a
+      shape with a gradient fill. The ones above need, respectively: a colour whose red and blue differ,
+      a highlight, a shadow colour that is not the background, and a source layer.
+      ➡️ **The structural fix is logged as #477** — the app should say when an applied effect changes
+      nothing on this layer, instead of leaving him to conclude it is broken.
       ⚠️ **How this went wrong five times over, because the pattern matters more than the result.** The
       count went 9 → 6 → 4 → 2 → 0 across one session, and EVERY drop came from a blind spot in the
       probe, never from a change to the app:
