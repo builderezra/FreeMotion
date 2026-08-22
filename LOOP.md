@@ -510,6 +510,22 @@ one line — it silently deleted the loop.** `git checkout` restored it (the fil
 **In a minified-style file, replace exact substrings, never to end-of-line**, and check the edit landed
 before running anything.
 
+**✅ v11.76 — THE BIGGEST LAG WIN, and it was a SHARED fault, not another single effect.**
+Sixteen kernels opened with `d.slice()` — a fresh 5.6 MB array per invocation, **133 MB of garbage a
+frame** at 24 effects. On a phone that is collected in PAUSES, which fits *"playback is a buggy mess while
+scrubbing is fine"* far better than steady slowness. One reused buffer, refilled: **zoomstreaks 173→59,
+lensblur 158→52, tiltshift 74→37, spinblur 102→70 — three of which I had never touched.**
+**THE LESSON: after fixing two instances of a cost, look for the SHARED one.** Two single-effect wins
+(tiltshift, spinstreaks) were worth ~975ms between them; this one change beat both, across effects I had
+not read. **Ask what every kernel does on its first line before optimising any of them individually.**
+**⚠️ AND THE NEAR-MISS THAT IS NOW A TEST.** The bulk edit matched a bare variable name (`s=d.slice()`)
+and converted one of `sketch`'s THREE copies — a kernel that holds several live snapshots cannot share one
+buffer, and the picture would have been wrong in a way no single-kernel test would notice. Caught by
+counting copies per kernel afterwards. There is now a SOURCE test that fails if any multi-copy kernel is
+put on the scratch, mutation-checked by re-making exactly that edit.
+**When a bulk edit uses a short identifier, verify per-site afterwards — `git checkout` is cheap, a silent
+corruption is not.**
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
