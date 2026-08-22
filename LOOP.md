@@ -261,6 +261,23 @@ clause 1. Clause 4 shipped: "Save template file…" writes the same `.fmotion.js
 the existing importer reads it and the app stays local-only — the route he chose himself.
 `embedFonts` was EXTRACTED rather than copied so the two exporters cannot drift.
 
+**✅ 22 Aug — a THIRD shape of unreachable entry, found by the tick it wasted.**
+#343 had all four clauses ticked and its own checkbox left at `[ ]`, so it sat at the top of oldest-first
+looking like work — and I opened this tick by re-reading a finished entry. Added the mirror of the
+existing "ticked [x] but says STAYS OPEN" detector to `tools/next.sh`: **an open entry whose every
+numbered clause is ticked**. It only fires on entries that HAVE clauses, so prose entries cannot cry wolf.
+**It found THREE on its first run, and only one was the one I knew about:**
+· **343** — genuinely finished. Closed.
+· **395** — MP3 is still his call, but that sentence lived inside a TICKED clause. Now clause 3, with
+  options and a recommendation.
+· **425** — a real CONFLICT between two of his own instructions (copy on the left vs the group on the
+  right) was sitting inside a ticked clause too. Now clause 3, with options.
+**THE LESSON: the queue can lie in both directions, and the cheap direction hides better.** "Ticked but
+not done" loses work and gets found eventually. "Done but not ticked" only costs time — so nothing ever
+raises it, and it re-costs that time every single pass. Both are now detected rather than trusted.
+**Note for later: next.sh's detectors have no self-tests**, unlike `_classify.py`. This one proved itself
+by finding three real cases on its first run, but the same "the symptom is silence" argument applies.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
