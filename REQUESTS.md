@@ -4596,9 +4596,28 @@ better still, keep working inside the turn rather than parking work for a later 
         this fill **both saturate to 255** — so the two renders were identical for a reason that has
         nothing to do with caching. Verified separately that brightness genuinely works (204 → 255 at
         2.2, → 61 at 0.3). **A parameter sweep across a clipped range measures nothing.**
-      ⏭️ **The next concrete step, and it is narrow:** bisect what differs between "parameter set before
-      the first render" (0 bytes) and "parameter changed after a render" (308 bytes). That gap is the
-      only reliable signal so far, and it is reproducible on demand.
+      ✅ **SOLVED 23 Aug, and the answer is that MY PROBE WAS THE BUG. There is no compositor fault.**
+      The bisect was done properly — one probe, all cases in the same run, with controls:
+      | case | differing bytes |
+      |---|---|
+      | value set BEFORE any render | **0** |
+      | value changed AFTER a render | **308** |
+      | same scene rendered twice (control) | 0 — renders are deterministic |
+      | after re-rendering the live scene | 308 — persistent, not a race |
+      Then located them: **all 103 differing pixels sat on ONE ROW (y=90 exactly), spanning the whole
+      width of the rectangle, 25 levels off.** A single-scanline seam.
+      **The probe rendered a 1080x1920 project into a 160x160 SQUARE canvas** — a non-uniform squash. Re-run
+      at **full project resolution with no scaling: ZERO differing pixels.** The seam was resampling, made
+      by the measurement.
+      ➡️ **WHY THIS MATTERS FOR REBUILDING THE FEATURE, which is the useful part:** `effectDoesNothing`
+      compared two renders taken through `fx-thumbs`' reduced raster. **That comparison is not safe at a
+      resampling scale** — the downscale can differ between two paths by a scanline and read as "the
+      effect did something". So the rebuild must either compare at a raster that does not resample, or
+      ignore differences too small and too thin to be the effect. The detection logic was right; the
+      **surface it measured on** was the fault.
+      ⚠️ **Also verified along the way and worth keeping:** rendering writes NO cache keys onto the layer
+      or the effect (checked before/after), and the two scene clones are byte-identical apart from
+      `clipColor`. Both plausible causes, both eliminated.
       **(23 Aug — not a new report from him; the conclusion of #460, which he has raised three times.)** — built the same day it was logged, because #460 is three reports old.**
       **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
       — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
