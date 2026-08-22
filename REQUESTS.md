@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.70
 >
-> **State:** v11.70, **838 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.70, **839 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -7999,6 +7999,24 @@ better still, keep working inside the turn rather than parking work for a later 
       ladder never ran during the sample.
       **So the next reading settles it**, and it is worth taking one WHILE PLAYING. A probe rebuilding his
       scene shape here cannot: real playback does not start headlessly, so renderAvg/gapAvg stay 0.
+
+      **22 Aug — THE LADDER IS NOT BROKEN, measured end to end in the real app.** The entry called a
+      never-stepping-down ladder "the first thing to look at". Driven with a cost that scales with the
+      backing store (which is how real rasterising behaves): **tier 0 → 1 → 2 → 3, 497k → 315k → 187k →
+      130k pixels, frame gap 101ms → 32.6ms** — 10fps to 30fps, settled, not latched. So on this machine
+      the regulator works. Your tier-0-at-10.7fps sample is therefore the OTHER diagnosis v10.18 named —
+      the ladder never being asked — which is what the corrected report now says explicitly.
+      **Two measuring traps found on the way, both of which produced a WRONG reading first:**
+      · **The payoff latch persists for the life of the page.** A drop must earn its place (queue 54), so
+        when one buys nothing the ladder reverts it and latches probing OFF. My second measurement
+        inherited that latch from my first and read "the ladder never steps down" — a bug that was not
+        there. Only `detail` mode clears it from outside.
+      · **A flat cost is the wrong instrument.** Shedding pixels genuinely cannot help a fixed burn, so
+        the ladder is RIGHT to revert, and a test built on one reports a defect that does not exist.
+      **What shipped: a test that the ladder is WIRED to playback**, which is a different question from
+      whether it decides correctly. The existing test drives `FM._notePlaybackCost` directly — fast and
+      exact, and it stays green if you delete the one line in the play loop that feeds it. This one plays
+      for real, and that deletion is caught by it alone.
 
       **★ HIS SECOND REAL MEASUREMENT, 19 Aug (v10.02) — and it moves this entry on.** Verbatim:
       ```

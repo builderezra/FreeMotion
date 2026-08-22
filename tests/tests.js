@@ -38579,4 +38579,93 @@
       throw new Error('150 ms of real drift was injected well after warm-up and the controller did nothing (max rate ' + r.el.maxRate.toFixed(4) + ', ' + r.el.seeks + ' seeks) — the warm-up gate has become "never correct" and the sound would drift away from the picture');
     }
   });
+
+  /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides
+   * correctly, and the one no existing test could answer.
+   * "the quality ladder actually steps down when shedding pixels helps" already pins the DECISION, and
+   * pins it better than anything timing-based could: it drives `FM._notePlaybackCost` directly, so it
+   * is fast and exact. What it cannot see is whether real playback ever CALLS that function. Cut the
+   * one line in the play loop that feeds it and that test stays green while the app ships a regulator
+   * that never runs — which is indistinguishable, from the outside, from his 10.7fps-at-tier-0 sample.
+   * So this one plays for real and asserts the outcome: pixels shed, and frames actually faster.
+   * Measured live before writing it — tier 0 -> 1 -> 2 -> 3, 497k -> 315k -> 187k -> 130k pixels,
+   * frame gap 101 ms -> 32.6 ms. The ladder is healthy here; this keeps it wired.
+   * Measured here: with a cost that scales with the backing store, tier walks 0 -> 1 -> 2 -> 3
+   * (497k -> 315k -> 187k -> 130k pixels) and the frame gap goes 101 ms -> 32.6 ms. The ladder is not
+   * broken on this machine. This locks that down.
+   *
+   * TWO THINGS THIS TEST HAS TO DO THAT ARE NOT OBVIOUS, both of which cost me a wrong reading first:
+   * · CLEAR THE LATCH. A tier drop must EARN its place (queue 54: he did not want quality dropped for
+   *   nothing), so when a drop buys nothing the ladder reverts it and latches probing OFF. That latch
+   *   persists for the life of the page — so a measurement taken after any earlier heavy probe is not
+   *   independent. My first run read "the ladder never steps down" purely because something before it
+   *   had latched. 'detail' mode zeroes the latch, which is the only reset from outside.
+   * · MAKE THE COST SCALE WITH PIXELS. A flat burn is the wrong instrument: shedding pixels genuinely
+   *   does not help it, so the ladder is RIGHT to revert, and a test built on one would report a bug
+   *   that is not there. */
+  async function q202Ladder(opts) {
+    const cv = document.getElementById('canvas') || document.querySelector('canvas');
+    const o = opts || {};
+    const saved = { render: FM.renderScene, layers: FM.scene.layers.slice(),
+                    dur: FM.scene.project.duration, mode: FM.settings.get('playbackQuality'), t: FM.time };
+    const build = () => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'box', start: 0, duration: 12, x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#f00' });
+      FM.scene.layers.push(L); FM.scene.project.duration = 12;
+      FM.setTime(0); FM.refreshAll();
+    };
+    try {
+      // ---- clear the latch, or nothing below is independent ----
+      FM.settings.set('playbackQuality', 'detail');
+      FM.renderScene = saved.render; build();
+      FM.play(); await sleep(400); FM.pause();
+      const reset = FM._perfState();
+      FM.settings.set('playbackQuality', 'auto');
+
+      build();
+      /* Normalised against THIS canvas's own starting size, not a fixed pixel count. A hardcoded
+         reference makes the burn depend on whatever resolution the harness happens to run at — the
+         first version used 500k and produced a 33 ms frame here, so the test tripped its own
+         "is it even struggling?" control instead of measuring anything. */
+      const px0 = Math.max(1, cv ? cv.width * cv.height : 1);
+      FM.renderScene = function () {
+        const px = cv ? cv.width * cv.height : px0;
+        const ms = o.flat ? o.costMs : (px / px0) * o.costMs;
+        const t0 = performance.now(); while (performance.now() - t0 < ms) { /* burn */ }
+      };
+      const before = FM._perfState();
+      FM.play();
+      const trace = [];
+      for (let i = 0; i < (o.samples || 12); i++) { await sleep(250); const st = FM._perfState(); trace.push(st); }
+      const last = FM._perfState();
+      FM.pause();
+      return { reset: reset, before: before, last: last, trace: trace,
+               deepest: Math.max.apply(null, trace.map(x => x.tier)),
+               firstGap: trace[0].gapAvg, lastGap: last.gapAvg };
+    } finally {
+      try { FM.pause(); } catch (e) {}
+      FM.renderScene = saved.render; FM.scene.layers = saved.layers;
+      FM.scene.project.duration = saved.dur;
+      FM.settings.set('playbackQuality', saved.mode || 'auto');
+      FM.setTime(saved.t);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  }
+
+  test('the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)', { item: '202' }, async function () {
+    if (typeof FM._perfState !== 'function') throw new Error('FM._perfState is missing — the ladder cannot be observed');
+    const r = await q202Ladder({ costMs: 100, samples: 14 });
+
+    // CONTROLS FIRST: without these a latched ladder or a dead probe reads as a pass.
+    if (r.reset.locked) throw new Error('the latch was still set after the detail-mode reset — this measurement is not independent of whatever ran before it, which is exactly how I first misread this as a broken ladder');
+    if (!(r.firstGap > 60)) throw new Error('the scene was only ' + r.firstGap.toFixed(1) + ' ms a frame to begin with — it is not struggling, so there is nothing for the ladder to react to and this proves nothing');
+
+    if (!(r.deepest > 0)) throw new Error('the ladder never left tier 0 while frames took ' + r.firstGap.toFixed(1) + ' ms — it can see the cost and is not acting on it, which is the "tier 0 of 6 at 10.7 fps" his phone reported');
+    if (!(r.last.canvasPx < r.before.canvasPx)) throw new Error('the tier moved but the canvas did not shrink (' + r.before.canvasPx + ' -> ' + r.last.canvasPx + ') — a tier number that sheds no pixels buys nothing');
+    /* And it has to have WORKED. A ladder that drops rungs without the frames speeding up is the
+       worst outcome — soft AND slow — and it is what queue 54's payoff latch exists to prevent. */
+    if (!(r.lastGap < r.firstGap * 0.8)) throw new Error('pixels were shed but the frame gap barely moved (' + r.firstGap.toFixed(1) + ' -> ' + r.lastGap.toFixed(1) + ' ms) — the preview went soft for nothing');
+  });
+
 })();
