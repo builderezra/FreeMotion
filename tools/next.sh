@@ -171,6 +171,43 @@ if [ -n "$ALLDONE" ]; then
   echo
 fi
 
+# AN OPEN ENTRY WHOSE BODY CLAIMS A VERSIONED FIX (22 Aug). The no-clauses sibling of the check above,
+# and it was added because that one MISSED #431: the entry has no numbered clauses, so nothing looked at
+# it, while its body said "✅ FIXED v11.71" and its checkbox and STATUS line both still said open. He had
+# already seen the fix working in a screenshot.
+# No suppression heuristic here on purpose. The obvious one — "unless the entry also says something is
+# still outstanding" — would have suppressed #431 itself, because its STALE status line says NEEDS YOU.
+# Measured before shipping: across the whole file this matches exactly ONE entry, so it does not need to
+# be clever to avoid crying wolf. If it ever starts matching many, that is the signal to add nuance,
+# not now.
+CLAIMSFIXED="$(python3 - "$F" <<'PYF'
+import sys, re, io
+lines = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
+out, cur, body = [], None, []
+def flush():
+    if cur and re.search(r'\u2705 \*\*(?:FIXED|DONE|BUILT|SHIPPED) v[0-9]', '\n'.join(body)):
+        out.append('%d:%s' % (cur[0], cur[1][:100]))
+for i, ln in enumerate(lines, 1):
+    m = re.match(r'^- \[( |x)\] ', ln)
+    if m:
+        flush()
+        cur = (i, ln) if m.group(1) == ' ' else None
+        body = []
+        continue
+    if cur: body.append(ln)
+flush()
+print('\n'.join(out))
+PYF
+)"
+if [ -n "$CLAIMSFIXED" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! OPEN [ ] BUT THE BODY SAYS IT WAS FIXED IN A VERSION — it is holding the queue for nothing:"
+  echo "$CLAIMSFIXED"
+  echo "!! Tick it, or say in the entry what is left that the fix did not cover."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 # AN OPEN ITEM FILED UNDER "## Done" IS A DONE ITEM, to anyone reading the file — and REQUESTS.md is
 # written for EZRA to read, not only for a script. Six of them were sitting down there on 17 Aug,
 # including "EXPORTED VIDEO CAME OUT WITH NO AUDIO" and the entry this file calls "the most serious
