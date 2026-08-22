@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.62
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.63
 >
-> **State:** v11.62, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.63, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,27 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **386b — The Outline toggle on videos and images drew nothing at all.** ✅ **DONE v11.63.**
+      (22 Aug — found by re-auditing closed requests against the code.)
+      His words: *"Outlines should still be a toggle option on videos and clips, not just shadow"*.
+      **Half of it shipped at v10.64:** `canBorder` includes media, so the Outline & Shadows card offers
+      the toggle, the colour, the size and the position on any video or image — **and none of it drew
+      anything.** The translation into the alpha `stroke` effect (`effectiveFx`, js/compositor.js:1427)
+      was written correctly and was simply never consulted: its ONE render-path caller opened only for a
+      caption track or a live effect preview, and an ordinary clip has neither, so `drawLayer` built its
+      post-fx list from the raw `layer.effects`, which never contains the outline.
+      **Measured before the fix:** a red image with a 6 px green outline rendered 3600 red pixels and
+      **0 green**. After: 1584 green at 6 px, 4144 at 14 px, 0 when switched off, picture unchanged.
+      **Fix:** the gate's CONDITION gains the media-outline case rather than calling `effectiveFx`
+      unconditionally — this runs for every layer on every frame, and three property reads is the honest
+      cost. The `_cueFx` recursion guard is untouched, so the stroke cannot be concatenated twice through
+      masks, motion blur, blend modes or effect isolation.
+      🚨 **THE LESSON: A SEAM-ONLY TEST WOULD HAVE PASSED THROUGHOUT.** "effectiveFx returns a stroke
+      effect" was true the entire time this was broken — the translation was always right, nothing
+      consumed it. **The test counts PIXELS**, with a control asserting the picture is on screen at all so
+      that "no green" cannot pass for the wrong reason, and it checks the outline follows the WIDTH rather
+      than merely appearing once. Mutation-checked by closing the gate again.
 
 - [x] **363b — Four places still called a controller a "null".** ✅ **DONE v11.62.**
       (22 Aug — found by re-auditing closed requests against the code.)

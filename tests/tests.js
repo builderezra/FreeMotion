@@ -24703,6 +24703,64 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a video or image Outline actually draws (queue 386)', { item: '386' }, async function () {
+    /* His words: *"Outlines should still be a toggle option on videos and clips, not just shadow"*.
+     * Half of it shipped at v10.64 — `canBorder` includes media, so the Outline & Shadows card offers
+     * the toggle, the colour, the size and the position — and NONE of it drew anything.
+     * `effectiveFx` has translated that toggle into the alpha `stroke` effect since v10.64, but the one
+     * render-path caller of it only opened its gate for a caption track or a live effect preview. An
+     * ordinary video or image has neither, so the merged list was computed nowhere and drawLayer built
+     * its post-fx list from the raw `layer.effects`, which never contains the outline.
+     * MEASURED before the fix: a red image with a 6px green outline rendered 3600 red pixels and 0 green.
+     * ⚠️ This measures PIXELS, not the effect list. A seam-only check ("effectiveFx returns a stroke")
+     * passed the whole time this was broken — the translation was always correct; nothing consumed it. */
+    if (!FM.renderScene) throw new Error('FM.renderScene is not reachable');
+    const W = 300, H = 300;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const src = document.createElement('canvas'); src.width = 60; src.height = 60;
+    const sg = src.getContext('2d'); sg.fillStyle = '#ff0000'; sg.fillRect(0, 0, 60, 60);
+    const img = new Image(); img.src = src.toDataURL();
+    await new Promise(r => { img.onload = r; });
+
+    const L = FM.makeLayer('image', { name: 'I', start: 0, duration: 4 });
+    L.transform.x = 150; L.transform.y = 150; L.shapeW = 60; L.shapeH = 60;
+    FM.media.set(L.id, { kind: 'image', el: img, img: img, width: 60, height: 60, file: { name: 'i.png', size: 10, type: 'image/png' } });
+    const scene = { project: { name: 'p', width: W, height: H, fps: 30, duration: 4 }, layers: [L], selectedId: null, selectedIds: [] };
+    const count = () => {
+      ctx.clearRect(0, 0, W, H);
+      FM.renderScene(ctx, scene, 0);
+      const d = ctx.getImageData(0, 0, W, H).data;
+      let green = 0, red = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 8) { if (d[i + 1] > 140 && d[i] < 110) green++; if (d[i] > 140 && d[i + 1] < 110) red++; }
+      }
+      return { green: green, red: red };
+    };
+    try {
+      // CONTROL — the picture must be on screen at all, or "no green" would pass for the wrong reason.
+      const off = count();
+      if (off.red < 3000) throw new Error('the image itself did not render (' + off.red + ' red pixels) — nothing below would mean anything');
+      if (off.green !== 0) throw new Error('there is already green on screen with the outline OFF — the probe cannot tell an outline from the picture');
+
+      L.stroke = { enabled: true, width: 6, color: '#00ff00', position: 'outside', round: false };
+      const on = count();
+      if (on.green < 50) throw new Error('the Outline toggle is on but drew ' + on.green + ' pixels — the card offers a colour, a size and a position that do nothing');
+      if (on.red < 3000) throw new Error('turning the outline on damaged the picture itself (' + on.red + ' red pixels)');
+
+      // it must follow the SIZE, not just appear once
+      L.stroke.width = 14;
+      const thick = count();
+      if (!(thick.green > on.green)) throw new Error('a 14px outline draws no more than a 6px one (' + thick.green + ' vs ' + on.green + ') — the width is not reaching the render');
+
+      // …and turn off again cleanly
+      L.stroke.enabled = false;
+      if (count().green !== 0) throw new Error('the outline survived being switched off');
+    } finally {
+      try { FM.media.remove(L.id); } catch (e) {}
+    }
+  });
+
   test('nothing on screen still calls a controller a \'null\' (queue 363)', { item: '363' }, async function () {
     /* Queue 363 renamed the layer type in the UI — his instruction, and the entry's own scope note asks
      * for exactly this test: *"Places to sweep: the Add menu, the layer row label, the inspector title,

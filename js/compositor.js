@@ -10752,7 +10752,22 @@ window.FM = window.FM || {};
       const pv = FM._fxPreview;
       return !!(pv && layer && pv.id === layer.id && pv.list && pv.list.length);
     })();
-    if (layer && ((layer.captions && layer.captions.length) || _pvOn) && !layer._cueFx) {
+    /* …AND A MEDIA LAYER WHOSE OUTLINE IS ON (queue 386 clause 1, fixed 22 Aug). `effectiveFx` has
+       translated that toggle into the alpha `stroke` effect since v10.64 — but this gate is the ONLY
+       render-path caller of it, and it only opened for a caption track or a live effect preview. An
+       ordinary video or image has neither, so the merged list was computed nowhere and `drawLayer` built
+       its post-fx list from the raw `layer.effects` at :10840, which never contains the outline. The
+       toggle, the colour, the size and the position all appeared in the Outline & Shadows card and drew
+       NOTHING. Measured: a red image with a 6px green outline rendered 3600 red pixels and **0 green**.
+       Added to the CONDITION rather than by calling effectiveFx unconditionally, because this runs for
+       every layer on every frame and three property reads is the honest cost of the fix; effectiveFx
+       itself is only entered when it has something to add.
+       The `_cueFx` guard is untouched: drawLayer re-enters for masks, motion blur, blend modes and
+       effect isolation, Object.assign carries the flag onto every clone, so the stroke cannot be
+       concatenated twice. */
+    const _mediaOutline = !!(layer && (layer.type === 'video' || layer.type === 'image')
+                             && layer.stroke && layer.stroke.enabled);
+    if (layer && ((layer.captions && layer.captions.length) || _pvOn || _mediaOutline) && !layer._cueFx) {
       const eff = effectiveFx(layer, t);
       layer = (eff !== layer.effects)
         ? Object.assign({}, layer, { effects: eff, _cueFx: 1 })
