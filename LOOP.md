@@ -278,6 +278,26 @@ raises it, and it re-costs that time every single pass. Both are now detected ra
 **Note for later: next.sh's detectors have no self-tests**, unlike `_classify.py`. This one proved itself
 by finding three real cases on its first run, but the same "the symptom is silence" argument applies.
 
+**✅ v11.72 — #473, the library grid goes to three rows. HE REVERSED HIS OWN #358 AND THAT IS SAID OUT LOUD.**
+#358 asked for TWO rows in his words; this asks for three. Honoured as a change of mind, not a slip,
+because he gave a REASON (*"since you made the pictures smaller"*) and because what 358 actually ruled
+out was scrolling DOWN — which is untouched: rows stay locked in, spill-over still pages sideways.
+**Two existing tests asserted two rows.** UPDATED with the reversal and his reason recorded in both,
+never deleted — a guard that encodes one of his instructions must not be quietly flipped, and the next
+session has to be able to see that he changed his mind rather than that I overrode him.
+**A THIRD test broke on its own CONTROL, and that is the control working.** Its 9-clip fixture no longer
+overflowed a page, so "every import is still reachable" would have stopped exercising paging entirely and
+gone green while testing nothing. Raised to 13, sized to overflow whatever the row count is.
+**THE LESSON: a fixture is sized to a layout, so a layout change can silently retire a test.** When a
+behaviour changes, check what the OLD fixtures were calibrated against — the tests that keep passing are
+the dangerous ones.
+
+**⚠️ #353 clause 3 — THE SUITE HAS NEVER RUN AT PHONE WIDTH.** `tests/_cdp.py --width 380` exists and is
+documented in its own header; `ship.sh` and `mutate.sh` both run the default 1280. On a mobile-first app,
+where #431 was a phone-layout bug that survived three passes. **Attempted at 380px: it did NOT finish in
+600s** — so whether it is even green there is still unknown, and that is recorded as unknown rather than
+guessed. Worth a tick of its own: find out why it stalls, then decide whether a phone pass can be a gate.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
