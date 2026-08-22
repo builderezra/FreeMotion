@@ -438,6 +438,18 @@ rewritten the line I was matching on) and **the ship ran anyway**, publishing th
 entry it was written for was still open. Shell `;` between a fallible edit and a ship is a gate with a
 hole in it. **Check the edit landed before shipping it — or join them with `&&`.**
 
+**🔴 22 Aug — #432: HE NEVER ANSWERED BECAUSE HE HAD NEVER SEEN THE OPTIONS.**
+Four template-icon candidates were drawn on 21 Aug into `tests/_tmplicon.html` — a local file he cannot
+open from his phone — and then "put to him" **in words**. Asking someone to choose between five icons by
+description is not asking a question; it is asking them to imagine one. It sat for a day and read as
+"waiting on Ezra".
+Rendered and screenshotted into the chat: all five at real 24px, at 4×, beside the family they sit in.
+**RULE: A VISUAL CHOICE CANNOT BE OFFERED IN PROSE. If it was drawn for him to pick from, it has to reach
+him as an IMAGE.** Same class of failure as his own *"maybe my images arent going through"* — running the
+other way. Check for this whenever an entry says options were "put to him": were they SHOWN?
+Also ticked clause 1, which was a standing instruction rather than a task (same resolution as #353) and
+was making the entry look like it had two open jobs when it had one.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
