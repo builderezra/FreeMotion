@@ -185,6 +185,19 @@ stale fps mirror (#118), a dead preset block (#454), a duplicated clamp (#165.3,
 CSS features on one pseudo-element. **When adding an effect to an element, check what already owns that
 slot.**
 
+**✅ v11.61 — #338 done, and it is the SAME SHAPE as #257: one complaint, two places, fixed in one.**
+The move/extend icons were redrawn twice (queue 235 desktop, v9.86 phone) and both fixes touched only the
+SINGLE-clip pair; the multi-clip pair still carried the exact art he complained about. `ab()` could not
+express a filled shape (`svgIcon()` hard-codes `fill="none"`), which is probably why it was skipped — it
+now takes the same `{ html }` hatch `qbtn` had.
+
+**⚠️ A PATTERN NOW WORTH CHECKING EVERY TIME: A FIX APPLIED TO ONE OF TWO PLACES.**
+#257 (phone kept the ring, PC lost it), #338 (single-clip fixed, multi-clip not), #142 (add menu honoured
+the colour, drawing did not), #118 (dropdowns updated, the code's mirror not). **When closing a request,
+ask WHERE ELSE this behaviour lives — the phone/PC pair, the single/multi pair, the menu/tool pair.**
+The test for it must assert STRUCTURE, not strings: two icons can differ character by character and still
+look identical, which is the complaint itself.
+
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
