@@ -75,6 +75,21 @@ Outline never reaches the frame — probe already written at `tests/_q386audit.h
 diamond's REMOVE is still shared), and draw-on keyframes never registering as layer keyframes.
 Needing him: 184, 204, 285, 378, 461.
 
+**✅ v11.66 — #472, AND IT WAS NOT A FLAKY TEST. It was a real bug in the app.**
+The entry was filed as "our own safety net is unreliable"; it turned out the net was fine and it had been
+reporting a genuine defect all along, which nobody believed because it went green on the re-run.
+**Reproduced before touching anything** (the entry demanded it, and demanded the tolerance NOT be widened):
+20 flicks, 2 dead, release velocity 1.83 px/ms against a 0.02 threshold, `scrollTop` frozen for all 90
+frames. `scrollTop` snaps to half a pixel, so a first frame landing a fraction of a millisecond after the
+fling is armed steps sub-pixel, the write rounds straight back, and the loop's "the write did not move it →
+we are at the end, stop" check killed the glide on frame one. **About one real flick in five did nothing.**
+**The lesson worth keeping: an intermittent test failure is a hypothesis about the app, not about the test.**
+Two earlier ticks re-ran it, saw green and moved on. The re-run IS the trap the entry warned about.
+**And a statistical bug needs a seam, not a gesture.** Driven through the UI the test is a coin flip and
+proves nothing on the runs where the frame lands late, so the step became a pure function
+(`FM._tlMomentumStep`) the suite drives frame by frame with a deliberately sub-pixel first frame.
+Deterministic, mutation-checked, and both ends asserted so "never stop" cannot pass as a fix.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
