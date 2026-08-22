@@ -24695,6 +24695,55 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('Canvas settings never blanks the frame rate, and Apply never rewrites it (queue 118)', { item: '118' }, async function () {
+    /* Found by re-auditing CLOSED requests against the code after Ezra said "uve missed a lot".
+     * Queue 118 was his instruction to the frame-rate lists: "drop 24, keep 25, add 15 and 120". The
+     * dropdowns in index.html changed; a hardcoded MIRROR of them inside js/app.js
+     * (`FPS_PRESETS = ['24','25','30','50','60']`, added at v3.28) did not — a second source of truth for
+     * rows that live in the markup, left disagreeing about exactly the rates he had just changed.
+     * MEASURED CONSEQUENCE, which is why this is a real bug and not tidying: a **24 fps project** matched
+     * the stale list, so the code set `fpsSel.value = '24'` — a row that no longer exists — the select
+     * fell to selectedIndex -1 and rendered BLANK, and Apply then read '' → `parseInt('') || 30` and
+     * rewrote the project from 24 fps to 30. Opening the dialog and pressing Apply destroyed the setting.
+     * The fix asks the CONTROL which rows exist instead of keeping a copy, so it cannot drift again. */
+    const sel = document.getElementById('cv-fps');
+    const num = document.getElementById('cv-fps-num');
+    const btn = document.getElementById('btn-canvas');
+    if (!sel || !num || !btn) throw new Error('the Canvas settings frame-rate controls are missing');
+    const fps0 = FM.scene.project.fps;
+    try {
+      // CONTROL — the probe must be able to see a normal rate land on its own row, or a blank would be indistinguishable from a pass.
+      FM.scene.project.fps = 30; btn.click(); await sleep(140);
+      if (sel.selectedIndex < 0 || sel.value !== '30') throw new Error('a plain 30 fps project does not even open on the 30 row — this probe is not driving the dialog');
+      closeCv();
+
+      /* Every rate the app can hold: the rows that exist, one that never did (24 — his own entry
+         promises "Custom still reaches 24 either way"), and one genuinely off-ladder. */
+      for (const fps of [15, 24, 25, 30, 48, 50, 60, 120]) {
+        FM.scene.project.fps = fps;
+        btn.click(); await sleep(140);
+        if (sel.selectedIndex < 0) throw new Error('a ' + fps + ' fps project opens Canvas settings with a BLANK frame rate box — Apply then reads it as empty and rewrites the project to 30');
+        const applied = sel.value === 'custom'
+          ? Math.max(1, Math.min(120, parseInt(num.value, 10) || 30))
+          : (parseInt(sel.value, 10) || 30);
+        if (applied !== fps) throw new Error('opening Canvas settings on a ' + fps + ' fps project and pressing Apply would write ' + applied + ' fps — the setting is destroyed by looking at it');
+        closeCv();
+      }
+      // …and a rate that HAS a row must use it rather than hiding in Custom.
+      FM.scene.project.fps = 120; btn.click(); await sleep(140);
+      if (sel.value === 'custom') throw new Error('120 fps has its own row but opens on Custom — the dialog is not reading the real option list');
+      closeCv();
+    } finally {
+      FM.scene.project.fps = fps0;
+      closeCv();
+    }
+    function closeCv() {
+      const dlg = document.getElementById('cv-dialog');
+      if (dlg) dlg.classList.remove('open');
+      document.body.classList.remove('cv-open', 'cv-anchored');
+    }
+  });
+
   test('the export frame rate defaults to the project, not silently to 30fps (queue 471)', { item: '471' }, function () {
     /* Found by re-auditing every CLOSED request against the code after Ezra said "uve missed a lot".
      * `#exp-fps` carried TWO `selected` attributes — on "project" AND on "30 fps". HTML takes the LAST

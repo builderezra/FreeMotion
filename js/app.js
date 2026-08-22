@@ -5207,7 +5207,24 @@ window.FM = window.FM || {};
       const fpsSel = document.getElementById('cv-fps');
       const fpsNum = document.getElementById('cv-fps-num');
       const fpsCustomRow = document.getElementById('cv-custom-fps');
-      const FPS_PRESETS = ['24', '25', '30', '50', '60'];
+      /* NO HARDCODED COPY OF THE LIST (queue 118, fixed 22 Aug). This used to be
+         `['24','25','30','50','60']` — a second source of truth for rows that live in index.html, added
+         at v3.28 and never updated when queue 118 rewrote those rows to 15/25/30/50/60/120. Ezra's own
+         instruction there was "drop 24, keep 25, add 15 and 120", and the dropdowns did change; this
+         mirror did not, so the two disagreed about exactly the rates he had just changed.
+         MEASURED CONSEQUENCE, not a tidy-up: a **24 fps project** matched the stale list, so the code took
+         the preset branch and set `fpsSel.value = '24'` — a row that no longer exists. The select landed
+         on selectedIndex -1 and rendered BLANK, and Apply then read '' → `parseInt('') || 30` and
+         rewrote his project from 24 fps to 30. The setting was destroyed by opening the dialog and
+         pressing Apply. (15 and 120 merely opened on "Custom…" instead of their own rows — cosmetic, and
+         they round-tripped.) The entry itself promised "Custom still reaches 24 either way".
+         Asking the CONTROL removes the mirror entirely, so it can never drift from index.html again.
+         Same shape js/home.js:2059-2064 already uses for the new-project dialog. */
+      const fpsHasRow = (v) => {
+        if (!fpsSel) return false;
+        for (let i = 0; i < fpsSel.options.length; i++) if (fpsSel.options[i].value === v) return true;
+        return false;
+      };
       canvasBtn.addEventListener('click', () => {
         cvDetect();
         // seed the custom W/H inputs from the live project so switching to Custom starts sensible
@@ -5216,7 +5233,7 @@ window.FM = window.FM || {};
         // sync the fps control to the live project (a non-preset fps opens as Custom)
         const cur = String(FM.scene.project.fps || 30);
         if (fpsSel) {
-          if (FPS_PRESETS.indexOf(cur) >= 0) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
+          if (fpsHasRow(cur)) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
           else { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = cur; if (fpsCustomRow) fpsCustomRow.classList.remove('hidden'); }
         }
         const pb = FM.scene.project.background;

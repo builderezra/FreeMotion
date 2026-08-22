@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.52
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.53
 >
-> **State:** v11.52, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.53, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -873,6 +873,24 @@ better still, keep working inside the turn rather than parking work for a later 
       ✓ on the label since that menu has no switch to show state.
       Two existing tests had the old requirement written into them (Settings must lead with Onion skin).
       Updated, with your reversal quoted in place so nobody later "fixes" them back.
+
+- [x] **118b — Canvas settings blanked the frame rate on a 24fps project, and Apply rewrote it to 30.**
+      ✅ **DONE v11.53.** (22 Aug — the unbuilt half of #118, found by re-auditing closed requests against
+      the code after *"just check extra hard theres no leftovers coz looking through uve missed a lot"*.)
+      **#118 changed the dropdowns in index.html to 15/25/30/50/60/120 exactly as he asked** — *"drop 24,
+      keep 25, add 15 and 120"* — **but left a hardcoded mirror of the OLD list inside js/app.js**
+      (`FPS_PRESETS = ['24','25','30','50','60']`, added at v3.28, untouched by the v6.74 commit). A second
+      source of truth for rows that live in the markup, disagreeing about precisely the rates he changed.
+      **Measured, not inferred:** a **24 fps project** matched the stale list, so the code took the preset
+      branch and set `fpsSel.value = '24'` — a row that no longer exists. selectedIndex fell to -1, the box
+      rendered **BLANK**, and Apply read `''` → `parseInt('') || 30` and **rewrote the project to 30 fps**.
+      Opening the dialog and pressing Apply destroyed the setting. 15 and 120 opened on "Custom…" instead
+      of their own rows (cosmetic; they round-tripped).
+      **Fix: the mirror is gone.** The dialog now scans the live `<select>` for a matching row, the same
+      way `js/home.js` already does for the new-project dialog, so it cannot drift from index.html again.
+      **Verified across every rate the app supports:** 24 → "Custom… 24" and stays 24; 15 and 120 land on
+      their own rows; 25/30/50/60 unchanged; 48 (off-ladder) → Custom, stays 48. Mutation-checked by
+      restoring the hardcoded list.
 
 - [x] **118 — Frame-rate list: drop 24, keep 25, add 15 and 120.** (v6.74) His words: *"Why do we have 24 and 25
       fps? Just make 25 only, and also add a 120 option, and a 15 fps option."*
