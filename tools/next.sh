@@ -120,7 +120,11 @@ fi
 # because Ezra pushed back with "you did not meet every task i believe, double check again".
 # Same family as the unnumbered items and the malformed entry above, third cause, same treatment: detected
 # loudly rather than trusted. The checkbox and the prose must agree.
-CONTRA="$(awk '/^- \[x\] /{e=NR; t=$0} /STAYS OPEN|still OPEN|NOT done|remains open/{if (e && NR-e<4) printf "%d:%s\n", e, substr(t,1,100)}' "$F" | sort -u)"
+# …and a BACKTICK-QUOTED mention is a discussion of the phrase, not the phrase. #426's own history now
+# explains that its header used to carry one, and without this the detector fired on that explanation —
+# the same "a note about the problem is mistaken for the problem" trap the malformed-entry check above
+# already guards against, and for the same reason: a detector that cries wolf stops being read.
+CONTRA="$(sed 's/`[^`]*`//g' "$F" | awk '/^- \[x\] /{e=NR; t=$0} /STAYS OPEN|still OPEN|NOT done|remains open/{if (e && NR-e<4) printf "%d:%s\n", e, substr(t,1,100)}' | sort -u)"
 if [ -n "$CONTRA" ]; then
   echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   echo "!! TICKED [x] BUT THE ENTRY SAYS IT IS STILL OPEN — invisible to every list below:"

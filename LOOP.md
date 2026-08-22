@@ -242,7 +242,19 @@ asserted harder than the feature itself.
 461. The other audit (19 buildable OPEN entries, `tools/.buildable-audit.json`) is now the queue — plus
 **#472**, the flaky flick test, which is ours not his and should not be left to rot.
 
-**NEXT, oldest first — from `tools/.buildable-audit.json` and the open queue:** (a Custom rung on the export frame-rate list — never
+**⚠️ 22 Aug — I REOPENED #426 IN ERROR AND HAVE RE-CLOSED IT. My mistake, and the lesson generalises.**
+The new `next.sh` detector (entry ticked `[x]` whose body says it is still open) fired on #426 correctly
+— that phrase WAS in its header. I resolved it by UNTICKING without reading to the end of the entry,
+where **Ezra had already answered *"fixed"*** and it had been properly closed. So I put a done item back
+on his queue and reported it as outstanding.
+**A checkbox/prose contradiction can be resolved EITHER WAY, and which way is only knowable by reading the
+whole entry, newest note last.** The detector says "these disagree", never "the checkbox is wrong".
+**And the detector then fired on my own EXPLANATION of the phrase** — the "a note about the problem is
+mistaken for the problem" trap the malformed-entry check above already guards against. It strips
+backtick-quoted spans now, same treatment, same reason: a detector that cries wolf stops being read.
+
+**NEXT, oldest first — from `tools/.buildable-audit.json` and the open queue:** **#472** (the flaky
+vertical-flick test — ours, not his) is now the oldest actionable, then the 19 open-entry audit items. (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**

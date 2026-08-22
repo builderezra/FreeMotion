@@ -13258,8 +13258,7 @@ wait for them to report back."*
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
 
-- [ ] **426 — Extending the Add panel pushes the page dots off the bottom.** ⚠️ **STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **426 — Extending the Add panel pushes the page dots off the bottom.** ✅ **CLOSED 21 Aug — he said "fixed".** (The header used to carry a `STAYS OPEN` note; that was written BEFORE he answered and is kept below in the history rather than in the title. A guard shipped in v10.65 and the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
       v10.32.) His words, verbatim:
 
       > when extending the add pannel it makes the three dots at the bottom go down
@@ -13298,6 +13297,13 @@ wait for them to report back."*
       **ANSWERED BY EZRA, 21 Aug:** *"fixed"*. ✅ The guard that shipped works — the Add panel no
       longer pushes the page dots off the bottom for him. Closing this.
       ✅ **CLOSED 21 Aug — *"fixed"*.** The guard works on his phone.
+      ⚠️ **REOPENED IN ERROR 22 AUG, AND RE-CLOSED THE SAME DAY — my mistake, recorded because the lesson
+      generalises.** A new `next.sh` detector flags an entry ticked `[x]` whose body says "STAYS OPEN", a
+      real failure shape that had hidden this entry from every listing for weeks. It fired here correctly
+      — but I resolved it by UNTICKING, without reading to the end of the entry, where he had already
+      said *"fixed"*. **A contradiction between the checkbox and the prose can be resolved either way;
+      which way is only knowable by reading the whole entry, newest note last.** The stale phrase is out
+      of the header now, so the detector has nothing to fire on.
 - [x] **427 — 🔎 MEASURED ANOMALY: `body.fm-playing #time-readout` matches the pill and does not apply.**
       ✅ **CLOSED 20 Aug at v10.66 — THE ANOMALY IS NOT REAL, AND THE ORIGINAL MEASUREMENT WAS WRONG.**
       Re-measured live across a real play (`tests/_pillcolour.html`), sampling every 150ms: paused, the
