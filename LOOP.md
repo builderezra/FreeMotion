@@ -231,7 +231,18 @@ and one press destroyed the tilt animation without ever keying rotation. It now 
 is ABOUT; what it acts on is unchanged. The existing #419 test pressed the rail three times and every
 press was an ADD — which is exactly why nothing caught it.
 
-**NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
+**✅ v11.65 — the LAST dropped clause from the closed-request audit is done.** A drawing's draw-on
+keyframes were registered by neither collector, so moving a clip left them behind (transform 1,4 → 3,6;
+draw-on stayed at 1,4). Registered now, GATED to a shape's open path — on a video the same `trimStart`
+means SECONDS of source and is read as a bare number by the exporter and the audio player, so the gate is
+asserted harder than the feature itself.
+
+**🏁 THE DROPPED-CLAUSE AUDIT IS FULLY DRAINED — 12 of 12 buildable items shipped** (118, 121, 141, 142,
+153/154, 165.3, 257, 338, 363, 386, 419, 227). Five remain that genuinely need Ezra: 184, 204, 285, 378,
+461. The other audit (19 buildable OPEN entries, `tools/.buildable-audit.json`) is now the queue — plus
+**#472**, the flaky flick test, which is ours not his and should not be left to rot.
+
+**NEXT, oldest first — from `tools/.buildable-audit.json` and the open queue:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
