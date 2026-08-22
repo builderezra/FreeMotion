@@ -18,7 +18,7 @@
 > |---|---|---|
 > | **469** | Are the ◆ keyframe buttons fiddly to tap on your phone? **A** leave them · **B** same look, bigger invisible target · **C** visibly bigger | **B** if you've ever mis-tapped one, **A** if not |
 > | **460** | Colouring effects "still do nothing" — but all 43 measurably work. Which of the two options in the entry? | Send one screenshot of the exact effect + slider |
-> | **432** | The template icon: pick a letter, or "none of these" | — |
+> | **432** | The template icon — **the five options are now pictured in the chat** (they had only ever been described in words, which is why this sat). **A** stacked cards · **B** ⭐ frame + play · **C** folded card · **D** frame + sparkle · or "none of these" | **B** — it is the only one that still reads at 24px |
 > | **456** | The two rainbow Create buttons: pick a letter, or a mix ("B's colours with D's comet") | — |
 > | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
 > | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
@@ -14099,9 +14099,12 @@ wait for them to report back."*
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       including template icon looks shit"*.
       Two things in one message, and both are recorded rather than one:
-      1. [ ] **The standing instruction, restated:** log everything he says, as he says it. Already the
+      1. [x] **The standing instruction, restated:** log everything he says, as he says it. Already the
              rule (see the file header and CLAUDE.md); he is telling me it slipped, which is worth a line
              here rather than a promise in a chat reply.
+             ✅ **Ticked 22 Aug as a RULE, not a task** — same resolution as #353: an instruction's home is
+             the rules file, and it is in both the header of this file and CLAUDE.md. Left unticked it
+             made this entry look like it had two open jobs when it has one.
       2. [ ] **The template icon** — the fifth tab icon in the phone ADD sheet, the orange window-ish mark
              beside the music note in his v10.71 screenshot. He does not like how it looks.
       ⚠️ **Ask nothing, but note what is unsaid:** he has not said what he wants instead. Redraw it to read
@@ -14129,7 +14132,23 @@ wait for them to report back."*
       · **D · frame + sparkle** — reads well but a sparkle suggests AI or effects, which is a different
         part of the app.
       Palette unchanged in all four — the orange frame and the cyan/violet accents are his from 267.
-      ⏳ **WAITING ON EZRA — a letter, or "none of these".**
+      🔴 **22 Aug — AND HERE IS WHY HE NEVER ANSWERED: HE HAD NEVER SEEN THEM.**
+      The four candidates were "put to him" on 21 Aug **in words**, while the drawings sat in
+      `tests/_tmplicon.html` — a local file on this machine, which he has no way to open from his phone.
+      **Asking someone to choose between five icons by description is not asking a question, it is asking
+      them to imagine one.** No wonder it has sat for a day.
+      ✅ **The page is now rendered and the pictures put in front of him** — all five at their real 24px,
+      at 4×, and sitting in the row beside Elements / Shape / Media / Audio, which is the only comparison
+      that matters for an icon.
+      **What the real-size column shows, stated so he has my reading as well as the pictures:** the
+      CURRENT mark's cyan crossbar and violet block do merge into a smudge at 24px, exactly as this entry
+      claimed. **B (frame + play)** holds its silhouette best at that size and shares no outline with the
+      cube, the shapes, the picture or the note. C's fold all but disappears; A is three nested shapes in
+      24 pixels; D reads well but a sparkle means AI elsewhere in the app.
+      ⏳ **WAITING ON EZRA — a letter, or "none of these".** Now with something to look at.
+      ⚠️ **The lesson, and it is bigger than this entry: a visual choice cannot be offered in prose.**
+      Anything drawn for him to pick from has to reach him as an IMAGE. Same class of failure as his own
+      *"maybe my images arent going through"* — it just ran in the other direction.
 - [x] **433 — Wasted space under the clip in the solo view, and a press that did not open the edit menu.**
       ✅ **BOTH DONE — v10.73.**
       (20 Aug, phone screenshot at v10.71 with the empty band circled in orange.) His words, verbatim:
