@@ -396,6 +396,20 @@ screenshot, and there turn out to be THREE savers in three different places (lay
 the Effects card button). Deleting the wrong one costs him a feature, so it is a pick-one with a
 recommendation instead. The entry had warned about this and was right.
 
+**✅ v11.73 — #418, the undo/redo circular arrows. FIFTH stale "waiting on you" this week.**
+The STATUS line said waiting on him; **his reference image arrived on 21 Aug** and the entry describes it
+in enough detail to build from (a ~300° ring, solid triangular head, mirror pair). Nobody re-read past the
+status line. Built: 300° sweep, 60° gap at the top, filled head, undo anticlockwise / redo clockwise,
+stroke left at 1.8 to match the row — his "skinnier" was relative to his reference, which is drawn heavy.
+**THE FIRST ATTEMPT WAS WRONG AND ONLY MEASURING CAUGHT IT.** SVG arc flags pick between the TWO circle
+centres that fit the same endpoints and radius: `sweep=0` centred the ring at y≈-0.12 instead of 12, so
+the icon was a clipped band across the top of the box — and it looked plausible in source. Swept all four
+flag combinations and measured the ink box each time. `large=1 sweep=1` is the one that centres.
+**Do not reason about arc flags — render them and measure.** The pane also downscales screenshots, so a
+24px glyph cannot be judged by eye there; the numbers are the only honest check at that size.
+**✅ AND THE PHONE GATE FIRED FOR THE FIRST TIME** (index.html changed, so it was not skipped):
+843/843 at 1280 AND 843/843 at 380. The gate added for #353 clause 3 works end to end.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
