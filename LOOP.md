@@ -75,12 +75,17 @@ Outline never reaches the frame — probe already written at `tests/_q386audit.h
 diamond's REMOVE is still shared), and draw-on keyframes never registering as layer keyframes.
 Needing him: 184, 204, 285, 378, 461.
 
-**✅ SHIPPED FROM THE AUDITS ALREADY:**
+**✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
   attributes; HTML takes the last, so a 60/50/25/15/120 fps project opened Export on "30 fps" and rendered
   at 30 with nothing saying so. One word deleted. It survived months because the comment above it
   described the CORRECT behaviour — the prose was right and the markup was not.
+- **v11.53 — 🚨 opening Canvas settings on a 24 fps project rewrote it to 30.** #118's dropdowns changed
+  as he asked; a hardcoded MIRROR of the old list in js/app.js did not. A 24 fps project matched the stale
+  list, `fpsSel.value = '24'` hit a row that no longer exists, the box rendered BLANK, and Apply read `''`
+  → `|| 30`. Looking at the settings destroyed the setting. The mirror is deleted — the dialog reads the
+  live control now, so it cannot drift from index.html again.
 
 **⚠️ ALSO FIXED: `#426` was ticked `[x]` DONE while its own header read "⚠️ STAYS OPEN"** — invisible to
 every queue tool for weeks. Reopened; `next.sh` now detects that contradiction.
@@ -91,9 +96,14 @@ export dialogs, the replace hit the first, the control under test was never touc
 looked exactly like a dead new test. Two suite runs lost. **A green run after an ambiguous mutation proves
 nothing, same as after a missing one.**
 
-**NEXT: work the two audit lists, oldest first.** #141's Custom-fps rung is the natural next item — it is
-the other half of the entry #471 just came out of, it needs no decision from him, and every pattern it
-needs already exists in the canvas dialog.
+**NEXT, oldest first from the audit lists:** **#121** (the export dialog should reset to "Same as project"
+on EVERY open — today the on-ladder guard leaves a rate you picked once stuck across opens, and the cog is
+supposed to be the one source of truth), then **#141** (a Custom rung on the export frame-rate list — never
+built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
+386, 419, and draw-on keyframes.
+**A PATTERN WORTH NAMING: three of the four bugs found so far were SECOND COPIES of a list or a default** —
+the export list's stray `selected`, the canvas dialog's hardcoded FPS mirror, and the dead canvas-preset
+block. When a fix "updates the list", check for another copy of that list before ticking it.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
