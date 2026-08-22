@@ -83,7 +83,11 @@ or a gate — not a paragraph.
 So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
 the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
 
-**Always pass an explicit timeout instead:** `timeout: 500000` on the Bash call. One call, one result,
+**Always pass an explicit timeout instead:** `timeout: 500000` for a bare suite run — but **`timeout:
+900000` for `tools/ship.sh`, which runs the suite TWICE** (desktop, then again at 380px) whenever a
+`js/*.js`, `styles.css` or `index.html` change is being shipped. 500s is not enough for that and the
+ship gets backgrounded mid-push, which is exactly the background-and-poll this section exists to stop.
+Measured at v11.83: two green passes plus the push took just over eight minutes. One call, one result,
 no polling. Ezra has raised this more than once — *"i tried to get you to avoid this. it happens so
 often, you need to stop this issue"* — so treat it as a hard rule, not a preference.
 

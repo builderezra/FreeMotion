@@ -20,7 +20,8 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
    touched (a missed buster reads as "the fix does not work" — it has), add a plain-language
    `POLISH-LOG.md` entry, tick the `REQUESTS.md` entry with its version, then
    `tools/ship.sh "message"`. Never commit around ship.sh.
-6. **Suite in the FOREGROUND with `timeout: 500000`.** Never background-and-poll.
+6. **Suite in the FOREGROUND with `timeout: 500000`** — and **`timeout: 900000` for `tools/ship.sh`**,
+   which runs the suite twice (desktop + 380px) on any shipped source change. Never background-and-poll.
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.
@@ -111,6 +112,18 @@ Two negative results, both worth not repeating:
    is, which is where v11.72-v11.78 already went.
 **So the remaining lag work is effect kernels, not the editor.** `turbulentdisplace` (~157 ms) is
 the last real hog. Do not re-soak the editing path — it has been measured.
+
+### 23 Aug, v11.83 — the four lag entries were never blocked on measurement, they were blocked on TAPS
+#95, #125, #202 and the unnumbered editing-lag item all end on the same sentence: *needs a number from
+HIS phone*. The tool that produces that number (`js/perf-probe.js`) has existed for weeks, is well
+built, and had **never been run** — because it sits inside App settings, four taps deep, behind a cog
+that opens a canvas dialog first. Nobody was ever going to find it mid-lag.
+**The lesson worth keeping: an entry that says "waiting on him" is a claim about HIM, and it is worth
+checking whether it is actually a claim about the UI.** Rule 3 says read the file before building; this
+is the same rule pointed at a different thing — read what already SHIPPED before believing an entry.
+v11.83 has the app offer the measurement itself when the quality ladder is spent and frames are still
+late (once per session, playing only, sustained). **What is now genuinely outstanding is one tap from
+him**, and that is a much smaller ask than the one that has been sitting there since 14 August.
 
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
