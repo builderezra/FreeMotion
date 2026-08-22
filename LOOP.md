@@ -65,6 +65,13 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     thinner answer. This lived only in REQUESTS.md until 22 Aug, i.e. nowhere that would be read at the
     moment a workflow was actually being launched, which is the whole point of this file.
 
+14. **NEVER COMPARE TWO RENDERS THROUGH A RESAMPLING STEP.** Downscaling a frame to compare it is how
+    you manufacture a difference that is not in the picture. Queue 477 was withdrawn over a "bug" that
+    turned out to be a 1080x1920 project squashed into a 160x160 SQUARE probe canvas: 308 bytes on a
+    single scanline, deterministic, persistent, utterly convincing — and **zero at full project
+    resolution**. If two renders must be compared, compare them at a raster that does not resample, or
+    do not believe a thin difference.
+
 12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.
@@ -640,6 +647,23 @@ control this file already demands of tests, applied to throwaway probes, which i
 **AND: three probes in one tick disagreed with each other. That is the signal to STOP and report**, not to
 run a fourth. Recorded what is established, what is retracted, and the one narrow next step (bisect the
 gap between "set before render" and "changed after render", which reproduces on demand).
+
+**✅ 23 Aug — #477's mystery SOLVED, and the culprit was MY PROBE. Two ticks of chasing a phantom.**
+The bisect, done properly in one run with controls: value set before render → 0 bytes; changed after a
+render → 308; same scene twice → 0 (renders are deterministic); persistent across further renders. Then
+located: **all 103 differing pixels on ONE ROW, y=90, the full width of the shape, 25 levels off.** A
+single-scanline seam — exactly what a resample produces. **The probe rendered a 1080x1920 project into a
+160x160 SQUARE canvas.** At full resolution: **zero.**
+**THE USEFUL HALF: this also explains the original feature fault.** `effectDoesNothing` compared two
+renders through `fx-thumbs`' reduced raster, and that comparison is not safe at a resampling scale. The
+detection LOGIC was right; the SURFACE it measured on was wrong. That is what the rebuild has to change —
+now written in the entry, so v11.79's withdrawal ends with an answer rather than a shrug.
+**Now rule 14.** Also eliminated on the way (both plausible, both wrong): rendering writes no cache keys
+onto the layer or effect, and the two scene clones are byte-identical apart from `clipColor`.
+**Worth noticing about the shape of this:** every wrong turn in the last three ticks was a measurement
+artefact, never the app — a saturating parameter range, a panel that was not open, a squashed canvas.
+**When a bug is deterministic, persistent and convincing but nobody has reported it, weigh the instrument
+first.** He has never once mentioned a seam.
 
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
