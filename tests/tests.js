@@ -38482,4 +38482,101 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* Queue 148 — the artefact this entry recorded as "noted, not fixed", now measured and fixed.
+   * The popping itself went at v6.91 (the controller was re-priming the element's time-stretcher 55
+   * times a second). What that pass ALSO measured and deliberately left was this: "on an idle machine
+   * playback pitches up to +9.6% and back over four audible steps at the start."
+   * Re-measured on a real imported mp3 at v11.69: still there, +5.9% — about a semitone — over the
+   * first ~600 ms of EVERY press of play, then a snap back.
+   * THE CAUSE. The controller learns the element's output latency and subtracts it, because a constant
+   * offset is not drift. But the bias was seeded from the FIRST sample of a pass, and an element that
+   * has just been told to play has not reached its steady latency yet: measured 48 ms at the seed
+   * against ~87 ms settled, with the ~1.7 s EMA only creeping to 51.6 ms by 850 ms. So the controller
+   * carried a phantom ~37 ms of error, decided the sound was running late, and leaned on the throttle
+   * — and `preservesPitch` means a rate change is a PITCH change.
+   *
+   * TWO THINGS ABOUT THIS TEST, both learned the hard way:
+   * · The fake element RAMPS its latency (half at the start, full once spun up). The suite's existing
+   *   fake reports a CONSTANT latency, which cannot reproduce this at all — which is exactly why the
+   *   existing latency test stayed green throughout.
+   * · It drives `FM._syncMediaToClock()` directly rather than going through `FM.play()`. Driven through
+   *   the transport the defect does not appear (that path opens with a seek, which reseeds the bias),
+   *   so a test written that way passes against the bug — I wrote one, and its mutation survived. */
+  function spinUpEl(dur, lat, spin) {
+    const e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur,
+                seeks: 0, rateWrites: 0, maxRate: 1, _pos: 0, _at: performance.now(), _rate: 1, _stall: 0 };
+    const effLat = () => (spin ? lat * (0.5 + 0.5 * Math.min(1, e._pos / spin)) : lat);
+    const adv = () => {
+      const n = performance.now();
+      if (!e.paused) { const f = Math.max(e._at, e._stall); if (n > f) e._pos = Math.min(dur, e._pos + (n - f) / 1000 * e._rate); }
+      e._at = n;
+    };
+    Object.defineProperty(e, 'currentTime', {
+      get() { adv(); return Math.max(0, e._pos - effLat()); },
+      set(v) { adv(); e._pos = v; e.seeks++; e._stall = performance.now() + 30; },
+    });
+    Object.defineProperty(e, 'playbackRate', {
+      get() { return e._rate; },
+      set(v) { adv(); e._rate = v; e.rateWrites++; if (v > e.maxRate) e.maxRate = v; },
+    });
+    e.play = () => { adv(); e.paused = false; return Promise.resolve(); };
+    e.pause = () => { adv(); e.paused = true; };
+    return e;
+  }
+
+  async function q148Run(opts) {
+    const o = opts || {};
+    const saved = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, t: FM.time, playing: FM.playing };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
+      FM.scene.layers.push(L); FM.scene.project.duration = 12;
+      const el = spinUpEl(12, o.latency, o.spin);
+      FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: 12 });
+      FM.playing = false; FM.setTime(0); await sleep(40);
+      const t0 = performance.now();
+      FM.playing = true; el.play();
+      let ticks = 0;
+      for (let i = 0; i < (o.ticks || 18); i++) {
+        FM.setTime((performance.now() - t0) / 1000);
+        if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the controller');
+        FM._syncMediaToClock(); ticks++;
+        await sleep(75);
+        if (o.at && i === o.at) o.then(el);
+      }
+      FM.playing = false; el.pause();
+      return { el: el, ticks: ticks };
+    } finally {
+      FM.playing = saved.playing; FM.scene.layers = saved.layers;
+      FM.scene.project.duration = saved.dur; FM.setTime(saved.t);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  }
+
+  test('audio: pressing play does not pitch the sound up while the element spins up (queue 148)', { item: '148' }, async function () {
+    const r = await q148Run({ latency: 0.09, spin: 0.3 });
+    // CONTROL: the controller has to have been consulted, or every assertion below is vacuous.
+    if (r.ticks < 10) throw new Error('only ' + r.ticks + ' sync ticks — the controller barely ran, so nothing here is under test');
+    if (r.el.maxRate > 1.01) {
+      throw new Error('playback was pitched up to +' + ((r.el.maxRate - 1) * 100).toFixed(1) + '% while the element spun up — every press of play starts about a semitone sharp and slides back, which is what this entry recorded as noted-but-not-fixed');
+    }
+    if (r.el.seeks > 0) throw new Error('the element was seeked ' + r.el.seeks + ' times during a plain start — a seek is an audible hole');
+  });
+
+  /* The other direction, and it is the one that keeps the fix honest: waiting out the spin-up must not
+   * become "stop correcting". A controller that never touches the rate sails through the test above
+   * while letting the sound walk away from the picture — a worse bug, and a silent one. */
+  test('audio: real drift is still corrected once the element has warmed up (queue 148)', { item: '148' }, async function () {
+    let injectedAt = -1;
+    const r = await q148Run({
+      latency: 0.09, spin: 0.3, ticks: 24, at: 11,
+      then: el => { injectedAt = el.currentTime; el.currentTime = Math.max(0, el.currentTime - 0.15); },
+    });
+    if (injectedAt < 0) throw new Error('the drift was never injected, so this test proves nothing');
+    if (r.el.maxRate <= 1.01 && r.el.seeks <= 1) {
+      throw new Error('150 ms of real drift was injected well after warm-up and the controller did nothing (max rate ' + r.el.maxRate.toFixed(4) + ', ' + r.el.seeks + ' seeks) — the warm-up gate has become "never correct" and the sound would drift away from the picture');
+    }
+  });
 })();

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.69
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.70
 >
-> **State:** v11.69, **836 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.70, **838 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4926,6 +4926,29 @@ better still, keep working inside the turn rather than parking work for a later 
       Mutation-checked: with the fix disabled it reports 26.5 writes/s and goes red.
       **Still worth your ears** — this is measured, not heard. If it still sounds scratchy, say so and
       the next suspect is the decode path, not the sync loop.
+
+      **✅ THE "NOTED, NOT FIXED" ARTEFACT IS NOW FIXED — v11.70.** The line above recorded, and left:
+      *"on an idle machine playback pitches up to +9.6% and back over four audible steps at the start.
+      That is a real artefact and not a pop — noted, not fixed."* Re-measured on a real imported mp3:
+      **still there at +5.9%, about a semitone, over the first ~600ms of EVERY press of play.**
+      **Cause, measured rather than read.** The controller learns the element's output latency and
+      subtracts it (a constant is not drift). But the bias was seeded from the FIRST sample of a pass,
+      and an element just told to play has not reached steady latency: **seed 48ms against ~87ms
+      settled**, with the ~1.7s EMA only creeping to 51.6ms by 850ms. So it carried a phantom ~37ms of
+      error, decided the sound was late, and leaned on the throttle — and `preservesPitch` makes a rate
+      change a PITCH change.
+      **Fix:** wait 0.25s of the ELEMENT'S OWN playback before learning anything (its clock, not the
+      wall clock, so a stalled element cannot warm up on time it never played). Measured after:
+      **0 rate writes on a normal start (was 3, peak +5.9%), and steady-state sync error 13ms median /
+      19ms worst — inside the 45ms dead band, i.e. TIGHTER than before**, because the phantom error is
+      gone. Injected 150ms of real drift after warm-up is still corrected to the +10% ceiling.
+      **Two things this cost, both worth recording:**
+      · The suite's existing fake element reports a CONSTANT latency, which cannot reproduce this at
+        all — which is exactly why the existing latency test stayed green throughout. The new fake
+        RAMPS its latency.
+      · My first test drove it through `FM.play()` and **its mutation survived**: that path opens with
+        a seek, which reseeds the bias, so the defect never appears. Driving `_syncMediaToClock()`
+        directly reproduces it. A test written the natural way passes against this bug.
 
 - [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
       *"when dragging the cue length for captions it should show it changing live not just wait for you

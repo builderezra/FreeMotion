@@ -1229,6 +1229,17 @@ window.FM = window.FM || {};
    * seconds of pressing play.
    * RATE_WRITE_GAP 250ms: a ±10% trim needs a full second to close 100ms of error, so four
    * re-decisions per second is already finer than the correction can act on. It was 55. */
+  /* SYNC_WARMUP 0.25s of the element's OWN time before the latency estimate is seeded (queue 148).
+   * An element that has just been told to play has not reached its steady output latency yet, and the
+   * bias was seeded from the first sample regardless. Measured on a real import: the seed lands at
+   * 48ms while the true settled latency is ~87ms, and the ~1.7s EMA only creeps to 51.6ms by 850ms —
+   * so the controller sees a phantom ~37ms of error, decides the sound is running late, and leans on
+   * the throttle. That is the "+9.6% over four audible steps at the start" this entry recorded as
+   * noted-but-not-fixed: EVERY press of play began roughly a semitone sharp and slid back.
+   * Measured settling from ~230ms, so a quarter-second of the element's own progress is the gate.
+   * It is the element's clock, not the wall clock, deliberately: a stalled element must not warm up
+   * on time it never played. */
+  const SYNC_WARMUP = 0.25;
   const ERR_BIAS_ALPHA = 0.01, RATE_WRITE_GAP = 250;
   FM.syncTuning = { dead: SYNC_DEAD, tau: SYNC_TAU, trim: SYNC_TRIM, hard: SYNC_HARD, seekGapMs: SEEK_MIN_GAP, biasAlpha: ERR_BIAS_ALPHA, rateWriteGapMs: RATE_WRITE_GAP };
   // The whole decision, as a pure function, so it can be tested without a media element:
@@ -1437,6 +1448,20 @@ window.FM = window.FM || {};
              *      the user asking for a rate and is still honoured on the very next frame.
              * ============================================================================ */
             const rawErr = local - (m.el.currentTime || 0);
+            /* DON'T LEARN THE LATENCY UNTIL THE ELEMENT IS ACTUALLY RUNNING (queue 148). See
+               SYNC_WARMUP: seeding from a spin-up sample teaches the controller a latency that is too
+               small, and everything after it reads as the sound being late. Skipping the correction
+               for a quarter-second of the element's own playback costs nothing — real drift needs far
+               longer than that to become audible — and removes a pitch ramp on every single play. */
+            const ct = m.el.currentTime || 0;
+            if (m._warmCt == null) m._warmCt = ct;
+            if (ct - m._warmCt < SYNC_WARMUP) {
+              /* Note the base but correct NOTHING. Deliberately not a `return`: the volume/fade
+                 reconcile below runs every tick, and skipping it here would freeze a fade for the
+                 first quarter-second of every clip — trading an audible pitch ramp for an audible
+                 volume one. */
+              m._baseRate = base;
+            } else {
             if (m._errBias == null || !isFinite(m._errBias)) m._errBias = rawErr;
             else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
             const plan = FM.mediaSyncPlan(rawErr - m._errBias, base, m._syncAt == null ? Infinity : now - m._syncAt);
@@ -1449,6 +1474,7 @@ window.FM = window.FM || {};
             if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4 &&
                 (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
               m.el.playbackRate = plan.rate; m._rateAt = now;
+            }
             }
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
@@ -1575,7 +1601,7 @@ window.FM = window.FM || {};
         try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
         // A new pass learns its own output latency from scratch (queue 148) — the offset from the
         // last one belongs to a different position, and on a phone often to a different device state.
-        m._errBias = null; m._rateAt = 0; m._baseRate = null;
+        m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
         // Pressing PLAY is the other place a waveform gets opened at an arbitrary sample — and the one
