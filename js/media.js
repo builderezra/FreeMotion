@@ -187,6 +187,68 @@ window.FM = window.FM || {};
    * a fifteen-second sleep in a test is not a test. */
   FM.decodeWait = 15000;
 
+  /* ═══ SAY "H.265" AT IMPORT, NOT AFTER FIFTEEN SECONDS OF NOTHING (queue 129).
+   *
+   * What shipped at v7.62 was right and incomplete. It waits `decodeWait` for a frame, then toasts
+   * "No picture … this browser can't decode it" — and puts THE PART THAT HELPS ("re-export as H.264,
+   * or open it in Safari") in `console.warn`. He reported this from a phone, twice. **He is never
+   * going to see a console line**, so the app knew the answer and still did not tell him.
+   *
+   * Both halves are fixable without waiting on him:
+   *  · The wait. When the browser says outright that it cannot decode HEVC, and the file's own bytes
+   *    carry the `hvc1`/`hev1` sample-entry tag, there is nothing to wait FOR — that clip will never
+   *    produce a frame. Say so at once.
+   *  · The advice. The toast is tappable now (v11.83), so the fix can live one tap away instead of
+   *    in a console.
+   *
+   * ⚠️ BOTH CONDITIONS ARE REQUIRED, and that is deliberate. Guessing "this is probably H.265" from a
+   * filename, or from the browser's capabilities alone, would put a confident wrong diagnosis on
+   * screen for any clip that failed for some other reason — worse than the silence it replaces. If
+   * either check is unsure, nothing happens here and the existing fifteen-second path runs exactly as
+   * before. */
+  let _hevcOK = null;
+  FM.canDecodeHEVC = function () {
+    if (_hevcOK !== null) return _hevcOK;
+    let ok = false;
+    try {
+      const v = document.createElement('video');
+      // hvc1 and hev1 are the two sample-entry flavours; a browser that supports neither says "" to both.
+      ok = !!(v.canPlayType('video/mp4; codecs="hvc1"') || v.canPlayType('video/mp4; codecs="hev1"'));
+    } catch (e) { ok = false; }
+    _hevcOK = ok;
+    return ok;
+  };
+
+  /* Look for the HEVC sample-entry fourcc in the file's own bytes. Head AND tail, because an iOS
+   * recording is written with its moov at the END (it is being appended to while you record), which
+   * is precisely the case this exists for — a head-only sniff would miss every screen recording and
+   * find only the files that were never the problem. */
+  const SNIFF_BYTES = 256 * 1024;
+  FM.sniffHevc = async function (file) {
+    if (!file || !file.slice || !file.size) return false;
+    const look = async (blob) => {
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      // 'hvc1' = 68 76 63 31, 'hev1' = 68 65 76 31
+      for (let i = 0; i + 3 < buf.length; i++) {
+        if (buf[i] !== 0x68) continue;
+        if (buf[i+1] === 0x76 && buf[i+2] === 0x63 && buf[i+3] === 0x31) return true;
+        if (buf[i+1] === 0x65 && buf[i+2] === 0x76 && buf[i+3] === 0x31) return true;
+      }
+      return false;
+    };
+    try {
+      if (await look(file.slice(0, Math.min(SNIFF_BYTES, file.size)))) return true;
+      if (file.size > SNIFF_BYTES) return await look(file.slice(Math.max(0, file.size - SNIFF_BYTES)));
+      return false;
+    } catch (e) { return false; }   // unreadable → unsure → say nothing
+  };
+
+  /* The one message, in one place, so the toast and the console cannot drift apart. */
+  FM.hevcAdvice = function () {
+    return 'This looks like an iPhone screen recording (H.265). This browser cannot play H.265 — ' +
+           're-export it as H.264, or open FreeMotion in Safari, which can.';
+  };
+
   FM.wireVideoRepaint = function (rec) {
     if (!rec || rec.kind !== 'video' || !rec.el || rec._repaintWired) return;
     rec._repaintWired = true;
@@ -235,6 +297,28 @@ window.FM = window.FM || {};
     };
     rec.el.addEventListener('loadeddata', arrived, { once: true });
     rec.el.addEventListener('canplay', arrived, { once: true });
+
+    /* THE EARLY, CERTAIN CASE (queue 129). Only when the browser has said it cannot decode HEVC AND
+     * the file's bytes carry the tag — see the note by FM.sniffHevc for why both are required. The
+     * sniff is async and deliberately not awaited: if it comes back after a frame has already
+     * arrived, `settled` is true and nothing is said. It can only ever make the existing verdict
+     * EARLIER and more specific, never different. */
+    if (!FM.canDecodeHEVC() && rec.file) {
+      FM.sniffHevc(rec.file).then(isHevc => {
+        if (!isHevc || settled || !rec.el || rec.el.readyState >= 2) return;
+        settled = true;
+        clearTimeout(rec._decodeTimer); rec._decodeTimer = 0;
+        rec.undecodable = true;
+        rec.undecodableReason = 'hevc';
+        const nm = String((rec.file && rec.file.name) || 'that clip');
+        const shortNm = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
+        if (FM.toast) FM.toast('“' + shortNm + '” is H.265 — tap to see the fix', 8000,
+                               () => { if (FM.toast) FM.toast(FM.hevcAdvice(), 12000); });
+        console.warn('FreeMotion: "' + nm + '" — ' + FM.hevcAdvice());
+        if (FM.requestRender) FM.requestRender();
+      });
+    }
+
     rec._decodeTimer = setTimeout(() => {
       rec._decodeTimer = 0;
       if (settled || !rec.el || rec.el.readyState >= 2) return;
@@ -243,7 +327,10 @@ window.FM = window.FM || {};
       const nm = String((rec.file && rec.file.name) || 'that clip');
       // Same width budget as the audio-only toast next door: #toast shrink-fits inside ~190px at 380px.
       const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
-      if (FM.toast) FM.toast('No picture from “' + shortNm + '” — this browser can’t decode it', 7000);
+      /* The advice is one TAP away now rather than console-only (queue 129). He reported this from a
+         phone twice; a console.warn was never going to reach him. */
+      if (FM.toast) FM.toast('No picture from “' + shortNm + '” — tap to see why', 8000,
+                             () => { if (FM.toast) FM.toast(FM.hevcAdvice(), 12000); });
       // The untruncated name and the actionable half, which will not fit in a phone toast.
       console.warn('FreeMotion: "' + nm + '" gave no video frame after ' + Math.round(FM.decodeWait / 1000) +
                    's (readyState ' + rec.el.readyState + ', ' + rec.width + 'x' + rec.height + '). The container ' +

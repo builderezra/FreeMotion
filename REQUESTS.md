@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.85
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.86
 >
-> **State:** v11.85, **857 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.86, **859 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -295,6 +295,33 @@ better still, keep working inside the turn rather than parking work for a later 
       the new toast, the diagnosis is confirmed and the answer is transcoding. If you see NO toast and
       the clip is still blank, it is something else and I have been looking in the wrong place** —
       which is worth knowing just as much.
+
+      **v11.86 — I FIXED THE HALF THAT WAS MINE TO FIX, and it was a bad one.** Re-reading this entry,
+      v7.62 put the useful sentence — *re-export as H.264, or open it in Safari* — in `console.warn`.
+      **You reported this from a phone. Twice.** So the app worked out the answer and then wrote it
+      somewhere you could never read it, which is the same complaint as the original bug one level up:
+      the app knew and did not say.
+      Three changes, none of which needed your answer:
+      1. **It says H.265 AT IMPORT, not after fifteen seconds of nothing.** When the browser states it
+         cannot decode HEVC and the file's own bytes carry the `hvc1`/`hev1` tag, there is nothing to
+         wait for — that clip is never going to produce a frame.
+      2. **The fix is one TAP away** on the toast (using the tappable toast from v11.83), instead of a
+         console line: *"This looks like an iPhone screen recording (H.265). This browser cannot play
+         H.265 — re-export it as H.264, or open FreeMotion in Safari, which can."* The old
+         fifteen-second toast got the same treatment.
+      3. **The sniff reads the file's HEAD AND TAIL.** An iPhone recording is written with its index at
+         the END, because it is appended to while you record — so a head-only check would have found
+         every file except the ones this exists for. That is asserted by its own test.
+      ⚠️ **BOTH conditions are required before it accuses anything, deliberately.** Guessing from a
+      filename, or from the browser's capabilities alone, would put a confident WRONG diagnosis on
+      screen for a clip that failed for some other reason — worse than the silence it replaces. Three
+      of the five assertions are controls: a browser that CAN decode HEVC must stay quiet, an H.264
+      file must never be accused (`avc1` differs from `hvc1` by one byte), and a clip whose frame
+      arrives says nothing at all. Both mutations caught — dropping the bytes check accuses an H.264
+      file, and a head-only sniff misses the tail case.
+      **Still open, and still one sentence from you**, unchanged: if you see this toast the diagnosis is
+      confirmed and the remaining answer is transcoding; if you see NO toast and the clip is still
+      blank, it is something else and I have been looking in the wrong place.
 - [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
       two seconds long, and the project lags from just that, it also still doesn't compress the quality

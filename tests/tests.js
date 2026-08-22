@@ -39661,4 +39661,86 @@
       FM.refreshAll();
     }
   });
+
+  /* ═══ H.265 NAMED AT IMPORT, AND THE FIX PUT WHERE HE CAN READ IT (queue 129).
+     He reported a blank screen recording twice, FROM A PHONE, and the app's answer lived in
+     console.warn. The danger in fixing that is not silence, it is a confident WRONG diagnosis on
+     screen — so most of what follows is controls. */
+  test('the HEVC sniff reads the file\u2019s own bytes, head AND tail (queue 129)', { item: '129' }, async function () {
+    if (typeof FM.sniffHevc !== 'function') throw new Error('FM.sniffHevc is missing');
+    const pad = n => new Uint8Array(n);
+    const tag = t => new Uint8Array([t.charCodeAt(0), t.charCodeAt(1), t.charCodeAt(2), t.charCodeAt(3)]);
+    const blob = parts => new Blob(parts);
+
+    if (await FM.sniffHevc(blob([pad(2000), tag('hvc1'), pad(2000)])) !== true) throw new Error('hvc1 near the start was not found');
+    if (await FM.sniffHevc(blob([pad(2000), tag('hev1'), pad(2000)])) !== true) throw new Error('hev1 near the start was not found');
+
+    /* THE ONE THAT MATTERS: an iOS screen recording is written with its moov at the END, because it
+       is appended to while you record. A head-only sniff finds every file except the ones this
+       feature exists for. 400KB of padding puts the tag past the head window. */
+    const big = blob([pad(400 * 1024), tag('hvc1'), pad(64)]);
+    if (await FM.sniffHevc(big) !== true) throw new Error('hvc1 in the TAIL was not found — a head-only sniff misses every iOS screen recording, which is the whole case');
+
+    // CONTROL: an H.264 file must not be accused. 'avc1' differs from 'hvc1' by one byte.
+    if (await FM.sniffHevc(blob([pad(2000), tag('avc1'), pad(2000)])) !== false) throw new Error('an avc1 (H.264) file was reported as HEVC');
+    if (await FM.sniffHevc(blob([pad(5000)])) !== false) throw new Error('a file with no codec tag at all was reported as HEVC');
+    if (await FM.sniffHevc(null) !== false) throw new Error('a missing file was reported as HEVC');
+  });
+
+  test('a clip is only called H.265 when the browser AND the bytes both say so (queue 129)', { item: '129' }, async function () {
+    if (typeof FM.wireVideoRepaint !== 'function') throw new Error('FM.wireVideoRepaint is missing');
+    const realCan = FM.canDecodeHEVC, realToast = FM.toast, realWait = FM.decodeWait;
+    const tag = t => new Uint8Array([t.charCodeAt(0), t.charCodeAt(1), t.charCodeAt(2), t.charCodeAt(3)]);
+    const hevcFile = new Blob([new Uint8Array(1000), tag('hvc1')]); hevcFile.name = 'screen.mov';
+    const h264File = new Blob([new Uint8Array(1000), tag('avc1')]); h264File.name = 'clip.mp4';
+
+    const fakeEl = () => ({ readyState: 0, _l: {},
+      addEventListener(k, fn) { (this._l[k] = this._l[k] || []).push(fn); },
+      fire(k) { (this._l[k] || []).forEach(fn => fn()); } });
+
+    const run = async (canHevc, file) => {
+      FM.canDecodeHEVC = () => canHevc;
+      let msgs = [];
+      FM.toast = (m, ms, onTap) => { msgs.push({ m: m, tappable: typeof onTap === 'function', onTap: onTap }); };
+      const rec = { kind: 'video', el: fakeEl(), file: file, width: 640, height: 480 };
+      FM.wireVideoRepaint(rec);
+      await new Promise(r => setTimeout(r, 250));      // let the async sniff land
+      return { msgs: msgs, rec: rec };
+    };
+
+    try {
+      FM.decodeWait = 100000;                          // keep the 15s path out of this test entirely
+
+      // Both conditions true → named at once, with the fix one tap away.
+      const a = await run(false, hevcFile);
+      if (!a.msgs.length) throw new Error('a browser with no HEVC support and a file tagged hvc1 produced no message at all');
+      if (!/H\.265/.test(a.msgs[0].m)) throw new Error('the message did not name H.265: ' + a.msgs[0].m);
+      if (!a.msgs[0].tappable) throw new Error('the message was not tappable, so the actual fix is unreachable from a phone — which is the whole complaint');
+      if (a.rec.undecodable !== true) throw new Error('the record was not marked undecodable');
+      a.msgs[0].onTap();
+      if (!/H\.264|Safari/.test((a.msgs[1] || {}).m || '')) throw new Error('tapping it did not reveal the fix (re-export as H.264 / open in Safari)');
+
+      /* CONTROL 1 — the browser CAN decode HEVC. Then a hvc1 file is perfectly playable and accusing
+         it would be a wrong diagnosis on screen, which is worse than the silence this replaced. */
+      const b = await run(true, hevcFile);
+      if (b.msgs.length) throw new Error('a browser that CAN decode HEVC still accused an hvc1 file: ' + b.msgs[0].m);
+
+      /* CONTROL 2 — no HEVC support, but the file is H.264. It failed for some other reason, and
+         "this is H.265" would send him off re-exporting a file that was never the problem. */
+      const c = await run(false, h264File);
+      if (c.msgs.length) throw new Error('an H.264 file was accused of being H.265: ' + c.msgs[0].m);
+
+      /* CONTROL 3 — a frame arrives. Whatever the codec, there is nothing wrong and nothing to say. */
+      FM.canDecodeHEVC = () => false;
+      let said = 0; FM.toast = () => { said++; };
+      const rec = { kind: 'video', el: fakeEl(), file: hevcFile, width: 640, height: 480 };
+      FM.wireVideoRepaint(rec);
+      rec.el.readyState = 2; rec.el.fire('loadeddata');
+      await new Promise(r => setTimeout(r, 250));
+      if (said) throw new Error('a clip that produced a frame was still reported as undecodable');
+      if (rec.undecodable === true) throw new Error('a clip that produced a frame was left marked undecodable');
+    } finally {
+      FM.canDecodeHEVC = realCan; FM.toast = realToast; FM.decodeWait = realWait;
+    }
+  });
 })();
