@@ -65,12 +65,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     thinner answer. This lived only in REQUESTS.md until 22 Aug, i.e. nowhere that would be read at the
     moment a workflow was actually being launched, which is the whole point of this file.
 
-14. **NEVER COMPARE TWO RENDERS THROUGH A RESAMPLING STEP.** Downscaling a frame to compare it is how
-    you manufacture a difference that is not in the picture. Queue 477 was withdrawn over a "bug" that
-    turned out to be a 1080x1920 project squashed into a 160x160 SQUARE probe canvas: 308 bytes on a
-    single scanline, deterministic, persistent, utterly convincing — and **zero at full project
-    resolution**. If two renders must be compared, compare them at a raster that does not resample, or
-    do not believe a thin difference.
+14. **A REDUCED RASTER MAKES ITS OWN DIFFERENCES — SO "DO ANY PIXELS DIFFER" IS NEVER THE QUESTION.**
+    Enabling an effect routes a layer through an offscreen plate, and at any reduced raster the layer's
+    boundary lands on a fraction of a pixel, so the plate path and the direct path disagree on the
+    boundary rows. Measured on queue 477: **50 of 9,768 pixels, two rows, up to 10 levels** — and
+    **exactly zero at full project resolution**, where the boundary falls on integers.
+    So compare with a THRESHOLD, never with equality: boundary noise is ~0.5% of pixels, a real effect
+    ~15%. **⚠️ AND I GOT THIS WRONG ONCE ALREADY** — I first blamed my own probe squashing 9:16 into a
+    square, which WAS an artefact, and then claimed it explained the real fault too. It did not:
+    `rasterFor` scales uniformly. **Proving your instrument was faulty does not prove it was the only
+    fault.**
 
 12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure

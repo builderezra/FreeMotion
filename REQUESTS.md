@@ -4596,7 +4596,8 @@ better still, keep working inside the turn rather than parking work for a later 
         this fill **both saturate to 255** — so the two renders were identical for a reason that has
         nothing to do with caching. Verified separately that brightness genuinely works (204 → 255 at
         2.2, → 61 at 0.3). **A parameter sweep across a clipped range measures nothing.**
-      ✅ **SOLVED 23 Aug, and the answer is that MY PROBE WAS THE BUG. There is no compositor fault.**
+      🔴 **THE "SOLVED" BELOW IS WRONG AND IS CORRECTED AT THE END OF THIS ENTRY. Read that first.**
+      ⚠️ **SOLVED (INCORRECTLY) 23 Aug — kept because the retraction is the lesson.**
       The bisect was done properly — one probe, all cases in the same run, with controls:
       | case | differing bytes |
       |---|---|
@@ -4618,6 +4619,27 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **Also verified along the way and worth keeping:** rendering writes NO cache keys onto the layer
       or the effect (checked before/after), and the two scene clones are byte-identical apart from
       `clipColor`. Both plausible causes, both eliminated.
+
+      🔴 **CORRECTION, same day: THAT CONCLUSION WAS OVER-CLAIMED AND IS WITHDRAWN.**
+      I proved my own probe's squash was an artefact — true — and then claimed it *"also explains the
+      original feature fault"*. **It does not.** `rasterFor` uses `Math.min(TW/w, TH/h)`: a UNIFORM scale
+      that preserves aspect. `fx-thumbs` never squashed anything, so the artefact I found was never on the
+      real path. **I fixed a phantom and announced it as the answer.**
+      ✅ **RE-RUN ON A UNIFORM RASTER (74x132, exactly rasterFor's arithmetic) — THE FAULT IS REAL:**
+      value set before the render → **0**; value changed after a render → **100 pixels, worst 10**.
+      🎯 **AND NOW LOCATED, properly this time.** The differing pixels are **all in the solid interior**,
+      on exactly **TWO ROWS** — the shape's top and bottom boundary rows — across 48 columns, up to 10
+      levels. Not the effect: a **plate round-trip rounding at the layer's boundary**. Enabling an effect
+      routes the layer through an offscreen plate, and at a REDUCED raster the boundary falls on a
+      fraction of a pixel, so the plate path and the direct path disagree on those two rows. At full
+      project resolution the boundary lands on integers and the difference is **zero** — which is why the
+      earlier full-res check found nothing and misled me.
+      ➡️ **SO THE REBUILD IS A THRESHOLD, and the numbers to calibrate it are here.** "Does this effect do
+      anything" must not mean "does any pixel differ". Boundary noise is **~50 of 9,768 pixels (0.5%)**; a
+      real effect on a subject it can act on is **~15%** (channelremap on orange). Anything between one and
+      a few percent separates them with an order of magnitude of headroom either way.
+      **Still to confirm before building:** that the same threshold holds for a genuinely SUBTLE effect —
+      the risk is calling something dead that a person can just about see.
       **(23 Aug — not a new report from him; the conclusion of #460, which he has raised three times.)** — built the same day it was logged, because #460 is three reports old.**
       **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
       — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
