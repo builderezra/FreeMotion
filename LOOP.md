@@ -424,6 +424,20 @@ entry rather than glossed, and it is now a 30-second ask in his block instead of
 **THE LESSON: "I cannot test this here" is a thing to SURFACE, not a thing to sit on.** It had been true
 and recorded since 20 Aug, and he was never actually asked the one question that settles it.
 
+**✅ 22 Aug — a SECOND "done but not ticked" shape, found by the tick it wasted (again).**
+#431 was fixed at v11.71, he confirmed it in a screenshot, and the entry still read `[ ]` — so it kept
+surfacing as the next job. The clause detector added three ticks earlier **could not see it**: that one
+only fires on entries WITH numbered clauses, and #431 has none. `tools/next.sh` now also flags **an open
+entry whose body claims a versioned FIX/DONE**. Measured before shipping: exactly ONE match across the
+whole file, so it needs no cleverness to avoid crying wolf — and deliberately no "unless it also says
+something is outstanding" suppression, because that would have suppressed #431 itself (its STATUS line
+was stale and said NEEDS YOU).
+**⚠️ AND A REAL MISTAKE OF MY OWN IN THE SAME TICK, recorded rather than tidied away.** I chained the
+close and the ship in one command without a guard: the close FAILED (an assertion — `status.sh` had
+rewritten the line I was matching on) and **the ship ran anyway**, publishing the detector while the
+entry it was written for was still open. Shell `;` between a fallible edit and a ship is a gate with a
+hole in it. **Check the edit landed before shipping it — or join them with `&&`.**
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`

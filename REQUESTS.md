@@ -14041,8 +14041,14 @@ wait for them to report back."*
       `tests/_offlineboot.py` still reports the app coming up with the network off.
 
 
-- [ ] **431 — The Media and Audio panels squash the buttons above them.** (20 Aug, phone screenshot at
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **431 — The Media and Audio panels squash the buttons above them.** ✅ **DONE v11.71 — and he has
+      seen it working: his 22 Aug screenshot shows all five tab labels back on the Media tab.**
+      ⚠️ **Closed 22 Aug, later than it should have been.** The fix shipped, he confirmed it in a
+      screenshot, and this entry still read `[ ]`, so it kept coming up as the next job. The clause
+      detector added a few ticks ago could not see it (no numbered clauses here), which is why
+      `tools/next.sh` now ALSO flags an open entry whose body claims a versioned fix — across the whole
+      file that matched exactly one entry: this one.
+      (20 Aug, phone screenshot at
 
       🔴 **22 AUG — HE RAISED IT AGAIN, ANGRY, WITH TWO SCREENSHOTS. His words, verbatim:**
       *"I'm sure there's a lot of things I've asked that you've missed and honestly I don't know what
