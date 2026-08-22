@@ -90,6 +90,23 @@ proves nothing on the runs where the frame lands late, so the step became a pure
 (`FM._tlMomentumStep`) the suite drives frame by frame with a deliberately sub-pixel first frame.
 Deterministic, mutation-checked, and both ends asserted so "never stop" cannot pass as a fix.
 
+**✅ v11.67 — #47's safety half, and it turned up a real silent-data-loss bug.**
+#47 half (a) crash-resume was done; half (b) is ANSWERED — *"if there's a thing to make exporting safer
+then do it, currently I've barely done many exports anyway so the current system may not be safe"*. The
+entry itself names the right next step: work the UNTESTED GROUND (long exports, backgrounding, low
+storage, an interrupted export), not the 11,700-line OffscreenCanvas move.
+**Found by reading that untested ground: one audio clip that will not decode destroyed the ENTIRE
+soundtrack.** `FM.decodeAudio` was awaited unguarded — a file resolving to nothing was handled and always
+had been, but a corrupt file THROWS, and that threw straight out of the mixer past every other clip, into
+a caller that swallowed it to a `console.warn` and shipped a mute file. Measured: good song + one bad file
+→ mix `null`. Guarded per clip now, plus the fifth (and broadest) silent audio loss made to speak.
+**The lesson: the handled case next door is what made this invisible.** The line under the decode reads
+`if (!m.audioBuffer) { dropped.push('would not decode') }` — so the failure LOOKED covered, and the
+reject path went past it unseen. When a guard exists, check which failure shape it actually catches.
+**Also worth keeping: a mutation that breaks SYNTAX proves nothing.** Removing `try {` left a dangling
+`catch`, the file did not parse, four unrelated tests went red with "not reachable" and it reported
+CAUGHT. A real mutation has to leave the file valid and change only the behaviour.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
