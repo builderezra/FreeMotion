@@ -290,7 +290,19 @@ window.FM = window.FM || {};
         else dropped.push(nameOf(layer) + ' (no media record at all)');
         continue;
       }
-      if (m.audioBuffer === undefined) m.audioBuffer = await FM.decodeAudio(m.file);
+      /* A DECODE THAT REJECTS USED TO TAKE THE WHOLE SOUNDTRACK WITH IT (queue 47, v11.67). The line
+       * below has always handled a decode that RESOLVES to nothing — but a genuinely corrupt or
+       * unsupported file does not resolve, it THROWS, and nothing here caught it. That threw straight
+       * out of the mixer, where the caller's `catch` set the mix to null and logged to a console nobody
+       * has open. MEASURED: two audio clips, one good song and one file that will not decode, and the
+       * mix came back null — so the corrupt clip did not lose ITS sound, it lost EVERY layer's sound,
+       * and the export was silent with not one word said about why.
+       * One bad clip is now exactly as expensive as it should be: that clip, and it is reported by name
+       * through the same `dropped` list as every other reason a layer contributes nothing. */
+      if (m.audioBuffer === undefined) {
+        try { m.audioBuffer = await FM.decodeAudio(m.file); }
+        catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
+      }
       if (!m.audioBuffer) { dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue; }
       const buf = makeClipBuffer(oac, m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, buf.duration);
@@ -645,7 +657,20 @@ window.FM = window.FM || {};
       try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
-      try { mix = await buildAudioMix(scene, start, end); } catch (e) { console.warn('audio mix failed', e); mix = null; }
+      /* THE FIFTH SILENT LOSS, and the last one left in this file (queue 47, v11.67). The other four
+       * were each made to speak in v7.90-v11.21; this one stayed a bare console.warn, and it is the
+       * BROADEST of them — anything at all that throws out of the mixer lands here and ships a mute
+       * file. A phone running out of memory building the offline buffer for a long project reaches
+       * exactly this line, and a long project is precisely the export Ezra has not tried yet.
+       * It cannot prevent the loss — it makes the loss say something, which is the difference between
+       * an unreproducible report and a one-line answer. */
+      try { mix = await buildAudioMix(scene, start, end); }
+      catch (e) {
+        console.warn('[export] the soundtrack could not be built — exporting video only', e);
+        FM._audioTrackDropped = 'mix-failed';
+        if (FM.toast) FM.toast('The soundtrack could not be built — exporting WITHOUT SOUND', 6000);
+        mix = null;
+      }
 
       // Only declare an audio track if AAC encoding will actually work (it's unavailable on some iOS
       // Safari versions). Otherwise the muxer commits an empty audio track to the moov → a broken/silent

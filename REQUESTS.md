@@ -1,10 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.66
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.67
 >
-> **State:** v11.66, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
-> waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
-> why nothing has shipped for you lately except bugs I found myself.
+> **State:** v11.67, **833 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> waiting on you, the rest standing notes and long-term ideas.
+>
+> **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
+> ticks. **That was wrong** — you said so (*"you did not meet every task i believe"*), and two hand
+> audits proved it: **19 open entries had real work in them**, and **17 clauses were ticked DONE without
+> ever being built**. The tool I trusted to tell me the queue was empty was a pile of regexes over prose.
+> Those are being worked oldest-first now, and the last several releases came out of them.
+> The questions below are still genuinely yours to answer — they just are not the whole list any more.
 >
 > **The fastest ones. A letter or one word each, and each unblocks real work:**
 >
@@ -4088,6 +4094,26 @@ better still, keep working inside the turn rather than parking work for a later 
         11,700-line compositor.**
       · The worker move (OffscreenCanvas) is the expensive, risky half. Put it to him again with the
         real cost ONCE the cheap safety work is done and measured.
+
+      **✅ FIRST SAFETY WORK LANDED — v11.67, and it found a real one.** Working the untested ground
+      above rather than the worker move, as his answer asked. **One audio clip that will not decode was
+      destroying the WHOLE soundtrack.** The mixer awaited `FM.decodeAudio` unguarded: a file that
+      resolves to nothing was handled and always had been, but a corrupt or unsupported file THROWS, and
+      that threw straight out of the mixer past every other clip. The caller swallowed it into a
+      `console.warn` and shipped a mute file. **Measured before fixing:** a good song plus one bad file
+      → mix came back `null`, i.e. every layer's audio lost to one clip, silently. Now the decode is
+      guarded per clip, so one bad file costs that file only and is named through the same drop report as
+      every other reason a layer contributes nothing. Verified with a control — the rescued mix carries
+      the good song at the same level as an all-clips-fine mix, so it cannot pass on a mixer returning
+      well-shaped silence.
+      **And the fifth silent loss now speaks.** v7.90/v7.91/v11.21 made three sibling paths report;
+      this one — anything at all throwing out of the mixer — stayed a bare `console.warn`. It is the
+      broadest of the five, and a phone running out of memory building the offline buffer for a LONG
+      project lands exactly there, which is precisely the export he has not tried. It now flags
+      `mix-failed` and toasts "exporting WITHOUT SOUND", and the render still completes — a dead
+      soundtrack must never bin minutes of video (that is asserted too).
+      Both mutation-checked. **Still untested ground for a later tick:** backgrounding the app
+      mid-export, an export interrupted by a call, and genuinely long renders.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

@@ -38167,4 +38167,123 @@
     const moved = stepFn(100, 1.8, 16.67, 400, maxTop);
     if (Math.abs(moved.top - 400) > 40) throw new Error('the glide ignored a list that had been scrolled to 400 and jumped to ' + moved.top);
   });
+
+  /* Queue 47 — the safety half he actually asked for.
+   * Ezra, 21 Aug: *"if there's a thing to make exporting safer then do it, currently I've barely done
+   * many exports anyway so the current system may not be safe"*. So: the untested ground, not the
+   * 11,700-line worker move.
+   * MEASURED BEFORE FIXING: two audio clips, one good song and one file that will not decode. The
+   * decode REJECTS — which is what a genuinely corrupt or unsupported file does — and that threw
+   * straight out of the mixer past every `continue`, so `buildAudioMix` returned null and the export
+   * was silent. Not "the bad clip lost its sound": EVERY clip lost its sound, to one bad file, with
+   * nothing on screen saying why. The line below the decode has always handled a decode that RESOLVES
+   * to nothing, which is why this looked covered and was not. */
+  test('export: one clip whose audio will not decode no longer silences the whole soundtrack (queue 47)', { item: '47' }, async function () {
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, dec0 = FM.decodeAudio;
+    const peakOf = m => {
+      if (!m || !m.audioBuffer) return -1;
+      const d = m.audioBuffer.getChannelData(0);
+      let p = 0; for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; }
+      return p;
+    };
+    try {
+      const build = async function (breakDecode) {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const good = ac.createBuffer(2, 48000 * 2, 48000);
+        for (let c = 0; c < 2; c++) { const d = good.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 40) * 0.4; }
+        FM.scene.project.duration = 3;
+        FM.scene.layers.length = 0;
+        const mk = n => { const L = FM.makeLayer('video', { name: n }); L.start = 0; L.duration = 2; L.trimStart = 0; L.trimEnd = 2; FM.scene.layers.push(L); return L; };
+        const A = mk('good song'), B = mk('corrupt clip');
+        FM.media.set(A.id, { file: new Blob(['a']), duration: 2, audioBuffer: good });
+        FM.media.set(B.id, { file: new Blob(['b']), duration: 2 });   // no buffer → it gets decoded
+        FM.decodeAudio = breakDecode
+          ? async function () { throw new DOMException('Unable to decode audio data', 'EncodingError'); }
+          : dec0;
+        FM._lastAudioDrops = null;
+        try { return { mix: await FM.exporter.buildAudioMix(FM.scene, 0, 3), threw: null, drops: FM._lastAudioDrops }; }
+        catch (e) { return { mix: null, threw: e, drops: FM._lastAudioDrops }; }
+      };
+
+      const broken = await build(true);
+      if (broken.threw) throw new Error('one undecodable clip still threw the whole mixer over (' + broken.threw.message + ') — the caller swallows that and ships a mute file');
+      if (!broken.mix) throw new Error('one undecodable clip still returned NO MIX at all, so the good song is lost with it — this is the bug exactly');
+
+      /* THE CONTROL. "A mix came back" is not the claim; "the good song is IN it" is. Without this,
+         a mixer that returned a correctly-shaped buffer of pure silence would pass happily — which is
+         the same silent export wearing a different hat. */
+      const rescued = peakOf(broken.mix);
+      const control = await build(false);
+      const clean = peakOf(control.mix);
+      if (!(clean > 0.05)) throw new Error('the CONTROL mix — every clip decodable — is silent (peak ' + clean.toFixed(3) + '), so this test is measuring nothing and would pass on a mixer that never works');
+      if (!(rescued > 0.05)) throw new Error('the mix survived the corrupt clip but came out SILENT (peak ' + rescued.toFixed(3) + ') — the good song was lost anyway');
+      if (Math.abs(rescued - clean) > 0.02) throw new Error('the good song came through quieter beside a corrupt clip (' + rescued.toFixed(3) + ' vs ' + clean.toFixed(3) + ') — one bad file is still costing the others');
+
+      /* …and the bad clip is NAMED. Rescuing the soundtrack silently would trade one invisible failure
+         for another: he would get sound, minus one clip, and nothing to tell him which. */
+      const drops = broken.drops;
+      if (!drops || !drops.length) throw new Error('the undecodable clip was dropped without a word — the mixer reported nothing');
+      if (!drops.join(' | ').includes('corrupt clip')) throw new Error('the drop report does not name the clip that failed: ' + JSON.stringify(drops));
+      if (drops.join(' | ').includes('good song')) throw new Error('the GOOD clip was reported as dropped too: ' + JSON.stringify(drops));
+    } finally {
+      FM.decodeAudio = dec0;
+      FM.scene.layers = layers0;
+      FM.scene.project.duration = dur0;
+      FM._lastAudioDrops = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* The other half of the same tick (queue 47). Rescuing the mix from ONE bad clip does nothing for the
+   * failures that take the mixer down whole — a phone running out of memory building the offline buffer
+   * for a long project is the obvious one, and a long project is exactly the export he has not tried.
+   * That landed in a bare `console.warn` and shipped a mute file. Four sibling paths were each made to
+   * speak in v7.90-v11.21; this was the fifth and broadest, and it stayed quiet.
+   * Driven through a REAL export — 64x64, two frames — because the thing under test is the wiring, and
+   * a test of the reporting helper alone would pass with the catch block deleted. */
+  test('export: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47)', { item: '47' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), dur0 = P.duration, w0 = P.width, h0 = P.height;
+    const OAC0 = window.OfflineAudioContext, toast0 = FM.toast;
+    const toasts = [];
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); };
+      P.duration = 0.2; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.2; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.2; song.trimStart = 0; song.trimEnd = 0.2;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.2), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 40) * 0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.2, audioBuffer: buf });
+
+      // The shape of a phone dying on a long mix: building the offline buffer throws.
+      window.OfflineAudioContext = function () { throw new RangeError('Out of memory'); };
+      FM._audioTrackDropped = null;
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'probe', onReady: async r => { blob = r.blob; } });
+
+      /* The render must SURVIVE a dead soundtrack — a failed mix must never throw away minutes of
+         video. This is the control: without it the test would pass on an exporter that simply died,
+         which reports the problem by taking the whole export with it. */
+      if (!blob) throw new Error('a soundtrack that failed to build sank the entire export — the video is gone too');
+      if (FM._audioTrackDropped !== 'mix-failed') throw new Error('the export lost its sound and flagged it as "' + FM._audioTrackDropped + '" — the caller keys its message off this');
+      if (!toasts.length) throw new Error('the soundtrack was dropped and NOTHING was said on screen — a mute file with no explanation, which is the whole complaint');
+      if (!toasts.some(t => /WITHOUT SOUND/i.test(t))) throw new Error('something was said, but not that the file has no sound: ' + JSON.stringify(toasts));
+    } finally {
+      window.OfflineAudioContext = OAC0;
+      FM.toast = toast0;
+      FM.scene.layers = layers0;
+      P.duration = dur0; P.width = w0; P.height = h0;
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
 })();
