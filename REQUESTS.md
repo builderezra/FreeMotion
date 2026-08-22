@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.84
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.85
 >
-> **State:** v11.84, **857 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.85, **857 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8770,8 +8770,7 @@ better still, keep working inside the turn rather than parking work for a later 
       measurement (v11.29) and his scene costs 163ms/frame on a fast Mac, so the slowness is workload.
       His tier-0 reading means the ladder was never consulted, which only happens on a paused sample.
       There is nothing to build until that reading arrives.
-- [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** ✅ **CLOSED 23 Aug — it was FIXED, and the fix is in the code with your quote on it.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
       thirds of the screen empty black below them, no canvas, no timeline. So on finishing a vector
@@ -8796,6 +8795,27 @@ better still, keep working inside the turn rather than parking work for a later 
       and I do not have your exact route — you may have reached it from somewhere I did not. **If you
       finish a vector drawing and still land in a full-height panel, say so and it is live again**;
       otherwise it closes with v7.35.
+
+      **23 Aug — CLOSED, and not by "I still cannot reproduce it".** The 16 Aug note guessed v7.35 and a
+      shared CSS rule. That guess was wrong, and the real answer was sitting in `js/draw-tool.js` the
+      whole time, in a comment carrying **your own words and this queue number**:
+      > *STOP FIRST, THEN ADD (queue 179) … `body.drawing` carries `#inspector-panel { display: none }`,
+      > so adding the layer here selected it and opened the inspector while that panel was still HIDDEN
+      > — it docked and measured itself against a layout that was not on screen … A swipe down was the
+      > only way to make it re-measure.*
+      **That is your bug, exactly**, mechanism and all: the panel anchors itself just under the last
+      timeline row, and while `body.drawing` is on there are no rows to measure, so the anchor collapses
+      to the top of the screen and the panel fills it. The freehand branch had always stopped before
+      selecting, which is precisely why freehand never showed this and vector did.
+      **Verified end to end at 380x820 on the route you actually take** — start a vector drawing, tap
+      points, tap **Done**: the layer is created and selected, the phone enters editing mode
+      (`m-editing insp-open`), and the panel docks at the BOTTOM with the canvas and the timeline both
+      visible. Screenshot-checked, not just measured.
+      ⚠️ **Why this sat in your "waiting on you" pile for a week for no reason:** the entry was asking you
+      to confirm a fix that had already shipped, because it recorded what was ASKED and nobody re-read the
+      source. Worth knowing that 17 of the 26 open entries are named in a source comment somewhere, so
+      "the code mentions it" is far too noisy to make into an automatic check — but **before re-asking you
+      to confirm anything, the source is worth a grep.**
 - [x] **223 — ✅ **DONE v11.30.** The splash video is 2.8 MB, about as much as the whole app's code.** Found while
       answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
       that is images and video — almost all of it `splash.mp4`, which is decoration. The app's entire
