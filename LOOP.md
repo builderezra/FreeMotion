@@ -163,6 +163,20 @@ three of the five assertions are controls, because **a confident wrong diagnosis
 than the silence it replaces**. Reusing v11.83's tappable toast made this small; that is twice now
 that the toast action has paid for itself.
 
+### 23 Aug, v11.87 — A PARKED "SEPARATE, REAL QUESTION" IS A TODO, NOT A FOOTNOTE
+#98 ended with *"whether that fallback SHOULD be aspect-aware for templates/elements is a separate,
+real question — noted, not guessed at."* Not guessing was right; leaving it there was not. Followed up
+this tick and it was a live bug: the default text size existed in TWO copies (Add Text computed
+`min(W,H)/6.75`, the constructor fell back to a flat 96), and **"Reset Text" is implemented as a paste
+from a pristine layer**, so the reset button was wired to the smaller copy — 96 instead of 160 on his
+portrait projects, 96 instead of 320 on a 2880 comp.
+**The general shape, worth checking for elsewhere: one value written down twice, where only one copy is
+obviously reachable.** The unreachable-looking copy is the one that rots, and it surfaces through some
+path nobody connected to it (here, reset-as-paste). Fixed by deleting the second copy rather than
+syncing it — `FM.defaultTextSize()` is now the only definition and both callers use it.
+**So: when an entry parks a question in its own text, that question is queue work.** Three ticks
+running, the buildable half was sitting inside an entry marked 🟠 NEEDS YOU.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
