@@ -3537,12 +3537,25 @@ window.FM = window.FM || {};
       const pf = Math.round((P.fps || 30) * 100) / 100;
       const same = fpsSel.querySelector('option[value="project"]');
       if (same) same.textContent = 'Same as project — ' + pf + ' fps';
-      const onLadder = [].slice.call(fpsSel.options).some(o => o.value !== 'project' && Math.abs(parseFloat(o.value) - pf) < 0.001);
-      if (!onLadder) fpsSel.value = 'project';   // a custom rate has nowhere else to land
+      /* RESET TO THE PROJECT ON EVERY OPEN (queue 121, fixed 22 Aug). This used to reset only when the
+         project's rate was OFF the ladder — `if (!onLadder)` — which meant that for almost every real
+         project (15/25/30/50/60/120 all being rungs) a rate picked once stayed selected for the rest of
+         the session. Measured: project at 25, pick 60 for one export, change the project to 50 in the
+         cog, reopen Export → it still read 60. That is the exact thing #121 asked for the opposite of —
+         *"Settings ↔ Export should mirror ONE WAY"*, the cog being the source of truth — and the comment
+         on expPrefsApply already claimed it ("They come from the project every time"). The prose was
+         right and the code was not, same shape as the stray `selected` in #471 and the stale FPS mirror
+         in #118. The "project" rung is labelled with the real rate, so it always reads correctly. */
+      fpsSel.value = 'project';
     }
     const sel = document.getElementById('exp-res');
     if (sel) {
-      const prev = sel.value;
+      /* NO CARRY-OVER OF THE PREVIOUS PICK (queue 121). See the fps note above — and this half was worse,
+         because the value stored here is a SCALE, not a size. Measured: pick 720p on a 1080×1920 project
+         (scale 0.667), resize the canvas to 2160×3840 in the cog, reopen Export → the same 0.667 re-applied
+         and now read "1440p — 1440×2560". A resolution chosen for one project silently followed into a
+         different one as a size he never picked. The list is rebuilt with "Same as project" first, so
+         dropping the restore lands there naturally. */
       sel.innerHTML = '';
       const add = (val, label) => { const o = document.createElement('option'); o.value = val; o.textContent = label; sel.appendChild(o); };
       /* "SAME AS PROJECT", not "Full" (queue 172). Ezra: "Resolution should have a same as project
@@ -3557,8 +3570,7 @@ window.FM = window.FM || {};
          Every rung above is a uniform SCALE of the project, so the list could only ever offer the
          project's own aspect. This one hands width and height to the exporter directly. */
       add('custom', 'Custom size…');
-      // keep the previous choice if it still exists, else default to the project's own size
-      if (prev && [].some.call(sel.options, o => o.value === prev)) sel.value = prev;
+      // …and it opens on the project's own size, every time (queue 121).
       const cf = document.getElementById('exp-custom-field');
       const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
       const syncCustom = () => {

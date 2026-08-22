@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.53
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.54
 >
-> **State:** v11.53, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.54, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -873,6 +873,36 @@ better still, keep working inside the turn rather than parking work for a later 
       ✓ on the label since that menu has no switch to show state.
       Two existing tests had the old requirement written into them (Settings must lead with Onion skin).
       Updated, with your reversal quoted in place so nobody later "fixes" them back.
+
+- [x] **121b — Export kept a stale frame rate and resolution instead of following the project.**
+      ✅ **DONE v11.54.** (22 Aug — the unbuilt half of #121, found by re-auditing closed requests after
+      *"just check extra hard theres no leftovers"*.)
+      **#121's rule is his:** *"Settings ↔ Export should mirror ONE WAY"* — the cog owns the frame rate and
+      the size, and an export-time change is a ONE-OFF. `expPrefsApply` even carries a comment saying
+      exactly that (*"Deliberately NOT restoring fps or resolution… They come from the project every
+      time"*). **The code did the opposite in two ways**, both reproduced in a real browser first:
+      1. **Frame rate.** The reset was guarded by `if (!onLadder)` — it only fired when the project's rate
+         was NOT one of the rungs. Since 15/25/30/50/60/120 covers nearly every real project, a rate picked
+         once stuck for the session. Measured: project 25 → pick 60 → set the project to 50 in the cog →
+         reopen Export → **still 60**. The only case the guard did handle (48 fps) is the only case the
+         existing test covered, which is why it survived.
+      2. **Resolution, and this half was worse** — what it remembered was a **SCALE**, not a size. Pick
+         720p on a 1080×1920 project (0.667), resize the canvas to 2160×3840 in the cog, reopen Export →
+         the same 0.667 re-applied and read **"1440p — 1440×2560"**: a size he never chose, in a project it
+         was never chosen for.
+      **Both now inherit from the project on every open.** Verified: after picking 60 and moving the
+      project to 50 it reads "Same as project — 50 fps"; after the canvas resize it reads "Same as
+      project — 2160×3840"; and an off-ladder 48 fps project still lands correctly, which is what the old
+      guard was really protecting.
+      ⚠️ **The test broke another test first.** It closed the dialog by removing an `open` class from
+      `#exp-dialog` — neither the real element (`#export-dialog`) nor the real mechanism (`.hidden`) — so
+      the dialog stayed live and swallowed pointer events, and the queue-302 drag-handle test failed with
+      "the pointer lands on export-dialog". It presses the real **Cancel** button now. Second time this
+      week that restoring app state by hand rather than through the app's own path has poisoned the run.
+      ⚠️ **And the resolution mutation SURVIVED at first — the mutation was wrong, not the test.** The real
+      defect reads the old value BEFORE the option list is rebuilt; my single-site version read it after,
+      so it re-applied nothing. Restoring the genuine two-site defect fails the test exactly as it should.
+      🔗 Third strand of the same entry — the double `selected` in the markup — shipped as **#471** (v11.52).
 
 - [x] **118b — Canvas settings blanked the frame rate on a 24fps project, and Apply rewrote it to 30.**
       ✅ **DONE v11.53.** (22 Aug — the unbuilt half of #118, found by re-auditing closed requests against

@@ -24695,6 +24695,72 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the export dialog inherits from the project every open, and never carries a stale pick (queue 121)', { item: '121' }, async function () {
+    /* His rule in #121: *"Settings ↔ Export should mirror ONE WAY"* — the cog owns the frame rate and the
+     * size, and an export-time change is a ONE-OFF. `expPrefsApply` already says so in a comment
+     * ("Deliberately NOT restoring fps or resolution... They come from the project every time"). The code
+     * did the opposite, in two ways, both measured in a real browser before the fix:
+     *  1. The fps reset was guarded by `if (!onLadder)`, so it only fired for a rate that was NOT one of
+     *     the rungs. For 15/25/30/50/60/120 — nearly every real project — a rate picked once stayed put:
+     *     project 25, pick 60, change the project to 50 in the cog, reopen → still 60.
+     *  2. The resolution restored the previous pick, and what it stored was a SCALE. Pick 720p on a
+     *     1080×1920 project (0.667), resize the canvas to 2160×3840, reopen → the same 0.667 re-applied
+     *     and read "1440p — 1440×2560": a size he never chose, in a project it was never chosen for.
+     * Third strand of the same entry — the double `selected` in the markup — is queue 471, already fixed.  */
+    if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
+    const fps = document.getElementById('exp-fps'), res = document.getElementById('exp-res');
+    if (!fps || !res) throw new Error('the export dialog controls are missing');
+    const p0 = { fps: FM.scene.project.fps, w: FM.scene.project.width, h: FM.scene.project.height };
+    const open = async () => { FM.showExportDialog(); await sleep(200); };
+    /* Close it the way the app closes it. The first version of this test removed an `open` class from
+       `#exp-dialog` — an element and a class that are not how this dialog works — so the real
+       `#export-dialog` stayed visible and kept swallowing pointer events, and a later test failed with
+       "the pointer at the handle's own centre lands on export-dialog". Press the actual Cancel button;
+       fall back to the real element + class only if it is missing. */
+    const close = () => {
+      const cancel = document.getElementById('exp-cancel');
+      if (cancel) { cancel.click(); return; }
+      const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
+    };
+    try {
+      // CONTROL — the probe must actually be driving the dialog.
+      FM.scene.project.fps = 25; await open();
+      if (fps.value !== 'project') throw new Error('a freshly opened export dialog does not start on "Same as project" (it reads "' + fps.value + '") — nothing below would mean anything');
+      close();
+
+      // 1. A rate picked for one export must not survive the next open, and must follow the project.
+      await open(); fps.value = '60'; close();
+      FM.scene.project.fps = 50; await open();
+      if (fps.value !== 'project') throw new Error('after picking 60 fps once and then setting the project to 50, the export dialog still reads "' + fps.value + '" — the cog is supposed to be the one source of truth');
+      const lab = fps.options[fps.selectedIndex].textContent;
+      if (lab.indexOf('50') < 0) throw new Error('the "Same as project" row says "' + lab.trim() + '" instead of naming the project\'s 50 fps');
+      close();
+
+      // 2. A resolution pick must not survive — and must never re-apply as a DIFFERENT size.
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920; await open();
+      const alt = [].slice.call(res.options).filter(o => o.value !== '1' && o.value !== 'custom')[0];
+      if (!alt) throw new Error('the resolution list offers nothing below "Same as project" — this half is untestable');
+      res.value = alt.value; close();
+      await open();
+      if (res.value !== '1') throw new Error('a resolution picked for one export is still selected on the next open (' + res.value + ')');
+      close();
+      FM.scene.project.width = 2160; FM.scene.project.height = 3840; await open();
+      if (res.value !== '1') throw new Error('after the canvas was resized, the export resolution is still the old pick — a SCALE re-applied to a different project is a size he never chose');
+      const rlab = res.options[res.selectedIndex].textContent;
+      if (rlab.indexOf('2160') < 0 || rlab.indexOf('3840') < 0) throw new Error('the top rung reads "' + rlab.trim() + '" instead of the project\'s real 2160×3840');
+      close();
+
+      // …and the case the OLD guard existed for must still work: an off-ladder project rate.
+      FM.scene.project.fps = 48; await open();
+      if (fps.value !== 'project') throw new Error('a 48 fps project no longer lands on "Same as project"');
+      if (fps.options[fps.selectedIndex].textContent.indexOf('48') < 0) throw new Error('the project row does not name 48 fps');
+      close();
+    } finally {
+      close();
+      FM.scene.project.fps = p0.fps; FM.scene.project.width = p0.w; FM.scene.project.height = p0.h;
+    }
+  });
+
   test('Canvas settings never blanks the frame rate, and Apply never rewrites it (queue 118)', { item: '118' }, async function () {
     /* Found by re-auditing CLOSED requests against the code after Ezra said "uve missed a lot".
      * Queue 118 was his instruction to the frame-rate lists: "drop 24, keep 25, add 15 and 120". The
