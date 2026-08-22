@@ -26,6 +26,8 @@
 > | **387** | ~~is scrubbing fine and playback bad?~~ **You already answered this in the report** — *"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*. The real question: **does pressing play still feel wrong after v11.70?** It fixed a pitch-up that happens on play and never on scrub | Just "better" or "same" |
 > | **98** | Text starts at 8.3% of the frame height (160pt on a 1080x1920). Measured — the readout is honest, it is just a small default. **A** leave it · **B** ⭐ bigger, ~12% (a title you can read on a phone) · **C** bigger still, ~15% | **B** |
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
+> | **406** | 🔔 **You asked me to keep reminding you to acknowledge this one.** The answer: there are **three** preset savers, not two — one effect · effects-only · **whole look, the only one that carries ANIMATION**. So they are NOT duplicates and nothing was deleted. Just say "got it" | — |
+> | **406b** | And which menu did you want preset-saving OUT of? **A** ⭐ the layer ⋯ menu · **B** an effect row's ⋯ · **C** the Effects card button | **A** — it's the only one in a crowded ⋯ menu, and the Presets card still has it |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
 > | **425** | PC: does **copy** move to the right with the other three? You asked for copy on the LEFT a day earlier, so your two instructions disagree — **A** move it · **B** leave it | **B** — you asked for that spot more recently |
 > | **395** | MP3 needs a ~100 KB library, the first third-party code in the app — **A** ship it · **B** leave it | **B** — WAV and M4A already cover it |
@@ -13051,8 +13053,20 @@ wait for them to report back."*
 
       **Clauses:**
       1. [ ] **Saving presets is removed from that menu.** ⚠️ WHICH menu is not named — it arrived without
-             a screenshot. Find where preset-saving is offered and work out which one he means before
-             deleting anything; if it is genuinely ambiguous, ask alongside the answer to clause 2.
+             a screenshot.
+             ✅ **22 Aug — all three located, so this is now a pick-one instead of a guess.** The entry
+             warned against deleting on a guess and it was right to: there are three separate savers in
+             three separate places, and removing the wrong one costs him a feature.
+             | | where it lives | what it saves |
+             |---|---|---|
+             | **A** ⭐ *recommended* | the **layer ⋯ menu** → "Save whole look as preset…" (`js/app.js:3307`) | everything, including the ANIMATION |
+             | **B** | an **effect row's ⋯** → "Save this effect as preset…" (`js/inspector.js:1060`) | that one effect |
+             | **C** | the **Effects card button** → "Save effects only…" (`js/inspector.js:1677`) | the effects list |
+             **Why A is recommended:** it is the only one that sits in a crowded ⋯ menu rather than on the
+             card it belongs to, and **nothing is lost by moving it** — the layer's Presets card already
+             offers both whole-look and effects-only saves, so it would still be one tap away in a place
+             that names what it does. B and C are each the only route to their own thing.
+             **Nothing is deleted until he points at one.**
       2. [x] **Tell him the difference** — ANSWERED v10.44, from the code, and the answer is below.
       3. [ ] **Keep reminding him to acknowledge** — his words: *"don't stop until I reply acknowledging
              it, remind me to acknowledge as well"*. So this rides along at the top of every reply until
