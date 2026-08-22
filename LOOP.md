@@ -198,6 +198,19 @@ ask WHERE ELSE this behaviour lives — the phone/PC pair, the single/multi pair
 The test for it must assert STRUCTURE, not strings: two icons can differ character by character and still
 look identical, which is the complaint itself.
 
+**✅ v11.62 — #363 done. Same shape again: a rename applied to the Add menu and not to the other four
+places.** The timeline's right-click menu, two refusal messages in the effects browser, and the shortcuts
+sheet all still said "null". The internal `type === 'null'` is untouched and the test asserts that too —
+a green run must mean "the word moved", not "the word vanished everywhere".
+
+**⚠️ TWO GENERAL SCANNERS FAILED BEFORE THE NAMED-STRING TEST WORKED, and both failure modes generalise:**
+1. A line filter excluding `null,` (to skip code like `f(a, null, b)`) also skipped the PROSE
+   "…adjustment layer, null, or sample" — restoring that exact string left the suite GREEN.
+2. A string-literal extractor matched apostrophes inside COMMENTS ("don't", "it's") and paired them across
+   whole functions, reporting chunks of code as offending strings.
+**A scanner over source text is far harder than it looks. When the sites are known and finite, NAME THEM**
+— precise, cannot misfire, and a new site has to be added deliberately.
+
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
