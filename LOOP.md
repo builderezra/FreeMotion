@@ -724,6 +724,21 @@ assertion had nothing to see, and the right assertion was about cost, not appear
 was wrong in a way only real use exposed. The measurements that killed the threshold design (vignette at
 2.3x the floor) would never have shown up in a test written to confirm the design.
 
+**🔎 v11.82 — BUG HUNT (his standing #260, queue empty). Found one, in MY OWN CODE ONE TICK OLD.**
+The no-op check is two FULL-RESOLUTION renders on a 400ms timer and had **no guard for playback or
+export** — change a slider, press play inside that window, and both renders land on the main thread
+during the frames he is watching. **A stutter, in the app whose most frequent complaint is stutter, spent
+on a hint nobody is reading at that moment.** Deferred rather than dropped; the test asserts both halves.
+**HUNT YOUR NEWEST CODE FIRST — twice now that is where the bug was.** #477's withdrawal and this both came
+from turning the hunt on work I had just shipped, not on the oldest code in the repo. New code has had the
+least real use; old code has survived months of it.
+**And a corollary worth keeping: a feature can be correct and still be a performance regression.** Every
+assertion about this check passed at v11.81. Nothing was wrong with what it computed — only with WHEN.
+**TWO DATA-LOSS HUNTS CAME BACK CLEAN, recorded so nobody re-runs them:**
+· storage full mid-edit — no throw, work kept in memory, he is told, and the next save after space frees
+  writes everything;
+· a save in flight while the project switches — no cross-contamination, each project kept its own layers.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
