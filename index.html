@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.51</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.52</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -751,11 +751,16 @@
                or other things etc there's no way to export at that." He was right: this list was a fixed
                set with, in its own former comment, "no Custom on this dialog" — so a project built at a
                custom frame rate could not be rendered out at it by any route. Its label is filled in
-               per-project by showExportDialog, the same way the resolution list already builds "Full". -->
+               per-project by showExportDialog, the same way the resolution list already builds "Full".
+               ⚠️ EXACTLY ONE `selected` HERE, AND IT MUST STAY ON "project". The 30 fps rung also carried
+               one until v11.52; HTML takes the LAST one, so this list opened on 30 no matter what the
+               project was — a 60 fps project exported at 30 with nothing on screen saying so. The comment
+               above claimed "Same as project is FIRST and is the default" the whole time, which is how it
+               survived: the prose was right and the markup was not. -->
           <option value="project" selected>Same as project</option>
           <option value="15">15 fps</option>
           <option value="25">25 fps</option>
-          <option value="30" selected>30 fps</option>
+          <option value="30">30 fps</option>
           <option value="50">50 fps</option>
           <option value="60">60 fps (smooth)</option>
           <option value="120">120 fps</option>

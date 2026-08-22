@@ -52,6 +52,26 @@ if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
 fi
 # --------------------------------------------------------------------------------------------------
 
+# ---- AND IT MUST NOT BE AMBIGUOUS (22 Aug) --------------------------------------------------------
+# The not-found guard below has caught a lot. This is its blind twin: a string that IS found, more than
+# once, and the replace lands on the WRONG one. It cost two full suite runs and very nearly a false
+# conclusion that a brand-new test was dead — `<option value="30">30 fps</option>` appears in BOTH the
+# new-project dialog and the export dialog, the mutation hit the first, the thing under test was never
+# touched, and the green run looked exactly like a hole in the test.
+# A green run after an ambiguous mutation proves nothing, same as after a missing one. Refuse both.
+HITS="$(python3 - "$FILE" "$OLD" <<'PYC'
+import sys
+src = open(sys.argv[1], encoding='utf-8').read()
+print(src.count(sys.argv[2]))
+PYC
+)"
+if [ "$HITS" -gt 1 ]; then
+  echo "mutate: the old string appears $HITS times in $FILE — the replace would hit the FIRST one, which"
+  echo "        may not be the code under test. A green run after that proves nothing."
+  echo "        Include a neighbouring line to make it unique."
+  exit 4
+fi
+
 python3 - "$FILE" "$OLD" "$NEW" << 'PY' || { echo "mutate: the old string was not found — the mutation did NOT apply, so a green run here proves nothing"; exit 3; }
 import sys
 p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]

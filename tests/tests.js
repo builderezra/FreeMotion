@@ -24695,6 +24695,27 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the export frame rate defaults to the project, not silently to 30fps (queue 471)', { item: '471' }, function () {
+    /* Found by re-auditing every CLOSED request against the code after Ezra said "uve missed a lot".
+     * `#exp-fps` carried TWO `selected` attributes — on "project" AND on "30 fps". HTML takes the LAST
+     * one, so the list opened on 30 whatever the project was, and `showExportDialogNow` only forces
+     * "project" when the rate is OFF the ladder (48 fps and the like). So a 60, 50, 25, 15 or 120 fps
+     * project opened the export dialog reading "30 fps" and exported at 30 with nothing saying so.
+     * The comment above the markup claimed "Same as project is FIRST and is the default" the entire
+     * time, which is exactly how it survived review: the prose was right and the markup was not.
+     * This asserts the MARKUP, because that is where the defect lived — a behaviour-only check would
+     * pass the moment any code path happened to set .value. */
+    const sel = document.getElementById('exp-fps');
+    if (!sel) throw new Error('#exp-fps is missing — the export frame-rate control is not in the page');
+    const marked = [].slice.call(sel.options).filter(o => o.hasAttribute('selected')).map(o => o.value);
+    if (marked.length !== 1) throw new Error('#exp-fps has ' + marked.length + ' options carrying `selected` (' + marked.join(', ') + ') — HTML takes the LAST, so more than one means the list silently opens on whichever is furthest down');
+    if (marked[0] !== 'project') throw new Error('#exp-fps defaults to "' + marked[0] + '" instead of "project" — every export would use that rate regardless of the project');
+    /* Deliberately NOT asserting sel.value here. The live value legitimately moves as the dialog is used
+       — an earlier test in this run leaves it on 60 — and a value check would either fail for that
+       innocent reason or pass the moment any code path happens to set it. The defect was in the MARKUP,
+       so the markup is what this guards. */
+  });
+
   test('a project can never open at a size that cannot be opened (queue 470)', { item: '470' }, async function () {
     /* Found by a bug hunt on the last untested door for foreign data: a TEMPLATE PACK.
      * `clampProjectDims` has bounded project size since the OOM fix, and its own note says why — a

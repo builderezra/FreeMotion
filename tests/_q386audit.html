@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>q386 audit — does a media Outline reach the frame?</title></head>
+<body style="margin:0;background:#111;color:#eee;font:13px monospace">
+<iframe id="app" src="../index.html" style="width:900px;height:820px;border:0;display:block"></iframe>
+<pre id="out">running…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.renderScene&&w.FM.media)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var out=document.getElementById('out');
+var f=document.getElementById('app');
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sk=d.getElementById('splash-skip'); if(sk) sk.click();
+  var sp=d.getElementById('splash'); if(sp) sp.remove();
+  d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+  await sleep(600);
+
+  var P=FM.scene.project;
+  // a 100x100 opaque RED plate standing in for a clip's frame
+  var c=d.createElement('canvas'); c.width=100; c.height=100;
+  var cc=c.getContext('2d'); cc.fillStyle='#ff0000'; cc.fillRect(0,0,100,100);
+  var img=new W.Image();
+  await new Promise(function(r,j){img.onload=r;img.onerror=j;img.src=c.toDataURL();});
+
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('image',{name:'Pic'});
+  L.start=0; L.duration=5;
+  L.transform.x=P.width/2; L.transform.y=P.height/2;
+  FM.scene.layers.push(L);
+  FM.media.set(L.id,{kind:'image',el:img,width:100,height:100,duration:0});
+
+  function shot(){
+    var cv=d.createElement('canvas'); cv.width=P.width; cv.height=P.height;
+    var x=cv.getContext('2d'); x.clearRect(0,0,cv.width,cv.height);
+    FM.renderScene(x,FM.scene,0.5);
+    var px=x.getImageData(0,0,cv.width,cv.height).data;
+    var lit=0,green=0,red=0;
+    for(var i=0;i<px.length;i+=4){
+      if(px[i+3]>10){lit++;
+        if(px[i+1]>140&&px[i]<110&&px[i+2]<110)green++;
+        if(px[i]>140&&px[i+1]<110&&px[i+2]<110)red++;
+      }
+    }
+    return {lit:lit,green:green,red:red};
+  }
+  var R={};
+  R.project=P.width+'x'+P.height;
+  R.A_toggle_off=shot();
+
+  L.stroke={enabled:true,width:12,color:'#00ff00',position:'outside'};
+  R.B_toggle_on=shot();
+
+  // what the seam itself answers, for the same layer/time
+  R.B_effectiveFx=(FM._effectiveFx?FM._effectiveFx(L,0.5):[]).map(function(e){return e.type;});
+
+  // the same effect pushed straight onto layer.effects — proves the EFFECT works
+  L.stroke={enabled:false,width:12,color:'#00ff00'};
+  L.effects=[{type:'stroke',enabled:true,params:{width:12,color:'#00ff00',position:0,shape:0}}];
+  R.C_effect_direct=shot();
+  L.effects=[];
+
+  // toggle on again, but give the layer a CAPTIONS array so the gate at drawLayer opens
+  L.stroke={enabled:true,width:12,color:'#00ff00',position:'outside'};
+  L.captions=[{start:0,end:5,text:'x'}];
+  R.D_toggle_on_with_captions=shot();
+  delete L.captions;
+
+  out.textContent=JSON.stringify(R,null,1);
+  window.__done=1;
+ }).catch(function(e){out.textContent='ERR '+(e&&e.message||e)+'\n'+(e&&e.stack||''); window.__done=1;});
+});
+</script></body></html>

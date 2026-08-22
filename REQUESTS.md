@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.51
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.52
 >
-> **State:** v11.51, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.52, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -11728,6 +11728,30 @@ wait for them to report back."*
       **Also swept clean in the same pass** (recorded so it is not re-checked): the ELEMENTS insert path.
       `elements.insert()` goes through the same re-id gate and never touches the project object — a hostile
       element pack had its timing and keyframe order repaired and left the project untouched.
+
+- [x] **471 — 🚨 Every export was silently 30 fps, whatever the project was.** ✅ **DONE v11.52.**
+      (22 Aug — found by re-auditing every CLOSED request against the code after he said *"just check
+      extra hard theres no leftovers coz looking through uve missed a lot"*. He was right.)
+      **`#exp-fps` carried TWO `selected` attributes** — on `project` AND on `30`. HTML takes the LAST, so
+      the export dialog opened on **30 fps** regardless of the project, and `showExportDialogNow` only
+      forces `project` when the rate is OFF the ladder (48 and the like). A 60, 50, 25, 15 or 120 fps
+      project therefore opened Export reading "30 fps" and rendered at 30, **with nothing on screen saying
+      so**. Measured in the live app before the fix: `sel.value === '30'` on load.
+      **The fix is one word deleted.** The reason it survived is worth more than the fix: the comment
+      directly above that markup has said *"Same as project is FIRST and is the default (queue 141)"* for
+      months. Anyone checking read the prose, which was correct, and never looked at the attribute, which
+      was not. **The test asserts the MARKUP for exactly that reason** — a behaviour check would pass the
+      moment any code path happened to set `.value`.
+      ⚠️ **THE FIRST MUTATION SURVIVED, AND IT WAS THE MUTATION THAT WAS WRONG, NOT THE TEST.**
+      `<option value="30">30 fps</option>` appears TWICE — once in the new-project dialog
+      (`#hm-new-fps`, line 620) and once in the export dialog (`#exp-fps`, line 763). The replace hit the
+      first, the control under test was never touched, and the green run looked exactly like a dead
+      assertion. Two suite runs were spent before that was spotted. **`tools/mutate.sh` now REFUSES an
+      ambiguous mutation** — it already refused a missing one; this is the blind twin, and a green run
+      after either proves nothing. Re-run against the unique string: CAUGHT.
+      🔗 Sits under **#141** (*"if you made a custom fps or other things etc there's no way to export at
+      that"*), whose OTHER half — a **Custom rung on the export frame-rate list** — is still genuinely not
+      built and is the next thing to do here.
 
 - [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
