@@ -24,7 +24,7 @@
 > | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
 > | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
 > | **387** | ~~is scrubbing fine and playback bad?~~ **You already answered this in the report** — *"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*. The real question: **does pressing play still feel wrong after v11.70?** It fixed a pitch-up that happens on play and never on scrub | Just "better" or "same" |
-> | **391** | The Edit Text menu is "still a bit broken" — which part? | — |
+> | **98** | Text starts at 8.3% of the frame height (160pt on a 1080x1920). Measured — the readout is honest, it is just a small default. **A** leave it · **B** ⭐ bigger, ~12% (a title you can read on a phone) · **C** bigger still, ~15% | **B** |
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
 > | **425** | PC: does **copy** move to the right with the other three? You asked for copy on the LEFT a day earlier, so your two instructions disagree — **A** move it · **B** leave it | **B** — you asked for that spot more recently |
@@ -49,8 +49,9 @@
 > 425 each had a real question buried inside a *ticked* clause where nothing could see it — both are rows
 > above now. `tools/next.sh` refuses to stay quiet about this shape from now on.
 >
-> ⚠️ **Two of the rows above are still OPEN questions rather than a pick-one (391, 215), which is
-> not what you asked for.** (387 was one, and worse than that — it was asking you to repeat something you
+> ⚠️ **One row above is still an OPEN question rather than a pick-one (215), which is not what you
+> asked for.** (391 was one; it turned out to be a restatement of 98 — you said so — and its last open
+> piece is now measured and offered as a pick-one above.) (387 was one, and worse than that — it was asking you to repeat something you
 > had already said in your own report. Fixed 22 Aug.) You said *"I just want options. Yu can just say recommended next to the best
 > option"*. 342 was one of those and is fixed; the other three get the same treatment as each comes up
 > the list. If a question here ever reads as homework, that is a bug in how I asked it, not something
@@ -1661,6 +1662,31 @@ better still, keep working inside the turn rather than parking work for a later 
       top of the keyboard it is iOS Safari's own form-assistant bar, which cannot exist in any browser
       here and which nothing in our DOM can produce. (c) depends on your project's aspect. Only (d) is
       shipped.
+
+      ✅ **22 Aug — CLAUSE (c) IS SETTLED BY MEASUREMENT: nothing is lying, and nothing is broken.**
+      #391 was merged in here first (he said *"i think we already discussed"*, and he was right).
+      The entry's own instruction was *"either the pt value is not what is being drawn or the readout is
+      lying — measure which before changing anything"*. Measured, rendering at full project resolution
+      and reading the glyph pixels:
+      | font size | ink height | |
+      |---|---|---|
+      | 96 | 31px | — |
+      | 192 | 63px | **2.03×** for 2× the size |
+      | 384 | 124px | **4.00×** for 4× |
+      **So the renderer honours the number exactly and the readout is honest.** Neither half of the
+      either/or is true.
+      **Why the text still looks small, which is the real answer:** the Add Text button sets
+      `min(W,H)/6.75` — **160 on a 1080-wide project** — and 160 against a 1920-tall frame is **8.3% of
+      the height**. That is a small default, not a broken one. His "225 pt" was the OLD `height/12` on a
+      2700-tall comp, exactly as this entry already worked out.
+      ⚠️ **A PROBE ARTEFACT WORTH RECORDING, because the next session would hit it too.** Measuring via
+      `FM.makeLayer('text', …)` reports a default of **96 in every project size**, which looks exactly
+      like "the aspect-aware default was never wired up". It is not: `js/scene.js:532` is a bare
+      fallback, and the real Add Text path (`js/app.js:1991`) passes the 6.75 figure explicitly. **The
+      app path and the constructor disagree, so probing the constructor measures nothing about the
+      app.** (Whether that fallback SHOULD be aspect-aware for templates/elements is a separate, real
+      question — noted, not guessed at.)
+      **So the only thing left in (c) is a taste call, and it is yours** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
@@ -12257,8 +12283,8 @@ wait for them to report back."*
         see. It now sits at `inset: -1px` with a radius to match, so it traces the true outer edge.
         Worth keeping: "inset: 0" is not the outside of a bordered box, and on a 1px border at 3x that
         is the difference between tracing an edge and hovering just inside it.
-- [ ] **391 — The Edit Text menu is still a bit broken.** (18 Aug, phone screenshot at v9.87 with the
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **391 — The Edit Text menu is still a bit broken.** ✅ **MERGED INTO #98, 22 Aug — he was right that
+      it was already discussed, and the last open piece of it is now MEASURED.**
       keyboard up.) His words, verbatim: *"edit text menu still a bit broken and also"* (the sentence runs
       into #392, which is the separate request below).
       **Not specific enough to act on, and the shot shows a known non-bug**, so this needs one line from him
@@ -12271,9 +12297,14 @@ wait for them to report back."*
       **ANSWERED BY EZRA, 21 Aug:** *"i think we already discussed"* — he believes this is already
       covered elsewhere. Search the file for the Edit Text clauses before asking him again; if it truly
       is covered, merge this entry into the one that covers it rather than leaving both open.
-      ⏳ **WAITING ON EZRA — which part?** He answered *"i think we already discussed"* on 21 Aug, but no
-      entry in this file covers the Edit Text menu specifically, so there is nothing to act on. One line
-      naming what is wrong with it turns this into work.
+      ✅ **HE WAS RIGHT — it IS covered, by #98, and this entry was asking him to repeat himself.**
+      *"i think we already discussed"* (21 Aug). The note above claimed "no entry covers the Edit Text
+      menu specifically"; #98 covers exactly it — the two ✓ buttons, the `^ v ✓` bar, the size readout
+      and the fiddly handles. His v9.87 screenshot shows the SAME `^ v ✓` bar #98 already measured as iOS
+      Safari's own form assistant. So this is a restatement, three versions later, not a new fault.
+      **What the restatement adds, and it is the only new information:** the complaint survived from
+      v6.60 to v9.87, so whatever it is was not fixed by anything in between.
+      **Merged rather than left open.** The remaining half is #98 clause (c), settled below.
 - [x] **470 — 🚨 A template could create a project the app cannot open — and it would crash again on
       every relaunch.** ✅ **DONE v11.50.** (22 Aug — found by a bug hunt on the template insert path, not
       reported by Ezra. **The most serious thing the recent hunts have found.**)
