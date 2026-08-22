@@ -4671,8 +4671,31 @@ better still, keep working inside the turn rather than parking work for a later 
              matched a bare variable name and converted one of sketch's three by accident. Caught by
              counting; the guard is so the next tidy-up cannot repeat it. Mutation-checked with exactly
              that edit.
-             ⏭️ **Next:** turbulentdisplace (240ms — 12 trig calls per pixel; a lookup table would not be
-             exact, so it needs a different approach).
+             📊 **RE-MEASURED ALL 179 AFTER THE SCRATCH FIX (23 Aug), because the old ranking was stale:**
+             | | before the sweep | now |
+             |---|---|---|
+             | median effect | 14.85ms | **8.57ms** |
+             | effects over 25ms | 70 | **42** |
+             | 24 median effects | 356ms | **206ms** |
+             So the whole set is **42% cheaper** and his 294ms case is now around 206ms of the same work.
+
+             ❌ **AND ONE OPTIMISATION MEASURED AND REJECTED — recorded so nobody rebuilds it.**
+             The new top 15 is dominated by WARPS (11 of 15: turbulentdisplace, curl, kaleidoscope,
+             fractalwarp, twirl, innerpinch, tunnel, radialrepeat, ripple, pagecurl, bulge), and every
+             warp kernel answers `return [sx, sy]` — **a fresh two-element array per pixel, 1.46 million
+             allocations per warp per frame.** Exactly the v11.76 fault one level down.
+             Built it: one shared pair, 29 call sites. **Measured gains were real but modest** —
+             turbulentdisplace 181→157, innerpinch 80→57, tunnel 76→55, curl 131→110 (10-30%).
+             **Then four existing tests went red, and they were right to.** They hold TWO warp results at
+             once to compare mappings across parameters — and a shared mutable pair makes those two the
+             same object, so every comparison reads "moves no points". **That is the whole objection: the
+             contract becomes 'read the answer before calling again', and any caller that does not gets
+             identical values with NOTHING failing.** The production caller happens to be safe; the next
+             one might not be, and the failure is invisible.
+             **Reverted.** A 10-30% gain on effects the quality ladder already manages is not worth an API
+             that fails silently. The tests that caught it are the reason not to ship it.
+             ⏭️ **Still open in this family:** turbulentdisplace at 157ms (12 trig calls per pixel; a
+             lookup table would not be exact, so it needs a different idea, not the same one).
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**
