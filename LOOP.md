@@ -241,6 +241,26 @@ declined twice is evidence about the QUESTION.
 **Three rows in the top block are still open questions (387, 391, 215)** — flagged there in writing as a
 defect in how I asked, to be fixed as each comes up the list rather than in a sweep that jumps the queue.
 
+**🔴 22 Aug — HE RAISED #431 AGAIN, ANGRY, AND HE WAS RIGHT. Fixed in v11.71.**
+*"I asked for you to fix the audio and media menus so many times and nothings happened."* Three earlier
+passes at this entry measured the tab row, found a healthy 64.1px, and concluded it "only looks shorter
+next to a dense grid". **It genuinely crushes to 20.9px with 0 of 5 labels** — but ONLY with a POPULATED
+library in a SHORT sheet. With an empty library there is no pinned split, nothing competes for the
+height, and the row measures perfectly.
+**THE LESSON: reproduce with HIS data, not a fresh project.** Every earlier check used an empty library
+— the thing that causes the bug was the thing left out of the repro. My own first TEST made the same
+mistake one level up (a tall container) and its mutation SURVIVED.
+Cause was one missing line: `.addmenu-tabs` had no flex property so defaulted to shrinkable, while
+`.addmenu-pinned` — the very next rule in the file — already carried `flex: 0 0 auto`.
+**Also worth keeping: three ticks in a row I have counted an entry as "waiting on him" when it was not.**
+#250's blocker was stale, #342's question was badly asked, #431 was reproducible all along with the right
+data. **"NEEDS YOU" is a claim to audit before trusting.**
+
+**✅ v11.71 also — #343 clauses 3 and 4.** Clause 3 (people can create templates) was ALREADY TRUE, like
+clause 1. Clause 4 shipped: "Save template file…" writes the same `.fmotion.json` a project writes, so
+the existing importer reads it and the app stays local-only — the route he chose himself.
+`embedFonts` was EXTRACTED rather than copied so the two exporters cannot drift.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
