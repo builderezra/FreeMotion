@@ -410,6 +410,20 @@ flag combinations and measured the ink box each time. `large=1 sweep=1` is the o
 **✅ AND THE PHONE GATE FIRED FOR THE FIRST TIME** (index.html changed, so it was not skipped):
 843/843 at 1280 AND 843/843 at 380. The gate added for #353 clause 3 works end to end.
 
+**✅ 22 Aug — #429: an open question turned into a pick-one, and a 30-second phone check surfaced.**
+Clause 1 (*"after this cut off point I don't want the lines or special colouring"*) had FOUR candidates
+named in the entry and was still being put to him as "tell me which" — homework, against his standing
+instruction. Now A–D with A recommended (the ruler's notches, the only one of the four that is not an
+affordance he asked for; D is queue 417, HIS request, so picking it would undo that — said in the option
+rather than discovered afterwards).
+Clause 2 is the opposite case and worth keeping as a model: **five probes found nothing, and the sixth
+reproduced it** by growing the viewport mid-swipe the way iOS does when its toolbar hides. Mechanism
+bisected to `--stage-h: 40vh`, fix shipped at v10.67 (`svh`), and **the harness physically cannot verify
+it** — headless Chrome has no chrome, so `svh`/`lvh`/`vh` all resolve the same. That is stated in the
+entry rather than glossed, and it is now a 30-second ask in his block instead of buried.
+**THE LESSON: "I cannot test this here" is a thing to SURFACE, not a thing to sit on.** It had been true
+and recorded since 20 Aug, and he was never actually asked the one question that settles it.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
