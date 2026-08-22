@@ -96,14 +96,28 @@ export dialogs, the replace hit the first, the control under test was never touc
 looked exactly like a dead new test. Two suite runs lost. **A green run after an ambiguous mutation proves
 nothing, same as after a missing one.**
 
-**NEXT, oldest first from the audit lists:** **#121** (the export dialog should reset to "Same as project"
-on EVERY open — today the on-ladder guard leaves a rate you picked once stuck across opens, and the cog is
-supposed to be the one source of truth), then **#141** (a Custom rung on the export frame-rate list — never
+**✅ v11.54 — #121 done.** Export now inherits BOTH fps and resolution from the project on every open. The
+fps reset was guarded by `if (!onLadder)` so it skipped every common rate; the resolution remembered a
+SCALE, so a 720p pick on a 1080×1920 project re-applied to a 2160×3840 project as "1440p". Verified in a
+real browser, both halves mutation-proven (the resolution one only after I noticed MY mutation was invalid
+— the real defect reads the old value BEFORE the list is rebuilt).
+
+**NEXT, oldest first from the audit lists:** **#141** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
-**A PATTERN WORTH NAMING: three of the four bugs found so far were SECOND COPIES of a list or a default** —
-the export list's stray `selected`, the canvas dialog's hardcoded FPS mirror, and the dead canvas-preset
-block. When a fix "updates the list", check for another copy of that list before ticking it.
+**⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
+1. **A SECOND COPY of a list or a default** — three of the five bugs so far: the export list's stray
+   `selected`, the canvas dialog's hardcoded FPS mirror, the dead canvas-preset block. **When a fix
+   "updates the list", go looking for another copy before ticking it.**
+2. **THE PROSE WAS RIGHT AND THE CODE WAS NOT** — #471's comment said "Same as project is the default",
+   #121's comment said "They come from the project every time", #118's entry promised "Custom still
+   reaches 24". All three were true sentences sitting above false code, and each survived review because
+   the reader checked the sentence. **Verify the behaviour, never the comment.**
+
+**⚠️ AND A MUTATION LESSON, twice in two ticks: a surviving mutation is not proof the test is dead.**
+Once it hit an identical line in a DIFFERENT dialog (mutate.sh now refuses ambiguous strings); once it
+restored the defect at only ONE of its two sites, so it re-applied nothing. **Check the mutation actually
+reintroduces the defect before believing the test is the problem.**
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
