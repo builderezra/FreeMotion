@@ -687,6 +687,26 @@ would have told the next session to compare at full resolution — expensive, an
 The rebuild is a THRESHOLD, and the calibration is measured: boundary noise ~0.5% of pixels, a real effect
 ~15%. Still to confirm: that a genuinely SUBTLE effect clears the threshold.
 
+**❌ 23 Aug — #477: MEASURED THE PLANNED FIX BEFORE BUILDING IT, AND IT IS DEAD. Best outcome of the tick.**
+Last tick's plan was a THRESHOLD (noise ~0.5% of pixels, a real effect ~15%, "an order of magnitude of
+headroom"). That headroom only exists for effects that act on EVERY pixel. Measured against effects that
+act on PART of a layer:
+· vignette **115 px** against a **50 px** noise floor — 2.3×, not 47×;
+· longshadow, radialshadow, dropshadow — **exactly 50, identical to the noise**, because their shadow
+  falls outside the layer and is black on black (queue 460's finding, again).
+**No threshold can separate "invisible because it matches the background" from "boundary rounding" when
+both produce the same number.** Erosion does not rescue it either — all 50 noise pixels survive a 2px
+erode, since the boundary rows are fully opaque with opaque neighbours.
+✅ **The one viable design, now evidence-based: compare at FULL project resolution, where measured noise
+is exactly ZERO** — and pay for it by DEBOUNCING off the interaction path, not by shrinking the raster.
+That also fixes the original symptom for free: the hint vanished while dragging precisely because it
+recomputed on every refresh.
+**THE LESSON: a calibration that separates cleanly on the cases you thought of is not a calibration.**
+I had numbers, a 47× gap, and a plan — and the first deliberately awkward case (an effect that touches
+only part of the layer) collapsed it to 2.3×, with three effects landing exactly ON the floor.
+**Measuring the plan cost one tick; building it would have shipped something that calls every shadow
+effect dead.**
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
