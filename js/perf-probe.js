@@ -206,6 +206,37 @@ window.FM = window.FM || {};
           lines.push('CANVAS   ' + (st.canvasPx ? Math.round(st.canvasPx / 1000) + 'k pixels' : 'unknown') +
                      (st.locked ? ' · ladder LOCKED (probing stopped)' : ''));
         }
+        /* ═══ AUDIO (queue 148, and 95 / 96 / 72 with it).
+         * THREE of his open reports are about sound — scratchy popping, "the audios don't play
+         * smoothly", a song that will not play — and this report said nothing whatsoever about audio.
+         * #148 ends by asking HIS EARS a question the app can answer from numbers it already keeps:
+         * is the scratchiness OUR sync controller, or the browser's decoder under load?
+         * The number that settles it is WRITES TO playbackRate, not trims: `preservesPitch` makes a
+         * rate write a PITCH change, so a churning controller is audibly a warble. v6.91 took it from
+         * 21/s to 1.5/s and v11.70 to zero on a normal start — if his device reports it high again,
+         * the regression is ours and it is measurable; if it reports ~0 while he can hear it, the
+         * sync loop is exonerated and the decoder is next, which is exactly the fork #148 is stuck on. */
+        const ps = FM.playbackStats;
+        if (ps && (ps.syncs || ps.rateWrites)) {
+          const secs = Math.max(0.001, elapsed / 1000);
+          const errs = (ps.errs || []).slice().sort((a, b) => a - b);
+          const emed = errs.length ? errs[Math.floor(errs.length / 2)] : null;
+          const eworst = errs.length ? errs[errs.length - 1] : null;
+          lines.push('AUDIO    ' + (ps.rateWrites / secs).toFixed(1) + ' rate writes/s · ' + ps.seeks + ' seeks · ' + ps.syncs + ' sync ticks');
+          if (emed != null) {
+            lines.push('         sync error ' + Math.round(emed * 1000) + 'ms median · ' + Math.round(eworst * 1000) + 'ms worst' +
+                       ' (dead band ' + Math.round((FM.syncTuning ? FM.syncTuning.dead : 0.045) * 1000) + 'ms)');
+          }
+          /* Say what it MEANS, because a bare rate is not something he should have to interpret —
+           * and because the two readings point at completely different next steps. */
+          if (ps.rateWrites / secs > 4) {
+            lines.push('         ⚠ the rate is being rewritten often. preservesPitch turns that into a');
+            lines.push('           PITCH change, which is heard as a scratchy warble — this is ours.');
+          } else if (ps.syncs > 20) {
+            lines.push('         the sync controller is quiet, so scratchiness heard here is NOT our');
+            lines.push('           rate correction — the decoder under load is the next suspect.');
+          }
+        }
         lines.push('PROJECT  ' + scene());
         lines.push('DEVICE   ' + device());
         lines.push('');

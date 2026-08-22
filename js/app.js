@@ -1382,7 +1382,14 @@ window.FM = window.FM || {};
   }
   FM._declickGain = declickGain;   // exposed for the suite
 
-  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
+  /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
+   * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
+   * write a PITCH change — 85 writes in four seconds is the scratchy warble he reported, and the
+   * decision count did not show it. `errs` holds |sync error| samples so the report can give a
+   * median rather than a worst case, which is the number that says whether sync is the problem at
+   * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
+   * has been asking his ears. */
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
 
   // Jump the playhead to t and resync video/audio (used by loop + loop-region wrap).
   function wrapTo(t) {
@@ -1541,8 +1548,12 @@ window.FM = window.FM || {};
             m._baseRate = base;
             if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4 &&
                 (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
-              m.el.playbackRate = plan.rate; m._rateAt = now;
+              m.el.playbackRate = plan.rate; m._rateAt = now; FM.playbackStats.rateWrites++;
             }
+            /* The error the controller actually acted on, bias removed — capped so a long session
+               cannot grow this without bound. */
+            const es = FM.playbackStats.errs;
+            if (es.length < 600) es.push(Math.abs(rawErr - m._errBias));
             }
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
@@ -1649,7 +1660,14 @@ window.FM = window.FM || {};
     if (FM.timeline && FM.timeline.stopMomentum) FM.timeline.stopMomentum();   // don't fight a timeline glide
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
-    FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
+    /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
+   * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
+   * write a PITCH change — 85 writes in four seconds is the scratchy warble he reported, and the
+   * decision count did not show it. `errs` holds |sync error| samples so the report can give a
+   * median rather than a worst case, which is the number that says whether sync is the problem at
+   * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
+   * has been asking his ears. */
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
     _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.

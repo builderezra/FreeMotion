@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.88
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.89
 >
-> **State:** v11.88, **861 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.89, **863 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -5522,6 +5522,28 @@ better still, keep working inside the turn rather than parking work for a later 
       · My first test drove it through `FM.play()` and **its mutation survived**: that path opens with
         a seek, which reseeds the bias, so the defect never appears. Driving `_syncMediaToClock()`
         directly reproduces it. A test written the natural way passes against this bug.
+
+      ✅ **v11.89 — THE REPORT NOW ANSWERS THIS ENTRY'S QUESTION INSTEAD OF ASKING YOUR EARS.**
+      This entry has ended, twice, on a question only you could answer: *is the scratchiness our rate
+      controller, or the browser's decoder under load?* Meanwhile the "what's slow" report — the thing
+      that now offers itself the moment playback struggles (v11.83) — covered frames, quality, canvas,
+      project and device, and **said nothing whatsoever about audio**, while THREE of your open reports
+      are about sound (this one, 95's *"the audios don't play smoothly"*, and 96).
+      **The number that settles the fork was already being computed and simply not kept:** real WRITES
+      to `playbackRate`, which is not the same as trim decisions. `preservesPitch` makes a write a PITCH
+      change, so a churning controller is audibly a warble — that is what v6.91 took from 21/s to 1.5/s
+      and v11.70 to zero on a normal start.
+      So the report now carries `rate writes/s · seeks · sync ticks` and the median/worst sync error
+      against the dead band, **and reads them out**: over ~4 writes/s it says the churn is ours; quiet
+      with the controller demonstrably running, it says the sync loop is exonerated and the decoder is
+      next. Either way your next tap answers this entry instead of your ears having to.
+      ⚠️ **My first test for this was DEAD and the mutation caught it** — it injected `FM.playbackStats`
+      to check the report's wording, so deleting the counter entirely left it green. It proved the
+      report READS the numbers and nothing about anything WRITING them. There is a second test now that
+      drives the real sync controller with the spun-up fake element from the tests above and holds our
+      counter against the element's own: it must be non-zero when the element was really written to,
+      and **never higher**, because counting decisions instead of writes is precisely the mistake that
+      would report a quiet controller as a churning one. Both directions mutation-checked.
 
 - [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
       *"when dragging the cue length for captions it should show it changing live not just wait for you

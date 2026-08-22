@@ -39829,4 +39829,75 @@
       FM._resetOversizeWarning();
     }
   });
+
+  /* ═══ THE REPORT HAD NOTHING TO SAY ABOUT AUDIO (queue 148, and 95 / 96 / 72).
+     Three of his open reports are about sound, and "what's slow" reported frames, quality, canvas,
+     project and device — no audio at all. #148 ends by asking his EARS whether the scratchiness is
+     our rate controller or the browser's decoder, which is a question the app can answer from
+     numbers it already keeps. */
+  /* AND THE COUNTER ITSELF MUST COUNT (queue 148). The report test below injects FM.playbackStats
+     directly, so it proves the report READS the numbers and nothing about whether anything WRITES
+     them — its mutation survived deleting the counter, which is rule 9 exactly: a green run proves
+     nothing unless the probe exercised the code. This one drives the real sync controller with the
+     fake element from the tests above, which counts its own writes, and holds the two against each
+     other. */
+  test('the rate-write counter counts REAL writes to the element (queue 148)', { item: '148' }, async function () {
+    const saved = FM.playbackStats;
+    try {
+      FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
+      let injectedAt = -1;
+      const r = await q148Run({
+        latency: 0.09, spin: 0.3, ticks: 24, at: 11,
+        then: el => { injectedAt = el.currentTime; el.currentTime = Math.max(0, el.currentTime - 0.15); },
+      });
+      if (injectedAt < 0) throw new Error('the drift was never injected, so nothing forced a rate write and this test proves nothing');
+      const ours = FM.playbackStats.rateWrites, theirs = r.el.rateWrites;
+      if (!theirs) throw new Error('the element recorded no rate writes at all — the controller never corrected the injected drift, so there is nothing to count');
+      if (!ours) throw new Error('the element was written to ' + theirs + ' times and our counter recorded 0 — the report would tell him the sync loop is quiet while it churns, which is the wrong half of the fork #148 is stuck on');
+      if (ours > theirs) throw new Error('our counter claims ' + ours + ' rate writes but the element only saw ' + theirs + ' — it is counting decisions, not writes, which is the distinction this whole measurement rests on');
+      if (!FM.playbackStats.errs.length) throw new Error('no sync-error samples were recorded, so the report can show no median');
+    } finally {
+      FM.playbackStats = saved;
+    }
+  });
+
+  test('the what-is-slow report carries the audio numbers, and reads them (queue 148)', { item: '148' }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    const saved = FM.playbackStats;
+    const report = () => new Promise((res, rej) => {
+      const started = FM.perfProbe.run(260, res);
+      if (!started) rej(new Error('the probe refused to start'));
+    });
+    try {
+      /* A CHURNING controller: many real writes to playbackRate in a short sample. This is the
+         reading that means the scratchiness is OURS — preservesPitch turns a rate write into a
+         pitch change. */
+      FM.playbackStats = { syncs: 40, renders: 40, drops: 0, seeks: 2, trims: 30,
+                           rateWrites: 30, errs: [0.01, 0.02, 0.2] };
+      let r = await report();
+      if (!/AUDIO/.test(r)) throw new Error('the report has no AUDIO section at all, which is the whole of this change:\n' + r);
+      if (!/rate writes\/s/.test(r)) throw new Error('the AUDIO section does not report the rate-write rate — the one number that separates our controller from the decoder');
+      if (!/2 seeks/.test(r)) throw new Error('the AUDIO section does not report seeks');
+      if (!/sync error 20ms median/.test(r)) throw new Error('the AUDIO section did not report the MEDIAN sync error (expected 20ms from the sample):\n' + r);
+      if (!/this is ours/.test(r)) throw new Error('a churning rate controller was not called out as ours:\n' + r);
+
+      /* A QUIET controller. Same question, opposite answer — and this is the reading that would
+         exonerate the sync loop and send the next pass at the decoder, which is exactly the fork
+         #148 has been stuck on. */
+      FM.playbackStats = { syncs: 40, renders: 40, drops: 0, seeks: 0, trims: 0,
+                           rateWrites: 0, errs: [0.005, 0.006, 0.007] };
+      r = await report();
+      if (/this is ours/.test(r)) throw new Error('a QUIET controller was still blamed for the scratchiness:\n' + r);
+      if (!/NOT our/.test(r)) throw new Error('a quiet controller did not exonerate the rate correction, so the report leaves the question open:\n' + r);
+
+      /* CONTROL: nothing played during the sample. Then there is no audio evidence and the report
+         must say NOTHING rather than print a confident 0.0 that reads as "audio is fine". */
+      FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
+      r = await report();
+      if (/AUDIO/.test(r)) throw new Error('the report invented an AUDIO section for a sample in which nothing played:\n' + r);
+    } finally {
+      FM.playbackStats = saved;
+      if (FM.perfProbe && FM.perfProbe.stop) FM.perfProbe.stop();
+    }
+  });
 })();
