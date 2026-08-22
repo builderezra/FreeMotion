@@ -292,11 +292,19 @@ gone green while testing nothing. Raised to 13, sized to overflow whatever the r
 behaviour changes, check what the OLD fixtures were calibrated against — the tests that keep passing are
 the dangerous ones.
 
-**⚠️ #353 clause 3 — THE SUITE HAS NEVER RUN AT PHONE WIDTH.** `tests/_cdp.py --width 380` exists and is
-documented in its own header; `ship.sh` and `mutate.sh` both run the default 1280. On a mobile-first app,
-where #431 was a phone-layout bug that survived three passes. **Attempted at 380px: it did NOT finish in
-600s** — so whether it is even green there is still unknown, and that is recorded as unknown rather than
-guessed. Worth a tick of its own: find out why it stalls, then decide whether a phone pass can be a gate.
+**✅ #353 clause 3 — THE SUITE NOW RUNS AT PHONE WIDTH, and it is green there: 843/843 at 380px.**
+`tests/_cdp.py --width 380` was documented in the runner's own header and **nothing had ever called it**,
+on a mobile-first app, while #431 — a phone-layout bug — shipped and survived three desktop-width passes.
+`ship.sh` runs a second pass at 380px and refuses on a red, naming it as a phone-only layout bug. Skipped
+when no shipped source changed (`styles.css` / `index.html` / `js/`): a docs- or tests-only commit cannot
+move a layout, and paying five minutes to prove that every time is how a gate gets switched off. NOT an
+allowlist of UI files — that goes stale by the next module.
+**⚠️ AND A CORRECTION TO MY OWN PREVIOUS ENTRY HERE, which claimed the 380px suite "did NOT finish in
+600s".** It finishes fine. I had passed `--port 8779`; `--port` is the DEV SERVER port, not a debug port,
+so that run was aimed at nothing. **I wrote a wrong finding into this file and the next session would
+have inherited it as fact** — which is precisely what rule 11's "a blocker is a claim with a date on it"
+is about, committed by me one tick after writing it. **When a measurement says broken, check the
+instrument before the code**, and that includes your own command line.
 
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
