@@ -199,6 +199,18 @@ and DELETED my second test, which was both redundant and timing-flaky.
 **`tools/.test-floor` caught the deletion** — a removed test reads as green because nothing failed. Lower
 it deliberately (`echo N > tools/.test-floor`) or the gate refuses.
 
+**✅ 22 Aug — #215: the two gaps the entry NAMED and left open are now measured.**
+An entry that says *"known gap, stated rather than papered over"* is a work item, not a disclaimer. Both
+of #215's were buildable without Ezra, and they guarded the worst failure in the file: an MP4 whose moov
+advertises an audio track that was never fed — silent in one player, REFUSED by another.
+Measured from the output BYTES rather than by asking the code: `soun`/`mp4a` present on a healthy export,
+absent (with the video track intact) when AAC is unavailable. v7.91 + v9.43 are correct end to end.
+**THE LESSON: an assertion nothing has ever made fail is not yet a test.** My first mutation WAS caught —
+but by the flag assertion, not the file one, because the encode-before-mux ordering still saved the file
+(defence in depth working). The assertion I actually cared about was still unproven. A second, targeted
+mutation — declare the audio track unconditionally — fired it exactly. **When a mutation is caught by a
+DIFFERENT assertion than the one you wrote, you have not yet tested the thing you meant to.**
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
