@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.72
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.73
 >
-> **State:** v11.72, **843 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.73, **843 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -13358,8 +13358,21 @@ wait for them to report back."*
       will be the text saying tap here to add layer"). The empty-state panel is likewise left alone: it is
       the big centred + from #354, which he asked for and likes.
 
-- [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+      ✅ **DONE v11.73.**
+      ⚠️ **The STATUS line said "waiting on your answer" and that was STALE — the image arrived on 21 Aug**
+      and is described in this entry in enough detail to build from. Fifth stale "needs you" this week.
+      **Clause 1 built from that description:** a ~300° ring with a 60° gap at the top and a solid
+      triangular head at the end of the sweep — undo anticlockwise, redo clockwise, an exact mirror pair.
+      Weight left at `stroke-width 1.8`, which clause 2 had already established matches the rest of the
+      transport row; his *"skinnier"* was relative to his reference, which is drawn very heavy.
+      **Geometry verified numerically rather than by eye**, because the pane downscales screenshots and
+      the glyph is 24px: both centre at **(11.97, 12.03)** against a 12/12 target, span 15.7×15.7, and sit
+      inside the box (4.2 → 19.85). That matters — `transport-vcentre` asserts the centring.
+      ⚠️ **The first attempt was WRONG and the measurement caught it.** SVG arc flags choose between two
+      possible circle centres for the same endpoints; `sweep=0` put the ring at y≈-0.12 instead of 12, so
+      the icon was a clipped band across the top of the box. Swept all four flag combinations and measured
+      the ink each time rather than reasoning about it — `large=1 sweep=1` is the one that centres.
       🚨 **20 Aug — HIS IMAGES ARE NOT REACHING ME AT ALL. This is not one lost attachment.** In his own
       words while answering 429: *"maybe my images arent going through"*. That explains this entry, and the
       missing screenshots on 428 and 429 too. **The phone inbox is a TEXT file** (iCloud/GitHub), so an
