@@ -1252,20 +1252,6 @@ window.FM = window.FM || {};
     // the registry says it is, and letting a saved file rename Gaussian Blur would be a small lie with
     // no upside.
     const name = el('span', 'fx-name', (isBox && typeof fx.name === 'string' && fx.name) ? fx.name : reg.label);
-    /* "IT DOES NOTHING" — SAID BY THE APP, NOT LEFT FOR HIM TO CONCLUDE (queue 477).
-       He has reported effects doing nothing three times (#460). All 43 Colouring effects measurably
-       work; what he could not know is that his SUBJECT cannot show some of them — Channel Remap swaps
-       red and blue, and in his magenta `#cc22cc` both are 204; Long Shadow's black shadow lands on a
-       black background. Correct behaviour, identical to a broken button from the outside.
-       Measured, not guessed: the layer is rendered with this one effect bypassed and compared. Only for
-       an effect that is ON (a switched-off one is doing nothing on purpose) and only on the row that is
-       OPEN — the check costs two small renders, and running it for every row of a long stack would put
-       that cost on simply scrolling the panel. */
-    if (!off && expanded && FM.fxThumbs && FM.fxThumbs.effectDoesNothing) {
-      let dead = false;
-      try { dead = FM.fxThumbs.effectDoesNothing(layer, idx); } catch (e) { dead = false; }
-      if (dead) row.classList.add('fx-noop');
-    }
     // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it.
     // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
     // editor is ever open — no more scrolling past three expanded stacks to reach the fourth.
@@ -1412,15 +1398,6 @@ window.FM = window.FM || {};
         body.appendChild(kids);
       }
       if (!reg.params.length && !isBox) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
-      /* The measured "this changes nothing HERE" line (queue 477). Put in the BODY, under the controls,
-         so it reads as an explanation of what you are looking at rather than an error on the row — and
-         so it only ever appears on the effect you have open. `NOOP_WHY` names a reason where one is
-         knowable; otherwise it says the honest general thing rather than inventing a cause. */
-      if (row.classList.contains('fx-noop')) {
-        const why = NOOP_WHY[fx.type];
-        body.appendChild(el('div', 'insp-hint fx-noop-hint',
-          'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));
-      }
       wrap.appendChild(body);
     }
     row.appendChild(delBg);
@@ -1955,20 +1932,6 @@ window.FM = window.FM || {};
      (motion reads as state far better than swapping one glyph for another), the head styled as
      something you can press, and a one-time line of text for the person who has never seen it. */
   const FX_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
-  /* WHY an effect can look dead, where the reason is knowable from the effect alone (queue 477).
-     Every line here is a MEASURED cause from queue 460, not a guess: those are the exact effects that
-     read as broken on his flat magenta rectangle. Anything not listed gets the general sentence — a
-     wrong reason is worse than no reason. */
-  const NOOP_WHY = {
-    channelremap: 'this mode swaps two colour channels, and on this colour they are already the same',
-    halation: 'it blooms around highlights, and there are none here',
-    lightglow: 'it needs a bright area to glow from',
-    longshadow: 'the shadow is the same colour as what is behind it',
-    radialshadow: 'the shadow is the same colour as what is behind it',
-    matchgrade: 'it has no source layer to match yet',
-    vignette: 'the edges here have nothing to darken',
-  };
-
   function fxTapHint() {
     try {
       if (localStorage.getItem('fm.fx.tapHint')) return;

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.79
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.80
 >
-> **State:** v11.79, **851 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.80, **850 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4557,8 +4557,28 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [x] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
-      broken.** ✅ **DONE v11.79 — built the same day it was logged, because #460 is three reports old.**
+- [ ] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
+      **STATUS: 🟢 READY — nothing is stopping this**
+      broken.** ⚠️ **BUILT v11.79 AND WITHDRAWN THE NEXT TICK — a real fault, found by hunting my own work.**
+      **What was right:** the detection. It renders the layer twice, once with the one effect bypassed,
+      and compares all four channels. On his exact `#cc22cc` fill it correctly flagged channelremap,
+      halation and longshadow and stayed silent for grayscale/invert/brightness, and for channelremap on
+      an orange fill. Three crying-wolf controls, both directions mutation-checked.
+      🔴 **What was wrong, and why it had to come out:** **the hint vanished the instant a parameter
+      changed** — i.e. the moment you touch a slider, which is exactly when you would be reading it.
+      Measured: settled → correctly `true`; immediately after changing `mix` → `false`; and it stayed
+      false. The effect genuinely still does nothing at every `mix` value (0 pixels differ between
+      mix 0.4 and mix 1.0), so `false` is simply wrong there.
+      **First fix attempt did not hold.** I assumed a transient wrong answer was being cached, so I
+      cached only "yes". It got no better — the recompute itself keeps answering `false` after a change.
+      So the cause is deeper: the two renders disagree while the compositor's own per-layer state is
+      mid-invalidation, and `sceneWith()` deep-clones the layer, which may be what confuses it.
+      **WITHDRAWN rather than shipped with a known flaw.** A diagnostic that disappears while you
+      interact is the inverse of crying wolf and just as corrosive — it teaches you it is unreliable.
+      ⏭️ **To rebuild it properly, the open question is one thing:** why do the two renders differ
+      immediately after a parameter change when the effect's output does not? Answer that first; the rest
+      of the feature was correct and is in the history at v11.79 (`9b06de2`), tests included.
+      **(23 Aug — not a new report from him; the conclusion of #460, which he has raised three times.)** — built the same day it was logged, because #460 is three reports old.**
       **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
       — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
       `contributes()` already used in `js/fx-thumbs.js` (`lrender`/`sceneWith`), with a new

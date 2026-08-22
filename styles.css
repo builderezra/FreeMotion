@@ -7554,15 +7554,3 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 .tth-mark.in { background: #ff5d9e; }
 .tth-mark.out { background: #3ddc84; }
 .tth-n.on { z-index: 2; }
-
-/* The measured "this effect changes nothing here" line (queue 477). Deliberately quiet: it is an
-   explanation, not a warning. Amber rather than red — nothing is broken, the effect simply has nothing
-   to act on, and a red line would teach him to distrust a working effect. */
-.fx-noop-hint {
-  color: rgba(255, 196, 120, .92);
-  background: rgba(255, 176, 74, .07);
-  border: 1px solid rgba(255, 176, 74, .18);
-  border-radius: 8px;
-  padding: 7px 9px;
-  line-height: 1.35;
-}
