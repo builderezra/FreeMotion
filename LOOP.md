@@ -94,6 +94,24 @@ cannot see the difference between a good tick and a tidy one.
 it falls out of doing the work; it is not a tick of its own unless it is blocking something.
 **Workflows are authorised** (his words), bounded by rule 13.
 
+### 23 Aug — the phone sweep and the lag soak both came back CLEAN, and that is the finding
+Two negative results, both worth not repeating:
+1. **Phone-width layout sweep, 380x820**, over home / editor / layer-selected / all five ADD tabs /
+   export dialog, looking for controls off the edge (the #431 class of bug). **Zero genuine hits.**
+   Every apparent hit was the INSTRUMENT: elements inside horizontal scrollers (the shape pager
+   is *supposed* to have its next page off-screen), and a stale DOM driven through many clicks.
+   **The trap worth knowing: there are TWO `.addmenu` nodes** — the live one under `#add-sheet`
+   and a by-design copy under `#inspector` — so a bare `document.querySelector('.addmenu')` grabs
+   the off-screen one and every measurement taken from it is a lie. It cost several probes here.
+   (App and suite code are clean: every real lookup is scoped to a host. Only ad-hoc probes are at
+   risk.) Open/close x6 leaves the node count EXACTLY flat, so the second node is not a leak.
+2. **"Editing lags, and gets bad fast" — no third accumulation exists.** Numbers in REQUESTS.md
+   under that entry. Tap cost flat at 2.3 ms out to 40 layers, heap flat at ~9 MB, zero node growth
+   over a 40-round soak. The editing path is not the lag; per-effect compositor cost on real video
+   is, which is where v11.72-v11.78 already went.
+**So the remaining lag work is effect kernels, not the editor.** `turbulentdisplace` (~157 ms) is
+the last real hog. Do not re-soak the editing path — it has been measured.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.

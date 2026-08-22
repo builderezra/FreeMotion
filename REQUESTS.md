@@ -3068,6 +3068,28 @@ better still, keep working inside the turn rather than parking work for a later 
       *(Also worth recording: my first test for this freed 71 records as a side effect and broke a
       later test three cases along. It names every other record as reachable now, so it can only ever
       sweep its own orphan. A test that damages the run is worse than no test.)*
+
+      **v11.82 — I went looking for a THIRD accumulation and there isn't one. Measured, not read.**
+      "Gets bad fast" sounds like a leak, and two leaks really were found here before (v8.44, v8.46),
+      so I soaked it: 40 rounds of select-every-layer / nudge / commit / undo, then a scaling run at
+      your own 1080x1350 project size, building up to 40 layers and measuring back down.
+
+      | layers | renderScene | timeline rebuild | tap -> inspector |
+      |---|---|---|---|
+      | 1 | 0.00 ms | 0.60 ms | 1.73 ms |
+      | 10 | 0.06 ms | 0.93 ms | 2.17 ms |
+      | 20 | 0.07 ms | 0.96 ms | 2.34 ms |
+      | 40 | 0.21 ms | 1.18 ms | 2.30 ms |
+
+      Tap cost is FLAT out to 40 layers (2.3 ms), so the v6.33 fix is still holding three months on.
+      Heap sat at ~9 MB across the whole soak and the DOM node count did not grow by a single node
+      over 40 rounds. So the editing path -- selection, inspector rebuild, timeline redraw, undo --
+      is not what makes it lag, and nothing accumulates while you work.
+      **What that leaves is the only thing left: per-effect compositor cost on real video**, which is
+      exactly where v11.72-v11.78 went (median effect 14.85 -> 8.57 ms, effects over 25 ms cut 70 ->
+      42, your 24-effect case ~356 -> ~206 ms). One `turbulentdisplace` at ~157 ms is the last hog.
+      ⚠️ Still 🟠 NEEDS YOU for the same reason as before: I can only measure this on a desktop
+      browser. Whether it FEELS better on your phone is the half I cannot take from you.
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**
