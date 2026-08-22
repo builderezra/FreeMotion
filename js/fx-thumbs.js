@@ -1202,6 +1202,47 @@ window.FM = window.FM || {};
     for (let i = 0; i < on.length; i++) if (Math.abs(on[i] - off[i]) > 2) return true;
     return false;
   }
+  /* DOES THIS ONE EFFECT CHANGE ANYTHING, ON THIS LAYER, AT ITS OWN CURRENT SETTINGS? (queue 477)
+   * Ezra has reported the Colouring effects "doing nothing" three times. Queue 460 measured all 43 and
+   * every one works — which is true and useless to a man watching nothing happen. The real cause is that
+   * his SUBJECT cannot show some of them: Channel Remap swaps red and blue, and in his magenta `#cc22cc`
+   * both are 204; Halation blooms around highlights a flat fill has none of; Long Shadow's black shadow
+   * lands on a black background. Correct behaviour, indistinguishable from a broken button.
+   * So the app measures it and says so, rather than leaving him to conclude the tile is lying.
+   * Same method as `contributes` directly above — render twice and compare all four channels — but with
+   * ONE effect bypassed instead of the whole layer removed. Memoised on the layer, the index, the scene
+   * signature AND the effect's own settings, so dragging a slider re-checks and merely reopening a panel
+   * does not. */
+  const fxDeadCk = new Map();
+  function sceneWithFxOff(target, idx) {
+    const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
+    if (doc.effects && doc.effects[idx]) doc.effects[idx].enabled = false;
+    return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
+  }
+  function effectDoesNothing(layer, idx) {
+    if (!layer || !FM.scene || !FM.renderScene) return false;
+    const fx = layer.effects && layer.effects[idx];
+    if (!fx) return false;
+    /* An effect the user has switched OFF is not "doing nothing" in the sense that needs saying — it is
+       doing nothing on purpose, and labelling it would be the diagnostic crying wolf on its first day. */
+    if (fx.enabled === false) return false;
+    const key = layer.id + '#' + idx + '#' + sceneRev() + '#' + strHash(JSON.stringify(fx, FM.jsonReplacer));
+    if (fxDeadCk.has(key)) return fxDeadCk.get(key);
+    let dead = false;
+    try {
+      const r = rasterFor(FM.scene.project), w = windowFor(layer, null);
+      lrender(sceneWith(layer, null), w.anchor, r);
+      const on = lctx.getImageData(0, 0, r.w, r.h).data;
+      lrender(sceneWithFxOff(layer, idx), w.anchor, r);
+      const off = lctx.getImageData(0, 0, r.w, r.h).data;
+      dead = true;
+      for (let i = 0; i < on.length; i++) { if (Math.abs(on[i] - off[i]) > 2) { dead = false; break; } }
+    } catch (e) { dead = false; }   // could not tell → say nothing, never guess
+    if (fxDeadCk.size > 64) fxDeadCk.clear();
+    fxDeadCk.set(key, dead);
+    return dead;
+  }
+
   function canPreview(layer, fxType) {
     if (!layer || !FM.scene || !FM.renderScene) return false;
     if (fxType && FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(fxType, layer)) return false;
@@ -1446,6 +1487,8 @@ window.FM = window.FM || {};
        could hold it to the rule the file states for itself. Read-only: it hands back the function, and
        the caller supplies its own throwaway layer to run it on. */
     _override: function (type) { return OVERRIDES[type] || null; },
+    // queue 477: does one effect on this layer change anything at its current settings?
+    effectDoesNothing: function (layer, idx) { return effectDoesNothing(layer, idx); },
     // queue 400: the tile raster follows the screen. Exposed so the rule can be checked without a 3×
     // display, and so the measured cost of changing it can be re-derived rather than taken on trust.
     _tileScaleFor: function (dpr) { return tileScaleFor(dpr); },

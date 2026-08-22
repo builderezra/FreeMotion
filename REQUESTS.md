@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.78
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.79
 >
-> **State:** v11.78, **850 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.79, **851 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4557,9 +4557,24 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [ ] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
-      **STATUS: 🟢 READY — nothing is stopping this**
-      broken.** (23 Aug — not a new report from him; the conclusion of #460, which he has raised three
+- [x] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
+      broken.** ✅ **DONE v11.79 — built the same day it was logged, because #460 is three reports old.**
+      **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
+      — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
+      `contributes()` already used in `js/fx-thumbs.js` (`lrender`/`sceneWith`), with a new
+      `sceneWithFxOff`, memoised on layer + index + scene signature + the effect's own settings, so
+      dragging a slider re-checks and reopening a panel does not.
+      **Verified against his exact case:** on a flat `#cc22cc` rectangle it flags **channelremap,
+      halation and longshadow** — precisely the three queue 460 measured as invisible there — and stays
+      silent for grayscale, invert and brightness, which do work on that fill.
+      🛡️ **THE RISK WAS CRYING WOLF, and it has three controls, not one:** the same effect on an ORANGE
+      fill is NOT flagged (so the hint is about the subject, not the effect); working effects on his
+      magenta are NOT flagged; a switched-OFF effect is never flagged, because it is doing nothing on
+      purpose. Both directions mutation-checked.
+      **Cost:** two small renders, and only for the effect row that is OPEN — running it for every row of
+      a long stack would put that cost on merely scrolling the panel.
+      `NOOP_WHY` names a cause only where queue 460 MEASURED one; anything else gets the honest general
+      sentence, because a wrong reason is worse than no reason. (23 Aug — not a new report from him; the conclusion of #460, which he has raised three
       times.)
       **Why this exists.** #460 measured all 43 Colouring effects and found 43 of 43 working. He has still
       watched nothing happen, three separate times, because **his test subject cannot show some of them**:
