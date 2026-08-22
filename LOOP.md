@@ -71,6 +71,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+### 🎯 22 Aug — HIS STEER, AND IT CHANGES WHAT THIS LOOP SHOULD SPEND TICKS ON
+*"make sure youre doing either work i ask for or good important work. i dont know what ur doing as i just
+leave u on all day coz im busy and i just hope u make the project better for me, working on the lag being
+fixed for mobile would also be good"*.
+**Taken as a correction, because it is one.** The last several ticks were queue HYGIENE — closing entries
+already done, turning open questions into pick-ones, showing him options that had only been described.
+All of it real, all of it unblocking, **and none of it makes the app better from where he sits.** He
+cannot see the difference between a good tick and a tidy one.
+**So: MOBILE LAG is the work, and shipping improvements outranks tidying the list.** Hygiene is fine when
+it falls out of doing the work; it is not a tick of its own unless it is blocking something.
+**Workflows are authorised** (his words), bounded by rule 13.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.

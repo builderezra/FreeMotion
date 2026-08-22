@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.73
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.74
 >
-> **State:** v11.73, **843 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.74, **844 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4556,6 +4556,87 @@ better still, keep working inside the turn rather than parking work for a later 
 ---
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
+
+- [ ] **476 — PC: the layer-category grid sizes its cards wrongly after you interact with it a while.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (22 Aug, PC screenshot of the inspector's 8-card grid on a Star layer.) His words, verbatim:
+      > the sizing for htis menu on pc seems to have issues sometimes, where it doesnt show the buttons at the right size if you play around with it a bunch
+      **What the shot shows:** cards 1-6 (Colouring · Outline & Shadows · Mixing · Position/Scale · Speed ·
+      Customise Shape) are one width in a 3-across grid, and **7 (Presets) and 8 (Effects) are visibly
+      NARROWER and centred**, leaving ragged gaps either side. So the last row is being laid out on
+      different arithmetic from the rows above it.
+      ⚠️ **"sometimes … if you play around with it a bunch" means it is STATE-DEPENDENT, not a static CSS
+      bug** — so reproducing it needs a sequence (open/close the panel, switch layers, resize), not a
+      single screenshot comparison. That is the same shape as #431: it only appeared with a populated
+      library, and three passes measured a healthy layout because they used a fresh one.
+      **Likely suspects, to be MEASURED not guessed:** the fit/measure pass (`fitBox`, queue 50/208)
+      which is panel-variant only and caches a plan; a stale cached plan surviving a layer change; or the
+      orphan-card rule (v2.43 made a lone card span full width) interacting with an 8-card grid whose last
+      row holds 2.
+      🎯 **HE NARROWED IT HIMSELF, minutes later — verbatim:**
+      > i think it gets messed up when the timeline and add menu are split, only for when ur editing a layer i think
+      **That is the reproduction, and it is specific:** the SPLIT state (timeline and add menu shown
+      together) **while a layer is selected**. So the sequence to drive is: select a layer → open the add
+      menu alongside the timeline → look at the 8-card grid. Do NOT try to reproduce it from a static
+      load; his own words say it takes getting into that state.
+
+- [ ] **475 — Gradients on the PC add-menu cards.** (22 Aug, PC screenshot of the Add menu's object grid:
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Text · Captions · Sketching · Custom shape · Camera / Controller · Adjustment · New group · Custom
+      elements.) His words, verbatim:
+      > i think if u just added gardient to these buttons they would look way better on pc
+      **What the shot shows:** each card currently has a flat dark plate with a coloured 1px outline and a
+      very subtle tint — the colour lives in the icon and the border, not the surface. He wants the
+      SURFACE to carry a gradient.
+      ⚠️ **Check before building:** these cards' per-card colour comes from the tint palettes in
+      `js/addmenu.js` (`TINTS_ELEMENT` and friends) and the card CSS in `styles.css`. Queue 339/344 already
+      did gradient RINGS on this family, and #286 owns `.cat-card::after` — so find which pseudo-element
+      and which layer is free before adding a third thing to the same box. That collision has bitten twice
+      (v9.87 overwrote 286's cursor-lit edges by reusing `::after`).
+      **Scope note:** he says "on pc", and the same grid exists on the phone sheet — decide whether the
+      gradient applies to both or is desktop-only, and say which was assumed.
+
+- [ ] **474 — Steer, 22 Aug: workflows are allowed, do work that MATTERS, and mobile lag is the thing he
+      **STATUS: 🟢 READY — nothing is stopping this**
+      wants.** His words, verbatim:
+      > fyi u can run workflows if u need, also make sure youre doing either work i ask for or good important work. i dont know what ur doing as i just leave u on all day coz im busy and i just hope u make the project better for me, working on the lag being fixed for mobile would also be good (remember if ur doing something good rn dont stop coz i have no clue)
+      **Three instructions, and the middle one is a correction I should take on the chin:**
+      1. [x] **Workflows are authorised** — bounded per LOOP.md rule 13 (his own earlier instruction: a
+             step budget and a wait limit, never `while(true)`).
+      2. [ ] **"make sure youre doing either work i ask for or good important work"** — he cannot see what
+             the loop is doing and is trusting it to be worth the time. **Read honestly, the last several
+             ticks have been queue HYGIENE** (closing entries that were already done, turning open
+             questions into pick-ones, showing him options that had only been described). That work was
+             real and it unblocked him — but it does not make the app better, and he has no way to tell
+             the difference from where he sits. **Balance shifts back to shipping improvements.**
+      3. [x] **Mobile lag is what he wants worked on.** That is the #95 / #125 / #202 / #387 family. His
+             own device readings are the evidence base; the third (v10.16) is the one with a measurable
+             fault in OUR code — render 294.69ms on 9 shape layers with 24 effects at 1458k pixels.
+             ✅ **FIRST REAL RESULT — v11.74. Every effect timed at HIS resolution, and one outlier fixed.**
+             All **179** effects measured at 1080x1350 (1458k px, his sample exactly), 9 shape layers:
+             | | |
+             |---|---|
+             | 9 shape layers, no effects | **0.05ms** — the shapes are free, all his cost is effects |
+             | median effect | **14.85ms each** |
+             | effects over 25ms | **70 of 179** |
+             | 24 median effects | **356ms** — against his measured **294.69ms**. The numbers agree. |
+             **So his reading was never mysterious: effects are per-pixel JS at ~15ms each at full size.**
+             A dozen cannot reach 60fps on any phone by tuning; that is what the quality ladder exists for,
+             and #202 verified the ladder works.
+             🎯 **THE OUTLIER, AND IT IS FIXED: Tilt Shift cost 775.75ms** — 5x the next worst
+             (spinstreaks 320), 52x the median. A radius-8 box blur done with 17 taps per pixel per
+             channel, twice: ~198M adds a frame. Rewritten as a sliding window (add the entering pixel,
+             subtract the leaving one): **74.2ms, 10.5x.**
+             **Byte-identical, and that is the assertion** — the old 17-tap kernel lives in the test as a
+             reference and the two are compared byte for byte across three parameter cases. A faster
+             kernel that draws differently is a silent edit to every project using it. Mutation-checked by
+             shifting the window by one pixel: 23,445 bytes differ, caught.
+             `FM._pixelFx` added as a suite seam, because the kernels were module-local and a test could
+             not otherwise compare one against a reference.
+             ⏭️ **Next in this family:** spinstreaks (320ms), turbulentdisplace (240ms), zoomstreaks (173),
+             lensblur (158) — the same question each time is whether the algorithm is doing more work than
+             its output needs.
+      **Not a queue-jump to be re-litigated:** he named the work, so it goes to the front.
 
 - [x] **473 — The media/audio library should be THREE rows now, not two.** ✅ **DONE v11.72.** (22 Aug, phone screenshot at
       v11.71 with the empty band below the grid scribbled over.) His words, verbatim:

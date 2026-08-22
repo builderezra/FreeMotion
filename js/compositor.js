@@ -4380,7 +4380,67 @@ window.FM = window.FM || {};
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
     colorbalance: function(d,W,H,p,t){ var cbR=FM.evalProp(p.red,t); if(cbR==null)cbR=25; cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG=FM.evalProp(p.green,t); if(cbG==null)cbG=0; cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB=FM.evalProp(p.blue,t); if(cbB==null)cbB=-25; cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4; for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
     highlightsshadows: function(d,W,H,p,t){ var hsHi=FM.evalProp(p.highlights,t); if(hsHi==null)hsHi=-40; hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh=FM.evalProp(p.shadows,t); if(hsSh==null)hsSh=50; hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
-    tiltshift: function(d,W,H,p,t){ var tsCenter=FM.evalProp(p.center,t); if(tsCenter==null)tsCenter=0.5; tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter); var tsSoft=FM.evalProp(p.softness,t); if(tsSoft==null)tsSoft=0.5; tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft); var tsW4=W*4, tsLen=d.length, tsR=8; var tsSrc=d.slice(); var tsTmp=new Float32Array(tsLen); var tsx,tsy,tsc,tsi,tsj,tsAcc,tsCnt,tsBase; for(tsy=0;tsy<H;tsy++){ var tsRow=tsy*tsW4; for(tsx=0;tsx<W;tsx++){ tsBase=tsRow+tsx*4; for(tsc=0;tsc<4;tsc++){ tsAcc=0; tsCnt=0; for(tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsx+tsj; if(tsnx<0)tsnx=0; else if(tsnx>=W)tsnx=W-1; tsAcc+=tsSrc[tsRow+tsnx*4+tsc]; tsCnt++; } tsTmp[tsBase+tsc]=tsAcc/tsCnt; } } } var tsBlur=new Float32Array(tsLen); for(tsx=0;tsx<W;tsx++){ var tsCol=tsx*4; for(tsy=0;tsy<H;tsy++){ tsBase=tsy*tsW4+tsCol; for(tsc=0;tsc<4;tsc++){ tsAcc=0; tsCnt=0; for(tsj=-tsR;tsj<=tsR;tsj++){ var tsny=tsy+tsj; if(tsny<0)tsny=0; else if(tsny>=H)tsny=H-1; tsAcc+=tsTmp[tsny*tsW4+tsCol+tsc]; tsCnt++; } tsBlur[tsBase+tsc]=tsAcc/tsCnt; } } } var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001; for(tsy=0;tsy<H;tsy++){ var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1; var tsInv=1-tsBw; var tsRowI=tsy*tsW4; for(tsx=0;tsx<W;tsx++){ tsi=tsRowI+tsx*4; if(d[tsi+3]>0){ d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw; d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw; d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw; } } } },
+    /* TILT SHIFT WAS THE MOST EXPENSIVE EFFECT IN THE APP BY A FACTOR OF FIVE (queue 474, v11.74).
+       Measured at 1080x1350 — the exact size of Ezra's own slow reading — against all 179 effects:
+       median 14.85ms, and tiltshift **775.75ms**. The next worst was 320ms. He asked for the mobile lag
+       to be worked on and this is the single largest number in the whole set.
+       WHY: the blur was a radius-8 box done with 17 TAPS PER PIXEL PER CHANNEL, twice (a horizontal
+       pass then a vertical one). At 1458k pixels that is 1458000 x 4 x 17 x 2 ~= 198 MILLION adds per
+       frame, in JS, on the main thread.
+       A box blur does not need taps. Slide the window: add the pixel entering, subtract the one leaving,
+       and every output costs two operations instead of seventeen. The result is ARITHMETICALLY THE SAME
+       box — same radius, same edge-extend clamping, same divisor of 2R+1 (the old loop clamped the index
+       rather than shrinking the window, so the count was always 17, and that is reproduced exactly).
+       Pixel identity against the old implementation is asserted in the suite, not assumed. */
+    tiltshift: function(d,W,H,p,t){
+      var tsCenter=FM.evalProp(p.center,t); if(tsCenter==null)tsCenter=0.5; tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
+      var tsSoft=FM.evalProp(p.softness,t); if(tsSoft==null)tsSoft=0.5; tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
+      var tsW4=W*4, tsLen=d.length, tsR=8, tsWin=tsR*2+1;
+      var tsSrc=d.slice(); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
+      var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
+      /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
+         is what the tap loop's index clamping produced. */
+      for(tsy=0;tsy<H;tsy++){
+        tsRow=tsy*tsW4;
+        for(tsc=0;tsc<4;tsc++){
+          tsSum=0;
+          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsSrc[tsRow+tsnx*4+tsc]; }
+          for(tsx=0;tsx<W;tsx++){
+            tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
+            var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
+            var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
+            tsSum+=tsSrc[tsRow+tsIn*4+tsc]-tsSrc[tsRow+tsOut*4+tsc];
+          }
+        }
+      }
+      // VERTICAL, the same way down each column.
+      for(tsx=0;tsx<W;tsx++){
+        var tsCol=tsx*4;
+        for(tsc=0;tsc<4;tsc++){
+          tsSum=0;
+          for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
+          for(tsy=0;tsy<H;tsy++){
+            tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
+            var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
+            var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
+            tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
+          }
+        }
+      }
+      var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
+      for(tsy=0;tsy<H;tsy++){
+        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
+        var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
+        for(tsx=0;tsx<W;tsx++){
+          tsi=tsRowI+tsx*4;
+          if(d[tsi+3]>0){
+            d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
+            d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
+            d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+          }
+        }
+      }
+    },
     // ---- batch 12 (multi-param + colour) ----
     dropshadow: function(d,W,H,p,t){ var dsDist=FM.evalProp(p.distance,t); if(dsDist==null)dsDist=18; dsDist=Math.max(0,Math.min(60,dsDist)); var dsAng=FM.evalProp(p.angle,t); if(dsAng==null)dsAng=135; var dsSoft=FM.evalProp(p.softness,t); if(dsSoft==null)dsSoft=6; dsSoft=Math.max(0,Math.min(20,Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=d.slice(); var dsShift=new Float32Array(dsN); var dsx,dsy,dssx,dssy; for(dsy=0;dsy<H;dsy++){ for(dsx=0;dsx<W;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy; if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } } if(dsSoft>0){ var dsR=dsSoft; var dsWin=dsR*2+1; var dsTmp=new Float32Array(dsN); var dsAcc,dskx,dski,dsrow; for(dsy=0;dsy<H;dsy++){ dsrow=dsy*W; dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dskx=dski<0?0:(dski>=W?W-1:dski); dsAcc+=dsShift[dsrow+dskx]; } for(dsx=0;dsx<W;dsx++){ dsTmp[dsrow+dsx]=dsAcc/dsWin; var dsAdd=dsx+dsR+1; dsAdd=dsAdd>=W?W-1:dsAdd; var dsSub=dsx-dsR; dsSub=dsSub<0?0:dsSub; dsAcc+=dsShift[dsrow+dsAdd]-dsShift[dsrow+dsSub]; } } var dscol2; for(dsx=0;dsx<W;dsx++){ dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dscol2=dski<0?0:(dski>=H?H-1:dski); dsAcc+=dsTmp[dscol2*W+dsx]; } for(dsy=0;dsy<H;dsy++){ dsShift[dsy*W+dsx]=dsAcc/dsWin; var dsAddY=dsy+dsR+1; dsAddY=dsAddY>=H?H-1:dsAddY; var dsSubY=dsy-dsR; dsSubY=dsSubY<0?0:dsSubY; dsAcc+=dsTmp[dsAddY*W+dsx]-dsTmp[dsSubY*W+dsx]; } } } var dsi,dsidx,dsa,dssh,dsoa; for(dsi=0;dsi<dsN;dsi++){ dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>0) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt=FM.evalProp(p.amount,t); if(caAmt==null)caAmt=8; caAmt=Math.max(0,Math.min(30,caAmt)); var caAng=FM.evalProp(p.angle,t); if(caAng==null)caAng=0; var caRad=caAng*Math.PI/180; var caDx=Math.cos(caRad)*caAmt, caDy=Math.sin(caRad)*caAmt; if(caAmt===0)return; var caS=d.slice(); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
@@ -5291,6 +5351,11 @@ window.FM = window.FM || {};
         v-=((skH>>>0)%1000)/999*skTooth*(v/255); if(v<0)v=0; }
       d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
   };
+  /* SUITE SEAM (queue 474). The pixel kernels are module-local, so a test cannot check one against a
+     reference implementation — which is exactly what the tiltshift rewrite needed: it had to prove the
+     fast box blur produces the SAME bytes as the 17-tap one it replaced, not merely a similar picture.
+     Read-only by convention; nothing outside may mutate a kernel. */
+  FM._pixelFx = PIXEL_FX;
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source

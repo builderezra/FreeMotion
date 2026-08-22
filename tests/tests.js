@@ -38975,4 +38975,74 @@
       host.remove();
     }
   });
+
+  /* Queue 474 — Ezra asked for the mobile lag to be worked on, so all 179 effects were timed at 1080x1350,
+   * the exact size of his own slow reading. Median 14.85ms EACH. Tilt Shift: **775.75ms** — five times the
+   * next worst and fifty times the median.
+   * The cause was a radius-8 box blur done with 17 TAPS PER PIXEL PER CHANNEL, twice: ~198 million adds a
+   * frame at that size. A box blur does not need taps — slide the window, add what enters, subtract what
+   * leaves, two operations per output instead of seventeen. Measured after: **74.2ms, a 10.5x cut.**
+   * THIS TEST IS ABOUT IDENTITY, NOT SPEED. A faster kernel that draws a slightly different picture is a
+   * silent edit to everybody's projects, and a timing assertion would be flaky on a shared machine. So the
+   * OLD 17-tap implementation lives here as a reference and the two are compared byte for byte. It stays in
+   * the test rather than the app precisely so it cannot drift back into production. */
+  test('tilt shift: the fast box blur is byte-identical to the 17-tap one it replaced (queue 474)', { item: '474' }, function () {
+    if (!FM._pixelFx || typeof FM._pixelFx.tiltshift !== 'function') throw new Error('FM._pixelFx.tiltshift is not reachable — the seam this test needs is gone');
+    const W = 120, H = 90;
+
+    // The ORIGINAL kernel, verbatim in behaviour: 17 taps, index-clamped at the edges (so the divisor is
+    // always 17, never a shrunken window — reproducing that exactly is the whole subtlety).
+    const naive = (d, W, H, p) => {
+      const W4 = W * 4, len = d.length, R = 8;
+      const src = d.slice(), tmp = new Float32Array(len), blur = new Float32Array(len);
+      for (let y = 0; y < H; y++) { const row = y * W4;
+        for (let x = 0; x < W; x++) { const b = row + x * 4;
+          for (let ch = 0; ch < 4; ch++) { let a = 0, n = 0;
+            for (let j = -R; j <= R; j++) { let nx = x + j; if (nx < 0) nx = 0; else if (nx >= W) nx = W - 1; a += src[row + nx * 4 + ch]; n++; }
+            tmp[b + ch] = a / n; } } }
+      for (let x = 0; x < W; x++) { const col = x * 4;
+        for (let y = 0; y < H; y++) { const b = y * W4 + col;
+          for (let ch = 0; ch < 4; ch++) { let a = 0, n = 0;
+            for (let j = -R; j <= R; j++) { let ny = y + j; if (ny < 0) ny = 0; else if (ny >= H) ny = H - 1; a += tmp[ny * W4 + col + ch]; n++; }
+            blur[b + ch] = a / n; } } }
+      const line = p.center * H; let den = 0.05 + (1 - p.softness) * 0.5; if (den < 0.0001) den = 0.0001;
+      for (let y = 0; y < H; y++) { const dist = Math.abs(y - line) / H; let bw = dist / den; if (bw < 0) bw = 0; else if (bw > 1) bw = 1;
+        const inv = 1 - bw, rowI = y * W4;
+        for (let x = 0; x < W; x++) { const i = rowI + x * 4;
+          if (d[i + 3] > 0) { d[i] = src[i] * inv + blur[i] * bw; d[i + 1] = src[i + 1] * inv + blur[i + 1] * bw; d[i + 2] = src[i + 2] * inv + blur[i + 2] * bw; } } }
+    };
+
+    /* A picture with STRUCTURE, and with transparent pixels in it. A flat fill would be blurred to itself
+       and every difference would cancel — the classic vacuous image test. The alpha holes matter too: the
+       blend skips fully transparent pixels, so they are a branch the comparison has to cover. */
+    const mk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < a.length; i += 4) {
+        const px = (i / 4) | 0, x = px % W, y = (px / W) | 0;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = (x * x + y) % 256; a[i + 2] = (x + y * 11) % 256;
+        a[i + 3] = ((x + y) % 40 === 0) ? 0 : 255;
+      }
+      return a;
+    };
+
+    // CONTROL: the fixture has to actually vary, or "identical" is trivially true of two flat images.
+    const probe = mk();
+    let lo = 255, hi = 0;
+    for (let i = 0; i < probe.length; i += 4) { if (probe[i] < lo) lo = probe[i]; if (probe[i] > hi) hi = probe[i]; }
+    if (hi - lo < 100) throw new Error('the test image barely varies (' + lo + '..' + hi + '), so a blur cannot change it and this comparison proves nothing');
+
+    // The middle case is the default; the two extremes exercise the clamped ends of the focus band.
+    const cases = [{ center: 0.5, softness: 0.5 }, { center: 0, softness: 1 }, { center: 1, softness: 0 }];
+    for (const p of cases) {
+      const fast = mk(), ref = new Uint8ClampedArray(fast);
+      FM._pixelFx.tiltshift(fast, W, H, { center: p.center, softness: p.softness }, 0);
+      naive(ref, W, H, p);
+      let worst = 0, differing = 0;
+      for (let i = 0; i < fast.length; i++) { const d = Math.abs(fast[i] - ref[i]); if (d > worst) worst = d; if (d) differing++; }
+      if (worst !== 0) {
+        throw new Error('the fast tilt shift differs from the 17-tap original at centre=' + p.center + ' softness=' + p.softness +
+          ' — ' + differing + ' bytes out, worst channel off by ' + worst + '. A faster kernel that draws a different picture is a silent edit to every project using it');
+      }
+    }
+  });
 })();
