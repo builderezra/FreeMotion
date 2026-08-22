@@ -2880,6 +2880,32 @@ better still, keep working inside the turn rather than parking work for a later 
       the PC and say whether it still looks wrong.** If it does, the next step is the one the entry
       already names — treat it as a rebuild of the effect, and offer turning it off on desktop if it
       cannot be made to look good there.
+
+      **22 Aug — THE MOTION IS FINALLY MEASURED, and this entry's own blocker was STALE.**
+      Twice this entry recorded that the animation could not be timed here because the preview pane
+      reports `document.hidden: true`, throttling CSS animations — and both times a frozen transform was
+      nearly reported as "the screen is stuck". **`document.hidden` is FALSE now** (corrected in LOOP.md
+      rule 11 at v11.68), and a control animation was confirmed to genuinely advance (0 → 45.9 → 100 over
+      500ms) before believing anything. So the slam was driven through the real trackpad wheel path at
+      **1440x900** and sampled frame by frame for the first time:
+      | | |
+      |---|---|
+      | does it animate | **yes — 18 distinct transforms across the shake** |
+      | does it scale (the v8.54 bug) | **no** — `everScaled: false` |
+      | does it settle | **clean** — back to 0,0 at 1440x900, `hm-slam` cleared, grid transform `none` |
+      | frozen mid-shake, 1440x900 | wordmark on screen top-left, search / Select / cog on screen
+        top-right, no gap at any edge, no black bar, **no editor showing through** |
+      **A false alarm worth recording, because it would have read as #144 reopening.**
+      `document.elementFromPoint` at the top edge mid-shake returns **`stage`** — the editor — which
+      looks exactly like the shake uncovering what is behind home. It is not: the cover is a `::before`
+      at `inset: -8%`, and a pseudo-element PAINTS past its host's box without extending the host's hit
+      area, so hit-testing reports the editor at a pixel the overhang is covering perfectly. **Checked
+      with a screenshot rather than the hit test, and the pixels are right.** Same lesson as the rest of
+      this week: when a measurement says broken, check the instrument before the code.
+      **So there is nothing left here that a measurement can find.** It animates, it does not scale, it
+      does not clip, it does not uncover the editor, and it cleans up after itself. **A screenshot of it
+      frozen mid-shake was sent to him** so he can judge the look without having to trigger it himself —
+      which is the entire remaining question.
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.

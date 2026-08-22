@@ -51,7 +51,11 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     The original observation was real: a slam animation sampled at six points returned the same frozen
     transform every time and looked exactly like a bug. Throttling happens. It is just not a constant
     of the pane, so it has to be read at the moment of measuring.
-    Check `document.hidden` before believing any timing measurement.
+    Check `document.hidden` before believing any timing measurement — and CHECK IT WITH A CONTROL:
+    run a throwaway `element.animate()` and confirm it actually advances. Queue 250 was blocked on this
+    for two separate sessions, both of which recorded "motion cannot be timed here"; at v11.71 the pane
+    reported hidden:false AND a control animation ran 0 → 45.9 → 100, so the slam's motion was measured
+    for the first time. **A blocker written in an entry is a claim with a date on it, not a fact.**
 12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.
@@ -210,6 +214,19 @@ but by the flag assertion, not the file one, because the encode-before-mux order
 (defence in depth working). The assertion I actually cared about was still unproven. A second, targeted
 mutation — declare the audio track unconditionally — fired it exactly. **When a mutation is caught by a
 DIFFERENT assertion than the one you wrote, you have not yet tested the thing you meant to.**
+
+**✅ 22 Aug — #250: the entry's own BLOCKER was stale, and the slam is fine on PC.**
+Twice this entry recorded "the motion cannot be timed here — the pane reports document.hidden". That
+stopped two sessions from ever checking the thing he complained about. `document.hidden` is FALSE now,
+and a control animation confirmed frames genuinely advance, so the slam was driven through the real
+trackpad wheel path at 1440x900 and sampled: **18 distinct transforms, never scales, settles clean**, and
+frozen mid-shake nothing is clipped and no editor shows through.
+**A false alarm that would have read as #144 reopening:** `elementFromPoint` at the top edge returns
+`stage` — the editor — mid-shake. It is wrong. The cover is a `::before` at `inset:-8%`, and a
+pseudo-element PAINTS past its host's box without extending the host's HIT area. The pixels are right;
+the hit test is not the instrument. Screenshot settled it.
+**THE LESSON: a blocker recorded in an entry is a claim with a date on it.** Re-test it before inheriting
+it — especially one about the environment, which changes underneath the note.
 
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
