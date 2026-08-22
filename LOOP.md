@@ -55,37 +55,45 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 **▶️ LOOP RUNNING — every minute, and it stays that way (rule 8b: never pause it).**
 
-**⚠️ 22 Aug — HE WAS RIGHT AND I WAS WRONG. "0 actionable" WAS FALSE.**
-He said *"you did not meet every task i believe, double check again"* and then *"just check extra hard
-theres no leftovers coz looking through uve missed a lot"*. Both were correct.
+**⚠️ 22 Aug — HE WAS RIGHT TWICE, AND BOTH CORRECTIONS MATTER MORE THAN ANY FEATURE HERE.**
+*"you did not meet every task i believe, double check again"* and *"just check extra hard theres no
+leftovers coz looking through uve missed a lot"*. Two independent audits (39 agents each, every claim put
+through an adversarial refutation pass) proved him right on both counts.
 
-**An independent audit of all 34 open entries — agents re-reading each entry AND the code, with a second
-pass trying to REFUTE every claim — found 19 entries with real buildable work.** My classifier had said
-zero. It reads prose with regexes; it cannot tell "clause 3 needs Ezra" from "the whole entry is blocked",
-and that is precisely the miss. **NEVER treat `tools/_classify.py` as proof there is no work. It is a
-hint. When it says 0, AUDIT BY HAND.**
+**AUDIT 1 — the 34 OPEN entries: 19 have real buildable work.** My classifier said ZERO, for sixteen
+ticks. It is regexes over prose; it cannot tell "clause 3 needs Ezra" from "the entry is blocked".
+**`tools/_classify.py` IS A HINT, NEVER A PROOF. When it says 0, audit by hand.**
+Full first-steps: `tools/.buildable-audit.json`.
 
-**ALSO FOUND, and worse: #426 was ticked `[x]` DONE while its own header read "⚠️ STAYS OPEN".** Every
-queue tool matches `^- \[ \]`, so it was UNREACHABLE for weeks — the exact "nothing rots at the bottom"
-failure next.sh exists to prevent, third distinct cause. Reopened; next.sh now detects the contradiction.
+**AUDIT 2 — the 243 CLOSED multi-part requests: 17 clauses were ticked DONE without being built**, 12 of
+them buildable with no input from him. Full detail: `tools/.dropped-clause-audit.json`. This is the exact
+failure he named himself — *"how do you leave all this out"*. The confirmed ones:
+**141** (a Custom rung on the EXPORT frame-rate list — never built; the canvas dialog has one, export
+does not), **142** (the default shape colour never reaches freehand/vector drawing, though the entry
+claims it does), **118**, **121**, **154**, **165.3**, **257**, **338**, **363**, **386** (a media
+Outline never reaches the frame — probe already written at `tests/_q386audit.html`), **419** (the rail
+diamond's REMOVE is still shared), and draw-on keyframes never registering as layer keyframes.
+Needing him: 184, 204, 285, 378, 461.
 
-**THE 19 CONFIRMED-BUILDABLE ITEMS** (each survived an adversarial refutation pass; full first-steps in
-`scratchpad/buildable.json`, and the raw audit in the task output). Work them OLDEST FIRST as always:
-**47** (export safety — he authorised it: *"if there's a thing to make exporting safer then do it"*; the
-smallest piece is telling him when crash-protection has silently switched off), **96** (a song's tail —
-build `tests/_songtail.html`; ⚠️ the auditor's proposed clamp is a REGRESSION, do not apply it),
-**202** (perf readout — record WHICH operation ran late, in js/perf-probe.js only), **206**, **215**,
-**361**, **387**, **406**, **408**, **417**, **418** (the undo/redo icon he sent a picture of —
-index.html:436), **428**, **432**, **456**, **460**, plus the identity pass (docs-only) and two unnumbered.
+**✅ SHIPPED FROM THE AUDITS ALREADY:**
+- **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
+- **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
+  attributes; HTML takes the last, so a 60/50/25/15/120 fps project opened Export on "30 fps" and rendered
+  at 30 with nothing saying so. One word deleted. It survived months because the comment above it
+  described the CORRECT behaviour — the prose was right and the markup was not.
 
-**✅ v11.51 — first item off that list, and it was his own explicit instruction.** *"presets are just for
-effects not anything else, if it says preset remove any other function"* — a dead `cvCurrentCfg` and its
-"Canvas presets (queue 183)" comment block were still in js/app.js, referenced by nothing. Removed.
+**⚠️ ALSO FIXED: `#426` was ticked `[x]` DONE while its own header read "⚠️ STAYS OPEN"** — invisible to
+every queue tool for weeks. Reopened; `next.sh` now detects that contradiction.
 
-**A SECOND AUDIT IS STILL RUNNING:** all **243 CLOSED multi-part requests**, decomposed into his verbatim
-clauses and checked against the code, hunting for halves that were ticked DONE without being built. That
-is the documented failure mode of this file (*"how do you leave all this out"*). Fold its results in here
-when they land.
+**⚠️ NEW GATE: `tools/mutate.sh` REFUSES AN AMBIGUOUS MUTATION.** It already refused a MISSING old
+string; this is the blind twin. `<option value="30">30 fps</option>` exists in BOTH the new-project and
+export dialogs, the replace hit the first, the control under test was never touched — and the green run
+looked exactly like a dead new test. Two suite runs lost. **A green run after an ambiguous mutation proves
+nothing, same as after a missing one.**
+
+**NEXT: work the two audit lists, oldest first.** #141's Custom-fps rung is the natural next item — it is
+the other half of the entry #471 just came out of, it needs no decision from him, and every pattern it
+needs already exists in the canvas dialog.
 
 **392's wall, so no future tick re-litigates it:** `speechSynthesis` speaks to the speakers and exposes no
 stream, media element, or graph node. There is NO supported capture route in any browser. No capture → no
