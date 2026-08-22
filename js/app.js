@@ -2055,8 +2055,7 @@ window.FM = window.FM || {};
      * min(w,h)/6.75 is the same ratio expressed against whichever side is shorter — it returns 160 on
      * 1080x1920 exactly as before, so portrait projects are untouched, and 320 on 2880x2160 instead
      * of 180. */
-    const shortSide = Math.min(P.width, P.height);
-    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(shortSide / 6.75), start: FM.time, duration: FM.defaultLayerDuration() });
+    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: FM.defaultTextSize(), start: FM.time, duration: FM.defaultLayerDuration() });
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];

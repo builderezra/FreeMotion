@@ -39743,4 +39743,39 @@
       FM.canDecodeHEVC = realCan; FM.toast = realToast; FM.decodeWait = realWait;
     }
   });
+
+  /* ═══ "RESET TEXT" MUST RESET TO THE APP'S DEFAULT, NOT TO A SMALLER SECOND ONE (queue 98).
+     The default size was written down twice — the Add Text button computed min(W,H)/6.75 while the
+     layer constructor fell back to a bare 96 — and the long-press "Reset Text" path builds a pristine
+     layer with no props, so it copied the 96. The reset button was wired to the wrong copy. */
+  test('adding text and resetting text agree on the size, at any project shape (queue 98)', { item: '98' }, async function () {
+    if (typeof FM.defaultTextSize !== 'function') throw new Error('FM.defaultTextSize is missing — the default is written down in two places again');
+    const P = FM.scene.project;
+    const saved = { w: P.width, h: P.height };
+    try {
+      const shapes = [
+        { w: 1080, h: 1920, expect: 160 },   // his own portrait project — must be UNCHANGED at 160
+        { w: 1080, h: 1350, expect: 160 },
+        { w: 2880, h: 2160, expect: 320 },   // a big landscape comp, where a flat 96 was absurd
+        { w: 640, h: 480, expect: 71 }
+      ];
+      for (const sh of shapes) {
+        P.width = sh.w; P.height = sh.h;
+        const viaDefault = FM.defaultTextSize();
+        if (viaDefault !== sh.expect) throw new Error(sh.w + 'x' + sh.h + ': the default text size is ' + viaDefault + ', expected ' + sh.expect);
+        /* The constructor with NO props is exactly what "Reset Text" builds, and it is the path that
+           used to hand back 96 on every project regardless of size. */
+        const pristine = FM.makeLayer('text', {});
+        if (pristine.fontSize !== sh.expect) throw new Error(sh.w + 'x' + sh.h + ': a pristine text layer (what Reset Text copies from) is ' + pristine.fontSize + 'pt, but adding text gives ' + sh.expect + 'pt — a reset would shrink your text');
+      }
+
+      /* CONTROL: an explicit size must still win, or this "fix" would override every template,
+         caption and AI-generated layer that states its own size. */
+      P.width = 2880; P.height = 2160;
+      const explicit = FM.makeLayer('text', { fontSize: 42 });
+      if (explicit.fontSize !== 42) throw new Error('an explicitly requested font size was overridden by the default');
+    } finally {
+      P.width = saved.w; P.height = saved.h;
+    }
+  });
 })();

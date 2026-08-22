@@ -488,6 +488,22 @@ window.FM = window.FM || {};
   }
   FM.newScene = newScene;
 
+  /* THE DEFAULT TEXT SIZE, IN ONE PLACE (queue 98).
+   * It used to be written down twice: the Add Text button computed `min(W,H)/6.75` (160 on a
+   * 1080x1920 project) and this constructor fell back to a bare **96** — and the two disagreeing is
+   * not theoretical. Long-pressing the Text card offers "Reset Text", which builds a pristine layer
+   * with NO props and copies its text properties across, `fontSize` among them. So a reset did not
+   * restore the app's default at all: it set 96 on every project regardless of size, which is 40%
+   * smaller than a freshly added text layer on his 1080x1920 and under a third the size on a 2880
+   * comp. Two copies of one number, and the smaller copy was the one wired to the button labelled
+   * "Reset".
+   * Loading a saved project does NOT go through makeLayer, so nothing existing is resized by this. */
+  FM.defaultTextSize = function () {
+    const P = FM.scene && FM.scene.project;
+    if (!P || !P.width || !P.height) return 96;   // no project open yet — the old bare number stands
+    return Math.round(Math.min(P.width, P.height) / 6.75);
+  };
+
   function makeLayer(type, props) {
     props = props || {};
     const base = {
@@ -529,7 +545,7 @@ window.FM = window.FM || {};
     };
     if (type === 'text') {
       base.text = props.text || 'Text';
-      base.fontSize = props.fontSize || 96;
+      base.fontSize = props.fontSize || FM.defaultTextSize();
       base.color = props.color || '#ffffff';
       base.fontFamily = props.fontFamily || 'Inter, sans-serif';
       base.align = 'center';

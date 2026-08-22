@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.86
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.87
 >
-> **State:** v11.86, **859 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.87, **860 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -1719,6 +1719,27 @@ better still, keep working inside the turn rather than parking work for a later 
       app.** (Whether that fallback SHOULD be aspect-aware for templates/elements is a separate, real
       question — noted, not guessed at.)
       **So the only thing left in (c) is a taste call, and it is yours** — see the question block.
+
+      ✅ **v11.87 — AND THE QUESTION THIS ENTRY PARKED TURNED OUT TO BE A REAL BUG.** The 22 Aug note
+      ended: *"Whether that fallback SHOULD be aspect-aware for templates/elements is a separate, real
+      question — noted, not guessed at."* Followed up, and it is not hypothetical.
+      **The default text size was written down TWICE.** The Add Text button computes `min(W,H)/6.75`
+      (160 on your 1080×1920); the layer constructor fell back to a bare **96**. Nothing in the app
+      creates text without a size, so that looked harmless — except for one path that does:
+      **long-pressing the Text card offers "Reset Text", and a reset is implemented as a paste from a
+      PRISTINE layer of the same type** (one code path for reset and paste-style, deliberately). That
+      pristine layer has no props, so it carried the 96 — and `fontSize` is one of the properties the
+      text category copies.
+      **So "Reset Text" did not restore the app's default. It shrank your text:** 96 instead of 160 on
+      your portrait projects (40% smaller), and 96 instead of 320 on a 2880 comp (under a third). The
+      button labelled *Reset* was wired to the wrong copy of the number.
+      **Fixed by removing the second copy** — `FM.defaultTextSize()` is the one definition now, and the
+      Add Text button uses it too, so they cannot drift apart again. Asserted at four project shapes,
+      including yours unchanged at 160. **Control: an explicit size still wins**, or this would have
+      overridden every template, caption and AI-generated text layer that states its own. Loading a
+      saved project does not go through the constructor, so nothing you already have is resized.
+      Mutation-checked by restoring the flat 96 — caught at the first shape.
+      **The taste call in (c) is still yours and still unanswered** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
