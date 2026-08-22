@@ -102,7 +102,18 @@ SCALE, so a 720p pick on a 1080×1920 project re-applied to a 2160×3840 project
 real browser, both halves mutation-proven (the resolution one only after I noticed MY mutation was invalid
 — the real defect reads the old value BEFORE the list is rebuilt).
 
-**NEXT, oldest first from the audit lists:** **#141** (a Custom rung on the export frame-rate list — never
+**✅ v11.55 — #141 done.** A `Custom…` rung on the export frame-rate list with a typed value, clamped
+1–120, seeded from the project, hidden for audio-only, and not remembered between opens (#121's rule).
+Two things only the mutation check caught: the input was 22px against every other control's 34px (a bare
+`<input>` misses `.exp-custom`, the wrapper carrying the dialog's styling), and **the first test was DEAD
+and looked alive** — it reimplemented the fps branches inside the test file, so deleting the app's custom
+branch left it green. The rate now resolves in ONE place, `FM._exportFps()`, which both sides call.
+
+**⚠️ A THIRD MUTATION LESSON, and the most important: A TEST THAT RE-DERIVES THE LOGIC IT IS TESTING CAN
+ONLY EVER AGREE WITH ITSELF.** Drive the app's own function. If there isn't one to drive, extract it —
+that is what the `FM._…` seams in this codebase are for.
+
+**NEXT, oldest first from the audit lists:** ~~#141~~ (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
