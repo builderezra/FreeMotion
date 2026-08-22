@@ -228,6 +228,19 @@ the hit test is not the instrument. Screenshot settled it.
 **THE LESSON: a blocker recorded in an entry is a claim with a date on it.** Re-test it before inheriting
 it — especially one about the environment, which changes underneath the note.
 
+**✅ 22 Aug — #342: the entry was blocked on a BADLY-ASKED QUESTION, not on Ezra.**
+He declined clause 3 twice — *"idk what could it ask"* — and both times what he was handed was an OPEN
+question ("what do you try to do that you can't?"). His standing instruction of 21 Aug is explicit:
+*"I just want options. Yu can just say recommended next to the best option"*. The entry had even written
+down "put these to him as options rather than an open question" — and then left the open question in the
+block he actually reads. Re-asked as A–E with A recommended, and with E ("nothing, it's fine") offered as
+a real answer rather than a cop-out, because clauses 1–2 shipped and were verified end to end.
+**THE LESSON: "waiting on Ezra" is a claim to audit, exactly like a stale blocker.** Before counting an
+entry as blocked, check that what he was actually asked is answerable in one word. A question he has
+declined twice is evidence about the QUESTION.
+**Three rows in the top block are still open questions (387, 391, 215)** — flagged there in writing as a
+defect in how I asked, to be fixed as each comes up the list rather than in a sweep that jumps the queue.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
