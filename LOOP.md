@@ -211,6 +211,17 @@ a green run must mean "the word moved", not "the word vanished everywhere".
 **A scanner over source text is far harder than it looks. When the sites are known and finite, NAME THEM**
 — precise, cannot misfire, and a new site has to be added deliberately.
 
+**✅ v11.63 — #386 done. The Outline card on videos/images offered a toggle, colour, size and position
+and drew NOTHING.** The translation into the alpha stroke effect was correct since v10.64; its one
+render-path caller only opened for caption tracks and live effect previews, so for an ordinary clip the
+merged list was computed nowhere. Measured: 3600 red pixels, **0 green**. Now 1584 green at 6px, 4144 at
+14px, 0 when off.
+
+**🚨 A SEAM-ONLY TEST WOULD HAVE PASSED THE ENTIRE TIME.** "effectiveFx returns a stroke effect" was true
+throughout — the translation was always right, nothing consumed it. **When a feature is "compute a thing
+then render it", test the PIXELS, not the computation.** With a control asserting the picture is on screen
+at all, so "nothing drawn" cannot pass for the wrong reason.
+
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
