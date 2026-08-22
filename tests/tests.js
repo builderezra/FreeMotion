@@ -38668,4 +38668,86 @@
     if (!(r.lastGap < r.firstGap * 0.8)) throw new Error('pixels were shed but the frame gap barely moved (' + r.firstGap.toFixed(1) + ' -> ' + r.lastGap.toFixed(1) + ' ms) — the preview went soft for nothing');
   });
 
+
+  /* Queue 215 — the two gaps this entry named and deliberately left open, both now measured.
+   * Its own words: *"Known gap, stated rather than papered over: the AAC path has no direct test"* and
+   * *"the end-to-end 'muxer is built with no audio track' step is still only argued, not measured."*
+   * They matter more than the usual untested branch, because the failure they guard is the WORST one in
+   * the entry: a file whose moov advertises an audio track that was never fed. That plays silently in
+   * one player and is REFUSED OUTRIGHT by another — a broken file rather than an honest silent one.
+   * v9.43 fixed it by encoding the soundtrack BEFORE the muxer exists, so a failure drops the mix
+   * before any track is declared. Nothing checked the resulting FILE.
+   * This reads the bytes: 'soun' is the handler type of an audio track and 'mp4a' its sample entry, so
+   * their absence is the file itself saying it never promised sound. */
+  async function q215TrackScan(blob) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const find = (str) => {
+      const p = [].map.call(str, c => c.charCodeAt(0));
+      outer: for (let i = 0; i < buf.length - p.length; i++) {
+        for (let j = 0; j < p.length; j++) if (buf[i + j] !== p[j]) continue outer;
+        return i;
+      }
+      return -1;
+    };
+    return { bytes: blob.size, soun: find('soun') >= 0, mp4a: find('mp4a') >= 0, vide: find('vide') >= 0 };
+  }
+
+  test('export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)', { item: '215' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast };
+    const realAE = window.AudioEncoder;
+    const toasts = [];
+    const runExport = async () => {
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.3), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: buf });
+      FM._audioTrackDropped = null;
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'probe', onReady: async r => { blob = r.blob; } });
+      return blob;
+    };
+    try {
+      FM.toast = m => toasts.push(String(m));
+
+      /* THE CONTROL, and it is doing real work here: if this browser could not encode AAC anyway, or
+         the scan simply never finds these boxes, the assertions below would pass on a file that never
+         had sound for unrelated reasons. A healthy export MUST carry a real audio track. */
+      const good = await runExport();
+      if (!good) throw new Error('the control export produced no file at all');
+      const g = await q215TrackScan(good);
+      if (!g.vide) throw new Error('the control export has no video track either — the byte scan is not finding tracks, so nothing below means anything');
+      if (!g.soun || !g.mp4a) throw new Error('a healthy export did not declare an audio track (soun ' + g.soun + ', mp4a ' + g.mp4a + ') — either this browser cannot encode AAC, or the scan is broken; either way the real assertion below would pass for the wrong reason');
+      if (FM._audioTrackDropped) throw new Error('a healthy export reported its audio as dropped (' + FM._audioTrackDropped + ')');
+
+      // Now the case: this browser has no AAC encoder. Support is a property of the BROWSER, which is
+      // why the same project exports with sound on one machine and without it on another.
+      toasts.length = 0;
+      window.AudioEncoder = { isConfigSupported: async () => ({ supported: false }) };
+      const dry = await runExport();
+      if (!dry) throw new Error('the export produced nothing when AAC was unavailable — a missing soundtrack must never sink the render');
+      const d = await q215TrackScan(dry);
+
+      if (!d.vide) throw new Error('the video track went missing too — losing the sound cost the picture');
+      if (d.soun || d.mp4a) throw new Error('the file DECLARES an audio track (soun ' + d.soun + ', mp4a ' + d.mp4a + ') that was never fed — this is the broken file v9.43 exists to prevent: silent in one player, refused outright by another');
+      if (FM._audioTrackDropped !== 'aac-unavailable') throw new Error('the loss was flagged as "' + FM._audioTrackDropped + '" — the caller keys its message off this');
+      if (!toasts.some(t => /WITHOUT SOUND/i.test(t))) throw new Error('the export lost its sound and said nothing on screen: ' + JSON.stringify(toasts));
+    } finally {
+      window.AudioEncoder = realAE;
+      FM.toast = saved.toast;
+      FM.scene.layers = saved.layers;
+      P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
 })();

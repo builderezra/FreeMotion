@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.70
 >
-> **State:** v11.70, **839 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.70, **840 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -7960,6 +7960,24 @@ better still, keep working inside the turn rather than parking work for a later 
       ⏳ **WAITING ON EZRA — the toast text if a silent export happens again.** All four known silent
       losses now name themselves on screen (v11.21 closed the last one). No toast AND a silent file would
       mean the mix was built and the loss is in the muxer — the one region still without a witness.
+
+      **22 Aug — THE TWO GAPS THIS ENTRY NAMED AND LEFT OPEN ARE NOW MEASURED.** Both were written down
+      here deliberately rather than papered over: *"the AAC path has no direct test"* and *"the
+      end-to-end 'muxer is built with no audio track' step is still only argued, not measured."*
+      They guard the worst failure in this entry — a file whose moov advertises an audio track that was
+      never fed, which plays silently in one player and is REFUSED OUTRIGHT by another.
+      **Measured by reading the output file's bytes**, not by asking the code: `soun` is an audio track's
+      handler type and `mp4a` its sample entry, so their absence is the file itself saying it never
+      promised sound. A healthy export carries both (3070 bytes); with AAC unavailable the file carries
+      NEITHER and still has its video track (1016 bytes), flags `aac-unavailable`, and toasts.
+      **So v7.91 + v9.43 are correct end to end** — the file is honest, not broken.
+      **Two mutations, because the first one did not prove what I wanted.** Deleting the AAC path's
+      `mix = null` was caught, but by the FLAG assertion — the encode-before-mux ordering still saved
+      the file, which is defence in depth working. So the file assertion was still unproven. Making the
+      muxer declare audio unconditionally fires it exactly: *"the file DECLARES an audio track that was
+      never fed"*. **An assertion nothing has ever made fail is not yet a test.**
+      **Still the one region without a witness: the muxer itself**, if a silent file ever arrives with
+      NO toast. That still needs your screenshot.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
 
