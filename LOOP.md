@@ -136,6 +136,19 @@ this; the other 28 warps ignore it.
 is the quality ladder (which #202 verified works), not another rewrite. So this family is done until
 his phone reading says otherwise — which is what v11.83's toast is for.
 
+### 23 Aug, v11.85 — GREP THE SOURCE BEFORE RE-ASKING HIM TO CONFIRM ANYTHING
+#179 sat in his "waiting on you" pile for a week asking him to confirm a bug that had **already been
+fixed**, and the fix was in `js/draw-tool.js` in a comment carrying HIS OWN QUOTE and the queue number:
+*"STOP FIRST, THEN ADD (queue 179)"*. The entry's own guess (v7.35, a shared CSS rule) was wrong; the
+real mechanism was that the docked panel anchors under the last timeline row, and `body.drawing` hides
+the timeline, so the anchor collapsed to the top of the screen.
+**This is rule 3 pointed one step further: an entry records what was ASKED, and the SOURCE often records
+what was done.** Re-verified on the real route (tap points → Done) at 380x820 before closing.
+⚠️ **I checked whether this could be made structural and it cannot, honestly** — 17 of 26 open entries
+are named in some source comment, so an automatic "the code mentions this" flag would be ~65% false
+positives, and a gate that cries wolf gets ignored (the exporter's own diagnostics note says the same).
+So it stays a habit with a one-line cost: `grep -rn "queue <n>" js/` before re-asking him.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
