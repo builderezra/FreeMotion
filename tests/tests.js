@@ -39273,4 +39273,63 @@
       await sleep(60);
     }
   });
+
+  /* Queue 475 — Ezra, with a PC screenshot of the add menu's object grid:
+   * *"i think if u just added gardient to these buttons they would look way better on pc"*.
+   * Done on the card's own BACKGROUND, not a new pseudo-element: `::after` is queue 286's cursor-lit
+   * ring and `--multi`'s `::before` is queue 344's four-colour ring, and stacking a third thing on the
+   * same box is how v9.87 silently overwrote 286. A pseudo-element is one slot.
+   * The colour is each card's existing `--am-tint`, so no new palette exists to drift from the one in
+   * js/addmenu.js — the only change is that a flat fill becomes a ramp. */
+  test('the PC add cards carry a gradient in their own colour (queue 475)', { item: '475' }, async function () {
+    if (!FM.addMenu || typeof FM.addMenu.render !== 'function') throw new Error('FM.addMenu.render is not reachable');
+    /* The rule is `@media (min-width: 701px)` — it IS the "on pc" he asked for. Below that the phone
+       sheet is deliberately unstyled, so there is nothing here to check and saying so is honest; the
+       suite runs at 380px as well and a thrown error there would be a false alarm. */
+    if (!window.matchMedia('(min-width: 701px)').matches) return;
+
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) throw new Error('#inspector-panel is missing — the scope this rule depends on does not exist');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-99999px;top:0;width:360px;height:420px;display:flex;flex-direction:column';
+    panel.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(320);
+      const cards = [].slice.call(host.querySelectorAll('.addmenu-card')).filter(c => !c.classList.contains('has-thumb'));
+      if (cards.length < 4) throw new Error('only ' + cards.length + ' add cards rendered — this test is not looking at the grid');
+
+      const flat = cards.filter(c => !/gradient/.test(getComputedStyle(c).backgroundImage));
+      if (flat.length) {
+        throw new Error(flat.length + ' of ' + cards.length + ' PC add cards still have a flat fill — he asked for a gradient on these');
+      }
+
+      /* AND IT MUST BE THE CARD'S OWN COLOUR. One shared gradient across every card would satisfy the
+         check above while flattening the per-card tints, which are what make the row readable at a
+         glance. */
+      const seen = {};
+      cards.forEach(c => { seen[getComputedStyle(c).backgroundImage] = 1; });
+      if (Object.keys(seen).length < 3) {
+        throw new Error('all ' + cards.length + ' cards share ' + Object.keys(seen).length + ' gradient(s) — the per-card tint has been flattened into one colour');
+      }
+    } finally {
+      host.remove();
+    }
+  });
+
+  /* The placement matters as much as the rule. This first landed inside
+   * `@media (min-width: 701px) and (prefers-reduced-motion: no-preference)` — the block that gates the
+   * cursor-lit ring, which moves. A static gradient has nothing to do with motion, and living in there
+   * would have silently withheld it from anyone with reduced motion switched on: a whole class of user
+   * losing a feature, with nothing on screen to say why. */
+  test('the add-card gradient is not gated behind prefers-reduced-motion (queue 475)', { item: '475' }, async function () {
+    const css = await fetch('styles.css', { cache: 'no-store' }).then(r => r.text());
+    const at = css.indexOf('#inspector-panel .addmenu-card {\n    background:');
+    if (at < 0) throw new Error('the gradient rule is not in styles.css — this guard is watching nothing');
+    const media = css.lastIndexOf('@media', at);
+    const header = css.slice(media, css.indexOf('{', media));
+    if (/reduced-motion/.test(header)) {
+      throw new Error('the gradient sits inside "' + header.trim() + '" — anyone with reduced motion enabled would not get it, and nothing would say so');
+    }
+  });
 })();

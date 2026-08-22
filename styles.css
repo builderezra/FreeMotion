@@ -7118,6 +7118,39 @@ body.fm-pushing #toast { z-index: 213; }
      .fxb-tile, not on these two, so there is no collision. Checked rather than assumed. */
 }
 
+/* GRADIENT SURFACES ON THE PC ADD CARDS (queue 475, v11.78). Ezra, with a PC screenshot of the object
+   grid: *"i think if u just added gardient to these buttons they would look way better on pc"*.
+   Done on the card's own BACKGROUND, not a new pseudo-element: `::after` is queue 286's cursor-lit ring
+   and `--multi`'s `::before` is queue 344's four-colour ring. Stacking a third thing on the same box is
+   how v9.87 silently overwrote 286 — a pseudo-element is ONE slot, and "add a glow" twice is a collision,
+   not a layering.
+   The colour is the card's OWN `--am-tint`, the variable the flat fill already used, so every card keeps
+   its hue and js/addmenu.js stays the single source of the palette. Only the fill becomes a ramp.
+   ⚠️ DELIBERATELY OUTSIDE the `prefers-reduced-motion` block above, which is where this first landed. That
+   query gates the cursor-lit ring, which MOVES. A static gradient has nothing to do with motion, and
+   sitting in there would have silently withheld it from anyone who has reduced motion switched on.
+   SCOPED TO #inspector-panel because he said "on pc". The phone sheet shares the class and is left alone
+   on purpose: it is the surface he actually works on, and restyling it unasked is how a regression gets
+   reported. One word extends it. */
+@media (min-width: 701px) {
+  #inspector-panel .addmenu-card {
+    background:
+      linear-gradient(158deg,
+        rgba(var(--am-tint, 41, 217, 187), .26) 0%,
+        rgba(var(--am-tint, 41, 217, 187), .085) 55%,
+        rgba(255, 255, 255, .022) 100%);
+  }
+  #inspector-panel .addmenu-card:hover {
+    background:
+      linear-gradient(158deg,
+        rgba(var(--am-tint, 41, 217, 187), .40) 0%,
+        rgba(var(--am-tint, 41, 217, 187), .16) 55%,
+        rgba(255, 255, 255, .05) 100%);
+  }
+  /* A tile showing your own footage keeps its picture — a ramp over a thumbnail is just haze. */
+  #inspector-panel .addmenu-card.has-thumb { background: rgba(var(--am-tint, 41, 217, 187), .10); }
+}
+
 /* ---- The layer buttons shrink with the band (queue 285) ---------------------------------------
    Ezra: "the layer edit pannels buttons should shrink if you make the timeline too small, so the button
    all stay fitting on screen."

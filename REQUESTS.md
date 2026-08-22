@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.77
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.78
 >
-> **State:** v11.77, **848 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.78, **850 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4596,8 +4596,25 @@ better still, keep working inside the turn rather than parking work for a later 
       menu alongside the timeline → look at the 8-card grid. Do NOT try to reproduce it from a static
       load; his own words say it takes getting into that state.
 
-- [ ] **475 — Gradients on the PC add-menu cards.** (22 Aug, PC screenshot of the Add menu's object grid:
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **475 — Gradients on the PC add-menu cards.** ✅ **DONE v11.78.**
+      **On the card's own BACKGROUND, not a new pseudo-element** — the entry warned to check which slot
+      was free and both are taken on this family: `::after` is queue 286's cursor-lit ring, `--multi`'s
+      `::before` is queue 344's four-colour ring. A pseudo-element is ONE slot; stacking a third is
+      exactly how v9.87 silently overwrote 286.
+      **No new palette.** The ramp uses each card's existing `--am-tint`, the same variable the flat wash
+      used, so js/addmenu.js stays the single source of the colours and nothing can drift.
+      **Scoped to `#inspector-panel` at `min-width: 701px`** — he said "on pc". The phone sheet shares the
+      class and is deliberately untouched: it is the surface he works on and restyling it unasked is how a
+      regression gets reported. One word extends it.
+      ⚠️ **A REAL MISTAKE CAUGHT BEFORE SHIPPING, and it is now a test.** The rule first landed inside
+      `@media (min-width: 701px) and (prefers-reduced-motion: no-preference)` — the block that gates the
+      cursor-lit ring, which moves. **A static gradient has nothing to do with motion**, so that would
+      have silently withheld it from everyone with reduced motion switched on, with nothing on screen to
+      explain why. Moved to a plain width query, and a second test fails if it ever drifts back inside a
+      reduced-motion block. Both mutation-checked.
+      Media tiles keep their thumbnail (a ramp over a photo is haze) — asserted, because a blanket rule
+      would have broken exactly that case.
+      (22 Aug, PC screenshot of the Add menu's object grid: (22 Aug, PC screenshot of the Add menu's object grid:
       Text · Captions · Sketching · Custom shape · Camera / Controller · Adjustment · New group · Custom
       elements.) His words, verbatim:
       > i think if u just added gardient to these buttons they would look way better on pc
