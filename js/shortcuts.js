@@ -27,7 +27,7 @@ window.FM = window.FM || {};
   ];
   // Mouse / stage interactions — the powerful bits that aren't obvious from the UI.
   const TIPS = [
-    ['Right-click timeline', 'Add camera, adjustment layer, null, or sample'],
+    ['Right-click timeline', 'Add camera, adjustment layer, controller, or sample'],
     ['Select camera, drag', 'Pan the whole scene'],
     ['Select camera, scroll', 'Zoom around the cursor'],
     ['Drag layer / handles', 'Move, or scale & rotate from the corners'],

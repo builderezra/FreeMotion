@@ -153,7 +153,7 @@ window.FM = window.FM || {};
       const reg = FM.fxRegistry.get(id);
       let msg;
       if (layer.type === 'adjustment') msg = 'Adjustment layers only do colour, blur & pixel grades — add this to the layer itself';
-      else if (layer.type === 'camera' || layer.type === 'null') msg = 'Camera & null layers have no pixels — effects can’t apply to them';
+      else if (layer.type === 'camera' || layer.type === 'null') msg = 'Camera & controller layers have no pixels — effects can’t apply to them';
       else msg = 'That effect needs ' + (reg && reg.appliesTo === 'text' ? 'a text layer' : 'a video or image layer');
       if (FM.toast) FM.toast(msg, 2000);
       return;
@@ -414,7 +414,7 @@ window.FM = window.FM || {};
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
     if (!layer) { if (!quiet) FM.fxBrowser.close(); return; }
     if (['shape', 'text', 'image', 'video', 'adjustment'].indexOf(layer.type) < 0) {
-      if (FM.toast) FM.toast('Masks need a layer with pixels — camera/null/group can’t be masked', 1900);
+      if (FM.toast) FM.toast('Masks need a layer with pixels — camera/controller/group can’t be masked', 1900);
       return;
     }
     if (!Array.isArray(layer.masks)) layer.masks = [];

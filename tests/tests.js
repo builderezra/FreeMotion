@@ -24703,6 +24703,53 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('nothing on screen still calls a controller a \'null\' (queue 363)', { item: '363' }, async function () {
+    /* Queue 363 renamed the layer type in the UI — his instruction, and the entry's own scope note asks
+     * for exactly this test: *"Places to sweep: the Add menu, the layer row label, the inspector title,
+     * any hint text… A test should assert the old word is gone from the UI and the new one is present."*
+     * That test was never written, and FOUR user-facing strings still said "null" — the timeline's
+     * right-click menu, two refusal messages in the effects browser, and the shortcuts sheet — while the
+     * Add menu next door already said "Controller".
+     * ⚠️ THE INTERNAL TYPE VALUE MUST STAY 'null'. Every saved project on his device has it written in,
+     * so this is a vocabulary change and nothing else. The test asserts BOTH halves: the word is gone
+     * from what he reads, and still there in what the code compares. */
+    /* NAMED STRINGS, NOT A GENERAL SCANNER. Two general versions were tried and both were worse than
+       useless. A line filter that excluded `null,` (to skip code like `f(a, null, b)`) also skipped the
+       PROSE "…adjustment layer, null, or sample", so restoring that exact string left the test GREEN. A
+       literal-extractor then matched apostrophes inside comments — "don't", "it's" — and paired them
+       across whole functions, reporting chunks of code as offending strings.
+       The four sites are known and finite. Naming them is precise, cannot misfire, and fails loudly if
+       any one comes back. A new site would need adding here, which is the honest trade. */
+    const RENAMED = [
+      { file: 'js/timeline.js',   gone: "'Add null (rig control)'",                                   now: "'Add controller (rig control)'" },
+      { file: 'js/fx-browser.js', gone: 'Camera & null layers have no pixels',                         now: 'Camera & controller layers have no pixels' },
+      { file: 'js/fx-browser.js', gone: 'camera/null/group can',                                       now: 'camera/controller/group can' },
+      { file: 'js/shortcuts.js',  gone: 'adjustment layer, null, or sample',                           now: 'adjustment layer, controller, or sample' },
+    ];
+    const cache = {};
+    const read = async (f) => {
+      if (!cache[f]) {
+        const res = await fetch(f, { cache: 'no-store' });
+        if (!res.ok) throw new Error('could not read ' + f + ' (' + res.status + ')');
+        cache[f] = await res.text();
+      }
+      return cache[f];
+    };
+    let sawType = false;
+    for (const r of RENAMED) {
+      const src = await read(r.file);
+      if (src.indexOf(r.gone) >= 0) throw new Error(r.file + ' still shows the user the old word: ' + r.gone);
+      if (src.indexOf(r.now) < 0) throw new Error(r.file + ' no longer contains the renamed string ' + JSON.stringify(r.now) + ' — "gone" must mean renamed, not deleted');
+      if (/===\s*'null'/.test(src)) sawType = true;
+    }
+    /* The control: if the type COMPARISONS had been renamed too, every check above would pass while every
+       saved project on his device quietly broke. A green run must mean "the word moved", not "the word
+       vanished everywhere". */
+    if (!sawType) throw new Error("no `type === 'null'` comparison survives in those files — the internal type was renamed too, which breaks every project already saved");
+    const tl = await read('js/timeline.js');
+    if (!/label: 'Add controller/.test(tl)) throw new Error('the timeline menu no longer offers to add a controller at all');
+  });
+
   test('the MULTI-clip move and extend icons are not the same drawing (queue 338)', { item: '338' }, async function () {
     /* His complaint on 338 was that the two buttons were the same picture with *"a couple of pixels of
      * ink"* between them. It was fixed TWICE for the single-clip pair (desktop at queue 235, phone at

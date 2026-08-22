@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.61
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.62
 >
-> **State:** v11.61, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.62, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,24 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **363b — Four places still called a controller a "null".** ✅ **DONE v11.62.**
+      (22 Aug — found by re-auditing closed requests against the code.)
+      #363 renamed the layer in the UI and the Add menu duly says **Controller** — but four user-facing
+      strings never got the memo: the timeline's right-click menu (*"Add null (rig control)"*), the two
+      refusal messages in the effects browser (*"Camera & null layers have no pixels"*, *"camera/null/group
+      can't be masked"*), and the keyboard-shortcuts sheet. The entry's own scope note asked for exactly
+      the test that would have caught it — *"A test should assert the old word is gone from the UI and the
+      new one is present"* — and that test was never written.
+      **The internal `layer.type === 'null'` is untouched**, and the test asserts that too: every saved
+      project has that value written in, so this is a vocabulary change and nothing else. A green run has
+      to mean "the word moved", not "the word vanished everywhere".
+      ⚠️ **TWO GENERAL SCANNERS WERE TRIED AND BOTH WERE WORSE THAN USELESS.** A line filter excluding
+      `null,` (to skip code like `f(a, null, b)`) also skipped the PROSE *"…adjustment layer, null, or
+      sample"* — so restoring that exact string left the suite GREEN. A string-literal extractor then
+      matched apostrophes inside comments (*"don't"*, *"it's"*) and paired them across whole functions,
+      reporting chunks of code as offending strings. The four sites are known and finite, so the test
+      names them: precise, cannot misfire, and a new site has to be added deliberately. Mutation-checked.
 
 - [x] **338b — The MULTI-clip move/extend icons were still the drawing he complained about.**
       ✅ **DONE v11.61.** (22 Aug — found by re-auditing closed requests against the code.)
