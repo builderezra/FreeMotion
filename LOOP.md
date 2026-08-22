@@ -113,7 +113,16 @@ branch left it green. The rate now resolves in ONE place, `FM._exportFps()`, whi
 ONLY EVER AGREE WITH ITSELF.** Drive the app's own function. If there isn't one to drive, extract it —
 that is what the `FM._…` seams in this codebase are for.
 
-**NEXT, oldest first from the audit lists:** ~~#141~~ (a Custom rung on the export frame-rate list — never
+**✅ v11.56 — #142 done.** The default shape colour now reaches freehand and vector drawing; before, an
+add-menu shape took `#cc22cc` while a drawing came out `#ffffff`, though the entry claimed otherwise.
+`'random'` still leaves the tool white and a hand-picked colour still wins — a default is a starting point.
+
+**⚠️ MY OWN EDIT LANDED IN THE WRONG FUNCTION.** `sessionLayerId = null; …` appears in BOTH `stop()` and
+`startDraw()`, the replace hit the first, and the seed ran when the tool CLOSED — the colour applied one
+session late. **`mutate.sh` refuses ambiguous strings now, but HAND EDITS DO NOT GO THROUGH IT.** Anchor on
+a string proven unique (`grep -c`) before replacing, and check which function the edit ended up in.
+
+**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
