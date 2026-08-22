@@ -23,7 +23,7 @@
 > | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
 > | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
 > | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
-> | **387** | Phone lag: is scrubbing fine and *playback* bad, or are both bad? That one word decides where I look | — |
+> | **387** | ~~is scrubbing fine and playback bad?~~ **You already answered this in the report** — *"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*. The real question: **does pressing play still feel wrong after v11.70?** It fixed a pitch-up that happens on play and never on scrub | Just "better" or "same" |
 > | **391** | The Edit Text menu is "still a bit broken" — which part? | — |
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
@@ -49,8 +49,9 @@
 > 425 each had a real question buried inside a *ticked* clause where nothing could see it — both are rows
 > above now. `tools/next.sh` refuses to stay quiet about this shape from now on.
 >
-> ⚠️ **Three of the rows above are still OPEN questions rather than a pick-one (387, 391, 215), which is
-> not what you asked for.** You said *"I just want options. Yu can just say recommended next to the best
+> ⚠️ **Two of the rows above are still OPEN questions rather than a pick-one (391, 215), which is
+> not what you asked for.** (387 was one, and worse than that — it was asking you to repeat something you
+> had already said in your own report. Fixed 22 Aug.) You said *"I just want options. Yu can just say recommended next to the best
 > option"*. 342 was one of those and is fixed; the other three get the same treatment as each comes up
 > the list. If a question here ever reads as homework, that is a bug in how I asked it, not something
 > for you to solve.
@@ -11999,6 +12000,27 @@ wait for them to report back."*
       2. [ ] Playback is buggy on mobile where scrubbing is not — chase the PLAYBACK path, not the renderer.
              ⏸️ **Blocked on Ezra:** profiled at v10.62 and does not reproduce in Chrome at any throttle;
              it needs a clip off his own phone or a screen recording.
+             🔎 **22 Aug — A CANDIDATE CAUSE SHIPPED SINCE, AND IT FITS THE ASYMMETRY EXACTLY. Worth
+             re-testing before anything else.** **v11.70** fixed the sync controller seeding its
+             output-latency estimate from a sample taken before the element had spun up: measured seed
+             48ms against ~87ms settled, so it carried a phantom ~37ms of error and leaned on the
+             throttle — **pitching every play up ~6% (about a semitone) for the first ~600ms**, and
+             re-priming the browser's time-stretcher each time it wrote the rate.
+             **That is something PLAYBACK does and SCRUBBING never does**, which is the exact split this
+             entry says to treat as the lead. It does not explain a frozen picture on its own, but "a
+             buggy mess when I press play, fine when I scrub" is what it would feel and sound like.
+             **So: does pressing play still feel wrong on your phone at v11.70+?** If it is better, this
+             clause was partly that. If it is unchanged, the picture half is separate and still needs a
+             recording.
+             ⚠️ **What the hand audit prescribed here was NOT applied, and that is deliberate.** It said
+             to retract this clause's blocker and write in a verified reading of an old screen recording
+             (which control was lit at 2.0/4.0/6.0s). **I could not verify it:** the line numbers it
+             cites have moved, and the app does not signal playing with a coloured pill — the play
+             button swaps its ICON, a triangle for two pause bars. Writing an unverifiable reading into
+             this file as fact is the failure this file exists to prevent, so it stayed out.
+             ✅ **But that gives a cleaner discriminator for next time:** in any screen recording, **two
+             bars on the transport button = playing, a triangle = stopped.** That settles "was he
+             playing or scrubbing" from the picture alone, with no inference.
       ⚠️ Previous rounds measured desktop timings and found nothing, repeatedly (#95, #125, #202). Do not do
       that again: this needs a throttled-CPU profile of the PLAY path specifically, and the scrub/play
       asymmetry is the control that makes such a profile meaningful.
