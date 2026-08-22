@@ -149,6 +149,20 @@ are named in some source comment, so an automatic "the code mentions this" flag 
 positives, and a gate that cries wolf gets ignored (the exporter's own diagnostics note says the same).
 So it stays a habit with a one-line cost: `grep -rn "queue <n>" js/` before re-asking him.
 
+### 23 Aug, v11.86 — WHEN AN ENTRY IS BLOCKED ON HIM, CHECK WHETHER PART OF IT IS BLOCKED ON ME
+#129 (a screen recording that lands on the timeline with no picture) is genuinely waiting on one
+observation from him. But re-reading it turned up a half that was never his: v7.62 diagnosed the file
+correctly and put the sentence that HELPS — *re-export as H.264, or open it in Safari* — in
+`console.warn`. **He reported it from a phone, twice.** The app worked the answer out and wrote it
+where he could never read it, which is the original complaint one level up.
+**So the pattern to run on every 🟠 NEEDS YOU entry: separate what needs his ANSWER from what merely
+needs his CONFIRMATION.** The second kind usually has buildable work hiding in it.
+v11.86 names H.265 at import instead of after 15s of silence, and puts the fix one tap away on the
+toast. It fires only when the browser says it cannot decode HEVC AND the bytes carry `hvc1`/`hev1` —
+three of the five assertions are controls, because **a confident wrong diagnosis on screen is worse
+than the silence it replaces**. Reusing v11.83's tappable toast made this small; that is twice now
+that the toast action has paid for itself.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
