@@ -28,6 +28,8 @@
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **406** | 🔔 **You asked me to keep reminding you to acknowledge this one.** The answer: there are **three** preset savers, not two — one effect · effects-only · **whole look, the only one that carries ANIMATION**. So they are NOT duplicates and nothing was deleted. Just say "got it" | — |
 > | **406b** | And which menu did you want preset-saving OUT of? **A** ⭐ the layer ⋯ menu · **B** an effect row's ⋯ · **C** the Effects card button | **A** — it's the only one in a crowded ⋯ menu, and the Presets card still has it |
+> | **429a** | Past the end of your project, which should stop? **A** ⭐ the ruler's tick lines · **B** the add row's dashed wash · **C** the lane shading · **D** the head divider *(you asked for D — picking it undoes that)* | **A** |
+> | **429b** | ⏱️ **30 seconds on your phone, and it closes a bug I can't test here.** Swipe the timeline in Safari — does the little **+** still jump down as the toolbar hides? A fix shipped at v10.67; headless Chrome has no toolbar, so it physically cannot tell the fix from the bug | Just "still moves" or "fine now" |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
 > | **425** | PC: does **copy** move to the right with the other three? You asked for copy on the LEFT a day earlier, so your two instructions disagree — **A** move it · **B** leave it | **B** — you asked for that spot more recently |
 > | **395** | MP3 needs a ~100 KB library, the first third-party code in the app — **A** ship it · **B** leave it | **B** — WAV and M4A already cover it |
@@ -13843,8 +13845,19 @@ wait for them to report back."*
                 width, past everything.
              ⚠️ Any of those four fits "lines or special colouring", and three of them are deliberate
              (417, the ruler, and the add row's affordance). **Removing the wrong one undoes a request he
-             already made**, which is why this is not being guessed at — one circle on a screenshot, or
-             "the ruler lines" / "the add row" / "the shading", picks it in a word.
+             already made**, which is why this is not being guessed at.
+             ✅ **22 Aug — made a PICK-ONE rather than an open question**, per his standing instruction of
+             21 Aug (*"I just want options. Yu can just say recommended next to the best option"*). It had
+             been sitting as "tell me which", which is homework:
+             | | what would change |
+             |---|---|
+             | **A** ⭐ *recommended* | **the ruler's notches stop at the end of the project.** They currently run the whole scrollable width, so they keep ticking across empty lane past your last clip — which is the one thing here that has no purpose out there |
+             | **B** | **the add row's dashed outline + tinted wash** stop at the end of the project instead of spanning the full width |
+             | **C** | **the lane shading** either side of the playhead stops past the end |
+             | **D** | **the head divider** (the hairline where every row cuts off) — ⚠️ **you asked for this one** in queue 417, so picking it would undo that |
+             **Why A:** it is the only one of the four that is not an affordance you asked for, and
+             "lines" describes it literally. B and C are colouring rather than lines; D is yours.
+             **Still one circle on a screenshot beats all of this** — but a letter now unblocks it.
       2. [ ] **The + button must be STIFF while you swipe the timeline** — it "moves around and stuff",
              so it is tracking the scroll when it should be pinned. Likely the add-row's `+` inside
              `.tl-addrow-head`, or the empty-state disc: the row is sticky-left, and a sticky element
