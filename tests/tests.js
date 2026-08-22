@@ -32617,9 +32617,19 @@
       for (var i = 0; i < 5; i++) { rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, big), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined); await rec.flush(); }
       if (rec.recording) throw new Error('60 bytes past a 40-byte ceiling and it is still recording — a long export would fill the storage quota with leftovers nobody will resume');
       if (rec.bytes > 80) throw new Error('it kept writing well past the cap (' + rec.bytes + ' bytes)');
-      // Capped means "this render cannot be resumed", so it must not offer a partial one.
+      /* CORRECTED AT v11.69 (queue 47). This used to assert the opposite — that a capped job must NOT
+         load — on the reasoning that "resuming from a truncated recording would drop the frames it
+         stopped saving and produce a file with a gap in the middle". That reasoning was never measured,
+         and it is wrong: resume restarts from the SAVED seam, not from where the dead run got to, so
+         the frames past the cap are simply re-rendered like any other unsaved tail.
+         Measured end to end before changing it — a 150-frame export capped at frame 60 and killed at
+         100, resumed: the second run rendered exactly 90 frames (150-60), the finished file is 5s like
+         the control, and the moving test rect is pixel-identical to the control at ten timestamps
+         spanning the seam. Worst offset: 0px.
+         The old behaviour meant passing the cap did not stop saving MORE, it DELETED what was saved —
+         on the longest renders, which are the most expensive to redo and the likeliest to be killed. */
       var saved = await XR.load(sig);
-      if (saved) throw new Error('a capped job still loaded — resuming from a truncated recording would drop the frames it stopped saving and produce a file with a gap in the middle');
+      if (!saved) throw new Error('a capped job saved good parts and load() refused them all — passing the cap must stop the saving, not delete the render');
     } finally { await XR.clear(); }
   });
 
@@ -38352,6 +38362,64 @@
       FM._lastStaleSeeks = null;
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* Queue 47 — the LONG-render half, and the cap was throwing away the render it had already saved.
+   * Crash-resume stops persisting past 512 MB (~nine minutes of 1080p) so a phone's storage does not
+   * fill with leftovers. That much is right. What it ALSO did was refuse, at load time, every chunk
+   * saved before the cap — so passing the cap did not mean "stop saving more", it meant "delete what
+   * you have". MEASURED before fixing: a capped job with five good parts on disk, load() answering
+   * null, against a control under the cap that resumed fine.
+   * It lands on exactly the wrong renders. A 15-minute export saved its first nine minutes and then,
+   * on a crash, re-rendered all fifteen — and long renders are both the most expensive to redo and the
+   * likeliest to be killed, because length is what makes a phone run out of memory in the first place.
+   * A capped job is a clean PREFIX, which is the shape resume already handles. */
+  test('export resume: a render that outgrew the save cap still resumes from what WAS saved (queue 47)', { item: '47' }, async function () {
+    var XR = FM.exportResume;
+    if (!XR) throw new Error('FM.exportResume is not loaded');
+    var sig = XR.signature(xrBaseSig()) + '|cap';
+    var meta = { decoderConfig: { codec: 'avc1.42001f', codedWidth: 64, codedHeight: 64 } };
+    var mkChunk = function (i, key) {
+      return { type: key ? 'key' : 'delta', timestamp: i * 33333, duration: 33333,
+               byteLength: 40000, copyTo: function (d) { d.fill(i % 251); } };
+    };
+    var record = async function (maxBytes) {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { maxBytes: maxBytes, batchChunks: 2, batchBytes: 1 << 30 });
+      for (var i = 0; i < 12; i++) { rec.add(mkChunk(i, i === 0), i === 0 ? meta : null); await rec.flush(); }
+      await rec.settle();
+      return rec;
+    };
+    try {
+      // 200 KB against 12 x 40 KB chunks: it caps part-way, the way 512 MB caps a long export.
+      var rec = await record(200000);
+      if (!rec.capped) throw new Error('the recorder never hit its cap, so this test is not exercising the capped path at all');
+      if (!(rec.parts > 0)) throw new Error('the capped recorder wrote NO parts — there is nothing saved to argue about');
+      var loaded = await XR.load(sig);
+      if (!loaded) throw new Error('a capped render saved ' + rec.parts + ' good parts and load() refused every one of them — the cap deletes the render instead of just stopping the saving');
+      if (!(loaded.parts > 0)) throw new Error('the capped job loaded but reports ' + loaded.parts + ' parts');
+      if (!(loaded.lastTs > 0)) throw new Error('the capped job has no resume point (lastTs ' + loaded.lastTs + '), so there is nothing to carry on from');
+
+      /* THE REAPER. Capped jobs used to be swept as stale precisely BECAUSE load refused them; leaving
+         that in place would delete the render between the crash and the next run — the one moment it
+         has to survive. */
+      await XR.sweep();
+      if (!(await XR.load(sig))) throw new Error('the boot sweep deleted the capped render — it would be gone by the time he reopens the app, which is the only moment it exists for');
+
+      /* THE CONTROL that keeps this honest: the gate that actually matters must NOT have been loosened.
+         Resuming a render made with different settings would splice foreign footage into the file —
+         the one failure here that produces a silently WRONG movie. */
+      if (await XR.load(sig + '|DIFFERENT') !== null) throw new Error('a saved render now loads against a DIFFERENT signature — the capped fix loosened the wrong gate, and that ships a corrupt movie');
+
+      // …and a plain under-cap render still resumes, so the assertions above are not passing on a
+      // load() that says yes to everything.
+      var plain = await record(1 << 30);
+      if (plain.capped) throw new Error('the control recorder capped when it should not have');
+      var loadedPlain = await XR.load(sig);
+      if (!loadedPlain || !(loadedPlain.parts > rec.parts)) throw new Error('the uncapped control resumed with ' + (loadedPlain ? loadedPlain.parts : 'nothing') + ' parts, no more than the capped one — the harness is not distinguishing the two cases');
+    } finally {
+      try { await XR.clear(); } catch (e) {}
     }
   });
 })();

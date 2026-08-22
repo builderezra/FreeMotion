@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.68
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.69
 >
-> **State:** v11.68, **834 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.69, **835 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4126,10 +4126,28 @@ better still, keep working inside the turn rather than parking work for a later 
       fire during the next, reporting repeated frames on a clean render. Caught because the "always
       report" mutation SURVIVED — the control could not see it. Fixed; both directions now caught.
 
-      **Still untested ground for a later tick:** backgrounding the app mid-export, an export
-      interrupted by a call, and genuinely long renders. (Note for whoever takes it: LOOP.md rule 11
-      says the preview pane reports `document.hidden: true` — it reports FALSE now, measured at v11.68,
-      so the backgrounded case cannot be staged just by measuring in the pane.)
+      **✅ THIRD SAFETY PIECE — v11.69: the save cap was DELETING the render, not just stopping the save.**
+      This is the LONG-render ground. Crash-resume stops persisting past 512 MB (~9 min of 1080p) to keep
+      a phone's storage from filling — correct. But `load()` also REFUSED any capped job, so passing the
+      cap threw away every chunk already saved. Measured: a capped job with 5 good parts on disk and
+      `load()` answering null, against a control under the cap that resumed fine. A 15-minute export
+      saved its first nine minutes and then re-rendered all fifteen — and long renders are both the
+      dearest to redo and the likeliest to be killed. Capped now means only "stop writing more"; the boot
+      sweep no longer reaps one either.
+      ⚠️ **An existing test asserted the OPPOSITE** — that a capped resume would "produce a file with a
+      gap in the middle". **That reasoning had never been measured, and it is wrong:** resume restarts
+      from the SAVED seam, not from where the dead run reached, so the tail is simply re-rendered.
+      Proved end to end before changing it — 150-frame export, capped at frame 60, killed at 100,
+      resumed: the second run rendered exactly 90 frames, the file is 5s like the control, and the moving
+      test rect is pixel-identical to a clean export at ten timestamps across the seam (worst offset 0px).
+      The test is corrected rather than deleted; its first half (it stops recording past the cap) was
+      right. **The gate that matters is untouched and still tested:** a saved render from DIFFERENT
+      settings is still refused, because splicing that in is the one failure that ships a wrong movie.
+
+      **Still untested ground for a later tick:** backgrounding the app mid-export and an export
+      interrupted by a call. Both need a real device — they cannot be staged here (LOOP.md rule 11 was
+      corrected at v11.68: the preview pane reports `document.hidden` FALSE, so measuring in the pane
+      does NOT stage a backgrounded tab). **Long renders have now had a real pass.**
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

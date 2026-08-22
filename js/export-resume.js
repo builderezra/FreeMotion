@@ -42,9 +42,17 @@ window.FM = window.FM || {};
 
   /* A ceiling on what we are willing to leave lying in IndexedDB. At the exporter's bitrate a 1080p30
    * export is ~0.9 MB/s, so 512 MB is around nine minutes of footage. Past it we stop persisting and
-   * mark the job capped: a crash then loses the render exactly as it did before this file existed,
-   * which is no worse than the old behaviour, and is far better than filling a phone's storage quota
-   * with the leftovers of a render nobody is going to resume. */
+   * mark the job capped, which keeps a phone's storage from filling with the leftovers of a render
+   * nobody is going to resume.
+   * WHAT CAPPED USED TO ALSO MEAN, AND NO LONGER DOES (queue 47, v11.69): `load()` REFUSED a capped
+   * job, so passing the cap did not merely stop saving MORE — it threw away every chunk already
+   * saved. Measured: a capped job with five good parts on disk, and load() answering null for all of
+   * it, against a control under the cap that resumed fine. The comment here used to call that "no
+   * worse than the old behaviour"; it is worse than the behaviour one frame earlier, and it lands on
+   * the LONGEST renders — the ones most expensive to redo and likeliest to be killed. A 15-minute
+   * export saved its first nine minutes and then re-rendered all fifteen.
+   * A capped job is a clean PREFIX, which is the same shape resume already handles; there was never a
+   * correctness reason to refuse one. Capped now means only what it says: stop writing more. */
   const MAX_BYTES = 512 << 20;
   const BATCH_BYTES = 3 << 20;            // flush a part at ~3 MB…
   const BATCH_CHUNKS = 60;                // …or ~2 s of 30fps footage, whichever comes first
@@ -213,14 +221,16 @@ window.FM = window.FM || {};
    *     up to 512 MB of encoded video would sit on the device indefinitely.
    *   • Parts numbered at or past the job's own count are the debris of a torn write and go whatever
    *     the job's age.
-   * A capped job counts as stale: load() can never use one, so keeping it is pure cost. */
+   * A capped job is NOT stale any more — load() can use its prefix, so reaping it would throw away
+   * exactly the render this file exists to protect. It ages out on the same three-day clock as
+   * every other job. */
   async function sweep() {
     if (FM._exporting) return;          // never reap underneath a running export
     const st = FM.storage;
     if (!st || !st.readMedia) return;
     let job = null;
     try { job = await st.readMedia(JOB_KEY); } catch (e) { job = null; }
-    const stale = !job || job.v !== FORMAT || job.capped || !job.updatedAt ||
+    const stale = !job || job.v !== FORMAT || !job.updatedAt ||
                   (Date.now() - job.updatedAt) > MAX_AGE_MS || !(job.parts > 0);
     if (stale) { await clear(); return; }
     let keys = [];
@@ -236,7 +246,7 @@ window.FM = window.FM || {};
     if (!st || !st.readMedia) return null;
     let job = null;
     try { job = await st.readMedia(JOB_KEY); } catch (e) { return null; }
-    if (!job || job.v !== FORMAT || job.sig !== sig || job.capped) return null;
+    if (!job || job.v !== FORMAT || job.sig !== sig) return null;   // capped is fine: a prefix is a prefix
     if (!(job.parts > 0)) return null;
     if (!job.updatedAt || (Date.now() - job.updatedAt) > MAX_AGE_MS) return null;
     /* Read part 0 and nothing else. This used to concatenate every part into one array so the caller
