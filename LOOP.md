@@ -450,6 +450,19 @@ other way. Check for this whenever an entry says options were "put to him": were
 Also ticked clause 1, which was a standing instruction rather than a task (same resolution as #353) and
 was making the entry look like it had two open jobs when it had one.
 
+**🔗 22 Aug — #454 and #406 were being asked SEPARATELY, and one of them would have deleted the other's
+answer.** #406 is his own question about the difference between the preset savers; the answer is that the
+whole-look one is the ONLY way to carry an ANIMATION between layers. #454 is his rule — *"presets are just
+for effects not anything else"* — which applied literally DELETES that saver. Neither entry mentioned the
+other, so he would have been choosing to lose the capability without being told it existed.
+Now one question, with the cost of each option stated: **A** delete it (his literal words), **B**
+recommended — keep it, rename it out of "preset" so the word means one thing, which is the goal he
+actually stated. Nothing is deleted until he picks.
+**THE LESSON: two entries can be individually well-written and jointly misleading.** Both were honest;
+the harm was in the gap between them. **Before offering a destructive option, check what else in the file
+depends on the thing being destroyed** — a grep for the feature's name across REQUESTS.md would have
+found it, and that costs seconds.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
