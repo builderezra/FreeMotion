@@ -2390,7 +2390,24 @@ window.FM = window.FM || {};
     const L = trimDrag.layer, ramped = FM.isAnimated(L.speed), sp = ramped ? 1 : (L.speed || 1);
     const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
     const se = snapEdge(L, movingEdge, pps, trimDrag.sup);
-    if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
+    if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); }
+    else {
+      hideSnap();
+      /* LAND THE EDGE ON A WHOLE FRAME (queue 153). His words, about Alight Motion's trim readout:
+         *"the notches are frames and the whole thing has to actually line up with the notches."*
+         The DELTA above is already quantised (`Math.round(sec*fps)/fps`) — but that only makes the CHANGE
+         a whole number of frames, not the result. An imported clip's duration is whatever the file is
+         (11.21s, say), so start+duration sits between frames and every quantised drag keeps it there.
+         Measured before this: a clip at start 0.017 / duration 2.013 trimmed by a whole-frame delta
+         landed its edge at 2.0967s — between notches, for ever.
+         So the EDGE is what gets rounded, not the movement. A snap wins outright when one is active: an
+         edge lined up with another clip matters more than the frame grid, and since every edge that goes
+         through here is now frame-aligned anyway, the two agree in practice.
+         Only the edge being DRAGGED moves — the opposite edge stays exactly where it was, which is what
+         dragging one end of a clip should do. */
+      const frameEdge = Math.round(movingEdge * fps) / fps;
+      dt += (frameEdge - movingEdge);
+    }
     /* A REVERSED CLIP'S ENDS ARE SWAPPED, and this function did not know (BUG-HUNT: "Trim grips ignore
        layer.reversed — trimming a reversed video edits the wrong end of the source and drops footage").
        `FM.layerLocalTime` evaluates a reversed clip as `trimStart + (duration*sp - adv)`, so its FIRST

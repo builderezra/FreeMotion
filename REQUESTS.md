@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.56
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.57
 >
-> **State:** v11.56, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.57, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5077,6 +5077,24 @@ better still, keep working inside the turn rather than parking work for a later 
          out-point), so the strip shows the whole clip's span, not just the edge being dragged.
       Worth checking first whether our trim already quantises to frames — if it does not, the strip
       would be drawing a promise the trim does not keep, and the quantising is the real work.
+
+      ✅ **THE QUANTISING IS DONE — v11.57. That warning was right, and it WAS the real work.**
+      **Checked first, as the line above says to.** `applyTrimAt` already quantised the DELTA
+      (`Math.round(sec*fps)/fps`) — but a whole-frame CHANGE applied to an edge that is not on a frame
+      keeps it off the grid for ever, and an imported clip's duration is whatever the file is (11.21s),
+      never a frame boundary. **Measured:** a clip at start 0.017 / duration 2.013 trimmed by a
+      whole-frame delta put its edge at 2.0967s — between notches, permanently.
+      **So the EDGE is rounded now, not the movement.** A real grip drag lands on frame 85 / frame 25
+      exactly. A snap still wins outright when one is active — an edge lined up with another clip matters
+      more than the grid — and only the edge being dragged moves; the opposite end stays put.
+      ⚠️ **A probe trap worth keeping:** dispatching pointer events on the CLIP BODY performs a MOVE, not
+      a trim, and both edges shift together — which reads exactly like the fix failing. Drive
+      `.clip-grip.left` / `.clip-grip.right`, and assert the untouched edge did not move, which is what
+      tells a trim from a move.
+      **STILL TO BUILD — the visible half:** the six-value readout (`Start · End · Duration` /
+      `In · Out · Change`, Change signed) and the notch strip with the landing notch filled in and
+      coloured marks at the in/out points. It can now be honest, because the trim really does land where
+      the strip would say.
 
 - [x] **155 — Put the open-project glint on the SELECTED add-menu tab. ALREADY DONE — verified and tested v7.70.** (14 Aug.) His words: *"I want
       the effect that you have on the open project, like with the shiny line going around it, also on

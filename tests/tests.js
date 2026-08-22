@@ -24695,6 +24695,70 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a trimmed edge lands on a whole frame (queue 153)', { item: '153' }, async function () {
+    /* His words, about Alight Motion's trim: *"the notches are frames and the whole thing has to actually
+     * line up with the notches."* That sentence is the requirement, and it is about the RESULT.
+     * `applyTrimAt` already quantised the DELTA (`Math.round(sec*fps)/fps`) — but a whole-frame change to
+     * an edge that is not on a frame keeps it off the grid for ever, and an imported clip's duration is
+     * whatever the file is (11.21s), never a frame boundary. MEASURED before the fix: a clip at
+     * start 0.017 / duration 2.013 trimmed by a whole-frame delta put its edge at 2.0967s — between
+     * notches. So the EDGE is rounded now, not the movement.
+     * ⚠️ Drive the GRIPS (`.clip-grip.left` / `.clip-grip.right`). A first pass dispatched on the clip
+     * body and silently performed a MOVE instead of a trim — both edges shifted together, which reads
+     * exactly like the fix failing. `tailUnmoved` below is what tells the two apart. */
+    const fps = FM.scene.project.fps || 30;
+    const onFrame = (t) => Math.abs(t * fps - Math.round(t * fps)) < 1e-6;
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    const sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    try {
+      const mk = async (start, dur) => {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'C', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 40, fill: '#fff', start: start, duration: dur });
+        FM.scene.layers.push(L);
+        FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+        FM.scene.project.duration = 12;
+        FM.timeline.rebuild();
+        await sleep(280);
+        return L;
+      };
+      const dragGrip = async (L, side, dx) => {
+        const clip = document.querySelector('.clip[data-id="' + L.id + '"]');
+        if (!clip) throw new Error('the clip did not render, so no trim can be driven');
+        const grip = clip.querySelector('.clip-grip.' + side);
+        if (!grip) throw new Error('the clip has no .clip-grip.' + side + ' — dragging the body would MOVE the clip, not trim it');
+        const r = grip.getBoundingClientRect();
+        const x0 = r.left + r.width / 2, y = r.top + r.height / 2;
+        const pd = (t, x) => new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, isPrimary: true, button: 0 });
+        grip.dispatchEvent(pd('pointerdown', x0));
+        await sleep(50);
+        for (const d of [dx * 0.3, dx * 0.6, dx]) { window.dispatchEvent(pd('pointermove', x0 + d)); await sleep(40); }
+        window.dispatchEvent(pd('pointerup', x0 + dx));
+        await sleep(180);
+      };
+
+      // Deliberately off-frame to begin with — the case a quantised DELTA can never repair.
+      let L = await mk(0.017, 2.013);
+      if (onFrame(L.start + L.duration)) throw new Error('the fixture starts frame-aligned, so it cannot show the difference');
+      const headBefore = L.start;
+      await dragGrip(L, 'right', 31);
+      if (!onFrame(L.start + L.duration)) throw new Error('after dragging the right grip the edge sits at ' + ((L.start + L.duration) * fps).toFixed(3) + ' frames — it should land on a whole one');
+      if (Math.abs(L.start - headBefore) > 1e-9) throw new Error('trimming the right edge moved the LEFT edge too — that is a move, not a trim');
+
+      // …and the head, where the tail must stay exactly where it was.
+      L = await mk(0.417, 2.013);
+      const tailBefore = L.start + L.duration;
+      await dragGrip(L, 'left', 26);
+      if (!onFrame(L.start)) throw new Error('after dragging the left grip the start sits at ' + (L.start * fps).toFixed(3) + ' frames — it should land on a whole one');
+      if (Math.abs((L.start + L.duration) - tailBefore) > 1e-6) throw new Error('trimming the head moved the tail — the untouched edge must not shift');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.duration = dur0;
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.timeline.rebuild();
+      await sleep(120);
+    }
+  });
+
   test('the default shape colour reaches freehand and vector drawing too (queue 142)', { item: '142' }, async function () {
     /* Entry 142 lists the drawing paths in scope — "and the freehand/vector paths, which also create
      * fillable layers" — and its shipped note claims outright: "It reaches every route that spawns a
