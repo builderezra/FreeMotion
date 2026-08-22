@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.55
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.56
 >
-> **State:** v11.55, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.56, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -873,6 +873,30 @@ better still, keep working inside the turn rather than parking work for a later 
       ✓ on the label since that menu has no switch to show state.
       Two existing tests had the old requirement written into them (Settings must lead with Onion skin).
       Updated, with your reversal quoted in place so nobody later "fixes" them back.
+
+- [x] **142b — The default shape colour never reached freehand or vector drawing.** ✅ **DONE v11.56.**
+      (22 Aug — the unbuilt half of #142, found by re-auditing closed requests against the code.)
+      **The entry claimed this already worked.** Its scope names the drawing paths — *"and the
+      freehand/vector paths, which also create fillable layers"* — and its shipped note says outright:
+      *"It reaches every route that spawns a shape, including freehand and vector drawing."*
+      **Measured, and it did not.** With the setting on `#cc22cc`, an add-menu rectangle came out
+      `#cc22cc` and a drawing came out `#ffffff`. The preference only ever reached layers born through
+      `FM.makeLayer` without an explicit fill; `FM.drawTool` is initialised with the literal `'#ffffff'`
+      (js/draw-tool.js:13) and hands that straight to the committed layer, so the two never met.
+      **Fix:** `FM.startDraw` seeds the tool from the setting, and writes it to the bar's swatch so the
+      live overlay, the swatch and the finished layer all agree.
+      ⚠️ **Two behaviours deliberately preserved:** `'random'` still leaves the tool white — that value is
+      documented as *"what the app has always done"*, and white is what this tool has always done — and a
+      colour he picks by hand still wins and keeps winning across reopens. A default is a STARTING point,
+      not an override applied every time the tool opens.
+      ⚠️ **Two self-inflicted errors worth recording, both the same shape as bugs found this week:**
+      1. **My edit landed in the wrong function.** `sessionLayerId = null; …` appears in BOTH `stop()` and
+         `startDraw()`; the replace hit the first, so the seed ran when the tool CLOSED and the colour
+         applied one session late. This is the ambiguity trap `tools/mutate.sh` now refuses — **hand edits
+         do not go through that gate, so anchor on a string proven unique.**
+      2. **A probe read `layers[length-1]`** and got white from an unrelated layer, which looked exactly
+         like the fix failing. A set difference against the layers present before the commit is the honest
+         read, and the test uses it.
 
 - [x] **141b — You can type a custom frame rate when exporting.** ✅ **DONE v11.55.**
       (22 Aug — the unbuilt half of #141, found by re-auditing closed requests against the code.)

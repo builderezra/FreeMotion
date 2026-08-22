@@ -24695,6 +24695,64 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the default shape colour reaches freehand and vector drawing too (queue 142)', { item: '142' }, async function () {
+    /* Entry 142 lists the drawing paths in scope — "and the freehand/vector paths, which also create
+     * fillable layers" — and its shipped note claims outright: "It reaches every route that spawns a
+     * shape, including freehand and vector drawing." It did not. Found by re-auditing closed requests
+     * against the code; MEASURED before the fix: with the setting on #cc22cc an add-menu rectangle came
+     * out #cc22cc and a drawing came out #ffffff, because FM.drawTool starts life at that literal and
+     * hands it straight to the committed layer.
+     * The control below is the half that always worked — without it, a probe that cannot see the setting
+     * at all would pass this test by reporting white everywhere. */
+    if (!FM.startDraw || !FM.settings) throw new Error('FM.startDraw / FM.settings are not reachable');
+    const orig = FM.settings.get('shapeColor');
+    const layers0 = FM.scene.layers.slice();
+    const stop = () => { try { (FM.stopDraw || (FM.drawTool && FM.drawTool._stop) || function () {}).call(FM); } catch (e) {} };
+    const drawOne = async () => {
+      const before = FM.scene.layers.slice();
+      FM.drawTool.points = [{ x: 100, y: 100 }, { x: 200, y: 150 }, { x: 150, y: 250 }];
+      const done = document.querySelector('.db-done');
+      if (!done) throw new Error('the drawing bar has no Done button — the tool did not open');
+      done.click();
+      await sleep(320);
+      /* Set difference, NOT layers[length-1]. A first pass read the last layer and got white from an
+         unrelated one, which looked exactly like the fix failing. */
+      const added = FM.scene.layers.filter(l => before.indexOf(l) < 0);
+      return added.length ? (added[0].fill || added[0].color) : null;
+    };
+    try {
+      FM.settings.set('shapeColor', '#cc22cc');
+
+      // CONTROL — the add menu already honoured this; if it does not, the probe cannot see the setting.
+      const addMenu = FM.makeLayer('shape', { shape: 'rect', x: 1, y: 1, shapeW: 9, shapeH: 9, start: 0, duration: 1 });
+      if ((addMenu.fill || '').toLowerCase() !== '#cc22cc') throw new Error('an add-menu shape did not take the default colour (' + addMenu.fill + ') — this probe cannot see the setting at all');
+
+      // THE BUG — drawing must start from it, show it on the swatch, and commit it to the layer.
+      FM.startDraw('vector'); await sleep(220);
+      if ((FM.drawTool.color || '').toLowerCase() !== '#cc22cc') throw new Error('the draw tool opened at ' + FM.drawTool.color + ' instead of the default shape colour');
+      const sw = document.querySelector('.db-color input');
+      if (!sw || sw.value.toLowerCase() !== '#cc22cc') throw new Error('the drawing bar swatch shows ' + (sw && sw.value) + ' — it disagrees with the colour that will be used');
+      const fill = await drawOne();
+      if ((fill || '').toLowerCase() !== '#cc22cc') throw new Error('the finished drawing came out ' + fill + ' instead of the default shape colour — the setting reaches the add menu but not drawing');
+      stop(); await sleep(120);
+
+      /* A COLOUR HE PICKS BY HAND WINS, and keeps winning. "Default" means the starting point, not an
+         override applied every time the tool opens. */
+      FM.startDraw('vector'); await sleep(180);
+      const sw2 = document.querySelector('.db-color input');
+      sw2.value = '#00ff88'; sw2.dispatchEvent(new Event('input')); await sleep(120);
+      stop(); await sleep(100);
+      FM.startDraw('vector'); await sleep(180);
+      if ((FM.drawTool.color || '').toLowerCase() !== '#00ff88') throw new Error('a hand-picked colour was overwritten by the default on the next open (' + FM.drawTool.color + ')');
+    } finally {
+      stop();
+      FM.settings.set('shapeColor', orig);
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll && FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('a custom frame rate can be typed on the export dialog (queue 141)', { item: '141' }, async function () {
     /* His words: *"if you made a custom fps or other things etc there's no way to export at that."*
      * #141 shipped "Custom size…" for the RESOLUTION and left the frame-rate half unbuilt — found by

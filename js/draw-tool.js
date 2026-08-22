@@ -8,6 +8,7 @@ window.FM = window.FM || {};
   'use strict';
 
   var overlay = null, octx = null, bar = null, drawing = false, erasing = false;
+  var userPickedColor = false;   // set once he moves the swatch himself — see the listener and startDraw
   // cursor: where the NEXT vector point will land (project coords). The trackpad moves it, "Add point"
   // commits it. snapX/snapY hold the co-ordinate it locked onto, so the guides can be drawn.
   FM.drawTool = { active: false, mode: null, points: [], stroke: 8, color: '#ffffff', cursor: null, snapX: null, snapY: null };
@@ -571,7 +572,13 @@ window.FM = window.FM || {};
       '<button class="db-done" type="button">Done</button>' +
       '<button class="db-cancel" type="button">Cancel</button>';
     document.body.appendChild(bar);
-    bar.querySelector('.db-color input').addEventListener('input', function (e) { FM.drawTool.color = e.target.value; redraw(); });
+    bar.querySelector('.db-color input').addEventListener('input', function (e) {
+      FM.drawTool.color = e.target.value;
+      /* A HAND-PICKED COLOUR OUTLIVES THE DEFAULT (queue 142). The setting supplies the STARTING colour;
+         once he has chosen one himself, reopening the tool must not overwrite it with the preference. */
+      userPickedColor = true;
+      redraw();
+    });
     bar.querySelector('.db-width input').addEventListener('input', function (e) { FM.drawTool.stroke = +e.target.value; redraw(); });
     bar.querySelector('.db-undo').addEventListener('click', undoStep);
     bar.querySelector('.db-redo').addEventListener('click', redoStep);
@@ -675,6 +682,25 @@ window.FM = window.FM || {};
     if (!overlay) return;
     FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false; erasing = false; FM.drawTool.erasing = false;
     FM.drawTool.snapX = FM.drawTool.snapY = null;
+    /* START FROM HIS DEFAULT SHAPE COLOUR (queue 142). The entry claimed this already worked — *"It
+       reaches every route that spawns a shape, including freehand and vector drawing"* — and it did not.
+       The setting only ever reached layers born through FM.makeLayer without an explicit fill (the add
+       menu); this tool began life at the literal '#ffffff' and handed that straight to the committed
+       layer. Measured before the fix: with the setting on #cc22cc an add-menu rectangle came out #cc22cc
+       and a drawing came out #ffffff.
+       READ THE SETTING, NOT FM.defaultShapeFill() — that helper rolls a fresh random hue when the
+       preference is 'random', and 'random' is documented as "what the app has always done", which for
+       this tool means white. So only a real colour seeds; 'random' leaves the old behaviour untouched.
+       Skipped once he has picked a colour by hand, and the adopt branch below still wins, so re-editing
+       an existing drawing keeps that drawing's own colour. */
+    if (!userPickedColor) {
+      var prefCol = null;
+      try { prefCol = FM.settings && FM.settings.get ? FM.settings.get('shapeColor') : null; } catch (e) {}
+      if (typeof prefCol === 'string' && /^#[0-9a-f]{6}$/i.test(prefCol)) {
+        FM.drawTool.color = prefCol.toLowerCase();
+        if (bar) { var swEl = bar.querySelector('.db-color input'); if (swEl) swEl.value = FM.drawTool.color; }
+      }
+    }
     /* A NEW drawing starts a new layer (queue 167). stop() clears these too, but not every exit runs
        through it — and without the reset here a second drawing would silently append its strokes to
        the layer the FIRST one built, which is a worse bug than the one being fixed. */
