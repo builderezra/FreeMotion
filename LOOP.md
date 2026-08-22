@@ -56,6 +56,15 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     for two separate sessions, both of which recorded "motion cannot be timed here"; at v11.71 the pane
     reported hidden:false AND a control animation ran 0 → 45.9 → 100, so the slam's motion was measured
     for the first time. **A blocker written in an entry is a claim with a date on it, not a fact.**
+13. **⏱️ A WORKFLOW GETS A HARD STEP BUDGET AND A WAIT LIMIT — his instruction, from watching one
+    freeze.** His words (queue 353): *"make sure you don't wait too long to wait for one of the work
+    flow people to reply because sometimes they freeze and you just do nothing for hours, so make it so
+    you only wait for a certain amount of time … make sure no workflow agents get stuck in a never
+    ending loop like last time"*. So: bounded rounds, never `while (true)`, and **if an agent has not
+    come back, carry on with the work rather than waiting on it** — an hour of nothing is worse than a
+    thinner answer. This lived only in REQUESTS.md until 22 Aug, i.e. nowhere that would be read at the
+    moment a workflow was actually being launched, which is the whole point of this file.
+
 12. **A picture assertion cannot police a cost.** Sixteen identical renders average back to the same
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.

@@ -4525,8 +4525,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [ ] **473 — The media/audio library should be THREE rows now, not two.** (22 Aug, phone screenshot at
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **473 — The media/audio library should be THREE rows now, not two.** ✅ **DONE v11.72.** (22 Aug, phone screenshot at
       v11.71 with the empty band below the grid scribbled over.) His words, verbatim:
       > Since you made the pictures smaller you can probably fit three rows in there now, an extra row below, just take ur time and don't make anything worse
       ⚠️ **THIS REVERSES HIS OWN QUEUE-358 INSTRUCTION, and that must be said rather than quietly
@@ -8673,8 +8672,12 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **The classifier now lives in ONE place, `tools/_classify.py`**, imported by both `next.sh` and
       `status.sh`. Two copies of that rule would drift, which is this project's most expensive bug shape.
       `next.sh`'s output was verified byte-identical before and after the extraction.
-- [ ] **353 — Standing instructions for the loop, restated after the compact.** (17 Aug.) His words,
-      **STATUS: 📌 NOTE — nothing to build**
+- [x] **353 — Standing instructions for the loop, restated after the compact.** ✅ **CLOSED 22 Aug — all
+      four clauses now live in [LOOP.md](LOOP.md), which is the file that actually gets read.**
+      Kept here in full because it is his words; closed because a standing instruction sitting in a
+      request list is a hope, and the rules file is the structural home. Clause by clause: **1** →
+      rule 2 + `tools/next.sh`; **2** → **rule 13, added today — it had NO structural home at all**;
+      **3** → rules 5/6/9 plus the phone-width gate in `ship.sh` (below); **4** → rules 8 and 8b.
       verbatim: *"Continue with the list, ticking one thing off at a time from top to bottom, oldest
       first, use workflows if you need, make sure you don't wait too long to wait for one of the work
       flow people to reply because sometimes they freeze and you just do nothing for hours, so make it
@@ -8683,14 +8686,18 @@ better still, keep working inside the turn rather than parking work for a later 
       sure everything is quality tested as good as possible, dont stop to ask me questions, ask but
       keep going and re ask next time i say something"*.
       Not a feature — a standing instruction, kept here so it is not lost with a transcript. The clauses:
-      1. One item at a time, oldest first. (Already the rule; `tools/next.sh` enforces the ordering.)
-      2. **A workflow gets a hard step budget and a wait limit.** He has watched one freeze and cost
-         hours of nothing. So: bounded rounds, no `while (true)`, and if an agent has not returned,
-         carry on with the work rather than waiting on it.
-      3. Quality-test everything as hard as possible — suite green, new test mutation-checked, phone
-         screenshot when the UI moved.
-      4. **Questions go in the entry and the work continues.** Never block on him; re-ask the next time
-         he speaks.
+      1. [x] One item at a time, oldest first. → **LOOP.md rule 2**, enforced by `tools/next.sh`.
+      2. [x] **A workflow gets a hard step budget and a wait limit.** He has watched one freeze and cost
+             hours of nothing. So: bounded rounds, no `while (true)`, and if an agent has not returned,
+             carry on with the work rather than waiting on it.
+             ✅ **→ LOOP.md rule 13, added 22 Aug.** Until then this clause lived ONLY here — nowhere
+             that would be read at the moment a workflow was being launched, which is the one moment it
+             is about. The other three clauses had been absorbed into the rules months ago; this one had
+             not, and nothing noticed because no workflow has been launched since.
+      3. [x] Quality-test everything as hard as possible. → rules 5/6/9, and **the phone-width gate in
+             `ship.sh`** (see below) — the half that was missing on a mobile-first app.
+      4. [x] **Questions go in the entry and the work continues.** Never block on him; re-ask the next
+             time he speaks. → **rules 8 and 8b.**
 
       ✅ **22 Aug — CLAUSE 3 GOT A REAL GATE. "Quality tested as good as possible" now includes the
       phone, which it never did.** This app is mobile-first and **every gate had only ever run the suite
