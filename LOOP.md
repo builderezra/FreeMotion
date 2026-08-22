@@ -125,6 +125,17 @@ v11.83 has the app offer the measurement itself when the quality ladder is spent
 late (once per session, playing only, sustained). **What is now genuinely outstanding is one tap from
 him**, and that is a much smaller ask than the one that has been sitting there since 14 August.
 
+### 23 Aug, v11.84 — the lag family has no effect over 150ms left
+turbulentdisplace 148 → 76.8ms (1.93×), which was the last one the #474 sweep left standing. The idea
+that worked is worth reusing on any per-pixel kernel: **check whether the expensive term is separable
+before assuming it is per-pixel.** Half of this one's noise depended on the column and the row
+independently, so the angle-addition identities turn eight transcendental calls per pixel into five
+numbers per column and five per row. `drawWarpEffect` now supports an optional `mapFn.prep` for exactly
+this; the other 28 warps ignore it.
+**The remaining top-of-list effects are 50–100ms of genuinely per-pixel work**, where the honest answer
+is the quality ladder (which #202 verified works), not another rewrite. So this family is done until
+his phone reading says otherwise — which is what v11.83's toast is for.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.

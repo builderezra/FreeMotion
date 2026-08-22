@@ -5454,9 +5454,15 @@ window.FM = window.FM || {};
       const src = actx.getImageData(0, 0, W, H).data;
       const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      /* OPT-IN PER-FRAME PRECOMPUTE (queue 474). A warp kernel is called once per pixel and gets no
+       * chance to hoist anything out of that loop, so any term depending only on x, or only on y, is
+       * recomputed 1.46 million times a frame. A kernel that has such terms can expose `.prep`, which
+       * runs ONCE here and is handed back to every call as the last argument. Kernels without one are
+       * untouched — the extra argument is simply ignored by the other 28. */
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps);
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
           let sx = m[0] | 0, sy = m[1] | 0;
           if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
           if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
@@ -6594,7 +6600,7 @@ window.FM = window.FM || {};
     // Turbulent Displace: domain-warped value-noise field pushes each pixel — organic churn, distinct
     // from fractalwarp's plain sum-of-sines (this warps the noise input by more noise → curlier). t
     // scrolls the field so it boils over time. Deterministic (no random).
-    turbulentdisplace: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y]; var td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10; td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1)); var td_ph=t*0.6; function td_n(u,v){ return Math.sin(u)*Math.cos(v*1.3)+Math.sin(u*2.1+v)*0.5+Math.cos(u*0.5-v*1.7)*0.35; } var td_wx=td_n(x/td_sc+td_ph, y/td_sc), td_wy=td_n(x/td_sc, y/td_sc-td_ph*0.8); var td_dx=td_n(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_n(x/td_sc-td_wy, y/td_sc+td_wx+1.7); return [x+td_dx*td_a, y+td_dy*td_a]; },
+    turbulentdisplace: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var td_a,td_sc,td_ph; if(pre){ if(pre.off)return [x,y]; td_a=pre.a; td_sc=pre.sc; td_ph=pre.ph; } else { td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y]; td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10; td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1)); td_ph=t*0.6; } function td_n(u,v){ return Math.sin(u)*Math.cos(v*1.3)+Math.sin(u*2.1+v)*0.5+Math.cos(u*0.5-v*1.7)*0.35; } var td_wx,td_wy; if(pre){ /* the two SEPARABLE noise calls, read from per-row/per-column tables — see prep */ var xi=x*5,yi=y*5,X=pre.X,Y=pre.Y,Xb=pre.Xb,Yb=pre.Yb; td_wx=X[xi]*Y[yi]+(X[xi+1]*Y[yi+1]+X[xi+2]*Y[yi+2])*0.5+(X[xi+3]*Y[yi+3]+X[xi+4]*Y[yi+4])*0.35; td_wy=Xb[xi]*Yb[yi]+(Xb[xi+1]*Yb[yi+1]+Xb[xi+2]*Yb[yi+2])*0.5+(Xb[xi+3]*Yb[yi+3]+Xb[xi+4]*Yb[yi+4])*0.35; } else { td_wx=td_n(x/td_sc+td_ph, y/td_sc); td_wy=td_n(x/td_sc, y/td_sc-td_ph*0.8); } var td_dx=td_n(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_n(x/td_sc-td_wy, y/td_sc+td_wx+1.7); return [x+td_dx*td_a, y+td_dy*td_a]; },
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
     // sampled from a THINNER source band (compress in → stretch out), feathered at the edges so it
     // blends. y/height are % of frame. Outside the band = identity.
@@ -6607,6 +6613,57 @@ window.FM = window.FM || {};
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
   };
   Object.setPrototypeOf(WARP_FX, null);   // own keys only — see POSTFX
+  FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
+                          // and a test cannot otherwise check a fast path against its own reference.
+
+  /* ═══ TURBULENT DISPLACE: the per-frame half of its noise, hoisted out of the pixel loop.
+   * (queue 474 — it was the last effect over 150ms at his 1080×1350, 11 of the top 15 being warps.)
+   *
+   * The kernel evaluates the same noise function four times per pixel:
+   *     td_n(u,v) = sin(u)·cos(1.3v) + 0.5·sin(2.1u + v) + 0.35·cos(0.5u − 1.7v)
+   * The LAST TWO calls take arguments that depend on the first two, so they are genuinely per-pixel
+   * and are left alone. THE FIRST TWO ARE SEPARABLE — their u depends only on x, their v only on y —
+   * and every term above splits into an x-part times a y-part once the angle-addition identities are
+   * applied:
+   *     sin(2.1u + v)   = sin(2.1u)cos(v)  + cos(2.1u)sin(v)
+   *     cos(0.5u − 1.7v) = cos(0.5u)cos(1.7v) + sin(0.5u)sin(1.7v)
+   * So five numbers per COLUMN and five per ROW replace eight transcendental calls per PIXEL. At
+   * 1080×1350 that is 10 trig calls per row/column instead of ~11.7 million per frame.
+   *
+   * ⚠️ NOT byte-identical, and this entry says so rather than implying it — the same honesty the
+   * spinstreaks rewrite needed (LOOP rule 14). The identity is exact in real arithmetic; in floats
+   * the operand order differs, so the last bits do. The test asserts the MATHS to 1e-9 (which is
+   * content-independent and the real claim) with a bounded picture check behind it. */
+  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    let a = FM.evalProp(p.amount, t);
+    if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;
+    if (a <= 0) return { off: 1 };                       // disabled — the kernel returns the pixel untouched
+    let sc = FM.evalProp(p.scale, t);
+    if (sc == null) sc = 60; if (sc < 10) sc = 10;
+    a *= (ps || 1); sc = Math.max(1, sc * (ps || 1));
+    const ph = t * 0.6;
+    const X = new Float64Array(W * 5), Y = new Float64Array(H * 5);
+    const Xb = new Float64Array(W * 5), Yb = new Float64Array(H * 5);
+    for (let x = 0; x < W; x++) {
+      const i = x * 5;
+      const u = x / sc + ph;                             // td_wx's u — same expression as the kernel's
+      X[i] = Math.sin(u); X[i + 1] = Math.sin(u * 2.1); X[i + 2] = Math.cos(u * 2.1);
+      X[i + 3] = Math.cos(u * 0.5); X[i + 4] = Math.sin(u * 0.5);
+      const ub = x / sc;                                 // td_wy's u
+      Xb[i] = Math.sin(ub); Xb[i + 1] = Math.sin(ub * 2.1); Xb[i + 2] = Math.cos(ub * 2.1);
+      Xb[i + 3] = Math.cos(ub * 0.5); Xb[i + 4] = Math.sin(ub * 0.5);
+    }
+    for (let y = 0; y < H; y++) {
+      const j = y * 5;
+      const v = y / sc;                                  // td_wx's v
+      Y[j] = Math.cos(v * 1.3); Y[j + 1] = Math.cos(v); Y[j + 2] = Math.sin(v);
+      Y[j + 3] = Math.cos(v * 1.7); Y[j + 4] = Math.sin(v * 1.7);
+      const vb = y / sc - ph * 0.8;                      // td_wy's v
+      Yb[j] = Math.cos(vb * 1.3); Yb[j + 1] = Math.cos(vb); Yb[j + 2] = Math.sin(vb);
+      Yb[j + 3] = Math.cos(vb * 1.7); Yb[j + 4] = Math.sin(vb * 1.7);
+    }
+    return { off: 0, a: a, sc: sc, ph: ph, X: X, Y: Y, Xb: Xb, Yb: Yb };
+  };
 
   // ================== CANVAS_FX: 3D solids + Move/Transform ==================
   // Canvas-composited effects. Like drawPixelEffect the layer is rendered clean to an offscreen,

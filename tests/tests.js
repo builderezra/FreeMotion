@@ -39575,4 +39575,90 @@
       FM._exporting = false; FM._resetPerfOffer();
     }
   });
+
+  /* ═══ TURBULENT DISPLACE: the separable half of its noise, hoisted per frame (queue 474).
+     It was the last effect over 150ms at his 1080×1350. The rewrite is NOT byte-identical — the
+     angle-addition identities are exact in real arithmetic and differ in the last float bits — so
+     what is asserted is the MATHS, to a bound far tighter than a pixel, exactly as the spinstreaks
+     rewrite needed (LOOP rule 14). */
+  test('the hoisted turbulent-displace noise matches its own reference kernel (queue 474)', { item: '474' }, async function () {
+    const K = FM._warpFx && FM._warpFx.turbulentdisplace;
+    if (!K) throw new Error('FM._warpFx.turbulentdisplace is not reachable — the suite seam is missing');
+    if (typeof K.prep !== 'function') throw new Error('the per-frame precompute is gone, so the pixel loop is doing the trig again');
+    const W = 240, H = 200, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const cases = [
+      { label: 'mid', p: { amount: 30, scale: 60 }, t: 0.37 },
+      { label: 'strong and fine', p: { amount: 70, scale: 15 }, t: 1.9 },
+      { label: 'weak and coarse', p: { amount: 6, scale: 200 }, t: 0 },
+      { label: 'reduced raster', p: { amount: 30, scale: 60 }, t: 0.8, ps: 0.5 }
+    ];
+    for (const c of cases) {
+      const ps = c.ps || 1;
+      const pre = K.prep(W, H, cx, cy, maxR, c.p, c.t, ps);
+      let worst = 0, moved = 0, n = 0;
+      for (let y = 0; y < H; y += 3) {
+        for (let x = 0; x < W; x += 3) {
+          const ref = K(x, y, W, H, cx, cy, maxR, c.p, c.t, ps);            // no `pre` → the original path
+          const fast = K(x, y, W, H, cx, cy, maxR, c.p, c.t, ps, pre);      // the table path
+          worst = Math.max(worst, Math.abs(ref[0] - fast[0]), Math.abs(ref[1] - fast[1]));
+          if (Math.abs(ref[0] - x) > 0.01 || Math.abs(ref[1] - y) > 0.01) moved++;
+          n++;
+        }
+      }
+      /* THE CONTROL, and it earned its place: the first version of this used `{}` for the default
+         case, and empty params make the effect a NO-OP — so both paths returned the pixel untouched
+         and "they agree" was true of nothing at all. */
+      if (moved < n * 0.5) throw new Error('case "' + c.label + '": the effect displaced only ' + moved + ' of ' + n + ' sample points, so agreement between the two paths proves nothing');
+      if (!(worst < 1e-9)) throw new Error('case "' + c.label + '": the hoisted noise differs from the reference by ' + worst + 'px, which is past the 1e-9 bound');
+    }
+
+    // Switched off, the precompute must say so rather than hand back tables the kernel would use.
+    const off = K.prep(W, H, cx, cy, maxR, { amount: 0 }, 0.5, 1);
+    if (!off || !off.off) throw new Error('with Amount at 0 the precompute did not report the effect as disabled');
+    const still = K(10, 10, W, H, cx, cy, maxR, { amount: 0 }, 0.5, 1, off);
+    if (still[0] !== 10 || still[1] !== 10) throw new Error('a disabled turbulent displace still moved the pixel');
+  });
+
+  test('the turbulent-displace precompute runs ONCE A FRAME, not once a pixel (queue 474)', { item: '474' }, async function () {
+    /* RULE 12: a picture assertion cannot police a cost. The whole point of this change is WHERE the
+       trig happens, and every visual check would pass just as happily with `prep` called 1.46 million
+       times a frame — which is what deleting the hook in drawWarpEffect would silently do. */
+    const K = FM._warpFx && FM._warpFx.turbulentdisplace;
+    if (!K || !K.prep) throw new Error('the turbulent-displace precompute is not reachable');
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    const realPrep = K.prep;
+    let calls = 0;
+    K.prep = function () { calls++; return realPrep.apply(this, arguments); };
+    try {
+      FM.scene.project.width = 320; FM.scene.project.height = 240;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'probe', x: 160, y: 120, shapeW: 260, shapeH: 200, fill: '#ff8a3d' });
+      L.start = 0; L.duration = 5;
+      L.effects = [{ type: 'turbulentdisplace', params: { amount: 40, scale: 50 } }];
+      FM.scene.layers.push(L); FM.refreshAll();
+
+      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240;
+      const ctx = cv.getContext('2d');
+      calls = 0;
+      FM.renderScene(ctx, FM.scene, 0.37);
+      if (calls === 0) throw new Error('the warp driver never called the precompute — the pixel loop is back to doing all the trig itself');
+      if (calls > 2) throw new Error('the precompute ran ' + calls + ' times for ONE frame; it is meant to run once per plate');
+
+      // ...and it must actually be warping, or counting its setup calls means nothing.
+      const withFx = ctx.getImageData(0, 0, 320, 240).data;
+      L.effects = [];
+      ctx.clearRect(0, 0, 320, 240);
+      FM.renderScene(ctx, FM.scene, 0.37);
+      const noFx = ctx.getImageData(0, 0, 320, 240).data;
+      let diff = 0;
+      for (let i = 0; i < withFx.length; i += 4) if (withFx[i] !== noFx[i] || withFx[i + 3] !== noFx[i + 3]) diff++;
+      if (diff < 200) throw new Error('the effect changed only ' + diff + ' pixels in this scene, so the call-count assertion above is not measuring a working effect');
+    } finally {
+      K.prep = realPrep;
+      FM.scene.layers.length = 0;
+      saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.refreshAll();
+    }
+  });
 })();

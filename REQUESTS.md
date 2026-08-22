@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.83
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.84
 >
-> **State:** v11.83, **855 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.84, **857 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4947,8 +4947,38 @@ better still, keep working inside the turn rather than parking work for a later 
              one might not be, and the failure is invisible.
              **Reverted.** A 10-30% gain on effects the quality ladder already manages is not worth an API
              that fails silently. The tests that caught it are the reason not to ship it.
-             ⏭️ **Still open in this family:** turbulentdisplace at 157ms (12 trig calls per pixel; a
-             lookup table would not be exact, so it needs a different idea, not the same one).
+             ✅ **FOURTH, AND IT CLEARS THE LAST ONE OVER 150ms: turbulentdisplace 148ms → 76.8ms, 1.93× — v11.84.**
+             The note above said this one "needs a different idea, not the same one", and that was right:
+             a lookup table would not be exact. The different idea is that **half the work was never
+             per-pixel to begin with.** The kernel evaluates the same noise four times a pixel:
+             `td_n(u,v) = sin(u)·cos(1.3v) + 0.5·sin(2.1u+v) + 0.35·cos(0.5u−1.7v)`. The last two calls
+             take arguments built from the first two, so they are genuinely per-pixel — but **the first
+             two are separable**: their `u` depends only on the column and their `v` only on the row.
+             Apply the angle-addition identities and every term splits into an x-part times a y-part, so
+             five numbers per column and five per row replace eight transcendental calls per pixel —
+             **10 trig calls per row/column instead of ~11.7 million per frame**, and the precompute
+             costs 0.14ms.
+             **This needed a new seam:** a warp kernel is called once per pixel and had no way to hoist
+             anything, so `drawWarpEffect` now runs an optional `mapFn.prep` once per plate and hands the
+             result to every call. The other 28 warps are untouched — they simply ignore the extra
+             argument.
+             ⚠️ **NOT byte-identical, and this says so rather than implying it** (the same honesty
+             spinstreaks needed). The identities are exact in real arithmetic; in floats the operand order
+             differs. **Measured: the two paths agree to 3.87e-12 of a pixel** across 19,107 sample points
+             at 1080×1350. The test asserts the maths to **1e-9** against the original kernel kept as a
+             reference, over four parameter cases including a reduced raster.
+             **Two mutations, one per claim, because they fail differently.** Swapping a sin for a cos in
+             the precompute is caught by the maths test; deleting the `prep` call in the warp driver is
+             caught only by a SECOND test that counts how many times the precompute runs per frame — the
+             picture is identical either way, which is rule 12 exactly (*a picture assertion cannot police
+             a cost*).
+             **And the control that earned its keep:** the first version of the maths test used empty
+             params for its "defaults" case, and empty params make this effect a no-op — so both paths
+             returned the pixel untouched and "they agree" was true of nothing. The test now fails unless
+             at least half its sample points actually moved.
+             ⏭️ **Still open in this family:** nothing over 150ms remains. The top of the list is now
+             ordinary per-pixel work in the 50–100ms band, where the answer is the quality ladder rather
+             than another rewrite.
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**
