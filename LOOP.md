@@ -604,6 +604,27 @@ it for two days as probe caveats, and he would have hit the same wall the next t
 it rather than half-building it. That was right — and then it was built properly the next tick.** Logging
 a thing to do it properly is not deferral, provided the next tick actually picks it up.
 
+**🔴 v11.80 — I WITHDREW v11.79, ONE TICK AFTER SHIPPING IT. Found by hunting my own work.**
+The no-op hint's DETECTION was right and stayed right. The DELIVERY was not: **the hint vanished the
+instant a parameter changed** — the moment you touch a slider, which is exactly when you would read it.
+Measured: settled → correctly true; immediately after changing `mix` → false, and it stayed false, while
+the effect demonstrably still does nothing (0 pixels differ between mix 0.4 and 1.0).
+**My first fix was a GUESS and measuring killed it.** I assumed a transient wrong answer was being cached
+and cached only "yes". No better — the recompute itself answers false after a change. The cause is deeper
+(the two renders disagree while the compositor's per-layer state is mid-invalidation; `sceneWith()`
+deep-clones the layer, which may be what confuses it). **Unknown cause + shipped feature = withdraw.**
+**THE LESSONS, and the first is the one that matters:**
+· **HUNT YOUR OWN WORK FIRST.** His standing instruction #260 says hunt when the queue is done; the most
+  productive place was the thing I shipped yesterday, not the oldest code in the repo.
+· **A VACUOUS MEASUREMENT ALMOST HID IT.** My first timing probe reported the cache-miss path costing the
+  SAME as the hit — impossible — because the Effects view was not open and the check never ran. I only
+  caught it because the numbers were identical, which they had no business being. **When two numbers that
+  should differ come out equal, suspect the probe before the code.**
+· **A diagnostic that disappears while you interact is the INVERSE of crying wolf and just as corrosive.**
+  It teaches him the feature is unreliable, which is worse than the silence it replaced.
+· **Withdrawing beats shipping with a known flaw**, and the honest POLISH-LOG entry says so plainly rather
+  than quietly reverting.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
