@@ -24703,6 +24703,63 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the MULTI-clip move and extend icons are not the same drawing (queue 338)', { item: '338' }, async function () {
+    /* His complaint on 338 was that the two buttons were the same picture with *"a couple of pixels of
+     * ink"* between them. It was fixed TWICE for the single-clip pair (desktop at queue 235, phone at
+     * v9.86 — filled block vs outlined block) and NEVER for the multi-clip pair, which still carried the
+     * exact art the complaint was about: `M4 8h9v8H4z` beside `M12 8H4v8h8`, a closed box next to the
+     * same box open at one edge. js/timeline.js's queue-235 comment names that very pair and measures
+     * the difference at "about four pixels at 15px".
+     * ⚠️ The assertion is STRUCTURAL, not a path-string comparison: two icons can differ character by
+     * character and still look identical, which is the whole point of the complaint. One must be FILLED
+     * and the other OUTLINED — a difference you cannot miss at 15px. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, mode0 = FM.selectMode;
+    const sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    try {
+      FM.scene.layers.length = 0;
+      const mk = n => FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 40, fill: '#fff', start: 0, duration: 2 });
+      const A = mk('A'), B = mk('B'), C = mk('C');
+      FM.scene.layers.push(A, B, C);
+      FM.scene.selectedIds = [A.id, B.id, C.id]; FM.scene.selectedId = A.id; FM.selectMode = true;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.time = 5;   // past every clip — that is what swaps the row to move/extend
+      FM.timeline.rebuild(); FM.inspector.refresh();
+      await sleep(380);
+
+      const btns = [].slice.call(document.querySelectorAll('.align-clipacts .qr-btn'));
+      const byTitle = re => btns.filter(b => re.test(b.title || ''))[0];
+      const move = byTitle(/move all/i), ext = byTitle(/extend all/i);
+      if (!move || !ext) throw new Error('the multi-clip move/extend pair is not on screen (found: ' + btns.map(b => b.title).join(' | ') + ')');
+
+      const paths = b => [].slice.call(b.querySelectorAll('svg path'));
+      const filled = b => paths(b).some(p => (p.getAttribute('fill') || '') === 'currentColor');
+      const dashed = b => paths(b).some(p => p.getAttribute('stroke-dasharray'));
+
+      if (!filled(move)) throw new Error('the multi-clip Move icon has no filled shape — it is still an outlined box like its neighbour, which is the "couple of pixels of ink" complaint');
+      if (filled(ext)) throw new Error('the multi-clip Extend icon is filled too — if both are filled they are the same drawing again');
+      if (!dashed(ext)) throw new Error('the multi-clip Extend icon has no dashed span — the dash is what says "reaches out to the playhead"');
+      if (filled(move) === filled(ext)) throw new Error('the two icons are structurally identical');
+
+      /* …and the SINGLE-clip pair must still be the same idea, or the two rows disagree about what a
+         filled block means. This is the pair that was already correct; it is the control. */
+      FM.scene.selectedIds = [A.id]; FM.scene.selectedId = A.id; FM.selectMode = false;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.timeline.rebuild(); FM.inspector.refresh(); await sleep(320);
+      const one = [].slice.call(document.querySelectorAll('.quick-row .qr-btn'));
+      const oneMove = one.filter(b => /move the clip|move all/i.test(b.title || ''))[0];
+      if (oneMove && !paths(oneMove).some(p => (p.getAttribute('fill') || '') === 'currentColor')) {
+        throw new Error('the single-clip Move icon is no longer filled — the two rows now mean different things by the same shape');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectMode = mode0;
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.timeline.rebuild(); FM.inspector.refresh();
+      await sleep(120);
+    }
+  });
+
   test('the rainbow add-menu card keeps its white edge on PC (queue 257 vs 286)', { item: '257' }, async function () {
     /* Queue 257's white gradient ring shipped at v8.36 and was correct — until queue 286 gave every card
      * in the PC panel a cursor-tracking ring on the SAME pseudo-element

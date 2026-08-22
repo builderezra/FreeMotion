@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.60
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.61
 >
-> **State:** v11.60, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.61, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,25 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **338b — The MULTI-clip move/extend icons were still the drawing he complained about.**
+      ✅ **DONE v11.61.** (22 Aug — found by re-auditing closed requests against the code.)
+      His complaint: the two buttons were the same picture with *"a couple of pixels of ink"* between
+      them. **It was fixed TWICE — desktop at queue 235, phone at v9.86 — and both fixes touched only the
+      SINGLE-clip pair.** The multi-clip pair in the same phone inspector still carried the exact art the
+      complaint was about: `M4 8h9v8H4z` beside `M12 8H4v8h8` — a closed box next to the same box open at
+      one edge. `js/timeline.js`'s own queue-235 comment names that pair and measures the gap at "about
+      four pixels of difference at 15px", which is his words verbatim.
+      **Now the same idea as the fixed pair:** Move is a SOLID FILLED block with a double chevron; Extend
+      is an OUTLINED box reaching out with a dashed span and one arrow. Structurally different, not
+      cosmetically.
+      ⚠️ **`ab()` could not express it**, which is probably why it was skipped: `svgIcon()` hard-codes
+      `fill="none"` on a single path, so a filled shape is impossible through it — and fill-vs-outline is
+      the entire point. `ab()` now takes the same `{ html }` raw-SVG hatch `qbtn` already had.
+      ⚠️ **The test asserts STRUCTURE, not path strings** — two icons can differ character by character
+      and still look identical, which is the complaint itself. One must be filled and the other outlined.
+      It also checks the single-clip pair still means the same thing, so the two rows cannot drift apart
+      again. Mutation-checked by removing the fill.
 
 - [x] **257b — The Sound effects card lost its white gradient edge on PC.** ✅ **DONE v11.60.**
       (22 Aug — found by re-auditing closed requests against the code.)

@@ -2602,7 +2602,20 @@ window.FM = window.FM || {};
     const acts = el('div', 'align-clipacts');
     acts.appendChild(el('div', 'align-label', 'Edit ' + n + ' clips'));
     const bar = el('div', 'quick-row');
-    function ab(title, icon, opts, fn) { const b = el('button', 'qr-btn' + (opts.danger ? ' qr-danger' : '')); b.title = title; b.innerHTML = svgIcon(icon); if (opts.disabled) b.disabled = true; b.addEventListener('click', fn); bar.appendChild(b); }
+    /* `opts.html` is the same raw inner-SVG hatch qbtn carries, and for the same reason: svgIcon() hard-codes
+       fill="none" on a single path, so a FILLED shape cannot be expressed through it — and fill-vs-outline is
+       the entire point of the move/extend pair (queue 338). Without this the multi-clip row could only ever
+       redraw one outlined box as a slightly different outlined box, which is the complaint. */
+    function ab(title, icon, opts, fn) {
+      const b = el('button', 'qr-btn' + (opts.danger ? ' qr-danger' : ''));
+      b.title = title;
+      b.innerHTML = opts.html
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + opts.html + '</svg>'
+        : svgIcon(icon);
+      if (opts.disabled) b.disabled = true;
+      b.addEventListener('click', fn);
+      bar.appendChild(b);
+    }
     const inside = l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4;
     const onAny = layers.some(inside);
     quickSideSig = homeRowSig();   // this bar swaps with the playhead too — keep syncPlayhead watching it
@@ -2622,14 +2635,23 @@ window.FM = window.FM || {};
       };
       const right = groupShift() > 0;
       ab(right ? 'Move all ' + n + ' clips right to the playhead' : 'Move all ' + n + ' clips left to the playhead',
-        right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16', {}, () => {
+        /* SAME DRAWINGS AS THE SINGLE-CLIP PAIR (queue 338, finished 22 Aug). v9.86 redrew that pair —
+           filled block vs outlined block — and left THIS one carrying the exact art the complaint was
+           about: `M4 8h9v8H4z` against `M12 8H4v8h8`, a closed box beside the same box open at one edge.
+           js/timeline.js's queue-235 comment names that very pair and measures the difference at "about
+           four pixels at 15px", which is his *"couple of pixels of ink"* verbatim. Two fixes for one
+           complaint, one of them never applied — found by re-auditing closed requests. */
+        '', { html: right
+          ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
+          : '<path d="M20.5 8.5H12v7h8.5z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' }, () => {
         const d = groupShift();   // recomputed at press: the panel doesn't rebuild on scrub
         layers.forEach(l => setStart(l, l.start + d));
         done();
       });
       // EXTEND is per-clip: each one's nearest edge reaches the playhead, so clips on either side of it
       // grow toward it from their own direction and they all end up meeting there.
-      ab('Extend all ' + n + ' clips to the playhead', 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16', {}, () => {
+      ab('Extend all ' + n + ' clips to the playhead', '', { html:
+        '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>' }, () => {
         let moved = 0;
         layers.forEach(l => { if (FM.extendClipTo(l, FM.time)) moved++; });
         if (!moved && FM.toast) FM.toast('No more source to extend into', 1500);
