@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.59
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.60
 >
-> **State:** v11.59, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.60, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,26 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **257b — The Sound effects card lost its white gradient edge on PC.** ✅ **DONE v11.60.**
+      (22 Aug — found by re-auditing closed requests against the code.)
+      His words on 257: *"the border colour around the rainbow should be white too, not solid white, give
+      it some gradient."* **It shipped correctly at v8.36 — then queue 286 broke it on desktop only.**
+      286 gave every card in the PC panel a cursor-tracking ring on the SAME pseudo-element
+      (`#inspector-panel .addmenu-card::after`, higher specificity), so from then on the desktop card had
+      **no visible outline at all**: measured at 1280×800, its border is `rgba(0,0,0,0)` — transparent ON
+      PURPOSE, because the ring is what draws the edge — and its `::after` had become 286's
+      `radial-gradient(220px at -9999px…)`. The phone sheet, which 286 never touches, still looked right.
+      **Fix:** 257's ring moves to `::before` (free on this card, measured), 286 keeps `::after`. Both
+      draw now — a white edge at rest AND the cursor glow — on both layouts. Same resolution the repo
+      already used for the 339-vs-286 collision. Carries the v9.88 `inset: -1px` lesson so the ring traces
+      the visible outline rather than one pixel inside it.
+      🚨 **THE PART WORTH REMEMBERING: 257 HAD A TEST, AND IT STAYED GREEN THROUGHOUT.** It is scoped to
+      `.addmenu--sheet` — the PHONE instance — which is correct for a phone-layout test and is exactly why
+      it could not see its own feature breaking on PC. **There are TWO add-menu instances in the DOM**
+      (BUG-HUNT §2), and a test that only ever looks at one of them will keep passing while the other is
+      visibly broken. The new test asserts BOTH instances and refuses to pass if it never saw the panel
+      one. Mutation-checked: putting the ring back on the shared slot fails both tests.
 
 - [x] **165.3b — Pinching to zoom while drawing LEFT INK, and there was no pan gesture at all.**
       ✅ **DONE v11.59.** (22 Aug — the unbuilt clause of #165.3, found by re-auditing closed requests.)

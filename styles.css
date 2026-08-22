@@ -7272,8 +7272,19 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    A masked ring paints the edge and nothing else: a full-size gradient with a mask that excludes the
    content box, leaving only the 1px frame. Rounded corners come free from `border-radius: inherit`. */
 .addmenu-card--rainbow { position: relative; }
-.addmenu-card--rainbow::after {
-  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+/* ⚠️ ::BEFORE, NOT ::AFTER (queue 257, fixed 22 Aug). This ring shipped on `::after` at v8.36 and was
+   correct — until queue 286 gave every card in the PC panel a cursor-tracking ring on the SAME
+   pseudo-element (`#inspector-panel .addmenu-card::after`, higher specificity). From then on the PC lost
+   this edge entirely: measured at 1280x800, the Sound effects card's border is `rgba(0,0,0,0)` — the
+   border is deliberately transparent because THIS is what draws the edge — and its `::after` was 286's
+   `radial-gradient(220px at -9999px…)`. So the card had no visible outline at all on desktop while the
+   phone sheet, which 286 does not touch, still had it. Two features silently sharing one slot: the same
+   collision the repo already resolved once for 339 vs 286.
+   `::before` is free here — only `.addmenu-card--multi::before` uses it, and that is `content: none` on
+   this card, measured. `::after` now belongs wholly to 286, so the card gets its white gradient edge at
+   rest AND still lights toward the cursor like its neighbours, on both layouts. */
+.addmenu-card--rainbow::before {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; z-index: 0;
   background: linear-gradient(115deg,
     rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .28) 38%,
     rgba(255, 255, 255, .70) 68%, rgba(255, 255, 255, .18) 100%);

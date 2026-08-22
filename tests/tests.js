@@ -22249,7 +22249,15 @@
         const col = getComputedStyle(ic).color;
         const m = col.match(/(\d+),\s*(\d+),\s*(\d+)/);
         if (!m || +m[1] < 240 || +m[2] < 240 || +m[3] < 240) throw new Error('the Sound effects icon is not white: ' + col);
-        const ring = getComputedStyle(sfx, '::after');
+        /* ::BEFORE since v11.60. The ring lived on ::after until queue 286 gave every card in the PC
+           panel a cursor ring on that same slot and took it over, so the DESKTOP lost this edge entirely
+           while the phone kept it.
+           ⚠️ AND THIS TEST DID NOT NOTICE, because it is scoped to `.addmenu--sheet` — the phone
+           instance — which 286 never touched. It stayed green for weeks while the card on PC had no
+           visible outline at all. Scoping to one instance is right for THIS test (it is a phone-layout
+           test) but it is why queue 257's own test could not catch 257 breaking; the PC side is asserted
+           separately in the queue-257-vs-286 test. */
+        const ring = getComputedStyle(sfx, '::before');
         if (!ring.backgroundImage || ring.backgroundImage === 'none') throw new Error('there is no gradient ring around the rainbow');
         if (!/gradient/.test(ring.backgroundImage)) throw new Error('the ring is a flat colour — he asked for "not solid white, give it some gradient"');
         const mask = ring.maskImage || ring.webkitMaskImage || '';
@@ -24695,6 +24703,50 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('the rainbow add-menu card keeps its white edge on PC (queue 257 vs 286)', { item: '257' }, async function () {
+    /* Queue 257's white gradient ring shipped at v8.36 and was correct — until queue 286 gave every card
+     * in the PC panel a cursor-tracking ring on the SAME pseudo-element
+     * (`#inspector-panel .addmenu-card::after`, higher specificity). From then on the desktop lost this
+     * edge entirely: MEASURED at 1280x800, the Sound effects card's border is `rgba(0,0,0,0)` — it is
+     * transparent on purpose, because the RING is what draws the edge — and its ::after had become 286's
+     * `radial-gradient(220px at -9999px…)`. The phone sheet, which 286 does not touch, still had it.
+     * Two features silently sharing one slot; 257 now owns ::before and 286 owns ::after.
+     * ⚠️ THERE ARE TWO ADD-MENU INSTANCES IN THE DOM — the PC panel and the phone sheet (BUG-HUNT §2).
+     * A document-wide querySelector picks whichever comes first, which is how a check like this passes
+     * while the thing on screen is broken. Both are asserted separately below. */
+    const open = async () => {
+      if (FM.addMenu && FM.addMenu.open) FM.addMenu.open();
+      await sleep(360);
+      const audio = [].slice.call(document.querySelectorAll('.addmenu-tab')).filter(t => /audio/i.test(t.textContent))[0];
+      if (audio) { audio.click(); await sleep(300); }
+    };
+    await open();
+    const cards = [].slice.call(document.querySelectorAll('.addmenu-card--rainbow'));
+    if (!cards.length) throw new Error('there is no rainbow add-menu card at all — this test is guarding nothing');
+
+    let sawPanel = false;
+    cards.forEach(c => {
+      const where = c.closest('#inspector-panel') ? 'the PC panel' : 'the phone sheet';
+      if (c.closest('#inspector-panel')) sawPanel = true;
+      const bf = getComputedStyle(c, '::before');
+      if (bf.content === 'none') throw new Error('in ' + where + ' the rainbow card has no ::before — its white edge is not being drawn');
+      if (!/linear-gradient/.test(bf.backgroundImage || '')) throw new Error('in ' + where + ' the ::before is not the white gradient ring (it is "' + (bf.backgroundImage || 'none').slice(0, 40) + '")');
+      if (bf.opacity === '0') throw new Error('in ' + where + ' the ring is drawn but invisible (opacity 0)');
+      /* The card's own border is deliberately transparent, so if the ring ever stops painting there is
+         NOTHING left — which is exactly how this went unnoticed. Assert that dependency explicitly. */
+      const cs = getComputedStyle(c);
+      const transparentBorder = /rgba\(0, 0, 0, 0\)|transparent/.test(cs.borderTopColor);
+      if (transparentBorder && bf.content === 'none') throw new Error('in ' + where + ' the border is transparent AND the ring is gone — the card has no visible edge at all');
+    });
+    if (!sawPanel) throw new Error('no rainbow card was found inside #inspector-panel — the PC instance is the one that broke, so a run that never saw it proves nothing');
+
+    /* …and 286's cursor ring must still be there on the panel card. Fixing 257 by taking ::after back
+       would just reverse the collision, which is not a fix. */
+    const panelCard = document.querySelector('#inspector-panel .addmenu-card--rainbow');
+    const af = getComputedStyle(panelCard, '::after');
+    if (!/radial-gradient/.test(af.backgroundImage || '')) throw new Error('the PC card lost its cursor-tracking ring (queue 286) — the two rings must coexist, not take turns');
+  });
+
   test('two fingers pan and zoom while drawing, and leave no ink (queue 165.3)', { item: '165.3' }, async function () {
     /* Ezra: *"another option that lets you grab the screen and zoom in or out so you can do more detailed
      * drawing."* v8.00 kept the zoom you already had and v8.01 stopped the tool throwing it away, but the
