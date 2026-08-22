@@ -557,6 +557,19 @@ and "if you play around with it a bunch"; the misalignment is CONSTANT. Driven a
 menu cycled four times, the cards never varied within a layout. So this may be only part of what he saw,
 and the entry says so and asks for a screenshot at the moment it happens rather than claiming the fix.
 
+**✅ v11.78 — #475, the second of the two things he asked for on 22 Aug. Gradients on the PC add cards.**
+Put on the card's own BACKGROUND, not a new pseudo-element: both slots are taken on this family
+(`::after` = 286's cursor ring, `--multi::before` = 344's four-colour ring), and the entry warned that
+v9.87 already overwrote 286 once by reusing one. Uses each card's existing `--am-tint`, so no second
+palette exists to drift.
+**⚠️ A REAL MISTAKE CAUGHT BEFORE SHIPPING, now a test: I first placed it inside
+`@media (… ) and (prefers-reduced-motion: no-preference)`** — the block that gates the cursor ring, which
+moves. A static gradient has nothing to do with motion, so that would have **silently withheld the
+feature from every user with reduced motion switched on**, with nothing on screen to explain it.
+**CHECK WHAT A MEDIA QUERY IS FOR BEFORE ADDING A RULE TO IT.** An `@media` block is a REASON, not a
+convenient bucket of selectors — landing in the nearest one that matches the width is how an accessibility
+setting silently removes an unrelated feature. A second test now fails if the rule drifts back in.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
