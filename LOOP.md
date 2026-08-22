@@ -589,6 +589,21 @@ will not touch it.
 on this layer. The detection machinery exists (`contributes`/`lrender` in fx-thumbs); the hard part is not
 crying wolf, and a bad version is worse than none.
 
+**✅ v11.79 — #477 built the day it was logged, because #460 is THREE reports old.**
+The app now says, on the open effect row, when an effect is ON and measurably changes nothing on this
+layer — with the reason where queue 460 MEASURED one. Verified on his exact case: a flat `#cc22cc`
+rectangle flags channelremap, halation and longshadow, and stays silent for grayscale/invert/brightness.
+**THE RISK WAS CRYING WOLF AND IT HAS THREE CONTROLS, NOT ONE:** the same effect on an ORANGE fill is not
+flagged (so the hint is about the SUBJECT, not the effect); working effects are not flagged; a switched-
+OFF effect is never flagged. A hint that fires on a working effect would teach him to distrust the ones
+that are fine — worse than the silence it replaces. Both directions mutation-checked.
+**THE LESSON: when the answer to a complaint is "you are testing it wrong", the fix is not to tell him
+that — it is to make the app say it at the moment it happens.** #460 had the whole explanation sitting in
+it for two days as probe caveats, and he would have hit the same wall the next time regardless.
+**Also: I said last tick this was "a feature, not a fix, and a bad version is worse than none" and logged
+it rather than half-building it. That was right — and then it was built properly the next tick.** Logging
+a thing to do it properly is not deferral, provided the next tick actually picks it up.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
