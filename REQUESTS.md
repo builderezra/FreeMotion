@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.71
 >
-> **State:** v11.71, **842 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.71, **842 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -27,6 +27,8 @@
 > | **391** | The Edit Text menu is "still a bit broken" — which part? | — |
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
+> | **425** | PC: does **copy** move to the right with the other three? You asked for copy on the LEFT a day earlier, so your two instructions disagree — **A** move it · **B** leave it | **B** — you asked for that spot more recently |
+> | **395** | MP3 needs a ~100 KB library, the first third-party code in the app — **A** ship it · **B** leave it | **B** — WAV and M4A already cover it |
 >
 > **Two only your phone can answer, and both are about work already finished:**
 > - **"Editing lags"** — every measured cause and the memory leak are FIXED. Does it actually feel
@@ -41,6 +43,11 @@
 > **Nothing is being quietly dropped.** Everything above is written up in full below, with what was
 > measured and what is still unknown. If you'd rather I just picked defaults and shipped, say so and I
 > will — the recommendations in the right-hand column are what I'd choose.
+>
+> ⚠️ **22 Aug — three entries were sitting in the queue with EVERY clause ticked**, so they read as work
+> to me and as unfinished to you, and were neither. 343 was genuinely finished and is now closed; 395 and
+> 425 each had a real question buried inside a *ticked* clause where nothing could see it — both are rows
+> above now. `tools/next.sh` refuses to stay quiet about this shape from now on.
 >
 > ⚠️ **Three of the rows above are still OPEN questions rather than a pick-one (387, 391, 215), which is
 > not what you asked for.** You said *"I just want options. Yu can just say recommended next to the best
@@ -7595,8 +7602,7 @@ better still, keep working inside the turn rather than parking work for a later 
       | **E — nothing, it is fine now** | a completely valid answer. Clauses 1 and 2 shipped and were driven end to end; "a lot more effort" may simply have been about the shell it used to be. |
       **E is not a cop-out answer** — it closes the entry honestly, and it is genuinely possible that what
       he wanted is already there. **One letter closes or directs this.**
-- [ ] **343 — Templates: swap the media for your own, and eventually let people make and share them.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **343 — Templates: swap the media for your own, and eventually let people make and share them.** ✅ **DONE — all four clauses (v9.97 / v11.71).**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
       > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
@@ -12514,8 +12520,14 @@ wait for them to report back."*
       **Clauses:**
       1. [x] ✅ Audio-only export — MP3 or whatever the browser can actually encode without a library.
              **Already shipped under queue 216 (WAV), before he asked.**
+      3. [ ] ⏳ **MP3 specifically — YOUR CALL, and it is the only thing left here.** No browser can
+             encode MP3 on its own; it needs a ~100 KB library shipped with the app, which is the first
+             third-party thing FreeMotion would carry. **A** ship it · **B** ⭐ *recommended* leave it —
+             WAV and M4A already cover "export the audio", and M4A is the smaller, more universal file
+             of the two. Pick **A** only if something you use actually refuses M4A.
       2. [x] ✅ **"or whatever" — answered and built at v10.72: M4A/AAC alongside WAV.** The one thing
-             left is MP3, which needs a library and is his call. "or whatever" is an invitation, not a spec: work out what the export dialog can honestly offer
+             left is MP3, which needs a library and is his call — now clause 3, rather than a sentence
+             buried in a ticked clause where no tool and no reader could see it. "or whatever" is an invitation, not a spec: work out what the export dialog can honestly offer
          given this is a local-only app with no backend. Worth checking what MediaRecorder and
          WebCodecs support on iOS Safari specifically before promising a format.
       ⚠️ Check what the exporter already does — GIF and video exist (js/gif-encode.js, js/exporter.js),
@@ -13459,6 +13471,16 @@ wait for them to report back."*
              to it — move copy and the switch is anchored to nothing. I moved it, three tests went red
              saying so, and rather than overwrite one of your instructions with the other I left copy where
              you put it. **Say "move copy too" and it goes right with the rest, switch and all.**
+      3. [ ] ⏳ **Does COPY move right too? One word, and it is the only thing left in this entry.**
+             Clause 1 moved parent / trash / group / ⋯ to the right and deliberately left COPY on the
+             left, because one day earlier (queue 373) you asked for copy to be there and anchored the
+             add-row switch to it. Two of your instructions point opposite ways, so I did the half that
+             does not overwrite the other. **A** move copy right as well (the switch moves with it) ·
+             **B** ⭐ *recommended* leave copy where you put it — you asked for that position
+             specifically and more recently than this row's layout.
+             *(Raised as a clause 22 Aug: it had been sitting inside a TICKED clause, so the entry read
+             as finished to every tool and as open to every reader. Neither was true.)*
+
       2. [x] ✅ **v10.63 — Their background is stronger**: the recess went from `rgba(0,0,0,.22)` to
              `rgba(0,0,0,.45)`, about 3 levels of separation from the row's surface to about 8.
              **DEEPER, not brighter** — v7.89 lifted this group with a white wash and you sent it back

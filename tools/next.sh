@@ -134,6 +134,43 @@ if [ -n "$CONTRA" ]; then
   echo
 fi
 
+# AN OPEN ENTRY WHOSE EVERY CLAUSE IS TICKED (22 Aug). The mirror of the check above, and it cost a
+# tick the day it was added: #343 had all four of its clauses ticked — two of them that same night — and
+# its own checkbox left at [ ], so it sat at the top of "oldest first" looking like work. This is the
+# CHEAPER direction of the same failure (nothing is lost, only time), which is exactly why nobody would
+# notice it: the entry reads as open, so you re-read it, and only the clause list tells you otherwise.
+# Only fires on entries that HAVE numbered clauses. An entry with none is prose, and prose has no
+# checklist to be finished — flagging those would cry wolf on nearly every entry in the file.
+ALLDONE="$(python3 - "$F" <<'PYA'
+import sys, re, io
+lines = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
+out, cur, clauses = [], None, []
+def flush():
+    if cur and clauses and all(clauses):
+        out.append('%d:%s' % (cur[0], cur[1][:100]))
+for i, ln in enumerate(lines, 1):
+    m = re.match(r'^- \[( |x)\] ', ln)
+    if m:
+        flush()
+        cur = (i, ln) if m.group(1) == ' ' else None
+        clauses = []
+        continue
+    if cur:
+        c = re.match(r'^\s+\d+\. \[( |x)\] ', ln)
+        if c: clauses.append(c.group(1) == 'x')
+flush()
+print('\n'.join(out))
+PYA
+)"
+if [ -n "$ALLDONE" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! OPEN [ ] BUT EVERY CLAUSE IS TICKED — this is finished and is still holding the queue:"
+  echo "$ALLDONE"
+  echo "!! Tick the entry, or say in it what is left that the clause list does not cover."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 # AN OPEN ITEM FILED UNDER "## Done" IS A DONE ITEM, to anyone reading the file — and REQUESTS.md is
 # written for EZRA to read, not only for a script. Six of them were sitting down there on 17 Aug,
 # including "EXPORTED VIDEO CAME OUT WITH NO AUDIO" and the entry this file calls "the most serious
