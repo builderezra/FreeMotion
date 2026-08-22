@@ -544,6 +544,19 @@ do not "fix" tests that are correctly describing the new hazard.**
 Also worth keeping: this is the first time a measured, working optimisation has been thrown away here.
 Recording the numbers AND the reason means nobody rebuilds it in a month.
 
+**✅ v11.77 — #476, one of the two bugs he reported yesterday. The cards were never the wrong SIZE.**
+Measured at 1600px: all eight cards 112.3px, identical. The fault was POSITION — a short last row was
+centred, sitting 60.7px off the columns above it, so two identical cards read as wrong. `flex-start` only
+affects short rows, so nothing was resized and his earlier "make the two extra big ones smaller" is not
+reopened.
+**THE LESSON: he described a SIZE problem and the sizes were perfect. Measure the thing he named, then
+measure its neighbours** — the complaint is a symptom, not a diagnosis. A width-only assertion would have
+passed on the broken layout, which is why this survived; the test pins ALIGNMENT for that reason.
+**⚠️ AND THE HALF THAT DID NOT REPRODUCE IS SAID PLAINLY IN HIS FILE, not glossed.** He said "sometimes"
+and "if you play around with it a bunch"; the misalignment is CONSTANT. Driven at two widths with the add
+menu cycled four times, the cards never varied within a layout. So this may be only part of what he saw,
+and the entry says so and asks for a screenshot at the moment it happens rather than claiming the fix.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
