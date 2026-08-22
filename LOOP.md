@@ -141,6 +141,25 @@ did its job. The test was corrected, not deleted: its first half was right.
 first; AudioBuffers live off the JS heap, so 10s and 30s both read 0 MB growth. Those numbers were
 discarded rather than reported. A reading of zero is a reading about the instrument.
 
+**✅ 22 Aug — #96: a suspected bug closed by MEASUREMENT, and an audit prescription proved impossible.**
+The buildable-audit said the song may "stop dead at 13.453" on scrub-into-tail-then-play, and prescribed
+replacing the mock-element test with a real-file one. Neither survived contact:
+· The stall does not reproduce — the real `liar.mp3` runs past its header claim to 19s+, never muted.
+· **13.453 was real and was not a stall.** `el.duration` IS NOT STABLE for a VBR mp3 — Chrome says
+  11.210s at loadedmetadata then refines it upward as it decodes: measured 11.210 → 15.752 → 20.297 in
+  one second. 13.456 reproduces exactly, as a decode boundary.
+· **A real-element test CANNOT catch this regression on Chrome.** The claim races ahead of the playhead,
+  so the gate is never crossed. I wrote it, mutation-checked it, **watched it pass against the defect,
+  and deleted it.** A test that goes green against its own bug is worse than none.
+**THE LESSON: a mock is not automatically the weaker instrument.** The audit's reasoning — "a stub cannot
+end, so it could prove the gate falsely" — sounds right and is backwards here: the stub's inability to
+drift is the only thing that holds the value still long enough to ask the question.
+**And: `tools/.buildable-audit.json` is a lead list, not a work order.** Its firstStep for this entry was
+wrong. Check the prescription before following it — the same way an entry records what was ASKED, not
+what is still missing.
+What shipped instead: the scrub-into-tail-then-play RESUME branch now has a test (nothing covered it),
+caught alone by deleting the `play()` call on that branch.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
