@@ -160,6 +160,25 @@ what is still missing.
 What shipped instead: the scrub-into-tail-then-play RESUME branch now has a test (nothing covered it),
 caught alone by deleting the `play()` call on that branch.
 
+**✅ v11.70 — #148: the artefact an earlier pass wrote down as "noted, not fixed" was still there.**
+*"playback pitches up to +9.6% and back over four audible steps at the start"* — re-measured on a real
+mp3: **+5.9%, about a semitone, on EVERY press of play.** Cause: the controller seeds its output-latency
+estimate from the FIRST sample of a pass, taken before the element has spun up — measured seed 48ms
+against ~87ms settled, EMA only reaching 51.6ms by 850ms — so it carried a phantom ~37ms of error and
+leaned on the throttle, and `preservesPitch` makes that a PITCH change. Now it waits 0.25s of the
+element's OWN playback before learning. After: 0 rate writes, and sync error 13ms median — TIGHTER than
+before, because it is no longer chasing an error that did not exist.
+**TWO LESSONS, both about the test rather than the fix:**
+· **A fake that is too clean cannot fail.** The suite's element reports a CONSTANT latency; the bug lives
+  entirely in the latency RAMP. That is why the existing latency test stayed green through all of this.
+  When a defect survives a test that seems to cover it, suspect the fixture's fidelity.
+· **The natural way to drive a test can hide the bug.** My first version went through `FM.play()` and its
+  mutation SURVIVED — that path opens with a seek, which reseeds the bias, so the defect never appears.
+  Driving `_syncMediaToClock()` directly reproduces it. Both times the mutation check was the only thing
+  that said so.
+**And "noted, not fixed" in an entry is a lead, not a closed door.** Re-measure those before assuming a
+later release swept them up: two of #148's costs had been fixed by other work, this one had not.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
