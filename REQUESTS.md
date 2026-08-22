@@ -4578,6 +4578,27 @@ better still, keep working inside the turn rather than parking work for a later 
       ⏭️ **To rebuild it properly, the open question is one thing:** why do the two renders differ
       immediately after a parameter change when the effect's output does not? Answer that first; the rest
       of the feature was correct and is in the history at v11.79 (`9b06de2`), tests included.
+
+      🔬 **INVESTIGATED 23 Aug. NOT SOLVED — and here is exactly what is and is not established, so the
+      next attempt does not re-walk it.**
+      **ESTABLISHED (one solid reproduction):** it is **not** a fault in the hint or in `js/fx-thumbs.js`.
+      A plain `FM.renderScene`, comparing a hand-built scene with the effect enabled against the same
+      scene with it disabled, shows **308 differing bytes (worst channel 25)** after `mix` is changed —
+      and the difference PERSISTS rather than settling.
+      **ALSO ESTABLISHED:** the timing is the trigger. Setting the same parameter value BEFORE the first
+      render gives **0 differing bytes**. So it is not the value, it is that the value changed after
+      something had already rendered.
+      ❌ **TWO FOLLOW-UP PROBES WERE INVALID AND THEIR CONCLUSIONS ARE WITHDRAWN**, recorded because both
+      would have been believed:
+      · An "are the differences on the antialiased edge?" probe returned **0 differing pixels** — because
+        that version set the parameter before rendering, i.e. it was measuring the healthy case.
+      · A "does the cache key on the layer id?" probe compared brightness at **1.3 against 2.2**, and on
+        this fill **both saturate to 255** — so the two renders were identical for a reason that has
+        nothing to do with caching. Verified separately that brightness genuinely works (204 → 255 at
+        2.2, → 61 at 0.3). **A parameter sweep across a clipped range measures nothing.**
+      ⏭️ **The next concrete step, and it is narrow:** bisect what differs between "parameter set before
+      the first render" (0 bytes) and "parameter changed after a render" (308 bytes). That gap is the
+      only reliable signal so far, and it is reproducible on demand.
       **(23 Aug — not a new report from him; the conclusion of #460, which he has raised three times.)** — built the same day it was logged, because #460 is three reports old.**
       **How it decides:** the layer is rendered twice — once as it is, once with that ONE effect bypassed
       — and all four channels compared. Measured, never inferred from parameters. Reuses the machinery
