@@ -191,6 +191,21 @@ The delivery mechanism is the same each time — the tappable toast from v11.83,
 And each one keeps the same guard: **fire only when certain, once, never mid-export**, with the controls
 outnumbering the happy path, because a confident wrong message is worse than silence.
 
+### 23 Aug, v11.89 — the same pattern, now pointed at the REPORT rather than a toast
+#148 has twice ended on a question only his ears could answer (is the scratchiness our rate controller
+or the decoder?) while the "what's slow" report — the thing that now offers itself automatically —
+covered frames, quality, canvas, project and device and **said nothing about audio**, with three of his
+open reports being about sound. The number that settles it was already computed and simply not kept:
+real WRITES to `playbackRate`, which is NOT trim decisions (`preservesPitch` makes a write a pitch
+change). The report carries and INTERPRETS it now.
+⚠️ **And the tick's real lesson: my first test was dead.** It injected `FM.playbackStats` to check the
+report's wording, so deleting the counter left it green — it proved the report READS numbers and
+nothing about anything WRITING them. **Injecting the state you are meant to be producing is the easiest
+way to write a test that cannot fail.** The fix was a second test driving the real controller and
+holding our counter against the element's own write count — non-zero, and never higher.
+**So when a change adds a MEASUREMENT, there are always two claims: the thing is measured, and the
+measurement is reported. One test cannot cover both, and the reporting one is the easy one to write.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
