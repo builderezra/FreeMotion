@@ -177,6 +177,20 @@ syncing it — `FM.defaultTextSize()` is now the only definition and both caller
 **So: when an entry parks a question in its own text, that question is queue work.** Three ticks
 running, the buildable half was sitting inside an entry marked 🟠 NEEDS YOU.
 
+### 23 Aug, v11.88 — FOUR TICKS RUNNING, AND THE PATTERN NOW HAS A NAME
+Every one of the last four ticks found real work inside an entry marked 🟠 NEEDS YOU, and three of them
+were **the same bug in different clothes: the app worked something out and then failed to say it where
+he could read it.**
+· #129 — diagnosed an undecodable H.265 file, put the fix in `console.warn`. He reported it from a phone.
+· #202 Finding 1 — his 12.2-megapixel project. The cap (v9.27) and the repair (v9.28) both shipped; the
+  instruction to use them lived in REQUESTS.md, a file he does not read.
+· #95/#125 — the "what's slow" readout existed for weeks, four taps deep, and had never been run.
+**So the check to run on any entry that looks blocked: does the app already KNOW this, and is it only
+failing to tell him?** That is not a question about him, and it is always buildable.
+The delivery mechanism is the same each time — the tappable toast from v11.83, now used three times.
+And each one keeps the same guard: **fire only when certain, once, never mid-export**, with the controls
+outnumbering the happy path, because a confident wrong message is worse than silence.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
