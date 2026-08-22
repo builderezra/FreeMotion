@@ -12541,8 +12541,23 @@ wait for them to report back."*
       · **record/import a voiceover** — fully local, lands on the timeline as ordinary audio, no TTS at
         all, and arguably solves the actual job better.
       🔒 No keys, no network, nothing leaves the device. Every user-supplied string reaches the DOM through
-      `textContent`; the only `innerHTML` in this feature takes static icon paths. `/security-review` was
-      NOT run — said plainly rather than implied.
+      `textContent`; the only `innerHTML` in this feature takes static icon paths.
+
+      ✅ **SECURITY REVIEW DONE, 22 Aug — the obligation this entry left open.** CLAUDE.md requires it for
+      anything that writes HTML, and the line above recorded that it had NOT been run. Audited by hand
+      against the specific sinks that rule names, across `js/tts.js` and the TTS surfaces in
+      `js/inspector.js`:
+      | check | result |
+      |---|---|
+      | user text reaching the DOM | **`textContent` only** — the preview is `pv.textContent = words`, and `el()` sets `textContent` by construction |
+      | `innerHTML` on the TTS path | three uses, **all static SVG path literals** via `svgIcon(...)`; none takes user data |
+      | `opts.html` (the one raw-SVG sink in reach) | its only callers pass a **boolean** choosing between two literal path strings — no interpolation of anything user-supplied |
+      | voice names (platform data, not his) | `textContent`, with a comment already saying why |
+      | network / keys / `eval` / `new Function` | **none** — `speechSynthesis` is the only external call, and it is local to the device |
+      | saved settings from a `.fmproj` | rate and pitch clamped to the spec range; the voice name is matched against the browser's own installed list, so an unknown or hostile name resolves to nothing |
+      **Nothing to fix.** Recorded so the next session does not re-run it, and so the claim above is
+      backed rather than asserted. *(Done as a hand audit against the named sinks; the `/security-review`
+      slash command itself is not available to me in this loop — said plainly, again, rather than implied.)*
 - [x] **393 — The "Loading …" bar sits ON TOP of the pop-up menus.** ✅ **v9.94.** (18 Aug, phone screenshot at v9.93:
       the "Loading IMG_2596" pill covering the Edit Shape card in the category grid.) His words, verbatim:
       *"Make it so the loading bar goes behind the pop up menus, so it isn't obstructing."*
