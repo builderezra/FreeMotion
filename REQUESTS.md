@@ -5052,6 +5052,14 @@ better still, keep working inside the turn rather than parking work for a later 
       different path (`body.text-editing #app` collapses the grid to one cell and #stage takes the whole
       area at `var(--stage)`, which is darker than the home ground by design), so ask him which strip he
       means before chasing it.
+
+- [ ] **153 — Trimming should show the numbers and the frame notches, like Alight Motion.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ⚠️ **THIS ENTRY HAD NO HEADER UNTIL 22 AUG — it sat inside #154's body for eight days**, which is
+      why it was never worked: every queue tool here matches `^- \[ \]`, so a request with no header of
+      its own is not deprioritised, it is UNREACHABLE. The numbering jumped 152 → 154 and nobody noticed.
+      Fourth distinct cause of this failure (after unnumbered items, the `[0-9]` grep, a malformed line,
+      and an entry ticked `[x]` while saying "STAYS OPEN"). `tools/next.sh` now detects it.
       (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
       extend, in alight motions there's some differences, it tells you all of this information and also
       shows on little notches, by colouring in the exact notch it will land on, because the notches are

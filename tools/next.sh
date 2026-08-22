@@ -78,6 +78,42 @@ if [ -n "$BAD" ]; then
   echo
 fi
 
+# A NUMBER ALLOCATED WHOSE ENTRY WAS NEVER WRITTEN (22 Aug). #153 — "trimming should show the numbers and
+# the frame notches" — sat inside #154's BODY for eight days with no header of its own. Every tool here
+# matches ^- \[ \], so it was not deprioritised: unreachable, like the unnumbered items and the malformed
+# line above. The numbering jumped 152 -> 154 and nothing noticed.
+# THE GAP is the signal that works. A "dated His words line buried deep in a block" detector was tried
+# first and REJECTED: measured against this file, legitimate entries carry that line up to 22 lines into
+# their body (#303, #305), so it cried wolf — and a detector that cries wolf stops being read, which is
+# how the last one died.
+# The 24 gaps below were the state when this was written; most are numbers merged into a neighbour
+# ("119 + 120"), and 90/91 are unexplained with no recoverable text anywhere in the file. They are listed
+# so the check stays SILENT on them and speaks only for a NEW hole — which is exactly the #153 shape.
+KNOWN_GAPS="32 33 34 36 38 39 40 41 42 43 44 45 46 49 50 51 52 54 55 56 57 90 91 120"
+NEWGAP="$(python3 - "$F" "$KNOWN_GAPS" <<'PYG'
+import re, sys
+nums = set()
+for l in open(sys.argv[1], encoding='utf-8'):
+    m = re.match(r'^- \[[ x]\] \*\*(\d+)', l)
+    if m: nums.add(int(m.group(1)))
+known = set(int(x) for x in sys.argv[2].split())
+if nums:
+    lo, hi = min(nums), max(nums)
+    new = [n for n in range(lo, hi + 1) if n not in nums and n not in known]
+    if new: print(' '.join(str(n) for n in new))
+PYG
+)"
+if [ -n "$NEWGAP" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! NUMBERS WITH NO ENTRY: $NEWGAP"
+  echo "!! A number was allocated and its entry never written — that request is UNREACHABLE."
+  echo "!! #153 sat inside #154's body this way for eight days. Search the file for its text; if it is"
+  echo "!! buried in another entry, give it its own '- [ ] **N — …**' line. If the number was merged into"
+  echo "!! a neighbour on purpose, add it to KNOWN_GAPS in this script."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 # AN ENTRY TICKED [x] THAT SAYS IT IS STILL OPEN (22 Aug). #426 was marked DONE while its own header read
 # "⚠️ STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced" — so every queue tool here,
 # which matches ^- \[ \], could not see it. Not deprioritised: UNREACHABLE, for weeks, and found only

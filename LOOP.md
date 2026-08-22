@@ -122,7 +122,24 @@ add-menu shape took `#cc22cc` while a drawing came out `#ffffff`, though the ent
 session late. **`mutate.sh` refuses ambiguous strings now, but HAND EDITS DO NOT GO THROUGH IT.** Anchor on
 a string proven unique (`grep -c`) before replacing, and check which function the edit ended up in.
 
-**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ (a Custom rung on the export frame-rate list — never
+**⚠️ 22 Aug — A WHOLE REQUEST OF HIS WAS UNREACHABLE FOR EIGHT DAYS. #153 had NO HEADER**: his verbatim
+words, a screenshot and a two-part spec ("trimming should show the numbers and the frame notches, like
+Alight Motion") sat inside **#154's body**, an unrelated entry about a black bar. The numbering jumped
+152 → 154 and nothing noticed. **Fifth distinct cause of the unreachable-entry family** — after unnumbered
+items, the `[0-9]` grep, a malformed line, and an entry ticked `[x]` while saying "STAYS OPEN".
+**#153 now has its own header and is ACTIONABLE.** The feature itself is the next build: a live readout
+(Start · End · Duration / In · Out · Change) plus a frame-notch strip with the landing notch filled in.
+His reasoning is the load-bearing part: *"the notches are frames and the whole thing has to actually line
+up with the notches"* — so **check first whether the trim already quantises to whole frames**; if it does
+not, the strip would draw a promise the trim does not keep and the quantising is the real work.
+
+**⚠️ NEW GATE in `tools/next.sh`: a NUMBER WITH NO ENTRY is reported.** Silent on the 24 known gaps (mostly
+numbers merged into a neighbour, e.g. "119 + 120"; 90/91 are unexplained with no recoverable text), fires
+on any new hole. **A "dated His words line buried deep in a block" detector was tried FIRST and rejected**
+— measured, legitimate entries carry that line up to 22 lines into their body (#303, #305), so it cried
+wolf, and a detector that cries wolf stops being read.
+
+**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ **#153 (the feature)**, (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
