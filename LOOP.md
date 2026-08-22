@@ -526,6 +526,24 @@ put on the scratch, mutation-checked by re-making exactly that edit.
 **When a bulk edit uses a short identifier, verify per-site afterwards — `git checkout` is cheap, a silent
 corruption is not.**
 
+**📊 23 Aug — re-measured all 179 effects after the scratch fix: median 14.85ms → 8.57ms, 70 effects
+over 25ms → 42, and his 294ms case is now ~206ms of the same work.** Re-measuring first is what found the
+next target; the old ranking was stale the moment v11.76 landed.
+
+**❌ AND A REJECTION, which is the more useful half.** The new top 15 is 11 WARPS, and every warp kernel
+returns a freshly allocated `[sx, sy]` **per pixel** — 1.46M allocations per warp per frame, exactly the
+v11.76 fault one level down. Built the shared-pair fix (29 sites): gains were real but modest, 10-30%.
+**Then four existing tests went red, and they were right.** They hold TWO warp results at once to compare
+mappings across parameters, and a shared mutable pair makes those the same object — every comparison reads
+"moves no points". **The contract becomes "read the answer before calling again", and any caller that does
+not gets identical values with NOTHING failing.** Reverted.
+**THE LESSON: an optimisation that changes an API from value-returning to shared-mutable is a footgun,
+and the cost of the footgun is not paid by the code you are looking at.** A 10-30% gain on effects the
+quality ladder already manages does not buy that. **The tests that broke are the reason not to ship it —
+do not "fix" tests that are correctly describing the new hazard.**
+Also worth keeping: this is the first time a measured, working optimisation has been thrown away here.
+Recording the numbers AND the reason means nobody rebuilds it in a month.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
