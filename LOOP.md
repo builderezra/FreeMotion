@@ -161,6 +161,16 @@ way.** Drawn across the clip's span (what #153 literally describes), the dragged
 of the strip, so "the exact notch it will land on" carries no information, and an 18s clip thinned 551
 ticks into a block. **Build what the request MEANS when the literal reading cannot work — and say so.**
 
+**✅ v11.59 — #165.3 done, and it was a BUG not just a gap.** A two-finger pinch while drawing did not
+merely fail to zoom — the second finger ran the ordinary drawing path and **committed a stroke**, so every
+attempt to zoom left ink (measured: viewport unchanged, layers 0 → 1). Two fingers now pan and zoom
+anchored on the midpoint, the in-flight stroke is discarded, and the KEEP=90 clamp is SHARED with the
+wheel pan rather than copied. The control that matters most — one finger still draws — is asserted.
+
+**⚠️ A FLAKE, recorded so it is not mistaken for a regression:** "a vertical flick on the timeline keeps
+gliding" failed once during this tick and passed on the next three runs (including two under mutate.sh).
+It is a timing-sensitive fling test, not caused by this change. If it fails again, it wants its own look.
+
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
