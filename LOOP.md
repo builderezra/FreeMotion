@@ -329,6 +329,22 @@ instead of holding the queue forever. #353 had been re-read at the top of the li
 Also ticked #473, whose checkbox I had left open while writing "DONE v11.72" in its body — the very shape
 the new next.sh detector was added for, committed by me two ticks after adding it. The gate caught it.
 
+**✅ 22 Aug — #387: the question in his block was one HE HAD ALREADY ANSWERED, in the report itself.**
+The row asked *"is scrubbing fine and playback bad, or are both bad?"* — and his original words are
+*"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*. So the thing
+called "waiting on Ezra" was waiting for a sentence he had already written. **Third time this pattern has
+appeared** (250 stale blocker, 342 badly-asked question, now 387 redundant question). Replaced with a
+question only he can answer: does play still feel wrong at v11.70+?
+**And a real lead recorded: v11.70 fits the asymmetry exactly.** The latency-bias fix removed a ~6%
+pitch-up on the first ~600ms of EVERY play plus rate churn — something playback does and scrubbing never
+does, which is precisely the split this entry says to treat as the lead.
+**THE AUDIT'S PRESCRIPTION WAS REFUSED HERE, on purpose — second time.** It wanted an old screen
+recording's reading written in as verified fact ("the accent pill was lit at 2.0/4.0/6.0s"). The cited
+line numbers have moved AND the app has no coloured pill — the play button swaps its ICON. Unverifiable,
+so it stayed out. **`tools/.buildable-audit.json` is a lead list; check its evidence before copying it.**
+What came out of checking: a cleaner discriminator for any future recording — **two bars = playing, a
+triangle = stopped** — which settles it from the picture with no inference at all.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
