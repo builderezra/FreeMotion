@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.69
 >
-> **State:** v11.69, **835 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
+> **State:** v11.69, **836 tests green**, tree clean, `HEAD == ssh/main`. **34 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -1689,6 +1689,28 @@ better still, keep working inside the turn rather than parking work for a later 
       thing is WHICH file and what you did just before.
       It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
       CPU throttle all played.
+
+      **22 Aug — the suspected SECOND bug in here is now closed by measurement, and one path gained a test.**
+      A hand audit flagged that the song might "stop dead at 13.453" when you scrub into the tail and then
+      press play, and prescribed replacing the mock-element test with a real-file one. **Both halves of
+      that turned out differently, and the reason is worth keeping.**
+      · **The stall does not reproduce.** Driven with the real `liar.mp3` through a real element, the song
+        runs past its header claim to 19s+, never muted, never paused, on both paths.
+      · **13.453 was real, and it was not a stall — it was Chrome refining the file's length.**
+        `el.duration` IS NOT STABLE for a VBR mp3: it reports **11.210s** at load and then grows as the
+        file decodes — measured **11.210 → 15.752 → 20.297** across one second of playback. 13.456s
+        reproduces exactly, as a decode boundary.
+      · **So the audit's prescription is impossible, and I have not "just not done it".** A real-element
+        test CANNOT catch this regression on Chrome: the element's claim races ahead of wherever the
+        playhead is put, so the gate is never crossed and the mutation restoring the old bug passes such a
+        test happily. I wrote it, mutation-checked it, watched it pass against the defect, and deleted it.
+        **A test that goes green against its own bug is worse than no test.** The mock's inability to
+        drift is not a weakness here — it is the only way to hold the claim still long enough to ask.
+      · **What DID ship: the scrub-into-the-tail-then-play path now has a test**, and it is a genuinely
+        different path — the resume branch, reached only when the element is PAUSED past the gate, which
+        is what you do when you drag into the second half of a song and hit play. Nothing covered it.
+        It asserts the element is neither muted NOR left paused, and mutation-checked both ways: deleting
+        the `play()` call on that branch is caught by this test ALONE.
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just

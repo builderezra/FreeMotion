@@ -38422,4 +38422,64 @@
       try { await XR.clear(); } catch (e) {}
     }
   });
+
+  /* Queue 96 — the path the existing test cannot reach: SCRUB INTO THE TAIL, THEN PRESS PLAY.
+   * The test above lands the playhead past the gate with the element already running. This one starts
+   * PAUSED past it, which is the resume branch (js/app.js — `FM.pastSourceEnd` then `el.play()`), and it
+   * is what you actually do: drag into the second half of a song and hit play. Nothing covered it.
+   * It was flagged as a suspected second bug — "stops dead at 13.453" — so I tried to settle it with the
+   * REAL file (tests/_fixtures/liar.mp3) and a real element. That does not work, and the reason is worth
+   * recording because it will tempt the next person too:
+   *   `el.duration` IS NOT STABLE for a VBR mp3. Chrome reports 11.210s at loadedmetadata and then
+   *   REFINES it upward as the file decodes — measured 11.210 -> 15.752 -> 20.297 across a second of
+   *   playback. So the element's claim races ahead of wherever the playhead is put, the gate is never
+   *   crossed, and the regression cannot be reproduced with a real element at all: the mutation that
+   *   restores the old header-trusting behaviour passes such a test happily. (13.456s reproduces exactly
+   *   — as a DECODE boundary, not a stall, which is what that report was.)
+   * That is why this is a stub. The element's inability to drift is not a weakness here, it is the only
+   * way to hold the claim fixed long enough to ask the question. */
+  test('scrubbing into the tail and pressing play does not leave the song muted or paused (queue 96)', { item: '96' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    const id = '_songTailProbe';
+    try {
+      FM.scene = scene([]);
+      const layer = FM.makeLayer('video', { name: 'Song', start: 0, duration: 26 });
+      layer.id = id; layer.trimStart = 0; layer.trimEnd = 26;
+      FM.scene.layers.push(layer);
+
+      let muted = false, played = 0, paused = true;
+      const el = { readyState: 4, currentTime: 0, duration: 11.21, volume: 1,
+                   play: () => { played++; paused = false; return Promise.resolve(); },
+                   pause: () => { paused = true; } };
+      Object.defineProperty(el, 'muted', { get: () => muted, set: v => { muted = v; }, configurable: true });
+      Object.defineProperty(el, 'paused', { get: () => paused, set: v => { paused = v; }, configurable: true });
+      FM.media.set(id, { kind: 'video', el: el, width: 0, height: 0, duration: 26.38, file: new Blob(['x']) });
+
+      FM.scene.project.duration = 30;
+      // Scrub into the tail while STOPPED — past the header's 11.21s, inside the real 26.38s.
+      FM.playing = false; paused = true; muted = false; played = 0;
+      FM.setTime(18);
+      if (FM.time < 17) throw new Error('the playhead clamped to ' + FM.time + 's — this test would not reach the gate it is about');
+      if (!el.paused) throw new Error('the element was not paused going in, so this is not the resume path this test exists for');
+
+      // …now press play.
+      FM.playing = true;
+      if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed');
+      FM._syncMediaToClock();
+
+      if (muted) throw new Error('scrubbing to 18s and pressing play left the song MUTED — the gate is using the header (11.21s) instead of the decoded length (26.38s), so the second half of every song is silent');
+      if (el.paused) throw new Error('scrubbing to 18s and pressing play left the element PAUSED while the transport ran on — this is "I pressed play and nothing happened", exactly as reported');
+      if (!played) throw new Error('play() was never called on the element after pressing play from 18s');
+    } finally {
+      FM.playing = false;
+      try { FM.pause(); } catch (e) {}
+      if (FM.media.remove) FM.media.remove(id);
+      FM.scene = savedScene;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 })();
