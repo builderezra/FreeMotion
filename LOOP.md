@@ -570,6 +570,25 @@ feature from every user with reduced motion switched on**, with nothing on scree
 convenient bucket of selectors — landing in the nearest one that matches the width is how an accessibility
 setting silently removes an unrelated feature. A second test now fails if the rule drifts back in.
 
+**💡 23 Aug — #460: "43 of 43 work" was TRUE and USELESS, and that is the finding.**
+He has reported the Colouring effects doing nothing THREE times. A prior session measured all 43 and
+proved every one works — and then told him that, which answers nothing for a man who has watched nothing
+happen. Reading the measurements together says something he can actually use: **his test subject cannot
+show several of them.** On his flat `#cc22cc` rectangle on a black background — Channel Remap swaps red
+and blue, which are BOTH 204 in that colour; Halation blooms around highlights a flat mid-tone has none
+of; Long Shadow's default BLACK shadow lands on a black background. All correct behaviour, all
+indistinguishable from a broken button.
+**THE LESSON: "it works" is not an answer to "it does nothing".** When a measurement contradicts what he
+sees, the job is not finished at proving him wrong — the remaining question is *what is he seeing*, and
+the answer is usually in the conditions the measurement had to control for. The evidence was sitting in
+that entry for two days as a list of probe caveats.
+**Also: the plain-render path is CLEAN** — 0.03ms/frame and ZERO heap growth with shapes or text at
+1080x1920. So "one simple video layer lags" is not the compositor, and further effect micro-optimisation
+will not touch it.
+**Logged #477 rather than half-building it:** the app should SAY when an applied effect changes nothing
+on this layer. The detection machinery exists (`contributes`/`lrender` in fx-thumbs); the hard part is not
+crying wolf, and a bad version is worse than none.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
