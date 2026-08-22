@@ -1252,6 +1252,17 @@ window.FM = window.FM || {};
     // the registry says it is, and letting a saved file rename Gaussian Blur would be a small lie with
     // no upside.
     const name = el('span', 'fx-name', (isBox && typeof fx.name === 'string' && fx.name) ? fx.name : reg.label);
+    /* "IT DOES NOTHING" — SAID BY THE APP, NOT LEFT FOR HIM TO CONCLUDE (queue 477, v11.81).
+       He reported effects doing nothing three times (#460). They all work; his SUBJECT could not show
+       them — Channel Remap swaps red and blue and his magenta has both at 204.
+       THE ANSWER IS READ FROM THE EFFECT, NEVER COMPUTED HERE. v11.79 computed it inline on every row
+       build and was withdrawn for it: a panel refresh happens on every slider step, so the hint
+       recomputed constantly and vanished the moment he touched anything — which is exactly when he
+       would be reading it. Now the row only DISPLAYS the last measured answer, and a settle timer
+       measures a new one once the settings stop moving. Dragging therefore leaves the hint alone
+       instead of flickering it off. */
+    if (!off && expanded) scheduleNoopCheck(layer, fx, idx);
+    if (!off && expanded && fx._noop === true) row.classList.add('fx-noop');
     // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it.
     // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
     // editor is ever open — no more scrolling past three expanded stacks to reach the fourth.
@@ -1398,6 +1409,11 @@ window.FM = window.FM || {};
         body.appendChild(kids);
       }
       if (!reg.params.length && !isBox) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      if (row.classList.contains('fx-noop')) {
+        const why = NOOP_WHY[fx.type];
+        body.appendChild(el('div', 'insp-hint fx-noop-hint',
+          'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));
+      }
       wrap.appendChild(body);
     }
     row.appendChild(delBg);
@@ -1932,6 +1948,60 @@ window.FM = window.FM || {};
      (motion reads as state far better than swapping one glyph for another), the head styled as
      something you can press, and a one-time line of text for the person who has never seen it. */
   const FX_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  /* WHY an effect can look dead, where the reason is knowable from the effect alone (queue 477).
+     Every line is a cause queue 460 MEASURED on his own magenta rectangle, not a guess. Anything not
+     listed gets the general sentence — a wrong reason is worse than no reason. */
+  const NOOP_WHY = {
+    channelremap: 'this mode swaps two colour channels, and on this colour they are already the same',
+    halation: 'it blooms around highlights, and there are none here',
+    lightglow: 'it needs a bright area to glow from',
+    longshadow: 'the shadow is the same colour as what is behind it',
+    radialshadow: 'the shadow is the same colour as what is behind it',
+    dropshadow: 'the shadow is the same colour as what is behind it',
+    matchgrade: 'it has no source layer to match yet',
+  };
+  /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
+     fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
+     measured until the settings have been still for NOOP_SETTLE, and the row is only redrawn when the
+     ANSWER changes — otherwise a refresh here would schedule another check and loop forever. */
+  const NOOP_SETTLE = 400;
+  let noopTimer = 0;
+  function scheduleNoopCheck(layer, fx, idx) {
+    if (!FM.fxThumbs || !FM.fxThumbs.effectDoesNothing) return;
+    const key = layer.id + '#' + idx + '#' + JSON.stringify(fx, FM.jsonReplacer);
+    if (fx._noopKey === key) return;                      // already measured for exactly these settings
+    clearTimeout(noopTimer);
+    noopTimer = setTimeout(function () {
+      const live = FM.layerById ? FM.layerById(FM.scene, layer.id) : layer;
+      const lfx = live && live.effects && live.effects[idx];
+      if (!lfx) return;
+      const k2 = live.id + '#' + idx + '#' + JSON.stringify(lfx, FM.jsonReplacer);
+      if (k2 !== key) return;                             // it moved again while we waited — let the next one win
+      const was = lfx._noop;
+      lfx._noop = FM.fxThumbs.effectDoesNothing(live, idx);
+      lfx._noopKey = key;
+      if (lfx._noop === was) return;
+      /* PAINT IT IN PLACE — never `FM.inspector.refresh()` from here. A refresh REBUILDS the row, and
+         this timer fires 400ms after a change, which lands squarely inside a press-and-hold: rebuilding
+         the row under the finger cancels the drag that was arming. The suite caught exactly that —
+         "an OPEN effect row can still be dragged to reorder" went red — and it would have broken
+         reordering for him in the same breath as adding the hint.
+         The accordion guarantees at most one open row, so it can be found rather than tracked. */
+      const openRow = document.querySelector('.fx-row.fx-open');
+      if (!openRow) return;
+      openRow.classList.toggle('fx-noop', lfx._noop === true);
+      const existing = openRow.querySelector('.fx-noop-hint');
+      if (lfx._noop === true) {
+        if (!existing) {
+          const body = openRow.querySelector('.fx-body') || openRow.querySelector('.fx-wrap') || openRow;
+          const why = NOOP_WHY[lfx.type];
+          body.appendChild(el('div', 'insp-hint fx-noop-hint',
+            'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));
+        }
+      } else if (existing) existing.remove();
+    }, NOOP_SETTLE);
+  }
+
   function fxTapHint() {
     try {
       if (localStorage.getItem('fm.fx.tapHint')) return;

@@ -1202,6 +1202,60 @@ window.FM = window.FM || {};
     for (let i = 0; i < on.length; i++) if (Math.abs(on[i] - off[i]) > 2) return true;
     return false;
   }
+  /* DOES THIS ONE EFFECT CHANGE ANYTHING, ON THIS LAYER, AT ITS OWN SETTINGS? (queue 477, v11.81)
+   * Ezra reported effects "doing nothing" three times (#460). All 43 Colouring effects work; what he
+   * could not know is that his SUBJECT could not show some of them — Channel Remap swaps red and blue,
+   * and in his magenta both are 204. Correct behaviour, identical to a broken button.
+   *
+   * WHY FULL PROJECT RESOLUTION, WHICH LOOKS WASTEFUL AND IS NOT NEGOTIABLE. v11.79 did this at the tile
+   * raster and was WITHDRAWN. Enabling an effect routes the layer through an offscreen plate, and at any
+   * reduced size the layer's boundary lands on a fraction of a pixel, so the plate path and the direct
+   * path disagree on the boundary rows. Measured at 74x132: **50 px of noise** — against **vignette at
+   * 115** and **longshadow / radialshadow / dropshadow at exactly 50**. No threshold separates those.
+   * At full resolution the boundary falls on integers and the measured noise is **exactly zero**, so the
+   * comparison can be plain equality with no fudge factor at all.
+   *
+   * THE TIME BUDGET is what makes that affordable. Two full-resolution renders of a cheap effect is a few
+   * ms; of the dearest it is a third of a second, and he has complained about lag for weeks. So the first
+   * render is TIMED, and if it alone blows the budget the check is abandoned and reports "unknown"
+   * (null) rather than freezing the panel. A hint that is absent on the heaviest effects is a fair price;
+   * a stutter is not. */
+  const NOOP_BUDGET_MS = 45;
+  let noopCv = null, noopCx = null;
+  function sceneWithFxOff(target, idx) {
+    const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
+    if (doc.effects && doc.effects[idx]) doc.effects[idx].enabled = false;
+    return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
+  }
+  function sceneAsIs(target) {
+    const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
+    return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
+  }
+  /* null = could not tell (too slow, or it threw). true/false = measured. The caller must treat null as
+     "say nothing", never as "it works" — an absent answer is not a negative one. */
+  function effectDoesNothing(layer, idx) {
+    if (!layer || !FM.scene || !FM.renderScene) return null;
+    const fx = layer.effects && layer.effects[idx];
+    if (!fx || fx.enabled === false) return null;   // switched off is doing nothing ON PURPOSE
+    const P = FM.scene.project;
+    const w = Math.max(2, P.width | 0), h = Math.max(2, P.height | 0);
+    try {
+      if (!noopCv) { noopCv = document.createElement('canvas'); noopCx = null; }
+      if (noopCv.width !== w || noopCv.height !== h) { noopCv.width = w; noopCv.height = h; noopCx = null; }
+      if (!noopCx) noopCx = noopCv.getContext('2d', { willReadFrequently: true });
+      const t0 = performance.now();
+      noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
+      FM.renderScene(noopCx, sceneAsIs(layer), FM.time);
+      if (performance.now() - t0 > NOOP_BUDGET_MS) return null;   // too dear to ask — stay quiet
+      const on = noopCx.getImageData(0, 0, w, h).data;
+      noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
+      FM.renderScene(noopCx, sceneWithFxOff(layer, idx), FM.time);
+      const off = noopCx.getImageData(0, 0, w, h).data;
+      for (let i = 0; i < on.length; i++) if (on[i] !== off[i]) return false;
+      return true;
+    } catch (e) { return null; }
+  }
+
   function canPreview(layer, fxType) {
     if (!layer || !FM.scene || !FM.renderScene) return false;
     if (fxType && FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(fxType, layer)) return false;
@@ -1446,6 +1500,8 @@ window.FM = window.FM || {};
        could hold it to the rule the file states for itself. Read-only: it hands back the function, and
        the caller supplies its own throwaway layer to run it on. */
     _override: function (type) { return OVERRIDES[type] || null; },
+    // queue 477: does one effect change anything on this layer? null = could not tell.
+    effectDoesNothing: function (layer, idx) { return effectDoesNothing(layer, idx); },
     // queue 400: the tile raster follows the screen. Exposed so the rule can be checked without a 3×
     // display, and so the measured cost of changing it can be re-derived rather than taken on trust.
     _tileScaleFor: function (dpr) { return tileScaleFor(dpr); },

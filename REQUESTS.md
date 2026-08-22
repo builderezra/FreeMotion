@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.80
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.81
 >
-> **State:** v11.80, **850 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.81, **852 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4557,9 +4557,30 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [ ] **477 — Tell him when an effect changes NOTHING on this layer, instead of letting him think it is
-      **STATUS: 🟢 READY — nothing is stopping this**
-      broken.** ⚠️ **BUILT v11.79 AND WITHDRAWN THE NEXT TICK — a real fault, found by hunting my own work.**
+- [x] **477 — Tell him when an effect changes NOTHING on this layer.** ✅ **DONE v11.81, on the second
+      attempt — the first (v11.79) was withdrawn, and the ticks between were spent finding out why.**
+      **The shipped design, every part of it forced by a measurement:**
+      · **Full project resolution.** At a reduced raster, switching an effect on routes the layer through
+        a plate whose boundary falls on a fraction of a pixel: **50 px of noise at 74x132 — against
+        vignette at 115 and longshadow/radialshadow/dropshadow at exactly 50.** No threshold separates
+        those. At full size the noise is **zero**, so the comparison is plain equality with no fudge.
+      · **Measured only after the settings settle (400ms), never on a row build.** v11.79 computed inline
+        on every rebuild, and a panel refresh happens on every slider step — which is why the hint
+        vanished the moment he touched anything.
+      · **Painted in place, never via `FM.inspector.refresh()`.** The suite caught this: a refresh from the
+        settle timer REBUILDS the row, and the timer fires 400ms after a change — squarely inside a
+        press-and-hold — so it cancelled the drag that was arming. *"an OPEN effect row can still be
+        dragged to reorder"* went red. It would have broken reordering in the same breath as adding a hint.
+      · **A 45ms time budget.** If the first of the two renders alone blows it, the check is abandoned and
+        reports *unknown*, and the row says nothing. A missing hint on the heaviest effects is a fair
+        price; a stutter, from the man who has reported lag for weeks, is not.
+      **Four controls in the tests, because crying wolf is the whole risk:** the same effect on an orange
+      fill is not flagged; a switched-off effect is not flagged; a **vignette** is not flagged (the case
+      that killed the threshold design); and rebuilding the row must run the check **zero** times —
+      asserted by counting calls, since with a stable full-res answer there is no flicker left to detect.
+      ⚠️ **`null` means "could not tell" and must never be read as "it works"** — an absent answer is not
+      a negative one.
+      ⚠️ **(Superseded history kept below.)** BUILT v11.79 AND WITHDRAWN THE NEXT TICK — a real fault, found by hunting my own work.
       **What was right:** the detection. It renders the layer twice, once with the one effect bypassed,
       and compares all four channels. On his exact `#cc22cc` fill it correctly flagged channelremap,
       halation and longshadow and stayed silent for grayscale/invert/brightness, and for channelremap on

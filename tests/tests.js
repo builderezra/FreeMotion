@@ -39332,4 +39332,111 @@
       throw new Error('the gradient sits inside "' + header.trim() + '" — anyone with reduced motion enabled would not get it, and nothing would say so');
     }
   });
+
+  /* Queue 477 — rebuilt after v11.79 was withdrawn. Ezra reported effects "doing nothing" three times
+   * (#460); they all work, but his SUBJECT could not show them — Channel Remap swaps red and blue and
+   * his magenta `#cc22cc` has both at 204.
+   * THE TWO THINGS THAT KILLED THE FIRST ATTEMPT, both asserted here:
+   * 1. IT MUST COMPARE AT FULL PROJECT RESOLUTION. At a reduced raster, switching an effect on routes the
+   *    layer through a plate whose boundary lands on a fraction of a pixel — measured 50 px of noise at
+   *    74x132, against vignette at 115 and longshadow/radialshadow/dropshadow at EXACTLY 50. No threshold
+   *    separates those. At full resolution the measured noise is zero, so equality needs no fudge.
+   * 2. IT MUST NOT RECOMPUTE WHILE HE IS DRAGGING. v11.79 computed on every row build, and a panel
+   *    refresh happens on every slider step — so the hint vanished the instant he touched anything. */
+  test('an effect that changes nothing on this layer is detected — and a working one is not (queue 477)', { item: '477' }, async function () {
+    if (!FM.fxThumbs || typeof FM.fxThumbs.effectDoesNothing !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable');
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920;
+      const put = (fill, type) => {
+        const inst = FM.fxRegistry.makeInstance(type);
+        if (!inst) return null;
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', name: 'probe', x: 540, y: 960, shapeW: 700, shapeH: 700, fill: fill });
+        L.start = 0; L.duration = 5; L.effects = [inst];
+        FM.scene.layers.push(L); FM.refreshAll();
+        return { L: L, inst: inst };
+      };
+
+      // HIS CASE: on a flat magenta fill, Channel Remap swaps two channels that are already equal.
+      const a = put('#cc22cc', 'channelremap');
+      if (!a) throw new Error('channelremap has no registry instance — this test cannot run');
+      const dead = FM.fxThumbs.effectDoesNothing(a.L, 0);
+      if (dead !== true) throw new Error('Channel Remap changes nothing on a flat #cc22cc fill (both red and blue are 204) and the check said ' + dead + ' — which is the whole of his complaint');
+
+      /* CONTROL 1 — THE SAME EFFECT ON A SUBJECT IT CAN ACT ON. This is what stops the hint reading as
+         "Channel Remap is broken": on orange it works and must be left alone. */
+      const b = put('#ff8a3d', 'channelremap');
+      if (FM.fxThumbs.effectDoesNothing(b.L, 0) === true) throw new Error('Channel Remap was called dead on an ORANGE fill, where it demonstrably changes thousands of pixels — the hint is firing on a working effect');
+
+      /* CONTROL 2 — a switched-OFF effect is doing nothing ON PURPOSE, and must report "unknown" rather
+         than "dead"; labelling it would fire on the most ordinary state there is. */
+      const c = put('#cc22cc', 'channelremap');
+      c.inst.enabled = false; FM.refreshAll();
+      if (FM.fxThumbs.effectDoesNothing(c.L, 0) === true) throw new Error('a DISABLED effect was reported as doing nothing — it is off, which he can already see');
+
+      /* CONTROL 3 — the localised case that killed the threshold design. A vignette changes only 115 px
+         of a reduced raster against 50 px of noise; at full resolution it must come out plainly ALIVE. */
+      const d = put('#ff8a3d', 'vignette');
+      if (d && FM.fxThumbs.effectDoesNothing(d.L, 0) === true) throw new Error('a vignette was reported as doing nothing — it only touches the edges of the layer, and calling that dead is exactly what the discarded threshold design would have done to every shadow effect');
+    } finally {
+      FM.scene.layers = saved.layers;
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.refreshAll(); FM.timeline.rebuild();
+    }
+  });
+
+  /* The other half of the withdrawal: the row must DISPLAY a stored answer, never compute one while it
+   * is being rebuilt. If it computes inline, a slider drag — which refreshes the panel on every step —
+   * makes the hint flicker off exactly when he is looking at it. */
+  test('the no-op hint is read from the effect, not recomputed on every panel refresh (queue 477)', { item: '477' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'probe', x: 540, y: 960, shapeW: 700, shapeH: 700, fill: '#cc22cc' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('channelremap');
+      if (!inst) throw new Error('channelremap has no registry instance');
+      inst._expanded = true;
+      /* Planted, not measured. The row's only job is to show what it is told — so this proves the
+         DISPLAY path without depending on a timer, and fails if the row goes back to deciding for
+         itself. */
+      inst._noop = true; inst._noopKey = 'planted';
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.selectLayer(L.id);
+      await sleep(200);
+      const cards = [].slice.call(document.querySelectorAll('.cat-card')).filter(c => c.offsetParent);
+      const fxCard = cards.find(c => /effects/i.test(c.textContent || ''));
+      if (!fxCard) throw new Error('no Effects card in the layer menu — cannot open the effect list');
+      fxCard.click();
+      await sleep(260);
+      if (!document.querySelector('.fx-noop-hint')) throw new Error('the row did not show a hint for an effect already marked as doing nothing — it is not reading the stored answer');
+
+      /* THE WITHDRAWAL CASE, asserted as COST rather than as flicker. The check is two FULL-RESOLUTION
+         renders; doing it on every row build would put that on every slider step, and a panel refresh
+         happens on every step. So count the calls: rebuilding the row must not make any. */
+      const real = FM.fxThumbs.effectDoesNothing;
+      let calls = 0;
+      FM.fxThumbs.effectDoesNothing = function (l, i) { calls++; return real.call(FM.fxThumbs, l, i); };
+      let gone = 0;
+      try {
+        for (let i = 0; i < 8; i++) {
+          inst.params.mix = 0.4 + i * 0.05;
+          FM.inspector.refresh();
+          if (!document.querySelector('.fx-noop-hint')) gone++;
+        }
+      } finally { FM.fxThumbs.effectDoesNothing = real; }
+      if (calls) throw new Error('rebuilding the effect row ran the full-resolution check ' + calls + ' time(s) — that is two whole renders per slider step, which is what made v11.79 unusable');
+      if (gone) throw new Error('the hint disappeared on ' + gone + ' of 8 rapid refreshes — exactly why v11.79 was withdrawn: it vanishes while you drag the slider you are reading it about');
+    } finally {
+      FM.scene.layers = saved.layers;
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
 })();
