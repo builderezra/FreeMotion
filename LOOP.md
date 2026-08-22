@@ -384,6 +384,18 @@ explicitly conditional on his verdict of the shipped version (*"if it's really b
 an effect"*), and the export-voice choice costs a key, a bill and the local-only rule. Saying so plainly
 matters as much as catching the false ones: auditing the claim is the rule, not disbelieving it.
 
+**🔴 22 Aug — #406: I HAD BEEN DROPPING AN EXPLICIT INSTRUCTION FOR THREE DAYS.**
+His request contained *"don't stop until I reply acknowledging it, remind me to acknowledge as well"* —
+he PRE-EMPTED exactly the failure that then happened: I answered once, on 19 Aug, and never mentioned it
+again. An instruction to repeat something cannot be honoured by remembering to; it needs a list.
+**So there is now a "SAY THESE IN EVERY REPLY UNTIL HE ANSWERS" block at the top of STATE**, with the
+line deleted the moment he answers. Same principle as every other gate here: the safeguard is the
+structure, not the intention.
+**And clause 1 was a guess waiting to happen.** *"Get rid of saving presets from this menu"* — no
+screenshot, and there turn out to be THREE savers in three different places (layer ⋯, an effect row's ⋯,
+the Effects card button). Deleting the wrong one costs him a feature, so it is a pick-one with a
+recommendation instead. The entry had warned about this and was right.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
