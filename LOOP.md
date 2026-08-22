@@ -475,6 +475,24 @@ the harm was in the gap between them. **Before offering a destructive option, ch
 depends on the thing being destroyed** — a grep for the feature's name across REQUESTS.md would have
 found it, and that costs seconds.
 
+**✅ v11.74 — THE FIRST REAL RESULT ON MOBILE LAG, which is what he asked for. Tilt Shift 776ms → 74ms.**
+Timed ALL 179 effects at 1080x1350 — his own slow reading's exact size. **Median 14.85ms EACH**; 9 shape
+layers with no effects cost 0.05ms. 24 median effects = 356ms against his measured 294.69ms: **the numbers
+agree, so his lag was never a mystery** — effects are per-pixel JS and a dozen cannot hit 60fps on any
+phone by tuning. That is what the quality ladder is for, and #202 proved the ladder works.
+**The outlier was real and fixable: Tilt Shift at 775.75ms, 5x the next worst and 52x the median** — a
+radius-8 box blur done with 17 taps per pixel per channel, twice (~198M adds a frame). A box blur needs a
+sliding window, not taps. 10.5x, and **byte-identical**, which is the assertion that matters: a faster
+kernel drawing a different picture silently edits every project that used it. The old kernel lives in the
+test as the reference so it cannot drift back into the app.
+**MEASURE THE WHOLE SET BEFORE OPTIMISING ANY OF IT.** The ranking is the finding — without it, tiltshift
+looks like one effect among many, and the 52x outlier is invisible. Next: spinstreaks 320, turbulentdisplace
+240, zoomstreaks 173, lensblur 158.
+**⚠️ AND A CORRECTION TO HOW THIS LOOP HAS BEEN SPENDING TICKS.** He said: *"i dont know what ur doing as i
+just leave u on all day … i just hope u make the project better for me"*. The preceding several ticks were
+queue hygiene — all real, all unblocking, none of it visible to him as improvement. **Shipping beats
+tidying; tidy only what falls out of the work.**
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
