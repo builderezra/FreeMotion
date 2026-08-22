@@ -28,6 +28,7 @@
 > | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
 > | **406** | 🔔 **You asked me to keep reminding you to acknowledge this one.** The answer: there are **three** preset savers, not two — one effect · effects-only · **whole look, the only one that carries ANIMATION**. So they are NOT duplicates and nothing was deleted. Just say "got it" | — |
 > | **406b** | And which menu did you want preset-saving OUT of? **A** ⭐ the layer ⋯ menu · **B** an effect row's ⋯ · **C** the Effects card button | **A** — it's the only one in a crowded ⋯ menu, and the Presets card still has it |
+> | **454** | You said presets are for effects ONLY. The one left is "Save whole look as preset…" — **it is the only way to copy an ANIMATION onto another layer.** **A** delete it (what you literally asked) · **B** ⭐ keep it but rename it "Copy look & motion to…" so "preset" means one thing | **B** — same goal, nothing lost |
 > | **429a** | Past the end of your project, which should stop? **A** ⭐ the ruler's tick lines · **B** the add row's dashed wash · **C** the lane shading · **D** the head divider *(you asked for D — picking it undoes that)* | **A** |
 > | **429b** | ⏱️ **30 seconds on your phone, and it closes a bug I can't test here.** Swipe the timeline in Safari — does the little **+** still jump down as the toolbar hides? A fix shipped at v10.67; headless Chrome has no toolbar, so it physically cannot tell the fix from the bug | Just "still moves" or "fine now" |
 > | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
@@ -14504,8 +14505,25 @@ wait for them to report back."*
          The layer menu offers *"Save whole look as preset…"*, which saves the layer's look AND its
          animations. That is more than "just saving what effects the layer has", so by his rule it
          should go — but it is a different feature from the one he circled and he may not have had it
-         in mind. **Two options, and he should pick: remove it entirely (recommended — it matches the
-         rule he stated), or keep it and cut it down to effects only.**
+         in mind.
+         🔗 **22 Aug — THIS COLLIDES WITH #406 AND THE TWO WERE BEING ASKED SEPARATELY, WHICH IS WRONG.**
+         #406 is his own question — *"what is the difference between saving a preset with just effects
+         and saving a layer as a preset"* — and the answer, which he has not acknowledged yet, is that
+         **the whole-look saver is the ONLY way to carry an ANIMATION from one layer to another.** It
+         saves the transform's keyframes, re-based onto the target so it animates from where that layer
+         already is.
+         So #454's rule, applied literally, **deletes the only route to copying a movement** — and he
+         would be choosing that without being told, because the two entries never referenced each other.
+         **Put as ONE question, with what each costs:**
+         | | what happens | cost |
+         |---|---|---|
+         | **A** | remove "Save whole look as preset…" entirely | **the literal reading of his words** (*"remove any other function"*) — and you lose the only way to copy an animation onto another layer |
+         | **B** ⭐ *recommended* | keep the feature, stop calling it a preset — rename it "Copy look & motion to…" and move it out of the Presets card | the word "preset" then means exactly one thing, which is the goal he stated — but he did say *"not merely rename"*, so this is a partial reading and he should know that |
+         | **C** | cut it down to effects only | makes it a duplicate of "Save effects only…", so it is A with extra steps |
+         **Why B is recommended over the literal A:** his complaint was that "preset" meant several
+         different things. B fixes exactly that without destroying a capability he may not know he has —
+         and he can still say "no, remove it" in one word. **A is what he literally asked for and will be
+         done on one word too.** Nothing is deleted until he picks.
       Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
