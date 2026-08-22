@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.64
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.65
 >
-> **State:** v11.64, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.65, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5463,7 +5463,28 @@ better still, keep working inside the turn rather than parking work for a later 
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
 
+- [x] **227b — A drawing's draw-on keyframes did not travel with its clip.** ✅ **DONE v11.65.**
+      (22 Aug — the last item from the closed-request audit, and the clause the entry's headline hid.)
+      **The feature itself always worked:** "Draw from" / "Draw to" exist, the renderer honours their
+      keyframes, and a test already proved a keyframed Draw to grows over time. **What was missing is that
+      `trimStart` / `trimEnd` were listed by NEITHER keyframe collector** — not `FM.animatedProps`, not the
+      timeline's `keyframeSlots` — so nothing else in the app knew those keyframes existed.
+      **Measured consequence:** moving a clip carried its transform keyframes (1,4 → 3,6) and left the
+      draw-on at 1,4. The drawing then animates at the wrong moment relative to its own clip, and the
+      keyframes never appear in the timeline row or in keyframe stepping.
+      🚨 **THE GATE IS THE DANGEROUS PART AND IS ASSERTED HARDER THAN THE FEATURE.** On a VIDEO layer
+      `trimStart` is the source trim **in seconds**, read as a bare number by the exporter, the audio
+      player, the timeline and the audio reactor. Registering it there would let the keyframe machinery
+      write an OBJECT where those readers expect a number — far worse than the bug being fixed. Only a
+      shape's OPEN path carries the draw-on meaning, which is the same condition the inspector uses to
+      build the rows. Closed paths, rectangles and videos are each asserted to be left alone, and the test
+      shifts a video's keyframes and checks its `trimStart` is still the number 1.25.
+      ⚠️ **A fixture trap worth keeping:** `FM.makeLayer` does not accept `closed` as an init property, so
+      `makeLayer('shape', { closed: true })` returns an OPEN path. A first pass used that and concluded the
+      gate was broken for closed paths. Set `.closed` after creation, the way a real closed vector does.
+
 - [ ] **472 — The timeline's vertical-flick test is FLAKY, and a flaky test is worse than none.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       **Not a request from him — a defect in our own safety net, filed so it is not tolerated.**
       (22 Aug.) *"a vertical flick on the timeline keeps gliding, like a horizontal one"* has now failed
       **twice** on unrelated ticks — once during the drawing-overlay work, once while shipping v11.64 —

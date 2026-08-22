@@ -272,6 +272,13 @@ window.FM = window.FM || {};
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => add(layer.crop, k, 'crop.' + k));
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => add(layer.shadow, k, 'shadow.' + k));
     if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => add(layer.trimPath, k, 'trimPath.' + k));
+    /* The drawing's own draw-on — see the note beside the matching line in js/scene.js. Addressed as
+       `drawOn.*` rather than the raw property name so a slot address can never be confused with a
+       video's `trimStart`, which is seconds of source and must stay a plain number. */
+    if (layer.type === 'shape' && layer.shape === 'path' && !layer.closed) {
+      add(layer, 'trimStart', 'drawOn.from');
+      add(layer, 'trimEnd', 'drawOn.to');
+    }
     if (layer.stroke && layer.stroke.dash) add(layer.stroke.dash, 'offset', 'dash.offset');
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => add(layer.repeater, k, 'repeater.' + k));
     (layer.masks || []).forEach((m, i) => { if (m) add(m, 'path', 'mask.' + i + '.path'); });

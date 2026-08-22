@@ -404,6 +404,20 @@ window.FM = window.FM || {};
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => { if (isAnimated(layer.crop[k])) out.push(layer.crop[k]); });   // crop keyframes — omitting them left crop animation behind on clip moves and undeletable
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => { if (isAnimated(layer.shadow[k])) out.push(layer.shadow[k]); });   // shadow (keyframeable)
     if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => { if (isAnimated(layer.trimPath[k])) out.push(layer.trimPath[k]); });   // stroke draw-on
+  /* A DRAWING'S "Draw from" / "Draw to" (queue 227's draw-on, registered 22 Aug). These live on the
+     layer as `trimStart` / `trimEnd`, and they were keyframable and rendered from day one — but were
+     listed by NEITHER collector, so nothing else in the app knew they existed. Measured consequence:
+     moving a clip carried its transform keyframes (1,4 → 3,6) and left the draw-on sitting at 1,4, so the
+     drawing animated at the wrong time relative to its own clip.
+     ⚠️ THE GATE IS LOAD-BEARING, NOT TIDINESS. On a VIDEO layer `trimStart` is the source trim IN
+     SECONDS — read as a bare number by the exporter, the audio player, the timeline and the audio
+     reactor. Registering it as a keyframable slot on anything but an open path would let the keyframe
+     machinery write an object where those readers expect a number, which is a far worse bug than the one
+     being fixed. Only a shape's open path has the draw-on meaning, which is exactly the condition the
+     inspector uses to build the two rows. */
+  if (layer.type === 'shape' && layer.shape === 'path' && !layer.closed) {
+    ['trimStart', 'trimEnd'].forEach(k => { if (isAnimated(layer[k])) out.push(layer[k]); });
+  }
     if (layer.stroke && layer.stroke.dash && isAnimated(layer.stroke.dash.offset)) out.push(layer.stroke.dash.offset);   // marching-ants
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => { if (isAnimated(layer.repeater[k])) out.push(layer.repeater[k]); });   // shape repeater
     if (layer.masks) layer.masks.forEach(m => { if (m && isAnimated(m.path)) out.push(m.path); });   // pen-mask path (moving reveal / roto) — its keyframes show on the clip and retime with it

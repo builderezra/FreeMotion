@@ -24703,6 +24703,56 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a drawing\'s draw-on keyframes travel with its clip (queue 227)', { item: 'draw-on-keyframes' }, async function () {
+    /* "Draw from" / "Draw to" animate a drawing on over time, and they worked from day one — the rows
+     * exist, the renderer honours them, and a test already proves a keyframed Draw to grows. What was
+     * missing is that `trimStart` / `trimEnd` were listed by NEITHER keyframe collector, so nothing else
+     * in the app knew those keyframes existed.
+     * MEASURED consequence: moving a clip carried its transform keyframes (1,4 → 3,6) and left the
+     * draw-on sitting at 1,4 — the drawing then animates at the wrong moment relative to its own clip.
+     * ⚠️ THE GATE IS THE DANGEROUS PART, so it is asserted harder than the feature. On a VIDEO layer
+     * `trimStart` is the source trim IN SECONDS, read as a bare number by the exporter, the audio player,
+     * the timeline and the audio reactor. Registering it as a keyframable slot there would let the
+     * keyframe machinery write an OBJECT where those readers expect a number — far worse than the bug
+     * being fixed. Only a shape's OPEN path has the draw-on meaning. */
+    const layers0 = FM.scene.layers.slice();
+    const slotsOf = L => (FM._keyframeSlots(L) || []).map(s => s.key || s.addr || '').filter(k => /drawOn/.test(k));
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'D', shape: 'path', start: 1, duration: 4, points: [[10, 10], [60, 40], [110, 20]], stroke: { enabled: true, width: 6, color: '#fff' } });
+      FM.scene.layers.push(L);
+      L.trimEnd = { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 4, v: 100, e: 'linear' }] };
+      L.transform.x = { kf: [{ t: 1, v: 100, e: 'linear' }, { t: 4, v: 200, e: 'linear' }] };
+
+      if (!(FM.animatedProps(L) || []).some(p => p === L.trimEnd)) throw new Error('a keyframed Draw to is not listed by FM.animatedProps — nothing that walks a layer\'s animation can see it');
+      if (slotsOf(L).length !== 2) throw new Error('the timeline has no keyframe slots for the draw-on (got ' + JSON.stringify(slotsOf(L)) + ')');
+
+      // THE BUG: moving the clip must carry the draw-on, exactly as it carries the transform.
+      FM.shiftLayerKeyframes(L, 2); L.start += 2;
+      const drawOn = L.trimEnd.kf.map(k => k.t).join(',');
+      const tx = L.transform.x.kf.map(k => k.t).join(',');
+      if (tx !== '3,6') throw new Error('the CONTROL failed — the transform keyframes did not follow the clip either (' + tx + '), so this run proves nothing');
+      if (drawOn !== '3,6') throw new Error('moving the clip left the draw-on keyframes at ' + drawOn + ' while the transform moved to ' + tx + ' — the drawing animates at the wrong time');
+
+      /* THE GATE, all three ways. `makeLayer` does not accept `closed` as an init prop — a first pass
+         passed it in and got an OPEN path back, which made a closed path look like it wrongly had the
+         slots. Set it the way a real closed vector path carries it. */
+      const C = FM.makeLayer('shape', { name: 'C', shape: 'path', start: 0, duration: 2, points: [[0, 0], [10, 10], [20, 0]] });
+      C.closed = true;
+      if (slotsOf(C).length) throw new Error('a CLOSED path was given draw-on slots — it has no draw-on');
+      const R = FM.makeLayer('shape', { name: 'R', shape: 'rect', start: 0, duration: 2 });
+      if (slotsOf(R).length) throw new Error('a rectangle was given draw-on slots');
+      const V = FM.makeLayer('video', { name: 'V', start: 0, duration: 3 });
+      V.trimStart = 1.25;
+      if (slotsOf(V).length) throw new Error('a VIDEO was given draw-on slots — its trimStart is SECONDS of source and must never become a keyframe object');
+      FM.shiftLayerKeyframes(V, 2);
+      if (typeof V.trimStart !== 'number' || V.trimStart !== 1.25) throw new Error('shifting a video\'s keyframes altered its source trim (' + JSON.stringify(V.trimStart) + ') — that number feeds the exporter and the audio player');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      await sleep(80);
+    }
+  });
+
   test('a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419)', { item: '419' }, async function () {
     /* His words: *"The key frames for these three things are all interacting with each other and causing
      * issues, make em independent."* v11.33 fixed the ADD side and the row-scoped path, and the
