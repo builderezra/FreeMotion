@@ -5463,6 +5463,22 @@ better still, keep working inside the turn rather than parking work for a later 
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
 
+- [ ] **472 — The timeline's vertical-flick test is FLAKY, and a flaky test is worse than none.**
+      **Not a request from him — a defect in our own safety net, filed so it is not tolerated.**
+      (22 Aug.) *"a vertical flick on the timeline keeps gliding, like a horizontal one"* has now failed
+      **twice** on unrelated ticks — once during the drawing-overlay work, once while shipping v11.64 —
+      and passed on the immediate re-run both times. The failure message is identical each time:
+      **"a fling WAS armed (v≈1.8) but the list did not move: 150 → 150"**, so momentum starts and the
+      scroller does not follow.
+      **Why this matters more than one red run:** ship.sh refuses on a red suite, which is correct — but a
+      suite that goes green when you simply run it again teaches the next session to re-run instead of
+      read, and that is how a real regression gets waved through. It also cost two full suite runs today.
+      **Where to look:** the fling is armed from measured velocity, so the arm side works. The suspects
+      are the settle/RAF handoff (the test may sample before the first frame lands) and the scroller being
+      rebuilt underneath the animation. **Do not "fix" it by widening the tolerance** — that hides it.
+      Reproduce it first: run the suite in a loop and catch a failing run, or drive the gesture directly
+      and log the scrollTop each frame.
+
 - [x] **419b — A tilt keyframe turned the rotation diamond into a delete button.** ✅ **DONE v11.64.**
       (22 Aug — the unfixed half of #419, found by re-auditing closed requests against the code.)
       His words: *"The key frames for these three things are all interacting with each other and causing

@@ -167,9 +167,12 @@ attempt to zoom left ink (measured: viewport unchanged, layers 0 → 1). Two fin
 anchored on the midpoint, the in-flight stroke is discarded, and the KEEP=90 clamp is SHARED with the
 wheel pan rather than copied. The control that matters most — one finger still draws — is asserted.
 
-**⚠️ A FLAKE, recorded so it is not mistaken for a regression:** "a vertical flick on the timeline keeps
-gliding" failed once during this tick and passed on the next three runs (including two under mutate.sh).
-It is a timing-sensitive fling test, not caused by this change. If it fails again, it wants its own look.
+**⚠️ A REAL FLAKE, NOW SEEN TWICE — it has earned its own item.** "a vertical flick on the timeline keeps
+gliding" failed once on 22 Aug and again while shipping v11.64, both times reporting *a fling WAS armed
+(v≈1.8) but the list did not move: 150 → 150*, and both times passing on the immediate re-run. It is not
+caused by either change (one was the drawing overlay, one the transform panel). **A red suite that goes
+green on a re-run is the worst kind of test**: it trains you to re-run instead of read. Filed as a thing
+to fix rather than tolerated — see the queue.
 
 **✅ v11.60 — #257 done, and it is the most instructive one yet.** The white gradient ring shipped
 correctly at v8.36, then **queue 286 broke it on desktop** by claiming the same `::after` on every panel
@@ -221,6 +224,12 @@ merged list was computed nowhere. Measured: 3600 red pixels, **0 green**. Now 15
 throughout — the translation was always right, nothing consumed it. **When a feature is "compute a thing
 then render it", test the PIXELS, not the computation.** With a control asserting the picture is on screen
 at all, so "nothing drawn" cannot pass for the wrong reason.
+
+**✅ v11.64 — #419 done, and the POLISH-LOG had told him it was already fixed.** The rail diamond judged
+add-vs-remove across ALL THREE rotate channels, so a tilt key under the playhead flipped it into REMOVE
+and one press destroyed the tilt animation without ever keying rotation. It now judges on the channels it
+is ABOUT; what it acts on is unchanged. The existing #419 test pressed the rail three times and every
+press was an ADD — which is exactly why nothing caught it.
 
 **NEXT, oldest first from the audit lists:** (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
