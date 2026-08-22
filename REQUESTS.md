@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.76
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.77
 >
-> **State:** v11.76, **847 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.77, **848 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4557,8 +4557,24 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [ ] **476 — PC: the layer-category grid sizes its cards wrongly after you interact with it a while.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **476 — PC: the layer-category grid sizes its cards wrongly after you interact with it a while.**
+      ✅ **PARTLY DONE v11.77 — the misalignment is fixed; the "sometimes" half did NOT reproduce.**
+      **MEASURED at 1600px with a layer selected: every card is EXACTLY the same width (112.3px, all
+      eight). The size was never wrong.** What was wrong is the POSITION: `justify-content: center` put
+      the short last row at x=74.7 / 196 while the columns above sat at 14 / 135.3 / 256.7 — **offset by
+      60.7px**, so two identical cards read as the wrong size because nothing lines up with them. That is
+      exactly what his screenshot shows. Changed to `flex-start`, which only affects a SHORT row (a full
+      row fills the width either way), so no card was resized and his earlier *"make the two extra big
+      ones smaller"* is not reopened.
+      The test pins the ALIGNMENT, not the width — a width assertion passes happily on the broken layout,
+      which is why this went unnoticed. Mutation-checked by restoring the centring.
+      ⚠️ **NOT REPRODUCED: the intermittent half.** He said *"sometimes … if you play around with it a
+      bunch"* and *"when the timeline and add menu are split, only for when ur editing a layer"*. Driven
+      at 1280 and 1600, selecting a layer and cycling the add menu open/closed four times: **the cards
+      measured 86.7px then 112.3px and never varied within a layout, at any point in the sequence.**
+      The misalignment above is CONSTANT, not intermittent, so it may not be the whole of what he saw.
+      **If it still looks wrong after v11.77, that is a second fault and needs the screenshot at the
+      moment it happens.**
       (22 Aug, PC screenshot of the inspector's 8-card grid on a Star layer.) His words, verbatim:
       > the sizing for htis menu on pc seems to have issues sometimes, where it doesnt show the buttons at the right size if you play around with it a bunch
       **What the shot shows:** cards 1-6 (Colouring · Outline & Shadows · Mixing · Position/Scale · Speed ·

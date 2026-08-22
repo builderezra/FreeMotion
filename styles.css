@@ -744,7 +744,18 @@ body.text-editing .sb-wrap { display: none !important; }
    kind of thing. Flex rather than grid is what buys the centring — the stretch classes the JS still
    assigns (.cat-span2/3, .cat-mspan2/3, .cat-card-fx) set grid-column, which is inert here, so they
    go quiet on their own with no change to inspector.js. */
-.cat-grid { --cat-cols: 2; --cat-gap: 9px; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--cat-gap); }
+/* A SHORT LAST ROW LINES UP WITH THE COLUMNS ABOVE IT (queue 476, v11.77). Ezra, with a PC screenshot
+   of the 8-card grid: *"the sizing for htis menu on pc seems to have issues sometimes, where it doesnt
+   show the buttons at the right size"*.
+   MEASURED at 1600px: every card is EXACTLY the same width (112.3px) — the size was never wrong. What is
+   wrong is the POSITION: `justify-content: center` put the last row's two cards at x=74.7 and 196 while
+   the three columns above sit at 14, 135.3 and 256.7. Offset by 60.7px, so they read as a different size
+   because nothing lines up with them.
+   `flex-start` only affects a SHORT row — a full row fills the width either way — so this changes nothing
+   about the sizes, and in particular does not reopen the request the centring came from: his earlier
+   *"make the two extra big ones smaller"*, which was about Presets being two columns wide and Effects the
+   full width. Nothing is stretched here; the leftovers just sit under the column they belong to. */
+.cat-grid { --cat-cols: 2; --cat-gap: 9px; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--cat-gap); }
 
 .cat-card { flex: 0 0 calc((100% - (var(--cat-cols) - 1) * var(--cat-gap)) / var(--cat-cols)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 17px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; transition: background .12s, border-color .12s, transform .04s; }
 .cat-card { position: relative; }

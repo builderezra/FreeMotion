@@ -39216,4 +39216,61 @@
     }
     if (onScratch < 10) throw new Error('only ' + onScratch + ' kernels are on the shared scratch — the optimisation has been reverted, so this guard is watching nothing');
   });
+
+  /* Queue 476 — Ezra, with a PC screenshot of the layer menu: *"the sizing for htis menu on pc seems to
+   * have issues sometimes, where it doesnt show the buttons at the right size if you play around with it
+   * a bunch"*, and then *"i think it gets messed up when the timeline and add menu are split, only for
+   * when ur editing a layer"*.
+   * MEASURED at 1600px with a Star layer selected: every card is EXACTLY the same width — 112.3px, all
+   * eight. The SIZE was never wrong. What was wrong is where the last row SITS: `justify-content: center`
+   * put its two cards at x=74.7 and 196 while the three columns above sat at 14, 135.3 and 256.7. Offset
+   * by 60.7px, so they read as a different size because nothing lines up above or below them.
+   * This test pins the alignment rather than the width, because the width was never the fault — and a
+   * width-only assertion would have passed happily on the broken layout, which is exactly why it went
+   * unnoticed. */
+  test('the layer menu’s short last row lines up with the columns above it (queue 476)', { item: '476' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'star', name: 'Star', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#e91e63' });
+      L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.timeline.rebuild(); FM.selectLayer(L.id);
+      await sleep(320);
+
+      const cards = [].slice.call(document.querySelectorAll('.cat-card')).filter(c => c.offsetParent);
+      if (cards.length < 7) throw new Error('only ' + cards.length + ' category cards on screen — the grid this test is about is not showing');
+
+      const boxes = cards.map(c => c.getBoundingClientRect());
+      const w0 = boxes[0].width;
+
+      // CONTROL: equal widths, which was already true — asserted so a future change cannot fix the
+      // alignment by shrinking the leftovers instead of moving them.
+      const odd = boxes.filter(b => Math.abs(b.width - w0) > 1);
+      if (odd.length) throw new Error(odd.length + ' of ' + boxes.length + ' cards are a different width from the first (' + w0.toFixed(1) + 'px) — the cards must all stay the same size');
+
+      /* THE ASSERTION: every card sits on one of the column x-positions established by the first row.
+         A centred short row lands BETWEEN them, which is the fault in his screenshot. */
+      const firstRowTop = Math.round(boxes[0].top);
+      const columns = boxes.filter(b => Math.round(b.top) === firstRowTop).map(b => b.left);
+      if (columns.length < 2) throw new Error('could not read the column positions — only ' + columns.length + ' card(s) on the first row');
+
+      const strays = [];
+      boxes.forEach((b, i) => {
+        if (Math.round(b.top) === firstRowTop) return;
+        const onAColumn = columns.some(cx => Math.abs(cx - b.left) < 1.5);
+        if (!onAColumn) strays.push({ card: (cards[i].textContent || '').trim().slice(0, 14), left: +b.left.toFixed(1) });
+      });
+      if (strays.length) {
+        throw new Error(strays.length + ' card(s) do not line up with the columns above them: ' + JSON.stringify(strays) +
+          ' against columns at [' + columns.map(c => c.toFixed(1)).join(', ') + '] — a short last row is being centred, so it reads as the wrong size even though every card is identical');
+      }
+    } finally {
+      FM.scene.layers = layers0;
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
 })();
