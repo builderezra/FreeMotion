@@ -139,7 +139,21 @@ on any new hole. **A "dated His words line buried deep in a block" detector was 
 — measured, legitimate entries carry that line up to 22 lines into their body (#303, #305), so it cried
 wolf, and a detector that cries wolf stops being read.
 
-**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ **#153 (the feature)**, (a Custom rung on the export frame-rate list — never
+**✅ v11.57 — #153's HARD HALF is done.** The entry warned: *"worth checking first whether our trim
+already quantises to frames — if it does not, the strip would be drawing a promise the trim does not
+keep, and the quantising is the real work."* It was right. The DELTA was quantised; the RESULT was not,
+and an imported clip's duration is never a frame boundary, so an edge could only ever land between
+notches. The edge is rounded now — real grip drags land on frame 85 / frame 25 exactly, snapping still
+wins when active, and the untouched edge stays put.
+**STILL TO BUILD for #153 — the visible half:** the six-value readout (`Start · End · Duration` /
+`In · Out · Change`, Change signed) and the notch strip with the landing notch filled and coloured
+in/out marks. It can be honest now, because the trim really does land where the strip would say.
+
+**⚠️ PROBE TRAP: pointer events on the CLIP BODY perform a MOVE, not a trim** — both edges shift together
+and it reads exactly like the fix failing. Drive `.clip-grip.left` / `.clip-grip.right`, and assert the
+UNTOUCHED edge did not move; that is what tells a trim from a move.
+
+**NEXT, oldest first from the audit lists:** ~~#141~~ ~~#142~~ **#153 (the readout + notch strip)**, (a Custom rung on the export frame-rate list — never
 built; every pattern it needs already exists in the canvas dialog), then 142, 154, 165.3, 257, 338, 363,
 386, 419, and draw-on keyframes.
 **⚠️ TWO PATTERNS WORTH NAMING, both earned this session:**
