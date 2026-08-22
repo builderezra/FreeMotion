@@ -493,6 +493,23 @@ just leave u on all day … i just hope u make the project better for me"*. The 
 queue hygiene — all real, all unblocking, none of it visible to him as improvement. **Shipping beats
 tidying; tidy only what falls out of the work.**
 
+**✅ v11.75 — spinstreaks 320ms → 46ms (7x). Second of the effect sweep he asked for.**
+Same shape as tiltshift, bigger: **22 trig calls per pixel** (~32M a frame). Every tap is the pixel's own
+offset rotated by a fixed angle, and rotating a known vector is the angle-addition identity — ten cos/sin
+pairs precomputed once per frame, then pure arithmetic. sqrt and atan2 vanish too, because dx and dy
+ALREADY are R·cosA and R·sinA.
+**NOT byte-identical, and that is stated rather than implied.** Exact in real arithmetic; the float orders
+differ in the last bits and the sample index is a TRUNCATION, so a coordinate landing exactly on a pixel
+can truncate the other way. Measured: coordinates agree to 5.7e-14, picture ≤2/255 on real content.
+**When byte-identity is not reachable, assert the MATHS instead** — the coordinate check is
+content-independent and far stronger than any picture comparison; the picture check then only has to be a
+bound. And where the two differ, the NEW one is the more accurate: the old path round-tripped through
+sqrt/atan2, which is the thing that drifts.
+**⚠️ A NEAR-MISS: my first edit replaced to END OF LINE, and in this file the entire pixel loop lives on
+one line — it silently deleted the loop.** `git checkout` restored it (the file was committed at v11.74).
+**In a minified-style file, replace exact substrings, never to end-of-line**, and check the edit landed
+before running anything.
+
 **✅ SHIPPED FROM THE AUDITS ALREADY (three, and two were destroying settings silently):**
 - **v11.51** — dead `cvCurrentCfg` / "Canvas presets" code removed (his *"presets are just for effects"*).
 - **v11.52 — 🚨 THE BIG ONE. Every export was silently 30 fps.** `#exp-fps` carried TWO `selected`
