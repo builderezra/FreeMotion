@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.54
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.55
 >
-> **State:** v11.54, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.55, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -873,6 +873,28 @@ better still, keep working inside the turn rather than parking work for a later 
       ✓ on the label since that menu has no switch to show state.
       Two existing tests had the old requirement written into them (Settings must lead with Onion skin).
       Updated, with your reversal quoted in place so nobody later "fixes" them back.
+
+- [x] **141b — You can type a custom frame rate when exporting.** ✅ **DONE v11.55.**
+      (22 Aug — the unbuilt half of #141, found by re-auditing closed requests against the code.)
+      His words: *"if you made a custom fps or other things etc there's no way to export at that."*
+      **#141 shipped the RESOLUTION half — "Custom size…" — and left the frame-rate half unbuilt.** The
+      rate could only be one of the fixed rungs or "Same as project", so a 30 fps project could not be
+      rendered at 24 by ANY route, and #118 had already removed 24 from every list, so even the rungs
+      could not reach it.
+      **Built exactly like the resolution's Custom row, no new pattern invented:** a `Custom…` rung last in
+      the list, a hidden `#exp-custom-fps` row that appears when it is chosen, seeded from the project so
+      it is never blank, clamped 1–120 like the canvas dialog, falling back to the project's rate on an
+      empty or unreadable value. Hidden with the other video-only rows for an audio-only export, and NOT
+      remembered between opens — #121's rule is that the cog owns the rate and an export change is a
+      one-off.
+      ⚠️ **Two things fixed only because the mutation check caught them:**
+      1. **The input was 22px tall against every other control's 34px.** A bare `<input>` does not get the
+         dialog's styling — `.exp-custom` is the wrapper that carries it. Measured at 380px, not eyeballed.
+      2. **THE FIRST TEST WAS DEAD AND LOOKED ALIVE.** It reimplemented the three fps branches inside the
+         test file, so deleting the custom branch from js/app.js left it green — it was checking its own
+         arithmetic, not the app's. The rate is now decided in ONE place, `FM._exportFps()`, which both the
+         exporter and the test call. **A test that re-derives the logic it is testing can only ever agree
+         with itself.**
 
 - [x] **121b — Export kept a stale frame rate and resolution instead of following the project.**
       ✅ **DONE v11.54.** (22 Aug — the unbuilt half of #121, found by re-auditing closed requests after

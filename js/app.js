@@ -3547,6 +3547,19 @@ window.FM = window.FM || {};
          right and the code was not, same shape as the stray `selected` in #471 and the stale FPS mirror
          in #118. The "project" rung is labelled with the real rate, so it always reads correctly. */
       fpsSel.value = 'project';
+      /* The Custom row (queue 141), wired exactly like the resolution's syncCustom below. Seeded from the
+         project so it opens on something valid rather than empty, and the listener is guarded so repeated
+         opens do not stack handlers. Not persisted: #121 makes the cog the source of truth, so a custom
+         export rate is a one-off override for this render. */
+      const fpsCf = document.getElementById('exp-custom-fps');
+      const fpsNum = document.getElementById('exp-fps-num');
+      const syncCustomFps = () => {
+        const on = fpsSel.value === 'custom';
+        if (fpsCf) fpsCf.classList.toggle('hidden', !on);
+        if (on && fpsNum && !fpsNum.value) fpsNum.value = pf;
+      };
+      if (!fpsSel._customWired) { fpsSel._customWired = 1; fpsSel.addEventListener('change', syncCustomFps); }
+      syncCustomFps();
     }
     const sel = document.getElementById('exp-res');
     if (sel) {
@@ -3636,6 +3649,28 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, items);
     });
   }
+  /* THE ONE PLACE THE EXPORT FRAME RATE IS DECIDED — and it is exposed on purpose (queue 141).
+   * The suite must drive THIS, not a copy of it. The first test written for the Custom rung
+   * reimplemented these three branches inside the test file, so deleting the custom branch from the app
+   * left every assertion green: it was checking its own arithmetic, not the app's. A helper both sides
+   * call is the only version of that test that can fail.
+   *  · 'project' → the project's own rate, custom values included.
+   *  · 'custom'  → whatever is typed, clamped to the same 1-120 the canvas dialog allows, falling back to
+   *                the project's rate when the box is empty, zero or unreadable.
+   *  · anything else → the rung's own value. */
+  FM._exportFps = function () {
+    const sel = document.getElementById('exp-fps');
+    const raw = sel ? sel.value : 'project';
+    const proj = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
+    if (raw === 'project') return proj;
+    if (raw === 'custom') {
+      const el = document.getElementById('exp-fps-num');
+      const typed = Math.round(parseFloat(el && el.value));
+      return Math.max(1, Math.min(120, typed || proj));
+    }
+    return parseFloat(raw) || 30;
+  };
+
   function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
 
   // Format picker → button label + transparent toggle + GIF note. MP4 can't carry alpha, so the
@@ -3659,12 +3694,12 @@ window.FM = window.FM || {};
        than sitting there meaning nothing". A control that cannot affect the output is worse than no
        control: it invites you to set it and then quietly ignores you. */
     const audioOnly = fmt === 'audio' || fmt === 'audiom4a';
-    ['exp-res', 'exp-fps', 'exp-custom-field', 'exp-transparent-field'].forEach(function (id) {
+    ['exp-res', 'exp-fps', 'exp-custom-field', 'exp-custom-fps', 'exp-transparent-field'].forEach(function (id) {
       const n = document.getElementById(id);
       const f = n && (n.classList.contains('field') ? n : (n.closest('.field') || n.parentElement));
       if (!f) return;
       if (audioOnly) { f.dataset.audioHid = '1'; f.classList.add('hidden'); }
-      else if (f.dataset.audioHid) { delete f.dataset.audioHid; if (id !== 'exp-custom-field' && id !== 'exp-transparent-field') f.classList.remove('hidden'); }
+      else if (f.dataset.audioHid) { delete f.dataset.audioHid; if (id !== 'exp-custom-field' && id !== 'exp-custom-fps' && id !== 'exp-transparent-field') f.classList.remove('hidden'); }
     });
     const go = document.getElementById('exp-go');
     if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames'
@@ -3815,10 +3850,7 @@ window.FM = window.FM || {};
     const outW = isCustom ? clampDim(cwEl && cwEl.value, FM.scene.project.width) : 0;
     const outH = isCustom ? clampDim(chEl && chEl.value, FM.scene.project.height) : 0;
     // 'project' resolves to the project's own rate, custom values included (queue 141).
-    const fpsRaw = document.getElementById('exp-fps').value;
-    const fps = (fpsRaw === 'project')
-      ? (FM.scene.project.fps || 30)
-      : (parseFloat(fpsRaw) || 30);
+    const fps = FM._exportFps();
     const qEl = document.getElementById('exp-quality');
     const qf = (qEl && parseFloat(qEl.value)) || 0.1;
     const P = FM.scene.project;

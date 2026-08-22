@@ -24695,6 +24695,65 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('a custom frame rate can be typed on the export dialog (queue 141)', { item: '141' }, async function () {
+    /* His words: *"if you made a custom fps or other things etc there's no way to export at that."*
+     * #141 shipped "Custom size…" for the RESOLUTION and left the frame-rate half unbuilt — found by
+     * re-auditing closed requests against the code. Before this, the rate could only be one of the fixed
+     * rungs or "Same as project", so a 30 fps project could not be rendered at 24 by any route at all,
+     * and #118 had already dropped 24 from every list. */
+    if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
+    const fps = document.getElementById('exp-fps');
+    const num = document.getElementById('exp-fps-num');
+    const row = document.getElementById('exp-custom-fps');
+    if (!fps) throw new Error('#exp-fps is missing');
+    if (!num || !row) throw new Error('there is no Custom frame-rate control on the export dialog — the other half of queue 141 is still unbuilt');
+    const p0 = FM.scene.project.fps;
+    const open = async () => { FM.showExportDialog(); await sleep(200); };
+    const close = () => { const c = document.getElementById('exp-cancel'); if (c) c.click(); };
+    try {
+      FM.scene.project.fps = 30;
+      await open();
+      if (![].some.call(fps.options, o => o.value === 'custom')) throw new Error('the frame-rate list has no Custom rung');
+      if (!row.classList.contains('hidden')) throw new Error('the Custom fps row is visible before Custom is chosen');
+
+      // choosing Custom reveals the row, seeded from the project so it is never empty
+      fps.value = 'custom'; fps.dispatchEvent(new Event('change')); await sleep(120);
+      if (row.classList.contains('hidden')) throw new Error('choosing Custom did not reveal the Custom fps row');
+      if (!num.value) throw new Error('the Custom fps box opened empty instead of seeded from the project');
+
+      /* THE POINT OF THE FEATURE: a rate that is on NO rung must reach the exporter. 24 is the case from
+         his own entry — #118 removed it from every list, so "Same as project" cannot reach it either
+         unless the project itself is 24. */
+      num.value = '24';
+      /* DRIVE THE APP'S OWN RESOLVER, not a copy of it. The first version of this test reimplemented the
+         three branches here — and deleting the custom branch from js/app.js left it green, because it was
+         only ever checking its own arithmetic. FM._exportFps is the single place the exporter decides the
+         rate, so this is the same code the render uses. */
+      if (!FM._exportFps) throw new Error('FM._exportFps is not reachable — the test would be checking a copy of the logic instead of the app');
+      const readBack = () => FM._exportFps();
+      if (readBack() !== 24) throw new Error('a typed 24 fps reaches the exporter as ' + readBack());
+
+      // clamped to the same 1-120 the canvas dialog allows, and never NaN
+      num.value = '999'; if (readBack() !== 120) throw new Error('999 fps was not clamped to 120 (got ' + readBack() + ')');
+      num.value = '0';   if (readBack() !== 30)  throw new Error('0 fps did not fall back to the project rate (got ' + readBack() + ')');
+      num.value = '';    if (readBack() !== 30)  throw new Error('an empty box did not fall back to the project rate (got ' + readBack() + ')');
+
+      // and picking a normal rung hides the row again
+      num.value = '24';
+      fps.value = '60'; fps.dispatchEvent(new Event('change')); await sleep(120);
+      if (!row.classList.contains('hidden')) throw new Error('the Custom fps row stayed visible after picking 60 fps');
+      close();
+
+      /* IT MUST NOT BE REMEMBERED (queue 121): the cog owns the rate, an export change is a one-off. */
+      await open();
+      if (fps.value !== 'project') throw new Error('the export dialog reopened on "' + fps.value + '" instead of the project — a custom rate must not persist');
+      if (!row.classList.contains('hidden')) throw new Error('the Custom fps row is showing on a fresh open');
+    } finally {
+      close();
+      FM.scene.project.fps = p0;
+    }
+  });
+
   test('the export dialog inherits from the project every open, and never carries a stale pick (queue 121)', { item: '121' }, async function () {
     /* His rule in #121: *"Settings ↔ Export should mirror ONE WAY"* — the cog owns the frame rate and the
      * size, and an export-time change is a ONE-OFF. `expPrefsApply` already says so in a comment

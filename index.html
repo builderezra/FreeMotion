@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.54</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.55</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -764,7 +764,21 @@
           <option value="50">50 fps</option>
           <option value="60">60 fps (smooth)</option>
           <option value="120">120 fps</option>
+          <!-- CUSTOM, last (queue 141). Ezra: "if you made a custom fps or other things etc there's no
+               way to export at that." The rungs above are a fixed ladder, so a project at 24 or 48 could
+               only be exported at its own rate by picking "Same as project" — and there was no way at all
+               to render a 30 fps project out at 24. This row hands a rate straight to the exporter, the
+               same way "Custom size…" already does for the resolution directly below. -->
+          <option value="custom">Custom…</option>
         </select>
+      </label>
+      <label class="field hidden" id="exp-custom-fps"><span>Custom fps</span>
+        <!-- Inside .exp-custom, exactly like the Custom size row below: that wrapper is what carries the
+             dialog's input styling (padding, border, radius, tabular numerals) and the full-width rule at
+             380px. A bare <input> here measured 22px tall against every other control's 34px. -->
+        <span class="exp-custom">
+          <input type="number" id="exp-fps-num" min="1" max="120" step="1" inputmode="numeric" aria-label="Custom export frame rate, 1 to 120">
+        </span>
       </label>
       <label class="field"><span>Quality</span>
         <select id="exp-quality">
@@ -915,7 +929,7 @@
   <script src="js/shortcuts.js?v=78"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=50"></script>
-  <script src="js/app.js?v=348"></script>
+  <script src="js/app.js?v=350"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>
