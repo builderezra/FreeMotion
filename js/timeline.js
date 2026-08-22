@@ -2358,6 +2358,25 @@ window.FM = window.FM || {};
   function stopScrollMomentum() { if (scrollMomRAF) { cancelAnimationFrame(scrollMomRAF); scrollMomRAF = 0; } }
   let _lastScrollFling = null;
   FM._tlLastScrollFling = function () { return _lastScrollFling; };   // suite seam: did the release FLING?
+  /* ONE FRAME of a vertical glide, as a pure function (queue 472). Position in, position out — it
+     touches no element, so the suite can drive it frame by frame and choose its own frame deltas.
+     That matters here more than usual: the bug this exists to hold shut only shows when a frame lands
+     sub-pixel, so a test that flicks the real timeline passes on every run where the frame happens to
+     land late. It read as a FLAKY TEST for weeks for exactly that reason. Driven directly it is
+     deterministic, and the mutation that reintroduces the bug is caught every time.
+     `viewTop` is where the list actually is, which is not always where we left it — the user can scroll
+     mid-glide. Far from our float means something else moved it, so follow; near it means the snap ate a
+     sub-pixel step, which is the case the old code fatally mistook for "hit the end". */
+  function momentumStep(pos, v, dt, viewTop, maxTop) {
+    v *= Math.pow(MOM_FRICTION, dt / 16.67);                          // the SAME friction as the horizontal fling
+    if (Math.abs(pos - viewTop) > 2) pos = viewTop;                   // something else moved the list — follow it
+    pos += v * dt;
+    const target = Math.max(0, Math.min(maxTop, pos));
+    const clamped = target !== pos;                                   // the CLAMP moved it: genuinely at an end
+    return { top: target, pos: target, v: v, stop: clamped || Math.abs(v) <= 0.01 };
+  }
+  FM._tlMomentumStep = momentumStep;   // suite seam: one glide frame, without needing a gesture
+
   function startScrollMomentum(vPxPerMs) {
     _lastScrollFling = { v: vPxPerMs, at: performance.now() };
     stopScrollMomentum();
@@ -2365,14 +2384,25 @@ window.FM = window.FM || {};
     if (!timelineEl || !isFinite(v) || Math.abs(v) < 0.02) return;     // too gentle to bother
     v = Math.max(-4.2, Math.min(4.2, v));                             // px/ms cap ≈ a hard flick
     let last = performance.now();
+    /* A FLOAT POSITION, because `scrollTop` SNAPS (queue 472). The loop used to read scrollTop back each
+       frame and stop when the write did not change it — reading "no movement" as "hit the end of the
+       list". But scrollTop quantises to half-pixels, so when the first animation frame lands a fraction
+       of a millisecond after the fling is armed, `v * dt` is sub-pixel, the assignment rounds straight
+       back to where it was, and the glide CANCELS ITSELF ON FRAME ONE.
+       Measured: ten identical flicks, two of them dead — velocity 1.83 px/ms, well past the threshold,
+       scrollTop frozen at its release value for all 90 frames while the eight good runs moved on the
+       very first frame. Intermittent because it depends on when the first frame lands, which is why it
+       read as a flaky TEST for weeks; it is the app, and it means a real flick sometimes does not glide.
+       Keeping the position as a float and clamping it ourselves separates the two cases the old check
+       confused: "too small to register yet" (keep going, it accumulates) from "genuinely at an end"
+       (the clamp moved it, so stop). It still follows the view if something else scrolls it. */
+    let pos = timelineEl.scrollTop;
     const step = (now) => {
       const dt = Math.min(48, now - last); last = now;
-      v *= Math.pow(MOM_FRICTION, dt / 16.67);                        // the SAME friction as the horizontal fling
-      const b = timelineEl.scrollTop;
-      timelineEl.scrollTop = b + v * dt;
-      if (timelineEl.scrollTop === b) { scrollMomRAF = 0; return; }   // hit an end — stop rather than spin
-      if (Math.abs(v) > 0.01) scrollMomRAF = requestAnimationFrame(step);
-      else scrollMomRAF = 0;
+      const maxTop = timelineEl.scrollHeight - timelineEl.clientHeight;
+      const s = momentumStep(pos, v, dt, timelineEl.scrollTop, maxTop);
+      timelineEl.scrollTop = s.top; pos = s.pos; v = s.v;
+      scrollMomRAF = s.stop ? 0 : requestAnimationFrame(step);
     };
     scrollMomRAF = requestAnimationFrame(step);
   }

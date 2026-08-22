@@ -38123,4 +38123,48 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   });
+
+  /* Queue 472 — the flaky vertical-flick test was the APP, not the test.
+   * Ezra's entry said it outright: *"Do not 'fix' it by widening the tolerance — that hides it."*
+   * Reproduced first: ten identical flicks, two dead, release velocity 1.83 px/ms (the threshold is
+   * 0.02) and scrollTop frozen at its release value for all 90 frames. `scrollTop` snaps to half-pixels,
+   * so a first frame landing a fraction of a millisecond after the fling is armed moves it sub-pixel,
+   * the write rounds straight back, and the old loop read "the write did not move it" as "hit the end of
+   * the list" and cancelled the glide on frame one.
+   * Driven through the real gesture this is a coin flip — it passes on every run where the first frame
+   * lands late — so it is driven through the pure stepper instead, where the frame delta is ours to
+   * choose. Both halves are asserted, because the fix is only correct if it still STOPS at an end:
+   * fixing the stall by never stopping would spin a dead rAF forever. */
+  test('a flick still glides when the first frame is too small to move scrollTop (queue 472)', { item: '472' }, function () {
+    const stepFn = FM._tlMomentumStep;
+    if (typeof stepFn !== 'function') throw new Error('no _tlMomentumStep seam to drive');
+
+    // A frame so short that v*dt lands well under scrollTop's half-pixel snap…
+    const v0 = 1.8, dt = 0.2, maxTop = 900;
+    if (v0 * dt >= 0.5) throw new Error('this probe is meant to be sub-pixel — it no longer is, so it proves nothing');
+    // …and a view that therefore does NOT move: viewTop stays where it started, exactly as the browser
+    // reports it after the rounded write. That readback is what used to kill the glide.
+    let st = stepFn(100, v0, dt, 100, maxTop);
+    if (st.stop) throw new Error('the glide cancelled itself on a sub-pixel first frame — this is the bug: a real flick does not move');
+    if (!(st.pos > 100)) throw new Error('a sub-pixel step was thrown away rather than accumulated (pos ' + st.pos + ') — it can never reach a whole pixel this way');
+
+    // Accumulating is the whole point: several sub-pixel frames must add up and cross a pixel.
+    let pos = st.pos, v = st.v;
+    for (let i = 0; i < 8; i++) { const r = stepFn(pos, v, dt, 100, maxTop); pos = r.pos; v = r.v; if (r.stop) throw new Error('the glide stopped mid-accumulation on frame ' + (i + 2)); }
+    if (!(pos - 100 > 1)) throw new Error('nine sub-pixel frames moved less than a pixel in total (' + (pos - 100).toFixed(3) + ') — they are not accumulating');
+
+    // The other half: a real end must still stop it, or the rAF spins forever against the clamp.
+    const atEnd = stepFn(maxTop - 0.1, 3, 16.67, maxTop - 0.1, maxTop);
+    if (!atEnd.stop) throw new Error('gliding into the bottom of the list did not stop — the rAF would spin forever');
+    if (atEnd.top > maxTop) throw new Error('the glide ran past the end of the list to ' + atEnd.top);
+
+    // …and the top end too, flicking the other way.
+    const atTop = stepFn(0.1, -3, 16.67, 0.1, maxTop);
+    if (!atTop.stop) throw new Error('gliding into the top of the list did not stop');
+    if (atTop.top < 0) throw new Error('the glide ran past the top of the list to ' + atTop.top);
+
+    // A glide the user interrupts by scrolling elsewhere follows the view rather than fighting it.
+    const moved = stepFn(100, 1.8, 16.67, 400, maxTop);
+    if (Math.abs(moved.top - 400) > 40) throw new Error('the glide ignored a list that had been scrolled to 400 and jumped to ' + moved.top);
+  });
 })();

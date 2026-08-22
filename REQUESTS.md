@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.65
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.66
 >
-> **State:** v11.65, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.66, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5483,8 +5483,20 @@ better still, keep working inside the turn rather than parking work for a later 
       `makeLayer('shape', { closed: true })` returns an OPEN path. A first pass used that and concluded the
       gate was broken for closed paths. Set `.closed` after creation, the way a real closed vector does.
 
-- [ ] **472 — The timeline's vertical-flick test is FLAKY, and a flaky test is worse than none.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **472 — The timeline's vertical-flick test is FLAKY, and a flaky test is worse than none.** ✅ **DONE v11.66 — and it was the APP, not the test.**
+      **What it actually was:** reproduced by flicking twenty times in a row — two dead glides, release
+      velocity 1.83 px/ms (the threshold to glide at all is 0.02) and `scrollTop` frozen at its release
+      value for all 90 frames, while the good runs moved on frame one. `scrollTop` snaps to half a pixel,
+      so a first frame landing a fraction of a millisecond after the fling is armed moves it sub-pixel, the
+      write rounds straight back, and the old loop read "the write did not move it" as "hit the end of the
+      list" and cancelled the glide immediately. **Roughly one real flick in five did nothing.**
+      The tolerance was NOT widened, as the entry demanded. The glide now keeps its position as a float and
+      does its own clamping, which separates the two cases the old check confused: too small to register
+      yet (keep going, it accumulates) from genuinely at an end (the clamp moved it, so stop).
+      **The test:** driven through the real gesture this is a coin flip, so the step was extracted as a
+      pure function (`FM._tlMomentumStep`) and the test drives it frame by frame with a deliberately
+      sub-pixel first frame. Deterministic, and mutation-checked — restoring the old read-back is caught
+      every run. Both ends are asserted too, so "fix" it by never stopping and the test goes red.
       **Not a request from him — a defect in our own safety net, filed so it is not tolerated.**
       (22 Aug.) *"a vertical flick on the timeline keeps gliding, like a horizontal one"* has now failed
       **twice** on unrelated ticks — once during the drawing-overlay work, once while shipping v11.64 —
