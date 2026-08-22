@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.74
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.75
 >
-> **State:** v11.74, **844 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.75, **845 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -4633,9 +4633,28 @@ better still, keep working inside the turn rather than parking work for a later 
              shifting the window by one pixel: 23,445 bytes differ, caught.
              `FM._pixelFx` added as a suite seam, because the kernels were module-local and a test could
              not otherwise compare one against a reference.
-             ⏭️ **Next in this family:** spinstreaks (320ms), turbulentdisplace (240ms), zoomstreaks (173),
-             lensblur (158) — the same question each time is whether the algorithm is doing more work than
-             its output needs.
+             ✅ **SECOND: spinstreaks 319.68ms → 45.7ms, 7x — v11.75.** Same shape of waste, bigger scale:
+             **22 trig calls per pixel** (~32M a frame) — a sqrt and an atan2 to reach polar form, then a
+             cos and a sin for each of ten taps. Every tap is the pixel's own offset rotated by a fixed
+             angle, and rotating a known vector is the angle-addition identity: precompute ten cos/sin
+             pairs once per frame and the pixel loop is pure arithmetic. The radius is never needed either,
+             because dx and dy already ARE R·cosA and R·sinA.
+             ⚠️ **NOT byte-identical, unlike tiltshift, and the entry says so rather than implying it.**
+             The identity is exact in real arithmetic; the two float orders differ in the last bits, and
+             the sample index is a TRUNCATION, so a coordinate landing exactly on a pixel (the k=0 tap is
+             the pixel itself) can truncate differently. **Measured:** sample coordinates agree to
+             **5.7e-14**; the picture differs by **≤2 of 255 on real content** and more only on a 1px
+             checkerboard, where any resampling change swings the full range.
+             **And where they differ the NEW one is more accurate** — the old path went out through
+             sqrt/atan2 and back, and that round trip is the thing that drifts.
+             The test asserts the MATHS (content-independent, 1e-9 bound on every sample point) with a
+             bounded picture check behind it, plus a control that the effect actually altered the image.
+             Mutation-checked by flipping one sign in the rotation: caught at 54/255.
+             ⏭️ **Next in this family:** turbulentdisplace (240ms — 12 trig calls per pixel, but a lookup
+             table would NOT be exact, so it needs a different approach), zoomstreaks (173), lensblur (158).
+             ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
+             file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
+             restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**
       **Not a queue-jump to be re-litigated:** he named the work, so it goes to the front.
 
 - [x] **473 — The media/audio library should be THREE rows now, not two.** ✅ **DONE v11.72.** (22 Aug, phone screenshot at

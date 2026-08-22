@@ -4635,7 +4635,25 @@ window.FM = window.FM || {};
       // and the streak becomes a long even comet tail, at 2 it collapses to a tight ghost right behind
       // the subject. 0.6 read from the param is the same double as the literal, so the default is exact.
       var ssCx=wCx(p,t,W,W/2), ssCy=wCy(p,t,H,H/2), ssW4=W*4; var ssSpan=ssAmt*0.5; var ssN=10; var ssDa=ssSpan/(ssN-1);
-      var ssDec=p.decay==null?0.6:FM.evalProp(p.decay,t); if(ssDec<0)ssDec=0; if(ssDec>2)ssDec=2; for(var ssY=0; ssY<H; ssY++){ for(var ssX=0; ssX<W; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssR=Math.sqrt(ssDx*ssDx+ssDy*ssDy); var ssA=Math.atan2(ssDy,ssDx); var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0, ssWsum=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=1/(1+ssK*ssDec); var ssSa=ssA - ssK*ssDa; var ssSx=ssCx + ssR*Math.cos(ssSa); var ssSy=ssCy + ssR*Math.sin(ssSa); var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; ssWsum+=ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWsum; d[ssOut+1]=ssAccG/ssWsum; d[ssOut+2]=ssAccB/ssWsum; d[ssOut+3]=ssAccA/ssWsum; } } },
+      var ssDec=p.decay==null?0.6:FM.evalProp(p.decay,t); if(ssDec<0)ssDec=0; if(ssDec>2)ssDec=2;
+      /* NO TRIGONOMETRY IN THE PIXEL LOOP (queue 474, v11.75). Second most expensive effect in the app —
+         319.68ms at 1080x1350 against a 14.85ms median — because it did 22 TRIG CALLS PER PIXEL: a sqrt
+         and an atan2 to reach polar form, then a cos and a sin for each of the 10 taps. At 1458k pixels
+         that is ~32 MILLION trig calls a frame.
+         None of it is needed. Every tap samples this pixel's own offset from the centre, rotated by a
+         FIXED angle k*ssDa — and rotating a known vector is the angle-addition identity, pure arithmetic
+         once cos/sin of the ten steps are precomputed once per frame:
+             sx = cx + dx*cos(kD) + dy*sin(kD)
+             sy = cy + dy*cos(kD) - dx*sin(kD)
+         Since dx and dy ARE R*cosA and R*sinA, the radius never has to be found either — sqrt and atan2
+         both disappear along with every per-tap cos/sin. The weights are constant per tap too, so the
+         weight sum is computed once instead of re-accumulated for all 1.4M pixels.
+         Same identity, not an approximation — only the ORDER of floating-point operations differs, which
+         is why the suite pins this with a BOUNDED-difference assertion rather than the byte-identity one
+         used for tilt shift. See the test for why exact equality is not reachable here. */
+      var ssCos=new Float64Array(ssN), ssSin=new Float64Array(ssN), ssWts=new Float64Array(ssN), ssWtot=0;
+      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*ssDec); ssWtot+=ssWts[ssP]; }
+      for(var ssY=0; ssY<H; ssY++){ for(var ssX=0; ssX<W; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=ssWts[ssK]; var ssCk=ssCos[ssK], ssSk=ssSin[ssK]; var ssSx=ssCx + ssDx*ssCk + ssDy*ssSk; var ssSy=ssCy + ssDy*ssCk - ssDx*ssSk; var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWtot; d[ssOut+1]=ssAccG/ssWtot; d[ssOut+2]=ssAccB/ssWtot; d[ssOut+3]=ssAccA/ssWtot; } } },
     /* FRACTAL RIDGES. Three octaves of value noise, each folded to a ridge (1 - |2n-1|) and summed
      * at the fixed weights 0.5 / 0.3 / 0.2. The catalogue entry above says what this looked like
      * before the rework and what was measured; this block is about the three rules it has to obey.

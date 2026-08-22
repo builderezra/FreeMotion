@@ -39045,4 +39045,87 @@
       }
     }
   });
+
+  /* Queue 474 — Spin Streaks, the second most expensive effect in the app: 319.68ms at 1080x1350 against
+   * a 14.85ms median. It did 22 TRIG CALLS PER PIXEL — sqrt + atan2 to reach polar form, then cos + sin
+   * for each of ten taps — about 32 million trig calls a frame. Rewritten to rotate the pixel's own
+   * offset by precomputed steps: **45.7ms, 7x.**
+   *
+   * WHY THIS TEST IS NOT A BYTE-IDENTITY ONE, unlike the tilt-shift rewrite next to it.
+   * The rewrite is the angle-addition identity, so it is exact in real arithmetic — but the two orders of
+   * floating-point operations differ in the last bits, and the sample index is a TRUNCATION. A coordinate
+   * that lands exactly on a whole pixel (which happens constantly — the k=0 tap is the pixel itself) will
+   * truncate differently under a 1e-14 nudge. So byte-equality is not reachable and demanding it would be
+   * demanding the wrong thing.
+   * MEASURED, so the claim is not hand-waved: the two formulas agree on every sample coordinate to
+   * **5.7e-14**, and on realistic content the picture differs by at most 1-2 of 255. On a hard 1px
+   * checkerboard it differs more, because there ANY resampling change swings the full range — that is a
+   * property of the fixture, not of the rewrite.
+   * Worth recording: where they differ, the NEW one is the more accurate. The old code reached the sample
+   * through sqrt+atan2 and back, and that round trip is what drifts; the rewrite keeps the pixel's exact
+   * offset, so its k=0 tap is exactly the pixel itself.
+   * So the primary assertion is on the MATHS — content-independent — with a bounded picture check behind it. */
+  test('spin streaks: the trig-free rewrite samples the same points as the polar original (queue 474)', { item: '474' }, function () {
+    if (!FM._pixelFx || typeof FM._pixelFx.spinstreaks !== 'function') throw new Error('FM._pixelFx.spinstreaks is not reachable');
+    const W = 160, H = 120, cx = W / 2, cy = H / 2;
+    const amount = 0.5, span = amount * 0.5, N = 10, dA = span / (N - 1);
+
+    /* 1. THE IDENTITY ITSELF. For every pixel and every tap, the polar form and the rotated-offset form
+       must give the same sample point. This is the real claim and it does not depend on any image. */
+    const cosK = [], sinK = [];
+    for (let k = 0; k < N; k++) { cosK.push(Math.cos(k * dA)); sinK.push(Math.sin(k * dA)); }
+    let worstCoord = 0, taps = 0;
+    for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) {
+      const dx = x - cx, dy = y - cy, R = Math.sqrt(dx * dx + dy * dy), A = Math.atan2(dy, dx);
+      for (let k = 0; k < N; k++) {
+        const sxA = cx + R * Math.cos(A - k * dA), syA = cy + R * Math.sin(A - k * dA);
+        const sxB = cx + dx * cosK[k] + dy * sinK[k], syB = cy + dy * cosK[k] - dx * sinK[k];
+        const d = Math.max(Math.abs(sxA - sxB), Math.abs(syA - syB));
+        if (d > worstCoord) worstCoord = d;
+        taps++;
+      }
+    }
+    if (taps < 1000) throw new Error('only ' + taps + ' taps compared — the sweep is not covering the frame');
+    if (!(worstCoord < 1e-9)) throw new Error('the rewritten sample point is ' + worstCoord + ' away from the polar one — that is not float noise, the two formulas genuinely disagree and the streak will point somewhere else');
+
+    /* 2. AND THE PICTURE, on content with real structure but no 1px edges — which is what his projects
+       are. A gradient is the honest fixture here: a checkerboard would fail on truncation alone and tell
+       us nothing about whether the effect still looks the same. */
+    const mk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < a.length; i += 4) {
+        const px = (i / 4) | 0, x = px % W, y = (px / W) | 0;
+        const b = 128 + 80 * Math.sin(x / 17) * Math.cos(y / 13);
+        a[i] = b | 0; a[i + 1] = (b * 0.8 + 20) | 0; a[i + 2] = (255 - b) | 0; a[i + 3] = 255;
+      }
+      return a;
+    };
+    const naive = (d) => {
+      const src = d.slice(), W4 = W * 4, dec = 0.6;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = x - cx, dy = y - cy, R = Math.sqrt(dx * dx + dy * dy), A = Math.atan2(dy, dx);
+        let aR = 0, aG = 0, aB = 0, aA = 0, ws = 0;
+        for (let k = 0; k < N; k++) {
+          const wt = 1 / (1 + k * dec), sa = A - k * dA;
+          const sx = cx + R * Math.cos(sa), sy = cy + R * Math.sin(sa);
+          const xi = sx < 0 ? 0 : (sx > W - 1 ? W - 1 : (sx | 0)), yi = sy < 0 ? 0 : (sy > H - 1 ? H - 1 : (sy | 0));
+          const i = yi * W4 + xi * 4;
+          aR += src[i] * wt; aG += src[i + 1] * wt; aB += src[i + 2] * wt; aA += src[i + 3] * wt; ws += wt;
+        }
+        const o = (y * W + x) * 4; d[o] = aR / ws; d[o + 1] = aG / ws; d[o + 2] = aB / ws; d[o + 3] = aA / ws;
+      }
+    };
+    const fast = mk(), ref = new Uint8ClampedArray(fast);
+    // CONTROL: the effect has to actually DO something, or "the two agree" is true of two no-ops.
+    const before = fast.slice();
+    FM._pixelFx.spinstreaks(fast, W, H, { amount: amount, decay: 0.6 }, 0);
+    let moved = 0;
+    for (let i = 0; i < fast.length; i += 4) if (Math.abs(fast[i] - before[i]) > 3) moved++;
+    if (moved < 500) throw new Error('the effect barely changed the image (' + moved + ' pixels) — it is not being exercised, so agreeing with the reference proves nothing');
+
+    naive(ref);
+    let worst = 0;
+    for (let i = 0; i < fast.length; i++) { const d = Math.abs(fast[i] - ref[i]); if (d > worst) worst = d; }
+    if (worst > 4) throw new Error('the rewritten spin streaks differs from the original by ' + worst + '/255 on ordinary content — the identity holds, so this is a real behaviour change, not rounding');
+  });
 })();
