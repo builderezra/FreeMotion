@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.58
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Aug at v11.59
 >
-> **State:** v11.58, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
+> **State:** v11.59, **816 tests green**, tree clean, `HEAD == ssh/main`. **33 items open — 28 of them
 > waiting on you**, the rest standing notes and long-term ideas. **None are buildable by me.** That is
 > why nothing has shipped for you lately except bugs I found myself.
 >
@@ -5462,6 +5462,28 @@ better still, keep working inside the turn rather than parking work for a later 
       suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
+
+- [x] **165.3b — Pinching to zoom while drawing LEFT INK, and there was no pan gesture at all.**
+      ✅ **DONE v11.59.** (22 Aug — the unbuilt clause of #165.3, found by re-auditing closed requests.)
+      His words: *"another option that lets you grab the screen and zoom in or out so you can do more
+      detailed drawing."* v8.00 kept the zoom you already had and v8.01 stopped the tool resetting it —
+      but **the gesture itself was never built**, so the only pan was the mouse wheel, which is no pan at
+      all on the device he draws on.
+      🚨 **And it was worse than missing. MEASURED before the fix:** a two-finger pinch on `#draw-overlay`
+      did not merely fail to zoom — the second finger ran through the ordinary drawing path and
+      **committed a stroke**. `FM.viewport` came back unchanged (`{x:0,y:0,scale:1}`) and
+      `FM.scene.layers` went **0 → 1**. Every attempt to zoom left a mark on his drawing.
+      **Built:** two fingers pan and zoom together, anchored on the finger midpoint so the canvas stays
+      under them (canvas-edit's `startPinch` maths, minus its layer-resize branch — nothing is selected in
+      drawing mode). The in-flight stroke is discarded rather than committed, and lifting one of two
+      fingers does not start a new stroke from wherever the other one is.
+      ⚠️ **The KEEP=90 off-screen clamp is now SHARED, not copied.** It was lifted out of the wheel
+      handler into `keepCanvasOnScreen()` and both callers use it — a second copy of a rule is the exact
+      shape of three separate bugs found this week (#471's stray `selected`, #118's stale fps mirror,
+      #454's dead preset block).
+      ⚠️ **The control is the assertion that matters most: ONE FINGER MUST STILL DRAW.** A "fix" that
+      turned every touch into a gesture would pass both of the other assertions and destroy the tool.
+      Mutation-checked by disarming the pinch — the ink comes straight back.
 
 - [x] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo. DONE — v7.35, v7.77, v7.78, v8.01, v8.02.**
       (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:

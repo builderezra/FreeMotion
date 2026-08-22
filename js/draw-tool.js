@@ -142,10 +142,84 @@ window.FM = window.FM || {};
     snapCursor();
   }
 
+  /* KEEP THE CANVAS ON SCREEN — one copy, used by BOTH the wheel pan and the two-finger gesture.
+     Lifted out of the wheel handler when the pinch arrived (queue 165.3) rather than copied into it: a
+     second copy of a clamp is the exact shape of three separate bugs found this week (a stale frame-rate
+     mirror, a duplicated default, a dead preset block). Its reasoning is unchanged from v8.03 — without
+     it, twenty-five flicks put the canvas at top -5025 with no way back, because the ⛶ view bar that
+     owns zoom and fit is hidden while drawing. */
+  function keepCanvasOnScreen(c) {
+    var KEEP = 90, r = c.getBoundingClientRect(), fx = 0, fy = 0;
+    if (r.right < KEEP) fx = KEEP - r.right;
+    else if (r.left > window.innerWidth - KEEP) fx = (window.innerWidth - KEEP) - r.left;
+    if (r.bottom < KEEP) fy = KEEP - r.bottom;
+    else if (r.top > window.innerHeight - KEEP) fy = (window.innerHeight - KEEP) - r.top;
+    if (fx || fy) { FM.viewport.x += fx; FM.viewport.y += fy; FM.viewport.apply(); }
+  }
+
+  /* ---- TWO FINGERS PAN AND ZOOM WHILE DRAWING (queue 165.3) --------------------------------------
+   * Ezra: *"another option that lets you grab the screen and zoom in or out so you can do more detailed
+   * drawing."* v8.00 kept the zoom you already had and v8.01 stopped the tool resetting it, but the
+   * GESTURE was never built — the wheel was the only way to pan, which is no way at all on a phone.
+   * WORSE THAN MISSING, AND THIS IS THE REAL BUG: measured before this, a two-finger pinch on the
+   * overlay did not merely fail to zoom — the second finger ran through the ordinary drawing path and
+   * COMMITTED A STROKE. Pinching to zoom left ink on the drawing. `FM.viewport` came back unchanged and
+   * `FM.scene.layers` went 0 -> 1.
+   * The maths is canvas-edit's `startPinch`, anchored on the finger midpoint so the canvas stays under
+   * the fingers, minus its layer-resize branch — nothing is selected in drawing mode. */
+  var dPtrs = new Map(), dPinch = null;
+  function drawOriginScreen() {
+    var w = wrap() || document.getElementById('canvas-wrap');
+    var r = w.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - FM.viewport.x, y: r.top + r.height / 2 - FM.viewport.y };
+  }
+  function beginDrawPinch() {
+    var q = [];
+    dPtrs.forEach(function (v) { q.push(v); });
+    if (q.length < 2) return;
+    /* THROW THE IN-FLIGHT STROKE AWAY — do not commit it. The first finger has already started drawing
+       by the time the second lands, and treating that as a stroke is what put ink on the canvas every
+       time he tried to zoom. */
+    drawing = false; erasing = false;
+    FM.drawTool.points = [];
+    redraw();
+    dPinch = {
+      dist: Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y) || 1,
+      midX: (q[0].x + q[1].x) / 2, midY: (q[0].y + q[1].y) / 2,
+      scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
+      u: drawOriginScreen(),
+    };
+  }
+  function moveDrawPinch() {
+    if (!dPinch) return;
+    var q = [];
+    dPtrs.forEach(function (v) { q.push(v); });
+    if (q.length < 2) return;
+    var d = Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y);
+    var mx = (q[0].x + q[1].x) / 2, my = (q[0].y + q[1].y) / 2;
+    var s1 = Math.max(0.2, Math.min(8, dPinch.scale * (d / dPinch.dist)));
+    // screen(Q) = u + t + s·(Q − u)  ⇒  t' = mid − u − (s'/s0)·(mid0 − u − t0)
+    var k = s1 / dPinch.scale;
+    FM.viewport.scale = s1;
+    FM.viewport.x = mx - dPinch.u.x - k * (dPinch.midX - dPinch.u.x - dPinch.x);
+    FM.viewport.y = my - dPinch.u.y - k * (dPinch.midY - dPinch.u.y - dPinch.y);
+    FM.viewport.apply();
+    var c = preview();
+    if (c) keepCanvasOnScreen(c);
+    syncOverlay(); redraw();
+  }
+
   function onDown(e) {
     if (!FM.drawTool.active) return;
     if (e.target !== overlay && e.target !== preview()) return;
     e.preventDefault(); e.stopPropagation();
+    /* Track TOUCH pointers only. A mouse or pen never makes a second one, and treating them as
+       gesture fingers would arm a pinch that can never be released. */
+    if (e.pointerType === 'touch') {
+      if (dPtrs.size >= 2 && !dPtrs.has(e.pointerId)) return;   // a third finger must not join
+      dPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (dPtrs.size === 2) { beginDrawPinch(); return; }
+    }
     var p = toProject(e.clientX, e.clientY);
     if (FM.drawTool.mode === 'freehand') {
       // ERASE (queue 165.2) takes the same gesture the brush does — press, and drag over anything else
@@ -172,6 +246,10 @@ window.FM = window.FM || {};
     }
   }
   function onMove(e) {
+    if (e.pointerType === 'touch' && dPtrs.has(e.pointerId)) {
+      dPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (dPinch) { moveDrawPinch(); return; }
+    }
     if (FM.drawTool.active && erasing && FM.drawTool.mode === 'freehand') { eraseAt(toProject(e.clientX, e.clientY)); return; }
     if (!FM.drawTool.active || !drawing || FM.drawTool.mode !== 'freehand') return;
     var p = toProject(e.clientX, e.clientY), pts = FM.drawTool.points, last = pts[pts.length - 1], s = dispScale();
@@ -185,6 +263,12 @@ window.FM = window.FM || {};
   // full-screen inspector sheet over the canvas so you could not even see what you had drawn. Now a
   // stroke is committed and the tool stays armed for the next one; Done is how you leave.
   function onUp(e) {
+    if (e && e.pointerType === 'touch' && dPtrs.has(e.pointerId)) {
+      dPtrs.delete(e.pointerId);
+      /* The gesture ends when a finger leaves, and the REMAINING finger must not carry on drawing —
+         lifting one of two fingers should not start a stroke from wherever the other one happens to be. */
+      if (dPinch && dPtrs.size < 2) { dPinch = null; drawing = false; FM.drawTool.points = []; redraw(); return; }
+    }
     if (erasing) { erasing = false; return; }
     if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand' || !drawing) return;
     drawing = false;
@@ -804,12 +888,7 @@ window.FM = window.FM || {};
          * and applied by CORRECTION rather than by pre-computing limits — the canvas rect already knows
          * where it ended up, whatever the zoom and crop are doing, so there is no second model of the
          * geometry to keep in step with the first. */
-        var KEEP = 90, r2 = c2.getBoundingClientRect(), fx = 0, fy = 0;
-        if (r2.right < KEEP) fx = KEEP - r2.right;
-        else if (r2.left > window.innerWidth - KEEP) fx = (window.innerWidth - KEEP) - r2.left;
-        if (r2.bottom < KEEP) fy = KEEP - r2.bottom;
-        else if (r2.top > window.innerHeight - KEEP) fy = (window.innerHeight - KEEP) - r2.top;
-        if (fx || fy) { FM.viewport.x += fx; FM.viewport.y += fy; FM.viewport.apply(); }
+        keepCanvasOnScreen(c2);
         /* Kept for a SCALE change, not for the pan: the overlay is a child of the wrapper the viewport
          * transforms, so a pure translate carries it along with no JavaScript at all — verified by
          * mutation, which removed this line and changed nothing. A zoom does change the wrapper's scale

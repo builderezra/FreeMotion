@@ -24695,6 +24695,63 @@
    * 3.5s gap between them becomes 1.9s.
    * Asserted as the INVARIANT — the gap is whatever it was — rather than as specific coordinates, so
    * it holds for any clamp policy that keeps the selection rigid. */
+  test('two fingers pan and zoom while drawing, and leave no ink (queue 165.3)', { item: '165.3' }, async function () {
+    /* Ezra: *"another option that lets you grab the screen and zoom in or out so you can do more detailed
+     * drawing."* v8.00 kept the zoom you already had and v8.01 stopped the tool throwing it away, but the
+     * GESTURE was never built — the wheel was the only pan, which is no pan at all on a phone.
+     * AND IT WAS WORSE THAN MISSING. Measured before the fix: a two-finger pinch on #draw-overlay did not
+     * merely fail to zoom — the second finger ran through the ordinary drawing path and COMMITTED A
+     * STROKE. FM.viewport came back unchanged and FM.scene.layers went 0 -> 1. Pinching to zoom left ink
+     * on his drawing, which is the half of this worth guarding hardest. */
+    if (!FM.startDraw || !FM.viewport) throw new Error('FM.startDraw / FM.viewport are not reachable');
+    const layers0 = FM.scene.layers.slice();
+    const vp0 = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale };
+    const stop = () => { try { (FM.stopDraw || (FM.drawTool && FM.drawTool._stop) || function () {}).call(FM); } catch (e) {} };
+    const tp = (type, id, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, button: 0, buttons: 1 });
+    try {
+      for (const mode of ['freehand', 'vector']) {
+        FM.scene.layers.length = 0;
+        FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.scale = 1; FM.viewport.apply();
+        FM.startDraw(mode); await sleep(260);
+        const ov = document.getElementById('draw-overlay');
+        if (!ov) throw new Error('#draw-overlay is missing, so the gesture cannot be driven');
+        const r = ov.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        ov.dispatchEvent(tp('pointerdown', 1, cx - 40, cy)); await sleep(40);
+        ov.dispatchEvent(tp('pointerdown', 2, cx + 40, cy)); await sleep(40);
+        for (const d of [12, 28, 50, 75]) {
+          window.dispatchEvent(tp('pointermove', 1, cx - 40 - d, cy + d * 0.2));
+          window.dispatchEvent(tp('pointermove', 2, cx + 40 + d, cy + d * 0.2));
+          await sleep(35);
+        }
+        window.dispatchEvent(tp('pointerup', 1, cx - 115, cy + 15));
+        window.dispatchEvent(tp('pointerup', 2, cx + 115, cy + 15));
+        await sleep(200);
+        if (FM.scene.layers.length !== 0) throw new Error('in ' + mode + ' mode a two-finger pinch LEFT INK — it committed ' + FM.scene.layers.length + ' layer(s) instead of zooming');
+        if (!(FM.viewport.scale > 1.05)) throw new Error('in ' + mode + ' mode the pinch did not zoom (scale ' + FM.viewport.scale + ')');
+        stop(); await sleep(100);
+      }
+
+      /* THE CONTROL, and it is the one that matters most: one finger must still DRAW. A "fix" that
+         turned every touch into a gesture would pass both assertions above and destroy the tool. */
+      FM.scene.layers.length = 0;
+      FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.scale = 1; FM.viewport.apply();
+      FM.startDraw('freehand'); await sleep(240);
+      const ov2 = document.getElementById('draw-overlay');
+      const r2 = ov2.getBoundingClientRect(), cx2 = r2.left + r2.width / 2, cy2 = r2.top + r2.height / 2;
+      ov2.dispatchEvent(tp('pointerdown', 1, cx2 - 30, cy2)); await sleep(40);
+      for (const d of [10, 20, 35, 55]) { window.dispatchEvent(tp('pointermove', 1, cx2 - 30 + d, cy2 + d * 0.4)); await sleep(35); }
+      window.dispatchEvent(tp('pointerup', 1, cx2 + 25, cy2 + 22)); await sleep(220);
+      if (FM.scene.layers.length === 0) throw new Error('one finger no longer draws — the gesture has swallowed ordinary drawing, which is far worse than the bug it fixes');
+    } finally {
+      stop();
+      FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale;
+      try { FM.viewport.apply(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll && FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('trimming shows the six numbers and the landing notch (queue 153)', { item: '153' }, async function () {
     /* The visible half of his request: *"it tells you all of this information and also shows on little
      * notches, by colouring in the exact notch it will land on"*. Six values in two rows — Start · End ·
