@@ -535,6 +535,25 @@ console errors, nothing off-screen, no sideways scroll**, and every feature ship
 invisible on localhost and fatal on Pages. `curl | grep version` only proves the HTML deployed, not
 that the app BOOTS.
 
+### 23 Aug — the LIVE app now has a full end-to-end pass, not just a boot check
+Went further than "it boots" on `https://builderezra.github.io/FreeMotion/` at 375px, because every
+check for weeks had been against localhost:
+| step | result |
+|---|---|
+| home screen, tabs, FAB | ✅ renders, no console errors, nothing off-screen |
+| tap a project card | ✅ opens the editor (body class clears, timeline appears) |
+| add a layer + renderScene | ✅ 53,398 non-black pixels |
+| **run a real export** | ✅ **1,677-byte MP4, `ftypisom`, video track present, no audio track (correct — no audio in the project), 317ms, no errors** |
+| editor at 375px | ✅ screenshot correct, v12.01, v11.93's bigger undo/redo arrows visible |
+**The export is the one that matters** — queue 215 is the most serious open item and its whole subject
+is the OUTPUT being wrong. It had never been run against the deployed build.
+⚠️ **One false alarm, and it was mine:** my first "tap the project card" used `.proj-card`, which does
+not exist — the class is `.hm-card` — so it clicked nothing and looked like the live app refusing to
+open a project. **Found the element by its TEXT instead, and it worked first time.** Guessing a
+selector is the same failure as the truncated grep and the too-narrow regex: three flavours of reading
+the app through a broken lens in one week. When a basic interaction appears broken, check the selector
+before the app.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
