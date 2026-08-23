@@ -554,6 +554,26 @@ selector is the same failure as the truncated grep and the too-narrow regex: thr
 the app through a broken lens in one week. When a basic interaction appears broken, check the selector
 before the app.
 
+### 23 Aug — the rule-8b AUDIT found a mis-classified entry, and it was a 🚨 one
+Swept all 28 open entries asking "is this REALLY waiting on him?". **#460 was not.** It is marked
+🟠 NEEDS YOU, but its own last line is *"NEXT STEP: instrument the four implementations"* — my step, not
+his. Did it, and **the four 'genuinely dead' effects all work**: lightglow 1,575 changed pixels,
+longshadow 2,370, channelremap 1,575, radialshadow 1,353 on ordinary artwork.
+**My 21 Aug measurement was wrong for the reason that entry itself had already written down**, one step
+further along: the shadows cast into TRANSPARENT space (a frame-filling rectangle leaves nowhere for a
+shadow), and channelremap's default swaps RED and BLUE — on his `#cc22cc` magenta those are the SAME
+NUMBER, so the swap is a no-op by arithmetic.
+**And the suite had been disagreeing with that entry the whole time**: its no-op-at-defaults test lists
+a DIFFERENT four (darkglow, replacecolor, hslbands, matchgrade). Nobody reconciled the two.
+**Three rules out of this:**
+1. **Run rule 8b's audit as "is this waiting on HIM, or on ME?" — not "is there a status field".** One
+   pass over 28 entries found a 🚨 item whose next step was mine for two days.
+2. **When a test and an entry disagree about the same effects, one of them is wrong and it is worth ten
+   minutes to find out which.** The suite was right.
+3. **A no-op result on a synthetic subject proves nothing about the effect.** I built a flat opaque
+   magenta fill because it matched his screenshot — and reproduced his complaint AND the wrong
+   diagnosis. Test on artwork the effect can act on, then on his subject, and report both.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
