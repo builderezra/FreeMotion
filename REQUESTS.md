@@ -5148,6 +5148,21 @@ better still, keep working inside the turn rather than parking work for a later 
              Emboss, Zoom Blur, Hex Tiles.
              **Glitch is deliberately left alone** — it holds TWO copies at once, and one shared buffer
              would make them secretly the same array.
+             ❌ **AND A NINTH ATTEMPT MEASURED AND REJECTED — zoomstreaks, recorded so nobody rebuilds it.**
+             Its ten taps each recomputed `(k/steps)*strength` and `1-(k/(steps+1))` — **twenty divisions
+             per pixel, 29 million a frame, for exactly ten distinct pairs** — plus a per-pixel `norm`.
+             Textbook hoisting, and it came out **byte-identical** as expected.
+             **It bought nothing.** Timed properly (median of seven runs, not a single shot): the tap
+             tables measured **75.6ms against 68.4ms** for the same loop with the arithmetic left
+             inline. Reverted.
+             **Why, and it is worth knowing before the next one:** the JIT already hoists loop-invariant
+             arithmetic, and a `Float64Array` load is not cheaper than a multiply. **Hoisting only pays
+             when the thing hoisted is genuinely expensive** — a `Math.sin`, a `Math.pow`, an
+             allocation — which is exactly what the eight wins above removed. Cheap arithmetic is
+             already free.
+             ⚠️ **A measurement lesson too:** my first reading was a single run and said 67.2 → 66.0,
+             which looked like a small win and would have shipped. Seven runs said the opposite.
+             **Single-shot timings decided nothing here; they only looked like they did.**
              🐛 **AND THE GUARD THAT POLICES EXACTLY THAT WAS ITSELF BROKEN.** It refused the change,
              which is how this was found — but for the wrong reason: its scan required
              `function(d,W,H,p,t)` with no spaces, so **it could see only 52 of the file's 170 kernels**
