@@ -39897,17 +39897,25 @@
   test('the what-is-slow report carries the audio numbers, and reads them (queue 148)', { item: '148' }, async function () {
     if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
     const saved = FM.playbackStats;
-    const report = () => new Promise((res, rej) => {
+    /* ⚠️ THE ACTIVITY HAS TO HAPPEN DURING THE SAMPLE (queue 489). This used to set the counters
+       BEFORE starting the probe and expect them reported — which models "all of it happened before he
+       pressed Measure", and that is precisely the case the report used to get wrong: the counters run
+       from play(), so dividing their total by the probe's own window inflated the rate by however long
+       playback had already been going, and past 4/s the report states "this is ours". The numbers are
+       now the sample's own, so the fixture makes them happen inside it. What this test is FOR — a
+       churning controller is called ours, a quiet one is not — is unchanged. */
+    const report = (during) => new Promise((res, rej) => {
       const started = FM.perfProbe.run(260, res);
-      if (!started) rej(new Error('the probe refused to start'));
+      if (!started) { rej(new Error('the probe refused to start')); return; }
+      if (during) setTimeout(during, 90);
     });
     try {
       /* A CHURNING controller: many real writes to playbackRate in a short sample. This is the
          reading that means the scratchiness is OURS — preservesPitch turns a rate write into a
          pitch change. */
-      FM.playbackStats = { syncs: 40, renders: 40, drops: 0, seeks: 2, trims: 30,
-                           rateWrites: 30, errs: [0.01, 0.02, 0.2] };
-      let r = await report();
+      FM.playbackStats = { syncs: 0, renders: 40, drops: 0, seeks: 0, trims: 30,
+                           rateWrites: 0, errs: [0.01, 0.02, 0.2] };
+      let r = await report(() => { FM.playbackStats.syncs += 40; FM.playbackStats.seeks += 2; FM.playbackStats.rateWrites += 30; });
       if (!/AUDIO/.test(r)) throw new Error('the report has no AUDIO section at all, which is the whole of this change:\n' + r);
       if (!/rate writes\/s/.test(r)) throw new Error('the AUDIO section does not report the rate-write rate — the one number that separates our controller from the decoder');
       if (!/2 seeks/.test(r)) throw new Error('the AUDIO section does not report seeks');
@@ -39917,9 +39925,9 @@
       /* A QUIET controller. Same question, opposite answer — and this is the reading that would
          exonerate the sync loop and send the next pass at the decoder, which is exactly the fork
          #148 has been stuck on. */
-      FM.playbackStats = { syncs: 40, renders: 40, drops: 0, seeks: 0, trims: 0,
+      FM.playbackStats = { syncs: 0, renders: 40, drops: 0, seeks: 0, trims: 0,
                            rateWrites: 0, errs: [0.005, 0.006, 0.007] };
-      r = await report();
+      r = await report(() => { FM.playbackStats.syncs += 40; });
       if (/this is ours/.test(r)) throw new Error('a QUIET controller was still blamed for the scratchiness:\n' + r);
       if (!/NOT our/.test(r)) throw new Error('a quiet controller did not exonerate the rate correction, so the report leaves the question open:\n' + r);
 
@@ -41513,6 +41521,63 @@
       FM.scene.layers = keep; FM.time = keepT;
       FM.selectLayer(null); FM.refreshAll();
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
+  /* ═══ 489: THE AUDIO LINE MUST DESCRIBE THE SAMPLE, NOT THE WHOLE SESSION.
+     `FM.playbackStats.rateWrites` counts from play() and is only cleared by play(). The report divided
+     that running total by the probe's own ten-second window — so the longer playback had been going
+     before he pressed Measure, the bigger the number, and past 4/s the report says flatly "this is
+     ours" and blames FreeMotion's rate correction for a controller behaving exactly as v11.70 intended.
+     This is the line the whole audio question turns on and the reason his toast tap matters, so a
+     confident wrong answer here is worse than none.
+     The test pre-loads the counters as if he had been playing for a while, then makes a KNOWN, small
+     amount of activity happen during the sample, and reads what the report says. */
+  test('489: the report\'s audio numbers count only what happened during the sample', { item: '489' }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    if (FM.perfProbe.running) throw new Error('a probe is already running, so this one would be refused and prove nothing');
+    const ps = FM.playbackStats;
+    if (!ps) throw new Error('FM.playbackStats is missing — there is nothing for the report to count');
+    const saved = { rateWrites: ps.rateWrites, seeks: ps.seeks, syncs: ps.syncs, errs: (ps.errs || []).slice() };
+    try {
+      // As if he had been playing for two minutes before pressing Measure.
+      ps.rateWrites = 900; ps.seeks = 120; ps.syncs = 1500; ps.errs = [];
+      const DUR = 1200;
+      const ADD_RATE = 3, ADD_SEEK = 2, ADD_SYNC = 7;
+      const text = await new Promise((res, rej) => {
+        const to = setTimeout(() => rej(new Error('the probe never finished within 6s')), 6000);
+        const started = FM.perfProbe.run(DUR, (out) => { clearTimeout(to); res(out); });
+        if (started === false) { clearTimeout(to); rej(new Error('FM.perfProbe.run refused to start')); return; }
+        // …a small, known amount of real activity DURING the window
+        setTimeout(() => { ps.rateWrites += ADD_RATE; ps.seeks += ADD_SEEK; ps.syncs += ADD_SYNC; }, Math.round(DUR / 2));
+      });
+      if (!text || typeof text !== 'string') throw new Error('the probe produced no report text');
+
+      const line = text.split('\n').find(l => l.indexOf('AUDIO') === 0);
+      /* CONTROL: with the counters moving during the window the AUDIO line must exist. If it does not,
+         every assertion below is skipped and a pass means nothing. */
+      if (!line) throw new Error('no AUDIO line in the report even though the counters moved during the sample:\n' + text);
+
+      const m = line.match(/AUDIO\s+([\d.]+) rate writes\/s · (\d+) seeks · (\d+) sync ticks/);
+      if (!m) throw new Error('the AUDIO line no longer has the shape this asserts ("' + line + '")');
+      const rate = parseFloat(m[1]), seeks = +m[2], syncs = +m[3];
+
+      const sessionRate = 903 / (DUR / 1000);        // what the old arithmetic would have printed
+      if (rate > sessionRate / 4) {
+        throw new Error('the report says ' + rate.toFixed(1) + ' rate writes/s. Only ' + ADD_RATE + ' happened during the ' +
+          (DUR / 1000) + 's sample (~' + (ADD_RATE / (DUR / 1000)).toFixed(1) + '/s); the rest were already counted before Measure was pressed. ' +
+          'Dividing the session total by the sample window is queue 489 — and past 4/s the report tells him the scratchiness "is ours".');
+      }
+      if (seeks !== ADD_SEEK) throw new Error('seeks reported as ' + seeks + ', expected the ' + ADD_SEEK + ' that happened during the sample (120 had already happened before it)');
+      if (syncs !== ADD_SYNC) throw new Error('sync ticks reported as ' + syncs + ', expected the ' + ADD_SYNC + ' during the sample (1500 had already happened before it)');
+
+      /* AND THE VERDICT IT DRIVES. 3 writes in 1.2s is 2.5/s, under the 4/s bar, so the report must NOT
+         be accusing us — that sentence is the whole reason this number matters. */
+      if (/this is ours/.test(text)) {
+        throw new Error('the report blames FreeMotion ("this is ours") on a sample with only ' + ADD_RATE + ' rate writes in ' + (DUR / 1000) + 's:\n' + text);
+      }
+    } finally {
+      ps.rateWrites = saved.rateWrites; ps.seeks = saved.seeks; ps.syncs = saved.syncs; ps.errs = saved.errs;
     }
   });
 })();

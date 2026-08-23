@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.09
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.10
 >
-> **State:** v12.09, **892 tests green**, tree clean.
+> **State:** v12.10, **893 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -26,7 +26,7 @@
 >    for it, and a yes/no from you is worth more than another test I write.
 > 1. **⏸ HOLD OFF ON THE LAG-REPORT TAP FOR NOW — I need to fix the instrument first.**
 >    This has been my #1 ask for weeks, and the review found **three separate faults in the report it
->    produces** (#489, #491, #493). The audio line can inflate its own number enough to blame FreeMotion
+>    produces** (#489 ✅ fixed v12.10, #491 and #493 still open). The audio line can inflate its own number enough to blame FreeMotion
 >    for something behaving correctly, and the sync-error figures describe a different ten seconds than the
 >    one they are printed under. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387), so it is
 >    worth more than everything else on this list — which is exactly why I am not going to spend it on a
@@ -16615,8 +16615,22 @@ re-opened #480, which I had marked done and had not fixed.
       the transform, so the "cannot draw" case was drawing in full white and testing nothing.
       The thumbnail is rendered at whatever the playhead happens to be on, and a layer that is not visible at that instant draws nothing — so saving a selection whose clips do not span the playhead produces a black JPEG. That is worse than the ✦/letter fallback it replaced, because two black cards are indistinguishable and both look broken.
 
-- [ ] **489 — 🔴 The lag report's AUDIO line can give a WRONG verdict — and it is the line the whole audio question hangs on.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **489 — 🔴 The lag report's AUDIO line can give a WRONG verdict — and it is the line the whole audio question hangs on.** ✅ **FIXED v12.10.**
+      The counters run from the moment you press **Play**, and only reset when you press Play again. The
+      report divided that running total by its own ten-second window — so the longer you had been playing
+      before pressing Measure, the bigger the number got. Past 4 per second the report states flatly that
+      the scratchiness **"is ours"**, blaming FreeMotion's rate correction for a controller doing exactly
+      what it was designed to do.
+      **Measured with the test:** a sample where only 3 rate writes actually happened in 1.2 seconds (2.5/s)
+      was reported as **746.2 per second** — nearly 200× over, and far past the line where it accuses us.
+      Rate, seeks and sync ticks are now the sample's own. The section still appears when there is audio at
+      all, because "0.0 rate writes/s" is a real reading — silence is not the same as nothing to say.
+      The sync-error figures are still session-wide and now SAY SO in the report ("since play, not this
+      sample") until **#491** turns them into a rolling window.
+      ⚠️ **An older test (#148) had to move with it** — it set the counters before starting the probe and
+      expected them counted, which is the exact case that was wrong. What it protects is unchanged: a
+      churning controller is still called ours, a quiet one still is not; the activity just happens inside
+      the sample now.
       'rate writes/s' divides a counter that has been adding up since you pressed Play by the probe's own 10-second window. If playback had been running a while before you started the probe, the number is inflated by however long that was — enough to cross the '⚠ this is ours' threshold and blame FreeMotion for a controller behaving exactly as intended. **This matters more than its size:** the one thing I keep asking you to do is tap the toast and send me the text, and that text is what unblocks #148 and four others. Fix the instrument before you spend the tap.
 
 - [ ] **490 — 🟠 The oversize-project instructions get covered by the dialog 400ms after they appear.**

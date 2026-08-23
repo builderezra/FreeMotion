@@ -117,6 +117,18 @@ window.FM = window.FM || {};
       const dur = Math.max(1000, Math.min(60000, ms || 10000));
       const gaps = [];
       const t0 = performance.now();
+      /* ⚠️ THE AUDIO COUNTERS RUN FROM `play()`, NOT FROM HERE (queue 489). `FM.playbackStats.rateWrites`
+         accumulates for the whole of playback and is only reset when play starts. The report divided
+         that total by the probe's OWN ten-second window, so the longer he had been playing before
+         pressing Measure, the bigger the number got — and past 4/s the report states flatly "this is
+         ours", blaming FreeMotion's rate correction for a controller doing exactly what v11.70
+         intended. It is the line the whole audio question turns on, and it is the one thing his tap on
+         the toast is meant to settle, so a plausible wrong answer here is worse than no answer.
+         Snapshot on the way in; everything below reports the DIFFERENCE over this sample. */
+      const ps0 = (function () {
+        const p = FM.playbackStats || {};
+        return { rateWrites: p.rateWrites | 0, seeks: p.seeks | 0, syncs: p.syncs | 0 };
+      })();
       let last = t0, frames = 0;
       const gapsPlay = [], gapsDrag = [];   // queue 387 — see the split in tick()
       let tierLow = 99, tierHigh = -1;
@@ -263,22 +275,34 @@ window.FM = window.FM || {};
           }
         }
         const ps = FM.playbackStats;
+        // Everything here is THIS SAMPLE's share, not the whole session's (queue 489).
+        const dRate = ps ? Math.max(0, (ps.rateWrites | 0) - ps0.rateWrites) : 0;
+        const dSeeks = ps ? Math.max(0, (ps.seeks | 0) - ps0.seeks) : 0;
+        const dSyncs = ps ? Math.max(0, (ps.syncs | 0) - ps0.syncs) : 0;
+        /* PRESENT if there is audio at all this session, but the NUMBERS are this sample's. Gating the
+           section on the windowed counts instead made it vanish on a quiet sample, which the queue-148
+           test caught: "0.0 rate writes/s" is a real and useful reading — silence is not the same as
+           having nothing to say. */
         if (ps && (ps.syncs || ps.rateWrites)) {
           const secs = Math.max(0.001, elapsed / 1000);
           const errs = (ps.errs || []).slice().sort((a, b) => a - b);
           const emed = errs.length ? errs[Math.floor(errs.length / 2)] : null;
           const eworst = errs.length ? errs[errs.length - 1] : null;
-          lines.push('AUDIO    ' + (ps.rateWrites / secs).toFixed(1) + ' rate writes/s · ' + ps.seeks + ' seeks · ' + ps.syncs + ' sync ticks');
+          lines.push('AUDIO    ' + (dRate / secs).toFixed(1) + ' rate writes/s · ' + dSeeks + ' seeks · ' + dSyncs + ' sync ticks');
           if (emed != null) {
+            /* SAID TO BE SINCE PLAY, because it is — the error samples are capped at the first 600 and
+               only cleared by play(), so unlike the line above these are NOT this sample's. Queue 491
+               turns them into a rolling window; until then the label is what stops them being read as
+               ten seconds' worth. */
             lines.push('         sync error ' + Math.round(emed * 1000) + 'ms median · ' + Math.round(eworst * 1000) + 'ms worst' +
-                       ' (dead band ' + Math.round((FM.syncTuning ? FM.syncTuning.dead : 0.045) * 1000) + 'ms)');
+                       ' (dead band ' + Math.round((FM.syncTuning ? FM.syncTuning.dead : 0.045) * 1000) + 'ms) — since play, not this sample');
           }
           /* Say what it MEANS, because a bare rate is not something he should have to interpret —
            * and because the two readings point at completely different next steps. */
-          if (ps.rateWrites / secs > 4) {
+          if (dRate / secs > 4) {
             lines.push('         ⚠ the rate is being rewritten often. preservesPitch turns that into a');
             lines.push('           PITCH change, which is heard as a scratchy warble — this is ours.');
-          } else if (ps.syncs > 20) {
+          } else if (dSyncs > 20) {
             lines.push('         the sync controller is quiet, so scratchiness heard here is NOT our');
             lines.push('           rate correction — the decoder under load is the next suspect.');
           }
