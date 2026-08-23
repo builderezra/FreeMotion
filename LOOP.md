@@ -505,6 +505,19 @@ multiply.** Do not hoist divisions and multiplies on the theory that fewer opera
 distinguish a 2% win from noise — and 2% is exactly the size of result that gets shipped without
 scrutiny.** Median of several, always, before keeping or rejecting.
 
+### 23 Aug — two kernels READ and found already correct, and the list of what is still unopened
+Applied the boundary rule (hoist only EXPENSIVE work) to the next two candidates and found nothing to
+do — which is the right outcome to record rather than to keep poking:
+· **bumpmap** — its `cos`/`sin` of the light angle and the light vector's `sqrt` are all in the SETUP,
+  before the pixel loop. The only per-pixel `sqrt` normalises the surface normal, which is real work.
+· **fractalridges** — its one `Math.pow` is genuinely per-pixel AND guarded by `if (fr_sh !== 1)`, so
+  the default path skips it. The comment there already explains the guard exists for byte-identity.
+**Re-timed all 105 pixel effects at his size: median 10.8ms, 24 over 25ms.** ⚠️ Not comparable to the
+8.57ms recorded after v11.78 — different params, different harness. **Per-effect before/after numbers
+in this file are like-for-like; the medians are not, and should not be quoted against each other.**
+**Still never opened: lensblur (69.6ms), linstreaks (65.6), clouds (49.6).** Those are the next tick's
+candidates, and per the rule above the only way to know is to read them.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
