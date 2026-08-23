@@ -111,6 +111,11 @@ from him, or is a standing note/held item. The reminder list below is what he ow
   holes found and closed. New diagnostics still need this treatment; the old ones have had it.
 **What would unblock the most:** one tap from him on the "what's slow" toast. Five entries (95, 125,
 148, 202, 387) wait on that single report.
+**The block he reads now opens with THREE actions, not a 20-row table** (23 Aug). He had ~15 open
+questions and answered none for many ticks; a wall of pick-ones is a wall however well written. It
+leads with the toast tap (unblocks five entries), "got it" for #406, and the feature name — everything
+else is explicitly marked not urgent. **If a request for a decision goes unanswered for days, suspect
+the ASK before the person.**
 **Delivery path verified live, 23 Aug** — the service worker is registered and controlling on the real
 Pages origin, the silent-downgrade marker (queue 306) has never fired, and the cache is exactly ONE
 build: all 71 versioned URLs the page names are present and **zero files are cached at two versions**,
