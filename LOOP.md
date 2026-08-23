@@ -116,6 +116,16 @@ questions and answered none for many ticks; a wall of pick-ones is a wall howeve
 leads with the toast tap (unblocks five entries), "got it" for #406, and the feature name — everything
 else is explicitly marked not urgent. **If a request for a decision goes unanswered for days, suspect
 the ASK before the person.**
+**Nine tests could SKIP their own assertions and report a pass — fixed 23 Aug.** Audited all 880 for
+vacuous passes. None lacks a `throw` (good), but **24 could `return` before reaching one**, and ten of
+those skipped because THE THING UNDER TEST WAS MISSING — `FM.buildMaskAlpha` gone, `FM.timeline.rebuild`
+gone, `FM.sfx.open` gone, the timeline drawing no clip for a layer the test had just created. Delete the
+feature and those tests go GREEN. Nine now throw and name what vanished; the suite is still 880/880 at
+BOTH widths, so not one of those guards had ever been firing — they were dead valves that would only
+have mattered at the moment they hid something.
+⚠️ **Fourteen other early returns are legitimate and were left alone** — viewport gates (`matchMedia`),
+codec support, loop control. **The rule: a test may skip for an ENVIRONMENT reason, never because the
+thing it tests has disappeared.**
 **Every ship.sh gate test-fired, 23 Aug — they all still refuse.** The gates are the loop's guarantees
 and each encodes a real past failure, but nothing had ever CHECKED that they still fire; a gate that
 quietly stopped working is the same silent-absence class as a missing diagnostic. Deliberately tripped
