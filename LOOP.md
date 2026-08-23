@@ -132,6 +132,20 @@ thing it tests has disappeared.**
 DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
 loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
 returns were real, and those nine are fixed.
+**A full phone does NOT cost him work — simulated and verified, 23 Aug.** His storage is one budget
+shared with the video in IndexedDB, so "what happens when it fills mid-edit" is a real question about
+his data. Stubbed `localStorage.setItem` to throw `QuotaExceededError` on every project write, then
+edited six times:
+| | |
+|---|---|
+| saves blocked | 6 |
+| the last good save | **intact — 813 bytes before and after, layer still present** |
+| toasts shown | **exactly 1**, not 6 (autosave runs every 600ms; the anti-spam works) |
+| what it said | *"Storage full — autosave paused. Use ⚙ → Save project file to keep your work."* |
+| after space frees | **autosave resumes and persists** the next edit |
+Nothing truncated, nothing corrupted, told once, given a route out. `localStorage.setItem` is atomic —
+it throws or it writes — so the previous value always survives; and `storage.js` separately catches the
+nastier case where a write REPORTS success and silently did nothing, by comparing a revision.
 **Security pass against the three risks CLAUDE.md names, 23 Aug — all clean.** Never done before, and
 it needed no decision from him:
 · **No user-controlled string reaches `innerHTML`.** 104 writes; the sixteen whose expression mentions
