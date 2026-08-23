@@ -518,6 +518,23 @@ in this file are like-for-like; the medians are not, and should not be quoted ag
 **Still never opened: lensblur (69.6ms), linstreaks (65.6), clouds (49.6).** Those are the next tick's
 candidates, and per the rule above the only way to know is to read them.
 
+### 23 Aug — CAMPAIGN CLOSED, and the LIVE app verified for the first time
+Read all three remaining hogs. **None is reducible:** lensblur, linstreaks and clouds have ZERO
+transcendental calls inside their pixel loops (all the trig is already in the setup; clouds has none),
+and linstreaks weights each tap by THE SAMPLED PIXEL'S OWN brightness — a non-linear filter, so the
+sliding-window trick behind Tilt Shift's 10.5× cannot apply. Their cost is real gathers with
+data-dependent weights.
+**Final tally: eight wins, one measured rejection, vein empty. Do not re-rank the effects hoping for
+another — the whole top five has been read.**
+🌐 **AND A GAP IN MY OWN PRACTICE, closed:** every check for weeks has been against `localhost:8777`.
+**The thing he actually loads is `https://builderezra.github.io/FreeMotion/`, and I had never once
+tested it.** Did so at 375px: boots clean, v12.01, home screen and tabs and FAB all correct, **zero
+console errors, nothing off-screen, no sideways scroll**, and every feature shipped this week present
+(struggle offer, oversize warning, HEVC sniff, defaultTextSize, 105 pixel + 21 warp kernels).
+**Worth repeating after any release that changes the file list** — a cache-buster or a missing file is
+invisible on localhost and fatal on Pages. `curl | grep version` only proves the HTML deployed, not
+that the app BOOTS.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
