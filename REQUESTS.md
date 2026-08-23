@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.91
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.92
 >
-> **State:** v11.91, **866 tests green**. **Three new reports logged 23 Aug — 478 (black bar between the add menu and the timeline, PC), 479 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.92, **867 tests green**. **478 (the black bar) is FIXED in v11.92.** Two of the three new reports are still open — 479 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -11326,9 +11326,8 @@ wait for them to report back."*
          couple of pixels and is exactly the sort of thing that gets nudged the wrong way by eye.
       Goes with **354**, which is the same control.
 
-- [ ] **478 — A black bar appeared between the add menu and the timeline (PC).** (23 Aug, v11.90, with a
-      **STATUS: 🟢 READY — nothing is stopping this**
-      full-screen PC screenshot.) **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **478 — A black bar appeared between the add menu and the timeline (PC).** ✅ **FIXED v11.92 — reproduced both ways.** (23 Aug, v11.90, with a
+      full-screen PC screenshot.)
       His words, verbatim:
       > Just had a glitch where a black bar appeared between the add menu and the timeline
       **From the screenshot** (Chrome, ~2000px wide, Studio layout, Project 33, Audio tab of the add menu
@@ -11345,6 +11344,34 @@ wait for them to report back."*
       **Related history worth reading first, because a black bar has been chased here three times:**
       #154 (a black bar leaving a project, v7.02), #237/#239 (the slam's flat ring), and the #97 update
       band (v7.35). None of those is this one — this is PC, mid-session, between two panels.
+
+      ✅ **FOUND AND FIXED, v11.92 — and your word "glitch" was the clue.** It is not random: it happens
+      when the WINDOW CHANGES SIZE while the add menu is raised.
+      **The mechanism.** Raising the add menu makes the panel float (`position: fixed`), because a
+      floating box has to be told where its edges are or it spans the whole window and covers the
+      timeline. Those edges are measured **when you grab the resizer** — and nothing measured them
+      again afterwards, so the panel stays nailed to the column it saw at that moment while the grid's
+      column moves:
+      | window | panel (pinned) | timeline column | result |
+      |---|---|---|---|
+      | 1440 wide, just raised | 346 | 346 | fine |
+      | widened to 1800 | still 346 | moves to 400 | **54px of bare background between them — your black bar** |
+      | narrowed to 1100 | still 346 | moves to 300 | 46px of panel ON TOP of the timeline |
+      The comment on that pin already knew the column moves when the window is resized — and the answer
+      it reached was to re-read on every pointerdown, which covers picking the drag up again but NOT the
+      window changing under a panel that is already raised.
+      **Fixed by re-pinning on resize**, measured with the panel put back in its grid slot for the read
+      (while it floats, its own rect IS the stale pin, so re-reading it would just re-pin the wrong
+      numbers). Both directions asserted, plus a control that the deliberately-wrong pin really moves
+      the panel — otherwise the test would pass against a no-op.
+      ⚠️ **This is very likely #476 as well** (*"the sizing for this menu on pc seems to have issues
+      sometimes… i think it gets messed up when the timeline and add menu are split"*) — same panel,
+      same pin, and "split" is that raised state. #476 stays open pending your screenshot rather than
+      being closed on a guess, but **try it again first: it may already be gone.**
+      *(Two of my own mistakes here, both caught: a mutation SURVIVED because I had added a redundant
+      layout flush — deleted rather than left looking load-bearing — and my first test called the
+      re-pin function directly, so unhooking the resize listener passed it. It fires a real resize
+      event now. That is the same dead-assertion shape as the queue-148 counter one tick earlier.)*
 
 - [ ] **479 — The arrows on the new undo/redo buttons are too small.** (23 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

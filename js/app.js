@@ -4358,6 +4358,30 @@ window.FM = window.FM || {};
         root.style.setProperty('--am-width', Math.round(r.width) + 'px');
         root.style.setProperty('--am-bottom', Math.round(window.innerHeight - r.bottom) + 'px');
       };
+      /* ═══ AND RE-PIN WHEN THE WINDOW CHANGES SIZE (queue 478).
+       * Ezra: *"Just had a glitch where a black bar appeared between the add menu and the timeline"*.
+       * Reproduced at 1440x900: raise the panel, widen the window to 1800, and the panel is still
+       * `position: fixed` at the column it measured on POINTERDOWN — 346px wide — while the grid's
+       * column has moved out to 400. The 54px between them is bare `#app` with a transparent
+       * background, which paints as a black bar exactly where he says. Narrowing does the mirror
+       * image and the panel OVERLAPS the timeline by 46px instead.
+       * The pin comment three lines up already knew the column moves on resize; the answer it reached
+       * was to re-read on every pointerdown, which covers picking the drag up again and not the window
+       * changing under a panel that is ALREADY raised.
+       * Measuring has to happen with the panel back in the grid — while it floats, its rect IS the
+       * stale pin, so re-reading it would just re-pin the wrong numbers. Dropping the class, forcing
+       * layout and restoring it happens inside one frame, so nothing paints in between. */
+      const amRepin = () => {
+        if (!document.body.classList.contains('am-floating')) return;
+        const p = document.getElementById('inspector-panel');
+        if (!p) return;
+        document.body.classList.remove('am-floating');
+        amPinSlot();                        // its getBoundingClientRect forces the grid layout for us
+        document.body.classList.add('am-floating');
+      };
+      FM._amRepin = amRepin;                // suite seam: the defect is geometry after a resize
+      window.addEventListener('resize', amRepin);
+
       amRez.addEventListener('pointerdown', (e) => {
         if (!studioAdd()) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;

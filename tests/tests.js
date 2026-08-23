@@ -40020,4 +40020,50 @@
       if (FM.refreshAll) FM.refreshAll();
     }
   });
+
+  /* ═══ THE BLACK BAR BETWEEN THE ADD MENU AND THE TIMELINE (queue 478).
+     Ezra, 23 Aug: "Just had a glitch where a black bar appeared between the add menu and the timeline".
+     A raised add-menu panel is `position: fixed`, pinned to the grid column it measured ON POINTERDOWN.
+     Resize the window while it is raised and the column moves out from under it: widening leaves bare
+     #app showing between the panel and the timeline (his black bar), narrowing makes the panel overlap
+     the timeline instead. Both directions are asserted, because a fix that only tracks one is half a
+     fix and the overlap is the same defect wearing different clothes. */
+  test('a raised add menu keeps its column when the window is resized (queue 478)', { item: '478' }, async function () {
+    if (typeof FM._amRepin !== 'function') throw new Error('FM._amRepin is missing — nothing re-pins the floating panel');
+    const p = document.getElementById('inspector-panel');
+    if (!p) throw new Error('no #inspector-panel');
+    const root = document.documentElement;
+    const hadFloat = document.body.classList.contains('am-floating');
+    const saved = { l: root.style.getPropertyValue('--am-left'), w: root.style.getPropertyValue('--am-width'), b: root.style.getPropertyValue('--am-bottom') };
+    try {
+      /* Stand the panel up as a floating one pinned to a column that is deliberately WRONG — 120px
+         narrower than the slot it is actually in. That is exactly the state a resize leaves behind,
+         reproduced without needing to resize the real window (which the harness cannot do). */
+      document.body.classList.remove('am-floating');
+      const slot = p.getBoundingClientRect();
+      if (slot.width < 40) throw new Error('the inspector panel is ' + slot.width + 'px wide — this layout is not the desktop one and the test cannot see the defect');
+      root.style.setProperty('--am-left', Math.round(slot.left) + 'px');
+      root.style.setProperty('--am-width', Math.round(slot.width - 120) + 'px');
+      root.style.setProperty('--am-bottom', Math.round(window.innerHeight - slot.bottom) + 'px');
+      document.body.classList.add('am-floating');
+
+      // CONTROL: the wrong pin must actually MOVE the panel, or re-pinning proves nothing.
+      const wrong = p.getBoundingClientRect();
+      if (Math.abs(wrong.width - slot.width) < 60) throw new Error('the deliberately-wrong pin did not change the panel geometry (' + wrong.width + ' vs slot ' + slot.width + '), so this test cannot see the bug');
+
+      /* Fire a REAL resize event rather than calling FM._amRepin() — the defect is that nothing
+         re-pins WHEN THE WINDOW CHANGES, so unhooking the listener has to fail this too. Calling the
+         function directly tests the repair and not the wiring, which is how a dead assertion happens
+         (see the queue-148 counter, same mistake one tick earlier). */
+      window.dispatchEvent(new Event('resize'));
+
+      const fixed = p.getBoundingClientRect();
+      if (Math.abs(fixed.width - slot.width) > 2) throw new Error('after re-pinning the panel is ' + Math.round(fixed.width) + 'px but its column is ' + Math.round(slot.width) + 'px — that difference is the black bar he reported (or, narrowing, the panel overlapping the timeline)');
+      if (Math.abs(fixed.left - slot.left) > 2) throw new Error('after re-pinning the panel starts at ' + Math.round(fixed.left) + ' but its column starts at ' + Math.round(slot.left));
+      if (!document.body.classList.contains('am-floating')) throw new Error('re-pinning dropped the floating state — the panel would fall back into the grid and collapse the raise');
+    } finally {
+      root.style.setProperty('--am-left', saved.l); root.style.setProperty('--am-width', saved.w); root.style.setProperty('--am-bottom', saved.b);
+      document.body.classList.toggle('am-floating', hadFloat);
+    }
+  });
 })();
