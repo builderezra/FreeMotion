@@ -428,6 +428,20 @@ looks exactly like unbounded growth. It was simply below the 120-commit cap; the
 past it. **A growth curve measured entirely inside a cap is indistinguishable from a leak — find the
 cap before calling it.** Same family as the truncated greps: measure past the boundary, or don't claim.
 
+### 23 Aug, v11.98 — SEPARABILITY IS THE RECURRING WIN. Check for it before anything else.
+Declined to start Corner Pin or LUT unasked — both are genuinely multi-tick, and the plan itself says
+Corner Pin *"sliders alone would be unusable"*, so a half-build contradicts its own judgement. Went back
+to his named priority instead, re-ranked the 21 warps, and the top one (Wave) was separable: its x shift
+depends only on y, its y shift only on x. Two tables → **2.3× and BYTE-IDENTICAL**.
+**That is now FIVE wins from one idea** (tiltshift, spinstreaks, the shared scratch buffer,
+turbulentdisplace, wave). **So the first question about any slow per-pixel kernel is: does each
+expensive term depend on only one coordinate?** If yes the win is exact and free; if it needs an
+identity (spinstreaks, turbulentdisplace) it is close but not exact and needs a bounded assertion; only
+if neither holds is it genuinely per-pixel work for the quality ladder to manage.
+⚠️ **And my ranking sweep OVER-STATED the absolutes** — it sampled every third pixel and multiplied by
+9, putting Wave at ~130ms when it is ~25ms. The ordering was sound and the sweep did its job, but the
+numbers were not publishable. **Rank with a sample; quote from a full run.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
