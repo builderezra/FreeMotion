@@ -206,6 +206,23 @@ holding our counter against the element's own write count — non-zero, and neve
 **So when a change adds a MEASUREMENT, there are always two claims: the thing is measured, and the
 measurement is reported. One test cannot cover both, and the reporting one is the easy one to write.**
 
+### 23 Aug, v11.90 — WHEN A FAILURE SPEAKS, ASK HOW EARLY IT COULD HAVE SPOKEN
+#215 (a silent export) was already diagnosed and already speaking: v7.91 toasts *"this browser cannot
+encode AAC"*. The gap was WHEN. It speaks during the export, so he finds out by having already waited
+out a render. And the entry's own key sentence hands over the fix: **AAC support belongs to the BROWSER,
+not to the project or the settings** — so it is knowable the moment the dialog opens, before he has
+committed anything. The warning is a block in the export card now, not a toast, because a toast about a
+render he has not started is gone by the time he presses the button.
+**Generalising the last five ticks: the question is not only "does the app say it" but "does it say it
+while he can still act on it".** A message that arrives after the cost has been paid is closer to a
+receipt than a warning.
+⚠️ **Two guards worth keeping in mind here, both from this tick:** the condition needs BOTH halves (a
+browser that refuses AAC *and* a project with sound to lose), or every silent animation gets warned
+about audio it never had — and audio rides the `'video'` layer type, so the natural `type === 'audio'`
+check finds nothing, ever. Both mutation-checked.
+*(The suite's no-double-quotes-in-test-names gate fired on me this tick and was right to — the name
+would have truncated its own FAIL line in ship.sh. A structural guard paying for itself.)*
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
