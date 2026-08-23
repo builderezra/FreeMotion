@@ -111,6 +111,11 @@ from him, or is a standing note/held item. The reminder list below is what he ow
   holes found and closed. New diagnostics still need this treatment; the old ones have had it.
 **What would unblock the most:** one tap from him on the "what's slow" toast. Five entries (95, 125,
 148, 202, 387) wait on that single report.
+**Delivery path verified live, 23 Aug** — the service worker is registered and controlling on the real
+Pages origin, the silent-downgrade marker (queue 306) has never fired, and the cache is exactly ONE
+build: all 71 versioned URLs the page names are present and **zero files are cached at two versions**,
+which is queue 430's pruner working. **So a release does reach his phone.** Nothing to fix; re-check
+only if he reports an old build again.
 
 ## WHAT THE WORK TAUGHT — the durable rules, distilled from 33 ticks
 *(Each line cost something. The full account of any of them is in LOOP-HISTORY.md.)*
