@@ -40211,4 +40211,42 @@
       if (FM.perfProbe && FM.perfProbe.stop) FM.perfProbe.stop();
     }
   });
+
+  /* ═══ THE TEXT-TO-SPEECH PANEL OFFERS THE WAY OUT (queue 392).
+     Its note ends "or to record a voiceover yourself" — and recording one is a feature that already
+     exists, buried in Add ▸ Audio. The panel was naming the solution and leaving him to find it. */
+  test('the text-to-speech panel offers the recorder it tells you to use (queue 392)', { item: '392' }, async function () {
+    const saved = FM.scene.layers.slice();
+    const realOpen = FM.voiceRec && FM.voiceRec.open;
+    let opened = 0;
+    try {
+      if (!FM.voiceRec) throw new Error('FM.voiceRec is missing — the panel has nothing to offer');
+      FM.voiceRec.open = () => { opened++; };
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { name: 'speak me', text: 'hello there', x: 100, y: 100 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(400);
+      if (FM.inspector && FM.inspector.openCategory) { try { FM.inspector.openCategory('tts'); } catch (e) {} }
+      await sleep(300);
+
+      const note = document.querySelector('.tts-note');
+      const btn = document.querySelector('.tts-rec');
+      if (!note) { /* the panel is not open in this harness — assert the wiring instead of nothing */ }
+      if (!note && !btn) throw new Error('the text-to-speech panel did not render for a text layer, so this test cannot see either the note or the button');
+      if (note && !btn) throw new Error('the panel warns that the voice will not be in the export and names recording as the fix, but offers no way to do it — which is the whole point of this change');
+      if (btn) {
+        if (!/record/i.test(btn.textContent)) throw new Error('the button does not say what it does: ' + btn.textContent);
+        btn.click();
+        if (opened !== 1) throw new Error('the button did not open the recorder (opened ' + opened + ' times)');
+      }
+    } finally {
+      if (FM.voiceRec && realOpen) FM.voiceRec.open = realOpen;
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
 })();

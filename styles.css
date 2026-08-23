@@ -7589,3 +7589,7 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   color: var(--text); font-size: 12.5px; line-height: 1.45;
 }
 .export-warn b { color: var(--warn, #e8a33d); }
+
+/* Queue 392 — the way OUT of the text-to-speech dead end, next to the note explaining it. Full width
+   so it reads as the panel's suggested next step rather than a stray control. */
+.tts-rec { display: block; width: 100%; margin-top: 8px; min-height: 40px; }

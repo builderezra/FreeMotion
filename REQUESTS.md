@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.95
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.96
 >
-> **State:** v11.95, **870 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.96, **871 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -13238,6 +13238,16 @@ wait for them to report back."*
       stream, so **there is no supported way to capture what it says** — in any browser, not just Safari.
       No capture means no audio layer, no trimming, and nothing in the export. The panel says this on
       screen rather than letting him discover it after building something around it.
+      ✅ **v11.96 — THE PANEL NOW OFFERS THE DOOR, NOT JUST THE WALL.** Its note has always ended
+      *"…or to record a voiceover yourself"* — and **recording one is a feature that already exists**
+      (`FM.voiceRec`, Add ▸ Audio ▸ Record voice…). So the panel was naming the solution and leaving you
+      to go and find it, which is the same shape as queue 129's fix-in-a-console and 202's
+      fix-in-a-text-file: the app knows the answer and does not hand it over.
+      There is a **"Record a voiceover instead"** button under the note now, full width, 40px, verified
+      at 375px. **It adds no capability and pre-empts nothing below** — a recording IS an audio layer, so
+      unlike anything `speechSynthesis` can produce it trims on the timeline and lands in the export.
+      The cloud-vs-record decision below is still yours.
+
       **THE DECISION HE STILL OWES, and it is the only thing blocking a voice that IS in the export:**
       · **cloud TTS (BYOK)** — genuinely good voices and a real audio track, but a key, a small bill, and
         his text leaves the device, which breaks the local-only rule this app is built on; or

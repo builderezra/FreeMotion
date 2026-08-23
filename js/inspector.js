@@ -2561,6 +2561,21 @@ window.FM = window.FM || {};
        record what it says, so there is nothing to put on the timeline and nothing to export. Saying so
        here is the whole difference between a feature and a button that lies. */
     body.appendChild(el('div', 'insp-hint tts-note', FM.tts.EXPORT_NOTE));
+
+    /* ...AND THEN OFFER THE DOOR, not just the wall (queue 392).
+     * The note above ends "or to record a voiceover yourself" — and recording a voiceover is a feature
+     * that ALREADY EXISTS (`FM.voiceRec`, Add ▸ Audio ▸ Record voice…). So the panel was naming the
+     * solution and leaving him to go and find it, which is the same shape as queue 129's console.warn
+     * and 202's fix-in-a-text-file: the app knows the answer and does not hand it over.
+     * This adds no capability and pre-empts no decision — the cloud-vs-record choice in this entry is
+     * still his. It is a door to something already built, put where the problem is described. */
+    if (FM.voiceRec && FM.voiceRec.open) {
+      const rec = el('button', 'set-action tts-rec', 'Record a voiceover instead');
+      rec.type = 'button';
+      rec.title = 'A recording IS an audio layer — it trims on the timeline and lands in the export';
+      rec.addEventListener('click', () => { FM.voiceRec.open(); });
+      body.appendChild(rec);
+    }
   }
 
   function quickRow(layer) {
