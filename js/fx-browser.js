@@ -1251,7 +1251,26 @@ window.FM = window.FM || {};
   let _featRow = null, _catDepth = 0;
   function rebuild() {
     scrollEl.innerHTML = '';
-    const tg = modeToggle(); if (tg) scrollEl.appendChild(tg);   // above everything, search results included
+    /* WHERE THE Visual/Filters/Audio TOGGLE LIVES (queue 481). Ezra, of the PC layout: "visual filter
+       and audio buttons are at the top along side the search and X button to save space."
+       On a PC the browser is docked into the inspector column — measured 346px wide, near enough a
+       phone — so a full-width row of its own costs 52px of a 500px-tall panel for three buttons. In the
+       header it costs nothing: the row is already there for the X and the search button, and the
+       "Add Effect" title beside them is saying what the panel obviously is.
+       ONLY when actually docked (`fxb-in-inspector`). He said "on pc" twice, and the phone's full-bleed
+       sheet keeps the toggle where queue 45 put it. The header is NOT rebuilt by rebuild(), so a stale
+       toggle would accumulate there on every re-render — hence the unconditional remove first, which
+       also cleans up if the window is resized from docked to sheet between rebuilds. */
+    const tg = modeToggle();
+    const topRow = root.querySelector('.fxb-top');
+    const stale = topRow && topRow.querySelector('.fxmode'); if (stale) stale.remove();
+    if (tg) {
+      if (topRow && root.classList.contains('fxb-in-inspector')) {
+        topRow.insertBefore(tg, topRow.querySelector('.fxb-search-btn'));
+      } else {
+        scrollEl.appendChild(tg);                 // above everything, search results included
+      }
+    }
     const q = (searchInput.value || '').trim();
     if (q) { scrollEl.appendChild(buildSearchResults(q)); stopAuto(); return; }
     const feat = buildFeatured();

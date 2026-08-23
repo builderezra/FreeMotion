@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.03
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.04
 >
-> **State:** v12.03, **886 tests green**, tree clean.
+> **State:** v12.04, **887 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -11714,18 +11714,28 @@ wait for them to report back."*
       `type` keys untouched so no existing project loses an effect. He can also veto any single name — the
       table above is a proposal, not a decision.
 
-- [ ] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** (23 Aug, two PC screenshots at v12.01.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
+      Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it
+      was still being dressed like a wide screen. Before → after: featured cards **150px → 112px**;
+      category tiles **4 columns of 71.8px squares → 3 of 100px** sized to their own label; **5 labels
+      wrapped, "Shakes / Movement" needed 41.4px of text in a 71.8px box → nothing overflows**, the
+      worst now clears its tile by 11px; the counts are gone; and Visual/Filters/Audio moved into the
+      header beside the X and the search, freeing the ~52px row they had to themselves.
+      **One thing you did not ask for, so you should know:** the X and search circles went 38px → 36px.
+      The header carries five controls now instead of three, and on a tighter inspector each toggle half
+      came out one pixel under the 60px minimum the suite holds for it. 36px is still a full tap target.
+      **Phone deliberately untouched** — you said "on pc" twice. The test proves that too: it re-opens
+      the browser at 390px and fails if the phone lost its toggle row, its counts, or its card size.
       His words, verbatim:
       > in this section on pc u can make it so that the featured icons are smaller, visual filter and audio buttons are at the top along side the search and X button to save space. the icons for each group actually fit in the box - you can remove the number saying how many effects are in there to make it fit-
       **Clauses — tick separately:**
-      1. [ ] **The featured (NEW) tiles are too big on PC** — shrink them.
-      2. [ ] **Visual / Filters / Audio move UP onto the same row as the search and the X**, which today
+      1. [x] **The featured (NEW) tiles are too big on PC** — shrink them.
+      2. [x] **Visual / Filters / Audio move UP onto the same row as the search and the X**, which today
              is a row of its own. That is the space saving he is asking for.
-      3. [ ] **The category icons must fit their box.** His second screenshot shows the labels breaking
+      3. [x] **The category icons must fit their box.** His second screenshot shows the labels breaking
              mid-word — *"Colourin g"*, *"Generativ e"*, *"Shakes / Movemen t"*, *"Repetitio n"* — so the
              tile is too small for its own text.
-      4. [ ] **Remove the effect COUNT from each category tile** (the 43 / 19 / 28 …) — he offers this
+      4. [x] **Remove the effect COUNT from each category tile** (the 43 / 19 / 28 …) — he offers this
              himself as the way to make the label fit.
       ⚠️ **PC ONLY as stated** — he says "on pc" twice. Decide explicitly whether the phone sheet keeps
       its current layout and say which was assumed; do not silently restyle both.

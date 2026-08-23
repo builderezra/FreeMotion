@@ -3759,6 +3759,51 @@ body.fm-playing #time-readout {
   .fxb-cats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .fxb-banner { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; min-height: 64px; padding: 12px 13px; font-size: 14px; }
 }
+/* ═══ THE PC EFFECTS BROWSER IS A 346px COLUMN, SO STOP DRESSING IT LIKE A WIDE ONE (queue 481).
+   Ezra, with two screenshots: "u can make it so that the featured icons are smaller, visual filter and
+   audio buttons are at the top along side the search and X button to save space. the icons for each
+   group actually fit in the box - you can remove the number saying how many effects are in there to
+   make it fit".
+   Since queue 397 the browser docks into the inspector on a PC. MEASURED at a 1440px viewport: the
+   panel is 346px wide and 500px tall, and it was still using the wide-screen treatment — 150px featured
+   cards, and 4 columns of 71.8px SQUARE category tiles. A square tile that narrow cannot hold a 26px
+   icon and its own name, so five labels wrapped and "Shakes / Movement" needed 41.4px of text in a
+   71.8px box: it broke mid-word, which is what his second screenshot shows.
+   The phone already solved this at queue 461 (3 columns, label bottom-left, height from content rather
+   than an aspect-ratio). The docked column is phone-width, so it gets the same treatment — this is not
+   a new design, it is applying the one that already works to the other narrow layout.
+   Scoped to `.fxb-in-inspector`, which is set ONLY when the browser is really docked in a panel wider
+   than 200px. He said "on pc" twice, so the phone sheet and the fallback canvas-bottom sheet are
+   deliberately untouched. */
+#fx-browser.fxb-in-inspector .fxb-title { display: none; }              /* the header's space goes to the toggle */
+/* The header now carries five controls instead of three, and the panel is as narrow as ~300px when the
+   inspector column is tight. Measured: at the default gaps each toggle half came out 59px, one pixel
+   under the 60px floor the suite holds for it. So the row itself gives up the space — tighter padding
+   and gaps, and 36px circles rather than 38 (still on the 36px thumb minimum, and the X and search are
+   the two controls in here you aim at least often). That leaves ~65px per half at 300px and ~79px at
+   the 346px I measured on a 1440px screen. */
+#fx-browser.fxb-in-inspector .fxb-top { gap: 6px; padding: 9px 8px; }
+#fx-browser.fxb-in-inspector .fxb-close,
+#fx-browser.fxb-in-inspector .fxb-search-btn { width: 36px; height: 36px; }
+#fx-browser.fxb-in-inspector .fxb-top .fxmode { flex: 1; min-width: 0; margin: 0; gap: 4px; }
+/* 38px to match the X and the search circle either side of them — and the suite holds a 36px floor on
+   anything you tap, which a 34px pill broke. The header already sizes to a 38px control, so keeping
+   the toggle at the same height costs nothing. */
+#fx-browser.fxb-in-inspector .fxb-top .fxmode-btn { min-height: 38px; padding: 7px 4px; font-size: 11.5px; border-radius: 8px; }
+/* Featured: 150px cards ate 43% of the column's width each. 112 keeps two-and-a-bit in view, which is
+   what tells you the row scrolls. */
+#fx-browser.fxb-in-inspector .fxb-card { flex: 0 0 112px; }
+#fx-browser.fxb-in-inspector .fxb-card .fxb-thumb { height: 70px; }
+#fx-browser.fxb-in-inspector .fxb-card-name { padding: 7px 8px; font-size: 11.5px; }
+/* Categories: his own suggestion — drop the count, and let the tile size itself to its label. */
+#fx-browser.fxb-in-inspector .fxb-banner-count { display: none; }
+#fx-browser.fxb-in-inspector .fxb-cats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#fx-browser.fxb-in-inspector .fxb-banner {
+  aspect-ratio: auto; min-height: 64px;
+  flex-direction: column; align-items: flex-start; justify-content: flex-end;
+  gap: 4px; padding: 10px 11px; font-size: 12.5px;
+}
+
 /* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet.
    …EXCEPT WHEN IT IS A SHEET (queue 303). Every rule here is now `:not(.fxb-sheet)`, and that is not
    tidiness — the sheet block below only overrides the ROOT's box, so without this the desktop card

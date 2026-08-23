@@ -13094,7 +13094,11 @@
       await FM.probeAudioTrack(loud);          // pre-warm so the toggle renders its final state at once
       await FM.probeAudioTrack(f.shp);
 
-      const scroll = document.querySelector('#fx-browser .fxb-scroll');
+      /* SEARCH THE WHOLE BROWSER, NOT THE SCROLLER (queue 481). The Visual/Filters/Audio toggle now
+         rides the HEADER row when the browser is docked into the inspector on a PC, and stays in the
+         scroll area on a phone. This test is about what the toggle DOES, not where it is parented, so
+         it looks in the root — anchored on .fxb-scroll it would fail on desktop for the wrong reason. */
+      const scroll = document.querySelector('#fx-browser');
       const mode = function () { return scroll.querySelector('.fxmode'); };
       const btn = function (name) {
         return Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === name; });
@@ -13104,9 +13108,16 @@
       FM.selectLayer(f.shp.id);
       FM.fxBrowser.open(f.shp);
       if (!mode()) throw new Error('no .fxmode toggle in the Add Effect browser');
-      if (scroll.firstElementChild !== mode()) throw new Error('the toggle is not the first thing in the browser — it has to sit ABOVE Featured');
+      /* ABOVE FEATURED — MEASURED, NOT INFERRED FROM DOM ORDER (queue 481). This used to require the
+         toggle to be the scroller's first child. Since 481 it rides the HEADER row on a PC, which is
+         still above Featured and is in fact further from it — but it is a different parent, so the old
+         check failed on a layout that satisfies exactly what it was protecting. What matters is that
+         you meet the toggle before the effects, so compare where they actually are on screen. */
       const feat = scroll.querySelector('.fxb-sec-title');
-      if (!feat || !(mode().compareDocumentPosition(feat) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('“' + (feat && feat.textContent) + '” is not below the toggle');
+      if (!feat) throw new Error('no section title in the browser to place the toggle against');
+      const mb = mode().getBoundingClientRect(), fb = feat.getBoundingClientRect();
+      if (!(mb.width && mb.height)) throw new Error('the toggle has no box (' + mb.width + 'x' + mb.height + '), so it is not visible at all');
+      if (mb.top >= fb.top) throw new Error('the toggle sits at y=' + mb.top.toFixed(0) + ', not above “' + feat.textContent + '” at y=' + fb.top.toFixed(0) + '”');
       if (!btn('Audio') || !btn('Visual')) throw new Error('the toggle does not offer both sides: ' + Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).map(function (b) { return b.textContent; }).join('/'));
       if (!btn('Visual').classList.contains('on')) throw new Error('the visual side is not the selected one on a layer with no audio');
       // A control you cannot press is not a control: BOTH halves have to be a real thumb target and
@@ -41008,6 +41019,113 @@
       FM.scene.layers = layers0; FM.addAt = at0;
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
       if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ 481: THE PC EFFECTS BROWSER IS A NARROW COLUMN AND MUST BE LAID OUT LIKE ONE.
+     Ezra, with two PC screenshots: "u can make it so that the featured icons are smaller, visual filter
+     and audio buttons are at the top along side the search and X button to save space. the icons for
+     each group actually fit in the box - you can remove the number saying how many effects are in there
+     to make it fit". Four separate asks, so four separate assertions — a summary is where clauses go to
+     die, and this entry had one clause that only the second screenshot showed (labels breaking
+     mid-word: "Colourin g", "Generativ e", "Shakes / Movemen t").
+     MEASURED before: the docked panel is 346px wide and was drawing 150px featured cards and 4 columns
+     of 71.8px SQUARE category tiles, in which "Shakes / Movement" needed 41.4px of text.
+     PC ONLY, as he said twice — the phone case is asserted at the bottom, because "make it fit" is easy
+     to satisfy by restyling both and that is not what he asked for. */
+  test('481: the PC effects browser fits its column — small featured cards, toggle in the header, labels that fit, no counts', { item: '481' }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach a desktop width');
+    const w0 = fe.style.width, h0 = fe.style.height;
+    const settle = () => new Promise(r => setTimeout(r, 150));
+    const keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      fe.style.width = '1440px'; fe.style.height = '900px';
+      window.dispatchEvent(new Event('resize'));
+      await settle(); await settle();
+      if (window.innerWidth <= 700) throw new Error('the frame did not widen to a desktop width (' + window.innerWidth + 'px)');
+
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S481', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await settle();
+      FM.fxBrowser.open(L);
+      await settle(); await settle();
+
+      const root = document.getElementById('fx-browser');
+      /* CONTROL. Every assertion below is scoped to `.fxb-in-inspector`. If the browser did not dock —
+         a collapsed inspector, a narrow frame — none of the new CSS applies and a clean run would mean
+         the layout was never looked at. */
+      if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
+      if (!root.classList.contains('fxb-in-inspector')) throw new Error('the browser is not docked in the inspector (classes: ' + root.className + '), so none of the PC rules under test are in effect and everything below would pass without measuring anything');
+      const panelW = root.getBoundingClientRect().width;
+      if (panelW > 700) throw new Error('the docked panel is ' + panelW.toFixed(0) + 'px wide — that is not the narrow column these rules are for');
+
+      // CLAUSE 2 — Visual/Filters/Audio ride the header row beside the X and the search button.
+      const top = root.querySelector('.fxb-top');
+      if (!top.querySelector('.fxmode')) throw new Error('the Visual/Filters/Audio toggle is not in the header row — he asked for it "at the top along side the search and X button to save space"');
+      if (root.querySelector('.fxb-scroll .fxmode')) throw new Error('the toggle is ALSO still in the scroll area, so it now costs MORE space, not less');
+      const btns = [].slice.call(top.querySelectorAll('.fxmode-btn'));
+      if (btns.length < 3) throw new Error('only ' + btns.length + ' toggle buttons in the header; expected Visual, Filters and Audio');
+      const tr = top.getBoundingClientRect();
+      btns.forEach(b => {
+        const br = b.getBoundingClientRect();
+        if (br.width < 40) throw new Error('the "' + b.textContent.trim() + '" button is only ' + br.width.toFixed(1) + 'px wide — squeezed to nothing by moving it into the header');
+        if (br.left < tr.left - 0.5 || br.right > tr.right + 0.5) throw new Error('the "' + b.textContent.trim() + '" button overflows the header row');
+      });
+
+      // CLAUSE 1 — the featured cards shrink.
+      const card = root.querySelector('.fxb-card');
+      if (!card) throw new Error('no featured cards to measure');
+      const cw = card.getBoundingClientRect().width;
+      if (cw >= 140) throw new Error('featured cards are still ' + cw.toFixed(1) + 'px wide in a ' + panelW.toFixed(0) + 'px column — he asked for them smaller');
+
+      // CLAUSE 4 — no effect counts on the category tiles.
+      const cnt = root.querySelector('.fxb-banner-count');
+      if (!cnt) throw new Error('no .fxb-banner-count element found at all — the count must stay in the DOM so the PHONE keeps it (he said "on pc")');
+      if (getComputedStyle(cnt).display !== 'none') throw new Error('the effect count is still showing on the category tiles; he offered removing it himself as the way to make the label fit');
+
+      // CLAUSE 3 — every category label fits inside its own tile.
+      const banners = [].slice.call(root.querySelectorAll('.fxb-banner'));
+      if (banners.length < 8) throw new Error('only ' + banners.length + ' category tiles found — too few to be the real list');
+      const spill = banners.map(b => {
+        const lab = b.querySelector('.fxb-banner-label');
+        const bb = b.getBoundingClientRect(), lb = lab.getBoundingClientRect();
+        return { name: lab.textContent, over: +Math.max(bb.top - lb.top, lb.bottom - bb.bottom).toFixed(1) };
+      }).filter(x => x.over > 0.5);
+      if (spill.length) throw new Error('these category labels do not fit their tile (px outside): ' + spill.map(x => x.name + ' ' + x.over).join(', ') + ' — this is the "Shakes / Movemen t" breakage in his second screenshot');
+
+      // …and the tiles must still be wide enough that the longest name is not being split letter by letter.
+      const cols = getComputedStyle(root.querySelector('.fxb-cats')).gridTemplateColumns.split(' ').length;
+      if (cols > 3) throw new Error('the category grid is still ' + cols + ' columns wide in a ' + panelW.toFixed(0) + 'px panel — that is what made the labels break mid-word');
+
+      // ═══ PC ONLY. The phone sheet keeps the layout queue 45/461 gave it.
+      FM.fxBrowser.close();
+      await settle();
+      fe.style.width = '390px';
+      window.dispatchEvent(new Event('resize'));
+      await settle(); await settle();
+      if (!matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not narrow back to a phone width');
+      FM.selectLayer(L.id);
+      FM.fxBrowser.open(L);
+      await settle(); await settle();
+      if (root.classList.contains('fxb-in-inspector')) throw new Error('the browser is still marked as docked at a phone width, so the PC rules are leaking onto the phone');
+      if (!root.querySelector('.fxb-scroll .fxmode')) throw new Error('the phone lost its Visual/Filters/Audio row — he asked for the PC layout to change, twice saying "on pc"');
+      const pcnt = root.querySelector('.fxb-banner-count');
+      if (pcnt && getComputedStyle(pcnt).display === 'none') throw new Error('the effect counts vanished on the PHONE too; he asked for that on PC');
+      const pcard = root.querySelector('.fxb-card');
+      if (pcard && pcard.getBoundingClientRect().width < 140) throw new Error('the phone featured cards shrank as well (' + pcard.getBoundingClientRect().width.toFixed(1) + 'px) — PC only was the ask');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (_) {}
+      fe.style.width = w0; fe.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await settle();
+      FM.scene.layers = keep; FM.selectLayer(keepSel || null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 })();
