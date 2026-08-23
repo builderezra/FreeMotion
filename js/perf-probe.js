@@ -127,7 +127,7 @@ window.FM = window.FM || {};
          Snapshot on the way in; everything below reports the DIFFERENCE over this sample. */
       const ps0 = (function () {
         const p = FM.playbackStats || {};
-        return { rateWrites: p.rateWrites | 0, seeks: p.seeks | 0, syncs: p.syncs | 0 };
+        return { rateWrites: p.rateWrites | 0, seeks: p.seeks | 0, syncs: p.syncs | 0, at: performance.now() };
       })();
       let last = t0, frames = 0;
       const gapsPlay = [], gapsDrag = [];   // queue 387 — see the split in tick()
@@ -285,7 +285,17 @@ window.FM = window.FM || {};
            having nothing to say. */
         if (ps && (ps.syncs || ps.rateWrites)) {
           const secs = Math.max(0.001, elapsed / 1000);
-          const errs = (ps.errs || []).slice().sort((a, b) => a - b);
+          /* THIS SAMPLE'S ERRORS (queue 491). `errs` is a rolling window of the last 600 with a matching
+             list of timestamps, so the report can take exactly the ones recorded while it was watching.
+             Without the timestamps (a hand-built stats object in a test) fall back to all of them — but
+             say which it is on the line below rather than letting a whole-session figure pass itself off
+             as ten seconds. */
+          const allErrs = ps.errs || [], errTimes = ps.errT || [];
+          const windowed = errTimes.length === allErrs.length
+            ? allErrs.filter((v, i) => errTimes[i] >= ps0.at)
+            : null;
+          const sampleOnly = windowed !== null;
+          const errs = (sampleOnly ? windowed : allErrs).slice().sort((a, b) => a - b);
           const emed = errs.length ? errs[Math.floor(errs.length / 2)] : null;
           const eworst = errs.length ? errs[errs.length - 1] : null;
           lines.push('AUDIO    ' + (dRate / secs).toFixed(1) + ' rate writes/s · ' + dSeeks + ' seeks · ' + dSyncs + ' sync ticks');
@@ -295,7 +305,8 @@ window.FM = window.FM || {};
                turns them into a rolling window; until then the label is what stops them being read as
                ten seconds' worth. */
             lines.push('         sync error ' + Math.round(emed * 1000) + 'ms median · ' + Math.round(eworst * 1000) + 'ms worst' +
-                       ' (dead band ' + Math.round((FM.syncTuning ? FM.syncTuning.dead : 0.045) * 1000) + 'ms) — since play, not this sample');
+                       ' (dead band ' + Math.round((FM.syncTuning ? FM.syncTuning.dead : 0.045) * 1000) + 'ms)' +
+                       (sampleOnly ? '' : ' — since play, not this sample'));
           }
           /* Say what it MEANS, because a bare rate is not something he should have to interpret —
            * and because the two readings point at completely different next steps. */

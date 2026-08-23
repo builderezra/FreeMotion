@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.11, 894 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.12, 895 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 491–497 — the review's own findings, oldest first. 491/493 are the lag report's remaining faults (489 fixed v12.10) and
+**Next: 492–497 — the review's own findings, oldest first. 493 is the LAST lag-report fault (489 v12.10, 491 v12.12) and it
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
 what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
@@ -120,6 +120,11 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **491: IF THE TEST DOES NOT CALL THE APP'S OWN CODE, IT IS TESTING ITSELF.** The first 491 test pushed
+samples into `playbackStats.errs` with its own inline copy of the collector's logic — so restoring the old
+first-600 cap changed nothing it could see. Extracting `FM._noteSyncError` and driving THAT caught it at
+once. The review flagged this same shape in queue 129, so it is a habit: **before writing a fixture that
+manipulates state directly, look for the function the app uses and call that instead.**
 ⚠️ **490: WHEN A TEST FAILS IN THE SUITE BUT NOT IN THE BROWSER, SUSPECT LEFTOVER STATE — AND MAKE THE
 ASSERTION SAY WHY.** `#cv-oversize` measured 0x0 only in the suite. Two earlier tests hide `#canvas-dialog`
 with an INLINE `style.display='none'` that nothing clears (the app only toggles a class), so by the time a

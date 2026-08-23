@@ -1405,7 +1405,18 @@ window.FM = window.FM || {};
    * median rather than a worst case, which is the number that says whether sync is the problem at
    * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
    * has been asking his ears. */
-  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [], errT: [] };
+  /* THE COLLECTOR ITSELF, as a function rather than three lines inside the sync tick (queue 491) — so
+     the suite can drive the real thing. A test that pushes into the array with its own copy of this
+     logic proves only that its own copy works: the first version of the 491 test did exactly that, and
+     a mutation restoring the old first-600 cap sailed through it. */
+  const ERR_KEEP = 600;
+  FM._noteSyncError = function (v, now) {
+    const p = FM.playbackStats; if (!p) return;
+    const es = p.errs || (p.errs = []), et = p.errT || (p.errT = []);
+    es.push(v); et.push(now);
+    if (es.length > ERR_KEEP) { es.shift(); et.shift(); }
+  };
 
   // Jump the playhead to t and resync video/audio (used by loop + loop-region wrap).
   function wrapTo(t) {
@@ -1568,8 +1579,15 @@ window.FM = window.FM || {};
             }
             /* The error the controller actually acted on, bias removed — capped so a long session
                cannot grow this without bound. */
-            const es = FM.playbackStats.errs;
-            if (es.length < 600) es.push(Math.abs(rawErr - m._errBias));
+            /* ⚠️ A ROLLING WINDOW, NOT A FIRST-600 CAP (queue 491). This used to stop recording once 600
+               samples existed, and the list is only cleared by play() — so after the first few seconds
+               of playback it was frozen. The report then printed those numbers under a heading that
+               says "10-second sample", describing a window that had closed long before the sample
+               opened. Drift that BUILDS UP over a long playback — the single thing most worth catching
+               — could not appear in it at all.
+               The timestamps are what let the report take only the samples from its own window; the
+               values stay a plain array of numbers because that is what everything already reads. */
+            FM._noteSyncError(Math.abs(rawErr - m._errBias), now);
             }
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
@@ -1683,7 +1701,7 @@ window.FM = window.FM || {};
    * median rather than a worst case, which is the number that says whether sync is the problem at
    * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
    * has been asking his ears. */
-  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [] };
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [], errT: [] };
     _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.

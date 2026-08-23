@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.11
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.12
 >
-> **State:** v12.11, **894 tests green**, tree clean.
+> **State:** v12.12, **895 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -26,7 +26,7 @@
 >    for it, and a yes/no from you is worth more than another test I write.
 > 1. **⏸ HOLD OFF ON THE LAG-REPORT TAP FOR NOW — I need to fix the instrument first.**
 >    This has been my #1 ask for weeks, and the review found **three separate faults in the report it
->    produces** (#489 ✅ fixed v12.10, #491 and #493 still open). The audio line can inflate its own number enough to blame FreeMotion
+>    produces** (#489 ✅ v12.10, #491 ✅ v12.12 — **only #493 left, then the tap is worth spending**). The audio line can inflate its own number enough to blame FreeMotion
 >    for something behaving correctly, and the sync-error figures describe a different ten seconds than the
 >    one they are printed under. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387), so it is
 >    worth more than everything else on this list — which is exactly why I am not going to spend it on a
@@ -16647,8 +16647,21 @@ re-opened #480, which I had marked done and had not fixed.
       caps and scrolls instead of pushing Apply out of reach.
       An 11-second toast explains what to do, then the canvas dialog opens on top of it and hides it completely. You get 0.4s to read ~110 characters, and the instruction you need *while using the dialog* spends the other 10.6s as a blurred ghost behind it.
 
-- [ ] **491 — 🟠 The lag report's 'sync error' figures describe the wrong ten seconds.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **491 — 🟠 The lag report's 'sync error' figures describe the wrong ten seconds.** ✅ **FIXED v12.12.**
+      The samples stopped being collected after the first 600, and the list is only cleared when you press
+      Play — so within a few seconds of pressing play it was frozen. The report then printed those numbers
+      under a heading that says *ten-second sample*, describing a window that had closed long before the
+      sample opened. **Drift that builds up over a long playback — the single thing most worth catching —
+      could not appear in it at all.**
+      It is a rolling window now: it keeps the most recent samples rather than the first ones, each stamped
+      with when it happened, and the report takes only the ones recorded while it was watching. The
+      "since play, not this sample" note I added in v12.10 is gone, because the figures now really are the
+      sample's.
+      ⚠️ **My first test for this was worthless and the mutation caught it.** It pushed samples into the
+      array using its own copy of the logic, so it only proved its own copy worked — putting the old cap
+      straight back sailed through it. The collector is a real function now and the test drives that.
+      **That is the same mistake the review flagged in #129**, so it is clearly a habit and not an
+      accident: if a test does not call the app's own code, it is testing itself.
       The error samples stop being collected after the first 600 and only reset when you press Play, so the numbers printed under a heading that says '10-second sample' actually come from the first few seconds after Play — a window that had already closed before the sample opened. Drift that builds up during a long playback, which is exactly the thing worth catching, is invisible to it. Needs to be a rolling window, not a first-600 cap.
 
 - [ ] **492 — 🟡 The 'want me to find what's slow?' offer can fire off a single bad frame.**

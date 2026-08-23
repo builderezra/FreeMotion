@@ -41695,4 +41695,61 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 491: THE SYNC-ERROR FIGURES MUST BE FROM THE TEN SECONDS THE HEADING CLAIMS.
+     The samples stopped being collected after the first 600 and were only cleared by play(), so within
+     a few seconds of pressing play the list was frozen. The report then printed those numbers inside a
+     block headed as a ten-second sample — describing a window that had closed before the sample opened.
+     Drift that BUILDS UP over a long playback, which is the single thing most worth catching, could not
+     appear in it at all.
+     Two independent halves: the collector keeps rolling past 600, and the report takes only what was
+     recorded while it was watching. */
+  test('491: sync-error figures come from the sample, and collection never stops', { item: '491' }, async function () {
+    const ps = FM.playbackStats;
+    if (!ps) throw new Error('FM.playbackStats is missing');
+    const saved = { errs: (ps.errs || []).slice(), errT: (ps.errT || []).slice(),
+                    syncs: ps.syncs, rateWrites: ps.rateWrites, seeks: ps.seeks };
+    try {
+      /* ── HALF ONE: it must not stop at 600. The old code was `if (es.length < 600) es.push(...)`, so
+         a long playback recorded nothing after the first few seconds. Driven through the real array so
+         a cap anywhere in the collector shows up. */
+      if (typeof FM._noteSyncError !== 'function') throw new Error('FM._noteSyncError is missing — the real collector is not reachable, and a test that pushes into the array itself only proves its own copy works (that is how the first version of this test let the bug through)');
+      ps.errs = []; ps.errT = [];
+      const t0 = performance.now();
+      for (let i = 0; i < 900; i++) FM._noteSyncError(0.001 * (i % 7), t0 + i);   // THE REAL COLLECTOR
+      if (ps.errs.length !== 600) throw new Error('after 900 samples the buffer holds ' + ps.errs.length + ' — expected it to roll at 600');
+      if (ps.errs.length !== ps.errT.length) throw new Error('values and timestamps are out of step (' + ps.errs.length + ' vs ' + ps.errT.length + '), so the report cannot tell which are its own');
+      /* CONTROL: the buffer must have DROPPED the oldest, not the newest. A cap that keeps the first
+         600 and silently ignores the rest is the exact bug, and it also ends with length 600. */
+      const oldestKept = ps.errT[0];
+      if (!(oldestKept > t0 + 100)) throw new Error('the buffer still holds the OLDEST samples (first timestamp ' + (oldestKept - t0).toFixed(0) + 'ms in), so it is a first-600 cap and not a rolling window — which is queue 491 exactly');
+
+      /* ── HALF TWO: the report uses only what arrived during ITS window. */
+      if (FM.perfProbe.running) throw new Error('a probe is already running, so this one would be refused');
+      ps.errs = []; ps.errT = [];
+      // Stale, huge errors from "earlier in the playback" — 400ms, far worse than anything current.
+      const stale = performance.now() - 60000;
+      for (let i = 0; i < 30; i++) { ps.errs.push(0.4); ps.errT.push(stale + i); }
+      ps.syncs = 10; ps.rateWrites = 1;
+      const DUR = 1200;
+      const text = await new Promise((res, rej) => {
+        const to = setTimeout(() => rej(new Error('the probe never finished')), 6000);
+        if (FM.perfProbe.run(DUR, out => { clearTimeout(to); res(out); }) === false) { clearTimeout(to); rej(new Error('the probe refused to start')); return; }
+        // …and a handful of GOOD samples during the sample itself
+        setTimeout(() => { for (let i = 0; i < 12; i++) { ps.errs.push(0.006); ps.errT.push(performance.now()); } ps.syncs += 12; }, Math.round(DUR / 2));
+      });
+      const line = (text.split('\n').find(l => /sync error/.test(l)) || '');
+      if (!line) throw new Error('the report shows no sync-error line even though 12 samples arrived during the sample:\n' + text);
+      const m = line.match(/sync error (\d+)ms median · (\d+)ms worst/);
+      if (!m) throw new Error('the sync-error line no longer has the shape this asserts: "' + line + '"');
+      const med = +m[1], worst = +m[2];
+      if (med > 60 || worst > 60) {
+        throw new Error('the report says ' + med + 'ms median / ' + worst + 'ms worst. The samples taken DURING the ten seconds were 6ms; the 400ms ones are from a minute before Measure was pressed. Printing them under a "10-second sample" heading is queue 491.');
+      }
+      if (/since play, not this sample/.test(line)) throw new Error('the line still says it is whole-session, so the windowing did not happen: "' + line + '"');
+    } finally {
+      ps.errs = saved.errs; ps.errT = saved.errT;
+      ps.syncs = saved.syncs; ps.rateWrites = saved.rateWrites; ps.seeks = saved.seeks;
+    }
+  });
 })();
