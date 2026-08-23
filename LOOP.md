@@ -97,11 +97,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.01, 880 tests green, tree clean, `HEAD == ssh/main`, live deploy verified end to end** (boots,
-opens a project, renders, and produces a valid MP4 at 375px on the real Pages URL).
-**The queue is genuinely blocked on Ezra** — audited entry by entry on 23 Aug by asking "is this waiting
-on HIM or on ME?", which is the only version of that audit worth running. Everything open needs a word
-from him, or is a standing note/held item. The reminder list below is what he owes.
+**v12.03, 886 tests green, tree clean, `HEAD == ssh/main`.**
+**⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
+every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
+produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
+one buildable without him — logged as **485–496**. An empty queue is a hypothesis; that is the second time
+checking it has found real work. **When the queue looks blocked, attack the shipped code instead.**
+Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on every frame, invisible because the
+picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
+into a layer index).
+**Next: 481 (PC effects browser layout), then 489/491/493 — the lag report's own faults.**
+⛔ **Do not ask him to tap the lag toast until 489/491/493 are fixed.** That tap unblocks five entries and
+the report it produces is currently wrong in three places; spending it on a broken gauge wastes the one
+measurement only his phone can take.
 **Two campaigns closed, do not restart them:**
 · **Effect speed** — eight wins (tiltshift 10.5×, spinstreaks 7×, the shared frame buffer, turbulent
   displace 1.93×, wave 2.3×, cross process 9×, lens flare 2×, twelve kernels off their own frame copy),

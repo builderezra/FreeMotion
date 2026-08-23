@@ -40906,4 +40906,108 @@
         offenders.join('\n  ') + '\nBound by d.length instead.');
     }
   });
+
+  /* ═══ 480 RE-OPENED: THE MARKER MUST LAND BELOW THE LAYER YOU DROPPED ON IT — EVEN WHEN ROWS AND
+     LAYERS DISAGREE. Ezra, twice: "you still cant drag stuff on top of the add layer it just teleports
+     it back under". I shipped v11.94 as the fix and it was wrong: it computed the drop position among
+     the rows ON SCREEN and wrote that straight into FM.addAt, which is an index into scene.layers.
+     Those two are the same number only when every layer has a row — which is exactly the arrangement I
+     had open while testing it. Collapse a group and they drift apart, and the marker lands above the
+     dropped layer instead of below it, i.e. his symptom, unchanged.
+     So the arrangement here is the one that separates them: a COLLAPSED GROUP hiding two members, so
+     the timeline draws 3 rows for 5 layers. The old arithmetic yields addAt=2 (a hidden layer) and the
+     marker renders ABOVE the dropped row; the correct answer is the index of the layer that follows
+     the block. The control below refuses to pass if the group is not actually hiding anything. */
+  test('480: dropping a layer on the add row puts the marker BELOW it, with a collapsed group on the timeline', { item: '480' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atPhoneWidth(async function () {
+        const mk = (n) => { const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' }); L.start = 0; L.duration = 3; return L; };
+        FM.scene.layers.length = 0;
+        const L0 = mk('L0');
+        const G = FM.makeLayer('group', { name: 'G', x: 0, y: 0, start: 0, duration: 3 });
+        G.collapsed = true;
+        const C1 = mk('C1'), C2 = mk('C2'), L4 = mk('L4');
+        C1.parent = G.id; C2.parent = G.id;
+        FM.scene.layers.push(L0, G, C1, C2, L4);       // 5 layers, but C1/C2 are hidden inside G
+        FM.addAt = 4; FM.dragAddAt = null;             // marker directly above L4
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(200);
+
+        const rowsNow = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow'));
+        const all = rowsNow();
+        /* CONTROL: if the group is not hiding its members, rows and layers agree, the old buggy
+           arithmetic gives the right answer by accident, and this test proves nothing at all. */
+        const trackRows = all.filter(r => !r.classList.contains('tl-addrow'));
+        if (trackRows.length !== 3) throw new Error('expected 3 visible layer rows (L0, G, L4) for 5 layers — got ' + trackRows.length + ', so the collapsed group is NOT hiding its members and rows/layers still agree, which is the one arrangement this test cannot detect the bug in');
+        const addRow = all.filter(r => r.classList.contains('tl-addrow'))[0];
+        if (!addRow) throw new Error('there is no add row on the timeline');
+
+        const slotH = all[1].getBoundingClientRect().top - all[0].getBoundingClientRect().top;
+        const listTop = all[0].getBoundingClientRect().top;
+        const src = trackRows.filter(r => { const hd = r.querySelector('.track-head'); return hd && (FM.scene.layers[parseInt(hd.dataset.idx, 10)] || {}).name === 'L0'; })[0];
+        if (!src) throw new Error('could not find L0 row to drag');
+        const h = src.querySelector('.row-drag');
+        if (!h) throw new Error('L0 row has no .row-drag handle');
+        /* ⚠️ AIM IN THE PACKED LAYOUT, NOT THE DOM. The dragged row is lifted OUT of the row list while
+           the finger is down and the rest close up, so a row's DOM position is not the slot it occupies
+           mid-drag. L0 is above the add row, so the add row rides one slot higher than where it is drawn
+           at rest. The first version of this test aimed at the DOM slot, missed the add row entirely,
+           and still passed — the drop resolved elsewhere and happened to leave the marker below L0.
+           A mutation putting the v11.94 bug straight back survived it. */
+        const addSlot = all.filter(r => r !== src).indexOf(addRow);
+        const hr = h.getBoundingClientRect();
+        const x = hr.left + hr.width / 2, y0 = hr.top + hr.height / 2;
+        const targetY = listTop + addSlot * slotH + slotH / 2;   // dead on the ADD ROW
+        const pe = (t, cy) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: cy, pointerId: 93, pointerType: 'touch', isPrimary: true, button: 0, buttons: t === 'pointerup' ? 0 : 1 });
+        const before = FM.scene.layers.map(l => l.name).join(',');
+        FM._dragDebug = true;                      // seam (queue 449): what the gesture ACTUALLY resolved
+        h.dispatchEvent(pe('pointerdown', y0));
+        await sleep(40);
+        for (let k = 1; k <= 6; k++) { await sleep(26); h.dispatchEvent(pe('pointermove', y0 + (targetY - y0) * k / 6)); await sleep(26); }
+        /* CONTROL, READ WITH THE FINGER STILL DOWN: this test is only about the drop that lands ON the
+           add row. If the gesture resolved to any other slot the marker arithmetic under test never
+           runs, and everything below passes without exercising it — which is exactly what happened
+           first time round. */
+        const gap = FM._dragGap;
+        if (!gap) throw new Error('FM._dragGap was never published, so the drag never reached the handle and nothing below is exercised');
+        if (gap.g !== gap.addIdx) throw new Error('the gesture resolved to slot ' + gap.g + ' but the add row is at slot ' + gap.addIdx + ' (' + JSON.stringify(gap.statics) + ') — it did not land ON the add row, so the marker arithmetic under test never ran');
+        /* THE SWITCH'S LEAN IS THE SAME ARITHMETIC (queue 438), and it had the same row-vs-layer fault:
+           `addSwitchProportion` divides FM.dragAddAt by scene.layers.length, so a row index there draws
+           the marker at the wrong height for the whole gesture. Captured here and compared with where
+           the marker ACTUALLY lands — what he is shown while dragging has to be what he gets. */
+        const liveAddAt = FM.dragAddAt;
+        if (typeof liveAddAt !== 'number') throw new Error('FM.dragAddAt was not published mid-drag (' + liveAddAt + '), so the add switch had nothing live to lean on');
+        h.dispatchEvent(pe('pointerup', targetY));
+        await sleep(450);
+
+        const names = FM.scene.layers.map(l => l.name);
+        /* CONTROL: a gesture that never reached the handle leaves everything untouched and every
+           assertion below would pass on a stale scene. */
+        if (names.join(',') === before) throw new Error('the layer order did not change (' + before + '), so the drag never happened and the marker reading proves nothing');
+        const iL0 = names.indexOf('L0');
+        if (iL0 < 0) throw new Error('L0 vanished from the scene: ' + names.join(','));
+        if (typeof FM.addAt !== 'number') throw new Error('FM.addAt is not a number after the drop: ' + FM.addAt);
+        /* THE WHOLE POINT. The marker must end up AFTER the layer that was dropped on it. */
+        if (FM.addAt <= iL0) {
+          throw new Error('the add marker landed at layer ' + FM.addAt + ' but L0 is at ' + iL0 +
+            ' — the marker is ABOVE the layer that was dropped onto it, which is exactly "it teleports it back under". ' +
+            'Order is ' + names.join(',') + '. This is the row-index-vs-layer-index confusion: with the group collapsed the timeline draws 3 rows for 5 layers.');
+        }
+        /* And it must be a real index, not one pointing into the hidden middle of the group. */
+        if (FM.addAt > FM.scene.layers.length) throw new Error('FM.addAt (' + FM.addAt + ') is past the end of the ' + FM.scene.layers.length + '-layer scene');
+        if (liveAddAt !== FM.addAt) throw new Error('the add switch leaned to layer ' + liveAddAt + ' while you were dragging, but the marker landed at ' + FM.addAt + ' — what he is shown mid-drag is not where it goes');
+      });
+    } finally {
+      FM._dragDebug = false; FM._dragGap = null;
+      FM.dragAddAt = null; FM.dragLayerId = null;
+      FM.scene.layers = layers0; FM.addAt = at0;
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 })();

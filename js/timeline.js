@@ -1068,7 +1068,8 @@ window.FM = window.FM || {};
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
       const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll during a reorder drag
-      let moved = false, dropBeforeId, dropAddAt = null, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0;
+      let moved = false, dropBeforeId, dropAddAt = null, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0
+      let restOrder = [];   // non-dragged layer ids, scene order (queue 480 — see acquire)
 
       // NATURAL geometry model — snapshotted at grab (no transforms exist yet), in CONTENT coordinates
       // (viewport top + scrollTop), so it stays valid through auto-scroll and row transforms.
@@ -1097,12 +1098,35 @@ window.FM = window.FM || {};
         listTop = all[0].top;
         statics = all.filter(r => r.isAdd || !groupSet[r.id]);
         dragged = all.filter(r => !r.isAdd && groupSet[r.id]);
+        /* ⚠️ ROWS ARE NOT LAYERS — queue 480, RE-OPENED after I shipped this as fixed at v11.94.
+           `statics` is what is ON SCREEN. A collapsed group (`hiddenByCollapse`), Edit Group and the
+           phone's solo row each hide layers that still occupy slots in `scene.layers`. But `FM.addAt`
+           and `FM.dragAddAt` are indices INTO scene.layers — the marker is drawn before the first
+           visible row whose layer index reaches it, and the add switch divides the number by
+           `scene.layers.length`. The v11.94 fix wrote a position among ROWS straight into both, and
+           the comment below it asserted the two were the same thing ("its index among statics IS its
+           layer index"). They are equal only when every layer has a row, which is the one case I had
+           open while testing. Collapse a group and the marker lands somewhere else entirely — which is
+           Ezra's "it just teleports it back under", still there after I told him it was gone.
+           `restOrder` is the layer order the drop produces minus the block being carried, so a row's
+           position in it IS how many layers end up above the marker. Built once per gesture, not per
+           pointermove: the reorder is deferred, so scene.layers cannot change while the finger is down. */
+        restOrder = FM.scene.layers.filter(l => !groupSet[l.id]).map(l => l.id);
         blockH = Math.max(1, dragged.length) * slotH;
         const prim = dragged.find(d => d.id === layer.id) || dragged[0];
         grabOffset = prim ? (startY + startScroll) - prim.top : 0;   // where in the primary row the finger grabbed
         dragged.forEach(d => d.el.classList.add('row-dragging'));
         statics.forEach(s => s.el.classList.add('row-part'));        // transitioned: rows glide apart/together (the add row included — see acquire)
       }
+      // statics index -> how many LAYERS sit above that row once the dragged block is lifted out
+      const baseAbove = (sIdx) => {
+        for (let k = sIdx; k < statics.length; k++) {
+          if (statics[k].isAdd) continue;
+          const bi = restOrder.indexOf(statics[k].id);
+          if (bi >= 0) return bi;
+        }
+        return restOrder.length;                    // nothing real below it — the marker belongs at the end
+      };
       function layout() {   // position the block under the finger, open the gap, resolve the drop target
         if (!dragged.length || !dragged[0].el.isConnected) { acquire(); if (!dragged.length) return; }   // mid-drag rebuild → re-grab fresh rows
         // phone SOLO view: the selected layer is the only visible row — there is nowhere to drop, and
@@ -1159,7 +1183,7 @@ window.FM = window.FM || {};
         // the add row is not a layer, so the LAYER still lands past it; only the marker differs
         const tIdx = onAdd ? g + 1 : g;
         dropBeforeId = statics[tIdx] ? statics[tIdx].id : bottomBefore;
-        dropAddAt = onAdd ? (addIdx + dragged.length) : null;
+        dropAddAt = onAdd ? (baseAbove(addIdx) + dragged.length) : null;   // LAYER index, not a row index (queue 480)
         /* Seam (queue 449): what the gesture ACTUALLY resolved, straight from the code that resolved it.
            A probe inferring the gap from row TRANSFORMS read the top of the list as disagreeing by one
            slot, and could not tell a real off-by-one from its own reading — near the top the block's
@@ -1183,11 +1207,12 @@ window.FM = window.FM || {};
            `addAt` itself must NOT be written here: the drag can still be cancelled, and a half-applied
            index would survive it. So the live value is published beside `FM.dragLayerId` — same
            lifetime, same reason, cleared by the same line — and the switch prefers it while it exists.
-           The arithmetic: every static before the add row is a layer row, so its index among statics IS
-           its layer index; if the dragged block has opened its gap at or above it, the block is now
-           above it too and its index rises by the block's size. */
+           The arithmetic: `baseAbove` gives how many LAYERS sit above the marker once the block is
+           lifted out — NOT its index among statics, which is only the same number when every layer has
+           a row on screen (see acquire). If the block has opened its gap at or above the marker it ends
+           up above it too, so the marker's layer index rises by the block's size. */
         const ai = statics.findIndex(sr => sr.isAdd);
-        FM.dragAddAt = ai < 0 ? null : (ai + (g <= ai ? dragged.length : 0));
+        FM.dragAddAt = ai < 0 ? null : (baseAbove(ai) + (g <= ai ? dragged.length : 0));
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });

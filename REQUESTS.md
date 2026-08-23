@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.02
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.03
 >
-> **State:** v12.02, **885 tests green**, tree clean.
+> **State:** v12.03, **886 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -20,6 +20,10 @@
 > because the review found real work, not because you added much.
 >
 > ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
+> 0. **Five seconds: drag a layer onto the add-layer row and tell me if it sticks.** I have now told
+>    you this was fixed three times (#357, #443, and my own v11.94 two days ago). v12.03 fixes a real,
+>    proven fault that the earlier attempts missed — but given that record you should not take my word
+>    for it, and a yes/no from you is worth more than another test I write.
 > 1. **⏸ HOLD OFF ON THE LAG-REPORT TAP FOR NOW — I need to fix the instrument first.**
 >    This has been my #1 ask for weeks, and the review found **three separate faults in the report it
 >    produces** (#489, #491, #493). The audio line can inflate its own number enough to blame FreeMotion
@@ -11778,8 +11782,7 @@ wait for them to report back."*
       separate. ⚠️ Queue 410's guard requires the glyph's ink to stay centred within 0.6 of the viewBox
       centre, so any change to the arc must keep that — see how v11.93 had to shift the whole glyph down.
 
-- [ ] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.** 🔴 **RE-OPENED 23 Aug — I marked this fixed at v11.94 and it is not fixed.** An adversarial review of my own week found the v11.94 fix computes the drop index in *visible-row* coordinates (a position among the rows on screen, plus how many rows are being dragged) and then writes it straight into `FM.addAt`, which is an index into the real layer list. Those two only agree when every layer is its own visible row — the moment a GROUP is collapsed, or a track is hidden, they drift apart, and the marker lands in the wrong place or does not move at all. Which is exactly the symptom you reported and I told you was gone. Previous note kept below.
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.** ✅ **FIXED PROPERLY v12.03 — and this is the THIRD time I have told you this is fixed, so please actually try it and tell me if it still does it.** (#357 v10.05, #443 v10.82, and my own v11.94 all claimed it.) What was wrong this time: the drop worked out its position by counting the rows ON SCREEN, then used that number as a position in the real layer list. Those are the same number only when every layer has its own row — which is how my test project happened to be set up. Collapse a group, open Edit Group, or use the phone view that shows only the selected clip, and they stop agreeing, so the marker lands above your layer instead of below it. Now converted properly, and the add switch (which leans to show where the marker is while you drag) had the identical fault and is fixed with it. A test drags a layer onto the marker with a collapsed group present — 3 rows for 5 layers — and refuses to pass unless the group is really hiding rows, unless the gesture really landed on the marker, and unless what the switch shows mid-drag equals where the marker ends up. Putting either old line back makes it fail. 🔴 **RE-OPENED 23 Aug — I marked this fixed at v11.94 and it was not.** An adversarial review of my own week found the v11.94 fix computes the drop index in *visible-row* coordinates (a position among the rows on screen, plus how many rows are being dragged) and then writes it straight into `FM.addAt`, which is an index into the real layer list. Those two only agree when every layer is its own visible row — the moment a GROUP is collapsed, or a track is hidden, they drift apart, and the marker lands in the wrong place or does not move at all. Which is exactly the symptom you reported and I told you was gone. Previous note kept below.
       (Was: ✅ FIXED v11.94 — and you were right to push back.)
       (23 Aug.) His words, verbatim:
       > I said this ages ago but you still cant drag stuff on top of the add layer it just teleports it back under
