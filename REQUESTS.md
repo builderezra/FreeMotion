@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.97
 >
-> **State:** v11.97, **874 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.97, **875 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8547,6 +8547,11 @@ better still, keep working inside the turn rather than parking work for a later 
       `'video'` layer, which is exactly why the exporter's own mixer keys off `type === 'video'`. A
       "has audio" check written the natural way, as `type === 'audio'`, would find nothing ever and the
       warning would never fire. That mutation is caught by its own test.
+      🐛 **AND THE SAME HOLE HERE, found by the same audit.** The test drove
+      `FM._checkExportAudioSupport()` directly — so **deleting the call from `showExportDialog` left it
+      green while the warning stopped appearing entirely.** `checkExportAudioSupport` is module-local,
+      so replacing the seam intercepts nothing; the test opens the real dialog and reads the DOM now.
+      Mutation-checked on that exact line.
       *(The suite's own guard also caught me mid-tick: my first test name contained double quotes, which
       truncate the FAIL line in ship.sh and mutate.sh. Renamed — the gate did its job.)*
       **Three outcomes are now distinguishable from the outside**, which is what this entry has always
@@ -8822,6 +8827,12 @@ better still, keep working inside the turn rather than parking work for a later 
       the case it exists for. Once per project per session, and never mid-export. Three of the five
       assertions are controls (a 2160p comp, an ordinary 1080×1920, and mid-export), and the mutation
       that turns `>` into `>=` is caught by the 2160p one.
+      🐛 **AND A HOLE IN THAT TEST, FOUND BY AUDIT AND CLOSED.** Everything above drove
+      `FM.warnOversizeProject()` directly, so it covered the DECISION and nothing about the CALL —
+      **deleting the call from `projects.open()` left every assertion green while the app silently
+      stopped ever warning you.** Proved by mutation, then covered by a second test that creates two
+      probe projects and opens one for real. (The call site here goes through a public property, so a
+      spy genuinely intercepts it — unlike the module-local case in #215.)
 
       **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
       Verbatim:

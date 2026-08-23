@@ -39929,7 +39929,14 @@
       // Browser refuses AAC, project HAS sound → the one case worth warning about.
       FM.canEncodeAAC = async () => false;
       FM.projectHasAudio = () => true;
-      if (await FM._checkExportAudioSupport() !== true) throw new Error('a project with audio, in a browser that cannot encode AAC, got no warning — which is his exact report, found out only after the render');
+      /* DRIVEN THROUGH THE REAL ENTRY POINT (the dialog opening), not the seam. Calling
+         FM._checkExportAudioSupport() directly tests the check and NOT the wiring — deleting the call
+         from showExportDialog left this whole test green, proved by mutation. `checkExportAudioSupport`
+         is module-local, so replacing the seam intercepts nothing; the only honest observation is the
+         DOM effect after the dialog opens. */
+      if (FM.showExportDialog) { FM.showExportDialog(); await sleep(250); }
+      else if (await FM._checkExportAudioSupport() !== true) throw new Error('no showExportDialog to drive and the check itself said nothing');
+      if (box.classList.contains('hidden')) throw new Error('opening the export dialog showed no warning for a project with audio in a browser that cannot encode AAC — his exact report, and he would find out only after the render');
       if (box.classList.contains('hidden')) throw new Error('the warning was computed but left hidden');
       if (!/no sound/i.test(box.textContent)) throw new Error('the warning does not say the export will be silent: ' + box.textContent);
       if (!/Safari/.test(box.textContent)) throw new Error('the warning does not say what to do about it — the fix is what v7.91 left in a console');
@@ -39937,16 +39944,18 @@
       /* CONTROL 1 — a project with NO audio. Every silent animation he exports would otherwise carry
          a scary warning about losing sound it never had. */
       FM.projectHasAudio = () => false;
-      if (await FM._checkExportAudioSupport() !== false) throw new Error('a project with no audio at all was warned it would lose its sound');
-      if (!box.classList.contains('hidden')) throw new Error('the warning stayed on screen for a project with no audio');
+      if (FM.showExportDialog) { FM.showExportDialog(); await sleep(250); }
+      if (!box.classList.contains('hidden')) throw new Error('a project with no audio at all was warned it would lose its sound');
 
       /* CONTROL 2 — a browser that CAN encode AAC. Nothing is going to be lost, so nothing is said. */
       FM.canEncodeAAC = async () => true;
       FM.projectHasAudio = () => true;
-      if (await FM._checkExportAudioSupport() !== false) throw new Error('a browser that CAN encode AAC still warned the export would be silent');
-      if (!box.classList.contains('hidden')) throw new Error('the warning stayed on screen in a browser that can encode AAC');
+      if (FM.showExportDialog) { FM.showExportDialog(); await sleep(250); }
+      if (!box.classList.contains('hidden')) throw new Error('a browser that CAN encode AAC still warned the export would be silent');
     } finally {
       FM.canEncodeAAC = realAac; FM.projectHasAudio = realHas;
+      const dlg = document.getElementById('export-dialog');   // the test opens it for real now
+      if (dlg) dlg.classList.add('hidden');
       box.classList.add('hidden'); box.textContent = '';
     }
   });
@@ -40339,6 +40348,42 @@
     } finally {
       FM.toast = realToast; FM.perfProbe = realProbe; FM.playing = wasPlaying;
       FM._resetPerfOffer();
+    }
+  });
+
+  /* ═══ ...AND THAT OPENING A PROJECT ACTUALLY ASKS (queue 202).
+     The test above drives FM.warnOversizeProject() directly, so it covers the DECISION and nothing
+     about the call. Proved by mutation: deleting the call from projects.open() left it green while the
+     app silently stopped ever warning him. Unlike the export case the call site here goes through a
+     PUBLIC property (`FM.warnOversizeProject()`), so a spy really does intercept it. */
+  test('opening a project asks whether it is oversize (queue 202)', { item: '202' }, async function () {
+    if (!FM.projects || typeof FM.projects.open !== 'function') throw new Error('FM.projects.open is missing');
+    const realWarn = FM.warnOversizeProject;
+    // there is no public current() — storage keeps it here, and open() returns early on the same id
+    const curNow = () => { try { return localStorage.getItem('fm.currentProject'); } catch (e) { return null; } };
+    const startedAt = curNow();
+    let asked = 0;
+    const made = [];
+    try {
+      FM.warnOversizeProject = () => { asked++; return false; };
+      // two projects, because open() returns early when the id is already current
+      const a = await FM.projects.create({ name: 'q202-a' }); if (a) made.push(a);
+      const b = await FM.projects.create({ name: 'q202-b' }); if (b) made.push(b);
+      const list = FM.projects.list().filter(p => /^q202-/.test(p.name));
+      if (list.length < 2) throw new Error('could not create two probe projects, so the open path cannot be driven');
+      const other = list.find(p => p.id !== curNow());
+      if (!other) throw new Error('both probe projects report as current — nothing to open');
+      asked = 0;
+      await FM.projects.open(other.id);
+      if (!asked) throw new Error('opening a project never asked whether it is oversize — his 12.2-megapixel project would open silently, which is the whole of Finding 1');
+    } finally {
+      FM.warnOversizeProject = realWarn;
+      try {
+        for (const p of FM.projects.list().filter(p => /^q202-/.test(p.name))) {
+          if (FM.projects.remove) await FM.projects.remove(p.id);
+        }
+        if (startedAt && FM.projects.open) await FM.projects.open(startedAt);
+      } catch (e) {}
     }
   });
 })();
