@@ -3195,6 +3195,27 @@ better still, keep working inside the turn rather than parking work for a later 
       Heap sat at ~9 MB across the whole soak and the DOM node count did not grow by a single node
       over 40 rounds. So the editing path -- selection, inspector rebuild, timeline redraw, undo --
       is not what makes it lag, and nothing accumulates while you work.
+
+      ✅ **23 Aug — AND THE MEMORY HALF IS PROVEN BOUNDED, WITH A NUMBER.** The two leaks fixed here
+      (v8.44, v8.46) had tests but nothing ever checked they hold over a LONG session, which is the
+      thing "gets bad fast" actually describes. Soaked with real files: import a clip, put it on the
+      timeline, delete it, commit — ninety times.
+      | cycles | commits | media records held |
+      |---|---|---|
+      | 40 | 80 | 40 |
+      | 60 | 120 | 60 |
+      | 70 | 140 | **60** |
+      | 90 | 180 | **60** |
+      **It plateaus at exactly 60 and stays there**, with the heap flat at ~9 MB throughout. That is the
+      correct number rather than a coincidence: the undo stack caps at 120 entries, each cycle commits
+      twice, so 60 deletions remain undoable and their media is deliberately kept — freeing it would
+      make an undone delete come back blank, which is the whole reason v8.44 was hard.
+      **So nothing accumulates without bound while you work.** (With real video rather than my small
+      test clips it plateaus SOONER, because the stack also has a 48 MB budget that trims it before the
+      120-entry cap is reached.)
+      **Editing, memory and the timeline are all now measured and bounded. What is left in this entry is
+      only the per-effect compositor cost below, and your own verdict on whether the phone feels
+      better.**
       **What that leaves is the only thing left: per-effect compositor cost on real video**, which is
       exactly where v11.72-v11.78 went (median effect 14.85 -> 8.57 ms, effects over 25 ms cut 70 ->
       42, your 24-effect case ~356 -> ~206 ms). One `turbulentdisplace` at ~157 ms is the last hog.
