@@ -177,6 +177,15 @@ edited six times:
 Nothing truncated, nothing corrupted, told once, given a route out. `localStorage.setItem` is atomic —
 it throws or it writes — so the previous value always survives; and `storage.js` separately catches the
 nastier case where a write REPORTS success and silently did nothing, by comparing a revision.
+✅ **AND THE innerHTML RULE IS NOW A TEST (883 green), not a habit.** The pass below found the code
+clean, but "clean today" rots the moment someone writes `el.innerHTML = layer.name` — and his app holds
+his own words plus files other people have shared with him. A source scan now fails the suite if user
+text is ever written as HTML. **Mutation-checked with the real regression**: switching a caption's own
+text from `textContent` to `innerHTML` is caught by file and line.
+⚠️ **The denylist is deliberately NARROW** — `.name`/`.text`/`.caption` are user input in this codebase;
+`.label` is a UI constant (the add-menu TABS list), and including it would fail on a fixed literal list
+that was read and is safe. **A guard that cries wolf gets deleted.** The test carries its own control:
+it first proves it can SEE a planted violation and does NOT flag a plain icon constant.
 **Security pass against the three risks CLAUDE.md names, 23 Aug — all clean.** Never done before, and
 it needed no decision from him:
 · **No user-controlled string reaches `innerHTML`.** 104 writes; the sixteen whose expression mentions

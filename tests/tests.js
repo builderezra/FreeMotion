@@ -40780,4 +40780,47 @@
       if (FM.history) FM.history.reset();
     }
   });
+
+  /* ═══ NO USER TEXT MAY REACH innerHTML (the standing rule in CLAUDE.md, made structural).
+     A security pass on 23 Aug found the codebase clean — every innerHTML write resolves to a module
+     constant or an icon literal, and several places say so out loud. But "clean today" rots the moment
+     someone writes `el.innerHTML = layer.name`, and his app carries HIS data plus files other people
+     have shared with him. This scans the source so the rule cannot quietly lapse.
+     ⚠️ THE DENYLIST IS NARROW ON PURPOSE. In this codebase `.name`/`.text`/`.caption` are user input
+     (layer, project, template, element, file, cue) while `.label` is a UI CONSTANT (the add-menu TABS
+     list, blend-mode categories). Including `.label` would fail on `addmenu.js`'s tab row, which was
+     read and is a fixed literal list — a guard that cries wolf gets deleted, so it names only the
+     identifiers that really carry his words. */
+  test('no user-supplied text is ever written through innerHTML', { item: 'xss-innerhtml' }, async function () {
+    const FILES = ['app','inspector','timeline','storage','home','addmenu','compositor','captions','medialib',
+                   'elements-browser','fx-browser','ai-panel','notepad','sfx','voice-rec','draw-tool','crop-tool',
+                   'text-edit','template-fill','ai-templates','masks','tracker','graph-editor','settings'];
+    const USER = /\.(name|text|caption|filename)\b/;
+    const grab = l => (l.match(/\.innerHTML\s*=\s*([^;]*)/) || [, null])[1];
+
+    /* CONTROL FIRST: if the matcher cannot see a planted violation, a clean result means nothing —
+       this is the dead-assertion shape that has bitten this suite repeatedly. */
+    if (!USER.test(grab("el.innerHTML = '<b>' + layer.name + '</b>';") || ''))
+      throw new Error('the scanner cannot recognise `innerHTML = layer.name` as a violation, so a clean sweep below would prove nothing');
+    if (USER.test(grab("el.innerHTML = ICON_SVG;") || ''))
+      throw new Error('the scanner flags a plain icon constant — it would cry wolf and get deleted');
+
+    let scanned = 0;
+    const bad = [];
+    for (const f of FILES) {
+      let src = '';
+      try { src = await fetch('js/' + f + '.js', { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')); } catch (e) {}
+      if (!src) continue;
+      scanned++;
+      src.split('\n').forEach((l, i) => {
+        const rhs = grab(l);
+        if (rhs && USER.test(rhs)) bad.push('js/' + f + '.js:' + (i + 1) + '  ' + rhs.trim().slice(0, 90));
+      });
+    }
+    if (scanned < 15) throw new Error('only ' + scanned + ' source files were readable — the scan is not seeing the app, so a clean result proves nothing');
+    if (bad.length) {
+      throw new Error('user text is being written as HTML, which is how a layer name or a shared file executes script:\n  ' + bad.join('\n  ') +
+        '\nUse textContent for anything a person typed or a file supplied.');
+    }
+  });
 })();
