@@ -400,6 +400,21 @@ measured and the cards go 99.7 → 81.7px: *"doesnt show the buttons at the righ
 not that user sequence end to end — a real resize collapses the raise here, so the panel un-floats and
 the fault does not arise on that path. Said so in the entry rather than claiming a clean repro.
 
+### 23 Aug — SEVEN open entries rest on "could not reproduce". Worked the best one; it held.
+Listed them (96, 95, 148, 202, 361, 387, 429) and took #96, because its start-of-playback race had
+never been soaked and the path has changed twice since (v11.70's warm-up gate, v11.89). Built a real
+WAV in the browser and a real M4A via the app's own `encodeM4A`, then 40 attempts across four regimes —
+including fresh-import-then-play-immediately, which is the race the entry predicts. **0 failures.**
+**The finding is what it does NOT cover, and it is a genuine lead:** both my files decode promptly. His
+"song" was almost certainly an MP3, and #96 already documents that a VBR mp3's `el.duration` is
+UNSTABLE (11.210 → 15.752 → 20.297 in one second). A start race is far likelier against a length the
+element is still revising. **And no browser can encode MP3 (that is all of queue 395), so the app cannot
+manufacture the one file type most likely to fail — reproducing it needs his file.**
+**Generalisable: when a soak comes back clean, the useful output is the list of conditions it could not
+create.** A clean soak reported as "cannot reproduce" is nearly worthless; reported as "ruled out X, Y
+and Z, and here is the one input I cannot manufacture" it hands the next session, or him, a concrete
+next step.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
