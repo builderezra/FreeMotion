@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.99
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.00
 >
-> **State:** v11.99, **878 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v12.00, **879 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -5128,9 +5128,20 @@ better still, keep working inside the turn rather than parking work for a later 
              with those `evalProp` returns 0, so the effect correctly does nothing — two untouched
              images compare equal and prove nothing. The test uses explicit params in every case and
              fails unless a quarter of the pixels actually changed.
-             ⏭️ **Still open in this family:** the top of the PIXEL list now is lensflare (71ms),
-             zoomstreaks (67) and lensdistort (67) — all genuinely per-pixel geometry, so the quality
-             ladder is the answer there rather than another rewrite.
+             ✅ **SEVENTH — LENS FLARE, 71.2ms → 36.0ms (2×) and BYTE-IDENTICAL — v12.00.** I called
+             this "genuinely per-pixel geometry" one tick ago and that was wrong; reading it beat
+             assuming, again. **For every pixel it looped ALL SIX flare rays**, wrapped each angle
+             difference into range with two `while` loops and took a cosine, to find which ray that
+             pixel is most aligned with. The rays sit every 60°, so the best-aligned one is simply the
+             NEAREST — one rounding. **Six cosines and twelve wrap-tests per pixel became one cosine.**
+             `Math.pow(best, 32)` became five squarings, which took it from 53.6ms to 36.0.
+             Both are equal in exact arithmetic and measured **identical byte for byte** over three
+             flare positions, so the test asserts equality against the original six-ray implementation
+             kept verbatim as the reference. Two mutations — perturbing the ray spacing, and breaking
+             the squaring chain — each caught.
+             ⏭️ **Still open in this family:** zoomstreaks (67ms) and lensdistort (67ms) are next, and
+             this tick is the reason not to trust my own "genuinely per-pixel" verdict on them without
+             reading the code first.
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**

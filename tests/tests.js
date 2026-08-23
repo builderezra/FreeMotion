@@ -40543,4 +40543,75 @@
       for (let i = 0; i < mine.length; i += 4) if (base[i + 3] === 0 && mine[i] !== base[i]) throw new Error('a fully transparent pixel was graded');
     }
   });
+
+  /* ═══ LENS FLARE: SIX COSINES TO FIND THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474).
+     The worst pixel effect at his project size. Per pixel it looped all six flare rays, wrapped each
+     angle difference and took a cosine — to find the one the pixel is most aligned with. The rays sit
+     every 60°, so the best-aligned is simply the NEAREST, one rounding away: six cosines and twelve
+     wrap-tests become one cosine. And pow(b,32) is five squarings.
+     Both are equal in exact arithmetic and measured byte-identical here, so this asserts EQUALITY
+     against the original implementation kept as the reference. */
+  test('lens flare matches its original six-ray implementation exactly (queue 474)', { item: '474' }, async function () {
+    const P = FM._pixelFx;
+    if (!P || typeof P.lensflare !== 'function') throw new Error('FM._pixelFx.lensflare is not reachable');
+    const W = 120, H = 90;
+    const base = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0, k = 0; i < base.length; i += 4, k++) {
+      base[i] = (k * 5) & 255; base[i + 1] = (k * 11) & 255; base[i + 2] = (k * 23) & 255;
+      base[i + 3] = (k % 89 === 0) ? 0 : 255;
+    }
+    /* THE ORIGINAL, kept verbatim as the reference — the same discipline as tiltshift's 17-tap kernel
+       and wave's per-pixel path. */
+    const reference = (d, p) => {
+      const LX = p.x * W, LY = p.y * H, I = p.intensity;
+      const sig = Math.max(1, W * 0.18), den = 2 * sig * sig;
+      const FR = 255, FG = 240, FB = 210;
+      const rays = [0, 1.0471975512, 2.0943951024, 3.1415926536, 4.1887902048, 5.2359877560];
+      const maxR = Math.sqrt(W * W + H * H), w4 = W * 4;
+      for (let Y = 0; Y < H; Y++) {
+        const row = Y * w4;
+        for (let X = 0; X < W; X++) {
+          const i = row + X * 4;
+          if (d[i + 3] <= 0) continue;
+          const dx = X - LX, dy = Y - LY, d2 = dx * dx + dy * dy, dist = Math.sqrt(d2);
+          const core = I * 255 * Math.exp(-d2 / den);
+          let ray = 0;
+          if (dist > 0.5) {
+            const ang = Math.atan2(dy, dx);
+            let best = 0;
+            for (let k = 0; k < rays.length; k++) {
+              let dA = ang - rays[k];
+              while (dA > 3.1415926536) dA -= 6.2831853072;
+              while (dA < -3.1415926536) dA += 6.2831853072;
+              const al = Math.cos(dA);
+              if (al > best) best = al;
+            }
+            if (best > 0) ray = I * 150 * Math.pow(best, 32) * Math.exp(-dist / (maxR * 0.35));
+          }
+          const amt = core + ray;
+          if (amt <= 0) continue;
+          d[i] = 255 - (255 - d[i]) * (255 - FR * amt / 255) / 255;
+          d[i + 1] = 255 - (255 - d[i + 1]) * (255 - FG * amt / 255) / 255;
+          d[i + 2] = 255 - (255 - d[i + 2]) * (255 - FB * amt / 255) / 255;
+        }
+      }
+    };
+    const cases = [
+      { x: 0.3, y: 0.3, intensity: 1 },
+      { x: 0.8, y: 0.15, intensity: 2 },
+      { x: 0.5, y: 0.5, intensity: 0.4 }
+    ];
+    for (const p of cases) {
+      const mine = new Uint8ClampedArray(base), theirs = new Uint8ClampedArray(base);
+      P.lensflare(mine, W, H, p, 0.37, 1);
+      reference(theirs, p);
+      // CONTROL: the flare has to be lighting pixels, or equality is true of two untouched images.
+      let lit = 0;
+      for (let i = 0; i < mine.length; i += 4) if (mine[i] !== base[i]) lit++;
+      if (lit < (W * H) / 4) throw new Error('flare at ' + JSON.stringify(p) + ' lit only ' + lit + ' pixels — the comparison below would prove nothing');
+      for (let i = 0; i < mine.length; i++) {
+        if (mine[i] !== theirs[i]) throw new Error('flare at ' + JSON.stringify(p) + ': byte ' + i + ' is ' + mine[i] + ' but the original six-ray implementation gives ' + theirs[i] + ' — the nearest-ray shortcut has changed the picture');
+      }
+    }
+  });
 })();
