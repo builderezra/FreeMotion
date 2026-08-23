@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.96
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.97
 >
-> **State:** v11.96, **871 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.97, **873 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen

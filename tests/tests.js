@@ -40249,4 +40249,61 @@
       if (FM.refreshAll) FM.refreshAll();
     }
   });
+
+  /* ═══ THE FINISHED REPORT IS ONE TAP TO COPY (queue 95 / 125 / 148 / 202 / 387).
+     Five entries are waiting on him sending this report. When it finished, the app told him where the
+     Copy button was — cog → canvas dialog → App settings → scroll → Copy, on a phone. The comment that
+     put it there was half right: an AUTOMATIC clipboard write ten seconds after the tap would be
+     refused for want of a user gesture. A tappable toast supplies exactly that gesture. */
+  test('a finished measurement can be copied from the toast itself (queue 202)', { item: '202' }, async function () {
+    if (typeof FM.startPerfMeasure !== 'function') throw new Error('FM.startPerfMeasure is missing');
+    const realToast = FM.toast, realProbe = FM.perfProbe, realClip = navigator.clipboard;
+    const msgs = [];
+    let copied = null;
+    try {
+      FM.toast = (m, ms, onTap) => { msgs.push({ m: m, onTap: onTap }); };
+      // a probe that finishes immediately with a known report
+      FM.perfProbe = { running: false, run(ms, done) { setTimeout(() => done('REPORT-BODY-42'), 10); return true; }, stop() {} };
+      try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (t) => { copied = t; return Promise.resolve(); } } }); }
+      catch (e) { throw new Error('cannot stub the clipboard in this environment'); }
+
+      FM.startPerfMeasure(10);
+      await sleep(220);
+
+      const done = msgs.filter(x => /Measurement ready/.test(x.m))[0];
+      if (!done) throw new Error('no "measurement ready" message was shown at all:\n' + msgs.map(x => x.m).join('\n'));
+      if (typeof done.onTap !== 'function') throw new Error('the finished-measurement toast is not tappable, so copying it is still four taps deep in App settings — and five entries are waiting on him sending it');
+      done.onTap();
+      await sleep(60);
+      if (copied !== 'REPORT-BODY-42') throw new Error('tapping it did not put the report on the clipboard (got ' + JSON.stringify(copied) + ')');
+      if (!msgs.some(x => /Copied/.test(x.m))) throw new Error('nothing confirmed the copy, so he cannot tell whether it worked');
+    } finally {
+      FM.toast = realToast; FM.perfProbe = realProbe;
+      try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: realClip }); } catch (e) {}
+    }
+  });
+
+  test('a refused clipboard names the route that still works (queue 202)', { item: '202' }, async function () {
+    /* CONTROL: iOS can refuse the write even with a gesture. Failing silently would be worse than the
+       four taps this replaced — he would tap, see nothing, and have no idea the report still exists. */
+    const realToast = FM.toast, realProbe = FM.perfProbe, realClip = navigator.clipboard;
+    const msgs = [];
+    try {
+      FM.toast = (m, ms, onTap) => { msgs.push({ m: m, onTap: onTap }); };
+      FM.perfProbe = { running: false, run(ms, done) { setTimeout(() => done('REPORT'), 10); return true; }, stop() {} };
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } });
+      FM.startPerfMeasure(10);
+      await sleep(220);
+      const done = msgs.filter(x => /Measurement ready/.test(x.m))[0];
+      if (!done || typeof done.onTap !== 'function') throw new Error('no tappable finished-measurement toast');
+      done.onTap();
+      await sleep(120);
+      if (!msgs.some(x => /Could not copy/.test(x.m) && /App settings/.test(x.m))) {
+        throw new Error('a refused copy said nothing useful — he taps, nothing happens, and the report looks lost:\n' + msgs.map(x => x.m).join('\n'));
+      }
+    } finally {
+      FM.toast = realToast; FM.perfProbe = realProbe;
+      try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: realClip }); } catch (e) {}
+    }
+  });
 })();

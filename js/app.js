@@ -393,9 +393,25 @@ window.FM = window.FM || {};
     FM.toast('Measuring for ten seconds — keep using the app', 3200);
     return FM.perfProbe.run(ms || 10000, (report) => {
       try { localStorage.setItem('fm.lastPerfReport', report); } catch (e) {}
-      /* No clipboard write here: copying needs a user gesture and this lands ten seconds after the
-       * tap, so it would fail on iOS exactly when it mattered. Point at the button that can. */
-      if (FM.toast) FM.toast('Measurement ready — Settings ▸ App settings ▸ What\u2019s slow ▸ Copy', 6000);
+      /* THE LAST STEP USED TO BE FOUR TAPS, and the reasoning that put it there was half right.
+       * It said: copying needs a user gesture and this lands ten seconds after the tap, so an
+       * automatic write would fail on iOS exactly when it mattered — true, and why it pointed at the
+       * Copy button in App settings instead. But that is cog → canvas dialog → App settings → scroll →
+       * Copy, on a phone, for a report the app just asked him to produce, and FIVE entries (95, 125,
+       * 148, 202, 387) are waiting on him sending it.
+       * **A TAPPABLE toast supplies the gesture.** The tap IS the user activation the clipboard wants,
+       * so the write is allowed — and if it is still refused, the old four-tap route is named as the
+       * fallback rather than leaving him with a failure. */
+      if (FM.toast) FM.toast('Measurement ready — tap to copy it', 9000, () => {
+        const say = (m) => { if (FM.toast) FM.toast(m, 4000); };
+        try {
+          navigator.clipboard.writeText(report).then(
+            () => say('Copied — paste it to me'),
+            () => say('Could not copy here — Settings ▸ App settings ▸ What\u2019s slow ▸ Copy'));
+        } catch (e) {
+          say('Could not copy here — Settings ▸ App settings ▸ What\u2019s slow ▸ Copy');
+        }
+      });
     });
   };
   FM.playbackQualityInfo = function () {
