@@ -314,6 +314,22 @@ directly now, with the old route named as the fallback rather than failing silen
 **Worth generalising: when several entries queue behind one action, the highest-value work is removing
 friction from that action, not the entries.**
 
+### 23 Aug — DRIVING MY OWN CHAIN END TO END FOUND A HOLE THREE TESTS HAD MISSED
+The queue is fully blocked, so the tick went to verifying the thing five entries now depend on, with
+NOTHING stubbed, at 375px: sustained bad frames → offer toast → tap → a real ten-second sample →
+"Measurement ready — tap to copy it" → 1,032 chars stored. It works.
+⚠️ **The clipboard write is the one link that cannot be verified from here**, and the reason is worth
+keeping: a script-driven `.click()` is `isTrusted: false`, so it confers NO user activation and the
+browser refuses the write. The fallback fired and named the settings route, which is exactly its job. A
+real finger tap does confer activation. **Do not "fix" a clipboard refusal seen from a synthetic tap.**
+🐛 **And it exposed a real hole:** the offer test called `FM._maybeOfferPerfProbe`, which is a SEPARATE
+REFERENCE from the one `notePlaybackCost` calls — so the call site was uncovered, and deleting it left
+every assertion green while the app silently stopped offering to measure itself. Now driven through
+`FM._notePlaybackCost` (the real function containing the call) and mutation-checked on that exact line.
+**THIRD TIME for this shape** — queue 148's counter, 478's resize listener, this one. So, as a rule:
+**a seam exposed as `FM._x = x` does not intercept internal callers of `x`. Testing through it tests the
+function, never the wiring. Drive the outermost real entry point you can reach.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
