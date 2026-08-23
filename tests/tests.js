@@ -16297,7 +16297,7 @@
   });
 
   test('masks: a pen mask builds its stencil at the PREVIEW size, not the project size', { item: 'preview-scale' }, function () {
-    if (typeof FM.buildMaskAlpha !== 'function') return;
+    if (typeof FM.buildMaskAlpha !== 'function') throw new Error('FM.buildMaskAlpha is gone — this test used to SKIP when that happened, so removing the mask stencil builder would have left the suite green');
     var real = FM.buildMaskAlpha, seen = [];
     function run(TW, TH) {
       var L = FM.makeLayer('shape', { name: 'pm', shape: 'rect', x: 200, y: 200, shapeW: 300, shapeH: 300, fill: '#ff0000' });
@@ -16346,7 +16346,7 @@
   }
 
   test('timeline: selecting a layer rebuilds the timeline exactly ONCE', { item: 'select-cost' }, function () {
-    if (!FM.timeline || !FM.timeline.rebuild || !FM.selectLayer) return;
+    if (!FM.timeline || !FM.timeline.rebuild || !FM.selectLayer) throw new Error('FM.timeline.rebuild or FM.selectLayer is missing — this test used to skip silently, which would hide the timeline losing its rebuild entirely');
     var calls = withTempLayers(6, function () {
       var real = FM.timeline.rebuild, n = 0;
       try {
@@ -16361,7 +16361,7 @@
   });
 
   test('timeline: a rebuild measures the lane width once, not once per clip', { item: 'select-cost' }, function () {
-    if (!FM.timeline || !FM.timeline.rebuild) return;
+    if (!FM.timeline || !FM.timeline.rebuild) throw new Error('FM.timeline.rebuild is missing — skipping here would hide the rebuild disappearing');
     var d = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
     if (!d || !d.get) return;   // no way to observe the read on this engine
     var reads = 0;
@@ -24225,7 +24225,7 @@
      * It also checks the spinner COVERS the sheet, which is the one thing that had to differ: the
      * sound-effects card is twice as tall as it is wide, and the square sized off width alone stopped
      * 200px short of its top and bottom edges. */
-    if (!FM.sfx || !FM.sfx.open) return;
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing — the sound-effects sheet has no opener, and skipping would report that as a pass');
     const supported = CSS.supports('-webkit-mask-composite', 'xor') || CSS.supports('mask-composite', 'exclude');
     if (!supported) return;                       // the ring is @supports-gated; nothing to assert here
     try {
@@ -28905,9 +28905,9 @@
       await sleep(320);
 
       const clip = document.querySelector('.clip[data-id="' + L.id + '"]');
-      if (!clip) return;                                    // no timeline clip in this layout
+      if (!clip) throw new Error('the timeline drew no clip for a layer this test just created — it used to skip here, so the trim behaviour below was never checked at all');
       const grips = clip.querySelectorAll('[class*=grip]');
-      if (!grips.length) return;
+      if (!grips.length) throw new Error('the clip has no trim grips — skipping here meant the whole trim assertion never ran');
       const pps = clip.getBoundingClientRect().width / L.duration;
       if (!(pps > 4)) throw new Error('the clip is only ' + Math.round(pps) + 'px per second — too small to drag accurately');
       const drag = async (grip, seconds) => {
@@ -28953,9 +28953,9 @@
       FM.selectLayer(L.id); FM.refreshAll();
       await sleep(320);
       const clip = document.querySelector('.clip[data-id="' + L.id + '"]');
-      if (!clip) return;
+      if (!clip) throw new Error('the timeline drew no clip for a layer this test just created — it used to skip here, so the trim behaviour below was never checked at all');
       const grips = clip.querySelectorAll('[class*=grip]');
-      if (!grips.length) return;
+      if (!grips.length) throw new Error('the clip has no trim grips — skipping here meant the whole trim assertion never ran');
       const pps = clip.getBoundingClientRect().width / L.duration;
       if (!(pps > 4)) return;
       const g = grips[0], r = g.getBoundingClientRect();
@@ -34872,7 +34872,7 @@
    * sweep, or had never been wired — and "verify each survivor actually works" is the one part he
    * cannot check from his side. Each removal is therefore paired with a live check of its twin. */
   test('the settings panel no longer repeats controls that live elsewhere (queue 308-310)', { item: 'set-clearout' }, async function () {
-    if (!(FM.settings && FM.settings.open)) return;
+    if (!(FM.settings && FM.settings.open)) throw new Error('FM.settings.open is missing — the settings panel cannot be opened, and skipping would report that as a pass');
     try {
       FM.settings.open();
       await sleep(220);
