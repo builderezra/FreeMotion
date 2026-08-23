@@ -40681,4 +40681,103 @@
     }
     if (exercised < 10) throw new Error('only ' + exercised + ' of ' + onScratch.length + ' scratch kernels actually altered the image, so this test is barely exercising the buffer. Skipped: ' + skipped.join(', '));
   });
+
+  /* ═══ THREE PROPERTIES VERIFIED BY HAND ON 23 AUG, MADE STRUCTURAL.
+     Each was checked once in a browser and would have rotted silently: a one-off verification is a
+     hope, a test is a guarantee. */
+
+  test('a shared project file round-trips through the IMPORT path with nothing lost (queue 343)', { item: 'save-load' }, async function () {
+    /* The existing round-trip test compares layer IDs after a JSON pass. It never calls applyScene —
+       the code an import actually runs — and never checks that effects, keyframes, blend modes or text
+       properties survive. He shares work as .fmotion.json, so those are exactly what must not fall out. */
+    const saved = FM.scene.layers.slice();
+    const savedName = FM.scene.project.name;
+    try {
+      FM.scene.layers.length = 0;
+      const a = FM.makeLayer('shape', { shape: 'star', name: 'starry', x: 300, y: 400, shapeW: 220, shapeH: 220, fill: '#ff3d7f' });
+      a.start = 0; a.duration = 4; a.blendMode = 'screen';
+      a.effects = [FM.fxRegistry.makeInstance('vignette'), FM.fxRegistry.makeInstance('wave')].filter(Boolean);
+      if (a.effects.length !== 2) throw new Error('could not build two effect instances, so this test would prove nothing about effects surviving');
+      a.transform.opacity = { kf: [{ t: 0, v: 0.2, e: 'easeInOut' }, { t: 2, v: 1 }] };
+      const b = FM.makeLayer('text', { name: 'title', text: 'Hello Ezra', x: 300, y: 120 });
+      b.start = 0.5; b.duration = 3; b.bold = true; b.align = 'center';
+      FM.scene.layers.push(a, b);
+      FM.refreshAll();
+
+      const before = JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+      /* SERIALISE TO TEXT BEFORE TOUCHING THE SCENE. serializeScene can hand back an object still
+         referencing the live layers array — emptying the scene first empties the "file" too, which
+         reads as catastrophic data loss and is entirely the harness. A real import parses text. */
+      const text = JSON.stringify(await FM.storage.serializeScene(FM.scene), FM.jsonReplacer);
+      const parsed = JSON.parse(text);
+
+      FM.scene.layers.length = 0; FM.refreshAll();
+      const ok = await FM.storage.applyScene(parsed);
+      if (!ok) throw new Error('applyScene refused a file this app had just written');
+      if (FM.scene.layers.length !== 2) throw new Error('the import produced ' + FM.scene.layers.length + ' layers, not 2 — a shared file is losing work');
+
+      // ids are regenerated ON PURPOSE (they would collide with the source project's media), so ignore them
+      const strip = t => t.replace(/"id":"[^"]*"/g, '"id":"<new>"').replace(/"parent":"[^"]*"/g, '"parent":"<new>"');
+      const after = JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+      if (strip(before) !== strip(after)) {
+        const i = [...strip(before)].findIndex((c, k) => c !== strip(after)[k]);
+        throw new Error('the imported scene differs from the exported one at character ' + i + ': ' + strip(after).slice(Math.max(0, i - 60), i + 60));
+      }
+      const L0 = FM.scene.layers[0];
+      if ((L0.effects || []).length !== 2) throw new Error('effects did not survive the round trip');
+      if (!(L0.transform.opacity && L0.transform.opacity.kf)) throw new Error('the opacity keyframes did not survive the round trip');
+      if (L0.blendMode !== 'screen') throw new Error('the blend mode did not survive the round trip');
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.name = savedName;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history) FM.history.reset();
+    }
+  });
+
+  test('undo returns EXACTLY to the start over a long chain, and degrades cleanly past the cap', { item: 'undo-fidelity' }, async function () {
+    /* The suite proves single-edit fidelity. A long run is where index bookkeeping and the 120-entry
+       cap interact, and nothing covered it. */
+    const saved = FM.scene.layers.slice();
+    try {
+      const snap = () => JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < 3; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', name: 'base' + i, x: 100 + i * 20, y: 100, shapeW: 50, shapeH: 50, fill: '#4af' });
+        L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      }
+      FM.refreshAll(); FM.history.reset();
+      const start = snap();
+
+      for (let i = 0; i < 30; i++) {
+        const L = FM.scene.layers[i % FM.scene.layers.length];
+        if (i % 3 === 0) L.x = (L.x || 0) + 7;
+        else if (i % 3 === 1) L.name = 'edited-' + i;
+        else L.transform.opacity = 0.5 + (i % 5) / 10;
+        FM.history.commit();
+      }
+      if (snap() === start) throw new Error('thirty edits changed nothing, so undoing them proves nothing');
+      let n = 0;
+      while (FM.history.canUndo && FM.history.canUndo() && n < 60) { FM.history.undo(); n++; }
+      if (n < 30) throw new Error('only ' + n + ' undos were available after 30 committed edits');
+      if (snap() !== start) throw new Error('undoing every edit did NOT return the document to its starting state — this is silent data loss in the one feature that is meant to prevent it');
+
+      /* Past the cap it must lose REACH, never coherence. */
+      FM.history.reset();
+      for (let i = 0; i < 150; i++) { FM.scene.layers[i % 3].x = 200 + i; FM.history.commit(); }
+      let m = 0;
+      while (FM.history.canUndo && FM.history.canUndo() && m < 300) { FM.history.undo(); m++; }
+      if (m < 50) throw new Error('only ' + m + ' undos survived 150 edits — the stack is being pruned far harder than its 120-entry cap');
+      const ls = FM.scene.layers;
+      if (ls.length !== 3) throw new Error('undoing past the cap left ' + ls.length + ' layers instead of 3');
+      if (!ls.every(l => l && l.id && l.type === 'shape' && l.transform)) throw new Error('a layer came back malformed after undoing past the cap');
+      if (new Set(ls.map(l => l.id)).size !== ls.length) throw new Error('undoing past the cap duplicated a layer id');
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history) FM.history.reset();
+    }
+  });
 })();
