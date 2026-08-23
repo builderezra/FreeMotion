@@ -126,6 +126,12 @@ have mattered at the moment they hid something.
 ⚠️ **Fourteen other early returns are legitimate and were left alone** — viewport gates (`matchMedia`),
 codec support, loop control. **The rule: a test may skip for an ENVIRONMENT reason, never because the
 thing it tests has disappeared.**
+**The vacuous-pass audit is FINISHED — three classes checked, do not re-run it.** (1) tests with no
+`throw` at all: **none**. (2) loops that `continue` past every case without counting what ran:
+**none** — every one already has an "exercised" counter. (3) tests whose only assertion sits inside a
+DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
+loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
+returns were real, and those nine are fixed.
 **Every ship.sh gate test-fired, 23 Aug — they all still refuse.** The gates are the loop's guarantees
 and each encodes a real past failure, but nothing had ever CHECKED that they still fire; a gate that
 quietly stopped working is the same silent-absence class as a missing diagnostic. Deliberately tripped
