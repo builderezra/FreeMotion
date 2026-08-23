@@ -361,6 +361,28 @@ failure message on a button he pressed is self-policing — he sees nothing happ
 explains an outcome he cannot otherwise interpret (a silent file, a blank clip, a slow app) is the kind
 that has to be tested, because losing it is indistinguishable from the problem not occurring.
 
+### 23 Aug — THE DIAGNOSTIC AUDIT IS FINISHED. Result: 3 holes, all closed; the rest were sound.
+Ran the whole sweep to its end so nobody repeats it. Every diagnostic whose absence would be SILENT,
+mutated away one at a time and the suite run:
+| diagnostic | verdict |
+|---|---|
+| struggle offer reaching the real cost path (95/125/148/202/387) | ❌ hole → fixed |
+| "this export will have no sound" call site (215) | ❌ hole → fixed |
+| "this project is N megapixels" call site (202) | ❌ hole → fixed |
+| soundtrack **encode** failure (215's third leg) | ❌ hole → fixed |
+| soundtrack **mix** failure (215) | ✅ caught |
+| **no AAC encoder** (215) | ✅ caught |
+| decode watchdog / first-frame repaint (129) | ✅ caught |
+| every path that creates a video record wires the watchdog | ✅ all six do — checked, not assumed |
+**Four holes in the app's ability to explain itself, three of them in features shipped this same week.**
+⚠️ **One hypothesis of mine here was WRONG and checking beat assuming:** two call sites looked like they
+attached a `seeked` listener WITHOUT wiring the watchdog — they both wire it, the lines were just
+truncated in my grep output. Second time this week a truncated grep nearly became a finding (the export
+format list was the other). **Read the whole line before believing a gap.**
+**The audit is complete — do not re-run it. New diagnostics are what need this treatment now**, and the
+rule for them is above: if its absence is indistinguishable from the problem not happening, the CALL
+SITE needs a test, not just the logic.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
