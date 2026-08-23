@@ -206,7 +206,11 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '' });
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen });
+        /* `liveWhen` has to survive this copy or it does not exist (queue 482). This normaliser
+           rebuilds every param as a fresh object listing the keys it knows, so an option added at
+           the declaration is silently dropped here — which is what happened first time: the panel
+           kept using the old truthy test and the slider stayed locked in its own mode. */
       });
     } else if (def.options) {
       out.push({ key: def.param, label: def.label, type: 'segment', options: normOptions(def.options), default: def.def, legacy: def.legacy, keyframable: false });

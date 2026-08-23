@@ -1028,7 +1028,7 @@ window.FM = window.FM || {};
       { key: 'rate', label: 'Frame rate', min: 1, max: 30, step: 0.5, def: 8, unit: 'fps' },
       { key: 'mode', label: 'Mode', options: [[0, 'Hold'], [1, 'Strobe'], [2, 'Hold + Trail']], def: 0 },
       { key: 'blend', label: 'Blend live', min: 0, max: 1, step: 0.02, def: 0 },
-      { key: 'duty', label: 'Strobe on-time', min: 0.05, max: 1, step: 0.01, def: 0.5, overriddenBy: 'mode' },
+      { key: 'duty', label: 'Strobe on-time', min: 0.05, max: 1, step: 0.01, def: 0.5, overriddenBy: 'mode', liveWhen: 1 },
     ] },
     // Shockwave — ONE expanding pressure ring that travels out and leaves frame. Keyframe Radius and
     // that is the whole move. Not Circular Ripple, which is an infinite centre-locked standing sine.
@@ -1065,8 +1065,8 @@ window.FM = window.FM || {};
       { key: 'sat', label: 'Saturation', min: -100, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'lum', label: 'Brightness', min: -100, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'range', label: 'Range', min: 0.2, max: 3, step: 0.05, def: 1 },
-      { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band' },
-      { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band' },
+      { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band', liveWhen: 8 },
+      { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band', liveWhen: 8 },
     ] },
     // ---- batch 34: the scan bar + a key that survives bad lighting ----
     // Time Warp Scan — a bar crosses the frame and everything it has passed stays frozen at the

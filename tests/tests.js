@@ -41128,4 +41128,106 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 482: A SLIDER MUST BE USABLE IN THE MODE IT IS FOR, AND DEAD-LOOKING IN THE ONES IT IS NOT.
+     Ezra asked for a quality pass over every effect: "think of ways to improve it or give it more
+     function is reasonable and just improve their quality". Swept mechanically — every effect, every
+     slider, sampled across its whole range under every value of its mode control — and the fault this
+     found is the same one twice: the "this control is overridden" marker was written for a TICK BOX,
+     where truthy means the override is on, and then pointed at SEGMENT controls, where truthy only
+     means "not the first option".
+     The result was inverted. `.fx-overridden` is `pointer-events: none`, so:
+       · HSL Bands on Custom LOCKED "Custom centre" and "Custom width" — the entire Custom band was
+         unreachable, because the two sliders that define it could not be touched.
+       · Frame Stutter on Strobe LOCKED "Strobe on-time", the only mode that reads it.
+       · On the first option (Red / Hold) both sliders looked live and did nothing.
+     Both directions are asserted, because a fix that just flipped the test would swap the bug over. */
+  test('482: mode-gated sliders are live in their own mode and locked outside it', { item: '482' }, async function () {
+    const reg = FM.fxRegistry;
+    const cases = [
+      { type: 'hslbands',     ctrl: 'band', liveVal: 8, deadVals: [0, 5], sliders: ['centre', 'width'], ctrlLabel: 'Band' },
+      { type: 'framestutter', ctrl: 'mode', liveVal: 1, deadVals: [0, 2], sliders: ['duty'],            ctrlLabel: 'Mode' },
+    ];
+    /* CONTROL: the whole finding rests on the locked row being genuinely untouchable rather than just
+       faint. If that ever stops being true this test is measuring the wrong thing. */
+    const probe = document.createElement('div');
+    probe.className = 'fx-scrub-row fx-overridden';
+    probe.style.cssText = 'position:fixed;left:-9999px;width:10px;height:10px';
+    document.body.appendChild(probe);
+    const inert = getComputedStyle(probe).pointerEvents === 'none';
+    probe.remove();
+    if (!inert) throw new Error('.fx-overridden is no longer pointer-events:none, so "locked" does not mean unusable and this test is asserting the wrong property');
+
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      if (hadHome) FM.home.close();
+      for (const c of cases) {
+        const params = reg.paramsOf(c.type) || [];
+        // CONTROL: the declared gate must match what the test claims, or this passes by coincidence.
+        for (const key of c.sliders) {
+          const p = params.find(x => x.key === key);
+          if (!p) throw new Error(c.type + ' has no "' + key + '" param any more — this test is out of date, not passing');
+          if (p.overriddenBy !== c.ctrl) throw new Error(c.type + '.' + key + ' is gated by "' + p.overriddenBy + '", not "' + c.ctrl + '"');
+          if (Number(p.liveWhen) !== c.liveVal) throw new Error(c.type + '.' + key + ' declares liveWhen=' + p.liveWhen + ', expected ' + c.liveVal + ' — without it the old truthy test applies and the slider locks in the wrong mode');
+        }
+
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'S482', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 5;
+        const inst = reg.makeInstance(c.type);
+        if (!inst) throw new Error('could not make a ' + c.type + ' instance');
+        inst._expanded = true;                 // the param rows only exist while the editor is open
+        L.effects = [inst];
+        FM.scene.layers.push(L);
+        FM.selectLayer(L.id); FM.refreshAll();
+        FM.inspector.openCategory('effects'); FM.inspector.refresh();
+        await sleep(140);
+
+        const render = () => { FM.inspector.refresh(); };
+        const rowFor = (key) => {
+          const p = params.find(x => x.key === key);
+          const want = (p.label || key).trim().toLowerCase();
+          const lab = [].slice.call(document.querySelectorAll('.fx-scrub-label'))
+            .find(e => (e.textContent || '').trim().toLowerCase() === want);
+          return lab ? lab.closest('.fx-scrub-row') : null;
+        };
+
+        // ── IN its own mode: usable.
+        inst.params[c.ctrl] = c.liveVal;
+        render();
+        await sleep(140);
+        for (const key of c.sliders) {
+          const row = rowFor(key);
+          if (!row) throw new Error('no row on screen for ' + c.type + '.' + key + ' with ' + c.ctrl + '=' + c.liveVal + ' — nothing was measured');
+          if (row.classList.contains('fx-overridden')) {
+            throw new Error(c.type + ': "' + key + '" is LOCKED while ' + c.ctrlLabel + ' is the very option that uses it (' + c.liveVal + '). The row is pointer-events:none, so that mode cannot be used at all.');
+          }
+        }
+
+        // ── OUTSIDE it: locked, and saying which option to pick.
+        for (const dv of c.deadVals) {
+          inst.params[c.ctrl] = dv;
+          render();
+          await sleep(140);
+          for (const key of c.sliders) {
+            const row = rowFor(key);
+            if (!row) throw new Error('no row for ' + c.type + '.' + key + ' at ' + c.ctrl + '=' + dv);
+            if (!row.classList.contains('fx-overridden')) {
+              throw new Error(c.type + ': "' + key + '" looks live at ' + c.ctrlLabel + '=' + dv + ', but the kernel does not read it there — a control that does nothing must say so');
+            }
+            const tag = row.querySelector('.fx-ovr-tag');
+            if (!tag || !/only used when/i.test(tag.textContent || '')) {
+              throw new Error(c.type + '.' + key + ' is greyed at ' + c.ctrl + '=' + dv + ' with no explanation ("' + (tag && tag.textContent) + '") — a locked control with no reason just reads as broken');
+            }
+          }
+        }
+      }
+    } finally {
+      FM.scene.layers = saved.layers; FM.selectLayer(saved.sel || null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 })();

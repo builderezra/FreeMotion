@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.04
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.05
 >
-> **State:** v12.04, **887 tests green**, tree clean.
+> **State:** v12.05, **888 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -11742,7 +11742,7 @@ wait for them to report back."*
       📐 Measure at a desktop width in the Studio layout (what he uses), and re-check 380px is untouched.
 
 - [ ] **482 — 🔵 THE BIG ONE, IF I WANT IT: go through EVERY effect and improve it.** (23 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > and if you wnat a big project u can go through every single effect and think of ways to improve it or give it more function is reasonable and just improve their quality,
       **This is him answering the standing "pick a feature" question with something else entirely** — not
@@ -11778,8 +11778,36 @@ wait for them to report back."*
       Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5), rendering each effect at min /
       default / max on real footage, and reporting the ones that look weak WITH the picture, so he
       chooses what gets rebuilt. Rounds of a few, evidence each time — exactly how the original rounds ran.
-      ⚠️ **Not started: this is a multi-day project and he framed it as "if u want".** One word picks the
-      first category, or "no" parks it.
+      ✅ **ROUND 1 SHIPPED v12.05 — and it did NOT need a decision from you after all.** I had this entry
+      marked as waiting on you to pick a category. Re-reading your words — *"if you wnat a big project u
+      can go through every single effect"* — that is permission, not a question, so I started on the half
+      that needs no taste call: **is each slider actually doing something across its whole travel?**
+      **Swept all 105 pixel effects · 345 sliders**, each sampled at 5 points across its range.
+      ⚠️ **The first run said 70 sliders were dead. Every one of them was my instrument, not your app**,
+      and it is worth knowing why because it is the same mistake three times over: my test image was
+      fully opaque (so Drop Shadow, Inner Glow and Stroke had no edge to work on — the exact error I made
+      on #460), I compared `angle 0` against `angle 360` (the same angle), and I ignored the transparency
+      channel (so Blink and Pulse Opacity, which only move transparency, looked inert). Fixed, the real
+      number was **16 candidates**, and checking those over time cleared **6 more** as animation controls
+      that simply need the clock running.
+      🎯 **What survived is one real fault, found twice** — and it is a good one:
+      · **HSL Bands → Custom.** Picking "Custom" gave you a custom band **you could not customise**: the
+        "Custom centre" and "Custom width" sliders were greyed out AND untouchable (`pointer-events:
+        none`) in the one mode that uses them. On any other band they looked perfectly live and did
+        nothing.
+      · **Frame Stutter → Strobe.** Same thing: "Strobe on-time" was locked in Strobe, its only mode.
+      **The cause:** the "this control is overridden" marker was written for a TICK BOX, where "on" means
+      the override applies, and was later pointed at these two drop-downs, where it just means "not the
+      first option in the list". So it fired backwards. Fixed by naming which option actually uses each
+      slider, and the greyed-out ones now say **"Only used when Band is Custom"** instead of leaving you
+      guessing. Rounded Corners uses a real tick box and was correct all along — it is untouched.
+      🧰 **`tools/fx-sweep.js` is the probe, kept**, with all four ways it lied written at the top so the
+      next round does not rediscover them.
+      **Still open, and this part DOES need you:** the subjective half — does each effect LOOK good.
+      That cannot be swept. One word picks the first category (Colouring 43 · Warping 28 · Blur 19 ·
+      Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 ·
+      Repetition 5), or "no" parks it. Meanwhile I will keep running rounds like this one — mechanical,
+      no guessing — because they need nothing from you.
 
 - [ ] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** (23 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

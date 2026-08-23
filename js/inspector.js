@@ -1357,12 +1357,37 @@ window.FM = window.FM || {};
           if (p.overriddenBy) {
             const ctrl = reg.params.find(q => q.key === p.overriddenBy);
             const raw = fx.params[p.overriddenBy];
-            const active = !!(raw == null ? (ctrl && ctrl.default) : raw);
+            const cur = (raw == null) ? (ctrl && ctrl.default) : raw;
+            /* ⚠️ A TICK BOX AND A LIST OF MODES ARE NOT THE SAME TEST (queue 482).
+               This was written for a TOGGLE, where truthy means "the override is on", and it was then
+               pointed at two SEGMENT controls, where truthy just means "any option except the first".
+               So it locked the slider in exactly the mode the slider is FOR, and left it looking live
+               in the modes where it does nothing:
+               · HSL Bands → Custom greyed out "Custom centre" and "Custom width" — and the row is
+                 `pointer-events: none`, so choosing Custom gave you a band you could not customise.
+               · Frame Stutter → Strobe greyed out "Strobe on-time", its only mode.
+               · Either of them on the FIRST option (Red / Hold) left both sliders bright and inert.
+               `liveWhen` says which value of the controlling param actually uses this slider; without
+               it the old truthy test stands, which is right for the real toggle (Rounded Corners). */
+            let active, why;
+            if (p.liveWhen !== undefined) {
+              active = Number(cur) !== Number(p.liveWhen);
+              const opts = (ctrl && ctrl.options) || [];
+              let lbl = String(p.liveWhen);
+              for (let oi = 0; oi < opts.length; oi++) {
+                const o = opts[oi], val = Array.isArray(o) ? o[0] : oi;
+                if (Number(val) === Number(p.liveWhen)) { lbl = Array.isArray(o) ? o[1] : o; break; }
+              }
+              why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+            } else {
+              active = !!cur;
+              why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
+            }
             if (active) {
               row.classList.add('fx-overridden');
               row.setAttribute('aria-disabled', 'true');
               const tag = el('span', 'fx-ovr-tag');
-              tag.textContent = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
+              tag.textContent = why;
               row.appendChild(tag);
             }
           }

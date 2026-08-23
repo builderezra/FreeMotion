@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.04, 887 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.05, 888 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,10 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 482 or 483 (his), then 485–496 — the review's findings. 489/491/493 are the lag report's own faults.**
+**Next: 483 (undo/redo ring), then 485–496 — the review's findings. 489/491/493 are the lag report's own faults.**
+**482 is a STANDING round-based project, not a blocker.** Round 1 (v12.05) swept all 345 sliders for dead range
+and found two effects whose slider was locked in its own mode. `tools/fx-sweep.js` is the probe; its header lists
+the four ways it lied on the first run. Only the SUBJECTIVE half (does it look good) needs a word from him.
 ⛔ **Do not ask him to tap the lag toast until 489/491/493 are fixed.** That tap unblocks five entries and
 the report it produces is currently wrong in three places; spending it on a broken gauge wastes the one
 measurement only his phone can take.
