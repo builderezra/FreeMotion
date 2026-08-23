@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.10, 893 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.11, 894 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 490–496 — the review's own findings, oldest first. 491/493 are the lag report's remaining faults (489 fixed v12.10) and
+**Next: 491–497 — the review's own findings, oldest first. 491/493 are the lag report's remaining faults (489 fixed v12.10) and
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
 what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
@@ -120,6 +120,12 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **490: WHEN A TEST FAILS IN THE SUITE BUT NOT IN THE BROWSER, SUSPECT LEFTOVER STATE — AND MAKE THE
+ASSERTION SAY WHY.** `#cv-oversize` measured 0x0 only in the suite. Two earlier tests hide `#canvas-dialog`
+with an INLINE `style.display='none'` that nothing clears (the app only toggles a class), so by the time a
+later test opens it the element reports `hidden=false` and has no box. I lost a pass guessing. What ended it
+was making the throw walk up the ancestors and name the one that is `display:none` — a diagnostic in the
+assertion beat any amount of re-reading. Logged as queue 497, including the overlay leak it is masking.
 ⚠️ **488: A FIXTURE BUILT ON ASSUMED NUMBERS FAILS LIKE A BROKEN FIX.** Three separate own-goals in one item:
 the blank-card check asked about ALPHA when the canvas paints an opaque background (so it never fires); the
 test placed a 600px shape at 540,960 in a project a fraction of that size (off-canvas, looked like the fix

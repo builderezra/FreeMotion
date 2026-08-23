@@ -7638,3 +7638,19 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 /* Queue 392 — the way OUT of the text-to-speech dead end, next to the note explaining it. Full width
    so it reads as the panel's suggested next step rather than a stray control. */
 .tts-rec { display: block; width: 100%; margin-top: 8px; min-height: 40px; }
+
+/* Queue 490 — the oversize note inside Canvas settings. Sized to be read at a glance and to wrap
+   comfortably at 380px; `.hidden` already handles display, this only paints it. */
+.cv-oversize {
+  margin: 0 0 10px; padding: 9px 11px; border-radius: 10px;
+  background: color-mix(in srgb, #ffb347 16%, var(--panel-2));
+  border: 1px solid color-mix(in srgb, #ffb347 42%, var(--line));
+  color: var(--text); font-size: 12.5px; line-height: 1.45;
+}
+.cv-oversize.hidden { display: none; }
+/* …and because that note adds ~110px to a card that had no height limit and no way to scroll, the
+   card gets one. This is the shape of queue 494 on the export dialog — a warning row pushed the
+   Apply/Cancel row under the fold with nothing able to scroll to it. Measured at 375x553 the canvas
+   card fits with 27px to spare, so this changes nothing today; it is here so that a longer note, a
+   bigger system font or a shorter phone cannot put Apply out of reach. */
+#canvas-dialog .export-card { max-height: calc(100vh - 24px); overflow-y: auto; }

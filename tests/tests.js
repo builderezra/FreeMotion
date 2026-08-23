@@ -14541,7 +14541,7 @@
       canvasBtn.click(); await sleep(80);
       const dlg = document.getElementById('canvas-dialog');
       if (!(dlg && getComputedStyle(dlg).display !== 'none')) throw new Error('the canvas button did not open the canvas dialog');
-      if (dlg) dlg.style.display = 'none';
+      if (dlg) dlg.style.display = 'none';   // NOTE: inline, and nothing clears it — see queue 490's note in the 490 test
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Keyboard shortcuts').click(); await sleep(80);
       const sc = document.getElementById('shortcuts-overlay');
@@ -39832,7 +39832,16 @@
       if (!/12\.2 megapixel/.test(msgs[0].m)) throw new Error('the warning did not name the size: ' + msgs[0].m);
       if (!msgs[0].tappable) throw new Error('the warning was not tappable, so the repair is unreachable from a phone');
       msgs[0].onTap();
-      if (!/Scale the layers to fit/.test((msgs[1] || {}).m || '')) throw new Error('tapping it did not explain the repair that keeps his work in place');
+      /* ⚠️ THE EXPLANATION MOVED INTO THE DIALOG (queue 490). This used to require a SECOND toast
+         explaining the repair — and that toast was the bug: the canvas dialog opened on top of it
+         400ms later and covered it completely, leaving 0.4s to read ~110 characters. The wording now
+         lives in `#cv-oversize` inside the dialog, where it stays up for as long as he is choosing a
+         size. What this test protects is unchanged — tapping the warning must lead somewhere that
+         explains the repair that keeps his work in place — so it now asks the dialog. */
+      if (msgs.length > 1) throw new Error('tapping the warning fired a second toast ("' + msgs[1].m + '") — the dialog opens over the top of it, which is queue 490');
+      const note490 = document.getElementById('cv-oversize');
+      if (!note490) throw new Error('there is no #cv-oversize note in the canvas dialog, so tapping the warning explains nothing anywhere');
+      if (!/Scale the layers to fit/.test(note490.textContent)) throw new Error('the canvas dialog does not explain the repair that keeps his work in place: "' + note490.textContent + '"');
 
       // ONCE per project per session — a warning that nags every open gets dismissed forever.
       msgs = [];
@@ -41578,6 +41587,112 @@
       }
     } finally {
       ps.rateWrites = saved.rateWrites; ps.seeks = saved.seeks; ps.syncs = saved.syncs; ps.errs = saved.errs;
+    }
+  });
+
+  /* ═══ 490: THE INSTRUCTION MUST BE READABLE WHILE HE IS FOLLOWING IT.
+     Tapping "this project is too big" used to fire an 11-second toast explaining what to do, and then
+     open the canvas dialog on top of it 400ms later — which covered it completely. He got 0.4s to read
+     ~110 characters, and the guidance he needed WHILE choosing a size spent the other 10.6s as a
+     blurred ghost behind the card. The explanation now lives inside the dialog.
+     The last assertion is the one that stops this becoming queue 494 on a second dialog: the note adds
+     ~110px to a card that had no height limit and could not scroll. */
+  test('490: the oversize instruction lives inside the canvas dialog, not under it', { item: '490' }, async function () {
+    const dlg = document.getElementById('canvas-dialog');
+    const note = document.getElementById('cv-oversize');
+    if (!dlg) throw new Error('#canvas-dialog is missing');
+    if (!note) throw new Error('#cv-oversize is missing — the instruction has nowhere to live inside the dialog');
+    const card = dlg.querySelector('.export-card');
+    if (!card || !card.contains(note)) throw new Error('the oversize note is not inside the dialog card, so the dialog can still cover it');
+
+    const P = FM.scene.project;
+    const saved = { w: P.width, h: P.height, layers: FM.scene.layers.slice() };
+    const realToast = FM.toast;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const fe = window.frameElement;
+    const w0 = fe && fe.style.width, h0 = fe && fe.style.height;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const closeDlg = () => { if (!dlg.classList.contains('hidden')) { const c = dlg.querySelector('button'); if (c) c.click(); } dlg.classList.add('hidden'); };
+    try {
+      if (hadHome) FM.home.close();
+      await sleep(80);
+      /* ⚠️ CLEAR ANY INLINE display FIRST. Two earlier tests hide this dialog by writing
+         `style.display = 'none'` directly, and nothing ever clears it — the app only toggles the
+         `.hidden` class. So by the time this runs the dialog can be an element with no box at all,
+         which reads exactly like the feature being broken: it reported hidden=false and measured 0x0,
+         and cost a whole debugging pass to pin down. Left in those tests deliberately — removing it
+         unmasked an unrelated overlay leak that belongs in its own item, not in this one. */
+      dlg.style.removeProperty('display');
+      P.width = 3468; P.height = 3468;
+      if (!FM.projectIsOversize(P)) throw new Error('3468x3468 is not oversize, so nothing below is exercised — the threshold moved');
+      if (!FM.scene.layers.length) {
+        const L = FM.makeLayer('shape', { name: 'S490', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 800, shapeH: 800, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+      }
+      FM.refreshAll();
+
+      /* ── TAPPING THE WARNING MUST NOT FIRE A SECOND TOAST. That toast was the thing being covered. */
+      const said = [];
+      let onTap = null;
+      FM.toast = function (msg, ms, tap) { said.push(String(msg)); if (tap) onTap = tap; return null; };
+      FM._resetOversizeWarning();
+      if (!FM.warnOversizeProject()) throw new Error('the oversize warning did not fire at all, so its tap cannot be tested');
+      if (!onTap) throw new Error('the oversize toast is not tappable any more — the tap is how he reaches the fix');
+      said.length = 0;
+      onTap();
+      await sleep(400);
+      if (said.length) throw new Error('tapping the warning still fires a second toast ("' + said[0].slice(0, 60) + '…") — the dialog opens over the top of it, which is queue 490');
+      if (dlg.classList.contains('hidden')) throw new Error('tapping the warning no longer opens the canvas dialog, so the tap does nothing');
+
+      /* ── and the note is showing, in the dialog, saying the size. */
+      if (note.classList.contains('hidden')) throw new Error('the canvas dialog does not show the oversize note for a 12.0-megapixel project');
+      const nb = note.getBoundingClientRect();
+      if (!(nb.width > 40 && nb.height > 10)) {
+        /* A zero box means an ANCESTOR is not being displayed, and "0x0" alone sends the next session
+           guessing — it did me. Name the culprit. */
+        let why = 'unknown';
+        for (let el = note; el && el !== document.documentElement; el = el.parentElement) {
+          const st = getComputedStyle(el);
+          if (st.display === 'none' || st.visibility === 'hidden') { why = (el.id || el.className || el.tagName) + ' is ' + st.display + '/' + st.visibility; break; }
+        }
+        throw new Error('the oversize note has no box (' + nb.width + 'x' + nb.height + ') — ' + why +
+          ' [dialog hidden=' + dlg.classList.contains('hidden') + ', inline display="' + dlg.style.display + '", frame ' + window.innerWidth + 'x' + window.innerHeight + ']');
+      }
+      if (!/megapixel/i.test(note.textContent) || note.textContent.indexOf('3468') < 0) throw new Error('the note does not say how big the project actually is: "' + note.textContent + '"');
+      const cb = card.getBoundingClientRect();
+      if (nb.top < cb.top - 0.5 || nb.bottom > cb.bottom + 0.5) throw new Error('the note is not inside the dialog card it is supposed to be part of');
+
+      /* ── APPLY MUST STAY REACHABLE. This note adds ~110px to a card that had no height limit and no
+         way to scroll, which is queue 494's exact failure mode on the export dialog — there, a warning
+         row pushed Export under the fold with nothing able to reach it.
+         Asserted as the PROPERTY that prevents it rather than by shrinking the frame: the suite's
+         iframe height is not ours to set (setting it left innerHeight at 760), and a check that cannot
+         run is worse than no check. Measured at 375x553 in a real browser: the card fits with 27px to
+         spare, and with an artificially tripled note it caps and scrolls instead of hiding Apply. */
+      const cs = getComputedStyle(card);
+      if (cs.maxHeight === 'none') throw new Error('the canvas card has no max-height, so a longer note or a shorter phone can push Apply under the fold with nothing to scroll — queue 494 all over again');
+      if (cs.overflowY !== 'auto' && cs.overflowY !== 'scroll') throw new Error('the canvas card cannot scroll (overflow-y: ' + cs.overflowY + '), so anything past its height is unreachable');
+      const act = [].slice.call(card.querySelectorAll('button')).filter(b => /apply/i.test(b.textContent || ''))[0];
+      if (!act) throw new Error('no Apply button found in the canvas dialog');
+      const r = act.getBoundingClientRect(), cr = card.getBoundingClientRect();
+      const reachable = (r.bottom <= cr.bottom + 0.5) || card.scrollHeight > card.clientHeight;
+      if (!reachable) throw new Error('Apply sits below the card and the card does not scroll — it cannot be reached');
+
+      /* ── a normal project gets no note. */
+      closeDlg();
+      P.width = 1080; P.height = 1920; FM.refreshAll();
+      document.getElementById('btn-canvas').click();
+      await sleep(250);
+      if (!note.classList.contains('hidden')) throw new Error('a 1080x1920 project is being told it is too big: "' + note.textContent + '"');
+    } finally {
+      FM.toast = realToast;
+      closeDlg();
+      if (fe) { fe.style.width = w0; fe.style.height = h0; window.dispatchEvent(new Event('resize')); }
+      P.width = saved.w; P.height = saved.h; FM.scene.layers = saved.layers;
+      FM._resetOversizeWarning();
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 })();

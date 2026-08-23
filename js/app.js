@@ -2005,9 +2005,12 @@ window.FM = window.FM || {};
     _oversizeTold = key;
     const mp = (P.width * P.height / 1e6).toFixed(1);
     if (FM.toast) FM.toast('This project is ' + mp + ' megapixels — tap to fix the lag', 9000, () => {
-      if (FM.toast) FM.toast('Every frame draws ' + P.width + '×' + P.height + '. Pick a smaller size under Size — leave “Scale the layers to fit” on and your work moves with it.', 11000);
+      /* NO SECOND TOAST (queue 490). This used to explain what to do in an 11-second toast and then
+         open the dialog over the top of it 400ms later, which covered it completely. The explanation
+         now lives inside the dialog itself (see cvUpdate), where it is readable for as long as he is
+         choosing rather than for four tenths of a second. */
       const cv = document.getElementById('btn-canvas');
-      if (cv) setTimeout(() => cv.click(), 400);
+      if (cv) cv.click();
     });
     return true;
   };
@@ -5482,6 +5485,23 @@ window.FM = window.FM || {};
     }
     function cvUpdate() {
       const custom = cvAspect === 'custom';
+      /* THE OVERSIZE INSTRUCTION BELONGS IN THE DIALOG (queue 490). It used to be an 11-second toast
+         fired on tapping the warning, after which this dialog opened 400ms later and covered it — so
+         he got 0.4s to read ~110 characters, and the guidance he needed WHILE choosing a size spent the
+         remaining 10.6s as a blurred ghost behind the card. Here it stays on screen for exactly as long
+         as he is deciding, and it shows for anyone who opens this dialog on a too-big project, not only
+         for the one person who tapped the toast. */
+      const ovr = document.getElementById('cv-oversize');
+      if (ovr) {
+        const P0 = FM.scene && FM.scene.project;
+        const tooBig = !!(P0 && FM.projectIsOversize && FM.projectIsOversize(P0));
+        ovr.classList.toggle('hidden', !tooBig);
+        if (tooBig) {
+          ovr.textContent = 'This project is ' + (P0.width * P0.height / 1e6).toFixed(1) + ' megapixels ('
+            + P0.width + ' × ' + P0.height + ') and every frame has to draw all of it. Pick a smaller size below — '
+            + 'leave “Scale the layers to fit” on and your work comes with it.';
+        }
+      }
       // Only offer to move the work when there IS work — on a new project the row is just a question
       // about nothing, and the dialog is already long on a phone.
       const scaleRow = document.getElementById('cv-scale-row');

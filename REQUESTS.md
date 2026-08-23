@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.10
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.11
 >
-> **State:** v12.10, **893 tests green**, tree clean.
+> **State:** v12.11, **894 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16633,8 +16633,18 @@ re-opened #480, which I had marked done and had not fixed.
       the sample now.
       'rate writes/s' divides a counter that has been adding up since you pressed Play by the probe's own 10-second window. If playback had been running a while before you started the probe, the number is inflated by however long that was — enough to cross the '⚠ this is ours' threshold and blame FreeMotion for a controller behaving exactly as intended. **This matters more than its size:** the one thing I keep asking you to do is tap the toast and send me the text, and that text is what unblocks #148 and four others. Fix the instrument before you spend the tap.
 
-- [ ] **490 — 🟠 The oversize-project instructions get covered by the dialog 400ms after they appear.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **490 — 🟠 The oversize-project instructions get covered by the dialog 400ms after they appear.** ✅ **FIXED v12.11.**
+      Tapping "this project is too big" fired an 11-second toast explaining what to do, then opened the
+      canvas dialog **on top of it** 400ms later. You got 0.4 seconds to read about 110 characters, and the
+      instruction you needed *while choosing a size* spent the other 10.6 seconds as a blurred ghost behind
+      the card.
+      **The explanation now lives inside the dialog**, so it is there for as long as you are deciding — and
+      it shows for anyone who opens Canvas settings on a too-big project, not only for whoever tapped the
+      toast. The second toast is gone.
+      ⚠️ **I also gave that card a height limit while I was in there**, because the note adds ~110px to a
+      card that had none and could not scroll — which is **exactly #494's failure mode on the export
+      dialog**. Measured at 375×553: it fits with 27px to spare, and with an artificially tripled note it
+      caps and scrolls instead of pushing Apply out of reach.
       An 11-second toast explains what to do, then the canvas dialog opens on top of it and hides it completely. You get 0.4s to read ~110 characters, and the instruction you need *while using the dialog* spends the other 10.6s as a blurred ghost behind it.
 
 - [ ] **491 — 🟠 The lag report's 'sync error' figures describe the wrong ten seconds.**
@@ -16661,3 +16671,13 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       It is marked up as a button and takes focus, but only responds to a real tap — Enter and Space do nothing — and it disappears after 9 seconds. Anyone on a keyboard or switch control cannot reach the offer it carries.
 
+- [ ] **497 — 🟡 Two tests hide the canvas dialog with an inline style that nothing ever clears, and it masks a real overlay leak.** (Found 24 Aug while doing #490.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Housekeeping in my own test suite, not something you can see — but it cost a full debugging pass and
+      it is hiding something. Two tests hide `#canvas-dialog` by writing `style.display = 'none'` straight
+      onto the element. The app only ever toggles a class, so nothing clears that again for the rest of the
+      run: every later test that opens the canvas dialog gets an element that reports itself visible and
+      measures 0×0. That is what it looks like when a feature is broken, which is exactly how I read it.
+      **And it is masking something real:** when I hid it the proper way instead, an unrelated test started
+      failing because the dialog was genuinely on screen and intercepting taps — so something later opens
+      that dialog and leaves it open, and the stray inline style has been covering for it. Worth finding.
