@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.05
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.06
 >
-> **State:** v12.05, **888 tests green**, tree clean.
+> **State:** v12.06, **889 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -11809,8 +11809,18 @@ wait for them to report back."*
       Repetition 5), or "no" parks it. Meanwhile I will keep running rounds like this one — mechanical,
       no guessing — because they need nothing from you.
 
-- [ ] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** (23 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** ✅ **DONE v12.06.** (23 Aug.)
+      You were reading the ARC, and you were right — v11.93 had enlarged the arrowhead and never touched
+      the ring. The two ends sat **60° apart** (a 7-unit gap on a 14-unit circle) with the head parked on
+      one of them, so the head and the tail almost met at the top. **Now 100°** — the gap between the ends
+      goes 7.00 → 10.72 units, and they read as clearly separate.
+      Two things came with it: the arrowhead was **rotated around the circle** rather than moved, so it
+      still sits exactly on the end of the arc at the same angle to it; and opening the gap pushes both
+      endpoints down, which drags the glyph's ink with them — so the circle's centre moved 12.452 → 12.474
+      to compensate. **The icon is now better centred than before: 12.001 against a target of 12, where it
+      used to be 11.626.** Redo is the exact mirror, and a test fails if the two ever stop matching.
+      The gap is asserted as an ANGLE read off the path, not as coordinates, so the glyph can still be
+      redrawn freely — only closing the gap again fails.
       His words, verbatim:
       > the undo and redo buttons i think could use some more polish on the design, i think the start and end of the circle is too close.
       **This is feedback on v11.93**, which enlarged the arrowhead (3.1px → 4.7px) but did not touch the

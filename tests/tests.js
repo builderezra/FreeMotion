@@ -41230,4 +41230,49 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 483: THE TWO ENDS OF THE UNDO/REDO RING MUST READ AS SEPARATE.
+     Ezra: "the undo and redo buttons i think could use some more polish on the design, i think the start
+     and end of the circle is too close." He is describing the ARC, not the arrowhead — v11.93 had already
+     enlarged the head (3.1px → 4.7px) and left the ring alone. The arc ran 8.5,6.39 → 15.5,6.39: a
+     7-unit chord on a 14-unit circle, so a 60° gap with the head sitting at one end of it, and the head
+     and the tail nearly met at the top.
+     Now 100° (chord 10.72). Asserted as an ANGLE off the path data rather than as literal coordinates,
+     so the glyph can still be redrawn — only closing the gap again fails.
+     ⚠️ The ink must also stay centred: queue 410's guard allows 0.6 off the viewBox centre, and opening
+     the gap moves both endpoints DOWN, which drags the ink centre with them. That is why the arc centre
+     moved 12.452 → 12.474 in the same change; the transport-vcentre test is what polices it. */
+  test('483: the undo and redo rings keep a wide gap between their two ends', { item: '483' }, function () {
+    const MIN_GAP = 85;      // measured 99.9 at v12.06; the old, complained-about glyph was 60
+    ['btn-undo', 'btn-redo'].forEach(function (id) {
+      const btn = document.getElementById(id);
+      if (!btn) throw new Error('#' + id + ' is missing from the transport row');
+      const arc = btn.querySelector('svg path');
+      if (!arc) throw new Error(id + ' has no path in its icon');
+      const d = arc.getAttribute('d') || '';
+      /* CONTROL: this only means anything if the path really is "move, then one elliptical arc". If the
+         glyph is ever redrawn as, say, two half-circles or a stroked circle with a dash gap, the numbers
+         below would still parse into something and quietly assert nonsense. */
+      const m = d.match(/^\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*A\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([01])[\s,]+([01])[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)\s*$/);
+      if (!m) throw new Error(id + "'s ring is no longer a single move-plus-arc (\"" + d + "\"), so the gap cannot be measured this way — re-derive the assertion rather than deleting it");
+      const sx = +m[1], sy = +m[2], r = +m[3], ex = +m[8], ey = +m[9];
+      if (!(r > 0)) throw new Error(id + ' has a zero radius arc');
+      const chord = Math.hypot(ex - sx, ey - sy);
+      if (chord > 2 * r + 0.001) throw new Error(id + ': the chord (' + chord.toFixed(2) + ') is longer than the diameter (' + (2 * r).toFixed(2) + ') — the path is not describing the circle it claims');
+      const gap = 2 * Math.asin(Math.min(1, chord / (2 * r))) * 180 / Math.PI;
+      if (gap < MIN_GAP) {
+        throw new Error(id + ": the ring's two ends are only " + gap.toFixed(1) + '° apart (chord ' + chord.toFixed(2) +
+          ' on r=' + r + '), under the ' + MIN_GAP + '° this needs. That is the "the start and end of the circle is too close" he asked to fix — it was 60° when he complained.');
+      }
+    });
+    /* The two must stay mirror images of each other — a fix applied to one only is its own bug. */
+    const gapOf = function (id) {
+      const d = document.querySelector('#' + id + ' svg path').getAttribute('d');
+      const n = d.match(/-?[\d.]+/g).map(Number);
+      return Math.hypot(n[7] - n[0], n[8] - n[1]) / n[2];
+    };
+    if (Math.abs(gapOf('btn-undo') - gapOf('btn-redo')) > 0.01) {
+      throw new Error('undo and redo no longer have the same gap (' + gapOf('btn-undo').toFixed(3) + ' vs ' + gapOf('btn-redo').toFixed(3) + ') — they are meant to be mirror images');
+    }
+  });
 })();
