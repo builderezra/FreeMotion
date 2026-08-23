@@ -254,6 +254,25 @@ from him wearing a test's clothes.** Read what it is protecting before working a
 The new floor is written as a FRACTION of the ring, not an absolute unit count, so a later re-draw at a
 different scale cannot silently drop under it.
 
+### 23 Aug, v11.94 — #480, and the most useful lesson in weeks: TWO GOOD FIXES CAN COMPOSE INTO A BUG
+He said *"I said this ages ago but you still cant drag stuff on top of the add layer it just teleports
+it back under"*, and #357 (v10.05) and #443 (v10.82) were both ticked for exactly that. **Neither had
+regressed.** 357 decided a drop on the marker means the boundary below it; 443 then made the visible gap
+agree with that so the preview stopped lying. Each repaired what it was looking at, and TOGETHER they
+made the position he wants unreachable — measured, both slots produced the identical order.
+**The shared premise was the bug:** *"six gap positions have to map to five real boundaries"*. The add
+row is itself movable, so the sixth position is real and is expressed by the MARKER moving, not by the
+layer order changing. The case that looked completely dead — dragging the row directly below the marker
+onto it — changes no layer order at all, so `moveLayers` no-ops by design and the row springs back.
+**Three things to carry forward:**
+1. **A ticked entry is not evidence.** He was right and two DONE entries said otherwise. When he repeats
+   a report, reproduce it before reading the history — the history is a warning, not an answer.
+2. **When two entries "fixed" the same thing and he still complains, suspect their shared assumption**,
+   not a regression in either.
+3. **An old test that goes red on a deliberate reversal gets UPDATED with the reversal and his quote in
+   it, never deleted** (#443's test here, the same way #473 handled #358). What it protects — *what you
+   see is where it goes* — survived; only the thing it measures against changed.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
