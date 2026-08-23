@@ -223,6 +223,24 @@ check finds nothing, ever. Both mutation-checked.
 *(The suite's no-double-quotes-in-test-names gate fired on me this tick and was right to — the name
 would have truncated its own FAIL line in ship.sh. A structural guard paying for itself.)*
 
+### 23 Aug, v11.92 — #478 fixed, and "oldest-first" resolved itself without a queue-jump
+He reported three bugs mid-tick (478 black bar, 479 undo arrowheads, 480 dragging onto the add row).
+All three were logged verbatim immediately and left at the bottom per the rule. **Then the rule picked
+one anyway**: every item numbered below 478 is 🟠 NEEDS YOU / ⏸️ HELD / 📌 NOTE / 🔵 BIG, so **478 was
+the oldest ACTIONABLE item.** Worth remembering — oldest-first means oldest among items that can be
+worked, and when the top of the list is entirely blocked on him a fresh report can be next legitimately.
+**The bug:** a raised add menu floats, pinned to the grid column measured at POINTERDOWN, and nothing
+re-pinned on window resize — widening leaves bare `#app` showing (his black bar), narrowing overlaps the
+timeline. The existing comment already knew the column moves on resize and had solved it for the wrong
+moment.
+⚠️ **Two dead-assertion mistakes in one tick, same family as the last one:**
+· A mutation SURVIVED because the line I mutated (an explicit layout flush) was redundant —
+  `getBoundingClientRect` already forces layout. **A surviving mutation can mean the CODE is
+  redundant, not that the test is weak.** Deleted the line rather than leave it looking load-bearing.
+· My first test called `FM._amRepin()` directly, so unhooking the resize listener passed it. **Testing
+  the repair is not testing the wiring** — it fires a real `resize` event now. That is exactly the
+  queue-148 counter mistake one tick earlier, so it is now written here rather than re-learned.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
