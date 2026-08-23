@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.14
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.15
 >
-> **State:** v12.14, **897 tests green**, tree clean.
+> **State:** v12.15, **898 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16691,8 +16691,20 @@ re-opened #480, which I had marked done and had not fixed.
       into the list after every seek and at the start of every clip and pulling the median down.
       On a seek tick the code subtracts a bias that has just been set to nothing, so the raw error is stored instead of the corrected one. It inflates the 'worst' figure by the constant output latency — the very constant that was identified and removed in v11.70 — and drops an artificial zero into the median.
 
-- [ ] **494 — 🔴 On a short phone the Export button is under the fold and NOTHING SCROLLS — export is unreachable.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **494 — 🔴 On a short phone the Export button is under the fold and NOTHING SCROLLS — export is unreachable.** ✅ **FIXED v12.15.**
+      **I reproduced it at 375×553:** with the "this export will be silent" warning showing plus the custom
+      size, custom fps and GIF rows, the card was **633.6px tall in a 553px window** — its top 40px above
+      the screen, only **15.2px of the 32.5px Export button** visible, and card scroll, dialog scroll and
+      page height all confirming nothing could move. Export was genuinely unreachable.
+      Two fixes, and both are needed. The card now has a **height limit and scrolls** instead of growing off
+      the screen; and the **Cancel/Export row is pinned to the bottom** of it, so you never have to work out
+      that scrolling is possible — the settings move behind the buttons, the buttons stay put. Measured
+      after: the Export button is **fully visible at the top, middle and bottom of the scroll**.
+      The same rule covers the canvas dialog and the "export ready" card, which share this markup and
+      therefore shared the fault — so the height cap I added for #490 is now the general one.
+      ⚠️ First attempt looked right on paper and wrong on screen: the pinned bar was inset by the card's
+      padding, so the settings showed through the gap either side of the buttons. Caught by taking a
+      screenshot rather than trusting the numbers.
       The audio-support warning I added this week makes the export card 122.6px taller. The card has no height limit and its container cannot scroll. Measured at 375×553: only 3.1px of the 32.5px Export button is visible, and page scroll, dialog scroll and document height all confirm it is frozen in place. At 360×560 it is 6.6px. This is a feature I broke this week on the size of screen you actually use.
 
 - [ ] **495 — 🟠 The 'this export will be silent' warning stays up after you switch to a format it is wrong about.**

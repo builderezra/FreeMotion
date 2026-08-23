@@ -2777,6 +2777,30 @@ body.fm-playing #time-readout {
 .field select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 10px; }
 
+/* ⚠️ A DIALOG CARD MUST NEVER PUT ITS OWN BUTTONS OUT OF REACH (queue 494).
+   The card had no height limit and nothing around it could scroll, so every row added to it pushed the
+   Cancel/Export pair further down and eventually off the screen — with no way to get to them at all.
+   MEASURED at 375x553 with the "this export will be silent" warning plus the custom-size, custom-fps
+   and GIF rows showing: the card was 633.6px tall in a 553px viewport, its top was 40px ABOVE the
+   screen, only 15.2 of the Export button's 32.5px was visible, and card scroll, dialog scroll and
+   document height all confirmed nothing could move. Export was unreachable on the size of phone he
+   actually uses, and it was a row I added that tipped it over.
+   Two parts, and both are needed. The height cap makes the card scroll instead of overflowing, and the
+   STICKY action row means he never has to discover that scrolling is possible — Cancel and Export stay
+   on screen while the settings above them move. Applies to every .export-card, which is the export
+   dialog, the canvas dialog and the "export ready" card: they share this markup, so they shared the
+   fault. */
+.export-card { max-height: calc(100vh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.export-card > .dialog-actions {
+  position: sticky; bottom: 0; z-index: 1;
+  /* Negative margins cancel the card's own 22px/24px padding so the bar spans edge to edge and its
+     background actually COVERS what is scrolling behind it. Without them the row is inset, and the
+     settings underneath show through the gutter on both sides and below — measured and seen. */
+  margin: 14px -24px -22px; padding: 12px 24px 18px;
+  background: var(--panel);
+  box-shadow: 0 -12px 16px -8px var(--panel);   /* the rows fade out under it rather than colliding */
+}
+
 /* ---- "Export ready" (queue 141 part 4) --------------------------------------------------------
  * Same card, same language as the export dialog it follows — it is the last step of the same job, not
  * a new screen. The poster is the point of it: it is the only place in the app that shows you what you
@@ -7648,9 +7672,6 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   color: var(--text); font-size: 12.5px; line-height: 1.45;
 }
 .cv-oversize.hidden { display: none; }
-/* …and because that note adds ~110px to a card that had no height limit and no way to scroll, the
-   card gets one. This is the shape of queue 494 on the export dialog — a warning row pushed the
-   Apply/Cancel row under the fold with nothing able to scroll to it. Measured at 375x553 the canvas
-   card fits with 27px to spare, so this changes nothing today; it is here so that a longer note, a
-   bigger system font or a shorter phone cannot put Apply out of reach. */
-#canvas-dialog .export-card { max-height: calc(100vh - 24px); overflow-y: auto; }
+/* The canvas card's height cap now comes from the shared `.export-card` rule (queue 494), which was
+   added for the export dialog and covers this one too — the note added for queue 490 is what made this
+   card need it. Kept as a comment rather than a duplicate rule so the reason survives. */

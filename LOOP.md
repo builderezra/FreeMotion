@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.14, 897 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.15, 898 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 494–497 — the review's own findings, oldest first. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
+**Next: 495–497 — the review's own findings, oldest first. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
 that
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
@@ -121,6 +121,12 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **494: WHEN THE FRAME SIZE IS NOT YOURS TO SET, REPRODUCE THE CONDITION INSTEAD.** The suite's iframe
+ignores an attempt to set its HEIGHT (innerHeight stayed 760), so 'check it at 375x553' cannot be tested
+directly. Squeezing the CARD's max-height reproduces overflow on any screen and asserts the same property.
+Pair it with a computed-style check for the thing the squeeze cannot see (here, the max-height itself).
+AND: the numbers said the fix worked while the SCREENSHOT showed settings bleeding through the pinned bar.
+**For anything about layout, look at it.**
 ⚠️ **491: IF THE TEST DOES NOT CALL THE APP'S OWN CODE, IT IS TESTING ITSELF.** The first 491 test pushed
 samples into `playbackStats.errs` with its own inline copy of the collector's logic — so restoring the old
 first-600 cap changed nothing it could see. Extracting `FM._noteSyncError` and driving THAT caught it at

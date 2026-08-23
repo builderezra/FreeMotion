@@ -41881,4 +41881,69 @@
       throw new Error('the sync tick no longer records the de-biased value guarded by the learning tick, so either the latency is back in the samples or a guaranteed zero is');
     }
   });
+
+  /* ═══ 494: A DIALOG MUST NEVER PUT ITS OWN BUTTONS OUT OF REACH.
+     The export card had no height limit and nothing around it could scroll, so every row added to it
+     pushed Cancel/Export further down. MEASURED at 375x553 with the "this export will be silent"
+     warning plus the custom-size, custom-fps and GIF rows: the card was 633.6px tall in a 553px
+     viewport, its top sat 40px ABOVE the screen, 15.2 of the Export button's 32.5px was visible, and
+     card scroll, dialog scroll and document height all confirmed nothing could move. Export was
+     unreachable on the size of phone he actually uses, and a row I added is what tipped it over.
+     Asserted as behaviour under forced overflow rather than by shrinking the frame: the suite's iframe
+     height is not ours to set (queue 490 proved that — innerHeight stayed at 760), and a check that
+     cannot run is worse than none. Squeezing the card directly reproduces the same condition on any
+     screen. */
+  test('494: the export dialog keeps its buttons reachable when the card overflows', { item: '494' }, async function () {
+    const dlg = document.getElementById('export-dialog');
+    if (!dlg) throw new Error('#export-dialog is missing');
+    const card = dlg.querySelector('.export-card');
+    if (!card) throw new Error('the export dialog has no .export-card');
+    const actions = card.querySelector('.dialog-actions');
+    const go = document.getElementById('exp-go');
+    if (!actions || !go) throw new Error('the export dialog has no action row / Export button');
+
+    const wasHidden = dlg.classList.contains('hidden');
+    const savedMax = card.style.maxHeight, savedTop = card.scrollTop;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      dlg.classList.remove('hidden');
+      await sleep(60);
+
+      /* ── THE PROPERTIES THAT PREVENT IT. Checked as well as the behaviour below, because the forced
+         squeeze cannot see a missing max-height — that is the half which stops the card growing past
+         the screen in the first place. */
+      const cs = getComputedStyle(card);
+      if (cs.maxHeight === 'none') throw new Error('the export card has no max-height, so it grows past the bottom of a short screen with nothing able to scroll — that is queue 494');
+      if (cs.overflowY !== 'auto' && cs.overflowY !== 'scroll') throw new Error('the export card cannot scroll (overflow-y: ' + cs.overflowY + '), so anything past its height is unreachable');
+      if (getComputedStyle(actions).position !== 'sticky') throw new Error('the Cancel/Export row is not sticky, so on a squeezed card he has to discover that scrolling is possible before he can export');
+
+      /* ── AND THE BEHAVIOUR. Squeeze the card until it genuinely overflows. */
+      card.style.maxHeight = '180px';
+      await sleep(80);
+      /* CONTROL: if it does not overflow, the assertions below pass trivially and prove nothing. */
+      if (!(card.scrollHeight > card.clientHeight + 4)) throw new Error('the card did not overflow even squeezed to 180px (content ' + card.scrollHeight + ' vs box ' + card.clientHeight + '), so this test is not reproducing the case it was written for');
+
+      const reachable = (where) => {
+        const cb = card.getBoundingClientRect(), r = go.getBoundingClientRect();
+        const inside = r.top >= cb.top - 1 && r.bottom <= cb.bottom + 1;
+        const shown = Math.max(0, Math.min(r.bottom, cb.bottom) - Math.max(r.top, cb.top));
+        if (!inside || shown < r.height - 1) {
+          throw new Error('with the card overflowing and scrolled to the ' + where + ', only ' + shown.toFixed(1) +
+            ' of the Export button\'s ' + r.height.toFixed(1) + 'px is inside the card — he cannot press it. ' +
+            'The action row must stay pinned (queue 494: measured 15.2px of 32.5px visible at 375x553, with nothing able to scroll).');
+        }
+      };
+      card.scrollTop = 0; await sleep(60); reachable('top');
+      card.scrollTop = card.scrollHeight; await sleep(60); reachable('bottom');
+      card.scrollTop = Math.round(card.scrollHeight / 2); await sleep(60); reachable('middle');
+
+      /* ── the pinned bar must actually HIDE what scrolls behind it, or it reads as a rendering fault. */
+      const ab = getComputedStyle(actions).backgroundColor;
+      if (!ab || /transparent|rgba\(0,\s*0,\s*0,\s*0\)/.test(ab)) throw new Error('the pinned action row has no background (' + ab + '), so the settings scroll visibly through the buttons');
+    } finally {
+      card.style.maxHeight = savedMax;
+      card.scrollTop = savedTop;
+      if (wasHidden) dlg.classList.add('hidden');
+    }
+  });
 })();
