@@ -273,6 +273,20 @@ onto it — changes no layer order at all, so `moveLayers` no-ops by design and 
    it, never deleted** (#443's test here, the same way #473 handled #358). What it protects — *what you
    see is where it goes* — survived; only the thing it measures against changed.
 
+### 23 Aug, v11.95 — WHEN HIS REPORT IS A COMPARISON, THE INSTRUMENT MUST COMPARE
+#387's lead is *"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*
+— an ASYMMETRY, and the strongest clue in any of his performance reports, because both paths draw the
+same frames through the same compositor. The "what's slow" report was pooling play and scrub frames into
+one median: the single number guaranteed not to show it. Split by context now, with the verdict written
+out rather than left as arithmetic.
+**The general form, and it applies to the whole 🟠 pile: read what SHAPE his complaint is.** "X is fine
+but Y is bad" needs an instrument that measures X and Y separately; "it gets bad fast" needs one that
+samples over time; "it's slow" needs a threshold. Three of the last ticks were spent making the app
+report something it already knew, and this one is the same move applied to the report itself.
+**Blocked-on-him status is worth re-reading after every one of these.** #387 clause 2 said it needed
+*"a clip off his own phone or a screen recording"*; it now needs one tap, because the measurement moved
+onto his device instead of asking him to reproduce it for mine.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
