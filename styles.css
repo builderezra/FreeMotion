@@ -7577,3 +7577,15 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   padding: 7px 9px;
   line-height: 1.35;
 }
+
+
+/* Queue 215 — the "this export will be silent" pre-flight warning in the export dialog. Deliberately
+   a persistent block in the card rather than a toast: a toast about a render you have not started yet
+   is gone by the time you press the button. */
+.export-warn {
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 9px;
+  background: color-mix(in srgb, var(--warn, #e8a33d) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #e8a33d) 55%, transparent);
+  color: var(--text); font-size: 12.5px; line-height: 1.45;
+}
+.export-warn b { color: var(--warn, #e8a33d); }

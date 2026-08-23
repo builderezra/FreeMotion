@@ -3765,7 +3765,63 @@ window.FM = window.FM || {};
     expPrefsApply();   // after the resolution list is rebuilt for THIS project, so the match can land
     syncExportFormat();
     document.getElementById('export-dialog').classList.remove('hidden');
+    checkExportAudioSupport();
   }
+
+  /* ═══ SAY THE EXPORT WILL BE SILENT BEFORE HE RENDERS IT, NOT AFTER (queue 215).
+   *
+   * His report is *"I just exported and got no audio even tho the video had audio."* v7.91 found the
+   * cause and made it speak — the browser refusing to encode AAC — but it speaks DURING the export,
+   * after he has already waited out a render. The entry itself records the crucial property: **AAC
+   * support belongs to the BROWSER, not to the project or the settings.** So it is knowable the
+   * moment the dialog opens, before he has committed anything to it.
+   *
+   * A block in the card rather than a toast, deliberately: a toast about a render he has not started
+   * yet would be gone by the time he pressed Export.
+   *
+   * TWO CONDITIONS, and the second is what stops this being noise: the browser must actually refuse
+   * AAC, AND the project must actually have sound to lose. Warning "this will be silent" on a project
+   * with no audio in it is a false alarm on every silent animation he ever exports. */
+  let _aacOK = null;
+  FM.canEncodeAAC = async function () {
+    if (_aacOK !== null) return _aacOK;
+    if (typeof AudioEncoder === 'undefined') { _aacOK = false; return false; }
+    try {
+      const s = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 160000 });
+      _aacOK = !!(s && s.supported);
+    } catch (e) { _aacOK = false; }
+    return _aacOK;
+  };
+  FM._resetAacProbe = function () { _aacOK = null; };
+
+  /* Does this project have anything to lose? Audio rides the 'video' layer type (an mp3 becomes a
+   * 0x0 'video' layer — see the compositor), so the test is "a layer with a media record that is not
+   * silenced", not "a layer of type audio". */
+  FM.projectHasAudio = function () {
+    const ls = (FM.scene && FM.scene.layers) || [];
+    return ls.some(l => {
+      if (l.type !== 'video' || l.muted) return false;
+      const m = FM.media && FM.media.get && FM.media.get(l.id);
+      return !!m;
+    });
+  };
+
+  async function checkExportAudioSupport() {
+    const box = document.getElementById('exp-noaudio-warn');
+    if (!box) return false;
+    box.classList.add('hidden'); box.textContent = '';
+    if (!FM.projectHasAudio()) return false;
+    if (await FM.canEncodeAAC()) return false;
+    box.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = 'This export will have no sound. ';
+    box.appendChild(b);
+    box.appendChild(document.createTextNode(
+      'This browser cannot encode AAC audio. The picture will be fine. To keep the sound, open FreeMotion in Safari and export there.'));
+    box.classList.remove('hidden');
+    return true;
+  }
+  FM._checkExportAudioSupport = checkExportAudioSupport;
   /* WHICH layer the export should isolate — null means all of them (queue 174). Held here rather than
    * read off the selection, because the whole point of the change is that you can pick a layer without
    * first selecting it. The hidden #exp-solo-clip mirrors it so the export path below, and anything

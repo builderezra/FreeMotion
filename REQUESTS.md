@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.89
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.90
 >
-> **State:** v11.89, **863 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.90, **865 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8494,6 +8494,25 @@ better still, keep working inside the turn rather than parking work for a later 
       property of the BROWSER, not of your project or your settings. The same project exports with sound
       in one browser and without it in another, on the same machine, with nothing changed — which is
       unfalsifiable from a description alone.
+
+      ✅ **v11.90 — AND THAT SENTENCE IS THE FIX, ONE STEP EARLIER.** If AAC support belongs to the
+      BROWSER rather than to the project or the settings, then **it is knowable the moment the export
+      dialog opens** — before you have committed a single second of render to it. v7.91 made the failure
+      speak, but it speaks DURING the export, which means you find out by having already waited.
+      The dialog now carries a warning block, above the settings, when it applies:
+      > **This export will have no sound.** This browser cannot encode AAC audio. The picture will be
+      > fine. To keep the sound, open FreeMotion in Safari and export there.
+      A block in the card rather than a toast, deliberately — a toast about a render you have not
+      started yet is gone by the time you press the button.
+      ⚠️ **TWO conditions, and the second is what stops it being noise:** the browser must actually
+      refuse AAC, AND the project must actually have sound to lose. Otherwise every silent animation you
+      export would carry a warning about losing audio it never had. Both controls are asserted.
+      ⚠️ **And a trap the test pins down:** audio rides the `'video'` layer type — an mp3 becomes a 0×0
+      `'video'` layer, which is exactly why the exporter's own mixer keys off `type === 'video'`. A
+      "has audio" check written the natural way, as `type === 'audio'`, would find nothing ever and the
+      warning would never fire. That mutation is caught by its own test.
+      *(The suite's own guard also caught me mid-tick: my first test name contained double quotes, which
+      truncate the FAIL line in ship.sh and mutate.sh. Renamed — the gate did its job.)*
       **Three outcomes are now distinguishable from the outside**, which is what this entry has always
       lacked: a toast naming a clip = the mixer; the AAC toast = the encoder; NEITHER toast and still a
       silent file = the muxer, and that is the last place left to look.

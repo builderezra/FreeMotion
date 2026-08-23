@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=574">
+<link rel="stylesheet" href="styles.css?v=575">
 <link rel="stylesheet" href="theme-glass.css?v=31">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.89</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v11.90</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -701,6 +701,9 @@
   <div id="export-dialog" class="hidden">
     <div class="export-card">
       <div class="export-title">Export</div>
+      <!-- Queue 215. AAC support is a property of the BROWSER, not of the project or the settings, so
+           it can be asked BEFORE the render instead of after one. Hidden unless it actually applies. -->
+      <div id="exp-noaudio-warn" class="export-warn hidden"></div>
       <label class="field"><span>Format</span>
         <select id="exp-format">
           <option value="mp4">MP4 video</option>
@@ -929,7 +932,7 @@
   <script src="js/shortcuts.js?v=79"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=50"></script>
-  <script src="js/app.js?v=355"></script>
+  <script src="js/app.js?v=356"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>

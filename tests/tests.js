@@ -39900,4 +39900,72 @@
       if (FM.perfProbe && FM.perfProbe.stop) FM.perfProbe.stop();
     }
   });
+
+  /* ═══ SAY IT BEFORE THE RENDER, NOT AFTER (queue 215).
+     His report: "I just exported and got no audio even tho the video had audio." v7.91 made the cause
+     speak — the browser refusing AAC — but only DURING the export, once he had already waited out a
+     render. The entry's own key fact is that AAC support belongs to the BROWSER, so it is knowable the
+     moment the dialog opens. The risk is crying wolf on every silent animation he exports, which is
+     why both conditions are asserted separately. */
+  test('the export dialog warns about a silent export BEFORE the render (queue 215)', { item: '215' }, async function () {
+    const box = document.getElementById('exp-noaudio-warn');
+    if (!box) throw new Error('the export dialog has no pre-flight warning row');
+    if (typeof FM._checkExportAudioSupport !== 'function') throw new Error('FM._checkExportAudioSupport is missing');
+    const realAac = FM.canEncodeAAC, realHas = FM.projectHasAudio;
+    try {
+      // Browser refuses AAC, project HAS sound → the one case worth warning about.
+      FM.canEncodeAAC = async () => false;
+      FM.projectHasAudio = () => true;
+      if (await FM._checkExportAudioSupport() !== true) throw new Error('a project with audio, in a browser that cannot encode AAC, got no warning — which is his exact report, found out only after the render');
+      if (box.classList.contains('hidden')) throw new Error('the warning was computed but left hidden');
+      if (!/no sound/i.test(box.textContent)) throw new Error('the warning does not say the export will be silent: ' + box.textContent);
+      if (!/Safari/.test(box.textContent)) throw new Error('the warning does not say what to do about it — the fix is what v7.91 left in a console');
+
+      /* CONTROL 1 — a project with NO audio. Every silent animation he exports would otherwise carry
+         a scary warning about losing sound it never had. */
+      FM.projectHasAudio = () => false;
+      if (await FM._checkExportAudioSupport() !== false) throw new Error('a project with no audio at all was warned it would lose its sound');
+      if (!box.classList.contains('hidden')) throw new Error('the warning stayed on screen for a project with no audio');
+
+      /* CONTROL 2 — a browser that CAN encode AAC. Nothing is going to be lost, so nothing is said. */
+      FM.canEncodeAAC = async () => true;
+      FM.projectHasAudio = () => true;
+      if (await FM._checkExportAudioSupport() !== false) throw new Error('a browser that CAN encode AAC still warned the export would be silent');
+      if (!box.classList.contains('hidden')) throw new Error('the warning stayed on screen in a browser that can encode AAC');
+    } finally {
+      FM.canEncodeAAC = realAac; FM.projectHasAudio = realHas;
+      box.classList.add('hidden'); box.textContent = '';
+    }
+  });
+
+  test('having sound to lose counts audio LAYERS, not layer types (queue 215)', { item: '215' }, async function () {
+    /* Audio rides the 'video' layer type — an mp3 becomes a 0x0 'video' layer, which is documented in
+       the compositor and is exactly why the exporter's own mixer loop keys off type 'video'. A check
+       written as `type === 'audio'` would find nothing, ever, and the warning would never fire. */
+    if (typeof FM.projectHasAudio !== 'function') throw new Error('FM.projectHasAudio is missing');
+    const saved = FM.scene.layers.slice();
+    const made = [];
+    try {
+      FM.scene.layers.length = 0;
+      if (FM.projectHasAudio() !== false) throw new Error('an empty project reported that it has audio');
+
+      const shape = FM.makeLayer('shape', { shape: 'rect', name: 'no sound here', x: 10, y: 10, shapeW: 20, shapeH: 20 });
+      shape.start = 0; shape.duration = 2; FM.scene.layers.push(shape);
+      if (FM.projectHasAudio() !== false) throw new Error('a project of shapes reported that it has audio');
+
+      const snd = FM.makeLayer('video', { name: 'a sound effect', start: 0, duration: 2 });
+      FM.scene.layers.push(snd); made.push(snd.id);
+      FM.media.set(snd.id, { kind: 'video', el: { readyState: 4 }, width: 0, height: 0, duration: 2 });
+      if (FM.projectHasAudio() !== true) throw new Error('a 0x0 video layer with a media record — which is what an imported sound IS — was not counted as audio');
+
+      // A muted layer has nothing to lose either.
+      snd.muted = true;
+      if (FM.projectHasAudio() !== false) throw new Error('a MUTED layer was counted as sound the export would lose');
+    } finally {
+      made.forEach(id => { try { FM.media.del ? FM.media.del(id) : FM.media.delete(id); } catch (e) {} });
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
 })();
