@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.12
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.13
 >
-> **State:** v12.12, **895 tests green**, tree clean.
+> **State:** v12.13, **896 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16664,8 +16664,16 @@ re-opened #480, which I had marked done and had not fixed.
       accident: if a test does not call the app's own code, it is testing itself.
       The error samples stop being collected after the first 600 and only reset when you press Play, so the numbers printed under a heading that says '10-second sample' actually come from the first few seconds after Play — a window that had already closed before the sample opened. Drift that builds up during a long playback, which is exactly the thing worth catching, is invisible to it. Needs to be a rolling window, not a first-600 cap.
 
-- [ ] **492 — 🟡 The 'want me to find what's slow?' offer can fire off a single bad frame.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **492 — 🟡 The 'want me to find what's slow?' offer can fire off a single bad frame.** ✅ **FIXED v12.13.**
+      The offer is supposed to need ~120 struggling frames **in a row** — the comment in the code says
+      plainly that one bad frame is jitter and must not trigger it. But the count was only cleared on a
+      frame that came in fine; the "not playing" path returned early and left it untouched. So it survived
+      pauses and drags, and **one late frame after an unrelated pause could tip a total that had been
+      sitting at 119 since earlier**. Since the offer is one-shot per page load, that false alarm spends
+      the only one you ever get.
+      It now clears the moment playback stops, and again when you press play, so a run of frames can never
+      inherit a count from the last one. The test proves the bar still works from a clean run — 120 real
+      consecutive frames still offer to measure — so the fix has not just disabled the feature.
       Its counter is never reset when playback stops, so the '120 consecutive struggling frames' bar is really a running total across separate playbacks and pauses. One late frame after an unrelated pause can tip it. Since the offer is one-shot per page load, a false alarm spends the only one you get.
 
 - [ ] **493 — 🟡 After every seek, one audio sample is recorded with the latency bias still in it.**

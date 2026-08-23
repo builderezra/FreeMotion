@@ -41752,4 +41752,75 @@
       ps.syncs = saved.syncs; ps.rateWrites = saved.rateWrites; ps.seeks = saved.seeks;
     }
   });
+
+  /* ═══ 492: "120 CONSECUTIVE" HAS TO MEAN CONSECUTIVE.
+     The offer to measure fires after ~120 struggling frames in a row, and the note above it says
+     plainly that one bad frame is jitter and must not trigger it. But the counter was only cleared on
+     a frame that was FINE — the "not playing" path returned early without touching it. So the count
+     survived pauses and drags, and a single late frame after an unrelated pause could tip a total that
+     had been sitting at 119 since earlier. The offer is one-shot per page load, so that false alarm
+     spends the only one he gets.
+     Driven through the app's own entry point, not the module-local copy — the module and FM._maybe…
+     are the same function here, but the struggle COUNT is module state, so a fixture that pokes it
+     directly would prove nothing. */
+  test('492: the struggle count is consecutive, not a running total across pauses', { item: '492' }, function () {
+    if (typeof FM._maybeOfferPerfProbe !== 'function') throw new Error('FM._maybeOfferPerfProbe is missing');
+    if (typeof FM._perfOfferState !== 'function' || typeof FM._resetPerfOffer !== 'function') throw new Error('the perf-offer seams are missing');
+    const wasPlaying = FM.playing, realToast = FM.toast;
+    const saved = FM._perfOfferState();
+    let toasts = [];
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); return null; };
+      FM._resetPerfOffer();
+      FM.playing = true;
+      const struggle = () => FM._maybeOfferPerfProbe(999, 1, true);   // over budget, ladder spent
+
+      /* CONTROL: it must actually count while playing, or "it stopped counting" would pass everything
+         below for the wrong reason. */
+      struggle(); struggle(); struggle();
+      const after3 = FM._perfOfferState().hits;
+      if (after3 !== 3) throw new Error('three struggling frames left the count at ' + after3 + ' — the counter is not running, so nothing below is measuring what it claims');
+
+      // …almost at the bar
+      for (let i = 3; i < 119; i++) struggle();
+      if (FM._perfOfferState().hits !== 119) throw new Error('expected 119 hits, got ' + FM._perfOfferState().hits);
+      if (FM._perfOfferState().offered) throw new Error('the offer fired before the bar was reached');
+
+      /* ── THE PAUSE. One call while not playing must throw the run away. */
+      FM.playing = false;
+      struggle();
+      if (FM._perfOfferState().hits !== 0) throw new Error('after playback stopped the count is still ' + FM._perfOfferState().hits + ' — it survives pauses, so "120 consecutive" is really a running total (queue 492)');
+
+      /* ── and a single late frame in the NEXT playback must not fire the offer. */
+      FM.playing = true;
+      toasts = [];
+      struggle();
+      if (FM._perfOfferState().offered || toasts.length) {
+        throw new Error('one struggling frame after a pause fired the offer ("' + (toasts[0] || '') + '") — that is the "one bad frame is jitter" case the code says must not trigger it, and it spends the only offer of the page load');
+      }
+
+      /* ── the bar itself still works, from a clean run. */
+      FM._resetPerfOffer(); FM.playing = true; toasts = [];
+      for (let i = 0; i < 120; i++) struggle();
+      if (!FM._perfOfferState().offered) throw new Error('120 genuinely consecutive struggling frames did NOT offer to measure — the fix has broken the feature it was protecting');
+      if (!toasts.length || !/struggling/i.test(toasts[0])) throw new Error('the offer fired but said nothing useful: "' + (toasts[0] || '') + '"');
+
+      /* ── and pressing play clears any leftover count. */
+      FM._resetPerfOffer(); FM.playing = false;
+      FM.playing = true; for (let i = 0; i < 50; i++) struggle();
+      FM.playing = false;
+      if (typeof FM.play === 'function') {
+        FM.playing = false;
+        FM.play();
+        const h = FM._perfOfferState().hits;
+        FM.pause && FM.pause();
+        if (h !== 0) throw new Error('pressing play started with ' + h + ' struggling frames already on the clock');
+      }
+    } finally {
+      FM.toast = realToast;
+      FM._resetPerfOffer();
+      FM.playing = wasPlaying;
+      if (!wasPlaying && FM.pause) { try { FM.pause(); } catch (e) {} }
+    }
+  });
 })();

@@ -375,7 +375,14 @@ window.FM = window.FM || {};
 
   function maybeOfferPerfProbe(cost, budget, spent) {
     if (_perfOffered) return;
-    if (!FM.playing || FM._exporting) return;
+    /* ⚠️ NOT PLAYING MEANS THE RUN IS BROKEN (queue 492). This used to return WITHOUT clearing the
+       count, so "~120 consecutive decisions" was really a running total across separate playbacks,
+       drags and pauses. One late frame after an unrelated pause could tip a counter that had been
+       sitting at 119 since earlier — the "one bad frame is jitter" case the note above says must not
+       trigger it. And because the offer is one-shot per page load, that false alarm spends the only
+       one he ever gets. This function is still CALLED while he drags (notePlaybackCost runs for
+       motion as well as playback), which is exactly where the stale count used to survive. */
+    if (!FM.playing || FM._exporting) { _struggleHits = 0; return; }
     if (!FM.perfProbe || !FM.perfProbe.run || FM.perfProbe.running) return;
     // "the ladder has played every card it has, and it is STILL late"
     if (!(spent && cost > budget)) { _struggleHits = 0; return; }
@@ -1694,6 +1701,7 @@ window.FM = window.FM || {};
     if (FM.timeline && FM.timeline.stopMomentum) FM.timeline.stopMomentum();   // don't fight a timeline glide
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
+    _struggleHits = 0;      // a fresh run of frames — never inherit a count from the last one (queue 492)
     /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
    * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
    * write a PITCH change — 85 writes in four seconds is the scratchy warble he reported, and the
