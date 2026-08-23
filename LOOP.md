@@ -415,6 +415,19 @@ create.** A clean soak reported as "cannot reproduce" is nearly worthless; repor
 and Z, and here is the one input I cannot manufacture" it hands the next session, or him, a concrete
 next step.
 
+### 23 Aug — the media sweep is BOUNDED, proven over 90 import/delete cycles
+BUG-HUNT.md is at zero open items and the queue is blocked, so the tick went at the oldest entry's
+remaining unmeasured half: "gets bad fast" as a MEMORY claim. The v8.44/v8.46 leak fixes had tests but
+nothing checked they hold over a long session. Ninety cycles of import → place → delete → commit, with
+real files: media held plateaus at exactly **60** and stays there (heap flat ~9 MB).
+**60 is the right number, not a coincidence** — the undo stack caps at 120 entries, each cycle commits
+twice, so 60 deletions are still undoable and keeping their media is DELIBERATE (freeing it makes an
+undone delete come back blank, which is what made v8.44 hard).
+⚠️ **The soak nearly reported a leak at cycle 32.** Records grew 1:1 with cycles — 16, 24, 32 — and that
+looks exactly like unbounded growth. It was simply below the 120-commit cap; the plateau only appears
+past it. **A growth curve measured entirely inside a cap is indistinguishable from a leak — find the
+cap before calling it.** Same family as the truncated greps: measure past the boundary, or don't claim.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
