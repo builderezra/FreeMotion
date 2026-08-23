@@ -2,15 +2,31 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.02
 >
-> **State:** v12.02, **885 tests green**. **Four new requests logged 23 Aug: 481 (PC browser layout), 482 (improve every effect), 483 (undo/redo ring), 484 (rename the AM-copied effect names + add what they have).**, tree clean, and the live site verified end to end — it boots,
-> opens a project, renders, and exports a real file on your actual URL. **27 items open, and after an
-> entry-by-entry audit every one of them is waiting on YOU**, not on me.
+> **State:** v12.02, **885 tests green**, tree clean.
+>
+> **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
+> **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
+>
+> **⚠️ Two things changed the picture on 23 Aug, and neither is flattering to me.**
+> I pointed 60 agents at everything I shipped this week and told them to attack it, then made every
+> finding survive an independent attempt to prove it wrong. **14 held up.** They are logged as
+> **485–496** at the bottom of this file. One is already fixed (Contour Lines was doing ~200x the work
+> it needed on every frame — 3.1x slower playback, invisible because the picture came out identical).
+> And **#480 is RE-OPENED**: I told you the add-layer drag was fixed at v11.94 and it was not — the fix
+> measures the drop position in on-screen rows and then uses it as a position in the real layer list,
+> so the moment a group is collapsed the two disagree. Your symptom never went away.
+>
+> **44 items open, 17 of which I can now do without you** — that is the honest number, and it is up
+> because the review found real work, not because you added much.
 >
 > ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
-> 1. **Play something that lags or sounds scratchy, wait for the toast, tap it — then tap the second
->    toast to copy — and send me the text.** It now reports whether PLAYING is slower than SCRUBBING, and
->    whether the audio controller is churning. **That one tap unblocks FIVE entries** (95, 125, 148, 202,
->    387) stuck for weeks on a measurement only your phone can take.
+> 1. **⏸ HOLD OFF ON THE LAG-REPORT TAP FOR NOW — I need to fix the instrument first.**
+>    This has been my #1 ask for weeks, and the review found **three separate faults in the report it
+>    produces** (#489, #491, #493). The audio line can inflate its own number enough to blame FreeMotion
+>    for something behaving correctly, and the sync-error figures describe a different ten seconds than the
+>    one they are printed under. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387), so it is
+>    worth more than everything else on this list — which is exactly why I am not going to spend it on a
+>    broken gauge. Fixing those three is my next job. I will tell you when it is worth tapping.
 > 2. **"Got it"** — closes #406, the one you asked me to keep reminding you about.
 > 3. **A feature name — Corner Pin, LUT import, or Curves** — or "none". All 105 effect upgrades are
 >    built; these three are what is left. Each is a proper build, and I have not started one because
@@ -11762,7 +11778,9 @@ wait for them to report back."*
       separate. ⚠️ Queue 410's guard requires the glyph's ink to stay centred within 0.6 of the viewBox
       centre, so any change to the arc must keep that — see how v11.93 had to shift the whole glyph down.
 
-- [x] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.** ✅ **FIXED v11.94 — and you were right to push back.**
+- [ ] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.** 🔴 **RE-OPENED 23 Aug — I marked this fixed at v11.94 and it is not fixed.** An adversarial review of my own week found the v11.94 fix computes the drop index in *visible-row* coordinates (a position among the rows on screen, plus how many rows are being dragged) and then writes it straight into `FM.addAt`, which is an index into the real layer list. Those two only agree when every layer is its own visible row — the moment a GROUP is collapsed, or a track is hidden, they drift apart, and the marker lands in the wrong place or does not move at all. Which is exactly the symptom you reported and I told you was gone. Previous note kept below.
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (Was: ✅ FIXED v11.94 — and you were right to push back.)
       (23 Aug.) His words, verbatim:
       > I said this ages ago but you still cant drag stuff on top of the add layer it just teleports it back under
       ⚠️ **#357 is ticked ✅ v10.05 and #443 is ticked ✅ v10.82, both for this exact behaviour.** So
@@ -16469,3 +16487,62 @@ wait for them to report back."*
         against the fixed build. It compares the cue project times now.
       🧱 **And the fix itself wrote the rule twice.** A mutation in the grip's copy SURVIVED, because the
       suite drives the seam. One `shiftCues` writer, two callers, and a mutation to it now fails.
+
+
+## Found by review, not by you — 23 Aug 2026
+
+I pointed 60 agents at everything I shipped this week and told them to attack it, then made each finding survive an
+independent attempt to refute it. **14 held up.** These are all my own defects, not your requests — but they go on the
+list under numbers like everything else so none of them quietly disappears. One is already fixed (below); one
+re-opened #480, which I had marked done and had not fixed.
+
+- [x] **Contour Lines was doing ~200× the work it needed on every frame.** ✅ **FIXED v12.02.** Two loops were sized by the shared scratch buffer, which only ever grows, instead of by the frame being drawn — so once anything rendered at full size, every reduced-quality playback frame walked the big buffer for the rest of the session. Measured 8.2ms → 25.6ms per frame, 3.1× — and the picture was identical either way, so it read as 'playback is a buggy mess while scrubbing is fine'. A new guard now scans all 29 shared-buffer effects for the same mistake; it immediately caught a second loop I had missed while fixing the first.
+
+- [ ] **485 — 🟠 My new shared-scratch test cannot fail — 29 effects are reported as covered by an assertion that is inert.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The test claims 'every kernel on the shared buffer is unaffected by another kernel using it first'. It compares a kernel run alone against the same kernel run after another dirties the buffer — but the buffer is fully overwritten before each run and both runs use the same frame size, so the two results are byte-identical *by construction*. It would stay green if the sharing were completely broken. The one hazard the growing buffer actually has is a kernel reading past the end of the current frame into the tail left by a bigger one — which is precisely what Contour Lines was doing (fixed v12.02) and this test sailed past. Rewrite it to run the dirty pass at a LARGER size than the measured pass, which is the only shape that can catch it.
+
+- [ ] **486 — 🟠 On Chrome and Edge the app wrongly accuses your iPhone videos of being unplayable.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      `canDecodeHEVC()` asks the browser about the bare codec names `hvc1` / `hev1`. Chromium rejects those as under-specified and answers 'don't know' even when it has full hardware H.265 decode. So on Chrome/Edge the answer is always no, and importing a perfectly playable iPhone clip pops the toast telling you to re-export it as H.264 or switch to Safari. Needs the full codec string with its profile/level suffix.
+
+- [ ] **487 — 🟠 The oversize-project warning can never fire for the project you were last editing.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      It is called from exactly one place — `projects.open()` — and the project the app restores when it boots does not go through that function. So the exact case the warning was written for (your 12.2-megapixel project, resumed on your phone) is the one case it stays silent for. You would only ever see it by opening a different project first and then coming back.
+
+- [ ] **488 — 🟡 Element cards can show a solid black square instead of an icon.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The thumbnail is rendered at whatever the playhead happens to be on, and a layer that is not visible at that instant draws nothing — so saving a selection whose clips do not span the playhead produces a black JPEG. That is worse than the ✦/letter fallback it replaced, because two black cards are indistinguishable and both look broken.
+
+- [ ] **489 — 🔴 The lag report's AUDIO line can give a WRONG verdict — and it is the line the whole audio question hangs on.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      'rate writes/s' divides a counter that has been adding up since you pressed Play by the probe's own 10-second window. If playback had been running a while before you started the probe, the number is inflated by however long that was — enough to cross the '⚠ this is ours' threshold and blame FreeMotion for a controller behaving exactly as intended. **This matters more than its size:** the one thing I keep asking you to do is tap the toast and send me the text, and that text is what unblocks #148 and four others. Fix the instrument before you spend the tap.
+
+- [ ] **490 — 🟠 The oversize-project instructions get covered by the dialog 400ms after they appear.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      An 11-second toast explains what to do, then the canvas dialog opens on top of it and hides it completely. You get 0.4s to read ~110 characters, and the instruction you need *while using the dialog* spends the other 10.6s as a blurred ghost behind it.
+
+- [ ] **491 — 🟠 The lag report's 'sync error' figures describe the wrong ten seconds.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The error samples stop being collected after the first 600 and only reset when you press Play, so the numbers printed under a heading that says '10-second sample' actually come from the first few seconds after Play — a window that had already closed before the sample opened. Drift that builds up during a long playback, which is exactly the thing worth catching, is invisible to it. Needs to be a rolling window, not a first-600 cap.
+
+- [ ] **492 — 🟡 The 'want me to find what's slow?' offer can fire off a single bad frame.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Its counter is never reset when playback stops, so the '120 consecutive struggling frames' bar is really a running total across separate playbacks and pauses. One late frame after an unrelated pause can tip it. Since the offer is one-shot per page load, a false alarm spends the only one you get.
+
+- [ ] **493 — 🟡 After every seek, one audio sample is recorded with the latency bias still in it.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      On a seek tick the code subtracts a bias that has just been set to nothing, so the raw error is stored instead of the corrected one. It inflates the 'worst' figure by the constant output latency — the very constant that was identified and removed in v11.70 — and drops an artificial zero into the median.
+
+- [ ] **494 — 🔴 On a short phone the Export button is under the fold and NOTHING SCROLLS — export is unreachable.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The audio-support warning I added this week makes the export card 122.6px taller. The card has no height limit and its container cannot scroll. Measured at 375×553: only 3.1px of the 32.5px Export button is visible, and page scroll, dialog scroll and document height all confirm it is frozen in place. At 360×560 it is 6.6px. This is a feature I broke this week on the size of screen you actually use.
+
+- [ ] **495 — 🟠 The 'this export will be silent' warning stays up after you switch to a format it is wrong about.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The audio check runs once when the dialog opens and the format switcher never re-runs it. Pick WAV and the biggest, loudest thing in the dialog still tells you the export will be silent — when WAV is the one option that cannot fail for want of a codec, which is the stated reason it is first and default.
+
+- [ ] **496 — 🟢 The tappable toast says it is a button but the keyboard cannot press it.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      It is marked up as a button and takes focus, but only responds to a real tap — Enter and Space do nothing — and it disappears after 9 seconds. Anyone on a keyboard or switch control cannot reach the offer it carries.
+

@@ -185,7 +185,15 @@ import sys, re, io
 lines = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
 out, cur, body = [], None, []
 def flush():
-    if cur and re.search(r'\u2705 \*\*(?:FIXED|DONE|BUILT|SHIPPED) v[0-9]', '\n'.join(body)):
+    # An entry can legitimately be fixed and then RE-OPENED, because the fix turned out to be wrong
+    # (480: shipped at v11.94, and an adversarial review found the fix was in the wrong coordinate
+    # space, so the symptom Ezra reported never went away). Before this exemption the guard fired on that
+    # case and its advice was "tick it" — i.e. it argued for hiding a real, still-broken item. The
+    # entry has to keep the old claim as history, so the honest signal is the RE-OPENED word.
+    txt = (cur[1] if cur else '') + '\n' + '\n'.join(body)
+    if cur and re.search(r'RE-?OPENED', txt, re.I):
+        return
+    if cur and re.search(r'\u2705 \*\*(?:FIXED|DONE|BUILT|SHIPPED) v[0-9]', txt):
         out.append('%d:%s' % (cur[0], cur[1][:100]))
 for i, ln in enumerate(lines, 1):
     m = re.match(r'^- \[( |x)\] ', ln)
