@@ -473,6 +473,24 @@ row index does not.
 ⏭️ zoomstreaks (67ms) and lensdistort (67ms) are next — and per the above, do not take my word that
 they are irreducible without opening them.
 
+### 23 Aug, v12.01 — A GUARD CAN BE WATCHING A THIRD OF THE FILE AND STILL GO GREEN
+Opened lensdistort expecting per-pixel geometry and found its FIRST LINE was `d.slice()` — it had never
+been in v11.76's sweep. Twelve kernels were in the same position, each allocating 5.6 MB per call. All
+verified single-copy and read-only, then converted (Lens Distort 66.8 → 52.4ms, Edge 31.6 → 23.2,
+Voronoi 34 → 30). Glitch stays off: two live copies.
+🐛 **The interesting part is that the guard REFUSED the change, and was wrong.** Its scan required
+`function(d,W,H,p,t)` with no spaces, so **it saw 52 of the file's 170 kernels** and attributed the
+others' bodies to whichever kernel it had last matched — which made converting lensdistort look like
+`timecode` held two copies. Its own sanity check was `if (ks.length < 20)`, which a 52-of-170 match
+sails through.
+**Two rules out of this:**
+1. **A structural guard needs a sanity check calibrated to the REAL population, not to zero.** "Did I
+   match at least 20?" is not a check, it is a formality. It is 120 now, and restoring the old regex
+   fails that test by name.
+2. **When a guard blocks a change, check the guard before the change.** The instinct is to assume the
+   code is wrong — here the code was right and the instrument had been mis-parsing the file for weeks.
+   Same family as the truncated greps, one level up: this time the faulty reader was a TEST.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
