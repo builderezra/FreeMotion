@@ -6394,7 +6394,13 @@ window.FM = window.FM || {};
      * you dialled in a wave you liked while scrubbing, hit play, and it changed strength mid-playback
      * — and the exported file matched neither. At ps === 1 every multiplication is a no-op, so
      * exports and 1:1 previews stay byte-identical. (BUG-HUNT, high.) */
-    wave: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
+    wave: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+      /* THE WHOLE KERNEL IS SEPARABLE (queue 474 — the same idea as turbulentdisplace, and here it is
+       * EXACT rather than merely close). The x shift depends only on y and the y shift only on x, so
+       * both sines are per-ROW and per-COLUMN values, not per-pixel ones — and the five evalProp calls
+       * below are per-pixel today as well. `prep` computes exactly the same `Math.sin` of exactly the
+       * same argument once per row/column, so the result is BYTE-IDENTICAL, not within a bound. */
+      if (pre) return [x + pre.SX[y], y + pre.SY[x]];
       const k = ps || 1;
       const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
@@ -6634,6 +6640,22 @@ window.FM = window.FM || {};
    * spinstreaks rewrite needed (LOOP rule 14). The identity is exact in real arithmetic; in floats
    * the operand order differs, so the last bits do. The test asserts the MATHS to 1e-9 (which is
    * content-independent and the real claim) with a bounded picture check behind it. */
+  /* Wave: two lookup tables replace two sines AND five evalProp calls per pixel. Same expressions as
+   * the kernel's own fallback path, so the output is identical bit for bit — the test compares them
+   * with ===, not a tolerance. */
+  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    const k = ps || 1;
+    const amp = (FM.evalProp(p.amount, t) || 0) * k;
+    const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
+    const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
+    const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
+    const SX = new Float64Array(H), SY = new Float64Array(W);
+    for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW
+    for (let x = 0; x < W; x++) SY[x] = amp * cross * Math.sin(x / wl2 + ph); // the y shift, by COLUMN
+    return { SX: SX, SY: SY };
+  };
+
   WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     let a = FM.evalProp(p.amount, t);
     if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;

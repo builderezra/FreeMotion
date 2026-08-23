@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.97
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.98
 >
-> **State:** v11.97, **876 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.98, **877 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -5105,9 +5105,22 @@ better still, keep working inside the turn rather than parking work for a later 
              params for its "defaults" case, and empty params make this effect a no-op — so both paths
              returned the pixel untouched and "they agree" was true of nothing. The test now fails unless
              at least half its sample points actually moved.
-             ⏭️ **Still open in this family:** nothing over 150ms remains. The top of the list is now
-             ordinary per-pixel work in the 50–100ms band, where the answer is the quality ladder rather
-             than another rewrite.
+             ✅ **FIFTH — WAVE, 24.6ms → 10.9ms (2.3×) and BYTE-IDENTICAL — v11.98.** Re-ranked the 21
+             warps at your project size and Wave was top. It is the cleanest case yet: its horizontal
+             shift depends only on the ROW and its vertical shift only on the COLUMN, so both sines —
+             and the five parameter lookups beside them — were recomputed 1.46 million times a frame to
+             produce 1,080 + 1,350 distinct values. Two tables, built once a frame.
+             **Identical bit for bit, not within a bound** (same `Math.sin` of the same argument), so
+             the test compares with `===`. That matters: a tolerance would let a subtly different Wave
+             through into every project already using it.
+             ⚠️ **A correction to my own measurement, before it misleads anyone:** the sweep that ranked
+             the warps sampled every third pixel and multiplied by 9, which OVER-STATED the absolute
+             numbers (it put Wave at ~130ms; measured properly it is ~25ms). The RANKING was sound, the
+             absolutes were not. Numbers quoted here are from the full-resolution run.
+             ⏭️ **Still open in this family:** nothing over 150ms remains, and the top of the list is
+             ordinary per-pixel work where the answer is the quality ladder rather than another rewrite
+             — with the exception of separable kernels like this one, which are worth checking for
+             individually because the win is exact and free.
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**

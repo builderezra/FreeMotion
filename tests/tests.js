@@ -40446,4 +40446,44 @@
       if (FM.refreshAll) FM.refreshAll();
     }
   });
+
+  /* ═══ WAVE IS SEPARABLE, AND EXACTLY SO (queue 474).
+     Its x shift depends only on y and its y shift only on x, so both sines — and the five evalProp
+     calls beside them — are per-row/per-column, not per-pixel. Unlike turbulentdisplace this is the
+     SAME Math.sin of the SAME argument, so the fast path must be identical BIT FOR BIT: asserted with
+     ===, not a tolerance. A bounded check would let a subtly different wave through. */
+  test('the hoisted wave warp is byte-identical to its own reference (queue 474)', { item: '474' }, async function () {
+    const K = FM._warpFx && FM._warpFx.wave;
+    if (!K) throw new Error('FM._warpFx.wave is not reachable');
+    if (typeof K.prep !== 'function') throw new Error('wave lost its per-frame precompute, so both sines are back in the pixel loop');
+    const W = 240, H = 200, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const cases = [
+      { label: 'defaults', p: { amount: 30 }, t: 0.37 },
+      { label: 'big and short', p: { amount: 90, wavelength: 12, phase: 220, vertical: 90 }, t: 1.4 },
+      { label: 'reduced raster', p: { amount: 30 }, t: 0.8, ps: 0.5 },
+      { label: 'zero amount', p: { amount: 0 }, t: 0.5 }
+    ];
+    for (const c of cases) {
+      const ps = c.ps || 1;
+      const pre = K.prep(W, H, cx, cy, maxR, c.p, c.t, ps);
+      let moved = 0, n = 0;
+      for (let y = 0; y < H; y += 3) {
+        for (let x = 0; x < W; x += 3) {
+          const ref = K(x, y, W, H, cx, cy, maxR, c.p, c.t, ps);
+          const fast = K(x, y, W, H, cx, cy, maxR, c.p, c.t, ps, pre);
+          if (ref[0] !== fast[0] || ref[1] !== fast[1]) {
+            throw new Error('case "' + c.label + '" at ' + x + ',' + y + ': the table path gives ' + fast + ' and the reference gives ' + ref + ' — this rewrite is meant to be identical bit for bit, so ANY difference is a silent edit to every project using Wave');
+          }
+          if (Math.abs(ref[0] - x) > 0.01 || Math.abs(ref[1] - y) > 0.01) moved++;
+          n++;
+        }
+      }
+      /* CONTROL — except for the deliberately-zero case, the effect must actually be displacing
+         pixels, or "identical" is true of a warp that does nothing. */
+      if (c.label !== 'zero amount' && moved < n * 0.5) {
+        throw new Error('case "' + c.label + '": only ' + moved + ' of ' + n + ' points moved, so identity between the two paths proves nothing');
+      }
+      if (c.label === 'zero amount' && moved !== 0) throw new Error('an amount of 0 still moved pixels');
+    }
+  });
 })();
