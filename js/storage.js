@@ -1106,6 +1106,39 @@ window.FM = window.FM || {};
     } catch (e) { return null; }
   }
 
+  /* ═══ A PICTURE OF THE ELEMENT ITSELF (queue 342).
+   * `saveFromProject` — the Home route — stamps the source project's thumbnail, which is right there
+   * because the project IS the element. `save(name, layers)` — the "save this selection as an
+   * element" route — stamped NOTHING, so every element made that way fell back to a letter glyph.
+   * That is the "a card is a name and a layer count" in his complaint: fine with three elements,
+   * useless with thirty, and it is not a taste call which way it should go.
+   * Rendered from the layers being saved rather than the open project, so a selection of two layers
+   * out of twenty shows those two — the thing you are actually saving. */
+  function makeLayerThumb(layers) {
+    try {
+      if (!layers || !layers.length || !FM.renderScene) return null;
+      const P = FM.scene.project;
+      const mini = { project: P, layers: layers };
+      let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
+      FM.renderScene(src.getContext('2d'), mini, FM.time);
+      const s = Math.min(360 / P.width, 360 / P.height, 1);
+      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      while (src.width >= tw * 2) {
+        const half = document.createElement('canvas');
+        half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
+        const hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high';
+        hg.drawImage(src, 0, 0, half.width, half.height);
+        src = half;
+      }
+      const c = document.createElement('canvas');
+      c.width = tw; c.height = th;
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+      g.drawImage(src, 0, 0, tw, th);
+      return c.toDataURL('image/jpeg', 0.8);
+    } catch (e) { return null; }   // a thumbnail is never worth failing a save over
+  }
+  FM._makeLayerThumb = makeLayerThumb;
+
   // Thumbnails live in IndexedDB (key 'thumb:<id>'), NOT in the fm.projects index. The index is
   // re-parsed + rewritten on EVERY autosave (~0.6s while editing); an inline ~8KB JPEG per project
   // made that a multi-MB serialize at a few hundred projects — the "gets laggy, delete some" problem.
@@ -1668,7 +1701,7 @@ window.FM = window.FM || {};
       const pack = packLayers(layers);
       try { const db = await openDB(); await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
       const idx = this.list();
-      idx.unshift({ id: eid, name: name, count: layers.length });
+      idx.unshift({ id: eid, name: name, count: layers.length, thumb: makeLayerThumb(layers) });
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
       return true;
     },

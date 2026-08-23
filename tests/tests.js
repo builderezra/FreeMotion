@@ -39968,4 +39968,56 @@
       if (FM.refreshAll) FM.refreshAll();
     }
   });
+
+  /* ═══ AN ELEMENT CARD SHOULD SHOW THE ELEMENT (queue 342).
+     His complaint is that the Elements tab is a shell. Clause 3 is a taste call still with him, but
+     one part of it is not: saving a SELECTION as an element stamped no thumbnail at all, so every
+     element made that way was a letter glyph — "a name and a layer count", fine with three elements
+     and useless with thirty. saveFromProject already stamped one; this route never did. */
+  test('an element saved from a selection gets a picture of THOSE layers (queue 342)', { item: '342' }, async function () {
+    if (typeof FM._makeLayerThumb !== 'function') throw new Error('FM._makeLayerThumb is missing');
+    const saved = FM.scene.layers.slice();
+    const savedSize = { w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.project.width = 400; FM.scene.project.height = 300;
+      FM.scene.layers.length = 0;
+      const red = FM.makeLayer('shape', { shape: 'rect', name: 'red', x: 120, y: 150, shapeW: 160, shapeH: 160, fill: '#ff0000' });
+      const blue = FM.makeLayer('shape', { shape: 'rect', name: 'blue', x: 300, y: 150, shapeW: 160, shapeH: 160, fill: '#0000ff' });
+      [red, blue].forEach(l => { l.start = 0; l.duration = 5; FM.scene.layers.push(l); });
+      FM.refreshAll();
+
+      const both = FM._makeLayerThumb([red, blue]);
+      const justRed = FM._makeLayerThumb([red]);
+      if (!both || !/^data:image\//.test(both)) throw new Error('no thumbnail was produced for a two-layer element');
+      if (!justRed || !/^data:image\//.test(justRed)) throw new Error('no thumbnail was produced for a one-layer element');
+
+      /* THE ASSERTION THAT MATTERS: it must render the LAYERS IT WAS GIVEN, not the open project.
+         A version that stamped the whole project would hand back the same picture for both — which is
+         exactly the failure mode, since an element is usually a few layers out of many. */
+      if (both === justRed) throw new Error('saving one layer and saving two produced the SAME picture, so the thumbnail is of the project rather than of the element');
+
+      // CONTROL: nothing to draw → no thumbnail, rather than a blank one pretending to be a picture.
+      if (FM._makeLayerThumb([]) !== null) throw new Error('an empty layer list still produced a thumbnail');
+
+      /* And the whole way through FM.elements.save, because the unit above proves the renderer and
+         nothing about whether the save path calls it. */
+      const before = FM.elements.list().length;
+      const ok = await FM.elements.save('probe-342', [red]);
+      if (!ok) throw new Error('saving the element failed outright');
+      const idx = FM.elements.list();
+      const made = idx.find(e => e.name === 'probe-342');
+      try {
+        if (!made) throw new Error('the saved element is not in the index');
+        if (!made.thumb || !/^data:image\//.test(String(made.thumb))) throw new Error('the element was saved with NO thumbnail, so its card falls back to a letter glyph — which is the complaint');
+        if (idx.length !== before + 1) throw new Error('the index did not grow by exactly one');
+      } finally {
+        if (made && FM.elements.remove) FM.elements.remove(made.id);
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = savedSize.w; FM.scene.project.height = savedSize.h;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
 })();

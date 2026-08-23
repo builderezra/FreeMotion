@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.90
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.91
 >
-> **State:** v11.90, **865 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.91, **866 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8153,6 +8153,23 @@ better still, keep working inside the turn rather than parking work for a later 
       |---|---|
       | **A — preview before you add** ⭐ *recommended* | hold an element card and see it play, so you know which one it is before it lands in your project. Today a card is a name, a layer count and a still of the project it came from — fine with three elements, useless with thirty. Cheapest of these and the one that makes the tab worth opening. |
       | **B — organise them** | rename, reorder, folders. Real work, and it only starts paying once you have a lot of elements. |
+
+      ✅ **v11.91 — one piece of this was NOT a taste call, and it is fixed.** Option A's description
+      above says a card today is *"a name, a layer count and a still of the project it came from"*.
+      Reading the code, it is worse than that on the route that matters: `saveFromProject` (saving a
+      whole project as an element, from Home) stamps a thumbnail, but **`save(name, layers)` — the
+      "save this selection as an element" route — stamped none at all**, so every element made that way
+      fell back to a coloured square with a letter in it.
+      **Whichever of A–D you pick, a card showing the thing it is is right**, so it is done: the
+      thumbnail is rendered from THE LAYERS BEING SAVED rather than the open project, so a selection of
+      two layers out of twenty shows those two. ~3–5KB each, and the elements index is only written when
+      elements change (unlike the projects index, which is rewritten on every autosave — that is why
+      thumbnails were moved out of THAT one, and the distinction is why this is safe here).
+      Two mutations, one per claim: rendering the whole project instead is caught by two different
+      selections producing the SAME picture, and dropping the thumbnail from the save path is caught by
+      the card falling back to a glyph.
+      ⚠️ **This does not answer clause 3** — it is the cheap part of A, and the A/B/C/D pick below is
+      still yours.
       | **C — live link** | edit an element and every project already using it updates. Powerful, and the one with teeth: it can silently change a project you finished weeks ago. I would want to build it with an explicit "update the copies?" step rather than silently. |
       | **D — share them as files** | export/import an element. This is really **343**, so picking it just merges the two. |
       | **E — nothing, it is fine now** | a completely valid answer. Clauses 1 and 2 shipped and were driven end to end; "a lot more effort" may simply have been about the shell it used to be. |
