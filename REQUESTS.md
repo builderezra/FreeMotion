@@ -4862,6 +4862,26 @@ better still, keep working inside the turn rather than parking work for a later 
       The misalignment above is CONSTANT, not intermittent, so it may not be the whole of what he saw.
       **If it still looks wrong after v11.77, that is a second fault and needs the screenshot at the
       moment it happens.**
+
+      ✅ **23 Aug — THE INTERMITTENT HALF IS EXPLAINED, AND v11.92 ALREADY FIXED IT.** Your second
+      sentence is what cracked it: *"it gets messed up when the timeline and add menu are split, only for
+      when ur editing a layer"*. The v11.77 pass could not reproduce it because it cycled the add menu
+      open and closed — it never SPLIT it and then selected a layer, which is a different state.
+      **The sequence that produces it:** raise (split) the add menu, THEN select a layer. The panel is
+      `position: fixed` while raised, pinned to the column it measured when you grabbed the resizer — and
+      until v11.92 nothing re-measured that pin when the window changed size. The category grid is laid
+      out from the PANEL's width, so a stale pin resizes every card.
+      **Measured, in that exact state at 1440px:** with the pin 54px stale (the amount queue 478 measured
+      for a 1440→1800 resize), the cards go **99.7px → 81.7px** and back to 99.7 the moment the pin is
+      corrected. That is *"it doesnt show the buttons at the right size"*, in your state, and
+      intermittent because it needs a resize while split — which is *"if you play around with it a
+      bunch"*.
+      ⚠️ **Stated with the right confidence: I reproduced the MECHANISM (by staling the pin directly),
+      not that exact user sequence end to end** — driving a real 1440→1800 resize collapses the raise
+      here, so the panel un-floats and the fault does not arise on that particular path. The stale pin
+      was real, it is gone (v11.92 re-pins on every resize), and the cards now measure uniform at every
+      width tested. **If the sizing still looks wrong, it is a third fault and the screenshot matters
+      again — but try it first.**
       (22 Aug, PC screenshot of the inspector's 8-card grid on a Star layer.) His words, verbatim:
       > the sizing for htis menu on pc seems to have issues sometimes, where it doesnt show the buttons at the right size if you play around with it a bunch
       **What the shot shows:** cards 1-6 (Colouring · Outline & Shadows · Mixing · Position/Scale · Speed ·
