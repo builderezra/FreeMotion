@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.07, 890 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.08, 891 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 487–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
+**Next: 488–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
 what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
@@ -116,6 +116,10 @@ assertion, name the mutation it would catch — and then actually run it.
 ENVIRONMENT DIFFERS.** Its first version probed the actual browser for H.265 — but the suite runs headless
 with no H.265 at all, so every branch sat idle and a mutation restoring the bug SURVIVED. When a decision
 depends on the platform, split the decision out and hand the test a fake platform. Both directions.
+⚠️ **487: WHEN THE BUG IS A MISSING CALL, ASSERT THE CALL SITE, NOT JUST THE BEHAVIOUR.** The oversize warning
+worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
+the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
+unreachable — so for those, scan the source for the call as well.
 **482 is a STANDING round-based project, not a blocker.** Round 1 (v12.05) swept all 345 sliders for dead range
 and found two effects whose slider was locked in its own mode. `tools/fx-sweep.js` is the probe; its header lists
 the four ways it lied on the first run. Only the SUBJECTIVE half (does it look good) needs a word from him.

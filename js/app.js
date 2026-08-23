@@ -2012,6 +2012,14 @@ window.FM = window.FM || {};
     return true;
   };
   FM._resetOversizeWarning = function () { _oversizeTold = ''; };
+  /* Split out so the boot path's decision is testable without reloading the page (queue 487). The
+     landing is read from where he ENDED UP rather than re-deriving it from `fm.view`, so this cannot
+     drift out of step with the home-screen rule above it. */
+  FM._warnOversizeAfterLanding = function (restored) {
+    const onHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (!restored || onHome) return false;
+    return !!(FM.warnOversizeProject && FM.warnOversizeProject());
+  };
   const evenDim = v => Math.max(2, Math.round(v / 2) * 2);
   FM.fitProjectSize = function (w, h) {
     w = Math.max(2, Math.round(w || 0)); h = Math.max(2, Math.round(h || 0));
@@ -4543,6 +4551,14 @@ window.FM = window.FM || {};
         let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
         if (!(restored && lastView === 'editor')) FM.home.open();
       }
+      /* ⚠️ WARN ABOUT THE PROJECT HE IS ACTUALLY IN (queue 487). `warnOversizeProject` had exactly one
+         caller — `projects.open()` — and a refresh does not go through it: the boot above restores the
+         last document and drops him straight back into the editor. So the one case the warning exists
+         for, his 12.2-megapixel project resumed on his phone, was the one case it stayed silent for.
+         He could only ever see it by opening a DIFFERENT project and coming back to this one.
+         Only when he has actually landed in the editor — on Home there is no project to be too big,
+         and `projects.open()` still covers what he opens from there. */
+      FM._warnOversizeAfterLanding(restored);
       // Seed the Media library from media already sitting in existing projects, THEN sweep — the
       // sweep's keep-set reads the library, so seeding first is what stops it eating those blobs.
       if (FM.mediaLib) { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); }   // heal indexes poisoned before the fix

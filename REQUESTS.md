@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.07
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.08
 >
-> **State:** v12.07, **890 tests green**, tree clean.
+> **State:** v12.08, **891 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16582,8 +16582,18 @@ re-opened #480, which I had marked done and had not fixed.
       anywhere.
       `canDecodeHEVC()` asks the browser about the bare codec names `hvc1` / `hev1`. Chromium rejects those as under-specified and answers 'don't know' even when it has full hardware H.265 decode. So on Chrome/Edge the answer is always no, and importing a perfectly playable iPhone clip pops the toast telling you to re-export it as H.264 or switch to Safari. Needs the full codec string with its profile/level suffix.
 
-- [ ] **487 — 🟠 The oversize-project warning can never fire for the project you were last editing.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **487 — 🟠 The oversize-project warning can never fire for the project you were last editing.** ✅ **FIXED v12.08.**
+      The warning had exactly one caller: opening a project from the Home screen. **A refresh does not go
+      through that** — the app restores your last document and drops you straight back into the editor. So
+      the one case it was built for (your 12.2-megapixel project, picked back up on your phone) was the one
+      case it never covered. You could only have seen it by opening some other project and coming back.
+      It now also fires when the app lands you in the editor at boot. It stays quiet if you land on Home
+      (there is no project on screen to be too big) and on a first boot with nothing restored.
+      The test checks the decision AND that the boot code still asks the question — because the fault here
+      was a **missing call**, not wrong logic, and a behaviour-only test would have passed happily against
+      the Home path while boot stayed silent.
+      ⚠️ **Related and still open: #490** — when this toast does fire from the Home path it gets covered by
+      the canvas dialog 400ms later, so you get about half a second to read it. Next few ticks.
       It is called from exactly one place — `projects.open()` — and the project the app restores when it boots does not go through that function. So the exact case the warning was written for (your 12.2-megapixel project, resumed on your phone) is the one case it stays silent for. You would only ever see it by opening a different project first and then coming back.
 
 - [ ] **488 — 🟡 Element cards can show a solid black square instead of an icon.**

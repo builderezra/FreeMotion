@@ -41369,4 +41369,72 @@
       throw new Error('FM.canDecodeHEVC no longer probes any fully-specified codec string (profile/level), so on Chrome and Edge it is back to asking a question they answer "" to regardless of support');
     }
   });
+
+  /* ═══ 487: THE OVERSIZE WARNING MUST REACH THE PROJECT HE COMES BACK TO.
+     It had one caller, `projects.open()`. A refresh does not go through it — boot restores the last
+     document and lands straight in the editor — so the exact case the feature was written for (his
+     12.2-megapixel project, resumed on his phone) was the one case that stayed silent. He could only
+     see it by opening a different project and coming back.
+     Both halves are asserted: the decision itself, driven directly, AND that the boot path still
+     contains the call. The second matters because this bug WAS a missing call site, not wrong logic —
+     a behavioural test alone would have passed against `projects.open()` while boot stayed silent. */
+  test('487: a restored oversize project warns on boot, not only when opened from Home', { item: '487' }, async function () {
+    if (typeof FM._warnOversizeAfterLanding !== 'function') throw new Error('FM._warnOversizeAfterLanding is missing — the boot decision is not testable');
+    const P = FM.scene.project;
+    const saved = { w: P.width, h: P.height };
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realToast = FM.toast;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    let shown = [];
+    try {
+      FM.toast = function (msg) { shown.push(String(msg)); return null; };   // captured, so nothing pops mid-suite
+      if (hadHome) FM.home.close();
+      await sleep(80);
+
+      P.width = 3468; P.height = 3468;          // 12.0 MP — his own project's shape
+      if (!FM.projectIsOversize(P)) throw new Error('3468x3468 is not considered oversize, so this test cannot detect anything — the threshold moved');
+
+      // ── in the editor, restored: it must speak.
+      FM._resetOversizeWarning(); shown = [];
+      const fired = FM._warnOversizeAfterLanding(true);
+      if (!fired || !shown.length) throw new Error('a restored 12.0-megapixel project produced no warning when the app landed in the editor — this is the case the feature exists for and it was the one case it never covered');
+      if (!/megapixel/i.test(shown[0])) throw new Error('something was said but it was not the oversize warning: "' + shown[0] + '"');
+
+      // ── landed on Home: silent, because there is no project on screen to be too big.
+      if (FM.home && FM.home.open) {
+        FM._resetOversizeWarning(); shown = [];
+        FM.home.open(); await sleep(120);
+        FM._warnOversizeAfterLanding(true);
+        if (shown.length) throw new Error('the oversize warning fired while sitting on the Home screen: "' + shown[0] + '"');
+        FM.home.close(); await sleep(120);
+      }
+
+      // ── nothing restored (first boot): silent.
+      FM._resetOversizeWarning(); shown = [];
+      FM._warnOversizeAfterLanding(false);
+      if (shown.length) throw new Error('the warning fired although no project was restored: "' + shown[0] + '"');
+
+      // ── a normal-sized project says nothing.
+      P.width = 1080; P.height = 1920;
+      FM._resetOversizeWarning(); shown = [];
+      FM._warnOversizeAfterLanding(true);
+      if (shown.length) throw new Error('a 1080x1920 project was called oversize: "' + shown[0] + '"');
+    } finally {
+      FM.toast = realToast;
+      P.width = saved.w; P.height = saved.h;
+      FM._resetOversizeWarning();
+      if (FM.refreshAll) FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open(); else if (FM.home && FM.home.close) FM.home.close();
+    }
+
+    /* THE CALL SITE ITSELF. The defect was a missing call, so the decision being right proves nothing
+       unless boot actually asks it. */
+    const src = await fetch('js/app.js', { cache: 'no-store' }).then(r => r.text());
+    const boot = src.indexOf('FM.storage.load().then(');
+    if (boot < 0) throw new Error('cannot find the boot load in js/app.js — this guard is not reading what it thinks it is');
+    const bootBlock = src.slice(boot, boot + 3000);
+    if (bootBlock.indexOf('_warnOversizeAfterLanding') < 0) {
+      throw new Error('the boot path no longer asks about an oversize project, so a refresh straight back into his big project is silent again — which is queue 487 exactly');
+    }
+  });
 })();
