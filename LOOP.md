@@ -132,6 +132,19 @@ thing it tests has disappeared.**
 DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
 loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
 returns were real, and those nine are fixed.
+**Security pass against the three risks CLAUDE.md names, 23 Aug — all clean.** Never done before, and
+it needed no decision from him:
+· **No user-controlled string reaches `innerHTML`.** 104 writes; the sixteen whose expression mentions
+  a name/label/title all resolve to module constants (the add-menu TABS list, the blend-mode table) or
+  icon literals. The convention holds — the code says so out loud in several places
+  (*"element/template/file names are USER input — textContent, never innerHTML"*).
+· **No hardcoded secrets** — no key-shaped literal anywhere in `js/` or `index.html`.
+· **Exactly ONE outbound network call in the whole app**: `js/ai.js` → `api.anthropic.com`, which is
+  where a BYOK key is supposed to go and the only place it can. Everything else is local by
+  construction.
+· **And the untrusted-parser risk is already hardened**: an imported `.fmotion.json` may only rehydrate
+  real `data:` URIs — `storage.js` rejects anything else so an attacker cannot embed
+  `https://…/beacon` and have it fetched on open. Someone thought about this before me.
 **Every ship.sh gate test-fired, 23 Aug — they all still refuse.** The gates are the loop's guarantees
 and each encodes a real past failure, but nothing had ever CHECKED that they still fire; a gate that
 quietly stopped working is the same silent-absence class as a missing diagnostic. Deliberately tripped
