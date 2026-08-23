@@ -1780,6 +1780,27 @@ better still, keep working inside the turn rather than parking work for a later 
       **What is left in this entry:** nothing I can act on. The agent could not reproduce total silence
       on a well-formed file across 30 add-then-play trials, so if it still happens to you, the useful
       thing is WHICH file and what you did just before.
+
+      🔎 **23 Aug — SOAKED AGAIN, HARDER, AND IT STILL WILL NOT FAIL. 40 attempts, 0 failures.** Worth
+      recording because the earlier pass was 30 trials of one shape; this covers the race this entry
+      actually predicts, with a real file built in the browser:
+      | regime | attempts | failures |
+      |---|---|---|
+      | play / stop at five playhead positions, varied gaps | 14 | **0** |
+      | hammered — play, interrupt after 8ms, play again | 14 | **0** |
+      | **fresh import, then play IMMEDIATELY** (WAV) | 6 | **0** |
+      | **fresh import, then play immediately (real M4A/AAC)** | 6 | **0** |
+      Every attempt checked BOTH that the element's own clock advanced and that the transport did, so a
+      silent-but-moving playhead would have counted as a failure.
+      ⚠️ **What this does NOT rule out, and it is the honest next lead:** the file. Mine were WAV and
+      M4A — both decode promptly. **Your "song" was almost certainly an MP3, and this entry already
+      documents that `el.duration` on a VBR mp3 is UNSTABLE** (measured 11.210 → 15.752 → 20.297 across
+      one second of playback). A start-of-playback race is far likelier against a length the element is
+      still revising than against one it knows immediately.
+      **And the awkward part: the app cannot MAKE an mp3 to test with** — no browser encodes MP3, which
+      is the whole of queue 395. So reproducing this properly needs an mp3 from you, not another soak
+      here. **If it happens again, the single most useful thing is the file itself** (or just its
+      format and rough length), not a description.
       It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
       CPU throttle all played.
 
