@@ -2789,7 +2789,7 @@ window.FM = window.FM || {};
       const zoom = Math.max(0.1, (p.zoom == null ? 118 : FM.evalProp(p.zoom, t)) / 100);
       const chroma = clamp01(p.chroma == null ? 0.3 : FM.evalProp(p.chroma, t));
       if (k1 === 0 && k2 === 0 && zoom === 1 && chroma === 0) return;
-      const src = d.slice();
+      const src = fxSrc(d);
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
       const iz = 1 / zoom;
       const sample = function (sx, sy, o, di) {
@@ -2844,7 +2844,7 @@ window.FM = window.FM || {};
       const lines = vert ? W : H, span = vert ? H : W;
       const stride = vert ? W : 1, lineStep = vert ? 1 : W;
       const keys = new Uint32Array(span);
-      const src = d.slice();
+      const src = fxSrc(d);
       for (let L = 0; L < lines; L++) {
         // deterministic per line: the same frame always sorts the same lines
         let h = ((L * 374761393) ^ 0x5bf03635) | 0;
@@ -2977,7 +2977,7 @@ window.FM = window.FM || {};
       const glow = clamp01(p.glow == null ? 0.6 : FM.evalProp(p.glow, t));
       const em = hexToRGB(p.color || '#ff9a3c');
       const ux = Math.cos(ang), uy = Math.sin(ang);
-      const src = d.slice();
+      const src = fxSrc(d);
       const inv = 1 / scale, gw = Math.ceil(W * inv) + 2;
       const cellN = function (cx, cy) {
         let h = ((cy * gw + cx) * 374761393) | 0;
@@ -3034,7 +3034,7 @@ window.FM = window.FM || {};
       const trk = clamp01(p.tracking == null ? 0.5 : FM.evalProp(p.tracking, t)) * amt;
       const trkSpd = p.trackspeed == null ? 0.4 : FM.evalProp(p.trackspeed, t);
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
-      const src = d.slice();
+      const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
       const k = Math.max(1, Math.round(bleed));
       const frame = Math.floor(t * 30);
@@ -3207,7 +3207,7 @@ window.FM = window.FM || {};
       const x0 = Math.max(0, Math.floor(cx - R1)), x1 = Math.min(W, Math.ceil(cx + R1) + 1);
       const y0 = Math.max(0, Math.floor(cy - R1)), y1 = Math.min(H, Math.ceil(cy + R1) + 1);
       if (x1 <= x0 || y1 <= y0) return;
-      const src = d.slice(), R0s = R0 * R0, R1s = R1 * R1;
+      const src = fxSrc(d), R0s = R0 * R0, R1s = R1 * R1;
       for (let y = y0; y < y1; y++) {
         const dy = y - cy, dy2 = dy * dy;
         for (let x = x0; x < x1; x++) {
@@ -3467,7 +3467,7 @@ window.FM = window.FM || {};
     sharpen: function (d, W, H, p, t) {
       const a = FM.evalProp(p.amount, t), amt = (a == null ? 1.5 : a);
       if (amt <= 0) return;
-      const s = d.slice();
+      const s = fxSrc(d);
       // It only ever crunched a ONE-PIXEL halo, at full strength, everywhere.
       // RADIUS widens the halo, which is the difference between edge sharpening and local-contrast
       // "clarity". THRESHOLD is the one that matters on real footage: without it, flat sky and skin
@@ -3597,7 +3597,7 @@ window.FM = window.FM || {};
       };
     })(),
     halftone: function (d, W, H, p, t, ps) {
-      const size = Math.max(2, Math.round((FM.evalProp(p.size, t) || 8) * (ps || 1))), r2 = size / 2, s = d.slice();
+      const size = Math.max(2, Math.round((FM.evalProp(p.size, t) || 8) * (ps || 1))), r2 = size / 2, s = fxSrc(d);
       // ANGLE is the one that matters: every real print halftone runs its screen at 45 degrees,
       // because an axis-aligned dot grid beats against the subject and reads as a moire artefact
       // rather than as print. GAIN was a hardcoded 1.45 — ink coverage, the difference between a
@@ -3640,7 +3640,7 @@ window.FM = window.FM || {};
     },
     // ---- batch 4 ----
     edge: function (d, W, H, p, t) {
-      const k = FM.evalProp(p.amount, t) || 1, s = d.slice(), w4 = W * 4;
+      const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
       const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
@@ -3672,7 +3672,7 @@ window.FM = window.FM || {};
       }
     },
     emboss: function (d, W, H, p, t) {
-      const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = d.slice(), w4 = W * 4;
+      const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -3767,7 +3767,7 @@ window.FM = window.FM || {};
       const amt = FM.evalProp(p.amount, t) || 0; if (amt <= 0) return;
       // CENTRE was W/2, H/2 — the rush could only ever come out of the middle of the frame, so it
       // could not be aimed at the subject it is supposed to be rushing toward.
-      const s = d.slice(), cx = wCx(p, t, W, W / 2), cy = wCy(p, t, H, H / 2);
+      const s = fxSrc(d), cx = wCx(p, t, W, W / 2), cy = wCy(p, t, H, H / 2);
       const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t))));
       // SAMPLES is a quality knob and must not change the REACH, or turning it up would also lengthen
       // the streak. Legacy walks k/N for k<N, so its furthest tap is 8/9 of amt*0.35, not amt*0.35 —
@@ -4467,7 +4467,7 @@ window.FM = window.FM || {};
     chromaticaberration: function(d,W,H,p,t){ var caAmt=FM.evalProp(p.amount,t); if(caAmt==null)caAmt=8; caAmt=Math.max(0,Math.min(30,caAmt)); var caAng=FM.evalProp(p.angle,t); if(caAng==null)caAng=0; var caRad=caAng*Math.PI/180; var caDx=Math.cos(caRad)*caAmt, caDy=Math.sin(caRad)*caAmt; if(caAmt===0)return; var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad=FM.evalProp(p.radius,t); if(igRad==null)igRad=10; igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt=FM.evalProp(p.intensity,t); if(igInt==null)igInt=1; igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
     unsharpmask: function(d,W,H,p,t){ var umAmt=FM.evalProp(p.amount,t); if(umAmt==null)umAmt=1.2; umAmt=Math.max(0,Math.min(3,umAmt)); var umR=FM.evalProp(p.radius,t); if(umR==null)umR=3; umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
-    hextiles: function(d,W,H,p,t,ps){ var hxSize=FM.evalProp(p.size,t); if(hxSize==null)hxSize=20; if(hxSize<4)hxSize=4; if(hxSize>80)hxSize=80; hxSize=Math.max(2,hxSize*(ps||1));   /* tile size is PROJECT px — see plateScale */ var hxRowH=hxSize*0.75; if(hxRowH<1)hxRowH=1; var hxHalf=hxSize*0.5; var hxSrc=d.slice(); var hxW4=W*4; for(var hxY=0;hxY<H;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=0;hxX<W;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
+    hextiles: function(d,W,H,p,t,ps){ var hxSize=FM.evalProp(p.size,t); if(hxSize==null)hxSize=20; if(hxSize<4)hxSize=4; if(hxSize>80)hxSize=80; hxSize=Math.max(2,hxSize*(ps||1));   /* tile size is PROJECT px — see plateScale */ var hxRowH=hxSize*0.75; if(hxRowH<1)hxRowH=1; var hxHalf=hxSize*0.5; var hxSrc=fxSrc(d); var hxW4=W*4; for(var hxY=0;hxY<H;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=0;hxX<W;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
     linstreaks: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng=FM.evalProp(p.angle,t); if(lsAng==null)lsAng=90; var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=8; var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
@@ -5128,7 +5128,7 @@ window.FM = window.FM || {};
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=d.slice(); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which

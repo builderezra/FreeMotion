@@ -39208,17 +39208,26 @@
   test('kernels that hold more than one frame copy are kept OFF the shared scratch (queue 474)', { item: '474' }, async function () {
     const src = await fetch('js/compositor.js', { cache: 'no-store' }).then(r => r.text());
     const ks = [];
-    const re = /^ {4}([a-z0-9_]+): function\(d,W,H,p,t\)/gmi;
+    /* ⚠️ THIS REGEX HAD A BLIND SPOT AND IT COST A FALSE POSITIVE (v12.01). It required
+       `function(d,W,H,p,t)` with no spaces, so every kernel written `function (d, W, H, p, t)` was
+       invisible and its body was attributed to the PREVIOUS matching kernel — which is how converting
+       lensdistort made `timecode` look like it held two live copies. Both spacings now. */
+    const re = /^ {4}([a-z0-9_]+):\s*(?:function\s*\(|\(function)/gmi;
     let m;
     while ((m = re.exec(src))) ks.push({ name: m[1], at: m.index });
-    if (ks.length < 20) throw new Error('only found ' + ks.length + ' pixel kernels — the scan is not matching the file, so this proves nothing');
+    /* ⚠️ THIS FLOOR WAS 20 AND THAT IS WHY THE BLIND SPOT SURVIVED. The old regex matched 52 of the
+       file's 170 kernels — it was watching under a third of them — and a floor of 20 passed happily.
+       120 is well under the real count and well above anything a broken regex would return. */
+    if (ks.length < 120) throw new Error('only found ' + ks.length + ' pixel kernels — the scan is not matching the file (there are ~170), so this guard is watching a fraction of it');
 
     const offenders = [];
     let onScratch = 0;
     for (let i = 0; i < ks.length; i++) {
       const body = src.slice(ks[i].at, i + 1 < ks.length ? ks[i + 1].at : src.length);
-      const shared = (body.match(/fxSrc\(d\)/g) || []).length;
-      const own = (body.match(/d\.slice\(\)/g) || []).length;
+      /* Count USES, not the definition and not prose: `function fxSrc(d)` is the definition itself,
+         and the comment above it says "d.slice()" in backticks. Both were being counted. */
+      const shared = (body.match(/(?<!function\s)fxSrc\(d\)/g) || []).length;
+      const own = (body.match(/=\s*d\.slice\(\)/g) || []).length;
       if (shared) onScratch++;
       // one shared copy is fine; a shared copy ALONGSIDE another live copy is not, nor is two shared ones
       if (shared > 1 || (shared === 1 && own > 0)) offenders.push({ kernel: ks[i].name, shared: shared, own: own });
@@ -40613,5 +40622,63 @@
         if (mine[i] !== theirs[i]) throw new Error('flare at ' + JSON.stringify(p) + ': byte ' + i + ' is ' + mine[i] + ' but the original six-ray implementation gives ' + theirs[i] + ' — the nearest-ray shortcut has changed the picture');
       }
     }
+  });
+
+  /* ═══ EVERY kernel on the shared scratch, not a hand-written list (queue 474).
+     The existing scratch test names its cases, so twelve kernels moved onto the shared buffer in
+     v12.01 would not have been covered by it — and the failure mode is silent: a kernel that returned
+     the buffer without refilling it, or two live users, renders another effect's pixels.
+     This one reads the source, finds every kernel that uses `fxSrc(d)`, and takes REAL parameter
+     defaults from the registry, so a kernel converted later is covered the day it is converted. */
+  test('every kernel on the shared scratch is unaffected by another kernel using it first (queue 474)', { item: '474' }, async function () {
+    if (!FM.fxRegistry || typeof FM.fxRegistry.makeInstance !== 'function') throw new Error('FM.fxRegistry.makeInstance is missing');
+    const src = await fetch('js/compositor.js', { cache: 'no-store' }).then(r => r.text());
+    const re = /^ {4}([a-z0-9_]+):\s*(?:function|\(function)/gmi;
+    const marks = []; let m;
+    while ((m = re.exec(src))) marks.push({ name: m[1], at: m.index });
+    const onScratch = [];
+    for (let i = 0; i < marks.length; i++) {
+      const body = src.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : src.length);
+      if (/fxSrc\(d\)/.test(body)) onScratch.push(marks[i].name);
+    }
+    if (onScratch.length < 20) throw new Error('only ' + onScratch.length + ' kernels found on the shared scratch — the source scan is not matching, so this proves nothing');
+
+    const W = 96, H = 72;
+    const mk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0, k = 0; i < a.length; i += 4, k++) {
+        a[i] = (k * 7) & 255; a[i + 1] = (k * 17) & 255; a[i + 2] = (k * 31) & 255; a[i + 3] = 255;
+      }
+      return a;
+    };
+    let exercised = 0;
+    const skipped = [];
+    for (const name of onScratch) {
+      const fn = FM._pixelFx[name];
+      if (typeof fn !== 'function') continue;
+      let params = {};
+      try { const inst = FM.fxRegistry.makeInstance(name); if (inst && inst.params) params = inst.params; } catch (e) {}
+
+      const alone = mk();
+      try { fn(alone, W, H, params, 0.37, 1); } catch (e) { skipped.push(name + ' (threw)'); continue; }
+      const base = mk();
+      let moved = 0;
+      for (let i = 0; i < alone.length; i += 4) if (Math.abs(alone[i] - base[i]) > 2) moved++;
+      if (moved < 100) { skipped.push(name + ' (no-op at defaults)'); continue; }
+      exercised++;
+
+      // dirty the shared buffer with a DIFFERENT kernel, then run the same one again
+      const dirty = mk();
+      FM._pixelFx.tiltshift(dirty, W, H, { center: 0.15, softness: 0.9 }, 0.37, 1);
+      const after = mk();
+      fn(after, W, H, params, 0.37, 1);
+
+      for (let i = 0; i < alone.length; i++) {
+        if (alone[i] !== after[i]) {
+          throw new Error(name + ' rendered differently once another effect had used the shared scratch (byte ' + i + ': ' + alone[i] + ' vs ' + after[i] + ') — the buffer is being handed out while still in use, or returned without being refilled');
+        }
+      }
+    }
+    if (exercised < 10) throw new Error('only ' + exercised + ' of ' + onScratch.length + ' scratch kernels actually altered the image, so this test is barely exercising the buffer. Skipped: ' + skipped.join(', '));
   });
 })();

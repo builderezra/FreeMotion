@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.00
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.01
 >
-> **State:** v12.00, **879 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v12.01, **880 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -5139,9 +5139,23 @@ better still, keep working inside the turn rather than parking work for a later 
              flare positions, so the test asserts equality against the original six-ray implementation
              kept verbatim as the reference. Two mutations — perturbing the ray spacing, and breaking
              the squaring chain — each caught.
-             ⏭️ **Still open in this family:** zoomstreaks (67ms) and lensdistort (67ms) are next, and
-             this tick is the reason not to trust my own "genuinely per-pixel" verdict on them without
-             reading the code first.
+             ✅ **EIGHTH — TWELVE MORE KERNELS OFF THEIR OWN 5.6 MB FRAME COPY — v12.01.** Opening
+             lensdistort to check whether it was reducible found the first line was `d.slice()`: it had
+             never been part of v11.76's sweep at all. Twelve kernels were in the same position, each
+             allocating a fresh 5.6 MB array per invocation. All twelve verified single-copy and
+             read-only first, exactly as v11.76 did. **Lens Distort 66.8 → 52.4ms, Edge 31.6 → 23.2,
+             Voronoi 34 → 30**, plus Pixel Sort, Dispersion, VHS Tape, Shockwave, Sharpen, Halftone,
+             Emboss, Zoom Blur, Hex Tiles.
+             **Glitch is deliberately left alone** — it holds TWO copies at once, and one shared buffer
+             would make them secretly the same array.
+             🐛 **AND THE GUARD THAT POLICES EXACTLY THAT WAS ITSELF BROKEN.** It refused the change,
+             which is how this was found — but for the wrong reason: its scan required
+             `function(d,W,H,p,t)` with no spaces, so **it could see only 52 of the file's 170 kernels**
+             and was attributing bodies to the wrong owners. It had been watching under a third of the
+             file, and its own sanity check ("did I match at least 20?") was far too lax to notice.
+             Both fixed: the scan matches either spacing, it no longer counts the helper's own
+             definition or the word `d.slice()` inside a comment, and the floor is 120. Restoring the
+             old regex now fails that test by name.
              ⚠️ **A near-miss worth recording:** the first attempt at this edit replaced to END OF LINE in a
              file where the whole pixel loop lives on one line — it silently deleted the loop. `git checkout`
              restored it. **In a minified-style file, replace exact substrings, never to end-of-line.**
