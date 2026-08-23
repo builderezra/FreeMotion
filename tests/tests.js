@@ -40486,4 +40486,61 @@
       if (c.label === 'zero amount' && moved !== 0) throw new Error('an amount of 0 still moved pixels');
     }
   });
+
+  /* ═══ CROSS PROCESS: ONE CURVE PER CHANNEL, NOT ONE PER PIXEL (queue 474).
+     Its curve function does a Math.sin AND a Math.pow and was called three times per pixel — 4.4
+     million transcendental calls a frame at his project size, to produce at most 768 distinct answers,
+     because it depends only on an integer 0-255 out of a Uint8ClampedArray. Now a 256-entry table per
+     channel, built once. Identical BY CONSTRUCTION (same function, same integer), so this compares
+     bytes with === rather than a tolerance. */
+  test('cross process is byte-identical after the per-channel curves were memoized (queue 474)', { item: '474' }, async function () {
+    const P = FM._pixelFx;
+    if (!P || typeof P.crossprocess !== 'function') throw new Error('FM._pixelFx.crossprocess is not reachable');
+    const W = 96, H = 72;
+    const base = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0, k = 0; i < base.length; i += 4, k++) {
+      base[i] = (k * 7) & 255; base[i + 1] = (k * 13) & 255; base[i + 2] = (k * 29) & 255;
+      base[i + 3] = (k % 97 === 0) ? 0 : 255;      // some transparent pixels — the loop skips those
+    }
+    /* The reference is the ORIGINAL per-pixel maths, kept here exactly as it was, the same way the
+       tiltshift rewrite kept its 17-tap kernel. */
+    const curve = (v, lift, gain) => { let x = v / 255; x = x + lift * Math.sin(x * Math.PI); if (x < 0) x = 0; x = Math.pow(x, gain); return x * 255; };
+    const reference = (d, a, l1, l2, l3, g1, g2, g3) => {
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const nr = curve(r, l1, g1), ng = curve(g, l2, g2), nb = curve(b, l3, g3);
+        d[i] = r + (nr - r) * a; d[i + 1] = g + (ng - g) * a; d[i + 2] = b + (nb - b) * a;
+      }
+    };
+    /* EXPLICIT params in every case. With an empty object evalProp yields 0, the effect correctly does
+       nothing, and "identical" would be true of two untouched images — which is exactly the dead
+       control this suite has been caught by before. */
+    const cases = [
+      { amount: 1, lift: 100, gain: 100 },
+      { amount: 0.35, lift: 240, gain: 260 },
+      { amount: 0.8, lift: 0, gain: 300 }
+    ];
+    for (const p of cases) {
+      const mine = new Uint8ClampedArray(base), theirs = new Uint8ClampedArray(base);
+      P.crossprocess(mine, W, H, p, 0.37, 1);
+      const a = Math.min(1, Math.max(0, p.amount));
+      const cpL = Math.min(300, Math.max(0, p.lift)), cpG = Math.min(300, Math.max(0, p.gain));
+      const lk = cpL === 100 ? 1 : cpL / 100, gk = cpG === 100 ? 1 : cpG / 100;
+      const l1 = cpL === 100 ? 0.10 : 0.10 * lk, l2 = cpL === 100 ? 0.06 : 0.06 * lk, l3 = cpL === 100 ? -0.12 : -0.12 * lk;
+      const g1 = cpG === 100 ? 0.90 : 1 + (0.90 - 1) * gk, g2 = cpG === 100 ? 0.95 : 1 + (0.95 - 1) * gk, g3 = cpG === 100 ? 1.10 : 1 + (1.10 - 1) * gk;
+      reference(theirs, a, l1, l2, l3, g1, g2, g3);
+
+      // CONTROL: the grade must actually be doing something, or identity is vacuous.
+      let touched = 0;
+      for (let i = 0; i < mine.length; i += 4) if (mine[i] !== base[i] || mine[i + 1] !== base[i + 1]) touched++;
+      if (touched < (W * H) / 4) throw new Error('params ' + JSON.stringify(p) + ' graded only ' + touched + ' pixels — identity between the two paths proves nothing here');
+
+      for (let i = 0; i < mine.length; i++) {
+        if (mine[i] !== theirs[i]) throw new Error('params ' + JSON.stringify(p) + ': byte ' + i + ' is ' + mine[i] + ' via the lookup table and ' + theirs[i] + ' via the original per-pixel maths — this rewrite must be identical, or it silently re-grades every project already using Cross Process');
+      }
+      // ...and transparent pixels stay untouched
+      for (let i = 0; i < mine.length; i += 4) if (base[i + 3] === 0 && mine[i] !== base[i]) throw new Error('a fully transparent pixel was graded');
+    }
+  });
 })();

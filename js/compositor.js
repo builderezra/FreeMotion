@@ -4972,7 +4972,15 @@ window.FM = window.FM || {};
       var lk=cpL===100?1:cpL/100, gk=cpG===100?1:cpG/100;
       var l1=cpL===100?0.10:0.10*lk, l2=cpL===100?0.06:0.06*lk, l3=cpL===100?-0.12:-0.12*lk;
       var g1=cpG===100?0.90:1+(0.90-1)*gk, g2=cpG===100?0.95:1+(0.95-1)*gk, g3=cpG===100?1.10:1+(1.10-1)*gk;
-      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,l1,g1), ng=cv(g,l2,g2), nb=cv(b,l3,g3); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
+      /* ONE CURVE PER CHANNEL, NOT ONE PER PIXEL (queue 474). `cv` does a Math.sin AND a Math.pow, and
+         it was called three times a pixel — 4.4 MILLION transcendental calls a frame at 1080x1350 to
+         produce, at most, 768 distinct answers: it depends only on `v`, which is an integer 0-255 out
+         of a Uint8ClampedArray. So each channel gets a 256-entry table built once, exactly the
+         memoized-LUT shape gradeLUT already uses. Byte-identical by construction — the same function
+         of the same integer — so the test compares with === rather than a tolerance. */
+      var LR=new Float64Array(256), LG=new Float64Array(256), LB=new Float64Array(256);
+      for(var v=0;v<256;v++){ LR[v]=cv(v,l1,g1); LG[v]=cv(v,l2,g2); LB[v]=cv(v,l3,g3); }
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=LR[r], ng=LG[g], nb=LB[b]; d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
     lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
       // The leak always entered from the top-right at a fixed size, so it could not be placed to match
       // where the sun actually is in the shot — which is the only thing that makes a light leak read as
