@@ -491,6 +491,20 @@ sails through.
    code is wrong — here the code was right and the instrument had been mis-parsing the file for weeks.
    Same family as the truncated greps, one level up: this time the faulty reader was a TEST.
 
+### 23 Aug — THE STREAK ENDS HONESTLY: zoomstreaks hoisted, measured, REVERTED
+Ninth application of the same idea, and the first that did not pay. Its ten taps recomputed two
+constants each — twenty divisions per pixel, 29 million a frame, for ten distinct pairs. Hoisted them
+into tables; **byte-identical**, as predicted. Then measured properly: **75.6ms with the tables against
+68.4ms with the arithmetic inline.** Reverted.
+**The boundary of the technique, now known:** hoisting pays when the hoisted thing is EXPENSIVE — a
+`Math.sin`, a `Math.pow`, a 5.6 MB allocation. That is what all eight wins removed. **Cheap arithmetic
+is already free: the JIT hoists loop-invariants itself, and a Float64Array load is not cheaper than a
+multiply.** Do not hoist divisions and multiplies on the theory that fewer operations must be faster.
+⚠️ **And the measurement lesson, which nearly shipped this:** the first reading was a SINGLE run,
+67.2 → 66.0, which looks like a small win. Seven runs said the opposite. **A single-shot timing cannot
+distinguish a 2% win from noise — and 2% is exactly the size of result that gets shipped without
+scrutiny.** Median of several, always, before keeping or rejecting.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
