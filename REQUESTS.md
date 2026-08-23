@@ -13268,8 +13268,12 @@ wait for them to report back."*
       ambiguous mutation** — it already refused a missing one; this is the blind twin, and a green run
       after either proves nothing. Re-run against the unique string: CAUGHT.
       🔗 Sits under **#141** (*"if you made a custom fps or other things etc there's no way to export at
-      that"*), whose OTHER half — a **Custom rung on the export frame-rate list** — is still genuinely not
-      built and is the next thing to do here.
+      that"*), whose OTHER half is a **Custom rung on the export frame-rate list**.
+      ✅ **THAT SHIPPED at v11.55 (#141b), and this pointer went stale the moment it did** — corrected
+      23 Aug during a hand audit, having verified `#exp-custom-fps` and `#exp-fps-num` are really in the
+      export dialog rather than trusting the tick. **A "next thing to do" written inside one entry does
+      not get updated when another entry does the work**, which is exactly how a finished job keeps
+      advertising itself as outstanding.
 
 - [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
