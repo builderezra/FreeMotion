@@ -298,6 +298,22 @@ separate entries now. It costs one button and pre-empts no decision, because poi
 already built is navigation, not a new feature — worth saying explicitly in the entry so a reader does
 not think the pending choice was quietly made for him.
 
+### 23 Aug, v11.97 — THE NUMBERED QUEUE IS GENUINELY BLOCKED, so the tick went to the bottleneck
+Surveyed 395, 425, 429, 469 this tick looking for buildable halves and found none — they are real
+decisions (469 in particular: growing the ◆ target risks taps meant for Back CREATING a keyframe, which
+is his call and correctly refused). 425's "background too subtle" half already shipped at v10.63.
+⚠️ **And one of my own readings was wrong before it was right**: I grepped the export dialog's formats,
+saw only mp4/gif/frames, and nearly wrote up "audio export is unreachable" — the grep had truncated the
+list and both WAV and M4A are there. Checked before acting, which is the only reason it is not in the
+file as a finding.
+**So the tick went at the BOTTLENECK instead: five entries (95, 125, 148, 202, 387) now wait on one
+action — him tapping the toast and sending the report — and the last step of that was four taps deep in
+App settings.** The comment defending that was half right: an AUTOMATIC clipboard write ten seconds
+after the tap is refused for want of a user gesture. **A tappable toast IS the gesture**, so it copies
+directly now, with the old route named as the fallback rather than failing silently.
+**Worth generalising: when several entries queue behind one action, the highest-value work is removing
+friction from that action, not the entries.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
