@@ -132,6 +132,17 @@ thing it tests has disappeared.**
 DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
 loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
 returns were real, and those nine are fixed.
+**A shared project file round-trips losslessly — verified 23 Aug.** He shares work as `.fmotion.json`
+(templates, elements, whole projects), so "does anything fall out on the way back in" is a real
+question about his data. Built a scene with two effects, an opacity keyframe track with easing, a blend
+mode, bold/aligned text and non-zero start times; serialised it TO TEXT and parsed it back exactly as an
+import does; applied it. **Identical apart from the layer ids, which are regenerated on purpose** (an
+imported file carries the ids of the project it came from, and reusing them would collide with that
+project in the shared media store). Effects, keyframes, blend mode, text, bold, start times: all kept.
+⚠️ **My first run reported "import produces ZERO layers" — total data loss — and it was the HARNESS.**
+`serializeScene` hands back an object that can still reference the live layers array, so my
+`layers.length = 0` emptied the exported data too. A real import parses from TEXT, which severs that.
+**Serialise through a string before wiping anything, or you are testing your own probe.**
 **Undo survives a LONG chain, and the 120-cap degrades correctly — soaked 23 Aug.** The suite covers
 single-edit fidelity (*"one edit then undo puts the document back exactly, for every kind of edit"*);
 what it did not cover is a long run, which is where index bookkeeping and stack pruning interact.
