@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.93
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.94
 >
-> **State:** v11.93, **868 tests green**. **478 (black bar) and 479 (undo arrowheads) are FIXED, v11.92 and v11.93.** One of the three new reports is still open — 480 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.94, **869 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -11393,8 +11393,7 @@ wait for them to report back."*
       ring rather than an absolute number, so a later tidy-up cannot quietly shrink it back.
       Checked by rendering both icons at 380px side by side against the old one before committing.
 
-- [ ] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.** ✅ **FIXED v11.94 — and you were right to push back.**
       (23 Aug.) His words, verbatim:
       > I said this ages ago but you still cant drag stuff on top of the add layer it just teleports it back under
       ⚠️ **#357 is ticked ✅ v10.05 and #443 is ticked ✅ v10.82, both for this exact behaviour.** So
@@ -11405,6 +11404,35 @@ wait for them to report back."*
       **Do not re-read those entries and conclude it works.** Reproduce it by dragging, on the layout he
       uses, and if it passes there, ask which layout and which direction (dragging UP past the add row
       versus dropping ON it). The ticked entries are a warning here, not evidence.
+
+      ✅ **FIXED v11.94, and it was NOT a regression — it was the two "fixes" doing this to you.**
+      · **v10.05 (#357)** decided that landing on the add row means the boundary BELOW it.
+      · **v10.82 (#443)** then made the visible gap agree with that, so the preview stopped lying.
+      Each was a sound repair of what it was looking at. Together they made the position you are asking
+      for **genuinely unreachable** — measured with `tests/_adddrop.html`: dropping ON the marker and
+      dropping just BELOW it both produced `L0,L1,L4,L2,L3`, so there was no way to put a layer above it
+      at all. That is your "teleports it back under", and it was by design rather than by accident.
+      **The premise both entries shared was wrong.** They read it as *"six gap positions have to map to
+      five real boundaries"*, so one had to collapse. But the add row is ITSELF movable (`FM.addAt`), so
+      the sixth position is real — it is expressed by **the marker moving down, not by the layer order
+      changing.** Both drops insert the layer in the same place; what differs is which side of it the
+      marker ends up on.
+      **The case that made it look completely dead** is the one you would hit most: dragging the row
+      DIRECTLY BELOW the marker onto it. The layer order is then identical, `FM.moveLayers` returns
+      early on an unchanged order by design, and the row springs back having changed nothing at all.
+      Measured before and after, same gesture:
+      | | rows | marker |
+      |---|---|---|
+      | before | `L0, L1, [ADD], L2, L3` | 2 |
+      | after | `L0, L1, L2, [ADD], L3` | 3 |
+      **A disagreement that was already on screen is settled by this too:** since #438 the add SWITCH
+      has been leaning as though the layer went above the marker, while the drop put it below. They
+      agree now.
+      ⚠️ **#443's test asserted the old rule and was UPDATED, not deleted** — the reversal and your
+      quote are recorded in it, and what it actually protects (*what you see is where it goes*) is
+      unchanged, just measured against the marker as well as the layer boundary. Both directions
+      mutation-checked, including a control that a fix which ALWAYS moves the marker would simply make
+      the other position unreachable instead — which is how this got "fixed" twice already.
 
 - [x] **357 — A layer cannot be dragged onto the add-layer row.** ✅ **v10.05 — and the entry's guess was right.**
       The reorder mapped `.track-row` only, and the add row is deliberately not one. But it OCCUPIES a

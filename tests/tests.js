@@ -2591,8 +2591,21 @@
            was pushed skipped them and reported success — which is how the first version of this test
            survived a mutation that put the original bug straight back. */
         if (!gapBefore) throw new Error('no row was pushed down while the finger was on the add row, so the gap could not be read at all and the two assertions below would have been skipped');
-        if (gapBefore === '[ADD]') throw new Error('the gap opened ABOVE the add row while the layer landed before ' + landedBefore + ' — the preview shows one slot and the drop takes another, which is the whole of his report');
-        if (gapBefore && gapBefore !== landedBefore) throw new Error('the gap opened before ' + gapBefore + ' but the layer landed before ' + landedBefore + ' — what you can see and what you get are different slots');
+        /* ⚠️ REVERSED BY QUEUE 480, and updated rather than deleted so the reason survives.
+           This used to read: a gap opening ABOVE the add row is a bug, because the layer then landed
+           BELOW it. That was true while a drop could only ever resolve to the boundary UNDER the
+           marker — and that rule is exactly what Ezra came back to complain about on 23 Aug: "you
+           still cant drag stuff on top of the add layer it just teleports it back under".
+           Under 480 a gap on the add row is CORRECT and means "above the marker": the layer order is
+           unchanged (the marker is not a layer) and the MARKER moves below the block instead.
+           What this test is for has not changed — WHAT YOU SEE IS WHERE IT GOES — so that is still
+           what it asserts, now measured against the marker as well as the layer boundary. */
+        if (gapBefore === '[ADD]') {
+          const wantAt = after.indexOf('L4') + 1;
+          if (FM.addAt !== wantAt) throw new Error('the gap opened ABOVE the add row, so the layer should have ended up on top of it (marker at ' + wantAt + ') — the marker is at ' + FM.addAt + ', i.e. the layer is still underneath it, which is queue 480 exactly');
+        } else if (gapBefore && gapBefore !== landedBefore) {
+          throw new Error('the gap opened before ' + gapBefore + ' but the layer landed before ' + landedBefore + ' — what you see is not where it goes');
+        }
       }, 380);
     } finally {
       FM.dragAddAt = null; FM.dragLayerId = null;
@@ -40098,5 +40111,64 @@
     // ...and they really are MIRRORED, not merely equal: their centres sit either side of x=12.
     const cu = hu.x + hu.width / 2, cr = hr.x + hr.width / 2;
     if (!(cu > 12 && cr < 12)) throw new Error('the heads are not on opposite sides of the icon centre (undo ' + cu.toFixed(2) + ', redo ' + cr.toFixed(2) + ') — one of them is pointing the wrong way');
+  });
+
+  /* ═══ YOU CAN PUT A LAYER ON TOP OF THE ADD ROW (queue 480).
+     Ezra, 23 Aug: "I said this ages ago but you still cant drag stuff on top of the add layer it just
+     teleports it back under". #357 (v10.05) and #443 (v10.82) are both ticked for this and both made
+     it WORSE in this respect: 357 decided a drop on the marker means the boundary below it, 443 made
+     the preview agree. Between them the position above the marker became unreachable.
+     The case that shows it, and the one he is describing: drag the row DIRECTLY BELOW the marker onto
+     it. The layer order cannot change (the marker is not a layer), so `FM.moveLayers` returns early by
+     design and the row springs back having done nothing. What has to move is the MARKER. */
+  test('a layer dropped on the add row ends up ABOVE it (queue 480)', { item: '480' }, async function () {
+    const saved = FM.scene.layers.slice(), savedAt = FM.addAt;
+    const drag = async (name, slot) => {
+      const src = [...document.querySelectorAll('#tl-tracks .track-row')].find(r => (r.textContent || '').indexOf(name) >= 0);
+      const h = src && src.querySelector('.row-drag');
+      if (!h) throw new Error('no drag handle for ' + name + ' — this test cannot drive the gesture');
+      const first = document.querySelector('#tl-tracks .track-row, #tl-tracks .tl-addrow');
+      const listTop = first.getBoundingClientRect().top;
+      const slotH = first.getBoundingClientRect().height || 42;
+      const hr = h.getBoundingClientRect();
+      const x = hr.left + hr.width / 2, y0 = hr.top + hr.height / 2;
+      const ty = listTop + slot * slotH + slotH / 2;
+      const pe = (t, yy) => h.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: yy, bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', isPrimary: true }));
+      pe('pointerdown', y0); await sleep(50);
+      for (let k = 1; k <= 6; k++) { pe('pointermove', y0 + (ty - y0) * k / 6); await sleep(30); }
+      pe('pointerup', ty); await sleep(450);
+    };
+    const seed = () => {
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', name: 'L' + i, x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#3d7' });
+        L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      }
+      FM.addAt = 2; if (FM.clampAddAt) FM.clampAddAt();
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+    };
+    const order = () => FM.scene.layers.map(l => l.name).join(',');
+    try {
+      seed(); await sleep(500);
+      if (FM.addAt !== 2) throw new Error('the marker did not seed at index 2 (got ' + FM.addAt + '), so this test is not looking at the case it describes');
+
+      // HIS CASE: the row directly below the marker, dropped ON the marker.
+      await drag('L2', 2);
+      if (FM.addAt !== 3) throw new Error('dropping L2 on the add row left the marker at ' + FM.addAt + ' — the layer is still underneath it, which is his "it just teleports it back under"');
+      if (order() !== 'L0,L1,L2,L3') throw new Error('the LAYER order changed to ' + order() + ' — the marker is not a layer, so putting a layer above it must not reorder anything');
+
+      /* CONTROL: dropping just BELOW the marker must leave the marker where it is. Without this, a
+         "fix" that always shoved the marker down would pass the assertion above and make the other
+         position unreachable instead — which is exactly how this entry got fixed twice already. */
+      seed(); await sleep(500);
+      await drag('L3', 3);
+      if (FM.addAt !== 2) throw new Error('dropping BELOW the add row moved the marker to ' + FM.addAt + ' — now the position under it is the unreachable one');
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.addAt = savedAt; if (FM.clampAddAt) FM.clampAddAt();
+      FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
   });
 })();

@@ -1068,7 +1068,7 @@ window.FM = window.FM || {};
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
       const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll during a reorder drag
-      let moved = false, dropBeforeId, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0;
+      let moved = false, dropBeforeId, dropAddAt = null, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0;
 
       // NATURAL geometry model — snapshotted at grab (no transforms exist yet), in CONTENT coordinates
       // (viewport top + scrollTop), so it stays valid through auto-scroll and row transforms.
@@ -1137,9 +1137,29 @@ window.FM = window.FM || {};
            So the add row is not a slot for the GAP either: a gap that lands on it is pushed one past it,
            and the same number then drives both the layout and the target. What you see is where it goes,
            and the unavoidable collapse now happens with both positions showing the identical preview. */
+        /* ⚠️ QUEUE 480 REVERSES THE RULE ABOVE, and the two entries that "fixed" this are why it is
+           spelled out. Ezra, 23 Aug: *"I said this ages ago but you still cant drag stuff on top of the
+           add layer it just teleports it back under"*.
+           v10.05 decided that landing ON the add row means the boundary BELOW it, and v10.82 made the
+           gap agree with that so the preview stopped lying. Both were sound repairs of what they were
+           looking at — and together they made the position he is asking for UNREACHABLE. Measured with
+           `tests/_adddrop.html` at the add row's own slot: slots 2 and 3 both landed "before L2", so
+           there was no way to put a layer above the marker at all.
+           **The premise both entries shared was wrong: it is not six gap positions mapping to five
+           boundaries.** The add row is itself movable (`FM.addAt`), so the sixth position is real — it
+           is expressed by the ADD ROW moving down, not by the layer order changing. Both positions
+           insert the layer in the same place; what differs is which side of it the marker ends up on.
+           So the gap now opens where the finger is, and a drop on the add row carries the marker below
+           the block. `FM.dragAddAt` right below has ALREADY been reporting exactly this to the add
+           switch since queue 438 — the switch leaned as if the layer went above while the drop put it
+           below, so this also settles a disagreement that was already on screen. */
         const addIdx = statics.findIndex(sr => sr.isAdd);
-        const ge = (addIdx >= 0 && g === addIdx) ? g + 1 : g;
-        dropBeforeId = statics[ge] ? statics[ge].id : bottomBefore;
+        const onAdd = (addIdx >= 0 && g === addIdx);
+        const ge = g;                              // the gap opens where he is aiming (queue 480)
+        // the add row is not a layer, so the LAYER still lands past it; only the marker differs
+        const tIdx = onAdd ? g + 1 : g;
+        dropBeforeId = statics[tIdx] ? statics[tIdx].id : bottomBefore;
+        dropAddAt = onAdd ? (addIdx + dragged.length) : null;
         /* Seam (queue 449): what the gesture ACTUALLY resolved, straight from the code that resolved it.
            A probe inferring the gap from row TRANSFORMS read the top of the list as disagreeing by one
            slot, and could not tell a real off-by-one from its own reading — near the top the block's
@@ -1231,11 +1251,28 @@ window.FM = window.FM || {};
             d.el.classList.add('row-part');        // row-part's transition outranks row-dragging's none
             d.el.style.transform = 'translateY(' + (targetTop + k * slotH - d.top) + 'px)';
           });
-          setTimeout(() => { cleanup(); if (dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId); }, 160);
+          setTimeout(() => { cleanup(); applyDrop(); }, 160);
           return;
         }
         cleanup();
-        if (moved && dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId);
+        if (moved) applyDrop();
+      };
+      /* The marker's position is separate state from the layer order, and this is the whole of queue
+         480's "it teleports it back under": dropping the row that is ALREADY directly below the marker
+         onto it leaves the layer order identical, `FM.moveLayers` returns early on an unchanged order
+         by design, and the row springs back having changed nothing. The only thing that should move in
+         that case is the marker. So it is applied separately, and a marker-only change rebuilds on its
+         own — no history entry, because `FM.addAt` is view state and not part of the scene document. */
+      const applyDrop = () => {
+        const wantAdd = (dropAddAt != null && dropAddAt !== FM.addAt) ? dropAddAt : null;
+        if (wantAdd != null) { FM.addAt = wantAdd; if (FM.clampAddAt) FM.clampAddAt(); }
+        const before = FM.scene.layers.slice();
+        if (dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId);
+        const orderChanged = FM.scene.layers.some((l, i) => l !== before[i]);
+        if (wantAdd != null && !orderChanged) {
+          if (FM.syncAddSwitch) FM.syncAddSwitch();
+          if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        }
       };
       const abort = () => { unlisten(); cleanup(); };   // pointercancel (browser stole the gesture) = never apply the move
       h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', abort);
