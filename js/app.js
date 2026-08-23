@@ -3870,12 +3870,26 @@ window.FM = window.FM || {};
     });
   };
 
+  /* WHICH FORMATS CAN ACTUALLY BE SILENCED BY A MISSING AAC ENCODER (queue 495). Only the two that
+     encode AAC. WAV comes out of OfflineAudioContext as raw samples and needs no codec at all — which
+     is the stated reason it is the first audio option — and GIF / PNG frames have no soundtrack to
+     lose. The check used to run once when the dialog opened and never again, so picking WAV left the
+     biggest, loudest thing in the dialog telling him the export would be silent, about the one option
+     that cannot fail for want of a codec. */
+  const AAC_FORMATS = { mp4: 1, audiom4a: 1 };
+  let _audioWarnSeq = 0;
   async function checkExportAudioSupport() {
+    const seq = ++_audioWarnSeq;
     const box = document.getElementById('exp-noaudio-warn');
     if (!box) return false;
     box.classList.add('hidden'); box.textContent = '';
     if (!FM.projectHasAudio()) return false;
+    const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
+    if (!AAC_FORMATS[fmt]) return false;
     if (await FM.canEncodeAAC()) return false;
+    /* …and the answer above is awaited, so a fast switch from MP4 to WAV could otherwise let THIS
+       call finish afterwards and put the warning back on a format it does not apply to. */
+    if (seq !== _audioWarnSeq) return false;
     box.textContent = '';
     const b = document.createElement('b');
     b.textContent = 'This export will have no sound. ';
@@ -3975,6 +3989,10 @@ window.FM = window.FM || {};
     const go = document.getElementById('exp-go');
     if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames'
       : (audioOnly ? 'Export audio' : (fmt === 'frame' ? 'Save frame' : 'Export MP4')));
+    /* The silent-export warning belongs to the FORMAT, so it is re-asked whenever the format changes
+       (queue 495). Deliberately not awaited: this runs on every change of the dropdown, and the answer
+       is cached — the sequence guard inside is what keeps a slow first answer from landing late. */
+    checkExportAudioSupport();
   }
 
   // Seam: the dialog's own format sync. Without it the M4A option can only be checked as MARKUP, and a

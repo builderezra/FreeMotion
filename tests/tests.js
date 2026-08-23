@@ -41946,4 +41946,66 @@
       if (wasHidden) dlg.classList.add('hidden');
     }
   });
+
+  /* ═══ 495: THE SILENT-EXPORT WARNING MUST FOLLOW THE FORMAT.
+     The AAC check ran once, when the dialog opened, and the format switcher never asked it again. So
+     picking "Audio only (WAV)" left the biggest, loudest thing in the dialog saying the export would be
+     silent — about the one option that CANNOT fail for want of a codec, which is the stated reason WAV
+     is the first audio format at all. Same for GIF and PNG frames, which have no soundtrack to lose.
+     Driven through the app's own two functions rather than by poking the box, so the wiring between
+     them is what is under test. */
+  test('495: the silent-export warning follows the chosen format', { item: '495' }, async function () {
+    const box = document.getElementById('exp-noaudio-warn');
+    const sel = document.getElementById('exp-format');
+    if (!box || !sel) throw new Error('the export dialog has no warning row / format select');
+    if (typeof FM._checkExportAudioSupport !== 'function' || typeof FM._syncExportFormat !== 'function') throw new Error('the export dialog seams are missing');
+
+    const realHasAudio = FM.projectHasAudio, realAAC = FM.canEncodeAAC;
+    const saved = sel.value;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const shown = () => !box.classList.contains('hidden');
+    try {
+      /* A project WITH audio on a browser that CANNOT encode AAC — the only situation in which this
+         warning is ever correct. */
+      FM.projectHasAudio = () => true;
+      FM.canEncodeAAC = async () => false;
+
+      sel.value = 'mp4'; FM._syncExportFormat(); await sleep(60); await FM._checkExportAudioSupport();
+      /* CONTROL: if it does not warn about MP4 there is no warning to misplace, and every check below
+         passes for the wrong reason. */
+      if (!shown()) throw new Error('no warning on MP4 with audio in the project and no AAC encoder — that is the case the warning exists for, so nothing below is meaningful');
+      if (!/no sound|silent/i.test(box.textContent)) throw new Error('the warning says something unexpected: "' + box.textContent + '"');
+
+      for (const fmt of ['audio', 'gif', 'frames', 'frame']) {
+        sel.value = fmt; FM._syncExportFormat(); await sleep(80);
+        if (shown()) {
+          throw new Error('after switching to "' + fmt + '" the dialog still says the export will be silent: "' +
+            box.textContent.slice(0, 70) + '…". ' + (fmt === 'audio'
+              ? 'WAV needs no codec at all — it is the one format that cannot fail this way, and it is the default audio option.'
+              : 'That format has no soundtrack to lose.'));
+        }
+      }
+
+      // …and it must come BACK for the formats it really applies to.
+      for (const fmt of ['mp4', 'audiom4a']) {
+        sel.value = fmt; FM._syncExportFormat(); await sleep(80);
+        if (!shown()) throw new Error('switching back to "' + fmt + '" did not restore the warning, so a genuinely silent export now happens with no notice at all');
+      }
+
+      // …and it stays away when the browser CAN encode AAC.
+      FM.canEncodeAAC = async () => true;
+      sel.value = 'mp4'; FM._syncExportFormat(); await sleep(80); await FM._checkExportAudioSupport();
+      if (shown()) throw new Error('the warning is showing on a browser that CAN encode AAC: "' + box.textContent + '"');
+
+      // …and when the project has no audio at all.
+      FM.canEncodeAAC = async () => false; FM.projectHasAudio = () => false;
+      sel.value = 'mp4'; FM._syncExportFormat(); await sleep(80); await FM._checkExportAudioSupport();
+      if (shown()) throw new Error('a project with no audio is being warned that it will have no sound');
+    } finally {
+      FM.projectHasAudio = realHasAudio; FM.canEncodeAAC = realAAC;
+      sel.value = saved;
+      try { FM._syncExportFormat(); } catch (e) {}
+      box.classList.add('hidden'); box.textContent = '';
+    }
+  });
 })();

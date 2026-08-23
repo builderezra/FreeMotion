@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.15
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.16
 >
-> **State:** v12.15, **898 tests green**, tree clean.
+> **State:** v12.16, **899 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16707,8 +16707,18 @@ re-opened #480, which I had marked done and had not fixed.
       screenshot rather than trusting the numbers.
       The audio-support warning I added this week makes the export card 122.6px taller. The card has no height limit and its container cannot scroll. Measured at 375×553: only 3.1px of the 32.5px Export button is visible, and page scroll, dialog scroll and document height all confirm it is frozen in place. At 360×560 it is 6.6px. This is a feature I broke this week on the size of screen you actually use.
 
-- [ ] **495 — 🟠 The 'this export will be silent' warning stays up after you switch to a format it is wrong about.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **495 — 🟠 The 'this export will be silent' warning stays up after you switch to a format it is wrong about.** ✅ **FIXED v12.16.**
+      The audio check ran once, when the dialog opened, and changing the format never asked it again. So
+      picking **Audio only (WAV)** left the biggest, loudest thing in the dialog telling you the export
+      would be silent — about the one format that **cannot** fail for want of a codec, which is the stated
+      reason WAV is the first audio option. Same for GIF, PNG frames and single-frame PNG, none of which
+      have a soundtrack to lose.
+      The warning is about **AAC**, so it now belongs only to the two formats that actually encode AAC (MP4
+      and M4A), and it is re-asked every time you change the format. It still appears when it should, and
+      the test checks that too — a fix that just deleted the warning would be worse than the bug.
+      One extra guard: the AAC answer is looked up asynchronously, so switching quickly from MP4 to WAV
+      could have let the older question finish afterwards and put the warning back on WAV. A later answer
+      now cannot overwrite a newer one.
       The audio check runs once when the dialog opens and the format switcher never re-runs it. Pick WAV and the biggest, loudest thing in the dialog still tells you the export will be silent — when WAV is the one option that cannot fail for want of a codec, which is the stated reason it is first and default.
 
 - [ ] **496 — 🟢 The tappable toast says it is a button but the keyboard cannot press it.**
