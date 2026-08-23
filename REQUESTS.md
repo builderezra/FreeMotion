@@ -5148,6 +5148,26 @@ better still, keep working inside the turn rather than parking work for a later 
              Emboss, Zoom Blur, Hex Tiles.
              **Glitch is deliberately left alone** — it holds TWO copies at once, and one shared buffer
              would make them secretly the same array.
+             📊 **WHERE THE EFFECT WORK STANDS, 23 Aug — and what is NOT yet looked at.**
+             Re-timed all 105 pixel effects at your project size using each effect's own registry
+             defaults. **Median 10.8ms; 24 of 105 still over 25ms.** The ones fixed above have dropped
+             out of the top entirely — lensflare was the worst at 71ms and crossprocess was 62ms, and
+             neither is in the top five now.
+             ⚠️ **That median is NOT comparable to the 8.57ms recorded after v11.78** — different
+             parameters and a different harness. The per-effect before/after numbers above ARE
+             like-for-like (same harness, same run); the median is only a snapshot of today.
+             **The current top five, and three of them have never been opened:**
+             | effect | ms | looked at? |
+             |---|---|---|
+             | lensblur | 69.6 | ❌ never |
+             | zoomstreaks | 69.2 | ✅ read — hoist measured and REJECTED, see below |
+             | linstreaks | 65.6 | ❌ never |
+             | spinstreaks | 53.6 | ✅ already rewritten at v11.75 |
+             | clouds | 49.6 | ❌ never |
+             **Read before judging** — that rule has now caught me twice (lensflare, lensdistort), and
+             checking bumpmap and fractalridges this tick found both ALREADY correct: bumpmap hoists its
+             light-vector trig into the setup, and fractalridges guards its one `pow` so the default
+             path skips it. Neither needed touching.
              ❌ **AND A NINTH ATTEMPT MEASURED AND REJECTED — zoomstreaks, recorded so nobody rebuilds it.**
              Its ten taps each recomputed `(k/steps)*strength` and `1-(k/(steps+1))` — **twenty divisions
              per pixel, 29 million a frame, for exactly ten distinct pairs** — plus a per-pixel `norm`.
