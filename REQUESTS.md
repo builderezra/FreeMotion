@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.94
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.95
 >
-> **State:** v11.94, **869 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.95, **870 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -12718,6 +12718,26 @@ wait for them to report back."*
              **That is something PLAYBACK does and SCRUBBING never does**, which is the exact split this
              entry says to treat as the lead. It does not explain a frozen picture on its own, but "a
              buggy mess when I press play, fine when I scrub" is what it would feel and sound like.
+             ✅ **v11.95 — AND THE REPORT NOW MEASURES YOUR ASYMMETRY DIRECTLY, on your own phone.**
+             This clause has been blocked on *"it needs a clip off his own phone or a screen recording"*.
+             It does not any more. Your sentence — *playback fine when scrubbing, a buggy mess when I
+             press play* — is a COMPARISON, and the "what's slow" report was pooling both into one
+             median, which is precisely the number that cannot see it.
+             It splits them now, and states the conclusion rather than leaving you to read numbers:
+             ```
+             SPLIT    playing 50.0ms (28 frames) · scrubbing 16.7ms (89 frames)
+                      ⚠ PLAYING IS 3.0× SLOWER THAN SCRUBBING. Both draw the same
+                        frames through the same compositor, so this is NOT rendering cost —
+                        it is something only playback does (the media clock, the sync loop).
+             ```
+             (That is a real run with the slowdown staged deliberately, to prove the verdict fires.)
+             **So the thing this clause needs from you is now one tap, not a screen recording:** play
+             something that feels wrong, drag the playhead about a bit too, and send me the text. If it
+             says playing is slower, this entry's own lead is confirmed with a number on it; if the two
+             come out level, the asymmetry is not happening any more and v11.70 was probably it.
+             ⚠️ A bucket is only quoted once it has 20 frames, and an idle sample prints no comparison
+             at all — this report's failure mode has always been confident numbers, and two medians
+             taken from three frames each would be exactly that.
              **So: does pressing play still feel wrong on your phone at v11.70+?** If it is better, this
              clause was partly that. If it is unchanged, the picture half is separate and still needs a
              recording.

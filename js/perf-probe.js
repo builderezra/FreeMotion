@@ -118,6 +118,7 @@ window.FM = window.FM || {};
       const gaps = [];
       const t0 = performance.now();
       let last = t0, frames = 0;
+      const gapsPlay = [], gapsDrag = [];   // queue 387 — see the split in tick()
       let tierLow = 99, tierHigh = -1;
       let wasHidden = document.hidden;
       /* WAS THE LADDER EVEN ALLOWED TO ACT? notePlaybackCost returns immediately unless the app is
@@ -144,10 +145,24 @@ window.FM = window.FM || {};
       const tick = (now) => {
         if (!self.running) return;
         const gap = now - last; last = now;
-        if (gap > 0 && gap < 2000) gaps.push(gap);      // a tab-switch gap is not a frame
+        /* ═══ SPLIT THE FRAMES BY WHAT HE WAS DOING (queue 387).
+         * His most useful sentence in any performance report: *"a video will playback fine when
+         * scrubbing but actually pressing play is a buggy mess"*. Both draw the same frames through
+         * the same compositor, so an asymmetry between them rules out rendering cost and points at
+         * something only playback does — and this report was pooling both into one median, which is
+         * precisely the number that cannot see it. The entry says it needs a reading off HIS phone;
+         * this is that reading, and it costs one branch per frame. */
+        const playing = !!FM.playing;
+        let moving = false;
+        try { moving = !!(FM.playbackQualityInfo && FM.playbackQualityInfo().inMotion); } catch (e) {}
+        if (gap > 0 && gap < 2000) {                    // a tab-switch gap is not a frame
+          gaps.push(gap);
+          if (playing) gapsPlay.push(gap);
+          else if (moving) gapsDrag.push(gap);          // dragging/scrubbing, which he says is FINE
+        }
         frames++;
         // the one thing the tier number cannot tell you on its own — see everEligible above
-        if (FM.playing || (FM.playbackQualityInfo && FM.playbackQualityInfo().inMotion)) everEligible = true;
+        if (playing || moving) everEligible = true;
         try {
           const st = FM._perfState ? FM._perfState() : null;
           if (st) { if (st.tier < tierLow) tierLow = st.tier; if (st.tier > tierHigh) tierHigh = st.tier; }
@@ -216,6 +231,37 @@ window.FM = window.FM || {};
          * 21/s to 1.5/s and v11.70 to zero on a normal start — if his device reports it high again,
          * the regression is ours and it is measurable; if it reports ~0 while he can hear it, the
          * sync loop is exonerated and the decoder is next, which is exactly the fork #148 is stuck on. */
+        /* ═══ PLAY vs SCRUB, SIDE BY SIDE (queue 387).
+         * The entry's own instruction is to chase the PLAYBACK path rather than the renderer, on the
+         * strength of his asymmetry. This is the only place that asymmetry can be measured on the
+         * device it happens on. A bucket needs enough frames to have a meaningful median — 20 is about
+         * a third of a second at 60fps — because a 3-frame median would read as a confident number and
+         * be noise, and this report's whole failure mode has been confident numbers. */
+        const MIN_BUCKET = 20;
+        const pMed = gapsPlay.length >= MIN_BUCKET ? pct(gapsPlay.slice().sort((a, b) => a - b), 50) : null;
+        const dMed = gapsDrag.length >= MIN_BUCKET ? pct(gapsDrag.slice().sort((a, b) => a - b), 50) : null;
+        if (pMed != null || dMed != null) {
+          lines.push('SPLIT    ' +
+            (pMed != null ? 'playing ' + pMed.toFixed(1) + 'ms (' + gapsPlay.length + ' frames)' : 'playing — not sampled') + ' · ' +
+            (dMed != null ? 'scrubbing ' + dMed.toFixed(1) + 'ms (' + gapsDrag.length + ' frames)' : 'scrubbing — not sampled'));
+          if (pMed != null && dMed != null) {
+            const ratio = pMed / dMed;
+            if (ratio >= 1.5) {
+              lines.push('         ⚠ PLAYING IS ' + ratio.toFixed(1) + '× SLOWER THAN SCRUBBING. Both draw the same');
+              lines.push('           frames through the same compositor, so this is NOT rendering cost —');
+              lines.push('           it is something only playback does (the media clock, the sync loop).');
+            } else if (ratio <= 0.67) {
+              lines.push('         scrubbing is the slower of the two here, which is the opposite of the');
+              lines.push('           report this split was built for — worth saying plainly.');
+            } else {
+              lines.push('         playing and scrubbing cost about the same, so the asymmetry is not');
+              lines.push('           happening in this sample.');
+            }
+          } else {
+            lines.push('         (both are needed for the comparison — press play AND drag the playhead');
+            lines.push('           during the ten seconds.)');
+          }
+        }
         const ps = FM.playbackStats;
         if (ps && (ps.syncs || ps.rateWrites)) {
           const secs = Math.max(0.001, elapsed / 1000);

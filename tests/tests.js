@@ -40171,4 +40171,44 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   });
+
+  /* ═══ PLAY vs SCRUB, MEASURED SEPARATELY (queue 387).
+     His most useful sentence in any performance report: "a video will playback fine when scrubbing but
+     actually pressing play is a buggy mess". Both draw the same frames through the same compositor, so
+     the asymmetry rules out rendering cost — and the report was pooling both into one median, the one
+     number that cannot see it. The entry says it needs a reading off HIS phone; this is that reading. */
+  test('the what-is-slow report measures playing and scrubbing separately (queue 387)', { item: '387' }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    const realPlaying = FM.playing, realQI = FM.playbackQualityInfo;
+    const report = () => new Promise((res, rej) => { if (!FM.perfProbe.run(700, res)) rej(new Error('the probe refused to start')); });
+    try {
+      /* PLAYING and slow. The probe reads FM.playing every frame, so holding it true for the whole
+         sample puts every frame in the play bucket. */
+      FM.playing = true;
+      FM.playbackQualityInfo = () => ({ inMotion: false, tier: 0, factor: 1, effective: 1, avgFrameMs: 0, avgGapMs: 0, mode: 'auto', dropFrom: 0, locked: false, lockAt: 0, costCtx: 'play' });
+      let r = await report();
+      if (!/SPLIT/.test(r)) throw new Error('the report has no SPLIT section, so it still pools playing and scrubbing into one median:\n' + r);
+      if (!/playing [0-9]/.test(r)) throw new Error('the playing bucket was not reported: ' + r.split('\n').filter(l => /SPLIT/.test(l))[0]);
+      if (!/scrubbing — not sampled/.test(r)) throw new Error('nothing was scrubbing, but the report claims a scrubbing figure — that would be a confident number about something that never happened');
+
+      /* SCRUBBING only — in motion but not playing. This is the half he says is FINE, and it must be
+         counted separately or the comparison is meaningless. */
+      FM.playing = false;
+      FM.playbackQualityInfo = () => ({ inMotion: true, tier: 0, factor: 1, effective: 1, avgFrameMs: 0, avgGapMs: 0, mode: 'auto', dropFrom: 0, locked: false, lockAt: 0, costCtx: 'drag' });
+      r = await report();
+      if (!/scrubbing [0-9]/.test(r)) throw new Error('a sample taken while dragging did not report a scrubbing figure:\n' + r);
+      if (!/playing — not sampled/.test(r)) throw new Error('nothing was playing, but the report claims a playing figure');
+
+      /* CONTROL: sitting still. Neither bucket fills, and the report must not invent a comparison —
+         a SPLIT line quoting two medians from an idle sample is exactly the confident-nonsense this
+         whole report exists to avoid. */
+      FM.playing = false;
+      FM.playbackQualityInfo = () => ({ inMotion: false, tier: 0, factor: 1, effective: 1, avgFrameMs: 0, avgGapMs: 0, mode: 'auto', dropFrom: 0, locked: false, lockAt: 0, costCtx: '' });
+      r = await report();
+      if (/SPLIT/.test(r)) throw new Error('an idle sample still printed a SPLIT comparison:\n' + r);
+    } finally {
+      FM.playing = realPlaying; FM.playbackQualityInfo = realQI;
+      if (FM.perfProbe && FM.perfProbe.stop) FM.perfProbe.stop();
+    }
+  });
 })();
