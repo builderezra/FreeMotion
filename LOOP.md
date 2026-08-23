@@ -132,6 +132,15 @@ thing it tests has disappeared.**
 DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
 loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
 returns were real, and those nine are fixed.
+**Undo survives a LONG chain, and the 120-cap degrades correctly — soaked 23 Aug.** The suite covers
+single-edit fidelity (*"one edit then undo puts the document back exactly, for every kind of edit"*);
+what it did not cover is a long run, which is where index bookkeeping and stack pruning interact.
+| | |
+|---|---|
+| 30 edits, under the cap | 30 undos, **byte-identical round trip to the start** |
+| 150 edits, past the cap | **exactly 119 undos possible** (120-entry stack → 119 steps back), all layers intact, no duplicate ids, and it correctly does NOT reach the start |
+Losing the oldest history past the cap is by design — it is what bounds memory. **The property that
+matters is that it degrades by losing REACH, never by corrupting the document, and it does.**
 **A full phone does NOT cost him work — simulated and verified, 23 Aug.** His storage is one budget
 shared with the video in IndexedDB, so "what happens when it fills mid-edit" is a real question about
 his data. Stubbed `localStorage.setItem` to throw `QuotaExceededError` on every project write, then
