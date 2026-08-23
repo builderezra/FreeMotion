@@ -458,6 +458,21 @@ produce at most 768 distinct answers**, because the curve's only input is an int
 now this): with `{}` params `evalProp` returns 0, the effect no-ops, and two untouched images compare
 equal. **Any test that compares a fast path against a reference must assert the effect DID something.**
 
+### 23 Aug, v12.00 — I called Lens Flare "genuinely per-pixel geometry" ONE TICK before halving it
+That verdict was written into REQUESTS.md from the timing numbers alone, without reading the kernel.
+Reading it took two minutes: **for every pixel it looped all six flare rays**, wrapped each angle with
+two `while` loops and took a cosine, to find the ray the pixel aligns with. The rays are 60° apart, so
+the nearest one IS the best — a single rounding. Six cosines → one. Then `pow(b,32)` → five squarings.
+**71.2 → 36.0ms, byte-identical.**
+**The lesson is narrow and useful: a timing number tells you WHICH kernel to read, never whether it can
+be improved.** I have now written "the answer here is the quality ladder, not another rewrite" twice and
+been wrong about a specific kernel both times. Rank by measurement; decide by reading.
+**Seven wins from the same question now**, and the question generalises past separability: *how much of
+this expression actually varies per pixel?* Six fixed rays do not. A 0-255 channel value does not. A
+row index does not.
+⏭️ zoomstreaks (67ms) and lensdistort (67ms) are next — and per the above, do not take my word that
+they are irreducible without opening them.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
