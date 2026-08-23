@@ -40654,14 +40654,43 @@
     }
     if (onScratch.length < 20) throw new Error('only ' + onScratch.length + ' kernels found on the shared scratch — the source scan is not matching, so this proves nothing');
 
+    /* ⚠️ THIS TEST USED TO BE INCAPABLE OF FAILING (queue 485), and it is worth saying exactly how,
+       because it looked thorough. It ran each kernel alone, then ran it again after another kernel had
+       "dirtied" the shared buffer, and compared. But `fxSrc` does `_fxScratch.set(d)` over the WHOLE of
+       d on entry, and the dirty pass used the same 96x72 frame — so the buffer was fully overwritten
+       both times and the two results were byte-identical BY CONSTRUCTION. It would have stayed green if
+       the sharing were completely broken.
+       The buffer's one real hazard is that it only ever GROWS: after a big frame it stays big, and the
+       bytes past the current frame's length are the tail of that older, larger frame. A kernel that
+       reads past `d.length` picks up another effect's pixels. Contour Lines did exactly that (fixed
+       v12.02) and this test sailed past it.
+       So: grow the scratch with a LARGE frame, run the kernel small, then grow it again with DIFFERENT
+       large content and run the same kernel on the same input. Everything inside the frame is identical
+       across the two runs; only the stale tail differs. Any kernel whose output changes is reading
+       beyond its own frame.
+       (The companion guard added in v12.02 scans the source for loops bounded by the buffer's length —
+       that one catches the wasted-work case, where the picture is right and the cost is not. Neither
+       test subsumes the other.) */
     const W = 96, H = 72;
-    const mk = () => {
+    const mk = (salt) => {
       const a = new Uint8ClampedArray(W * H * 4);
       for (let i = 0, k = 0; i < a.length; i += 4, k++) {
-        a[i] = (k * 7) & 255; a[i + 1] = (k * 17) & 255; a[i + 2] = (k * 31) & 255; a[i + 3] = 255;
+        a[i] = (k * 7 + salt) & 255; a[i + 1] = (k * 17) & 255; a[i + 2] = (k * 31) & 255; a[i + 3] = 255;
       }
       return a;
     };
+    const BW = 320, BH = 240;                 // >> the measured frame, so a tail always exists
+    const big = (fill) => {
+      const a = new Uint8ClampedArray(BW * BH * 4);
+      for (let i = 0; i < a.length; i++) a[i] = (i * 5 + fill) & 255;
+      return a;
+    };
+    /* Leave the scratch grown to BW*BH with a known pattern in it. `tiltshift` is a shared-scratch
+       kernel, so running it is what both grows the buffer and fills it. */
+    const primeTail = (fill) => {
+      FM._pixelFx.tiltshift(big(fill), BW, BH, { center: 0.15, softness: 0.9 }, 0.37, 1);
+    };
+
     let exercised = 0;
     const skipped = [];
     for (const name of onScratch) {
@@ -40670,23 +40699,30 @@
       let params = {};
       try { const inst = FM.fxRegistry.makeInstance(name); if (inst && inst.params) params = inst.params; } catch (e) {}
 
-      const alone = mk();
-      try { fn(alone, W, H, params, 0.37, 1); } catch (e) { skipped.push(name + ' (threw)'); continue; }
-      const base = mk();
+      primeTail(0);
+      const runA = mk(0);
+      try { fn(runA, W, H, params, 0.37, 1); } catch (e) { skipped.push(name + ' (threw)'); continue; }
+
+      /* CONTROL, per kernel: if the scratch is not actually bigger than this frame there is no stale
+         tail, the two runs are trivially equal, and a pass means nothing — which is precisely the bug
+         this rewrite fixes. */
+      const scratchBytes = FM._fxScratchInfo().bytes;
+      if (scratchBytes <= W * H * 4) throw new Error('the shared scratch is ' + scratchBytes + ' bytes for a ' + (W * H * 4) + '-byte frame, so there is no stale tail to read and this test cannot detect anything (kernel ' + name + ')');
+
+      // is this kernel doing anything at all at its defaults?
       let moved = 0;
-      for (let i = 0; i < alone.length; i += 4) if (Math.abs(alone[i] - base[i]) > 2) moved++;
+      const plain = mk(0);
+      for (let i = 0; i < runA.length; i += 4) if (Math.abs(runA[i] - plain[i]) > 2) moved++;
       if (moved < 100) { skipped.push(name + ' (no-op at defaults)'); continue; }
       exercised++;
 
-      // dirty the shared buffer with a DIFFERENT kernel, then run the same one again
-      const dirty = mk();
-      FM._pixelFx.tiltshift(dirty, W, H, { center: 0.15, softness: 0.9 }, 0.37, 1);
-      const after = mk();
-      fn(after, W, H, params, 0.37, 1);
+      primeTail(137);                          // same frame in, a DIFFERENT tail behind it
+      const runB = mk(0);
+      fn(runB, W, H, params, 0.37, 1);
 
-      for (let i = 0; i < alone.length; i++) {
-        if (alone[i] !== after[i]) {
-          throw new Error(name + ' rendered differently once another effect had used the shared scratch (byte ' + i + ': ' + alone[i] + ' vs ' + after[i] + ') — the buffer is being handed out while still in use, or returned without being refilled');
+      for (let i = 0; i < runA.length; i++) {
+        if (runA[i] !== runB[i]) {
+          throw new Error(name + ' rendered differently when the only thing that changed was the STALE TAIL of the shared buffer beyond this frame (byte ' + i + ': ' + runA[i] + ' vs ' + runB[i] + '). It is reading past d.length into another effect\'s pixels — bound its loops by d.length, or by W/H.');
         }
       }
     }

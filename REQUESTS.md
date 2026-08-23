@@ -16549,8 +16549,20 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [x] **Contour Lines was doing ~200× the work it needed on every frame.** ✅ **FIXED v12.02.** Two loops were sized by the shared scratch buffer, which only ever grows, instead of by the frame being drawn — so once anything rendered at full size, every reduced-quality playback frame walked the big buffer for the rest of the session. Measured 8.2ms → 25.6ms per frame, 3.1× — and the picture was identical either way, so it read as 'playback is a buggy mess while scrubbing is fine'. A new guard now scans all 29 shared-buffer effects for the same mistake; it immediately caught a second loop I had missed while fixing the first.
 
-- [ ] **485 — 🟠 My new shared-scratch test cannot fail — 29 effects are reported as covered by an assertion that is inert.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **485 — 🟠 My new shared-scratch test cannot fail — 29 effects are reported as covered by an assertion that is inert.** ✅ **REWRITTEN, shipped on v12.06** (tests only — nothing you can see changed).
+      The old shape: run each effect alone, run it again after another effect has used the shared buffer,
+      compare. It looked thorough and could not fail. The buffer is refilled completely on every use, and
+      both runs used the same frame size — so the two results were identical *by construction*. It would
+      have stayed green if the sharing were completely broken.
+      The buffer's actual hazard is that it only ever GROWS: after one big frame it stays big, and the space
+      past the current frame still holds the tail of that older one. An effect that reads past its own frame
+      picks up another effect's pixels. So the test now grows the buffer with a large frame, runs the effect
+      small, then refills the buffer with DIFFERENT large content and runs it again on the same input —
+      **everything inside the frame is identical between the two runs; only the stale tail differs.** Any
+      effect whose picture changes is reading beyond itself. It also refuses to run if the buffer is not
+      actually bigger than the frame, which is the exact hole it just had.
+      **Proved by making Emboss read one frame past its own** — the test names it and the byte. The old
+      version could not have seen that, because the stale tail was the same in both of its runs.
       The test claims 'every kernel on the shared buffer is unaffected by another kernel using it first'. It compares a kernel run alone against the same kernel run after another dirties the buffer — but the buffer is fully overwritten before each run and both runs use the same frame size, so the two results are byte-identical *by construction*. It would stay green if the sharing were completely broken. The one hazard the growing buffer actually has is a kernel reading past the end of the current frame into the tail left by a bigger one — which is precisely what Contour Lines was doing (fixed v12.02) and this test sailed past. Rewrite it to run the dirty pass at a LARGER size than the measured pass, which is the only shape that can catch it.
 
 - [ ] **486 — 🟠 On Chrome and Edge the app wrongly accuses your iPhone videos of being unplayable.**

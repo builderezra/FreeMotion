@@ -107,8 +107,11 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 485–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
+**Next: 486–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
+⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
+what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
+assertion, name the mutation it would catch — and then actually run it.
 **482 is a STANDING round-based project, not a blocker.** Round 1 (v12.05) swept all 345 sliders for dead range
 and found two effects whose slider was locked in its own mode. `tools/fx-sweep.js` is the probe; its header lists
 the four ways it lied on the first run. Only the SUBJECTIVE half (does it look good) needs a word from him.
