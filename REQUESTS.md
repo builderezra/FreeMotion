@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.97
 >
-> **State:** v11.97, **873 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.97, **874 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -1901,6 +1901,25 @@ better still, keep working inside the turn rather than parking work for a later 
       control test, because 244 existing toasts must stay inert.
       **What I need from you: press play on a project that lags, wait for the toast, tap it, then send
       me the text.** That is the number this entry has been waiting on since 14 August.
+
+      🔎 **v11.97+ — I DROVE THE WHOLE CHAIN END TO END BEFORE ASKING YOU AGAIN, and it works.** Nothing
+      stubbed, at 375px: sustained bad frames → the offer toast appears → tapping it starts a real
+      ten-second sample → it finishes with *"Measurement ready — tap to copy it"* and a 1,032-character
+      report in storage. So when you do it, it will behave.
+      ⚠️ **One link I CANNOT prove from here, stated rather than glossed:** the clipboard write itself.
+      A script-driven tap is `isTrusted: false`, so the browser grants it no user activation and refuses
+      the write — which is exactly what happened, and **the fallback correctly said** *"Could not copy
+      here — Settings ▸ App settings ▸ What's slow ▸ Copy"*. A real finger tap does confer activation,
+      so it should copy on your phone; if it ever does not, the toast tells you the route that still
+      works instead of failing silently.
+      🐛 **AND IT FOUND A REAL HOLE IN MY OWN TESTS.** The existing offer test calls
+      `FM._maybeOfferPerfProbe` directly — a SEPARATE reference from the one `notePlaybackCost` actually
+      calls — so the call site was never covered. **Deleting that line left every assertion green while
+      the app silently stopped ever offering to measure itself**, which is the entire feature. There is
+      a test driving the real cost recorder now, mutation-checked by deleting exactly that line, plus a
+      control that healthy playback never offers.
+      *(That is the third time this shape has bitten: queue 148's counter, 478's resize listener, this.
+      Testing the repair is not testing the wiring.)*
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame

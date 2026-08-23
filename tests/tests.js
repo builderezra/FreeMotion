@@ -40306,4 +40306,39 @@
       try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: realClip }); } catch (e) {}
     }
   });
+
+  /* ═══ DOES REAL PLAYBACK ACTUALLY REACH THE OFFER? (queue 95 / 125 / 148 / 202 / 387)
+     The existing test for the struggle offer calls `FM._maybeOfferPerfProbe` directly — and that is a
+     SEPARATE REFERENCE from the one `notePlaybackCost` calls, so replacing it intercepts nothing and
+     the call site was never covered. Deleting that line would leave every existing assertion green
+     while the app never offered to measure anything, which is the whole feature.
+     Found by driving it for real and watching the seam not fire — the same "testing the repair is not
+     testing the wiring" mistake as queue 148's counter and 478's resize listener, three for three. */
+  test('sustained bad frames reach the offer through the REAL cost path (queue 95)', { item: '95' }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function') throw new Error('FM._notePlaybackCost is not exposed — this test cannot reach the real call site');
+    const realToast = FM.toast, realProbe = FM.perfProbe, wasPlaying = FM.playing;
+    let offers = 0;
+    try {
+      FM.toast = (m) => { if (/struggling/i.test(m)) offers++; };
+      FM.perfProbe = { running: false, run() { return true; }, stop() {} };
+
+      /* Hopeless frames, sustained: 400ms of work against a ~16.7ms budget walks the ladder to the
+         bottom and keeps it late there, which is the condition the offer waits for. Driven through
+         notePlaybackCost itself, so the assertion covers the CALL, not just the decision. */
+      FM._resetPerfOffer();
+      FM.playing = true;
+      for (let i = 0; i < 900; i++) FM._notePlaybackCost(400, 400);
+      if (!offers) throw new Error('900 hopeless frames through the real cost recorder produced no offer — the app never asks to measure itself, and five entries are waiting on that measurement');
+      if (offers > 1) throw new Error('the offer fired ' + offers + ' times in one session');
+
+      /* CONTROL, and it doubles as the cleanup: healthy frames must never offer, and driving them
+         walks the quality tier back up to where it started. */
+      FM._resetPerfOffer(); offers = 0;
+      for (let i = 0; i < 900; i++) FM._notePlaybackCost(2, 2);
+      if (offers) throw new Error('playback that was comfortably inside budget still offered to measure itself — this would fire on every healthy session and get dismissed forever');
+    } finally {
+      FM.toast = realToast; FM.perfProbe = realProbe; FM.playing = wasPlaying;
+      FM._resetPerfOffer();
+    }
+  });
 })();
