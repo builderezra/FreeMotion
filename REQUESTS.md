@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.97
 >
-> **State:** v11.97, **875 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.97, **876 tests green**. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -8557,6 +8557,19 @@ better still, keep working inside the turn rather than parking work for a later 
       **Three outcomes are now distinguishable from the outside**, which is what this entry has always
       lacked: a toast naming a clip = the mixer; the AAC toast = the encoder; NEITHER toast and still a
       silent file = the muxer, and that is the last place left to look.
+      🐛 **23 Aug — ONE OF THOSE THREE COULD HAVE STOPPED WORKING WITHOUT ANYTHING NOTICING.** Audited
+      all three by silencing each toast in turn and running the suite. The mixer one and the AAC one are
+      both caught. **The third — the soundtrack failing to ENCODE mid-render — was not: silencing it
+      left every test green.**
+      **That is worse than an ordinary gap in coverage, and worth spelling out.** If that toast quietly
+      stopped firing, an encode failure would present as *"neither toast, and a silent file"* — which
+      the paragraph above defines as **the MUXER**, the one region with no witness. A regression there
+      would not merely lose a message; it would send the next investigation of your silent export to
+      precisely the wrong place.
+      Covered now by a test that drives a REAL export with an encoder that claims support and then fails
+      on configure (the true shape: the AAC probe passes, so the export is already committed). It
+      asserts the toast, the recorded reason, that the file is still written, and that the file does not
+      declare an audio track it never fed. Mutation-checked on that exact line.
       *Known gap, stated rather than papered over: the AAC path has no direct test. It sits mid-`run()`
       behind a real `isConfigSupported` probe, so covering it needs a full export with a stubbed encoder
       — a bigger rig than this change earned today.*

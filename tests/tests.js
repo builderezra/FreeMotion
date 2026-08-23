@@ -40386,4 +40386,64 @@
       } catch (e) {}
     }
   });
+
+  /* ═══ THE THIRD LEG OF #215'S DIAGNOSIS (queue 215).
+     That entry's whole value is that three outcomes are distinguishable from the outside:
+       · a toast naming a clip      → the MIXER dropped it
+       · the AAC toast              → this browser has no encoder
+       · NEITHER toast, silent file → the MUXER, the one region with no witness
+     The first two are covered. The third — the soundtrack ENCODE failing mid-render — was not:
+     silencing it left every test green. That is worse than an ordinary gap, because an encode failure
+     would then present as "neither toast plus a silent file" and point the next investigation at the
+     muxer, which is exactly the wrong place. Found by mutating the toast away during a seam audit. */
+  test('export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)', { item: '215' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast };
+    const realAE = window.AudioEncoder;
+    const toasts = [];
+    try {
+      FM.toast = m => toasts.push(String(m));
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.3), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: buf });
+
+      /* An encoder this browser SAYS it supports, which then fails when actually configured. That is
+         the real shape of this failure — the AAC probe passes, so the "no AAC encoder" branch is not
+         the one under test, and the export is already committed by the time it breaks. */
+      function BrokenEncoder() { throw new Error('probe: refused at construction'); }
+      BrokenEncoder.isConfigSupported = () => Promise.resolve({ supported: true });
+      window.AudioEncoder = BrokenEncoder;
+
+      FM._audioTrackDropped = null;
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'probe', onReady: async r => { blob = r.blob; } });
+
+      // CONTROL: the export must still SUCCEED. Losing the sound is the trade; losing the file is a bug.
+      if (!blob) throw new Error('a failed soundtrack encode took the whole export down — the video should still be written');
+      if (FM._audioTrackDropped !== 'encode-failed') throw new Error('the export did not record the encode failure (got ' + JSON.stringify(FM._audioTrackDropped) + ')');
+      if (!toasts.some(t => /WITHOUT SOUND/i.test(t))) {
+        throw new Error('the soundtrack failed to encode and NOTHING was said on screen — that silence reads as "neither toast plus a silent file", which queue 215 defines as the MUXER, so this would send the next investigation to the wrong place entirely: ' + JSON.stringify(toasts));
+      }
+      // ...and the file must be honest about it rather than declaring a track it never fed.
+      const scan = await q215TrackScan(blob);
+      if (!scan.vide) throw new Error('the byte scan found no video track, so it is not reading this file and the check below means nothing');
+      if (scan.soun || scan.mp4a) throw new Error('the file still DECLARES an audio track after the encode failed (soun ' + scan.soun + ', mp4a ' + scan.mp4a + ') — that is the file that plays silently in one player and is refused by another');
+    } finally {
+      window.AudioEncoder = realAE;
+      FM.toast = saved.toast;
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
 })();
