@@ -5168,6 +5168,16 @@ better still, keep working inside the turn rather than parking work for a later 
              checking bumpmap and fractalridges this tick found both ALREADY correct: bumpmap hoists its
              light-vector trig into the setup, and fractalridges guards its one `pow` so the default
              path skips it. Neither needed touching.
+             🏁 **THE EFFECT-SPEED CAMPAIGN IS FINISHED — all three remaining hogs read, none reducible.**
+             · **lensblur, linstreaks, clouds: ZERO transcendental calls inside their pixel loops.** Every
+               sin/cos/sqrt is already in the setup; clouds has none at all. So the boundary rule (hoist
+               only EXPENSIVE work) offers nothing here.
+             · **linstreaks in particular weights each of its 8 taps by THE SAMPLED PIXEL'S OWN
+               BRIGHTNESS**, which makes it a non-linear filter — so neither a prefix sum nor a recursive
+               filter applies, and the sliding-window trick that made Tilt Shift 10.5× cannot be used.
+             Their cost is 8-16 memory gathers per pixel with data-dependent weights: real work.
+             **Eight wins, one measured rejection, and the vein is now empty. Do not re-rank the effects
+             hoping for another; the remaining top five have all been read.**
              ❌ **AND A NINTH ATTEMPT MEASURED AND REJECTED — zoomstreaks, recorded so nobody rebuilds it.**
              Its ten taps each recomputed `(k/steps)*strength` and `1-(k/(steps+1))` — **twenty divisions
              per pixel, 29 million a frame, for exactly ten distinct pairs** — plus a per-pixel `norm`.
