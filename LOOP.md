@@ -574,6 +574,24 @@ a DIFFERENT four (darkglow, replacecolor, hslbands, matchgrade). Nobody reconcil
    magenta fill because it matched his screenshot — and reproduced his complaint AND the wrong
    diagnosis. Test on artwork the effect can act on, then on his subject, and report both.
 
+### 23 Aug — audit finished: the queue IS genuinely blocked, and one stale pointer corrected
+Ran the "waiting on him or on me?" sweep over every open entry with the tails correctly attributed.
+**After #460 closed, every remaining open item genuinely waits on Ezra**, or is a standing note/held
+item. So the loop is not hiding work behind a bad classifier — it is waiting, correctly.
+**One correction found:** closed entry #471 ends *"a Custom rung on the export frame-rate list is still
+genuinely not built and is the next thing to do here."* **It shipped at v11.55 as #141b.** Verified in
+`index.html` (`#exp-custom-fps`, `#exp-fps-num`) rather than trusting the tick. **A "next thing to do"
+written inside ENTRY A does not get updated when ENTRY B does the work** — so a finished job kept
+advertising itself as outstanding for weeks.
+⚠️ **AND MY OWN SCAN MISATTRIBUTED HALF OF IT FIRST — the fourth broken lens this week.** I split
+REQUESTS.md on `- [ ] **` only, so each open entry's "tail" ran through every CLOSED entry after it. It
+handed me a scrollbar-gutter fix as #342's next step (it belongs to #187) and the custom-fps note as
+#387's (it belongs to #471). **Splitting on open headers only is not parsing the file, it is parsing
+every other entry.** Redone splitting on ALL headers before acting on any of it.
+**That is: truncated grep, too-narrow regex, guessed selector, and now a mis-split parser — four
+readings-through-a-broken-lens in one week, none of which reached him because each was checked before
+acting. The check is the habit that matters, not the instrument.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
