@@ -15632,8 +15632,7 @@ wait for them to report back."*
       `close({push:true,wait:true})` and `armPushIn()` in ONE synchronous block, where elapsed time is 0
       by construction and the hold must engage. Both mutation directions caught; removing the release
       also trips an existing push test.
-- [ ] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** (21 Aug,
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **460 — 🚨 EFFECTS IN THE COLOURING LIST STILL DO NOTHING. He has reported this before.** ✅ **ANSWERED 23 Aug — ALL 43 WORK, and the earlier "four are dead" finding was wrong.** (21 Aug,
       with a screenshot.) His words, verbatim: *"Effects in this image STILLLLLLLLLL don't work"*.
       **The nine L's are the point.** The same complaint is already recorded from 13 Aug — *"There's a
       shit load of effects in the colour & light section that blatantly do nothing and don't work"* — and
@@ -15685,6 +15684,34 @@ wait for them to report back."*
       and `makeInstance` hands channelremap `mode:1`. Checking a KNOWN-GOOD effect the same way is what
       exposed it. **Do not diagnose from `p.def`.**
       **NEXT STEP: instrument the four implementations to find out whether they are CALLED at all.**
+
+      ✅ **23 Aug — DID THAT, AND THE FOUR ARE NOT DEAD. My own 21 Aug measurement was wrong, in exactly
+      the way this entry warned about two paragraphs earlier.**
+      Called all four kernels DIRECTLY with the parameters `makeInstance` gives them. On a flat, fully
+      opaque magenta fill they change **0 pixels** — reproducing the old result. On ordinary artwork (an
+      orange blob on a TRANSPARENT background, with a highlight):
+      | effect | pixels changed |
+      |---|---|
+      | lightglow | **1,575** |
+      | longshadow | **2,370** |
+      | channelremap | **1,575** |
+      | radialshadow | **1,353** |
+      **All four work. The test subject was the bug.** Two reasons, and both are the note this entry
+      already made about halation and matchgrade, applied one step further:
+      · **The shadows (`longshadow`, `radialshadow`) cast INTO TRANSPARENT SPACE beside your artwork.**
+        A rectangle that fills the frame edge to edge leaves nowhere for a shadow to fall, so they
+        correctly do nothing.
+      · **`channelremap` at its default swaps RED and BLUE — and your magenta is `#cc22cc`, where red
+        and blue are THE SAME NUMBER (204).** Swapping them is a no-op by arithmetic. It is not ignoring
+        you; there is genuinely nothing to swap.
+      **And the suite already disagreed with the old finding**: `no Colouring effect is a silent no-op at
+      its own defaults` lists the real no-op-at-defaults set as **darkglow, replacecolor, hslbands,
+      matchgrade** — a different four, each needing an input the default does not supply. That test
+      renders a layer that only partly covers the frame, which is why it sees the shadows working.
+      **So the answer to your nine L's is the subject, not the app** — which is exactly what **#477**
+      now says on screen when an effect cannot change the layer you have selected.
+      🔴 **If you pick these on a PHOTO or a gradient and still see nothing, this is live again** — but
+      try it on something with edges and mixed colour first.
       Everything cheap has been ruled out from the outside; the next fact worth having is whether the
       pixel function runs and does nothing, or never runs. Those are different bugs with different fixes.
       **Tell Ezra the four names either way** — he has asked twice and deserves to know exactly which
