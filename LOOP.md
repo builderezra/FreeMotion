@@ -346,6 +346,21 @@ read the DOM; create two projects and open one), both re-mutated to confirm they
 **And the general lesson: a new warning/diagnostic is exactly the kind of feature whose absence is
 silent.** Nothing breaks when it stops firing, so its call site needs the test more than its logic does.
 
+### 23 Aug — audited the app's DIAGNOSTICS the same way, and #215's triad had a hole
+Extending yesterday's audit outward: most of the app's "could not…" toasts sit on user actions he would
+see fail anyway, so their absence is not silent. **The exception is the export triad**, which is the
+whole of #215's diagnostic value — clip-naming toast = mixer, AAC toast = no encoder, neither + a silent
+file = MUXER. Silenced each in turn:
+· mixer toast — caught ✅ · AAC toast — caught ✅ · **encode-failure toast — SURVIVED** ❌
+**Why that one matters more than an ordinary gap:** if it stopped firing, an encode failure would look
+like "neither toast plus a silent file", i.e. the muxer — so a regression would not just lose a message,
+it would misdirect the next investigation of his most serious open bug. Covered now by a real export
+against an encoder that claims support and fails on configure.
+**The heuristic that found it, worth reusing: rank diagnostics by whether their ABSENCE is visible.** A
+failure message on a button he pressed is self-policing — he sees nothing happen. A message that
+explains an outcome he cannot otherwise interpret (a silent file, a blank clip, a slow app) is the kind
+that has to be tested, because losing it is indistinguishable from the problem not occurring.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
