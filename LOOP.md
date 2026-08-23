@@ -330,6 +330,22 @@ every assertion green while the app silently stopped offering to measure itself.
 **a seam exposed as `FM._x = x` does not intercept internal callers of `x`. Testing through it tests the
 function, never the wiring. Drive the outermost real entry point you can reach.**
 
+### 23 Aug — I AUDITED MY OWN WEEK FOR THAT HOLE AND FOUND TWO MORE (both now closed)
+Having written the rule above three times, the obvious next move was to check whether I had done it
+again. I had, twice, in features shipped this same week:
+· **v11.90's "this export will have no sound"** — test drove `FM._checkExportAudioSupport()`. Deleting
+  the call from `showExportDialog` left it GREEN while the warning stopped appearing.
+· **v11.88's "this project is 12.2 megapixels"** — test drove `FM.warnOversizeProject()`. Deleting the
+  call from `projects.open()` left it GREEN while the app never warned him again.
+Both proved by mutation BEFORE fixing, both now driven through the real entry point (open the dialog and
+read the DOM; create two projects and open one), both re-mutated to confirm they bite.
+**The distinction worth keeping, because it decides how to write the test:**
+· a call through a PUBLIC property (`FM.warnOversizeProject()`) CAN be intercepted by a spy;
+· a call to a MODULE-LOCAL function (`checkExportAudioSupport()`, `maybeOfferPerfProbe()`) cannot — the
+  only honest observation is the effect (a DOM change, a counter, a toast).
+**And the general lesson: a new warning/diagnostic is exactly the kind of feature whose absence is
+silent.** Nothing breaks when it stops firing, so its call site needs the test more than its logic does.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
