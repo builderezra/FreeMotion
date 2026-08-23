@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.08
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.09
 >
-> **State:** v12.08, **891 tests green**, tree clean.
+> **State:** v12.09, **892 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16596,8 +16596,23 @@ re-opened #480, which I had marked done and had not fixed.
       the canvas dialog 400ms later, so you get about half a second to read it. Next few ticks.
       It is called from exactly one place — `projects.open()` — and the project the app restores when it boots does not go through that function. So the exact case the warning was written for (your 12.2-megapixel project, resumed on your phone) is the one case it stays silent for. You would only ever see it by opening a different project first and then coming back.
 
-- [ ] **488 — 🟡 Element cards can show a solid black square instead of an icon.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **488 — 🟡 Element cards can show a solid black square instead of an icon.** ✅ **FIXED v12.09.**
+      The card was drawn at wherever the playhead happened to be sitting, and a clip that is not on screen
+      at that instant draws nothing — so saving a selection whose clips are somewhere else on the timeline
+      produced a black square. Two black cards look identical and both look broken, which is worse than the
+      ✦/letter card it replaced.
+      Two separate defences now: it picks a moment the selection is **actually on screen** (keeping the
+      playhead when that already shows everything, so the card matches what you were looking at), and it
+      **refuses to hand back a black card at all** — something that can never draw falls back to ✦/letter.
+      ⚠️ **My first attempt at the second half did not work and the test did not notice**, which is the more
+      useful half of this. I checked whether any pixel was transparent — but the canvas paints an opaque
+      background, so it is never transparent even when nothing was drawn. It passed a card that was 3072 of
+      3072 pixels solid black. It measures brightness now, and only rejects a flat card when it is also
+      dark, so a solid pink element still gets a pink card.
+      Two more of my own mistakes, both found by mutation rather than by reading: my test put a 600px shape
+      at 540,960 — coordinates from a phone-sized project — in a project a fraction of that size, so it sat
+      off-canvas and looked like the fix had failed; and it set `opacity` on the layer when opacity lives on
+      the transform, so the "cannot draw" case was drawing in full white and testing nothing.
       The thumbnail is rendered at whatever the playhead happens to be on, and a layer that is not visible at that instant draws nothing — so saving a selection whose clips do not span the playhead produces a black JPEG. That is worse than the ✦/letter fallback it replaced, because two black cards are indistinguishable and both look broken.
 
 - [ ] **489 — 🔴 The lag report's AUDIO line can give a WRONG verdict — and it is the line the whole audio question hangs on.**

@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.08, 891 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.09, 892 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 488–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
+**Next: 489–496 — the review's own findings, oldest first. 489/491/493 are the lag report's faults and
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
 what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
@@ -120,6 +120,12 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **488: A FIXTURE BUILT ON ASSUMED NUMBERS FAILS LIKE A BROKEN FIX.** Three separate own-goals in one item:
+the blank-card check asked about ALPHA when the canvas paints an opaque background (so it never fires); the
+test placed a 600px shape at 540,960 in a project a fraction of that size (off-canvas, looked like the fix
+had failed); and it set `opacity` on the layer when opacity lives on `layer.transform`. **Read the project's
+real dimensions and the real property names out of the running app — never assume phone-sized coordinates.**
+All three were caught by mutation, none by reading.
 **482 is a STANDING round-based project, not a blocker.** Round 1 (v12.05) swept all 345 sliders for dead range
 and found two effects whose slider was locked in its own mode. `tools/fx-sweep.js` is the probe; its header lists
 the four ways it lied on the first run. Only the SUBJECTIVE half (does it look good) needs a word from him.

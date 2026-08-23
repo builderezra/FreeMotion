@@ -1114,13 +1114,38 @@ window.FM = window.FM || {};
    * useless with thirty, and it is not a taste call which way it should go.
    * Rendered from the layers being saved rather than the open project, so a selection of two layers
    * out of twenty shows those two — the thing you are actually saving. */
+  /* WHEN DOES THIS SELECTION ACTUALLY SHOW SOMETHING? (queue 488) The thumbnail used to be drawn at
+     whatever the playhead happened to be on, and `drawLayer` returns immediately for a layer that is
+     not visible at that instant — so saving a selection whose clips do not span the playhead rendered
+     NOTHING, and the JPEG (which has no transparency) came out solid black. Two black cards are
+     indistinguishable from each other and both look broken, which is worse than the letter/✦ fallback
+     this replaced.
+     Prefer the playhead when it already shows the whole selection, so the card matches what he was
+     looking at; otherwise take the moment where the most of it is on screen. */
+  function pickThumbTime(layers) {
+    const visibleAt = (t) => layers.reduce((n, l) => n + (!FM.isLayerVisibleAt || FM.isLayerVisibleAt(l, t) ? 1 : 0), 0);
+    const now = Math.max(0, FM.time || 0);
+    let bestT = now, bestN = visibleAt(now);
+    if (bestN === layers.length) return now;
+    layers.forEach(l => {
+      const st = Math.max(0, +l.start || 0), du = Math.max(0, +l.duration || 0);
+      [st + Math.min(0.05, du / 2), st + du / 2, st + Math.max(0, du - 0.05)].forEach(t => {
+        if (!isFinite(t) || t < 0) return;
+        const n = visibleAt(t);
+        if (n > bestN) { bestN = n; bestT = t; }
+      });
+    });
+    return bestT;
+  }
+  FM._pickThumbTime = pickThumbTime;   // suite seam
+
   function makeLayerThumb(layers) {
     try {
       if (!layers || !layers.length || !FM.renderScene) return null;
       const P = FM.scene.project;
       const mini = { project: P, layers: layers };
       let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
-      FM.renderScene(src.getContext('2d'), mini, FM.time);
+      FM.renderScene(src.getContext('2d'), mini, pickThumbTime(layers));
       const s = Math.min(360 / P.width, 360 / P.height, 1);
       const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
       while (src.width >= tw * 2) {
@@ -1134,6 +1159,24 @@ window.FM = window.FM || {};
       c.width = tw; c.height = th;
       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
       g.drawImage(src, 0, 0, tw, th);
+      /* AND NEVER HAND BACK A BLACK ONE. Choosing a better moment covers the common case, but a layer
+         can draw nothing for reasons no time can fix — fully transparent, scaled to zero, or sitting
+         entirely off-canvas. Returning null lets the caller fall back to the ✦ / letter card, which at
+         least tells two of them apart.
+         ⚠️ MEASURE BRIGHTNESS, NOT ALPHA. The first version of this check asked whether any pixel had
+         alpha — and the scene paints an OPAQUE background, so alpha is full even when nothing at all
+         was drawn. It passed a card that was 3072 out of 3072 pixels solid black. A flat card is only
+         rejected when it is also DARK: a solid pink element is a perfectly good flat card and says
+         what it is, whereas a black one is indistinguishable from every other black one. */
+      try {
+        const px = g.getImageData(0, 0, tw, th).data;
+        let brightest = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const v = px[i] > px[i + 1] ? (px[i] > px[i + 2] ? px[i] : px[i + 2]) : (px[i + 1] > px[i + 2] ? px[i + 1] : px[i + 2]);
+          if (v > brightest) { brightest = v; if (brightest > 12) break; }
+        }
+        if (brightest <= 12) return null;
+      } catch (e) { /* tainted canvas (cross-origin media) — cannot read it, so trust the render */ }
       return c.toDataURL('image/jpeg', 0.8);
     } catch (e) { return null; }   // a thumbnail is never worth failing a save over
   }

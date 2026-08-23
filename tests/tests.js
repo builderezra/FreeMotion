@@ -41437,4 +41437,82 @@
       throw new Error('the boot path no longer asks about an oversize project, so a refresh straight back into his big project is silent again — which is queue 487 exactly');
     }
   });
+
+  /* ═══ 488: AN ELEMENT CARD MUST NEVER BE A BLACK SQUARE.
+     The thumbnail was rendered at whatever the playhead happened to be on, and drawLayer returns
+     immediately for a layer that is not visible at that instant — so saving a selection whose clips do
+     not span the playhead drew nothing, and the JPEG (no transparency) came out solid black. Two black
+     cards look identical and both look broken: strictly worse than the ✦ / letter fallback it replaced.
+     Two defences, asserted separately, because neither covers the other: pick a moment the selection is
+     actually on screen, and refuse to return a blank image whatever the moment. */
+  test('488: a saved element never becomes a black card', { item: '488' }, async function () {
+    if (typeof FM._makeLayerThumb !== 'function') throw new Error('FM._makeLayerThumb is missing');
+    const keep = FM.scene.layers.slice(), keepT = FM.time;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // How much of a returned thumbnail is not black? Decoded for real rather than trusted.
+    const inkOf = (url) => new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => {
+        const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
+        const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+        const px = cx.getImageData(0, 0, cv.width, cv.height).data;
+        let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 12 || px[i + 1] > 12 || px[i + 2] > 12) lit++;
+        res({ lit, total: px.length / 4 });
+      };
+      im.onerror = () => rej(new Error('the thumbnail data URL would not decode as an image'));
+      im.src = url;
+    });
+    try {
+      FM.scene.layers.length = 0;
+      /* ⚠️ PLACE IT IN THE PROJECT THAT IS ACTUALLY LOADED. The first draft hardcoded 540,960 with a
+         600px shape — the coordinates of a 1080x1920 phone project. The suite's project is a fraction
+         of that, so the shape sat entirely off-canvas and the render was empty for a reason that had
+         nothing to do with the bug under test. It looked exactly like a failure of the fix. */
+      const P0 = FM.scene.project;
+      const side = Math.max(4, Math.round(Math.min(P0.width, P0.height) * 0.6));
+      const L = FM.makeLayer('shape', { name: 'E488', shape: 'rect', x: P0.width / 2, y: P0.height / 2, shapeW: side, shapeH: side, fill: '#ff5aa8' });
+      L.start = 5; L.duration = 2;             // lives 5s..7s
+      FM.scene.layers.push(L);
+      FM.time = 0;                              // …and the playhead is nowhere near it
+      FM.refreshAll();
+      await sleep(60);
+
+      /* CONTROL: if the layer IS visible at the playhead there is no bug to detect and a pass is
+         meaningless — which is exactly how this shipped. */
+      if (FM.isLayerVisibleAt && FM.isLayerVisibleAt(L, FM.time)) throw new Error('the layer is visible at the playhead, so this test is not reproducing the case it was written for');
+
+      const url = FM._makeLayerThumb([L]);
+      if (!url) throw new Error('no thumbnail at all for a layer that is perfectly drawable two seconds later — the fallback is acceptable for something that can never draw, but not for this');
+      const got = await inkOf(url);
+      if (got.lit < got.total * 0.02) {
+        throw new Error('the element card came out essentially black (' + got.lit + ' of ' + got.total + ' pixels lit). The clip lives at 5s–7s and the playhead was at 0, so nothing was drawn — that is queue 488.');
+      }
+
+      /* AND the moment chosen has to be one the layer is actually up. */
+      if (typeof FM._pickThumbTime === 'function') {
+        const t = FM._pickThumbTime([L]);
+        if (FM.isLayerVisibleAt && !FM.isLayerVisibleAt(L, t)) throw new Error('the thumbnail time chosen (' + t + ') is one where the layer is not visible');
+      }
+
+      /* THE OTHER HALF: something that can never draw must return null so the caller can fall back to
+         the ✦ / letter card, rather than a black rectangle that looks like a broken image. */
+      const dead = FM.makeLayer('shape', { name: 'E488dead', shape: 'rect', x: P0.width / 2, y: P0.height / 2, shapeW: side, shapeH: side, fill: '#ffffff' });
+      /* Opacity lives on the TRANSFORM, not on the layer (`layer.transform.opacity` — js/compositor.js
+         :1933). Setting `dead.opacity = 0` did nothing at all: the square drew in full white, the card
+         was not black, and this branch never exercised the check it exists for — a mutation deleting
+         that check survived because of it. */
+      dead.start = 0; dead.duration = 5;
+      if (!dead.transform) throw new Error('a fresh layer has no .transform, so this fixture cannot make it invisible and the branch below would prove nothing');
+      dead.transform.opacity = 0;          // on screen, on time, and completely transparent
+      const deadUrl = FM._makeLayerThumb([dead]);
+      if (deadUrl) {
+        const d = await inkOf(deadUrl);
+        if (d.lit < d.total * 0.02) throw new Error('a layer that draws nothing produced a solid black card (' + d.lit + ' of ' + d.total + ' lit) instead of returning nothing and letting the ✦ / letter fallback show');
+      }
+    } finally {
+      FM.scene.layers = keep; FM.time = keepT;
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();
