@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.01
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.02
 >
-> **State:** v12.01, **884 tests green**. **Four new requests logged 23 Aug: 481 (PC browser layout), 482 (improve every effect), 483 (undo/redo ring), 484 (rename the AM-copied effect names + add what they have).**, tree clean, and the live site verified end to end — it boots,
+> **State:** v12.02, **885 tests green**. **Four new requests logged 23 Aug: 481 (PC browser layout), 482 (improve every effect), 483 (undo/redo ring), 484 (rename the AM-copied effect names + add what they have).**, tree clean, and the live site verified end to end — it boots,
 > opens a project, renders, and exports a real file on your actual URL. **27 items open, and after an
 > entry-by-entry audit every one of them is waiting on YOU**, not on me.
 >

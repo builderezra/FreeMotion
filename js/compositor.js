@@ -4297,7 +4297,12 @@ window.FM = window.FM || {};
       var clPaper=(p.paper==null?0:(Math.round(FM.evalProp(p.paper,t))|0))===1;
       var clHit=new Uint8Array(W*H);
       var clLumA=new Float32Array(W*H);
-      for(var cLi=0,cLj=0;cLi<clS.length;cLi+=4,cLj++) clLumA[cLj]=0.299*clS[cLi]+0.587*clS[cLi+1]+0.114*clS[cLi+2];
+      /* BOUND BY THE FRAME, NOT THE BUFFER (queue 474). `clS` is the SHARED scratch, which only ever
+         grows — after one full-size frame it stays at that size forever. Looping to its length on a
+         small frame (every effect-browser thumbnail is one) ran ~200x the needed iterations, all of
+         them writing past the end of clLumA where a typed array silently discards them. The picture
+         was never wrong; the work was pure waste on the one surface that renders 199 of them. */
+      for(var cLi=0,cLj=0;cLi<d.length;cLi+=4,cLj++) clLumA[cLj]=0.299*clS[cLi]+0.587*clS[cLi+1]+0.114*clS[cLi+2];
       if(clSm>0){ var clT=new Float32Array(W*H), clWin=clSm*2+1, clInv=1/clWin, ca,cb2,cs2,cidx;
         for(ca=0;ca<H;ca++){ var cRow=ca*W; cs2=0;
           for(cb2=-clSm;cb2<=clSm;cb2++){ cidx=cb2<0?0:(cb2>=W?W-1:cb2); cs2+=clLumA[cRow+cidx]; }
@@ -4306,7 +4311,7 @@ window.FM = window.FM || {};
         for(cb2=0;cb2<W;cb2++){ cs2=0;
           for(ca=-clSm;ca<=clSm;ca++){ cidx=ca<0?0:(ca>=H?H-1:ca); cs2+=clT[cidx*W+cb2]; }
           for(ca=0;ca<H;ca++){ clLumA[ca*W+cb2]=cs2*clInv;
-            var cAy=ca+clSm+1; cAy=cAy>=H?H-1:cAy; var cBy=ca-clSm; cBy=cBy<0?0:cBy; cs2+=clT[cAy*W+cb2]-clT[cBy*W+cb2]; } } } for(var clI=0,clJ=0;clI<clS.length;clI+=4,clJ++){ var clB=Math.floor(clLumA[clJ]*clScl); if(clB>=clLv)clB=clLv-1; if(clB<0)clB=0; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ clHit[clP]=1; } } }
+            var cAy=ca+clSm+1; cAy=cAy>=H?H-1:cAy; var cBy=ca-clSm; cBy=cBy<0?0:cBy; cs2+=clT[cAy*W+cb2]-clT[cBy*W+cb2]; } } } for(var clI=0,clJ=0;clI<d.length;clI+=4,clJ++){ var clB=Math.floor(clLumA[clJ]*clScl); if(clB>=clLv)clB=clLv-1; if(clB<0)clB=0; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ clHit[clP]=1; } } }
       /* THICKNESS: a hairline contour disappears at 1080p. Dilate the hit mask instead of re-tracing. */
       if(clTh>1){ var clD=new Uint8Array(W*H), clRq=clTh-1, cx2, cy2, ci2, cj2;
         for(cy2=0;cy2<H;cy2++) for(cx2=0;cx2<W;cx2++){ var on=0;

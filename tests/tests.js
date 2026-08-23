@@ -40872,4 +40872,38 @@
         unexpected.join('\n  ') + '\nIf one of them is deliberate, it is a decision for Ezra, not a code change — add it to ALLOWED with the reason.');
     }
   });
+
+  /* ═══ NO KERNEL MAY LOOP TO THE SHARED BUFFER'S LENGTH (queue 474).
+     `fxSrc(d)` hands back a scratch buffer that only ever GROWS — after one full-size frame it stays
+     at that size for the life of the page. A kernel that bounds its loop by `scratch.length` instead
+     of `d.length` therefore runs the wrong number of iterations on every SMALLER frame, and every
+     effect-browser thumbnail is a smaller frame. Measured on contourlines: 1,451,088 wasted iterations
+     per thumbnail, ~2.1ms each, ~418ms across a browser of 199.
+     The picture was never wrong — the surplus writes land past the end of a Float32Array, where the
+     runtime discards them silently — which is exactly why nothing caught it. */
+  test('no effect loops to the shared scratch buffer length instead of the frame (queue 474)', { item: '474' }, async function () {
+    const src = await fetch('js/compositor.js', { cache: 'no-store' }).then(r => r.text());
+    const marks = [];
+    const re = /^ {4}([a-z0-9_]+):\s*(?:function|\(function)/gmi;
+    let m;
+    while ((m = re.exec(src))) marks.push({ name: m[1], at: m.index });
+    if (marks.length < 120) throw new Error('only ' + marks.length + ' kernels matched — the scan is not seeing the file');
+
+    const offenders = [];
+    let onScratch = 0;
+    for (let i = 0; i < marks.length; i++) {
+      const body = src.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : src.length);
+      const got = body.match(/(?:var|const|let)\s+([A-Za-z0-9_]+)\s*=\s*fxSrc\(d\)/);
+      if (!got) continue;
+      onScratch++;
+      const v = got[1];
+      if (new RegExp('<\\s*' + v + '\\.length').test(body)) offenders.push(marks[i].name + ' loops to ' + v + '.length');
+    }
+    /* CONTROL: if no kernel is on the shared buffer at all, a clean result means nothing. */
+    if (onScratch < 20) throw new Error('only ' + onScratch + ' kernels are on the shared scratch — the optimisation was reverted, so this guard is watching nothing');
+    if (offenders.length) {
+      throw new Error('these bound a loop by the SHARED buffer, which only grows, so they do extra work on every smaller frame (every effect thumbnail):\n  ' +
+        offenders.join('\n  ') + '\nBound by d.length instead.');
+    }
+  });
 })();
