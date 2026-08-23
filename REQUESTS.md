@@ -2,15 +2,24 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.01
 >
-> **State:** v12.01, **880 tests green**. **LOOP.md cut from 124 KB to 15 KB** (it is re-read every tick) — the history moved to LOOP-HISTORY.md, nothing deleted.. **All three of 23 Aug's reports are FIXED — 478 (black bar) v11.92, 479 (undo arrowheads) v11.93, 480 (dragging onto the add row) v11.94.** Everything still open is waiting on you (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
-> waiting on you, the rest standing notes and long-term ideas.
+> **State:** v12.01, **880 tests green**, tree clean, and the live site verified end to end — it boots,
+> opens a project, renders, and exports a real file on your actual URL. **27 items open, and after an
+> entry-by-entry audit every one of them is waiting on YOU**, not on me.
 >
-> **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
-> ticks. **That was wrong** — you said so (*"you did not meet every task i believe"*), and two hand
-> audits proved it: **19 open entries had real work in them**, and **17 clauses were ticked DONE without
-> ever being built**. The tool I trusted to tell me the queue was empty was a pile of regexes over prose.
-> Those are being worked oldest-first now, and the last several releases came out of them.
-> The questions below are still genuinely yours to answer — they just are not the whole list any more.
+> ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
+> 1. **Play something that lags or sounds scratchy, wait for the toast, tap it — then tap the second
+>    toast to copy — and send me the text.** It now reports whether PLAYING is slower than SCRUBBING, and
+>    whether the audio controller is churning. **That one tap unblocks FIVE entries** (95, 125, 148, 202,
+>    387) stuck for weeks on a measurement only your phone can take.
+> 2. **"Got it"** — closes #406, the one you asked me to keep reminding you about.
+> 3. **A feature name — Corner Pin, LUT import, or Curves** — or "none". All 105 effect upgrades are
+>    built; these three are what is left. Each is a proper build, and I have not started one because
+>    guessing wrong costs days on the wrong thing.
+>
+> *(Everything below is a letter or one word, and none of it is urgent. The three above are.)*
+>
+> **Earlier this block claimed "none of these are buildable by me" for sixteen ticks. That was wrong**,
+> you said so, and two hand audits proved it — the work that came out of them is in the releases since.
 >
 > **The fastest ones. A letter or one word each, and each unblocks real work:**
 >
