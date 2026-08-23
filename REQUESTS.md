@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v12.01
 >
-> **State:** v12.01, **883 tests green**, tree clean, and the live site verified end to end — it boots,
+> **State:** v12.01, **884 tests green**, tree clean, and the live site verified end to end — it boots,
 > opens a project, renders, and exports a real file on your actual URL. **27 items open, and after an
 > entry-by-entry audit every one of them is waiting on YOU**, not on me.
 >

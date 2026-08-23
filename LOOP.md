@@ -177,6 +177,16 @@ edited six times:
 Nothing truncated, nothing corrupted, told once, given a route out. `localStorage.setItem` is atomic —
 it throws or it writes — so the previous value always survives; and `storage.js` separately catches the
 nastier case where a write REPORTS success and silently did nothing, by comparing a revision.
+✅ **AND THE LOCAL-ONLY PROMISE IS NOW A TEST TOO (884 green).** "Nothing leaves the device" is the
+premise the whole app rests on — no backend, media in IndexedDB, cloud TTS left as HIS decision. One
+added `fetch` to an analytics or CDN host would break it **silently**: nothing would look different and
+no test would fail. A source scan now asserts the app names exactly **two** hosts in code —
+`api.anthropic.com` (the one outbound call, his key, his choice) and a link to fetch that key — and
+fails on anything else, with the message that a new host is **a decision for Ezra, not a code change**.
+Mutation-checked by planting a `fetch('https://analytics.example.com/collect')`: caught by file and line.
+⚠️ Comment lines are skipped deliberately — the codebase documents the attacks it defends against
+(`https://attacker/beacon`), and flagging prose would make the guard noise. The test proves both halves
+of that: it SEES a planted fetch and does NOT see a URL in a comment.
 ✅ **AND THE innerHTML RULE IS NOW A TEST (883 green), not a habit.** The pass below found the code
 clean, but "clean today" rots the moment someone writes `el.innerHTML = layer.name` — and his app holds
 his own words plus files other people have shared with him. A source scan now fails the suite if user

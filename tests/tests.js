@@ -40823,4 +40823,53 @@
         '\nUse textContent for anything a person typed or a file supplied.');
     }
   });
+
+  /* ═══ THE APP CONTACTS EXACTLY ONE HOST (the local-only promise, made structural).
+     "Nothing leaves the device" is the premise the whole app is built on — it is why there is no
+     backend, why media lives in IndexedDB, and why cloud TTS is a decision he has to make rather than
+     something that quietly happened. A single added `fetch` to an analytics or CDN host would break
+     that promise SILENTLY: nothing would look different and no test would fail. This is that test.
+     Comment lines are skipped on purpose — the codebase documents attacks it defends against
+     (`https://attacker/beacon`, `http://evil/x`), and flagging prose would make the guard noise. */
+  test('the app makes network calls to exactly one host, and it is the AI endpoint', { item: 'local-only' }, async function () {
+    const FILES = ['app','ai','ai-key','ai-ops','ai-panel','ai-templates','storage','home','media','medialib',
+                   'exporter','compositor','inspector','timeline','captions','sfx','voice-rec','settings',
+                   'tracker','notepad','zip-write','gif-encode','audio-tools','fx-browser'];
+    const ALLOWED = [
+      'https://api.anthropic.com/v1/messages',        // the ONE outbound call — BYOK, his key, his choice
+      'https://console.anthropic.com/settings/keys',  // a link he taps to get his own key; not a call
+      'http://www.w3.org/2000/svg',
+      'http://www.w3.org/1999/xhtml'
+    ];
+    const urlsIn = (src) => {
+      const out = [];
+      src.split('\n').forEach((l, i) => {
+        const t = l.trim();
+        if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;   // prose, not code
+        const m = l.match(/https?:\/\/[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+/g);
+        if (m) m.forEach(u => out.push({ url: u.replace(/['"`;,)\]]+$/, ''), line: i + 1 }));
+      });
+      return out;
+    };
+    /* CONTROL: the scanner must SEE a call it is meant to catch, and must NOT see one in a comment. */
+    if (!urlsIn("  const r = fetch('https://tracker.example.com/collect');").length)
+      throw new Error('the scanner cannot spot a plain fetch to another host, so a clean sweep below would prove nothing');
+    if (urlsIn("   * we deliberately reject https://attacker/beacon here").length)
+      throw new Error('the scanner flags URLs inside comments — it would fire on the notes describing attacks this app defends against, and a guard that cries wolf gets deleted');
+
+    let scanned = 0;
+    const unexpected = [];
+    for (const f of FILES) {
+      let src = '';
+      try { src = await fetch('js/' + f + '.js', { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')); } catch (e) {}
+      if (!src) continue;
+      scanned++;
+      urlsIn(src).forEach(u => { if (!ALLOWED.includes(u.url)) unexpected.push('js/' + f + '.js:' + u.line + '  ' + u.url); });
+    }
+    if (scanned < 15) throw new Error('only ' + scanned + ' source files were readable — the scan is not seeing the app');
+    if (unexpected.length) {
+      throw new Error('this app promises that nothing leaves the device, and these send somewhere new:\n  ' +
+        unexpected.join('\n  ') + '\nIf one of them is deliberate, it is a decision for Ezra, not a code change — add it to ALLOWED with the reason.');
+    }
+  });
 })();
