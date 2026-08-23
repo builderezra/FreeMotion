@@ -442,6 +442,22 @@ if neither holds is it genuinely per-pixel work for the quality ladder to manage
 9, putting Wave at ~130ms when it is ~25ms. The ordering was sound and the sweep did its job, but the
 numbers were not publishable. **Rank with a sample; quote from a full run.**
 
+### 23 Aug, v11.99 — the sweep had only ever covered 21 of 126 kernels
+The warp ranking covered WARP_FX. **PIXEL_FX — 105 more kernels — had never been ranked**, and that is
+where the real cost was: Cross Process at 61.6ms for what is only a colour grade. Its curve does a
+`Math.sin` AND a `Math.pow`, three times per pixel — **4.4 million transcendental calls a frame to
+produce at most 768 distinct answers**, because the curve's only input is an integer 0-255. Three
+256-entry tables → **9× and byte-identical**.
+**Two things to carry:**
+1. **Check the SHAPE of a kernel's input domain, not just its coordinates.** Separability (wave) is one
+   case of a general question: how many distinct answers can this expensive expression actually have?
+   If the answer is "256 per channel", it is a table. Six wins now come from that one question.
+2. **When a sweep finds nothing, check what the sweep COVERED.** Mine had been ranking 21 kernels out
+   of 126 for several ticks while I concluded "nothing over 150ms remains".
+⚠️ **The empty-params dead control caught me a THIRD time** (turbulentdisplace, the element thumbnail,
+now this): with `{}` params `evalProp` returns 0, the effect no-ops, and two untouched images compare
+equal. **Any test that compares a fast path against a reference must assert the effect DID something.**
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
