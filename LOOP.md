@@ -383,6 +383,23 @@ format list was the other). **Read the whole line before believing a gap.**
 rule for them is above: if its absence is indistinguishable from the problem not happening, the CALL
 SITE needs a test, not just the logic.
 
+### 23 Aug — #476's "could not reproduce" fell to ONE WORD of his that arrived after the investigation
+The v11.77 pass looked hard and honestly failed to reproduce the intermittent card-sizing fault. His
+follow-up sentence — *"when the timeline and add menu are split, only for when ur editing a layer"* —
+names a state that pass never entered: it cycled the add menu OPEN and CLOSED, but never SPLIT it and
+then selected a layer. Those are different states, and only the second leaves the panel floating on a
+pinned width while the category grid is laid out from that width. Stale the pin by the 54px queue 478
+measured and the cards go 99.7 → 81.7px: *"doesnt show the buttons at the right size"*, exactly.
+**Two things worth carrying:**
+1. **When he adds a clue after a failed investigation, re-run the investigation — do not assume the
+   earlier "not reproduced" still stands.** The clue is usually the state nobody tried.
+2. **A fix can close an entry it was never aimed at.** v11.92 was built for the black bar (#478) and
+   removed #476's mechanism as a side effect. Worth checking recent fixes against stale
+   "could not reproduce" notes before asking him for another screenshot.
+⚠️ Reported at the confidence I actually have: I reproduced the MECHANISM by staling the pin directly,
+not that user sequence end to end — a real resize collapses the raise here, so the panel un-floats and
+the fault does not arise on that path. Said so in the entry rather than claiming a clean repro.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
