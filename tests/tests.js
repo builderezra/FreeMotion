@@ -41311,4 +41311,62 @@
       throw new Error('undo and redo no longer have the same gap (' + gapOf('btn-undo').toFixed(3) + ' vs ' + gapOf('btn-redo').toFixed(3) + ') — they are meant to be mirror images');
     }
   });
+
+  /* ═══ 486: DO NOT ACCUSE A PLAYABLE FILE. `FM.canDecodeHEVC()` decides whether importing an iPhone
+     clip pops a toast telling him the browser cannot play it and he should re-export or switch to
+     Safari. It asked `canPlayType('video/mp4; codecs="hvc1"')` — a bare fourcc with no profile or
+     level. Safari answers that. Chromium treats it as under-specified and returns "", the SAME answer
+     it gives for a codec it has never heard of, so the app said "cannot play H.265" on a browser with
+     hardware HEVC decode.
+     MEASURED in Chrome on this Mac before the fix: "hvc1" -> "", "hvc1.1.6.L93.B0" -> "probably", and
+     navigator.mediaCapabilities said supported + powerEfficient.
+     This asserts the RELATIONSHIP rather than a fixed answer, because the suite has to pass on a
+     browser that genuinely cannot decode H.265 too: whatever a fully-specified probe says, the app must
+     agree with it. */
+  test('486: the H.265 check agrees with a fully-specified codec probe, not a bare fourcc', { item: '486' }, function () {
+    if (typeof FM.canDecodeHEVC !== 'function') throw new Error('FM.canDecodeHEVC is missing');
+    const v = document.createElement('video');
+    /* CONTROLS: canPlayType has to be answering meaningfully at all, or every branch below is noise. */
+    if (!v.canPlayType('video/mp4; codecs="avc1.42E01E"')) throw new Error('this browser will not even claim H.264 support, so canPlayType is not answering and nothing below can be trusted');
+    if (v.canPlayType('video/mp4; codecs="notacodec.9.9"')) throw new Error('canPlayType claims to support a made-up codec, so a positive answer proves nothing');
+
+    /* ⚠️ THE REAL BROWSER IS NOT ENOUGH, and the first version of this test found that out the hard
+       way. The suite runs headless, where H.265 is absent entirely — so every behavioural branch below
+       sits idle and a mutation restoring the exact bug went through unnoticed. The decision therefore
+       lives behind `FM._hevcFromProbe`, which takes a canPlayType-shaped function, and the first three
+       assertions hand it a FAKE browser. Those run identically on any machine. */
+    if (typeof FM._hevcFromProbe !== 'function') throw new Error('FM._hevcFromProbe is missing — the H.265 decision is no longer testable without a browser that actually has H.265');
+    const chromium = t => /hvc1\.\d|hev1\.\d/.test(t) ? 'probably' : '';   // full string yes, bare fourcc ""
+    const safari   = t => /hvc1|hev1/.test(t) ? 'maybe' : '';                // answers the bare one too
+    const noHevc   = t => /avc1/.test(t) ? 'probably' : '';                  // H.264 only
+    if (!FM._hevcFromProbe(chromium)) throw new Error('given a Chromium-shaped browser — "" to the bare "hvc1", "probably" to "hvc1.1.6.L93.B0" — the app concludes it CANNOT play H.265. That is queue 486 exactly: an ordinary iPhone clip gets accused of being unplayable and he is told to re-export it or switch to Safari.');
+    if (!FM._hevcFromProbe(safari)) throw new Error('given a Safari-shaped browser the app concludes it cannot play H.265');
+    if (FM._hevcFromProbe(noHevc)) throw new Error('given a browser with H.264 only the app concludes it CAN play H.265 — an H.265 file would fail to play with no warning');
+
+    const FULL = [
+      'video/mp4; codecs="hvc1.1.6.L93.B0"', 'video/mp4; codecs="hev1.1.6.L93.B0"',
+      'video/mp4; codecs="hvc1.2.4.L120.B0"', 'video/mp4; codecs="hev1.2.4.L120.B0"'
+    ];
+    const BARE = ['video/mp4; codecs="hvc1"', 'video/mp4; codecs="hev1"'];
+    const fullSays = FULL.some(c => !!v.canPlayType(c));
+    const bareSays = BARE.some(c => !!v.canPlayType(c));
+    const app = FM.canDecodeHEVC();
+
+    if (fullSays && !app) {
+      throw new Error('this browser answers "' + (FULL.map(c => v.canPlayType(c)).find(Boolean)) +
+        '" to a fully-specified H.265 codec string, but FM.canDecodeHEVC() says NO' +
+        (bareSays ? '' : ' — and it says "" to the bare "hvc1", which is exactly the under-specified question that caused this') +
+        '. Importing an ordinary iPhone clip will wrongly tell him to re-export it or switch to Safari.');
+    }
+    if (!fullSays && !bareSays && app) {
+      throw new Error('FM.canDecodeHEVC() says YES on a browser that rejects every H.265 codec string — an H.265 file will fail to play with no warning at all');
+    }
+    /* And the probe must not have gone back to asking ONLY the bare question. Reading the source is the
+       only way to see that, because on Safari (which answers both) the behaviour is identical either
+       way — so a behavioural check alone would pass on Safari with the bug fully present. */
+    const src = String(FM.canDecodeHEVC);
+    if (!/hvc1\.\d/.test(src) && !/hev1\.\d/.test(src)) {
+      throw new Error('FM.canDecodeHEVC no longer probes any fully-specified codec string (profile/level), so on Chrome and Edge it is back to asking a question they answer "" to regardless of support');
+    }
+  });
 })();

@@ -207,13 +207,39 @@ window.FM = window.FM || {};
    * either check is unsure, nothing happens here and the existing fifteen-second path runs exactly as
    * before. */
   let _hevcOK = null;
+  /* THE DECISION, SEPARATED FROM THIS MACHINE'S CODECS (queue 486). The first test for this could not
+     fail: it asked the real browser, and the suite's browser has no H.265 at all, so every branch sat
+     idle and a mutation putting the bug straight back went unnoticed. Given a `canPlayType`-shaped
+     function, this returns the answer — so the suite can hand it a FAKE Chromium (says "" to a bare
+     fourcc, "probably" to a full codec string) and assert what the app concludes, on any machine. */
+  FM._hevcFromProbe = function (canPlayType) {
+    const PROBES = [
+      'video/mp4; codecs="hvc1"',                 // Safari answers these two…
+      'video/mp4; codecs="hev1"',
+      'video/mp4; codecs="hvc1.1.6.L93.B0"',      // …Chromium needs these. Main profile, level 3.1
+      'video/mp4; codecs="hev1.1.6.L93.B0"',
+      'video/mp4; codecs="hvc1.2.4.L120.B0"',     // Main 10 — iPhone HDR
+      'video/mp4; codecs="hev1.2.4.L120.B0"'
+    ];
+    return PROBES.some(c => !!canPlayType(c));
+  };
+
   FM.canDecodeHEVC = function () {
     if (_hevcOK !== null) return _hevcOK;
     let ok = false;
     try {
       const v = document.createElement('video');
-      // hvc1 and hev1 are the two sample-entry flavours; a browser that supports neither says "" to both.
-      ok = !!(v.canPlayType('video/mp4; codecs="hvc1"') || v.canPlayType('video/mp4; codecs="hev1"'));
+      /* ⚠️ ASK WITH THE FULL CODEC STRING, NOT THE BARE FOURCC (queue 486).
+         `hvc1` and `hev1` are the two sample-entry flavours, and asking for them by name alone is what
+         this used to do. Safari answers that question. CHROMIUM DOES NOT — it treats a bare HEVC fourcc
+         as under-specified and returns "", which is the same answer it gives for a codec it has never
+         heard of. MEASURED in Chrome on this Mac: "hvc1" -> "", while "hvc1.1.6.L93.B0" -> "probably",
+         and navigator.mediaCapabilities reports supported AND powerEfficient, i.e. hardware decode.
+         So the old probe returned false on a browser that plays H.265 perfectly, and importing an
+         ordinary iPhone clip accused it of being unplayable and told him to re-export it or switch to
+         Safari. The two profiles below are the ones a phone actually produces: Main (an ordinary
+         recording) and Main 10 (anything shot in HDR). The bare pair stays first for Safari. */
+      ok = FM._hevcFromProbe(c => v.canPlayType(c));
     } catch (e) { ok = false; }
     _hevcOK = ok;
     return ok;

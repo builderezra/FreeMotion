@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.06
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.07
 >
-> **State:** v12.06, **889 tests green**, tree clean.
+> **State:** v12.07, **890 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16565,8 +16565,21 @@ re-opened #480, which I had marked done and had not fixed.
       version could not have seen that, because the stale tail was the same in both of its runs.
       The test claims 'every kernel on the shared buffer is unaffected by another kernel using it first'. It compares a kernel run alone against the same kernel run after another dirties the buffer — but the buffer is fully overwritten before each run and both runs use the same frame size, so the two results are byte-identical *by construction*. It would stay green if the sharing were completely broken. The one hazard the growing buffer actually has is a kernel reading past the end of the current frame into the tail left by a bigger one — which is precisely what Contour Lines was doing (fixed v12.02) and this test sailed past. Rewrite it to run the dirty pass at a LARGER size than the measured pass, which is the only shape that can catch it.
 
-- [ ] **486 — 🟠 On Chrome and Edge the app wrongly accuses your iPhone videos of being unplayable.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **486 — 🟠 On Chrome and Edge the app wrongly accuses your iPhone videos of being unplayable.** ✅ **FIXED v12.07.**
+      The check asked the browser about `hvc1` — the bare name of the codec, with no profile or level.
+      Safari answers that question. **Chrome and Edge treat it as too vague and answer "don't know" —
+      the same answer they give for a codec they have never heard of.** So the app decided they could not
+      play H.265, and importing an ordinary iPhone clip popped a toast telling you to re-export it or
+      switch to Safari, on a browser that plays it in hardware.
+      **Measured here before the fix:** `hvc1` → nothing, `hvc1.1.6.L93.B0` → "probably", and the browser's
+      own capabilities API said supported, smooth and power-efficient. It now asks with the full string,
+      for both the ordinary profile and the HDR one a phone uses, and still asks the short question first
+      so Safari is unaffected.
+      ⚠️ **My first test for this could not fail** and I nearly shipped it. It asked the real browser — but
+      the test browser has no H.265 at all, so every check quietly sat idle and putting the bug straight
+      back went unnoticed. The decision is now separated from the machine it runs on, and the test hands it
+      a pretend Chrome, a pretend Safari and a pretend H.264-only browser, so it means the same thing
+      anywhere.
       `canDecodeHEVC()` asks the browser about the bare codec names `hvc1` / `hev1`. Chromium rejects those as under-specified and answers 'don't know' even when it has full hardware H.265 decode. So on Chrome/Edge the answer is always no, and importing a perfectly playable iPhone clip pops the toast telling you to re-export it as H.264 or switch to Safari. Needs the full codec string with its profile/level suffix.
 
 - [ ] **487 — 🟠 The oversize-project warning can never fire for the project you were last editing.**
