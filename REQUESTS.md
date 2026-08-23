@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.91
 >
-> **State:** v11.91, **866 tests green**, tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.91, **866 tests green**. **Three new reports logged 23 Aug — 478 (black bar between the add menu and the timeline, PC), 479 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -11325,6 +11325,48 @@ wait for them to report back."*
          row's contents against its own box before changing anything; "slightly lower than high" is a
          couple of pixels and is exactly the sort of thing that gets nudged the wrong way by eye.
       Goes with **354**, which is the same control.
+
+- [ ] **478 — A black bar appeared between the add menu and the timeline (PC).** (23 Aug, v11.90, with a
+      **STATUS: 🟢 READY — nothing is stopping this**
+      full-screen PC screenshot.) **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Just had a glitch where a black bar appeared between the add menu and the timeline
+      **From the screenshot** (Chrome, ~2000px wide, Studio layout, Project 33, Audio tab of the add menu
+      open with the sound-effects library showing): the inspector/add panel occupies the left column down
+      to about y=1120, and **below it there is a black band running the full width of the window** before
+      the desktop wallpaper. The timeline area to the right is empty dark blue-grey, and the band under
+      the left panel is a different, flatter black.
+      ⚠️ **"A glitch" — he says it APPEARED, so it is transient, and that is the hard part.** Do not
+      expect to find it by opening the app and looking. Reproduce by changing the thing that changes:
+      switching add-menu tabs (the library tab is TALLER than the others — that is the v11.71/v11.72
+      area), resizing the window, and opening/closing the panel. The add sheet's height is driven by
+      `--add-sheet-top` (js/mobile.js) and the panel by `dockSheet`, and a stale value in either leaves
+      exactly this shape of gap.
+      **Related history worth reading first, because a black bar has been chased here three times:**
+      #154 (a black bar leaving a project, v7.02), #237/#239 (the slam's flat ring), and the #97 update
+      band (v7.35). None of those is this one — this is PC, mid-session, between two panels.
+
+- [ ] **479 — The arrows on the new undo/redo buttons are too small.** (23 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The arrows on the new undo re do buttons are too smal
+      **This is about the icons I redrew** — the circular-arrow undo/redo in the transport row (the
+      `M8.5 5.94 A7 7 0 1 0 15.5 5.94` arc plus a filled triangle head). The ARC reads fine; the
+      arrowhead is what he is calling small. Fix is the head's size relative to the ring, not the
+      button's tap target. **Verify at HIS width — a desktop Studio layout — as well as at 380px.**
+
+- [ ] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (23 Aug.) His words, verbatim:
+      > I said this ages ago but you still cant drag stuff on top of the add layer it just teleports it back under
+      ⚠️ **#357 is ticked ✅ v10.05 and #443 is ticked ✅ v10.82, both for this exact behaviour.** So
+      either both fixes regressed, or neither ever covered the case he actually does. **His "it just
+      teleports it back under" is the new information**: the drop is not being refused outright, it is
+      being ACCEPTED and then undone — the layer moves and snaps back below the add row. That is a
+      different symptom from "the drop is refused", which is what #357/#443 were written against.
+      **Do not re-read those entries and conclude it works.** Reproduce it by dragging, on the layout he
+      uses, and if it passes there, ask which layout and which direction (dragging UP past the add row
+      versus dropping ON it). The ticked entries are a warning here, not evidence.
 
 - [x] **357 — A layer cannot be dragged onto the add-layer row.** ✅ **v10.05 — and the entry's guess was right.**
       The reorder mapped `.track-row` only, and the add row is deliberately not one. But it OCCUPIES a
