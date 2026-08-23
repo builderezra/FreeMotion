@@ -116,6 +116,14 @@ questions and answered none for many ticks; a wall of pick-ones is a wall howeve
 leads with the toast tap (unblocks five entries), "got it" for #406, and the feature name — everything
 else is explicitly marked not urgent. **If a request for a decision goes unanswered for days, suspect
 the ASK before the person.**
+**Every ship.sh gate test-fired, 23 Aug — they all still refuse.** The gates are the loop's guarantees
+and each encodes a real past failure, but nothing had ever CHECKED that they still fire; a gate that
+quietly stopped working is the same silent-absence class as a missing diagnostic. Deliberately tripped
+each: **cache-buster not bumped** ✅ refused (named the file and its `?v=`), **mutation in progress** ✅,
+**backtick in the commit message** ✅, **POLISH-LOG claiming an OPEN queue item is closed** ✅. The rest
+(stale REQUESTS stamp, classifier self-test, red suite, phone pass, push verification) have all fired
+naturally during recent ticks. **All gates run BEFORE the 4-minute suite, so re-testing them is cheap —
+worth repeating if one is ever edited.**
 **Delivery path verified live, 23 Aug** — the service worker is registered and controlling on the real
 Pages origin, the silent-downgrade marker (queue 306) has never fired, and the cache is exactly ONE
 build: all 71 versioned URLs the page names are present and **zero files are cached at two versions**,
