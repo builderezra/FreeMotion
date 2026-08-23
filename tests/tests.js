@@ -40066,4 +40066,37 @@
       document.body.classList.toggle('am-floating', hadFloat);
     }
   });
+
+  /* ═══ THE UNDO/REDO ARROWHEADS (queue 479).
+     Ezra, 23 Aug: "The arrows on the new undo re do buttons are too smal". They are my icons — a ring
+     plus a filled triangle — and the triangle was 3.6 units against a 14-unit ring, which at the 21px
+     the toolbar draws them is a 3.1px arrowhead. This locks the head's size RELATIVE to the ring, so
+     the number cannot quietly drift back down, and locks the two against each other so redo can never
+     stop mirroring undo. */
+  test('the undo and redo arrowheads are big enough to read, and mirror each other (queue 479)', { item: '479' }, async function () {
+    const u = document.getElementById('btn-undo'), r = document.getElementById('btn-redo');
+    if (!u || !r) throw new Error('the undo/redo buttons are not in the document');
+    const head = (btn, which) => {
+      const paths = btn.querySelectorAll('svg path');
+      if (paths.length < 2) throw new Error(which + ' has no separate arrowhead path');
+      const b = paths[1].getBBox();
+      if (!b.width) throw new Error(which + ' arrowhead has no size — is it still a filled triangle?');
+      return b;
+    };
+    const RING = 14;                       // the arc is r=7 in a 24-unit viewBox
+    const MIN = 0.30;                      // the head must be at least ~30% of the ring across
+    const hu = head(u, 'undo'), hr = head(r, 'redo');
+    for (const [name, b] of [['undo', hu], ['redo', hr]]) {
+      const frac = b.width / RING;
+      if (frac < MIN) throw new Error(name + ' arrowhead is ' + b.width.toFixed(2) + ' units — ' + Math.round(frac * 100) + '% of the ring, under the ' + Math.round(MIN * 100) + '% floor. At the 21px these draw at, that is the nub he called too small.');
+    }
+    /* MIRROR: the two are the same icon reflected, so any change to one that misses the other shows
+       up as different geometry. Cheap, and it caught nothing here only because both were edited. */
+    if (Math.abs(hu.width - hr.width) > 0.05 || Math.abs(hu.height - hr.height) > 0.05) {
+      throw new Error('undo and redo arrowheads differ in size (' + hu.width.toFixed(2) + 'x' + hu.height.toFixed(2) + ' vs ' + hr.width.toFixed(2) + 'x' + hr.height.toFixed(2) + ') — they are meant to be the same shape mirrored');
+    }
+    // ...and they really are MIRRORED, not merely equal: their centres sit either side of x=12.
+    const cu = hu.x + hu.width / 2, cr = hr.x + hr.width / 2;
+    if (!(cu > 12 && cr < 12)) throw new Error('the heads are not on opposite sides of the icon centre (undo ' + cu.toFixed(2) + ', redo ' + cr.toFixed(2) + ') — one of them is pointing the wrong way');
+  });
 })();

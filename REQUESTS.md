@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.92
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Aug at v11.93
 >
-> **State:** v11.92, **867 tests green**. **478 (the black bar) is FIXED in v11.92.** Two of the three new reports are still open — 479 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
+> **State:** v11.93, **868 tests green**. **478 (black bar) and 479 (undo arrowheads) are FIXED, v11.92 and v11.93.** One of the three new reports is still open — 480 (undo/redo arrowheads too small), 480 (still cannot drag a layer onto the add row — it teleports back under, and #357/#443 both claim this is fixed).** All three are next in line., tree clean, `HEAD == ssh/main`. **33 items open**, most of them
 > waiting on you, the rest standing notes and long-term ideas.
 >
 > **Correction to what this block used to say.** It claimed *"none are buildable by me"* for sixteen
@@ -11373,14 +11373,25 @@ wait for them to report back."*
       re-pin function directly, so unhooking the resize listener passed it. It fires a real resize
       event now. That is the same dead-assertion shape as the queue-148 counter one tick earlier.)*
 
-- [ ] **479 — The arrows on the new undo/redo buttons are too small.** (23 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **479 — The arrows on the new undo/redo buttons are too small.** ✅ **FIXED v11.93.** (23 Aug.)
       His words, verbatim:
       > The arrows on the new undo re do buttons are too smal
       **This is about the icons I redrew** — the circular-arrow undo/redo in the transport row (the
       `M8.5 5.94 A7 7 0 1 0 15.5 5.94` arc plus a filled triangle head). The ARC reads fine; the
       arrowhead is what he is calling small. Fix is the head's size relative to the ring, not the
       button's tap target. **Verify at HIS width — a desktop Studio layout — as well as at 380px.**
+
+      ✅ **FIXED v11.93 — and the number says you were right.** The head was **3.6 units against a
+      14-unit ring**, and these icons draw at 21px, so that arrowhead was **3.1px**. It is 5.4 units /
+      **4.7px** now — **39% of the ring instead of 26%.**
+      ⚠️ **It could not simply be made bigger, and an existing test is what said so.** Growing the head
+      upward pushed the glyph's INK off centre (to 11.18 in a viewBox centred on 12) and tripped the
+      guard from **queue 410 — your own earlier report** that *"the undoredo arrows are off… like way
+      too low down"*. So the whole glyph moved down 0.45 units to pay for the taller head: the ink now
+      centres on 11.63, which is **better centred than the old icon was** (11.61 → 0.37 off vs 0.40).
+      Both buttons are asserted identical and mirrored, with the floor written as a FRACTION of the
+      ring rather than an absolute number, so a later tidy-up cannot quietly shrink it back.
+      Checked by rendering both icons at 380px side by side against the old one before committing.
 
 - [ ] **480 — STILL cannot drag a layer on top of the add-layer row; it teleports back underneath.**
       **STATUS: 🟢 READY — nothing is stopping this**
