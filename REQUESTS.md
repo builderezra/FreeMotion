@@ -16736,8 +16736,20 @@ re-opened #480, which I had marked done and had not fixed.
       Enter" and took a pass to trace. Closing it properly is now the exposed way to do it.
       It is marked up as a button and takes focus, but only responds to a real tap — Enter and Space do nothing — and it disappears after 9 seconds. Anyone on a keyboard or switch control cannot reach the offer it carries.
 
-- [ ] **497 — 🟡 Two tests hide the canvas dialog with an inline style that nothing ever clears, and it masks a real overlay leak.** (Found 24 Aug while doing #490.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **497 — 🟡 Two tests hide the canvas dialog with an inline style that nothing ever clears, and it masks a real overlay leak.** ✅ **FIXED, shipped on v12.17** (my own test suite — nothing you can see).
+      **The thing it was hiding turned out to be worth finding.** A cleanup helper in the frame-rate test
+      called `closeCv()` — which looked for an element called `cv-dialog`. **There is no such element**; the
+      real one is `canvas-dialog`. So it closed nothing, that test opened Canvas settings ten times and left
+      it open every time, and the dialog sat over the editor for the rest of the run swallowing taps meant
+      for whatever was underneath. It went unnoticed because the *other* bug — the stray inline style — was
+      covering the mess up, while causing its own (an element reporting itself visible and measuring 0×0,
+      which cost me a full debugging pass during #490).
+      Two bugs, each hiding the other, and neither had a symptom until something unrelated failed.
+      🔒 **Made structural rather than just fixed:** a new check walks every element the suite reaches for
+      and fails if it exists nowhere in the app — because a lookup that finds nothing does nothing and says
+      nothing. Six ids are deliberately absent (buttons you asked to have removed, which tests watch in case
+      they come back); those are listed with a reason each, and the check also fails if one of them
+      reappears, so the list cannot quietly go stale.
       Housekeeping in my own test suite, not something you can see — but it cost a full debugging pass and
       it is hiding something. Two tests hide `#canvas-dialog` by writing `style.display = 'none'` straight
       onto the element. The app only ever toggles a class, so nothing clears that again for the rest of the

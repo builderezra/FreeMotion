@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 497 (test hygiene), then the queue is back to items waiting on HIM. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
+**ALL 14 REVIEW FINDINGS ARE CLOSED (485-496), plus 497. The queue is back to items waiting on HIM. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
 that
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
@@ -121,6 +121,12 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **497: TWO BUGS CAN HIDE EACH OTHER, AND A LOOKUP THAT FINDS NOTHING REPORTS NOTHING.** A cleanup helper
+closed `#cv-dialog`, which does not exist (`#canvas-dialog` does), so it left the dialog open over the editor
+for the rest of every run — and a second test's stray inline `display:none` on that same dialog covered it up
+while causing its own 0x0 mystery. Neither had a symptom until something unrelated failed. There is now a
+check that every id the suite reaches for exists somewhere, with an explained allowlist for the ones
+deliberately asserted absent. **When a cleanup helper 'works', confirm it changed something.**
 ⚠️ **496: A LEAKED CAPTURE-PHASE LISTENER LOOKS LIKE A BROKEN FEATURE.** The toast's Enter handler worked
 perfectly in a browser and did nothing in the suite. Cause: a test removed the audio-reactive sheet's NODE
 instead of closing it, leaving its `window` keydown listener — which calls stopPropagation on everything —

@@ -14541,7 +14541,10 @@
       canvasBtn.click(); await sleep(80);
       const dlg = document.getElementById('canvas-dialog');
       if (!(dlg && getComputedStyle(dlg).display !== 'none')) throw new Error('the canvas button did not open the canvas dialog');
-      if (dlg) dlg.style.display = 'none';   // NOTE: inline, and nothing clears it — see queue 490's note in the 490 test
+      /* HIDE IT THE WAY THE APP DOES (queue 497). Writing an inline display:none here left an element
+         that nothing ever clears — the app only toggles `.hidden` — so every later test that opened the
+         canvas dialog got something reporting itself visible and measuring 0x0. */
+      if (dlg) { dlg.classList.add('hidden'); dlg.style.removeProperty('display'); }
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Keyboard shortcuts').click(); await sleep(80);
       const sc = document.getElementById('shortcuts-overlay');
@@ -14622,7 +14625,7 @@
       window.confirm = realConfirm;
       if (FM.settings.isOpen()) FM.settings.close();
       if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
-      const d = document.getElementById('canvas-dialog'); if (d) d.style.display = 'none';
+      const d = document.getElementById('canvas-dialog'); if (d) { d.classList.add('hidden'); d.style.removeProperty('display'); }   // class, not an inline style nothing clears (queue 497)
       const vb = document.getElementById('view-bar'); if (vb && !vb.classList.contains('hidden')) vb.classList.add('hidden');
       FM.scene = savedScene; FM.setTime(hadTime);
       FM.selectLayer(null);
@@ -25485,10 +25488,19 @@
       FM.scene.project.fps = fps0;
       closeCv();
     }
+    /* ⚠️ THIS CLOSED NOTHING (queue 497). It looked for `#cv-dialog` — an element that does not exist,
+       the real one is `#canvas-dialog` — and removed a class `open` that nothing uses. So this test
+       opened Canvas settings ten times and left it open every single time, sitting over the editor for
+       the rest of the run and swallowing pointers aimed at anything underneath it. It went unnoticed
+       for as long as it did because ANOTHER test wrote an inline `display:none` onto that dialog which
+       nothing ever cleared, hiding the mess this made (and creating its own — see queue 490).
+       Press the real Cancel button, so this follows the app instead of guessing at its internals. */
     function closeCv() {
-      const dlg = document.getElementById('cv-dialog');
-      if (dlg) dlg.classList.remove('open');
-      document.body.classList.remove('cv-open', 'cv-anchored');
+      const cancel = document.getElementById('cv-cancel');
+      if (cancel) cancel.click();
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg) { dlg.classList.add('hidden'); dlg.style.removeProperty('display'); }
+      document.body.classList.remove('cv-open', 'cv-anchored', 'cv-up');
     }
   });
 
@@ -42088,5 +42100,55 @@
       FM.hideToast();
       if (t.blur) t.blur();
     }
+  });
+
+  /* ═══ 497: A TEST THAT REACHES FOR AN ELEMENT THAT DOES NOT EXIST DOES NOTHING, AND SAYS NOTHING.
+     `closeCv()` in the frame-rate test looked for `#cv-dialog`. The real element is `#canvas-dialog`.
+     So it closed nothing, that test opened Canvas settings ten times and left it open every time, and
+     the dialog sat over the editor for the rest of the run swallowing pointers aimed at whatever was
+     underneath. It stayed hidden for weeks because a DIFFERENT test wrote an inline `display:none`
+     onto that same dialog which nothing ever cleared — one bug covering for another, and the cover
+     caused its own (queue 490: an element reporting itself visible and measuring 0x0).
+     Neither had a symptom until something unrelated failed. So: every id the suite reaches for must
+     exist somewhere — in the markup, or as a string in the code that creates it at runtime.
+     The exceptions are ids asserted to be ABSENT ("this button must not come back"), which are listed
+     and explained rather than pattern-matched, because a clever pattern would eventually let a real
+     typo through as an intentional one. */
+  test('497: every element the suite reaches for actually exists', { item: '497' }, async function () {
+    const ASSERTED_ABSENT = {
+      'btn-more':      'queue 35 — the ⋯ button was removed; two tests check it has not come back',
+      'm-proj-more':   'queue 35 — its phone twin, same reason',
+      'exp-solo-clip': 'an older name for #exp-solo-btn; the check accepts either so the rename cannot silently break it',
+      'group-crumb':   'the floating "Editing group" pill was deleted; a test checks it stays deleted',
+      'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
+      'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it'
+    };
+    const [tests, html] = await Promise.all([
+      fetch('tests/tests.js', { cache: 'no-store' }).then(r => r.text()),
+      fetch('index.html', { cache: 'no-store' }).then(r => r.text())
+    ]);
+    const files = (html.match(/js\/[a-z0-9_-]+\.js/gi) || []).filter((v, i, a) => a.indexOf(v) === i);
+    if (files.length < 10) throw new Error('only found ' + files.length + ' scripts in index.html — the scan is not reading what it thinks it is');
+    const code = (await Promise.all(files.map(f => fetch(f, { cache: 'no-store' }).then(r => r.text()).catch(() => '')))).join('\n');
+
+    const ids = (tests.match(/getElementById\(\s*'[A-Za-z0-9_-]+'\s*\)/g) || [])
+      .map(m => m.replace(/.*'([A-Za-z0-9_-]+)'.*/, '$1'))
+      .filter((v, i, a) => a.indexOf(v) === i);
+    /* CONTROL: if the scan finds almost nothing it will pass no matter how broken the suite is. */
+    if (ids.length < 50) throw new Error('only ' + ids.length + ' element ids found in the suite — the scan is not matching, so a clean result means nothing');
+
+    const inMarkup = {};
+    (html.match(/id="[A-Za-z0-9_-]+"/g) || []).forEach(m => { inMarkup[m.slice(4, -1)] = 1; });
+    const missing = ids.filter(id => !inMarkup[id]
+      && code.indexOf("'" + id + "'") < 0 && code.indexOf('"' + id + '"') < 0
+      && !ASSERTED_ABSENT[id]);
+    if (missing.length) {
+      throw new Error('the suite reaches for ' + missing.length + ' element(s) that exist nowhere in the markup or the code: ' +
+        missing.join(', ') + '. A lookup that finds nothing does nothing and reports nothing — that is how #cv-dialog let a ' +
+        'cleanup helper close the wrong thing for weeks. Fix the id, or add it to ASSERTED_ABSENT above with the reason it is deliberate.');
+    }
+    /* …and the allowlist has to stay honest: an entry that has come BACK is no longer an exception. */
+    const backAgain = Object.keys(ASSERTED_ABSENT).filter(id => inMarkup[id]);
+    if (backAgain.length) throw new Error('these are listed as deliberately absent but are in the markup again: ' + backAgain.join(', ') + ' — the tests asserting they are gone will now fail, and the list above is out of date');
   });
 })();
