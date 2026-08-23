@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.16, 899 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.17, 900 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,7 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 496–497, then the queue is back to items waiting on HIM. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
+**Next: 497 (test hygiene), then the queue is back to items waiting on HIM. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
 that
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
@@ -121,6 +121,12 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **496: A LEAKED CAPTURE-PHASE LISTENER LOOKS LIKE A BROKEN FEATURE.** The toast's Enter handler worked
+perfectly in a browser and did nothing in the suite. Cause: a test removed the audio-reactive sheet's NODE
+instead of closing it, leaving its `window` keydown listener — which calls stopPropagation on everything —
+installed for the rest of the run. Every key in every later test was swallowed. **When a DOM event does not
+arrive, look for a capture-phase listener above it before doubting your own handler**, and never tear down
+a panel by deleting its element when it registered anything globally.
 ⚠️ **494: WHEN THE FRAME SIZE IS NOT YOURS TO SET, REPRODUCE THE CONDITION INSTEAD.** The suite's iframe
 ignores an attempt to set its HEIGHT (innerHeight stayed 760), so 'check it at 375x553' cannot be tested
 directly. Squeezing the CARD's max-height reproduces overflow on any screen and asserts the same property.

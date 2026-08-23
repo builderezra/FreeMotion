@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.16
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.17
 >
-> **State:** v12.16, **899 tests green**, tree clean.
+> **State:** v12.17, **900 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16721,8 +16721,19 @@ re-opened #480, which I had marked done and had not fixed.
       now cannot overwrite a newer one.
       The audio check runs once when the dialog opens and the format switcher never re-runs it. Pick WAV and the biggest, loudest thing in the dialog still tells you the export will be silent — when WAV is the one option that cannot fail for want of a codec, which is the stated reason it is first and default.
 
-- [ ] **496 — 🟢 The tappable toast says it is a button but the keyboard cannot press it.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **496 — 🟢 The tappable toast says it is a button but the keyboard cannot press it.** ✅ **FIXED v12.17.**
+      The toast marks itself as a button and takes focus, but it is a `div` — and a div does **not** get
+      Enter/Space activation from the browser the way a real button does. It had a tap handler and nothing
+      else, so it announced an action it could not perform. What it carries is not decoration: *"tap to
+      measure what's slow"* and *"tap to fix the lag"* are the two most valuable taps in the app.
+      Enter and Space now press it (Space is swallowed so the page does not scroll at the same time),
+      Escape dismisses it without doing the thing, and **the nine-second countdown waits while the toast
+      has focus** — generous for a tap, tight for a switch device.
+      ⚠️ **This turned up a genuine leak on the way.** The audio-reactive sheet installs a keydown listener
+      on the whole window that blocks every key, and only its own close path takes it back. A test removed
+      the panel by deleting the element instead — so from that point on, **every key press in the entire
+      test run was swallowed before it reached anything.** It surfaced as this toast "not responding to
+      Enter" and took a pass to trace. Closing it properly is now the exposed way to do it.
       It is marked up as a button and takes focus, but only responds to a real tap — Enter and Space do nothing — and it disappears after 9 seconds. Anyone on a keyboard or switch control cannot reach the offer it carries.
 
 - [ ] **497 — 🟡 Two tests hide the canvas dialog with an inline style that nothing ever clears, and it masks a real overlay leak.** (Found 24 Aug while doing #490.)

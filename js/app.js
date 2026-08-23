@@ -1021,20 +1021,41 @@ window.FM = window.FM || {};
   FM.toast = function (msg, ms, onTap) {
     const t = document.getElementById('toast'); if (!t) return;
     t.textContent = msg;
-    t.onclick = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
+    t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
     if (typeof onTap === 'function') {
       t.classList.add('toast-tap');
       t.setAttribute('role', 'button'); t.setAttribute('tabindex', '0');
-      t.onclick = function () { FM.hideToast(); try { onTap(); } catch (e) {} };
+      const fire = function () { FM.hideToast(); try { onTap(); } catch (e) {} };
+      t.onclick = fire;
+      /* ⚠️ role="button" DOES NOT MAKE ENTER AND SPACE WORK (queue 496). Only a real <button> gets that
+         for free; this is a div, so it announced itself as a button, accepted focus, and then did
+         nothing at all when pressed. The offers it carries are the two most valuable taps in the app —
+         "tap to measure what's slow" and "tap to fix the lag" — so on a keyboard or a switch they were
+         simply unreachable. Space is prevented as well as handled, or the page scrolls underneath. */
+      t.onkeydown = function (e) {
+        const k = e.key;
+        if (k === 'Enter' || k === ' ' || k === 'Spacebar') { e.preventDefault(); fire(); }
+        else if (k === 'Escape' || k === 'Esc') { e.preventDefault(); FM.hideToast(); }
+      };
     }
     t.classList.remove('hidden');
     const my = ++toastSeq;
     if (ms === undefined) ms = 2200;
-    if (ms) setTimeout(() => { if (my === toastSeq) FM.hideToast(); }, ms);
+    /* …and it must not vanish out from under someone who is on their way to pressing it. Nine seconds
+       is generous for a tap and short for a switch device, so while the toast HAS FOCUS the countdown
+       waits. Escape (above) and Tab are the ways out. */
+    if (ms) {
+      const expire = function () {
+        if (my !== toastSeq) return;
+        if (t.getAttribute('role') === 'button' && document.activeElement === t) { setTimeout(expire, 1000); return; }
+        FM.hideToast();
+      };
+      setTimeout(expire, ms);
+    }
   };
   FM.hideToast = function () {
     const t = document.getElementById('toast');
-    if (t) { t.classList.add('hidden'); t.onclick = null; t.classList.remove('toast-tap'); }
+    if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); }
   };
 
   // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).

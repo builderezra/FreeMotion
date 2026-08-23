@@ -35757,6 +35757,12 @@
         if (new RegExp('^' + name, 'i').test(txt)) throw new Error('"' + name + '" is explained by repeating its own name: ' + txt);
       });
     } finally {
+      /* ⚠️ CLOSE IT, DO NOT JUST DELETE THE NODE. This sheet installs a CAPTURE-PHASE keydown listener
+         on `window` that calls stopPropagation on every key, and only its own close path takes that
+         back. Removing the element left the listener behind, so from here to the end of the run every
+         key press in the suite was swallowed before it reached anything — which showed up much later
+         as the queue-496 toast "not responding to Enter" and took a debugging pass to trace to here. */
+      if (FM.closeAudioReactSheet) FM.closeAudioReactSheet();
       const sh = document.getElementById('ar-sheet'); if (sh && sh.parentElement) sh.parentElement.removeChild(sh);
       FM.scene.layers.forEach(l => { if (l.name === 'q325 clip') FM.media.remove(l.id); });
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
@@ -42006,6 +42012,81 @@
       sel.value = saved;
       try { FM._syncExportFormat(); } catch (e) {}
       box.classList.add('hidden'); box.textContent = '';
+    }
+  });
+
+  /* ═══ 496: A THING THAT CALLS ITSELF A BUTTON HAS TO BEHAVE LIKE ONE.
+     The tappable toast sets role="button" and tabindex="0" — so it announces itself as a button and
+     takes focus — but it is a div, and a div does not get Enter/Space activation from the browser the
+     way a real <button> does. It had a click handler and nothing else, so on a keyboard or a switch it
+     announced an action it could not perform, and then removed itself after nine seconds.
+     What it carries is not decoration: "tap to measure what's slow" and "tap to fix the lag" are the
+     two most valuable taps in the app. */
+  test('496: the tappable toast can be operated from the keyboard', { item: '496' }, async function () {
+    const t = document.getElementById('toast');
+    if (!t) throw new Error('#toast is missing');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const press = (key) => t.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true, cancelable: true }));
+    try {
+      for (const key of ['Enter', ' ']) {
+        let fired = 0;
+        FM.toast('tap to measure what’s slow', 9000, () => { fired++; });
+        await sleep(40);
+        /* CONTROL: it must really be presenting itself as a button, or "the keyboard cannot press it"
+           is not the complaint being tested. */
+        if (t.getAttribute('role') !== 'button') throw new Error('the tappable toast no longer says role="button", so this test is not describing what a screen reader announces');
+        if (t.getAttribute('tabindex') !== '0') throw new Error('the tappable toast is not focusable (tabindex ' + t.getAttribute('tabindex') + '), so the keyboard cannot even reach it');
+        if (t.classList.contains('hidden')) throw new Error('the toast did not show');
+        /* CONTROL: an earlier test may have replaced FM.toast with a capturing stub and not put it
+           back. The stub never touches the DOM, so the element still carries role/tabindex from some
+           PREVIOUS real toast and every check above passes on a stale element — which reads exactly
+           like the keyboard handler not working. Compare the text to what was just asked for. */
+        if (t.textContent.indexOf('measure') < 0 && t.textContent.indexOf('lag') < 0) {
+          throw new Error('#toast says "' + t.textContent.slice(0, 40) + '" instead of what this test just passed to FM.toast — FM.toast has been replaced by something that does not render, so this element is left over from an earlier test');
+        }
+
+        t.focus();
+        if (document.activeElement !== t) throw new Error('the toast will not take focus, so nothing below can be measured');
+        press(key);
+        await sleep(40);
+        if (!fired) throw new Error('pressing ' + (key === ' ' ? 'Space' : key) + ' on the toast did nothing — it announces itself as a button and cannot be pressed, which is queue 496');
+        if (!t.classList.contains('hidden')) throw new Error('the toast stayed on screen after being activated from the keyboard');
+      }
+
+      /* SPACE MUST BE SWALLOWED, or the page scrolls under him at the same time. */
+      let n2 = 0;
+      FM.toast('tap to fix the lag', 9000, () => { n2++; });
+      await sleep(40);
+      t.focus();
+      const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      t.dispatchEvent(ev);
+      if (!ev.defaultPrevented) throw new Error('Space was handled but not prevented, so activating the toast also scrolls the page');
+      await sleep(30);
+
+      /* ESCAPE dismisses without doing the thing — a way out that is not "wait nine seconds". */
+      let n3 = 0;
+      FM.toast('tap to fix the lag', 9000, () => { n3++; });
+      await sleep(40);
+      t.focus();
+      press('Escape');
+      await sleep(40);
+      if (n3) throw new Error('Escape triggered the action instead of dismissing the toast');
+      if (!t.classList.contains('hidden')) throw new Error('Escape did not dismiss the toast');
+
+      /* A PLAIN toast must NOT claim to be a button — announcing a control that does nothing is the
+         same fault in reverse. */
+      FM.toast('just saying', 400);
+      await sleep(40);
+      if (t.getAttribute('role') === 'button') throw new Error('a toast with no action still says role="button"');
+      if (t.getAttribute('tabindex') != null) throw new Error('a toast with no action is still focusable');
+      let stray = 0;
+      const prev = t.onkeydown;
+      if (prev) throw new Error('a toast with no action still has a key handler left over from the last one');
+      press('Enter'); await sleep(20);
+      if (stray) throw new Error('a plain toast responded to Enter');
+    } finally {
+      FM.hideToast();
+      if (t.blur) t.blur();
     }
   });
 })();

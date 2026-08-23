@@ -328,6 +328,7 @@ window.FM = window.FM || {};
 
   // ---- bake -------------------------------------------------------------------------------------
 
+  FM.closeAudioReactSheet = function (root) { closeSheet(root || document.getElementById('ar-sheet') || document.querySelector('.ar-sheet')); };
   FM.audioReact = {
     // Envelope -> mapped keyframes on target.transform[prop]. Returns keyframes written (0 on failure).
     async bake(layer, opts) {
@@ -407,6 +408,12 @@ window.FM = window.FM || {};
     return !!(m && (!m.width || !m.height));   // mp3/wav ride the video path with a 0x0 picture
   }
 
+  /* Exposed because closing this sheet is not just removing the node: it also takes back a
+     CAPTURE-PHASE keydown listener on `window` that calls stopPropagation on everything. A test
+     removed the node directly and left that listener behind, and every key press in the rest of the
+     suite was swallowed before it reached anything — which surfaced as "the toast cannot be operated
+     from the keyboard" (queue 496) and cost a debugging pass to trace back to here. Anything that
+     wants this sheet gone should call this. */
   function closeSheet(root) {
     if (!root) return;
     if (root._arKeyHandler) { window.removeEventListener('keydown', root._arKeyHandler, true); root._arKeyHandler = null; }
