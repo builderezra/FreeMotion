@@ -132,6 +132,17 @@ thing it tests has disappeared.**
 DOM-query loop, which pass when the selector returns nothing: **one candidate, read, and sound** (its
 loop is over a literal array and its main assertion is unconditional). Only class (1)-adjacent early
 returns were real, and those nine are fixed.
+✅ **TWO OF THIS WEEK'S HAND-VERIFICATIONS ARE NOW TESTS (882 green).** A one-off check in a browser is
+a hope; the repo's own rule is that a safeguard must be structural. So the two most valuable became
+permanent tests, each mutation-checked with a mutation the EXISTING suite could not see:
+· **file round-trip through the real import path** — dropping a layer in `applyScene` is caught
+  ("the import produced 1 layers, not 2 — a shared file is losing work"). The old round-trip test
+  compares only layer IDs and never calls `applyScene`, so it saw nothing.
+· **undo over a long chain** — shrinking the 120-entry cap to 6 is caught ("only 5 undos were available
+  after 30 committed edits"). The single-edit fidelity test cannot see a cap change at all.
+⚠️ **The storage-full behaviour was deliberately NOT made a test** — it needs `localStorage.setItem`
+stubbed globally, and the suite harness itself writes there mid-run, so the test would be more likely to
+break the suite than to catch a regression. Verified by hand instead, and that limitation is the reason.
 **A shared project file round-trips losslessly — verified 23 Aug.** He shares work as `.fmotion.json`
 (templates, elements, whole projects), so "does anything fall out on the way back in" is a real
 question about his data. Built a scene with two effects, an opacity keyframe track with easing, a blend
