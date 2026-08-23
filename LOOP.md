@@ -287,6 +287,17 @@ report something it already knew, and this one is the same move applied to the r
 *"a clip off his own phone or a screen recording"*; it now needs one tap, because the measurement moved
 onto his device instead of asking him to reproduce it for mine.
 
+### 23 Aug, v11.96 — IF A MESSAGE NAMES THE FIX, CHECK WHETHER THE FIX IS ALREADY BUILT
+#392's text-to-speech panel is honest about its wall — the browser speaks but gives no way to record, so
+the voice cannot be trimmed or exported. Its note ends *"or to record a voiceover yourself"*. **That
+feature already exists** (`FM.voiceRec`, Add ▸ Audio ▸ Record voice…) and the panel did not link to it.
+So the app described the solution and left him to go and find it, which is queue 129's console.warn and
+202's fix-in-a-text-file wearing a third disguise.
+**The check that keeps finding work: when the app tells him what to do, can it just DO it?** Three
+separate entries now. It costs one button and pre-empts no decision, because pointing at something
+already built is navigation, not a new feature — worth saying explicitly in the entry so a reader does
+not think the pending choice was quietly made for him.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
