@@ -241,6 +241,19 @@ moment.
   the repair is not testing the wiring** — it fires a real `resize` event now. That is exactly the
   queue-148 counter mistake one tick earlier, so it is now written here rather than re-learned.
 
+### 23 Aug, v11.93 — #479 done, and an OLD TEST stopped me shipping a new version of an old bug
+His undo/redo arrowheads were 3.6 units against a 14-unit ring — 3.1px at the 21px these draw at. Made
+them 5.4 (39% of the ring). **The suite then went red on queue 410's guard**, which exists because of
+HIS OWN earlier report that *"the undoredo arrows are off… way too low down"*: growing the head upward
+moved the glyph's ink centre to 11.18 against a viewBox centred on 12.
+**So the fix was two changes, not one** — a bigger head AND the whole glyph shifted down 0.45 to keep it
+centred. It now sits 0.37 off centre, slightly BETTER than the icon it replaces.
+**The general point: when a visual change trips an old guard, the guard is usually a previous complaint
+from him wearing a test's clothes.** Read what it is protecting before working around it — here,
+"just make the arrow bigger" would have re-created a bug he had already reported once.
+The new floor is written as a FRACTION of the ring, not an absolute unit count, so a later re-draw at a
+different scale cannot silently drop under it.
+
 ### ⚠️ SAY THESE IN EVERY REPLY UNTIL HE ANSWERS — he asked for it explicitly
 Not a courtesy: a standing instruction that has been dropped for days, which is why it is a LIST here
 rather than something to remember. Delete a line the moment he answers it.
