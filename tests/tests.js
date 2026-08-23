@@ -41823,4 +41823,62 @@
       if (!wasPlaying && FM.pause) { try { FM.pause(); } catch (e) {} }
     }
   });
+
+  /* ═══ 493: THE SAMPLE MUST BE THE ERROR THE CONTROLLER ACTED ON, NOT THE RAW ONE.
+     The sync loop learns a BIAS — the constant offset between where the audio element says it is and
+     where it really is, which is mostly output latency. Every decision is made on `rawErr - bias`, and
+     v11.70 identified that constant and removed it. But the sample stored for the report was computed
+     at the bottom of the tick as `rawErr - m._errBias`, and on a seek tick the seek has already set
+     `_errBias = null` — so the subtraction became `rawErr - 0` and what got recorded was the RAW error,
+     latency and all, straight into the "worst" figure the report prints.
+     Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
+     de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
+     Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('493: the recorded sync error has the latency bias removed, including right after a seek', { item: '493' }, async function () {
+    if (typeof FM._syncBiasStep !== 'function') throw new Error('FM._syncBiasStep is missing — the bias step is not reachable, so a test would have to reimplement it and would only be testing itself');
+    const LATENCY = 0.25;                       // 250ms of constant output latency, the thing v11.70 removed
+
+    /* ── learning tick: nothing to record, because the answer is 0 by construction. */
+    const m = {};
+    const first = FM._syncBiasStep(m, LATENCY);
+    if (!first.fresh) throw new Error('the first step on a fresh element did not report itself as learning the bias');
+    if (Math.abs(first.deBiased) > 1e-9) throw new Error('the learning tick produced ' + first.deBiased + ', expected exactly 0 — if it is not 0 this test is measuring something else');
+
+    /* ── a real run with genuine drift on top of the constant latency. */
+    const recorded = [];
+    for (let i = 1; i <= 400; i++) {
+      const raw = LATENCY + 0.001 * i;          // latency + slowly growing drift
+      const st = FM._syncBiasStep(m, raw);
+      if (!st.fresh) recorded.push(Math.abs(st.deBiased));
+    }
+    if (recorded.length < 300) throw new Error('only ' + recorded.length + ' samples would have been recorded out of 400 — the run is not being exercised');
+    const worst = Math.max.apply(null, recorded);
+    if (worst >= LATENCY) {
+      throw new Error('the worst recorded sample is ' + (worst * 1000).toFixed(0) + 'ms, at or above the ' + (LATENCY * 1000) +
+        'ms of constant output latency — the bias is not being removed, which is the constant v11.70 found and took out');
+    }
+
+    /* ── THE SEEK. This is the case that was wrong: the seek clears the bias, and the sample used to be
+       computed afterwards against the cleared value. */
+    m._errBias = null;                          // exactly what a seek does
+    const afterSeek = FM._syncBiasStep(m, LATENCY + 0.4);
+    if (!afterSeek.fresh) throw new Error('the tick after a seek did not report itself as re-learning the bias, so the zero it produces would be recorded');
+    if (Math.abs(afterSeek.deBiased) > 1e-9) throw new Error('the re-learning tick produced ' + afterSeek.deBiased + ' rather than 0');
+    const next = FM._syncBiasStep(m, LATENCY + 0.41);
+    if (next.fresh) throw new Error('the second tick after a seek is still reporting itself as learning');
+    if (Math.abs(next.deBiased) >= LATENCY) {
+      throw new Error('the first real sample after a seek is ' + (Math.abs(next.deBiased) * 1000).toFixed(0) +
+        'ms — it still carries the ' + (LATENCY * 1000) + 'ms latency, which is queue 493: the seek nulls the bias and the sample was taken against the nulled value');
+    }
+
+    /* ── THE CALL SITE. The defect was WHERE the sample was computed, not the arithmetic itself, so the
+       decision above being right proves nothing unless the tick actually uses it (queue 487's lesson). */
+    const src = await fetch('js/app.js', { cache: 'no-store' }).then(r => r.text());
+    if (/FM\._noteSyncError\(Math\.abs\(rawErr - m\._errBias\)/.test(src)) {
+      throw new Error('the sync tick still records `rawErr - m._errBias` at the point where a seek has already nulled the bias — that is the raw error with the latency left in');
+    }
+    if (!/if \(!step\.fresh\) FM\._noteSyncError\(Math\.abs\(step\.deBiased\)/.test(src)) {
+      throw new Error('the sync tick no longer records the de-biased value guarded by the learning tick, so either the latency is back in the samples or a guaranteed zero is');
+    }
+  });
 })();

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.13
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.14
 >
-> **State:** v12.13, **896 tests green**, tree clean.
+> **State:** v12.14, **897 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -24,13 +24,16 @@
 >    you this was fixed three times (#357, #443, and my own v11.94 two days ago). v12.03 fixes a real,
 >    proven fault that the earlier attempts missed — but given that record you should not take my word
 >    for it, and a yes/no from you is worth more than another test I write.
-> 1. **⏸ HOLD OFF ON THE LAG-REPORT TAP FOR NOW — I need to fix the instrument first.**
->    This has been my #1 ask for weeks, and the review found **three separate faults in the report it
->    produces** (#489 ✅ v12.10, #491 ✅ v12.12 — **only #493 left, then the tap is worth spending**). The audio line can inflate its own number enough to blame FreeMotion
->    for something behaving correctly, and the sync-error figures describe a different ten seconds than the
->    one they are printed under. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387), so it is
->    worth more than everything else on this list — which is exactly why I am not going to spend it on a
->    broken gauge. Fixing those three is my next job. I will tell you when it is worth tapping.
+> 1. **✅ THE LAG REPORT IS FIXED — PLEASE TAP IT NOW. This is the most useful thing you can do.**
+>    Play something that lags or sounds scratchy, wait for the toast, **tap it**, then tap the second toast
+>    to copy, and send me the text. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387) that
+>    have been stuck for weeks on a measurement only your phone can take.
+>    I asked you to hold off because the review found **three faults in the report itself** — all three are
+>    now fixed (#489 v12.10, #491 v12.12, #493 v12.14). To be blunt about what they were: the audio line
+>    could read **746 per second when the truth was 2.5**, and past 4 it states flatly that the problem is
+>    ours; the sync-error figures came from a window that had closed before the sample started; and after
+>    every seek the latency v11.70 removed was being added back into the worst-case number. Any report you
+>    had sent me before today could have pointed me at the wrong thing entirely.
 > 2. **"Got it"** — closes #406, the one you asked me to keep reminding you about.
 > 3. **A feature name — Corner Pin, LUT import, or Curves** — or "none". All 105 effect upgrades are
 >    built; these three are what is left. Each is a proper build, and I have not started one because
@@ -16676,8 +16679,16 @@ re-opened #480, which I had marked done and had not fixed.
       consecutive frames still offer to measure — so the fix has not just disabled the feature.
       Its counter is never reset when playback stops, so the '120 consecutive struggling frames' bar is really a running total across separate playbacks and pauses. One late frame after an unrelated pause can tip it. Since the offer is one-shot per page load, a false alarm spends the only one you get.
 
-- [ ] **493 — 🟡 After every seek, one audio sample is recorded with the latency bias still in it.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **493 — 🟡 After every seek, one audio sample is recorded with the latency bias still in it.** ✅ **FIXED v12.14.**
+      The sync loop learns a **bias** — the constant offset between where the audio says it is and where it
+      really is, which is mostly output latency. Every decision is made with that removed, and v11.70 was
+      the release that found and removed it. But the sample stored for the report was worked out at the
+      *bottom* of the tick, and a seek clears the bias a few lines above — so the subtraction became
+      "raw error minus nothing" and what got recorded was the **raw** error, latency and all, straight into
+      the "worst" figure. The correction v11.70 made was being undone in the report after every seek.
+      Also fixed: on the tick that *learns* the bias, the answer is exactly zero by construction — that is a
+      fact about the arithmetic, not about your audio — and it was being stored, dropping a guaranteed zero
+      into the list after every seek and at the start of every clip and pulling the median down.
       On a seek tick the code subtracts a bias that has just been set to nothing, so the raw error is stored instead of the corrected one. It inflates the 'worst' figure by the constant output latency — the very constant that was identified and removed in v11.70 — and drops an artificial zero into the median.
 
 - [ ] **494 — 🔴 On a short phone the Export button is under the fold and NOTHING SCROLLS — export is unreachable.**

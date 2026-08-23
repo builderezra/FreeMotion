@@ -1418,6 +1418,15 @@ window.FM = window.FM || {};
      logic proves only that its own copy works: the first version of the 491 test did exactly that, and
      a mutation restoring the old first-600 cap sailed through it. */
   const ERR_KEEP = 600;
+  /* One step of the sync loop's bias tracking, as a function so the suite can drive the real thing
+     across a seek (queue 493). `fresh` says the bias was just learned from this very sample, which
+     makes the de-biased error exactly zero — a fact about the arithmetic, not about the audio. */
+  FM._syncBiasStep = function (m, rawErr) {
+    const fresh = (m._errBias == null || !isFinite(m._errBias));
+    if (fresh) m._errBias = rawErr;
+    else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
+    return { deBiased: rawErr - m._errBias, fresh: fresh };
+  };
   FM._noteSyncError = function (v, now) {
     const p = FM.playbackStats; if (!p) return;
     const es = p.errs || (p.errs = []), et = p.errT || (p.errT = []);
@@ -1571,9 +1580,15 @@ window.FM = window.FM || {};
                  volume one. */
               m._baseRate = base;
             } else {
-            if (m._errBias == null || !isFinite(m._errBias)) m._errBias = rawErr;
-            else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
-            const plan = FM.mediaSyncPlan(rawErr - m._errBias, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            /* ⚠️ TAKE THE DE-BIASED ERROR BEFORE A SEEK THROWS THE BIAS AWAY (queue 493). The recorded
+               sample used to be computed at the BOTTOM of this block as `rawErr - m._errBias` — and on
+               a seek tick the seek has already set `_errBias = null` a few lines below, so that
+               subtraction is `rawErr - 0` and what got stored was the RAW error, output latency and
+               all. That is the very constant v11.70 identified and removed, put straight back into the
+               "worst" figure the report prints. Computed once, here, from the bias the controller is
+               actually acting on. */
+            const step = FM._syncBiasStep(m, rawErr);
+            const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               m._errBias = null;   // the offset we learned belonged to the old position
@@ -1584,17 +1599,13 @@ window.FM = window.FM || {};
                 (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
               m.el.playbackRate = plan.rate; m._rateAt = now; FM.playbackStats.rateWrites++;
             }
-            /* The error the controller actually acted on, bias removed — capped so a long session
-               cannot grow this without bound. */
-            /* ⚠️ A ROLLING WINDOW, NOT A FIRST-600 CAP (queue 491). This used to stop recording once 600
-               samples existed, and the list is only cleared by play() — so after the first few seconds
-               of playback it was frozen. The report then printed those numbers under a heading that
-               says "10-second sample", describing a window that had closed long before the sample
-               opened. Drift that BUILDS UP over a long playback — the single thing most worth catching
-               — could not appear in it at all.
-               The timestamps are what let the report take only the samples from its own window; the
-               values stay a plain array of numbers because that is what everything already reads. */
-            FM._noteSyncError(Math.abs(rawErr - m._errBias), now);
+            /* The error the controller actually acted on, bias removed. Rolling window, not a
+               first-600 cap (queue 491) — see FM._noteSyncError.
+               NOTHING IS RECORDED ON THE TICK THAT LEARNS THE BIAS (queue 493): the bias is set to the
+               raw error itself there, so the de-biased value is exactly 0 by construction. Storing it
+               dropped a guaranteed zero into the list after every seek and at the start of every clip,
+               pulling the median toward a number that describes the arithmetic rather than the audio. */
+            if (!step.fresh) FM._noteSyncError(Math.abs(step.deBiased), now);
             }
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade

@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.13, 896 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.14, 897 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -107,7 +107,8 @@ Shipped since: v12.02 (Contour Lines walking a grow-only buffer — 3.1x on ever
 picture was identical), v12.03 (queue 480, the add-row drag, wrong for the THIRD time — row indices written
 into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
-**Next: 493–497 — the review's own findings, oldest first. 493 is the LAST lag-report fault (489 v12.10, 491 v12.12) and it
+**Next: 494–497 — the review's own findings, oldest first. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
+that
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
 what would make them differ.** Its two runs were identical by construction. Before trusting any A/B
@@ -140,9 +141,8 @@ All three were caught by mutation, none by reading.
 **482 is a STANDING round-based project, not a blocker.** Round 1 (v12.05) swept all 345 sliders for dead range
 and found two effects whose slider was locked in its own mode. `tools/fx-sweep.js` is the probe; its header lists
 the four ways it lied on the first run. Only the SUBJECTIVE half (does it look good) needs a word from him.
-⛔ **Do not ask him to tap the lag toast until 489/491/493 are fixed.** That tap unblocks five entries and
-the report it produces is currently wrong in three places; spending it on a broken gauge wastes the one
-measurement only his phone can take.
+✅ **The lag toast is now worth tapping** (489/491/493 all fixed). It unblocks five entries — 95, 125, 148,
+202, 387 — on a measurement only his phone can take. Ask for it; do not let it drop off the summary.
 **Two campaigns closed, do not restart them:**
 · **Effect speed** — eight wins (tiltshift 10.5×, spinstreaks 7×, the shared frame buffer, turbulent
   displace 1.93×, wave 2.3×, cross process 9×, lens flare 2×, twelve kernels off their own frame copy),
