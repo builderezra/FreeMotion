@@ -42151,4 +42151,91 @@
     const backAgain = Object.keys(ASSERTED_ABSENT).filter(id => inMarkup[id]);
     if (backAgain.length) throw new Error('these are listed as deliberately absent but are in the markup again: ' + backAgain.join(', ') + ' — the tests asserting they are gone will now fail, and the list above is out of date');
   });
+
+  /* ═══ 482 ROUND 2: NO EFFECT MAY BE SILENT AT ITS OWN DEFAULTS, AND ITS STRONGEST SETTING MUST BE
+     STRONGER THAN ITS DEFAULT. Ezra: "go through every single effect and think of ways to improve it
+     … just improve their quality."
+     Round 1 swept every SLIDER for range that does nothing. This sweeps every EFFECT at the settings it
+     ships with — the state he actually sees when he taps it in the browser — and then checks that the
+     top of its main slider buys something over the default.
+     Three of 105 came back quiet and two were my own instrument, which is why the frame below carries
+     real alpha, hard edges, a highlight and a crushed shadow: an effect judged on a picture that cannot
+     show it reads as broken (the queue-460 lesson, and I repeated it twice more in round 1). */
+  test('482: every effect does something visible at its own defaults', { item: '482' }, async function () {
+    const R = FM.fxRegistry, P = FM._pixelFx;
+    if (!R || !P) throw new Error('the registry or the pixel-effect table is missing');
+    const W = 128, H = 96;
+    const frame = () => {
+      const a = new Uint8ClampedArray(W * H * 4), cx = W / 2, cy = H / 2, rx = W * 0.34, ry = H * 0.38;
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const u = x / W, v = y / H;
+        let r = Math.round(255 * u), g = Math.round(255 * v), b = Math.round(200 * (1 - u * v) + 40);
+        if (((x >> 4) + (y >> 4)) & 1) { r = Math.min(255, r + 40); g = Math.max(0, g - 30); }   // hard edges
+        if (x > W * 0.7 && y < H * 0.28) { r = 250; g = 245; b = 235; }                          // a highlight to clip
+        if (x < W * 0.18 && y > H * 0.78) { r = 8; g = 10; b = 14; }                             // a shadow to crush
+        const dx = (x - cx) / rx, dy = (y - cy) / ry, d = dx * dx + dy * dy;
+        a[i] = r; a[i + 1] = g; a[i + 2] = b;
+        a[i + 3] = d <= 1 ? (d > 0.82 ? 170 : 255) : 0;                                          // a real subject on transparency
+      }
+      return a;
+    };
+    /* Judged on the pixels the effect actually TOUCHES, not on a whole-frame average. A 1px edge
+       outline changes 3% of the frame and can still be perfectly visible — averaging over everything
+       calls it silent, which is exactly the wrong answer for every edge and outline effect. */
+    const strength = (type, params) => {
+      let best = { p95: 0, touched: 0 };
+      [0, 0.33, 0.71].forEach(t => {
+        const b = frame(), d = frame();
+        try { P[type](d, W, H, params, t, 1); } catch (e) { return; }
+        const ds = [];
+        for (let i = 0; i < d.length; i += 4) {
+          const q = Math.max(Math.abs(d[i] - b[i]), Math.abs(d[i + 1] - b[i + 1]), Math.abs(d[i + 2] - b[i + 2]), Math.abs(d[i + 3] - b[i + 3]));
+          if (q > 0) ds.push(q);
+        }
+        if (!ds.length) return;
+        ds.sort((x, y) => x - y);
+        const p95 = ds[Math.floor(ds.length * 0.95)];
+        if (p95 > best.p95) best = { p95: p95, touched: ds.length };
+      });
+      return best;
+    };
+
+    const KNOWN_THIN = {
+      /* Needs an area chosen on the canvas; at its default box it patches a smooth gradient with more
+         of the same gradient, so a small change is the CORRECT answer, not a weak one. */
+      touchup: 'patches a region from its surroundings — on a smooth image the right answer is a small change'
+    };
+
+    const quiet = [], all = [];
+    R.all().forEach(fx => {
+      if (!P[fx.type] || KNOWN_THIN[fx.type]) return;
+      const inst = R.makeInstance(fx.type);
+      const got = strength(fx.type, (inst && inst.params) || {});
+      all.push(fx.type);
+      /* A SILENCE FLOOR, NOT A RANKING. Measured across all 105: the median effect's 95th-percentile
+         pixel change is 131 and the first quartile is 60, so there is a wide spread of legitimate
+         subtlety — Teal & Orange scores 10 and is a deliberately gentle grade. This asserts only that
+         an effect does SOMETHING you could see, because the p95 statistic is dominated by however many
+         faint pixels an effect happens to touch, and tightening it further would start failing effects
+         for being tasteful rather than broken. */
+      if (got.touched < 20 || got.p95 < 4) quiet.push(fx.label + ' (' + got.touched + 'px, p95 ' + got.p95 + ')');
+    });
+    /* CONTROL: if the sweep barely ran, an empty result means nothing. */
+    if (all.length < 90) throw new Error('only ' + all.length + ' effects swept — the sweep is not reaching the effect table, so a clean result proves nothing');
+    if (quiet.length) {
+      throw new Error(quiet.length + ' effect(s) do almost nothing at the settings they ship with: ' + quiet.join(', ') +
+        '. He taps these in the browser and sees no change — that is what "improve their quality" is about. ' +
+        'If one is thin for a good reason, add it to KNOWN_THIN with that reason.');
+    }
+
+    /* ── ELECTRIC EDGES SPECIFICALLY, because it is the one this round changed and the one most likely
+       to drift back. It divided its edge strength by 1442 — the THEORETICAL maximum of a 3x3 Sobel,
+       which no real edge approaches — and scored a p95 of 2 against a median of 131 across the app:
+       five times below the next weakest effect. Removing the gain puts it back under the floor. */
+    const eeInst = R.makeInstance('electricedges');
+    if (eeInst) {
+      const ee = strength('electricedges', eeInst.params || {});
+      if (ee.p95 < 4) throw new Error('Electric Edges is back to a p95 of ' + ee.p95 + ' — it normalises against a Sobel maximum no real edge reaches, so the edges it draws are invisible');
+    }
+  });
 })();

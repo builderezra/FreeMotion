@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.17
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.18
 >
-> **State:** v12.17, **900 tests green**, tree clean.
+> **State:** v12.18, **902 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -11804,6 +11804,22 @@ wait for them to report back."*
       first option in the list". So it fired backwards. Fixed by naming which option actually uses each
       slider, and the greyed-out ones now say **"Only used when Band is Custom"** instead of leaving you
       guessing. Rounded Corners uses a real tick box and was correct all along — it is untouched.
+      ✅ **ROUND 2, v12.18 — every effect swept at the settings it SHIPS with.** Round 1 asked whether each
+      slider does anything across its travel; this asks whether the effect does anything when you simply tap
+      it in the browser, which is the state you actually meet.
+      **Result: nothing is silent, and one effect was almost invisible.** Ranking all 105 by how far the
+      pixels they touch actually move (95th percentile), the median scores **131** and the lower quarter
+      **60** — a wide, healthy spread of subtlety. **Electric Edges scored 2**: five times below the next
+      weakest and about sixty-five times below the median.
+      **The cause was arithmetic, not taste.** It measures edges with a Sobel filter and divides by 1442 —
+      the *theoretical* maximum that filter can produce — and no real edge comes close: a hard black-to-white
+      boundary only reaches about 0.62 of it. After the strength and flicker settings that left a lift of
+      roughly 4% of full brightness, on a one-pixel line. It now has a gain that restores the intended look,
+      and **nothing visible was lost by changing it, because there was nothing visible to lose.**
+      Two of the three candidates were my own measurement, not your app: Starfield draws perfectly well (it
+      just needs a dark frame to show against), and Remove Object patching a smooth gradient with more of the
+      same gradient *should* barely change it. Checked before reporting, as with round 1.
+      🔒 A test now sweeps all 105 at their defaults and fails if any drops under a visible floor.
       🧰 **`tools/fx-sweep.js` is the probe, kept**, with all four ways it lied written at the top so the
       next round does not rediscover them.
       **Still open, and this part DOES need you:** the subjective half — does each effect LOOK good.
