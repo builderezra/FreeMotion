@@ -479,9 +479,44 @@ window.FM = window.FM || {};
          Paint order is unchanged and still load-bearing: the block and the crossbar are declared FIRST
          and the frame LAST, so the frame's rounded corners cover their ends — "make sure the border
          lines go on top of the middle ones, not how it is currently". */
-      + '<rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4" stroke="url(#fm-ic-tpV)"/>'
-      + '<path d="M4 8.6h16" stroke="url(#fm-ic-tpH)"/>'
-      + '<rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#fm-ic-tpB)"/>'), options: function () {
+      /* ⚠️ REPLACED AGAIN — FOURTH TIME, AND THIS TIME HE CHOSE IT (queue 546/510/432).
+         *"Template button still looks shitty like in the projects and inspector menu"*, and before that
+         simply *"template icon looks shit"*. Queue 432 drew four alternatives and he picked none — the
+         reason is recorded there and is worth remembering: they were "put to him" IN WORDS while the
+         drawings sat in a local file he cannot open from a phone. Asking someone to choose between five
+         icons by description is asking them to imagine one.
+         So this time five were drawn, rendered at their REAL 24px beside the four neighbours, and sent to
+         him as a picture. He picked the STAMP.
+         WHY IT IS THE RIGHT SHAPE, in his terms rather than mine: a template is a thing you make copies
+         from, and that is what this draws — a dashed master behind, a solid copy in front. It is also the
+         only dashed texture in the TAB STRIP it lives in, so it is identifiable at 24px before the shape
+         resolves at all — which is precisely what the old header-over-a-block failed at: at real size the
+         bar and the block crowded into a smudge.
+         ⚠️ Dashes are NOT unique in this menu overall, and that is worth knowing before anyone adds a
+         third: `Controller` and `New group` are both dashed, and there the dashes mean "an EMPTY
+         container". Here they mean "the master you copy from". Two meanings for one texture is a real
+         cost, accepted because those two are CARDS inside the Elements tab while this is a TAB icon, so
+         they never appear beside each other, and because this is the only one pairing a dashed shape with
+         a SOLID one — which is the part that reads as "a copy of that" rather than "an empty box". If a
+         dashed card ever lands in the tab strip, this is the note that says why it would be a problem.
+         The PALETTE is untouched — orange frame, cyan and violet accents are his from queue 267 and the
+         two amendments after it, and he has never complained about the colours, only the arrangement.
+         Paint order is still load-bearing, and still his instruction: the copy is filled with the panel
+         colour so the master reads as BEHIND it rather than crossing through it. */
+      /* ⚠️ THE MASTER IS DRAWN AS AN OPEN PATH, NOT A RECT WITH A MATCHING FILL — and that is the whole
+         difference between this working everywhere and working only where I tested it.
+         The first version hid the master's covered corner by filling the copy with `var(--panel-2)`.
+         It looked perfect, because the page I checked it on happened to have that exact background.
+         On any tile whose background is NOT that colour — an active tab, a hover state, a future theme —
+         the fill shows up as a slightly-wrong box sitting inside the icon. And the alternative, leaving
+         it unfilled, puts the dashed lines straight through the solid copy: the EXACT fault he reported
+         on the Sample clip icon an hour earlier.
+         So the master traces only the part the copy does not cover — right stub, top, left, bottom stub,
+         one continuous path. Nothing is hidden, so nothing has to match, and the icon is correct against
+         any background. */
+      + '<path d="M16.4 8.6V5.8A1.8 1.8 0 0 0 14.6 4H5.8A1.8 1.8 0 0 0 4 5.8v8.8a1.8 1.8 0 0 0 1.8 1.8h2.8" stroke="url(#fm-ic-tpH)" stroke-dasharray="2.6 2.4"/>'
+      + '<rect x="8.6" y="8.6" width="11.4" height="11.4" rx="1.8" stroke="url(#fm-ic-tpB)"/>'
+      + '<path d="M11.4 14.3h5.8" stroke="url(#fm-ic-tpV)"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         /* THE TEMPLATE'S OWN PICTURE, not the same little glyph nine times (queue 268, and the last
            open clause of #210 — "it shouldn't even colour it should show the hero image of whatever

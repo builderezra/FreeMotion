@@ -207,6 +207,29 @@ quietly dropping a request is the exact failure this file exists to prevent.
 It is written for HIM to read, not just for Claude — plain language, his own phrasing quoted where
 it is short enough, and honest about what is outstanding.
 
+## ⚠️ USE CLAUDE DESIGN FOR EVERY DESIGN REQUEST — his standing instruction
+
+His words, 24 Aug: *"Can you use claude design for every future design request? and make sure this
+request isnt forgotten?"*
+
+The second half is the operative one, and by his own rule the answer is never a note — so it is written
+in the three places that actually get read: here, `REQUESTS.md` #545, and the cross-session memory.
+
+**What this means in practice, and the honest catch.** The `DesignSync` tool syncs a **component
+library** to a design-system project on claude.ai. FreeMotion has no component library — vanilla
+HTML/CSS/JS, no build step — so until a design-system project exists there is nothing to sync, and
+invoking it would be ceremony rather than work. **The part he actually got value from on #543 is:
+DRAW OPTIONS AND SHOW HIM A PICTURE BEFORE ANYTHING SHIPS.** Never ship an icon or a visual change
+he has not seen.
+
+So, for any design request:
+1. **Draw real options and render them** — big AND at the size they ship at (24px for icons; a 24px
+   icon that only reads at 64px is the trap #432 hit twice). Send him the picture.
+2. **Let him pick.** He has said it plainly: *"I just want options. Yu can just say recommended next
+   to the best option."*
+3. **Push the result to the design-system project once one exists** — see #545, which holds the one
+   decision needed to make that real.
+
 ## ⚠️ Standing reminder — raise this before ANY public release
 
 **The UI is modelled on Alight Motion and must be made visually our own before publishing.**

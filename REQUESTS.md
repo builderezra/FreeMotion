@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.33
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.34
 >
-> **State:** v12.33, **920 tests green**, tree clean.
+> **State:** v12.34, **921 tests green**, tree clean.
+>
+> **✅ v12.34 — the template icon is finally settled (#546, and it closes #432 and #510 with it).** You
+> picked the stamp: a dashed master with a solid copy in front. Fourth attempt at this icon, first one
+> you have chosen — and the difference was that this time you could SEE them.
+>
+> **📐 There is now a "FreeMotion Design System" project on claude.ai** with the icon options in it, so
+> design work lives somewhere you can open from your phone instead of a file on my machine. That was the
+> real problem with #432: I "showed" you four icons that only existed here.
+>
+> **⚠️ #542 is diagnosed but NOT fixed** — the Media/Audio menus on PC. One line forces those two tabs to
+> three rows whatever the height, and three was measured on a phone. That is next.
 >
 > **✅ v12.33 — the two icons you picked (#543).** Sample clip is a real clapperboard; AI Scene is a
 > drawn sparkle pair instead of the emoji. You were right about the lines: the crossbar ran exactly
@@ -4623,6 +4634,18 @@ better still, keep working inside the turn rather than parking work for a later 
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.** ⚠️ **THE PROPOSAL TABLE IS NOW COMPLETE (v9.16).**
       **STATUS: 📌 NOTE — nothing to build**
+      📋 **WHAT IS ACTUALLY LEFT, 24 Aug** (the tool kept flagging this entry as finished because every
+      round below is ticked, so here it is in one place instead of buried in the history):
+      · **Three NEW FEATURES, and each needs a word from you before I start** — **Corner Pin** (drag
+        handles on the canvas), **LUT import** (a file picker + a colour lookup path) and **Curves** (a
+        curve editor). These are proper builds of a day or more each, not rounds, and they need a new
+        KIND of control rather than a parameter. Guessing wrong costs days on the wrong thing, which is
+        why I have not picked one. **A name — or "none" — unblocks this.**
+      · **Gaussian Blur** is the one effect from the table still unimproved. It is a CSS filter, so
+        mixing softness over a sharp image needs a compositing path rather than a slider. Buildable
+        without you; it is simply the least valuable thing left here.
+      · ✅ **Word spacing and line height are DONE (v12.31)** — they were the last "still open" item in
+        this entry that did not need a decision from you.
       All 105 proposed effect upgrades are built except Gaussian Blur (needs a compositing path, not a
       slider) and five the plan itself says to skip. **What is genuinely left in that file is three
       NEW FEATURES — Corner Pin, LUT import and Curves — each needing a new kind of control (on-canvas
@@ -4677,7 +4700,13 @@ better still, keep working inside the turn rather than parking work for a later 
       **Still open from that same request:** word spacing and line height. They need the text renderer
       to carry two more fields and the line-breaking loop to honour them — a layout change, not a
       slider, so I have left it rather than bolt it on badly.
-      ✅ **DONE v12.31 — and "I have left it" had turned into months, which is the honest bit.** Text
+      ✅ **Word spacing + line height landed in v12.31 — and "I have left it" had turned into months,
+      which is the honest bit.**
+      ⚠️ *Worded deliberately. `tools/next.sh` treats a tick-plus-bold-DONE-plus-version as the WHOLE
+      entry being finished and flags it as holding the queue for nothing — which it did, because this
+      entry is only PARTLY done. So sub-parts of a long entry say "landed in vN" instead. Do not tidy
+      this back into the bold form. (This note itself tripped the guard on the first attempt, because it
+      quoted the pattern verbatim — hence the description rather than the literal string.)* Text
       Spacing now has four controls: Letter spacing, **Word spacing**, **Line height** and Applies.
       Word spacing widens the gaps between words without touching the letters. Line height is a
       MULTIPLIER (x1 = exactly what you have now), so it reads the same whichever way you stack it.
@@ -15380,8 +15409,7 @@ wait for them to report back."*
       the question is whether the action row is genuinely shorter on Media/Audio or whether it only looks
       it next to a dense grid. His screenshot is the layout to measure — v10.71, 6 media tiles.
 
-- [ ] **432 — The template icon looks bad.** (20 Aug.) His words, verbatim: *"Reminder to log things -
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **432 — The template icon looks bad.** (20 Aug.) His words, verbatim: *"Reminder to log things -
       including template icon looks shit"*.
       Two things in one message, and both are recorded rather than one:
       1. [x] **The standing instruction, restated:** log everything he says, as he says it. Already the
@@ -15390,7 +15418,7 @@ wait for them to report back."*
              ✅ **Ticked 22 Aug as a RULE, not a task** — same resolution as #353: an instruction's home is
              the rules file, and it is in both the header of this file and CLAUDE.md. Left unticked it
              made this entry look like it had two open jobs when it has one.
-      2. [ ] **The template icon** — the fifth tab icon in the phone ADD sheet, the orange window-ish mark
+      2. [x] ✅ **v12.34 — the stamp (see #546).** **The template icon** — the fifth tab icon in the phone ADD sheet, the orange window-ish mark
              beside the music note in his v10.71 screenshot. He does not like how it looks.
       ⚠️ **Ask nothing, but note what is unsaid:** he has not said what he wants instead. Redraw it to read
       clearly at the ~24px it is actually used at and show him, rather than guessing at a style. The other
@@ -17187,8 +17215,7 @@ re-opened #480, which I had marked done and had not fixed.
       it is not centred. **Measure it rather than eyeballing** — its own box, and the row — at phone width
       and on PC, since #278 and #588 both found the box right and the track wrong.
 
-- [ ] **510 — The template button still looks bad, in Projects and in the inspector.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **510 — The template button still looks bad, in Projects and in the inspector.** (24 Aug.)
       His words, verbatim:
       > Template button still looks shitty like in the projects and inspector menu the template button does not look good
       ⚠️ **This is #432 again** — the template icon he has already been shown five options for and has not
@@ -17637,6 +17664,23 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **542 — 🔴 PC: the Media and Audio menus are broken.** (24 Aug, PC screenshot at v12.30.)
       **STATUS: 🟢 READY — nothing is stopping this**
+
+      📐 **THE CAUSE, FOUND 24 Aug — one line in `js/addmenu.js`:**
+      ```
+      if (isLib) perPage = Math.max(1, 3 * COLS);
+      ```
+      A "library" tab (Media and Audio — the two he named) is forced to **THREE ROWS per page, always**,
+      overriding the fit planner that every other tab uses to work out how many rows actually fit.
+      **Three was measured on a 390px PHONE**, where the comment above it records the library body as
+      260px and three rows as ~208px. **On PC the inspector column is far shorter — measured 232px tall
+      with a 63px body** — so three rows cannot fit and the last one is sliced off, with the pager pushed
+      below the edge. That is exactly his screenshot.
+      ⚠️ **The fix is NOT "use two rows on PC".** Queue 473 is him asking for the third row and queue 358
+      is him rejecting vertical scrolling, so both numbers are his and neither can be hardcoded away. The
+      row count has to come from the SPACE, the same way the fit planner already does it for every other
+      tab — which is the machinery sitting right beside this line and being bypassed.
+      ⚠️ Reproduce with real library items before changing it: an empty library shows 3 cards and hides
+      the bug completely (measured — the probe showed no clipping until items exist).
       His words, verbatim:
       > media and audio menus have broke on pc
       **What the shot shows** (Audio tab open in the PC inspector): the sound-effect tiles are CUT OFF at
@@ -17682,3 +17726,56 @@ re-opened #480, which I had marked done and had not fixed.
       deliberately not started).
       ⚠️ **If it turns into the identity pass, raise BEFORE-PUBLISHING.md first** — that is the standing
       rule, and it is his call when to spend time on it rather than mine.
+
+- [ ] **545 — 🔒 STANDING RULE: use Claude Design for every future design request.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Can you use claude design for every future design request? and make sure this request isnt forgotten?
+      **"Make sure this request isn't forgotten" is the operative half**, and by his own standing rule the
+      answer to that is never a note — *"every safe guard needs to be structural"*. So this is recorded in
+      **three places that are actually read**, not one: this entry, `CLAUDE.md` (loaded every session), and
+      the cross-session memory. A note in one file is a hope that the next session opens it.
+      ⚠️ **The honest catch, told to him on 24 Aug:** Claude Design syncs a **component library** to a
+      design-system project on claude.ai. FreeMotion has no component library — it is vanilla HTML/CSS/JS
+      with no build step — so today there is nothing to sync, which is why the #543 icons were drawn
+      directly and shown as a picture instead.
+      **To honour the rule properly rather than ceremonially, the library has to exist.** That is the
+      decision he needs to make:
+      1. [ ] **Create a FreeMotion design-system project** holding the real icon set, the tile tint
+             palette, the type scale and the panel/button styles the app already uses. Then every future
+             design request has something to work from and push back to, and the rule is real.
+      2. [ ] Until that exists, design work still gets **options drawn and shown as a picture before
+             anything ships** — which is what he actually got value from on #543, and is the part of
+             "use Claude Design" that matters most.
+      ⚠️ Do NOT let this become a ceremony: if a request is one icon, drawing options and showing them is
+      the useful act. The design system is worth building when there is a SET to keep consistent — which
+      is exactly the identity pass in BEFORE-PUBLISHING.md.
+
+- [x] **546 — The template icon, designed with Claude Design.** (24 Aug.)
+      ✅ **A dashed master with a solid copy in front** — which is what a template actually is, a thing you
+      make copies from. It is also the only dashed texture in the tab strip, so it is identifiable at 24px
+      before the shape resolves, which is exactly what the old header-over-a-block failed at.
+      **Palette untouched** — the orange frame and cyan/violet accents are his from #267.
+      **This is the fourth attempt at this icon and the first he has chosen.** Why the earlier ones failed
+      is the useful part: #432 drew four alternatives and "put them to him" IN WORDS while the drawings sat
+      in a local file he cannot open from a phone. This time they were rendered at their real 24px beside
+      the four neighbouring tabs and sent to him as a picture.
+      ⚠️ **Rebuilt once mid-flight, and the reason is worth keeping.** My first version hid the master's
+      covered corner by filling the copy with `var(--panel-2)`. It looked perfect — on the one page I
+      happened to check, which had that exact background. On any other tile (an active tab, a hover, a
+      future theme) that fill shows as a slightly-wrong box inside the icon; and removing it instead runs
+      the dashed lines straight through the copy, which is the EXACT fault he reported on the Sample clip
+      icon the same day. The master now traces only what the copy does not cover, so nothing is hidden and
+      nothing has to match. **An icon that is only correct against one background is a bug waiting for a
+      theme** — there is a test for it now.
+      ⚠️ **An old test had to be retired**, the same way #384's did for the ＋ buttons: it asserted #375's
+      frame + crossbar + centred block as anatomy, which is a picture he has now replaced. What survives
+      is the half that was never about the drawing — every tab icon shares one grid and one stroke weight.
+      His words, verbatim:
+      > I would like to see what you and claude design can cook up with the template icon
+      ⚠️ **This is #432 and #510 — the same icon, third time asked.** #432 showed him five options and he
+      picked none; #510 is him saying plainly *"Template button still looks shitty like in the projects
+      and inspector menu the template button does not look good"*. Given #507's lesson, do not wait for
+      him to choose from the OLD list — draw new ones and show them.
+      **It appears in TWO places** (his words in #510): the Projects screen and the inspector's add menu.
+      Check both, and at 24px as well as full size.

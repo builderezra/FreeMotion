@@ -692,14 +692,17 @@
   });
 
   test('the Add sheet\'s tab icons are one set, and the Template icon is balanced in its box', { item: 'tab-icons' }, function () {
-    /* Queue 375. Ezra: "Template icon needs to be a little bit different as it's identical to alight
-       motions just with colour, should be a simple task just make it look good." He named the SHAPE, so
-       the palette stayed and the division inside the frame changed — a crossbar over one centred content
-       block, instead of AM's crossbar over an upright splitting the lower half into two panes.
-       "Looks good" is a judgement and is not what this asserts. What it asserts is the two things the
-       entry warned would break the SET: the icons must share one grid and one stroke weight, and the new
-       drawing must actually be centred in its own box rather than only looking centred at 88px, which is
-       the size it was drawn at. Both are measured off the real markup the sheet renders. */
+    /* ⚠️ THE TEMPLATE HALF OF THIS TEST DESCRIBED A DRAWING HE HAS SINCE REPLACED — twice over.
+       It was written for queue 375's frame + crossbar + centred block, and asserted that exact anatomy:
+       two rects, a path, the block centred and sitting below the bar. On 24 Aug (queue 546) he was shown
+       five drawn options and chose the STAMP — a dashed master with a solid copy in front — so there is
+       no crossbar and no block to be centred under it any more. Those assertions now describe a picture
+       that does not exist, which makes them noise rather than protection, so they are gone.
+       **What survives is the half that was never about the drawing**, and it is the reason this test
+       exists: every tab icon must share ONE grid and ONE stroke weight, or the row stops reading as a
+       set. That held through queue 375 and it holds through 546.
+       The stamp's own geometry is guarded by its own test ("the Template icon does not depend on matching
+       the background"), which protects what is actually fragile about it. */
     if (!FM.addMenu || !FM.addMenu._tabs) throw new Error('FM.addMenu._tabs() is missing — the tab list cannot be read');
     const tabs = FM.addMenu._tabs();
     if (!tabs.length) throw new Error('no tabs came back');
@@ -718,28 +721,9 @@
         if (sv.getAttribute('stroke-width') !== '1.8') bad.push(t.key + ' has stroke-width ' + sv.getAttribute('stroke-width') + ', not 1.8 — same reason');
         if (t.key !== 'template') return;
         sawTemplate = true;
-        // …and the drawing itself: centred left-to-right, and inside the frame it is drawn in
-        sv.setAttribute('width', '240'); sv.setAttribute('height', '240');
-        /* ⚠️ MEASURE THE BLOCK, NOT THE WHOLE ICON. The first version of this asked getBBox() on the
-           <svg> and checked that centre against 12 — and a mutation moving the block 2.4 units off
-           centre SURVIVED it, because the union bbox is the 4..20 FRAME whatever the block does. The
-           frame is the biggest rect and the block is the smallest, so they are told apart by area. */
-        const rects = [].slice.call(sv.querySelectorAll('rect'));
-        const bar = sv.querySelector('path');
-        if (rects.length < 2 || !bar) { bad.push('the Template icon is no longer a frame + crossbar + block (' + rects.length + ' rects, ' + (bar ? 1 : 0) + ' path)'); return; }
-        const area = r => parseFloat(r.getAttribute('width')) * parseFloat(r.getAttribute('height'));
-        const sorted = rects.slice().sort((a, b) => area(a) - area(b));
-        const block = sorted[0], frame = sorted[sorted.length - 1];
-        const bx = parseFloat(block.getAttribute('x')), bw = parseFloat(block.getAttribute('width'));
-        const by = parseFloat(block.getAttribute('y')), bh = parseFloat(block.getAttribute('height'));
-        const cx = bx + bw / 2;
-        if (Math.abs(cx - 12) > 0.4) bad.push('the Template icon\'s content block centres on x=' + cx.toFixed(2) + ', not 12 — it is lopsided inside its own frame');
-        const fx = parseFloat(frame.getAttribute('x')), fy = parseFloat(frame.getAttribute('y'));
-        const fw = parseFloat(frame.getAttribute('width')), fh = parseFloat(frame.getAttribute('height'));
-        if (bx < fx || bx + bw > fx + fw || by < fy || by + bh > fy + fh) bad.push('the Template icon\'s block escapes its frame');
-        // and it must sit BELOW the crossbar, or it is not the header-over-content shape at all
-        const barY = parseFloat((bar.getAttribute('d') || '').replace(/^M[\d.]+\s+/, ''));
-        if (!(by > barY)) bad.push('the Template icon\'s block is at y=' + by + ' but the crossbar is at y=' + barY + ' — the block is supposed to sit under the header, which is the whole shape');
+        /* Still checked, because it is cheap and it is the thing that would silently empty this branch:
+           the Template tab must actually carry a drawing. Its shape is asserted in queue 546's test. */
+        if (!sv.querySelector('path, rect, circle, polygon')) bad.push('the Template icon has no shapes in it at all');
       });
       if (!sawTemplate) bad.push('there is no tab keyed "template" to check');
       if (bad.length) throw new Error(bad.join(' | '));
@@ -28158,6 +28142,43 @@
       FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
       FM.refreshAll();
     }
+  });
+
+  test('the Template icon does not depend on matching the background (queue 546)', { item: '546' }, async function () {
+    /* Ezra picked the "stamp" — a dashed master with a solid copy in front — from five drawn options,
+       after three earlier attempts at this icon he rejected.
+       ⚠️ WHAT THIS GUARDS IS THE MISTAKE I MADE BUILDING IT, not the shape. My first version hid the
+       master's covered corner by filling the copy with `var(--panel-2)`. It looked perfect on the page I
+       checked it on, because that page happened to have that background. On a tile with any other
+       background — an active tab, a hover, a future theme — the fill shows as a slightly-wrong box
+       inside the icon. And removing the fill instead puts the dashed lines straight through the solid
+       copy, which is the EXACT fault he reported on the Sample clip icon the same day.
+       An icon that is only correct against one background is a bug waiting for a theme, and nothing else
+       in the suite would notice. So: the master is an open path that traces only what the copy does not
+       cover, and no shape in this icon may carry an opaque fill. */
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tab = [].slice.call(host.querySelectorAll('.addmenu-tab')).filter(t => t.dataset && t.dataset.key === 'template')[0];
+      if (!tab) throw new Error('no Template tab to inspect');
+      const svg = tab.querySelector('svg');
+      if (!svg) throw new Error('the Template tab has no icon at all');
+      const shapes = [].slice.call(svg.querySelectorAll('path, rect, circle, polygon'));
+      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s) — the stamp needs a master and a copy');
+      /* THE CONTROL: the dashed master IS the idea he picked, so its absence must fail here rather than
+         quietly leaving a plain double-box that means nothing. */
+      const dashed = shapes.filter(el => (el.getAttribute('stroke-dasharray') || '').trim());
+      if (!dashed.length) throw new Error('nothing in the Template icon is dashed any more — the "master you copy from" reading is gone');
+      const solid = shapes.filter(el => !(el.getAttribute('stroke-dasharray') || '').trim());
+      if (!solid.length) throw new Error('the Template icon has no solid shape — there is a master but no copy');
+      // …and the fragile bit: no opaque fill anywhere, so it cannot depend on the tile behind it.
+      const filled = shapes.map(el => ({ el: el, f: (el.getAttribute('fill') || '').trim() }))
+                           .filter(o => o.f && o.f !== 'none' && o.f !== 'transparent');
+      if (filled.length) throw new Error('the Template icon fills a shape with "' + filled[0].f + '" — an icon that paints a background colour into itself is only correct on the one tile that happens to match');
+    } finally { host.remove(); }
   });
 
   test('every Add-menu tile is a DRAWN icon, never an emoji (queue 543)', { item: '543' }, async function () {

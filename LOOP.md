@@ -97,7 +97,23 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.33, 920 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.34, 921 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.34: the template icon (#546, closing #432 and #510).** He chose the STAMP — dashed master, solid
+copy — from five drawn options. Fourth attempt at this icon, first one he picked, and the difference is
+that he could SEE them: #432 "put four options to him" in words while the drawings sat in a local file he
+cannot open from a phone.
+🔒 **STANDING RULE ADDED (#545, and it is in CLAUDE.md + memory too): use Claude Design for every design
+request.** In practice that means DRAW OPTIONS AND SEND HIM A PICTURE before anything visual ships. There
+is now a **FreeMotion Design System** project on claude.ai (id `8c7114b7-9b3b-488b-92ae-afc0e6753f92`)
+holding `icons/template-icon.html`. ⚠️ Do NOT hand-copy the app's icon set into it — a design system that
+drifts from the code is worse than none; it has to be generated from `js/addmenu.js`.
+⚠️ **Two lessons from building it.** (1) I first hid the master behind a copy filled with `var(--panel-2)`
+— correct only on a tile that happens to be that colour. **An icon that is only right against one
+background is a bug waiting for a theme.** (2) An old test asserted #375's frame+crossbar+block as
+anatomy; retired, exactly like #384's identical-＋ test. **A test encoding a design he has since replaced
+is noise, not protection.**
+**NEXT: #542**, diagnosed and ready — `if (isLib) perPage = Math.max(1, 3 * COLS)` forces Media/Audio to
+three rows whatever the height, and three was measured on a 390px phone.
 ⏸️ **PAUSED FOR DESIGN WORK AT HIS REQUEST (#544).** He picked the icons (#543) and both shipped in
 v12.33. Ask him what is next before resuming the oldest-first list.
 **v12.33: the Add menu's two odd tiles.** AI Scene was the ONLY `emoji:` entry in the menu; now a drawn
