@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.18
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.19
 >
-> **State:** v12.18, **902 tests green**, tree clean.
+> **State:** v12.19, **903 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -11820,6 +11820,16 @@ wait for them to report back."*
       just needs a dark frame to show against), and Remove Object patching a smooth gradient with more of the
       same gradient *should* barely change it. Checked before reporting, as with round 1.
       🔒 A test now sweeps all 105 at their defaults and fails if any drops under a visible floor.
+      ✅ **ROUND 3, v12.19 — and it caught my own rounds 1 and 2 overstating themselves.** Both said "every
+      effect" and both swept one table of 105. **The app has a second table of 21** — Wave, Twirl, Fisheye,
+      Kaleidoscope, Fractal Warp and friends, the ones that MOVE pixels rather than recolour them — and
+      neither round had touched a single one. Nothing failed; the sweeps just quietly covered four fifths
+      of the app while claiming all of it. All 21 are healthy (the gentlest, Stretch Segment, still shifts
+      pixels by 6.6px at its peak), and the test now walks both tables and fails if either goes unwalked.
+      Two other axes came back clean and are recorded so nobody repeats them: effects that crush to black
+      or blow out to white at their defaults (9 do, all of them hard-edged graphics like Halftone and
+      Letterbox, where that IS the effect), and controls whose default sits at the top of their range (31,
+      almost all "Mix"/"Amount" at full, which is the right default for a blend).
       🧰 **`tools/fx-sweep.js` is the probe, kept**, with all four ways it lied written at the top so the
       next round does not rediscover them.
       **Still open, and this part DOES need you:** the subjective half — does each effect LOOK good.
@@ -16774,3 +16784,27 @@ re-opened #480, which I had marked done and had not fixed.
       **And it is masking something real:** when I hid it the proper way instead, an unrelated test started
       failing because the dialog was genuinely on screen and intercepting taps — so something later opens
       that dialog and leaves it open, and the stray inline style has been covering for it. Worth finding.
+
+- [x] **498 — 🔴 Canvas settings is broken: the bottom row is cut off behind the buttons.** ✅ **FIXED v12.19 — same day you reported it.** (24 Aug, phone screenshot at v12.17.) **REGRESSION — I caused this in v12.15.**
+      His words, verbatim:
+      > This section is a bit broken the bottom button is going off the screen
+      **What the shot shows:** the Canvas settings card on his phone. "Scale the layers to fit" is sliced in
+      half by the App settings / Cancel / Apply row sitting on top of it, and its tick box is half visible.
+      **My fault, and recent.** v12.15 pinned that button row to the bottom of the card so Export could not
+      be pushed out of reach (#494). The bar has a background and the settings scroll UNDER it — which is the
+      design — but I never gave the scrolling content any room at the end, so the LAST row can never scroll
+      clear of the bar. It is permanently half-hidden, on every card that got the sticky row.
+      **Reproduced exactly at your size** (430×810, 1080×1350 project, a layer present): the row was covered
+      by 8px and **the card was not scrolling at all** — so there was genuinely no way to see it.
+      **The cause was one number.** I pinned that row with `bottom: 0` while giving it a negative bottom
+      margin so its background reaches the card's edge. That margin puts its natural position 22px BELOW
+      the scrolling area, and the pinning rule then drags it back UP — on top of whatever is above it,
+      even when there is nothing to scroll. Matching the two numbers makes it rest where it actually sits.
+      The export dialog got better too: scrolled to the end, its last row is now completely clear of the
+      buttons instead of tucked under them, and Export stays reachable exactly as #494 requires.
+
+- [ ] **499 — Remove the "clear all markers" option from the timeline long-press.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Get rid of the feature where holding on the timeline gives you an option to get rid of all markers
+

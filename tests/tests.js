@@ -42220,8 +42220,45 @@
          for being tasteful rather than broken. */
       if (got.touched < 20 || got.p95 < 4) quiet.push(fx.label + ' (' + got.touched + 'px, p95 ' + got.p95 + ')');
     });
-    /* CONTROL: if the sweep barely ran, an empty result means nothing. */
-    if (all.length < 90) throw new Error('only ' + all.length + ' effects swept — the sweep is not reaching the effect table, so a clean result proves nothing');
+    /* ⚠️ THE OTHER TABLE (queue 482, round 3). Rounds 1 and 2 said "every effect" and swept `FM._pixelFx`
+       — which is 105 of them. The app has a SECOND kernel table, `FM._warpFx`, holding 21 more (Wave,
+       Twirl, Fisheye, Fractal Warp, Kaleidoscope…), and neither round touched one of them. Nothing
+       failed; the sweeps simply described less than they claimed, and the old control (`< 90 swept`)
+       would have gone on passing forever while a fifth of the effects went unchecked.
+       A warp effect does not change colour — it moves pixels — so "does it do anything" is how far it
+       displaces them, not how much they change. Measured at defaults: all 21 are healthy, the gentlest
+       being Stretch Segment at 0.9px mean / 6.6px peak. */
+    const warpQuiet = [];
+    let warpSwept = 0;
+    const WF = FM._warpFx || {};
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    Object.keys(WF).forEach(type => {
+      const fn = WF[type];
+      if (typeof fn !== 'function') return;
+      const inst = R.makeInstance(type);
+      const prm = (inst && inst.params) || {};
+      let sum = 0, n = 0, worst = 0, broke = null;
+      [0, 0.33, 0.71].forEach(t => {
+        let pre = null;
+        try { if (fn.prep) pre = fn.prep(W, H, cx, cy, maxR, prm, t, 1); } catch (e) { broke = 'prep threw: ' + e; return; }
+        for (let y = 2; y < H; y += 3) for (let x = 2; x < W; x += 3) {
+          let r;
+          try { r = fn(x, y, W, H, cx, cy, maxR, prm, t, 1, pre); } catch (e) { broke = String(e).slice(0, 60); return; }
+          if (!r) continue;
+          const d = Math.hypot(r[0] - x, r[1] - y);
+          if (isFinite(d)) { sum += d; n++; if (d > worst) worst = d; }
+        }
+      });
+      warpSwept++;
+      if (broke) warpQuiet.push(type + ' (threw: ' + broke + ')');
+      else if (!n || sum / n < 0.4) warpQuiet.push(((R.all().find(f => f.type === type) || {}).label || type) + ' (mean shift ' + (n ? (sum / n).toFixed(2) : 0) + 'px, peak ' + worst.toFixed(2) + 'px)');
+    });
+    if (warpQuiet.length) throw new Error(warpQuiet.length + ' warp effect(s) barely move anything at their defaults: ' + warpQuiet.join(', '));
+
+    /* CONTROL, and the reason this round exists: BOTH tables must actually have been walked. The old
+       version only counted the pixel ones, so the warp table could empty out and it would still pass. */
+    if (all.length < 90) throw new Error('only ' + all.length + ' pixel effects swept — the sweep is not reaching FM._pixelFx, so a clean result proves nothing');
+    if (warpSwept < 15) throw new Error('only ' + warpSwept + ' warp effects swept — FM._warpFx holds 21, so this is not walking the second table and a fifth of the effects are going unchecked again');
     if (quiet.length) {
       throw new Error(quiet.length + ' effect(s) do almost nothing at the settings they ship with: ' + quiet.join(', ') +
         '. He taps these in the browser and sees no change — that is what "improve their quality" is about. ' +
@@ -42236,6 +42273,85 @@
     if (eeInst) {
       const ee = strength('electricedges', eeInst.params || {});
       if (ee.p95 < 4) throw new Error('Electric Edges is back to a p95 of ' + ee.p95 + ' — it normalises against a Sobel maximum no real edge reaches, so the edges it draws are invisible');
+    }
+  });
+
+  /* ═══ 498: THE PINNED BUTTON ROW MUST NOT SIT ON TOP OF THE LAST SETTING.
+     Ezra, with a phone screenshot: "This section is a bit broken the bottom button is going off the
+     screen". Canvas settings, with "Scale the layers to fit" sliced in half by the App settings /
+     Cancel / Apply row — and NO way to reveal it: measured maxScroll 0, so the card was not scrolling,
+     the row was simply covered for good.
+     My own regression, from v12.15. Pinning that row (so Export could not be pushed off a short phone,
+     queue 494) used `bottom: 0` against a `margin-bottom: -22px`. The margin puts the bar's natural
+     position 22px BELOW the scroll area, so the sticky rule dragged it up over the row above it, even
+     with nothing to scroll. Matching the two means it rests where it naturally sits.
+     Asserted on BOTH cards, because one rule governs them and only one of them showed the symptom. */
+  test('498: the pinned Cancel/Apply row never covers the last setting above it', { item: '498' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const keep = FM.scene.layers.slice(), P = FM.scene.project;
+    const saved = { w: P.width, h: P.height };
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const dlg = document.getElementById('canvas-dialog');
+    try {
+      if (hadHome) FM.home.close();
+      dlg.style.removeProperty('display');          // see queue 497 — an older test leaves this behind
+      await sleep(80);
+      /* The row only exists when there are layers to scale, which is the state his screenshot shows. */
+      if (!FM.scene.layers.length) {
+        const L = FM.makeLayer('shape', { name: 'S498', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#7ac943' });
+        L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+      }
+      FM.refreshAll();
+      document.getElementById('btn-canvas').click();
+      await sleep(300);
+
+      const card = dlg.querySelector('.export-card');
+      const bar = card && card.querySelector('.dialog-actions');
+      const row = document.getElementById('cv-scale-row');
+      if (!card || !bar) throw new Error('the canvas dialog has no card / action row');
+      /* CONTROLS: the row has to be on screen, and the bar has to be the pinned kind — otherwise there
+         is no overlap to detect and this passes for the wrong reason. */
+      if (!row || row.classList.contains('hidden')) throw new Error('the "Scale the layers to fit" row is not showing, so the overlap his screenshot shows cannot be reproduced here');
+      if (getComputedStyle(bar).position !== 'sticky') throw new Error('the action row is not pinned any more — this test is about what pinning did, so it is measuring nothing');
+      const rb = row.getBoundingClientRect(), bb = bar.getBoundingClientRect();
+      if (!(rb.height > 4)) throw new Error('the scale row has no height, so nothing is being measured');
+      const covered = rb.bottom - bb.top;
+      if (covered > 0.5 && !(card.scrollHeight > card.clientHeight + 1)) {
+        throw new Error('the pinned button row covers the bottom ' + covered.toFixed(1) + 'px of "Scale the layers to fit", and the card does not scroll (content ' +
+          card.scrollHeight + ' vs box ' + card.clientHeight + ') — so there is no way to see it at all. That is exactly his screenshot.');
+      }
+
+      /* AND WHEN THE CARD DOES OVERFLOW: scrolling to the end must clear the last row completely,
+         while the buttons stay reachable — the queue-494 guarantee has to survive this fix. */
+      const exp = document.getElementById('export-dialog');
+      document.getElementById('cv-cancel').click();
+      await sleep(150);
+      exp.classList.remove('hidden');
+      const ec = exp.querySelector('.export-card');
+      const eb = ec.querySelector('.dialog-actions');
+      const savedMax = ec.style.maxHeight;
+      ec.style.maxHeight = '200px';
+      await sleep(120);
+      if (!(ec.scrollHeight > ec.clientHeight + 4)) throw new Error('the export card did not overflow when squeezed, so the scrolled case is not being tested');
+      ec.scrollTop = ec.scrollHeight;
+      await sleep(120);
+      const rows = [].slice.call(ec.children).filter(n => n !== eb && n.getBoundingClientRect().height > 2);
+      const lastRow = rows[rows.length - 1];
+      if (lastRow) {
+        const lr = lastRow.getBoundingClientRect(), bar2 = eb.getBoundingClientRect();
+        if (lr.bottom - bar2.top > 0.5) throw new Error('scrolled to the very bottom, the pinned row still covers ' + (lr.bottom - bar2.top).toFixed(1) + 'px of the last setting — it can never be read in full');
+      }
+      const go = document.getElementById('exp-go').getBoundingClientRect(), cb = ec.getBoundingClientRect();
+      if (go.bottom > cb.bottom + 1 || go.top < cb.top - 1) throw new Error('Export is no longer inside the card while it overflows — the queue-494 fix has been undone');
+      ec.style.maxHeight = savedMax;
+    } finally {
+      try { document.getElementById('cv-cancel').click(); } catch (e) {}
+      const exp = document.getElementById('export-dialog'); if (exp) exp.classList.add('hidden');
+      dlg.classList.add('hidden');
+      P.width = saved.w; P.height = saved.h;
+      FM.scene.layers = keep; FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 })();

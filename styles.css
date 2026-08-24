@@ -2792,7 +2792,14 @@ body.fm-playing #time-readout {
    fault. */
 .export-card { max-height: calc(100vh - 24px); overflow-y: auto; overscroll-behavior: contain; }
 .export-card > .dialog-actions {
-  position: sticky; bottom: 0; z-index: 1;
+  /* ⚠️ `bottom` MUST MATCH THE NEGATIVE MARGIN BELOW (queue 498). With `bottom: 0` the sticky rule
+     keeps the bar's bottom edge at the bottom of the scroll area — but the -22px margin puts its
+     natural position 22px BELOW that, so sticking dragged it upwards ON TOP of the last row, even when
+     the card fitted and there was nothing to scroll. Ezra's screenshot: "Scale the layers to fit"
+     sliced in half by the button row, with no way to reveal it (measured maxScroll 0, covered by 8px).
+     Matching the offset means the bar rests exactly where it naturally sits and only ever moves when
+     there is genuinely something scrolling underneath it. */
+  position: sticky; bottom: -22px; z-index: 1;
   /* Negative margins cancel the card's own 22px/24px padding so the bar spans edge to edge and its
      background actually COVERS what is scrolling behind it. Without them the row is inset, and the
      settings underneath show through the gutter on both sides and below — measured and seen. */

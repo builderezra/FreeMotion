@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.18, 902 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.19, 903 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -110,8 +110,10 @@ effects browser dressed for a wide screen while docked in a 346px column).
 **ALL 14 REVIEW FINDINGS ARE CLOSED (485-496), plus 497.** `next.sh` now reports 1 actionable and 22 blocked.
 **That is not a reason to idle — rule 8b.** Audited the blocked list by hand on 24 Aug: 425, 96 and the rest
 genuinely do need a word from him. **The standing work that needs nothing from him is 482's MECHANICAL half**
-(round 1 = dead slider range, round 2 = silent at defaults). Keep running rounds on new axes: candidates for
-round 3 are effects whose default sits at an extreme, and effects that clip to pure white/black. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
+(round 1 = dead slider range, round 2 = silent at defaults). Keep running rounds on new axes: Round 3 (v12.19) found that rounds 1-2 swept only
+`FM._pixelFx` (105) and had never touched `FM._warpFx` (21) — **when sweeping 'every effect', walk BOTH
+tables.** Both other round-3 axes came back clean: clipping-at-defaults (9, all hard-edged graphics by
+design) and defaults-at-max (31, almost all Mix/Amount blends). Do not repeat those two. the lag report is now SOUND (489 v12.10, 491 v12.12, 493 v12.14) and the ask to him has flipped from 'hold off' to 'please tap it' —
 that
 block the one measurement only his phone can take, so they matter more than their numbers suggest.**
 ⚠️ **485 taught the general lesson again: a test that compares two runs is worth nothing until you can say
