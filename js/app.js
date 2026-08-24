@@ -4450,8 +4450,20 @@ window.FM = window.FM || {};
            1280x800 screen — with the sideways bug on top of it, that is the "takes up the whole
            screen" he reported. 0.62 keeps roughly a third of the window as canvas, which is the point
            of a menu that floats OVER the canvas rather than replacing it. A judgement call rather than
-           a measured one, so it is a single number in one place if he wants it taller. */
-        const ceil = Math.max(200, Math.round(vh * 0.62));
+           a measured one, so it is a single number in one place if he wants it taller.
+           ⚠️ …AND IT MUST NEVER BE LOWER THAN WHAT THE TIMELINE DRAG CAN ALREADY PRODUCE (queue 512).
+           Ezra: "it gets to a limit on how far it can be dragged up by itself. But if you drag it up
+           with the timeline at the same time, then it lets it drag up higher, which is really weird."
+           He is describing this exactly, and the numbers are stark — measured at a 820px window: this
+           ceiling is 508px, the timeline's is 590px, and the panel's FLOOR is `--tl-h`. The floor is
+           applied with Math.max AFTER the Math.min below, so once the timeline has been dragged to its
+           own 590 the floor overrides this ceiling and the panel goes to 590 — while dragging the panel
+           on its own still stopped dead at 508. Two paths to one size, 82px apart.
+           So the ceiling now asks the timeline's own clamp what IT would allow and never sits below it.
+           Tied to the function rather than to a copy of the number, so the two cannot drift apart again
+           — which is how they got 82px apart in the first place. */
+        const ceil = Math.max(200, Math.round(vh * 0.62),
+                              FM.clampTimelineH ? FM.clampTimelineH(vh) : 0);
         return Math.max(amFloor(), Math.min(ceil, h));
       };
       FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy

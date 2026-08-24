@@ -102,7 +102,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.37, 925 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.38, 926 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.38 worked #512** (taken ahead of #511 clause 1 because it is the same gesture family and names a
+precise defect). **He was exactly right:** dragging the inspector alone capped at 508px while dragging it
+with the timeline reached 590px — 82px apart on an 820px window. Two ceilings written down separately
+(timeline 0.72vh, add menu 0.62vh) and the panel's FLOOR is `--tl-h`, applied with max() AFTER the
+ceiling's min() — so raising the timeline first carried the panel past its own limit. Fixed by tying the
+panel's ceiling to `FM.clampTimelineH` rather than copying the number. Mutation: 76px split returns.
+**#511 is now partly explained** — clause 1's "inconsistent and random" has at least this concrete cause.
+Clauses 2 (exhaustive sweep of the drag state machine), 3 and 4 (the AI director menu on PC) are open.
+⚠️ **#508 still blocked on a visible preview pane** (rule 11 — check with a control before any timing work).
+**NEXT: #511** clauses 2-4, or #513/#514 (sketching) if the pane is still hidden.
 **v12.37 worked #509** — the timecode digits. He hedged ("not 100% sure") and the hedge was the accurate
 part: on PC dead centre both ways; at 380px the pill stretches to 226.6px and the digits sat **71.1px
 left** of it, because `#time-readout` had no `text-align` and inherited `start`. Fixed with

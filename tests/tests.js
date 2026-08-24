@@ -28144,6 +28144,49 @@
     }
   });
 
+  test('the inspector drags as high on its own as it does with the timeline (queue 512)', { item: '512' }, async function () {
+    /* Ezra: "it gets to a limit on how far it can be dragged up by itself. But if you drag it up with
+       the timeline at the same time, then it lets it drag up higher, which is really weird."
+       He had it exactly. Two ceilings existed: the timeline's (0.72 of the window on a tall viewport)
+       and the add menu's (0.62). The panel's FLOOR is the timeline's height, and the floor is applied
+       with Math.max AFTER the ceiling's Math.min — so once the timeline had been dragged to ITS ceiling
+       the floor overrode the panel's own and carried it up there too, while dragging the panel alone
+       still stopped dead lower. Measured at an 820px window: solo 508px, combined 590px, **82px apart**.
+       Both clamps are already exposed for the suite precisely so this tests the code that runs rather
+       than a copy of the arithmetic. */
+    if (typeof FM.clampAddMenuH !== 'function' || typeof FM.clampTimelineH !== 'function')
+      throw new Error('the clamps are not exposed — this test cannot reach the code it is about');
+    const root = document.documentElement;
+    const before = getComputedStyle(root).getPropertyValue('--tl-h').trim();
+    try {
+      const tlCeil = FM.clampTimelineH(999999);
+      // Solo: the timeline is at its normal height and the panel is dragged up on its own.
+      root.style.setProperty('--tl-h', '232px');
+      const solo = FM.clampAddMenuH(999999);
+      // Combined: the timeline has been dragged to its own ceiling first.
+      root.style.setProperty('--tl-h', tlCeil + 'px');
+      const combined = FM.clampAddMenuH(999999);
+
+      if (solo < combined) throw new Error('dragging the inspector alone stops at ' + solo + 'px, but dragging it with the timeline reaches ' + combined + 'px — ' + (combined - solo) + 'px higher, which is the inconsistency he reported');
+
+      /* THE CONTROL, and it matters: on a SHORT window the timeline's ceiling is the smaller of the two
+         and there was never a gap to close, so "solo >= combined" would be true of nothing. Only assert
+         that the gap was real when the geometry says it could have been. */
+      const vh = window.innerHeight;
+      if (vh >= 504) {
+        const oldCeil = Math.max(200, Math.round(vh * 0.62));
+        if (!(tlCeil > oldCeil)) throw new Error('at ' + vh + 'px tall the timeline ceiling (' + tlCeil + ') is not above the old add-menu ceiling (' + oldCeil + '), so this test is not exercising the gap it was written for');
+        if (solo < tlCeil) throw new Error('the solo ceiling is ' + solo + 'px but the timeline can reach ' + tlCeil + 'px — the two are still computed apart');
+      }
+      /* …and the floor coupling must survive: the panel still cannot be shorter than the timeline band
+         under it, or it would leave a hole. */
+      const squashed = FM.clampAddMenuH(1);
+      if (squashed < tlCeil) throw new Error('with the timeline at ' + tlCeil + 'px the panel was allowed down to ' + squashed + 'px, which would leave a gap under it');
+    } finally {
+      root.style.setProperty('--tl-h', before || '232px');
+    }
+  });
+
   test('the timecode digits stay centred in their pill however wide it gets (queue 509)', { item: '509' }, async function () {
     /* Ezra: "I believe that the play buttons Numbers aren't … Centred", and he said he was not sure —
        which fits, because on a desktop he would have been wrong. Measured at 1000px the pill shrink-wraps

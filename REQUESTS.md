@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.37
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.38
 >
-> **State:** v12.37, **925 tests green**, tree clean.
+> **State:** v12.38, **926 tests green**, tree clean.
+>
+> **✅ v12.38 — the inspector drag limit (#512). You had it exactly right.** Dragging the panel alone
+> stopped 82px short of where dragging it with the timeline reached. Two ceilings had been written down
+> separately; they are tied together now so they cannot drift again. This is also the first concrete
+> piece of #511's "inconsistent and random" — same panel, same gesture family.
 >
 > **✅ v12.37 — you were right about the play row's numbers (#509), and right to hedge.** On a PC they
 > are dead centre; on a phone the pill stretches and the digits were sitting 71px to the left of it.
@@ -17330,8 +17335,21 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] **The AI / director menu does not fit the PC layout** — it was not redesigned for it.
       4. [ ] **Give the director menu a distinctive background with some interesting colours** so it stands out.
 
-- [ ] **512 — PC: the inspector cannot be dragged up as far on its own as it can when dragged together with the timeline.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **512 — PC: the inspector cannot be dragged up as far on its own as it can when dragged together with the timeline.** (24 Aug.)
+      ✅ **Measured on an 820px-tall window: dragging the panel ALONE stopped at 508px; dragging it up
+      with the timeline reached 590px.** Same gesture, same panel, **82 pixels apart**.
+      **Why:** two ceilings had been written down separately — the timeline's (0.72 of the window on a
+      tall viewport) and the add menu's (0.62) — and the panel's FLOOR is the timeline's height, applied
+      with `Math.max` AFTER its own ceiling's `Math.min`. So raising the timeline first lifted the floor
+      past the panel's ceiling and carried it up there, while the panel's own drag still refused to cross
+      that line. Exactly your *"if you drag it up with the timeline at the same time, then it lets it drag
+      up higher, which is really weird."*
+      **The fix ties them together** rather than copying a number across: the panel's ceiling asks the
+      timeline's own clamp what it allows and never sits below it. **That is how they came to disagree in
+      the first place** — two hand-written constants — so tying them is what stops it recurring.
+      Mutation-checked: restoring the standalone ceiling reproduces the split (76px in the suite's window).
+      ⚠️ The floor coupling is deliberately kept and asserted — the panel still cannot be shorter than the
+      timeline band beneath it, or it would leave a hole.
       His words, verbatim:
       > When dragging the inspector layer up on PC, it should be able to be dragged up higher. Currently, for some reason, it gets to a limit on how far it can be dragged up by itself. But if you drag it up with the timeline at the same time, then it lets it drag up higher, which is really weird. So you should just make it be able to drag up high by itself and not need the the timeline with it to drag it up higher.
       **A precise bug report:** two paths to the same size compute their limit differently, and only one of
