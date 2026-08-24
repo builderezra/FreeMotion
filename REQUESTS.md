@@ -16932,6 +16932,29 @@ re-opened #480, which I had marked done and had not fixed.
       that is an ELEMENT or a TEMPLATE, and to save back to that store. **Plan it before writing anything**,
       and expect it to take more than one tick.
 
+      📐 **MEASURED IT END TO END, 24 Aug — and it is worse than you said.** Tapping an element card and
+      then following the app's own instructions:
+      | step | what actually happens |
+      |---|---|
+      | Tap an element to edit | **A real project is created** (`elementDraft: true`). Projects went 4 → 5. |
+      | Edit it, then ⋯ → Save as element (what the toast tells you to do) | **A DUPLICATE element appears.** Two "TestBadge" — the old one with 2 layers, a new one with 3. |
+      | Leave | **The draft project stays behind**, one per edit, forever. |
+      **So you cannot actually edit an element at all** — you can only fork it, and every attempt leaves a
+      project behind. "Still not working" is exactly right.
+      **The cause, in the code:** the edit route (`js/home.js`, `edit()`) creates a project, inserts the
+      element's layers into it, and hands you the normal editor. Saving back goes through
+      `elements.saveFromProject`, which always mints a NEW element id — there is no update path. The
+      element's own id is never carried into the editing session, so nothing can write back to it.
+      **Two candidate designs, being pressure-tested before anything is written:**
+      · **A — the element is the document.** Storage learns that the open document can be an element, and
+        autosave writes to the element store. Truest to what you asked for; also the most invasive change
+        to the code that holds all your work, so it needs care rather than enthusiasm.
+      · **B — the draft becomes invisible and the round trip closes.** The editing session carries the
+        element's id, saving UPDATES that element instead of minting a new one, and the draft is removed
+        on the way out. Far less risk to your projects; delivers everything visible you asked for.
+      Whichever wins, the acceptance test is yours: **tap an element, change it, come back — one element,
+      changed, and no new project anywhere.**
+
 - [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**
       His words, verbatim:
