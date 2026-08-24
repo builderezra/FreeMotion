@@ -98,6 +98,10 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v12.20, 904 tests green, tree clean, `HEAD == ssh/main`.**
+**✅ LIVE DEPLOY RE-VERIFIED END TO END, 24 Aug at v12.20** (the previous claim was v11.50, twenty releases
+stale). On the real Pages URL at 380px: boots, service worker controlling, all 71 assets served from cache,
+running version matches the HTML, renders a layer WITH an effect, and produces a real MP4 — `3 KB · 0:01 ·
+320x400 · 24 fps` with a correct poster — in about a second. Localhost behaves identically.
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
@@ -127,6 +131,13 @@ depends on the platform, split the decision out and hand the test a fake platfor
 worked perfectly and was simply never asked on the boot path. A behavioural test would have passed against
 the one caller that did exist. Three of the review's 14 findings are this shape — logic that is right and
 unreachable — so for those, scan the source for the call as well.
+⚠️ **CHECK COMPLETION WHERE THE APP SIGNALS IT, NOT WHERE YOU EXPECT IT.** Verifying the live export, I
+watched `#export-overlay` and `URL.createObjectURL` and concluded — twice, on two origins — that export
+HUNG at 'Encoding video 100%'. It had succeeded every time. The MP4 path deliberately ends on the
+`#export-ready` card (queue 141) and creates no blob URL until Save is pressed, and `_exporting` stays true
+while that card is up, by design. I nearly reported 'export is broken on the live site'. **The control that
+saved it was running the same flow on localhost** — identical behaviour meant it was my probe, not the
+deploy. Read the completion path before instrumenting it.
 ⚠️ **497: TWO BUGS CAN HIDE EACH OTHER, AND A LOOKUP THAT FINDS NOTHING REPORTS NOTHING.** A cleanup helper
 closed `#cv-dialog`, which does not exist (`#canvas-dialog` does), so it left the dialog open over the editor
 for the rest of every run — and a second test's stray inline `display:none` on that same dialog covered it up

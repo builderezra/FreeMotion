@@ -16814,3 +16814,26 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > Get rid of the feature where holding on the timeline gives you an option to get rid of all markers
 
+- [ ] **500 — The bin and ? in the multi-select header are stranded over on the LEFT.** (24 Aug, phone screenshot at v12.20, circled in red.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > These buttons like the bin are still all the way over to the left for no reason fix this
+      **What the shot shows:** the header while 4 clips are selected — `‹  4 selected   ? 🗑   ⋮   ⧉  ⧉+`.
+      The help and delete buttons sit in the middle-left with a visible gap after them, then a separate
+      group on the right. He has circled the ?/bin pair.
+      ⚠️ **"still" matters** — this is the same complaint as **#425**, which moved the layer-action buttons to
+      the right on the PC transport row. This is a DIFFERENT bar (the multi-select header) and it never got
+      the same treatment, so from where he sits the fix looks half-done.
+      ⚠️ **#425 clause 3 is still open and asks whether COPY moves right too.** Answer that at the same time
+      if he touches this one — the two are the same question about two different rows.
+
+- [ ] **501 — The add-row switch should be white at rest and flash blue when you press it.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make the switch button white by default and if you press it to move the add button then it will change to the blue colour for a second or whatever to signify you moved the add button
+      **Two clauses:**
+      1. [ ] The switch (`#btn-addside`) is **white by default** — it is accent-coloured now.
+      2. [ ] Pressing it (which sends the add row to the other end) **flashes blue briefly**, as the
+             acknowledgement that the row actually moved.
+      ⚠️ It already carries the dragged layer's colour while you drag a layer (#416) — that behaviour is his
+      too, so the new resting/flash colours must not fight it. Check both states before calling it done.
