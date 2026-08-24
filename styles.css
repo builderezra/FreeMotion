@@ -2286,6 +2286,41 @@ body.fm-playing #time-readout {
    benchmark you were parked on. v10.11 moved that signal onto the PLAYHEAD, which is where it belongs,
    and v10.10 turned this chip into the play button — so the yellow was a second, older answer to a
    question something else now answers, painted over the control you press most. The playhead keeps it. */
+
+/* ═══ THE PLAY PILL GOES CLEAR (queue 503, and part of the same white-chrome look as 501).
+   Ezra, across three messages:
+     "Get rid of the play buttons blue background and just make it transparent and leave the line
+      surrounding it but make it white — these last two requests about making stuff white is to
+      hopefully make that row of buttons look more coherent"
+     "When pressing the play button tho it should still light up blue with the outline being blue but
+      still leave the background clear"
+     "But I may want to undo this so make sure you have a way to quickly un do if I decide to"
+   The pill IS the play button (queue 364). At rest it carried a filled `--panel-2` slab while every
+   other control on that row is a bare icon — which is the incoherence he is pointing at. Clear
+   background and a white outline put it in the same language as its neighbours, and the accent is then
+   free to mean PLAYING rather than just "this is a button".
+   ⚠️ The fill is cleared in the playing and pressed states TOO, not only at rest — his second message
+   is explicit that the background stays clear while it is lit. That is why these override the
+   `body.fm-playing` rule above rather than sitting beside it.
+   Behind `body.white-chrome`, the one switch in js/app.js — his own condition. */
+body.white-chrome #time-readout {
+  background: transparent;
+  /* ⚠️ THE ROW'S WHITE, NOT PURE WHITE. Queue 402 is also his — "I want it to be more white and match
+     the other buttons in that row" — and the suite holds the pill to the same colour its neighbours
+     use. Setting `#fff` here broke that immediately: the pill read 255,255,255 against a row of
+     233,244,247. `--text` is that colour, so the outline and the digits stay in the family. */
+  border-color: color-mix(in srgb, var(--text) 85%, transparent);
+  color: var(--text);
+}
+body.white-chrome #time-readout:hover { background: rgba(255, 255, 255, .06); }
+body.white-chrome.fm-playing #time-readout,
+body.white-chrome #time-readout:active {
+  background: transparent;                     /* stays clear while lit — his words */
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(90, 199, 237, .32);
+}
+
 .tl-marker { transition: transform .12s ease, filter .12s ease; }
 .tl-marker:hover { transform: scale(1.3); filter: drop-shadow(0 0 5px rgba(255, 206, 74, .95)); }
 .tl-marker:hover::after { background: rgba(255, 206, 74, .8); }

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.23
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.24
 >
-> **State:** v12.23, **907 tests green**, tree clean.
+> **State:** v12.24, **908 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16878,21 +16878,27 @@ re-opened #480, which I had marked done and had not fixed.
       Only recomputed when the insertion point changes, not on every frame of the gesture — re-rendering
       per pointermove is the cost #387 is about.
 
-- [ ] **503 — Play button: clear background, white outline at rest, blue when pressed — and give me a quick way to undo the change.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **503 — Play button: clear background, white outline at rest, blue when pressed — and give me a quick way to undo the change.** ✅ **ALL FOUR DONE v12.24.** (24 Aug.)
       His words, verbatim, across three messages:
       > Get rid of the play buttons blue background and just make it transparent and leave the line surrounding it but make it white - these last two requests about making stuff white is to hopefully make that row of buttons look more coherent
       > When pressing the play button tho it should still light up blue with the outline being blue but still leave the background clear
       > But I may want to undo this so make sure you have a way to quickly un do if I decide to
       **Clauses:**
-      1. [ ] Play button background **transparent** at rest (it is a filled blue pill now).
-      2. [ ] Its outline **white** at rest.
-      3. [ ] While **pressed/playing**: outline goes **blue** and the button lights blue, but the background
+      1. [x] Play button background **transparent** at rest (it is a filled blue pill now).
+      2. [x] Its outline **white** at rest.
+      3. [x] While **pressed/playing**: outline goes **blue** and the button lights blue, but the background
              **stays clear** — no fill.
-      4. [ ] **A quick way to undo the whole look.** He may want it back. So this and #501 must land as one
+      4. [x] **A quick way to undo the whole look.** He may want it back. So this and #501 must land as one
              switchable thing — one line to flip, said plainly in the entry — not a scatter of edits.
-      ⚠️ **Goes with #501** (the add-row switch going white). His reason for both, in his words: *"to hopefully
-      make that row of buttons look more coherent"* — so judge them together, in that row, at phone width.
+      **The play button is the timecode pill** (that was #364 — you asked for the pill to become play), so
+      that is what changed. Measured: background fully transparent at rest, outline and digits in the
+      row's own white; while playing, outline and digits go accent blue and **the background stays clear**.
+      🔄 **Your undo switch covers both.** One constant in `js/app.js` — `const WHITE_CHROME = true` —
+      controls this and #501 together. Say the word and both revert in one line.
+      ⚠️ **One of your older requests nearly got overwritten.** #402 was *"I want it to be more white and
+      match the other buttons in that row"*, and the suite holds the pill to the same colour as its
+      neighbours. My first attempt used pure white, which broke that instantly — the pill read 255,255,255
+      against a row of 233,244,247. It uses the row's own white now, so both requests hold at once.
 
 - [ ] **504 — Opening Elements or Projects from the home menu sometimes makes every icon on screen vanish.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

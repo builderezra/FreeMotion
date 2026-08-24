@@ -42640,4 +42640,67 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 503: THE PLAY PILL IS CLEAR WITH A WHITE OUTLINE, AND STAYS CLEAR WHILE IT IS LIT.
+     The timecode pill IS the play button (queue 364). Ezra, across three messages: "Get rid of the play
+     buttons blue background and just make it transparent and leave the line surrounding it but make it
+     white"; "When pressing the play button tho it should still light up blue with the outline being blue
+     but still leave the background clear"; "But I may want to undo this so make sure you have a way to
+     quickly un do if I decide to."
+     The third message is why every rule here hangs off `body.white-chrome`, the same one switch as #501 —
+     his two white requests revert together, in one line.
+     The middle message is the one easy to get half-right: lighting the pill by filling it would satisfy
+     "light up blue" and break "leave the background clear", so the playing state is asserted separately. */
+  test('503: the play pill is clear with a white outline, and stays clear when lit', { item: '503' }, async function () {
+    const pill = document.getElementById('time-readout');
+    if (!pill) throw new Error('#time-readout is missing — it is the play button (queue 364)');
+    const sleep = ms => new Promise(r => setTimeout(r, 160));
+    /* ⚠️ TWO COLOUR FORMATS. `color-mix()` computes to `color(srgb 0.91 0.95 0.96 / 0.85)` — 0-1 floats —
+       while everything else reports `rgb(233, 244, 247)`. Reading the first with an rgb parser makes a
+       near-white outline look like near-black, which is exactly how this test first failed. */
+    const rgb = c => {
+      const n = (String(c).match(/[\d.]+/g) || []).map(Number);
+      return /^color\(/.test(String(c).trim()) ? n.map((v, i) => i < 3 ? v * 255 : v) : n;
+    };
+    const clear = c => { const m = rgb(c); return /transparent/.test(c) || (m.length === 4 && m[3] === 0); };
+    const whiteish = c => { const m = rgb(c); return m.length >= 3 && m[0] >= 200 && m[1] >= 200 && m[2] >= 200; };
+    const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const A = acc.startsWith('#') ? [1, 3, 5].map(i => parseInt(acc.substr(i, 2), 16)) : rgb(acc).slice(0, 3);
+    const isAccent = c => { const m = rgb(c); return m.length >= 3 && m.slice(0, 3).every((v, i) => Math.abs(v - A[i]) <= 14); };
+
+    if (typeof FM._whiteChrome !== 'boolean') throw new Error('FM._whiteChrome is missing — the one switch that reverts both white requests (#501 and this) is gone');
+    if (!FM._whiteChrome) return;   // deliberately reverted — these rules are not meant to apply
+
+    /* CONTROL: white and the accent must be distinguishable, or "white at rest, accent when lit" is not
+       a testable claim. */
+    if (A.every(v => v >= 200)) throw new Error('--accent is itself near-white (' + A + '), so this test cannot tell the two states apart');
+
+    const wasPlaying = document.body.classList.contains('fm-playing');
+    try {
+      document.body.classList.remove('fm-playing');
+      await sleep();
+      const restBg = getComputedStyle(pill).backgroundColor;
+      const restBorder = getComputedStyle(pill).borderTopColor;
+      if (!clear(restBg)) throw new Error('the play pill still has a filled background at rest (' + restBg + ') — he asked for it transparent so the row reads as one set of controls');
+      if (!whiteish(restBorder)) throw new Error('the play pill\'s outline is ' + restBorder + ' at rest, not white');
+
+      /* ── LIT. Both halves: the accent arrives AND the fill does not. */
+      document.body.classList.add('fm-playing');
+      await sleep();
+      const playBg = getComputedStyle(pill).backgroundColor;
+      const playBorder = getComputedStyle(pill).borderTopColor;
+      const playText = getComputedStyle(pill).color;
+      if (!isAccent(playBorder)) throw new Error('while playing the pill\'s outline is ' + playBorder + ', not the accent — pressing it gives no feedback');
+      if (!isAccent(playText)) throw new Error('while playing the pill\'s text is ' + playText + ', not the accent');
+      if (!clear(playBg)) throw new Error('while playing the pill fills in with ' + playBg + ' — he was explicit that it lights up blue "but still leave the background clear", and filling it is the easy way to get that half wrong');
+
+      /* ── and back. A lit state that never ends stops meaning anything. */
+      document.body.classList.remove('fm-playing');
+      await sleep();
+      const backBorder = getComputedStyle(pill).borderTopColor;
+      if (!whiteish(backBorder)) throw new Error('after playback stops the pill\'s outline stayed ' + backBorder + ' instead of returning to white');
+    } finally {
+      document.body.classList.toggle('fm-playing', wasPlaying);
+    }
+  });
 })();
