@@ -97,7 +97,12 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.29, 912 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.30, 914 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.30: Turbulent Displace 151.3 → 35.8 ms (4.2x)** — the last effect over 150 ms, and the only thing
+still actionable in the OLDEST entry ("editing lags"). Field built on a coarse lattice once a frame,
+read back with Catmull-Rom. ⚠️ **My first version used LINEAR interpolation and was out by 9.9 px** — the
+dev probe `tests/_tdbench.html` caught it, the suite did not, because the suite compared the two paths
+against a bound I had reasoned my way to instead of measured. **Reason about smoothness, then measure it.**
 **Last tick: #456 + #507 shipped** — the two rainbow ＋ buttons are now cool (home, hue-drifting) vs warm
 (in-project, turning AND breathing on a different period). They had been the identical ramp and the home
 one was not animated at all.

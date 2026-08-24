@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.29
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.30
 >
-> **State:** v12.29, **912 tests green**, tree clean.
+> **State:** v12.30, **914 tests green**, tree clean.
+>
+> **✅ v12.30 — THE LAST SLOW EFFECT IS FIXED.** Turbulent Displace was the only one left costing more
+> than 150 ms a frame at your project size; it is now 35.8 ms, 4.2x faster. Nothing in the effect list
+> costs more than a frame on its own any more. That closes the only thing still actionable in the
+> OLDEST entry on this list — "editing lags, and gets bad fast" — apart from your own verdict on
+> whether the phone FEELS better, which I cannot measure for you.
 >
 > **✅ v12.29 — THE TWO + BUTTONS ARE FINALLY DIFFERENT (#456 / #507).** Home is cool — sky, mint,
 > periwinkle, violet — and it now MOVES, which it never did: it was the one you called out as not
@@ -3293,6 +3299,26 @@ better still, keep working inside the turn rather than parking work for a later 
       **What that leaves is the only thing left: per-effect compositor cost on real video**, which is
       exactly where v11.72-v11.78 went (median effect 14.85 -> 8.57 ms, effects over 25 ms cut 70 ->
       42, your 24-effect case ~356 -> ~206 ms). One `turbulentdisplace` at ~157 ms is the last hog.
+
+      ✅ **AND THAT LAST HOG IS GONE — v12.30. Turbulent Displace: 151.3 ms -> 35.8 ms, 4.2x, measured
+      at your own 1080x1350.** It was the only effect still over 150 ms, so with this there is nothing
+      left in the effect list that costs more than a frame on its own.
+      **What it was doing:** eight sine/cosine calls for every single pixel — **11.7 million a frame**.
+      Queue 474 already hoisted half of them out of the loop, because those depend on x alone or y alone
+      and can be worked out once per row and column. The other half cannot: they feed the first half's
+      answer back in, so x and y are tangled together and no table can hold them.
+      **What it does now:** the effect's whole displacement field is worked out on a coarse grid once a
+      frame, and each pixel reads its value off that grid. That is only honest because the field is
+      smooth — it is a slow churn, not static — and how coarse the grid gets is chosen from your own
+      Detail slider, so a fine crawl falls back to every pixel and loses nothing.
+      ⚠️ **The first version of this was WRONG BY TEN PIXELS and the measurement is what caught it**,
+      not the tests, which all passed. I reasoned that the field's finest ripple was about three times
+      wider than it really is, sampled accordingly, and straight-line interpolation between grid points
+      was out by up to 9.9 px at Amount 80. Reading the grid with a curve instead of a straight line
+      brings the worst error, across every combination of Amount 6-80 and Detail 10-300, to **0.07 px**.
+      **On the actual picture:** rendered both ways on hard-edged text — the worst case, since anything
+      soft hides a one-pixel shift — **21 pixels out of 128,000 differ**, 0.2% of the lit area, and only
+      where a sample lands exactly on the boundary between two source pixels.
       ⚠️ Still 🟠 NEEDS YOU for the same reason as before: I can only measure this on a desktop
       browser. Whether it FEELS better on your phone is the half I cannot take from you.
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
@@ -16970,6 +16996,8 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ⚠️ **The "NEEDS YOU" that used to sit here was stale** — the question it referred to (design A vs B)
+      was answered by a review, not by him. Nothing is outstanding from him on this entry.
       His words, verbatim:
       > Elements and templates are still not working. How I want where you can tap on them to edit them without them needing to be created as a project. I don't like that when you tap on them they created as a project. I just want them to be editable in their own sections like I know this is gonna be a hard thing to hardwire and figure out but just put the effort in like stop doing the lazy way out like I've asked for this so many times
       ⚠️ **He is right that he has asked before: this is #342 and #340**, both still open, both about exactly
@@ -17051,6 +17079,20 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ **v12.27 — "just opening you having every layer selected"** — check what the editor looks like on
              arrival. If every layer is selected, that is `insert()` doing what it does for an insert
              (select what you just added) being wrong for an EDIT, where nothing should be selected yet.
+      4. [ ] 🔴 **TEMPLATES — the whole other half of his sentence, and the reason this entry is still open.**
+             He said *"Elements **and** templates"*. Everything above is elements only. Templates still go
+             through `useAsNew`, which makes a project, and saving back to a template mints a NEW id and
+             then papers over it in four places — the same mint-then-patch shape elements had before v12.26.
+             **The three pieces that fixed elements are the three templates needs:** an UPDATE path
+             (`templates.updateFrom`) so a template can be written back rather than only forked; the editing
+             session carrying the template's id so it knows what to write back to; and an exit that saves,
+             returns to the **Templates** tab, floats the edited one to the top, and clears the workspace —
+             in that order, because a discard refuses to delete the document you are standing in.
+             ⚠️ **Do not copy the element code across.** If both stores end up with a hand-copied round trip,
+             the next bug has to be fixed twice. Look for the shared shape first.
+             ⚠️ **And the same trap applies:** the boot orphan-sweep builds its keep-list from `fm.proj.*`
+             only, so template media must not be moved out of that namespace — that risk is what killed
+             design A for elements and it kills it here too.
 
 - [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**

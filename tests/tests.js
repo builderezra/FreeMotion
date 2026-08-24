@@ -39667,11 +39667,26 @@
     }
   });
 
-  /* ═══ TURBULENT DISPLACE: the separable half of its noise, hoisted per frame (queue 474).
-     It was the last effect over 150ms at his 1080×1350. The rewrite is NOT byte-identical — the
-     angle-addition identities are exact in real arithmetic and differ in the last float bits — so
-     what is asserted is the MATHS, to a bound far tighter than a pixel, exactly as the spinstreaks
-     rewrite needed (LOOP rule 14). */
+  /* ═══ TURBULENT DISPLACE — the last effect over 150ms at his 1080×1350, and the only thing still
+     actionable in the OLDEST entry in REQUESTS.md ("editing lags, and gets bad fast").
+     Queue 474 hoisted the separable half of its noise per frame. The second half is not separable —
+     `td_n(x/sc + wx, y/sc + wy)` mixes x and y — so it stayed at 8 trig calls per pixel, 11.7 million
+     a frame. It is now built on a coarse lattice in `prep` and read back with CATMULL-ROM, measured
+     151.3 → 35.8 ms including the lattice build.
+     ⚠️ **THE BOUND BELOW IS NO LONGER 1e-9, AND THAT IS A REAL LOOSENING — read why before tightening
+     it back.** An interpolated field is an approximation, so the honest thing is to assert the bound
+     that was MEASURED rather than one that sounds reassuring:
+       · where the step is 1 the lattice is every pixel and the cubic weights collapse to "take the
+         node", so NO interpolation happens at all. The only thing left is that the field is stored as
+         **Float32** — half the memory traffic through the pixel loop, and worth it — so the reading
+         comes back rounded to about 7 digits. Measured 3.8e-6 px. This asserts 1e-4, which is four
+         orders of magnitude tighter than the interpolated case and would still catch an interpolation
+         bug leaking into the step-1 path;
+       · where the step is larger, the worst error measured across amount 6–80 and scale 10–300 is
+         0.0708 px, and this asserts 0.12 px.
+     Linear interpolation was tried first and measured at nearly TEN pixels of error at Amount 80 —
+     the second-order noise varies about three times faster than its `scale` suggests. That is why the
+     kernel is cubic, and it is why this bound is asserted rather than reasoned about. */
   test('the hoisted turbulent-displace noise matches its own reference kernel (queue 474)', { item: '474' }, async function () {
     const K = FM._warpFx && FM._warpFx.turbulentdisplace;
     if (!K) throw new Error('FM._warpFx.turbulentdisplace is not reachable — the suite seam is missing');
@@ -39700,7 +39715,29 @@
          case, and empty params make the effect a NO-OP — so both paths returned the pixel untouched
          and "they agree" was true of nothing at all. */
       if (moved < n * 0.5) throw new Error('case "' + c.label + '": the effect displaced only ' + moved + ' of ' + n + ' sample points, so agreement between the two paths proves nothing');
-      if (!(worst < 1e-9)) throw new Error('case "' + c.label + '": the hoisted noise differs from the reference by ' + worst + 'px, which is past the 1e-9 bound');
+      if (pre.step === 1) {
+        if (!(worst < 1e-4)) throw new Error('case "' + c.label + '": the lattice step is 1, so every sample sits ON a node and nothing is interpolated — the only allowed difference is the Float32 storage of the field, and this is off by ' + worst + 'px');
+      } else if (!(worst < 0.12)) {
+        throw new Error('case "' + c.label + '" (step ' + pre.step + '): the lattice differs from the reference by ' + worst + 'px, past the 0.12px bound that was measured for it');
+      }
+    }
+
+    /* ⚠️ A SECOND CONTROL THE FIRST VERSION OF THIS DID NOT HAVE: the sample stride must not be a
+       multiple of the lattice step, or every sample lands on a node where the interpolation is exact
+       BY CONSTRUCTION and the bound above measures nothing. The dev probe hit exactly that with a
+       stride of 7 against a step of 7 and reported a flat 0.0000 for one whole row. 3 is coprime with
+       every step this can choose except 3 and 6, so those two are stepped past deliberately. */
+    for (const st of [3, 6]) {
+      const sc = st * 14, pr = { amount: 30, scale: sc };
+      const pre2 = K.prep(W, H, cx, cy, maxR, pr, 0.37, 1);
+      if (pre2.step !== st) continue;                 // the rule picked something else; nothing to guard here
+      let anyOff = 0;
+      for (let y = 0; y < H; y += 5) for (let x = 1; x < W; x += 5) {
+        const ref = K(x, y, W, H, cx, cy, maxR, pr, 0.37, 1);
+        const fast = K(x, y, W, H, cx, cy, maxR, pr, 0.37, 1, pre2);
+        if (Math.abs(ref[0] - fast[0]) > 1e-12) anyOff++;
+      }
+      if (!anyOff) throw new Error('at step ' + st + ' the two paths agreed EXACTLY at every off-node sample, which means the sampling is landing on lattice nodes and the accuracy bound is measuring nothing');
     }
 
     // Switched off, the precompute must say so rather than hand back tables the kernel would use.
@@ -39744,6 +39781,72 @@
       let diff = 0;
       for (let i = 0; i < withFx.length; i += 4) if (withFx[i] !== noFx[i] || withFx[i + 3] !== noFx[i + 3]) diff++;
       if (diff < 200) throw new Error('the effect changed only ' + diff + ' pixels in this scene, so the call-count assertion above is not measuring a working effect');
+    } finally {
+      K.prep = realPrep;
+      FM.scene.layers.length = 0;
+      saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.refreshAll();
+    }
+  });
+
+  test('the turbulent-displace lattice is actually COARSE at his own settings, or the speed is gone', { item: 'lag-editing' }, async function () {
+    /* RULE 12 AGAIN, from the other side. Every other assertion here is about the picture being right,
+       and ALL of them pass with a step of 1 — where the lattice is every pixel, the maths is exact, and
+       the effect is back to 151 ms. The whole point of the change is that the step is bigger than 1 at
+       the settings he actually uses, so that is asserted directly. Without this, dividing by a larger
+       constant "to be safe" would silently undo the work and nothing would go red. */
+    const K = FM._warpFx && FM._warpFx.turbulentdisplace;
+    if (!K || !K.prep) throw new Error('the turbulent-displace precompute is not reachable');
+    const W = 1080, H = 1350, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    // The effect's own defaults, which is what a tap on it in the effects list gives you.
+    const def = K.prep(W, H, cx, cy, maxR, { amount: 30, scale: 60 }, 0.37, 1);
+    if (!(def.step >= 3)) throw new Error('at the effect\u2019s DEFAULT settings the lattice step is ' + def.step + '; below 3 the per-pixel trig is essentially back and this is the 151ms effect again');
+    // A coarse churn should be coarser still.
+    const coarse = K.prep(W, H, cx, cy, maxR, { amount: 30, scale: 200 }, 0.37, 1);
+    if (!(coarse.step > def.step)) throw new Error('a scale of 200 chose step ' + coarse.step + ', no coarser than scale 60\u2019s ' + def.step + ' — the step is not tracking the noise scale at all');
+    /* …and the other direction is the safety half: a FINE crawl must fall back to exact, because that
+       is where an interpolated field would be visible. */
+    const fine = K.prep(W, H, cx, cy, maxR, { amount: 80, scale: 10 }, 0.37, 1);
+    if (fine.step !== 1) throw new Error('at the finest scale the step is ' + fine.step + ', so the lattice is approximating exactly where the detail is smallest');
+  });
+
+  test('turbulent displace renders the same PICTURE through the lattice as through the exact maths', { item: 'lag-editing' }, async function () {
+    /* THE MAP BOUND IS NOT THE PICTURE BOUND. drawWarpEffect samples NEAREST-NEIGHBOUR, so a map that
+       is off by seven hundredths of a pixel still flips a sample wherever the source coordinate sits
+       that close to an integer boundary. Sub-pixel accuracy therefore does NOT imply an identical
+       frame, and asserting only the former would be assuming the thing that matters.
+       Measured on hard-edged text — the worst case, since a soft or flat layer hides a one-pixel
+       sampling shift entirely — 21 pixels of 128000 differ, 0.21% of the lit area. */
+    const K = FM._warpFx && FM._warpFx.turbulentdisplace;
+    if (!K || !K.prep) throw new Error('the turbulent-displace precompute is not reachable');
+    const PW = 320, PH = 400;
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    const realPrep = K.prep;
+    try {
+      FM.scene.project.width = PW; FM.scene.project.height = PH;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { text: 'MMMM', x: PW / 2, y: PH / 2, size: 96, fill: '#ffffff' });
+      L.start = 0; L.duration = 5;
+      L.effects = [{ type: 'turbulentdisplace', params: { amount: 30, scale: 60 } }];
+      FM.scene.layers.push(L); FM.refreshAll();
+      const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+      const ctx = cv.getContext('2d');
+      FM.renderScene(ctx, FM.scene, 0.37);
+      const fast = ctx.getImageData(0, 0, PW, PH).data;
+      K.prep = null;                                  // no prep → the driver hands the kernel no `pre`
+      ctx.clearRect(0, 0, PW, PH);
+      FM.renderScene(ctx, FM.scene, 0.37);
+      const exact = ctx.getImageData(0, 0, PW, PH).data;
+      K.prep = realPrep;
+      let diff = 0, lit = 0;
+      for (let i = 0; i < fast.length; i += 4) {
+        if (exact[i + 3] > 8) lit++;
+        if (fast[i] !== exact[i] || fast[i + 1] !== exact[i + 1] || fast[i + 2] !== exact[i + 2] || fast[i + 3] !== exact[i + 3]) diff++;
+      }
+      /* THE CONTROL: if the effect drew nothing, "the two agree" is true of an empty frame. */
+      if (lit < 2000) throw new Error('only ' + lit + ' pixels were lit, so comparing the two paths proves nothing');
+      if (diff > lit * 0.02) throw new Error('the lattice changed ' + diff + ' pixels, ' + (100 * diff / lit).toFixed(2) + '% of the lit area — past the 2% bound, so the approximation is visible rather than a nearest-neighbour rounding');
     } finally {
       K.prep = realPrep;
       FM.scene.layers.length = 0;

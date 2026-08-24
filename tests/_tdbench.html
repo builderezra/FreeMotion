@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base href="../">
+<title>Turbulent Displace — accuracy and cost of the lattice</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12px/1.5 ui-monospace,Menlo,monospace}
+#out{padding:10px;white-space:pre}</style>
+</head>
+<body>
+<div id="out">measuring…</div>
+<script src="js/settings.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* Dev probe for the oldest entry in REQUESTS.md ("editing lags"): turbulentdisplace was the last
+   effect over 150ms. Answers two questions with numbers — how wrong is the lattice, and how much
+   faster is it. Not shipped, not linked from the app. */
+(function () {
+  const K = FM._warpFx.turbulentdisplace;
+  const lines = [];
+  const W = 1080, H = 1350, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+
+  lines.push('ACCURACY — worst |fast - exact| in PIXELS of displacement, over the whole plate');
+  lines.push('scale  amount   step   worst px   mean px   moved%');
+  const scales = [10, 15, 24, 40, 60, 100, 200, 300];
+  const amounts = [80, 30, 6];
+  let globalWorst = 0;
+  for (const sc of scales) for (const am of amounts) {
+    const p = { amount: am, scale: sc };
+    const t = 0.37;
+    const pre = K.prep(W, H, cx, cy, maxR, p, t, 1);
+    let worst = 0, sum = 0, n = 0, moved = 0;
+    /* STRIDE 11 x 13, both PRIME and both larger than the biggest step. Stride 7 against a step of 7
+       lands every sample exactly on a lattice node, where the interpolation is exact by construction —
+       and it duly reported 0.0000 error for that one row, which is a measurement of nothing. */
+    for (let y = 0; y < H; y += 13) for (let x = 0; x < W; x += 11) {
+      const ref = K(x, y, W, H, cx, cy, maxR, p, t, 1);
+      const fast = K(x, y, W, H, cx, cy, maxR, p, t, 1, pre);
+      const e = Math.max(Math.abs(ref[0] - fast[0]), Math.abs(ref[1] - fast[1]));
+      if (e > worst) worst = e;
+      sum += e; n++;
+      if (Math.abs(ref[0] - x) > 0.01) moved++;
+    }
+    globalWorst = Math.max(globalWorst, worst);
+    lines.push(String(sc).padStart(5) + String(am).padStart(8) + String(pre.step).padStart(7) +
+      worst.toFixed(4).padStart(11) + (sum / n).toFixed(4).padStart(10) + (100 * moved / n).toFixed(0).padStart(8) + '%');
+  }
+  lines.push('WORST ANYWHERE: ' + globalWorst.toFixed(4) + ' px');
+  lines.push('');
+
+  lines.push('COST — one full 1080x1350 plate of map calls, default params (amount 30, scale 60)');
+  const p = { amount: 30, scale: 60 }, t = 0.37;
+  function timeIt(usePre) {
+    const t0 = performance.now();
+    const pre = usePre ? K.prep(W, H, cx, cy, maxR, p, t, 1) : null;   // prep counts — it is per-frame work
+    let acc = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = K(x, y, W, H, cx, cy, maxR, p, t, 1, pre);
+      acc += m[0];
+    }
+    return { ms: performance.now() - t0, acc: acc };
+  }
+  timeIt(true); timeIt(false);              // warm the JIT on both paths
+  const slow = [], fast = [];
+  for (let i = 0; i < 3; i++) { slow.push(timeIt(false).ms); fast.push(timeIt(true).ms); }
+  const med = a => a.slice().sort((x, y) => x - y)[1];
+  const sMs = med(slow), fMs = med(fast);
+  lines.push('exact trig-per-pixel : ' + sMs.toFixed(1) + ' ms');
+  lines.push('lattice + interpolate: ' + fMs.toFixed(1) + ' ms   (' + (sMs / fMs).toFixed(2) + 'x faster)');
+  lines.push('');
+  lines.push('PREP ALONE (building the lattice) at the same size:');
+  const t1 = performance.now(); for (let i = 0; i < 5; i++) K.prep(W, H, cx, cy, maxR, p, t + i * 0.01, 1);
+  lines.push('  ' + ((performance.now() - t1) / 5).toFixed(2) + ' ms per frame');
+
+  /* THE MAP ERROR IS NOT THE PICTURE ERROR, and that distinction has bitten this repo before.
+     drawWarpEffect samples NEAREST-NEIGHBOUR, so a map that is off by a hundredth of a pixel still
+     flips a sample whenever the source coordinate sits that close to an integer boundary. On a
+     detailed layer that is the number that matters, not the sub-pixel bound above. */
+  lines.push('');
+  lines.push('PICTURE — the same frame rendered through both paths, nearest-neighbour and all');
+  (function () {
+    const PW = 320, PH = 400;
+    /* This probe loads the compositor WITHOUT the app, so there is no FM.scene to borrow — the scene
+       is built here as a literal and passed to renderScene explicitly. */
+    const L = FM.makeLayer('text', { text: 'MMMM', x: PW / 2, y: PH / 2, size: 96, fill: '#ffffff' });
+    L.start = 0; L.duration = 5;
+    L.effects = [{ type: 'turbulentdisplace', params: { amount: 30, scale: 60 } }];
+    const scene = { project: { width: PW, height: PH, fps: 30, duration: 5, bg: '#000000' }, layers: [L] };
+    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+    const ctx = cv.getContext('2d');
+    const realPrep = K.prep;
+    FM.renderScene(ctx, scene, 0.37);
+    const fastPx = ctx.getImageData(0, 0, PW, PH).data;
+    K.prep = null;                                   // no prep → the driver hands the kernel no `pre`
+    ctx.clearRect(0, 0, PW, PH);
+    FM.renderScene(ctx, scene, 0.37);
+    const exactPx = ctx.getImageData(0, 0, PW, PH).data;
+    K.prep = realPrep;
+    let diff = 0, worstCh = 0, lit = 0;
+    for (let i = 0; i < fastPx.length; i += 4) {
+      if (exactPx[i + 3] > 8) lit++;
+      let d = 0;
+      for (let c = 0; c < 4; c++) d = Math.max(d, Math.abs(fastPx[i + c] - exactPx[i + c]));
+      if (d > 0) { diff++; worstCh = Math.max(worstCh, d); }
+    }
+    const tot = fastPx.length / 4;
+    lines.push('  lit pixels in the frame : ' + lit);
+    lines.push('  pixels differing at all : ' + diff + ' of ' + tot + '  (' + (100 * diff / tot).toFixed(2) + '% of the frame, ' + (100 * diff / Math.max(lit, 1)).toFixed(2) + '% of the lit area)');
+    lines.push('  worst channel delta     : ' + worstCh);
+    window.__TDPIX = { diff: diff, tot: tot, lit: lit, worstCh: worstCh };
+  })();
+
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__TD = { worst: globalWorst, slowMs: sMs, fastMs: fMs };
+})();
+</script>
+</body>
+</html>
