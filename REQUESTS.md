@@ -16,8 +16,13 @@
 > measures the drop position in on-screen rows and then uses it as a position in the real layer list,
 > so the moment a group is collapsed the two disagree. Your symptom never went away.
 >
-> **44 items open, 17 of which I can now do without you** — that is the honest number, and it is up
-> because the review found real work, not because you added much.
+> **Nine new requests logged 24 Aug: 498–508.** Two are already done (#498 the cut-off Canvas row,
+> #499 the marker wipe). **#456 is unblocked** — you asked why nothing had happened with the two +
+> buttons, and the honest answer is that I parked a decision you had already made. That was my
+> mistake, not a missing answer from you.
+> **7 items I can build without you now**, working oldest-first: 500, 501, 502, 503, 504, 505, 507, 508.
+> **#505 (elements/templates editable in their own sections) is the big one** and I am treating it as
+> such — it goes with #342 and #340, which say the same thing.
 >
 > ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
 > 0. **Five seconds: drag a layer onto the add-layer row and tell me if it sticks.** I have now told
@@ -15743,6 +15748,8 @@ wait for them to report back."*
       **Two facts either side of a seam are not a test of the seam.**
 - [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      done any of that?"* — see #507. He told me what he wanted on 21 Aug; deciding to show him options
+      first was MY choice, and it turned a clear instruction into a four-day wait. Just build it.**
       better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
       create button in the menu and in the project that are both rainbow to be different colours not the
       same (both moving)  and the one in the project that moves currently just spins In a slow circle
@@ -16837,3 +16844,155 @@ re-opened #480, which I had marked done and had not fixed.
              acknowledgement that the row actually moved.
       ⚠️ It already carries the dragged layer's colour while you drag a layer (#416) — that behaviour is his
       too, so the new resting/flash colours must not fight it. Check both states before calling it done.
+
+- [ ] **502 — Dragging a layer does not live update.** (24 Aug, phone screenshot at v12.19.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also when dragging a layer it doesn't live update
+      **What the shot shows:** mid-drag on the phone. The dragged row is lifted out and the rows below have
+      NOT opened a gap for it — the list looks unchanged behind the held row, and "Tap to add a layer" is
+      half-scrolled under the transport. Whatever is meant to move as you drag is not moving on his device.
+      ⚠️ This is the same gesture #480 and #443 are about, and both of those were verified in a desktop
+      frame. **Reproduce it at phone width with a real touch drag before assuming it is the same code.**
+
+- [ ] **503 — Play button: clear background, white outline at rest, blue when pressed — and give me a quick way to undo the change.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim, across three messages:
+      > Get rid of the play buttons blue background and just make it transparent and leave the line surrounding it but make it white - these last two requests about making stuff white is to hopefully make that row of buttons look more coherent
+      > When pressing the play button tho it should still light up blue with the outline being blue but still leave the background clear
+      > But I may want to undo this so make sure you have a way to quickly un do if I decide to
+      **Clauses:**
+      1. [ ] Play button background **transparent** at rest (it is a filled blue pill now).
+      2. [ ] Its outline **white** at rest.
+      3. [ ] While **pressed/playing**: outline goes **blue** and the button lights blue, but the background
+             **stays clear** — no fill.
+      4. [ ] **A quick way to undo the whole look.** He may want it back. So this and #501 must land as one
+             switchable thing — one line to flip, said plainly in the entry — not a scatter of edits.
+      ⚠️ **Goes with #501** (the add-row switch going white). His reason for both, in his words: *"to hopefully
+      make that row of buttons look more coherent"* — so judge them together, in that row, at phone width.
+
+- [ ] **504 — Opening Elements or Projects from the home menu sometimes makes every icon on screen vanish.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > I sometimes get a glitch when opening the other sections like elements or projects in the home menu where all the icons on screen go away which looks buggy
+      "Sometimes" means a race or a transition, not a dead path — most likely icons being re-rendered or
+      re-fetched during the section change and showing empty for a frame or two.
+
+- [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Elements and templates are still not working. How I want where you can tap on them to edit them without them needing to be created as a project. I don't like that when you tap on them they created as a project. I just want them to be editable in their own sections like I know this is gonna be a hard thing to hardwire and figure out but just put the effort in like stop doing the lazy way out like I've asked for this so many times
+      ⚠️ **He is right that he has asked before: this is #342 and #340**, both still open, both about exactly
+      this. Read them before starting. #342: *"When you open an element as well in the element section it
+      just adds the element to ur open project, you can't even open it as a project and edit it. You need to
+      put a lot more effort into the elements feature"*.
+      **What he is asking for, plainly:** tapping an element or a template opens it FOR EDITING, in its own
+      section, and saving puts it back where it came from. It must not become a project, and it must not be
+      dumped into whatever project happens to be open.
+      ⚠️ **"stop doing the lazy way out" is the note to take seriously.** The shortcut here is routing this
+      through the project editor and calling it done. This needs the editor to be able to open a document
+      that is an ELEMENT or a TEMPLATE, and to save back to that store. **Plan it before writing anything**,
+      and expect it to take more than one tick.
+
+- [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
+      **STATUS: 📌 NOTE — nothing to build**
+      His words, verbatim:
+      > Make sure you're logging all of these and working on stuff in order
+      Restating what CLAUDE.md already requires, after six requests in one sitting: every message gets an
+      entry the moment it arrives, verbatim, and the queue is worked oldest-first rather than newest-first.
+
+- [ ] **507 — The two + buttons are STILL identical, and the moving one still just spins. He is asking why nothing has happened.** (24 Aug, two phone screenshots at v12.20.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > These plus buttons are still the same as each other and also the one that's moving inside the projects doesn't move interestingly like I've asked you to change it up like it's still the exact same like why haven't you done any of that?
+      **What the shots show:** the in-project "Tap here to start creating" + and the home screen's floating +
+      side by side. Same rainbow gradient, same circle, no visible difference between them.
+      ⚠️ **This is #456, and the answer to "why haven't you done any of that" is not flattering: I marked it
+      "waiting on your answer" and left it.** He had already said what he wanted on 21 Aug — *"I want the
+      create button in the menu and in the project that are both rainbow to be different colours not the
+      same (both moving) and the one in the project that moves currently just spins In a slow circle which
+      is lazy, make it something more visually creative and cool"*. I decided to show him options first;
+      that was my choice, not his instruction, and it cost four days. **#456 is now unblocked and both are
+      to be built.**
+      **Lesson worth keeping:** when he states what he wants, that is the decision. Options are for when I
+      genuinely cannot tell what he means — not for taste calls he has already made.
+
+- [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also the animation when opening a project still looks really Jany like the button you press on like the project you press one to open doesn't smoothly glide to the left with like a nice animation and then the project comes in smoothly from the right. It's always junkie every time it doesn't look good.
+      **He is describing a specific transition**, not "make it nicer": the card he tapped slides OUT to the
+      left, the editor slides IN from the right. Today it does neither smoothly, "every time" — so this is
+      not an occasional stutter but a transition that is absent or fighting a re-layout.
+      ⚠️ Likely cause to check FIRST: the editor is BUILT during those frames (home grid teardown, timeline
+      rebuild, first render all land together), so any animation is competing with real work. **Measure the
+      frame gaps during an open before picking an easing curve.**
+
+- [ ] **509 — The play row's numbers may not be centred.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also I'm not 100% sure but I believe that the play buttons Numbers aren't scented. I may be wrong but I feel like they are scented not scented scented scented in the middle. Centred*********
+      (Autocorrect fought him — he means **centred**.) The timecode readout in the transport row: he thinks
+      it is not centred. **Measure it rather than eyeballing** — its own box, and the row — at phone width
+      and on PC, since #278 and #588 both found the box right and the track wrong.
+
+- [ ] **510 — The template button still looks bad, in Projects and in the inspector.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Template button still looks shitty like in the projects and inspector menu the template button does not look good
+      ⚠️ **This is #432 again** — the template icon he has already been shown five options for and has not
+      picked from. He is now saying it plainly in both places it appears. Given #507's lesson, **do not wait
+      for him to choose from the old list**: build the best one (B, the ⭐ frame + play, was the recommended
+      option because it is the only one that still reads at 24px) and let him reject it.
+
+- [ ] **511 — PC: the inspector's drag/resize is inconsistent and buggy, and the AI "director" menu does not fit the new layout.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also on PC with all the moving parts that come with the inspector and being Dragonball up and down I find it's very inconsistent and bugs a lot depending on it. What order do you do stuff and you can change up like on you just by pressing it multiple times and it's just like really weird and inconsistent like it's not breaking the software anyway so it's like not humongous issue but it's just like really inconsistent and random and it doesn't really look too good like as a lot of weird issues with it like I think it's good it would be a good idea to give it a lot of testing and try and see every possible way it can break and not look good. Also the AI menu that pops up the director menu doesn't fit on the screen nicely on PC because it hasn't been designed for the new layout properly yet so it looks kind of weird if you could maybe give the director menu like the AI menu like a little bit of a cool background with some interesting colours so it stands out a bit.
+      ("Dragonball" is autocorrect for **dragged**.)
+      **Clauses — tick separately:**
+      1. [ ] **The inspector's drag up/down on PC is inconsistent and order-dependent** — the state changes
+             depending on what you did before and how many times you press. He is explicit that it does not
+             break the app, it just behaves randomly and looks bad.
+      2. [ ] **He is asking for exhaustive testing of it**, in his words: *"try and see every possible way it
+             can break and not look good"*. That is a request for a systematic sweep of the state machine,
+             not a spot fix.
+      3. [ ] **The AI / director menu does not fit the PC layout** — it was not redesigned for it.
+      4. [ ] **Give the director menu a distinctive background with some interesting colours** so it stands out.
+
+- [ ] **512 — PC: the inspector cannot be dragged up as far on its own as it can when dragged together with the timeline.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When dragging the inspector layer up on PC, it should be able to be dragged up higher. Currently, for some reason, it gets to a limit on how far it can be dragged up by itself. But if you drag it up with the timeline at the same time, then it lets it drag up higher, which is really weird. So you should just make it be able to drag up high by itself and not need the the timeline with it to drag it up higher.
+      **A precise bug report:** two paths to the same size compute their limit differently, and only one of
+      them is right. Find the clamp on the inspector's own drag and the clamp on the combined drag, and make
+      the first match the second. **Goes with #511 clause 1** — same panel, same gesture family.
+
+- [ ] **513 — The sketching menu on PC looks bad and buggy.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The sketching menu on PC looks really bad and, like, bugged, so maybe fix that up.
+      **What the shot shows:** the drawing toolbar is a single wide pill pinned to the very bottom of a
+      1999px-wide window — *"Draw on the canvas — keep drawing, then Done"*, a colour swatch, a size slider,
+      eraser, undo, redo, Done, Cancel, all in one row — while the picture being drawn on sits SMALL at the
+      top of the screen with an enormous empty black area between the two. The tools are nowhere near the
+      canvas they act on, and the gap reads as a broken layout rather than a design.
+      ⚠️ **It is the phone layout stretched across a desktop**, which is the same fault as #481 (the effects
+      browser) and #511 (the director menu): a sheet built bottom-anchored for a phone, never given a PC
+      arrangement. Check whether the canvas is also mis-sized — the drawing surface looks like it may extend
+      far below the visible image.
+
+- [ ] **514 — 🔴 Drawing: the SECOND stroke does not appear until you finish. You cannot see what you are drawing.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also, the sketching menu is still broken on everything where... when you draw a second stroke, it just doesn't show up until you actually finish the drawing so you can't see what you're drawing, and it's just really bugging, broken, and bad, and just fix it, please.
+      **"on everything" — every platform, not just PC.** This is the functional half of #513 and much worse
+      than the layout: the first stroke draws live, and every stroke after it is invisible until Done. You
+      are drawing blind.
+      **The shape of it says live-preview vs committed-layer:** stroke 1 renders from the live path, and
+      once it is committed the preview surface is presumably cleared or re-created without re-showing the
+      strokes already committed — so stroke 2 goes somewhere that is not being painted until the final
+      flush. Find where a finished stroke is committed and what the in-progress overlay draws.
+      ⚠️ **Higher priority than most of this batch** — it makes a whole feature unusable, and he has
+      reported it before ("still broken").
+
