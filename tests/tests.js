@@ -42899,4 +42899,71 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
+     Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
+     MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
+     notches 200ms apart peaked at 0px and did nothing; 350ms apart, nothing. One notch is ~120 units,
+     which damps to 41.9px — under the 64px threshold — so a wheel has to accumulate across notches, and
+     the idle timer threw the accumulator away after 130ms. Shorter than the gap between two clicks of an
+     ordinary mouse wheel, so it could never get off the ground.
+     The cause of the cause: one timer answered two different questions. "This pull has gone stale" and
+     "this flick has already slammed" now have their own windows, and the second is deliberately longer
+     than the first — the other way round, a slow continuous wheel re-arms between notches and slams
+     every couple of clicks, which is the double-fire the trackpad test above exists to prevent. */
+  test('250: the slam is reachable with a mouse wheel, and still fires only once', { item: '250' }, async function () {
+    if (!FM.home || !FM.home.open) throw new Error('FM.home.open is missing');
+    const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasOpen) { FM.home.open(); await sleepMs(160); }
+      const root = document.getElementById('home-screen');
+      const sc = root && root.querySelector('.hm-scroll');
+      if (!sc) throw new Error('the home scroller is not there — this test cannot drive the gesture');
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('reduced motion is on; the egg is deliberately not armed and this test cannot run');
+
+      const flick = async (deltaPerNotch, gapMs, notches) => {
+        sc.scrollTop = 0;
+        root.classList.remove('hm-slam');
+        await sleepMs(700);                                  // clear of BOTH windows before each run
+        let fired = 0;
+        const obs = new MutationObserver(() => { if (root.classList.contains('hm-slam')) fired++; });
+        obs.observe(root, { attributes: true, attributeFilter: ['class'] });
+        for (let i = 0; i < notches; i++) {
+          sc.dispatchEvent(new WheelEvent('wheel', { deltaY: -deltaPerNotch, bubbles: true, cancelable: true }));
+          await sleepMs(gapMs);
+        }
+        await sleepMs(600);
+        obs.disconnect();
+        root.classList.remove('hm-slam');
+        return fired;
+      };
+
+      /* CONTROL: the trackpad path must still work, or a wheel failure below could just mean the whole
+         egg is disarmed in this environment and the test would be measuring nothing. */
+      const pad = await flick(40, 16, 16);
+      if (pad !== 1) throw new Error('a trackpad-style flick fired the slam ' + pad + ' times, not once — the egg is not behaving here, so nothing below can be trusted');
+
+      /* ── THE BUG: an ordinary mouse wheel. Two cadences, both slower than the old 130ms window. */
+      const slow = await flick(120, 200, 4);
+      if (slow < 1) throw new Error('four mouse-wheel notches 200ms apart did not fire the slam at all — one notch damps to 41.9px against a 64px threshold, so the accumulator has to survive between notches. That is queue 250: broken on PC for anyone not using a trackpad.');
+      if (slow > 1) throw new Error('four mouse-wheel notches fired the slam ' + slow + ' times — one gesture must be one slam');
+
+      const slower = await flick(120, 350, 4);
+      if (slower !== 1) throw new Error('mouse-wheel notches 350ms apart fired ' + slower + ' times, expected exactly once');
+
+      /* ── and a LONG run of notches is still one slam, which is the constraint that makes the two
+         windows ordered the way they are. */
+      const long = await flick(120, 200, 10);
+      if (long !== 1) throw new Error('ten mouse-wheel notches fired the slam ' + long + ' times — the re-arm window must outlast the idle window, or a slow continuous wheel slams every couple of clicks');
+
+      /* ── a single stray notch must stay silent, or ordinary scrolling sets it off. */
+      const stray = await flick(120, 700, 1);
+      if (stray !== 0) throw new Error('one lone wheel notch fired the slam — it is meant to be impossible to trigger by accident');
+    } finally {
+      const root = document.getElementById('home-screen');
+      if (root) root.classList.remove('hm-slam');
+      if (!wasOpen && FM.home.close) FM.home.close();
+    }
+  });
 })();

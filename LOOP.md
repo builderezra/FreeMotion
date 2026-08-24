@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.27, 911 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.28, 911 tests green, tree clean, `HEAD == ssh/main`.**
 **✅ LIVE DEPLOY RE-VERIFIED END TO END, 24 Aug at v12.20** (the previous claim was v11.50, twenty releases
 stale). On the real Pages URL at 380px: boots, service worker controlling, all 71 assets served from cache,
 running version matches the HTML, renders a layer WITH an effect, and produces a real MP4 — `3 KB · 0:01 ·
@@ -147,6 +147,11 @@ HUNG at 'Encoding video 100%'. It had succeeded every time. The MP4 path deliber
 while that card is up, by design. I nearly reported 'export is broken on the live site'. **The control that
 saved it was running the same flow on localhost** — identical behaviour meant it was my probe, not the
 deploy. Read the completion path before instrumenting it.
+⚠️ **ONE TIMER, TWO QUESTIONS — queue 250.** The wheel path used a single 130ms constant for both "this
+pull is stale" and "this flick already slammed". Tuning one retuned the other, and 130ms is shorter than a
+mouse wheel's notch gap, so the easter egg was unreachable with a mouse for eight days while working fine
+on a trackpad. **When one constant serves two purposes, name them separately before tuning either.** Also:
+**test the input device he actually uses** — every previous check used trackpad-cadence events.
 ⚠️ **THE CLASSIFIER WAS READING ITS OWN STAMP — 14 ITEMS WERE UNREACHABLE (24 Aug).** `tools/status.sh`
 writes a STATUS line into each entry FROM `classify()`'s verdict, and the blocked stamp it writes
 ("waiting on your answer") matches BLOCKED. So a blocked item stayed blocked forever regardless of what

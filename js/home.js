@@ -720,7 +720,27 @@ window.FM = window.FM || {};
      * running its own overscroll bounce or, on some setups, a back-navigation gesture underneath ours.
      * The accumulator is in the same units as the drag, so the two paths reach the threshold at the
      * same felt effort and share one PULL_MIN. */
-    let wheelAcc = 0, wheelTimer = 0, wheelSpent = 0;
+    /* ⚠️ A MOUSE WHEEL COULD NEVER REACH THE THRESHOLD (queue 250). Ezra, 16 Aug: "the slam easter egg
+       on pc is competely broken now" — and it was, for anyone using a WHEEL rather than a trackpad.
+       MEASURED, one notch at a time, at 1440px:
+         trackpad flick (小 deltas, 16ms apart) → peak 62px, slams
+         wheel notches 90ms apart              → peak 42px, slams
+         wheel notches 200ms apart             → peak  0px, NOTHING
+         wheel notches 350ms apart             → peak  0px, NOTHING
+       The arithmetic: one notch is ~120 units and `damp(120)` is 41.9px, under the 64px threshold. So a
+       wheel MUST accumulate across notches — and the idle timer threw the accumulator away after 130ms,
+       which is shorter than the gap between two notches of an ordinary mouse wheel. A trackpad delivers
+       dozens of events a few milliseconds apart and sails past; a wheel never got off the ground.
+       THE CAUSE OF THE CAUSE: one timer was doing two unrelated jobs. "The pull has gone stale, glide it
+       back" and "this flick has already slammed, stay spent" are different questions with different
+       right answers, and sharing a 130ms constant meant the second one's value decided the first's.
+       Split, and named, so neither can be tuned into the other again:
+         IDLE  — how long a pull survives with no wheel events. Must outlast a wheel's notch cadence.
+         REARM — how much silence ends a gesture, so one flick is one slam. Deliberately LONGER than
+                 IDLE: if it were shorter, a slow continuous wheel would re-arm between notches and
+                 slam every couple of clicks, which is the double-fire v7.86's cooldown exists to stop. */
+    const WHEEL_IDLE = 420, WHEEL_REARM = 520;
+    let wheelAcc = 0, wheelTimer = 0, wheelSpent = 0, spentTimer = 0;
     sc.addEventListener('wheel', (e) => {
       if (selectMode || reduced()) return;
       if (sc.scrollTop > 0 || e.deltaY >= 0) {      // scrolled away from the top, or scrolling down
@@ -744,7 +764,9 @@ window.FM = window.FM || {};
        * the accumulator would climb back over PULL_MIN and re-slam two or three times per gesture. */
       if (px >= PULL_MIN && !wheelSpent) {
         clearTimeout(wheelTimer); wheelTimer = 0;
+        clearTimeout(spentTimer);
         wheelAcc = 0; wheelSpent = 1;
+        spentTimer = setTimeout(() => { spentTimer = 0; wheelSpent = 0; }, WHEEL_REARM);   // …and arm the re-arm even if no further events arrive
         slam();
         return;
       }
@@ -756,8 +778,8 @@ window.FM = window.FM || {};
        * makes one gesture exactly one slam at any speed. */
       if (wheelSpent) {
         wheelAcc = 0;
-        clearTimeout(wheelTimer);
-        wheelTimer = setTimeout(() => { wheelTimer = 0; wheelSpent = 0; }, 130);
+        clearTimeout(spentTimer);
+        spentTimer = setTimeout(() => { spentTimer = 0; wheelSpent = 0; }, WHEEL_REARM);
         return;
       }
       setPull(px);   // same curve as the drag, so both paths feel identical and share PULL_MIN
@@ -767,7 +789,7 @@ window.FM = window.FM || {};
         const rest = damp(wheelAcc);
         wheelAcc = 0;
         if (rest) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');
-      }, 130);
+      }, WHEEL_IDLE);
     }, { passive: false });
   }
 

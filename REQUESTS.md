@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.27
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.28
 >
-> **State:** v12.27, **910 tests green**, tree clean.
+> **State:** v12.28, **911 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -2994,8 +2994,7 @@ better still, keep working inside the turn rather than parking work for a later 
         y 5→20, so the ink centre is 12.5 in a box centred on 12 — the identical arithmetic to the
         magnifier, at the identical magnitude you spotted there. All three glyphs now measure 0.00.
 
-- [ ] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** His words:
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** ✅ **FIXED v12.28 — and "completely" was right, for anyone with a mouse.** His words:
       *"the slam easter egg on pc is competely broken now"* — told to me mid-task with *"dont let this
       distract you but also dont forget to log it"*, so it is written down here and waits its turn
       rather than jumping the queue.
@@ -3007,9 +3006,28 @@ better still, keep working inside the turn rather than parking work for a later 
       actually boil. Any of those could have broken it, and the v7.86 wheel-claiming change is the
       likeliest — the suite test `slam-wheel` covers the double-fire it was written for, so whatever
       is broken is something that test does not assert.
-      **Ask when starting it: broken HOW?** No animation at all, an animation that plays wrong, or the
-      screen left in a bad state afterwards? Each points somewhere different. Reproduce on PC at a
-      desktop width before changing anything — this is a PC-only report and the phone path differs.
+      **Ask when starting it: broken HOW?** — didn't need to ask in the end; it reproduced on PC first try
+      once I tested a MOUSE WHEEL rather than a trackpad.
+      📐 **MEASURED at 1440px, one notch at a time:**
+      | input | how far the list pulled | slammed? |
+      |---|---|---|
+      | Trackpad flick (small deltas, 16ms apart) | 62px | ✅ |
+      | Mouse wheel, notches 90ms apart | 42px | ✅ |
+      | **Mouse wheel, notches 200ms apart** | **0px** | ❌ |
+      | **Mouse wheel, notches 350ms apart** | **0px** | ❌ |
+      **The arithmetic:** one wheel notch is about 120 units, which the damping curve turns into **41.9px**
+      — under the 64px threshold. So a wheel has to build up across several notches, and the timer threw
+      the accumulated pull away after **130ms**, which is shorter than the gap between two clicks of an
+      ordinary mouse. A trackpad fires dozens of tiny events milliseconds apart and sails past it; a mouse
+      wheel never got off the ground. **Nothing was wrong with the animation — it was never reached.**
+      **The cause of the cause is worth naming:** one timer was answering two different questions. "This
+      pull has gone stale, glide it back" and "this flick has already slammed, stay spent" are unrelated,
+      and sharing a single 130ms constant meant tuning one silently retuned the other. They have their own
+      named windows now, and the spent one is deliberately **longer** — the other way round, a slow
+      continuous wheel re-arms between notches and slams every couple of clicks. The test proves both:
+      shortening the idle window kills the wheel entirely, and shortening the re-arm gives a double slam.
+      **After:** wheel at 200ms → one slam. At 350ms → one slam. Ten notches → still one slam. A single
+      stray notch → silent, so ordinary scrolling still cannot set it off.
 
       **TRIED TO REPRODUCE 16 Aug at 1280×800, and could NOT.** Driving the wheel path the way a
       trackpad delivers it (25 events, 8ms apart, at the top of the list): the slam **fires** —
