@@ -677,8 +677,16 @@ window.FM = window.FM || {};
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
     ] },
     { type: 'textrandomizer', label: 'Text Randomizer', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
+    /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
+       entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
+       did not want to bolt them on badly. They are here now.
+       ⚠️ BOTH DEFAULT TO A NO-OP — word 0 px, line x1 — so every Text Spacing already sitting in one of
+       his projects renders exactly as it did. A new control whose default changes existing work is the
+       kind of "fix" that reads as a bug. */
     { type: 'textspacing', label: 'Text Spacing', params: [
       { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
+      { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
     ] },
     { type: 'texttransform', label: 'Text Transform', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
@@ -1680,6 +1688,24 @@ window.FM = window.FM || {};
       // every existing instance keeps replacing, exactly as it did.
       var mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
       st.letterSpacing = mode === 1 ? (st.letterSpacing || 0) + sp : sp;
+      /* Word spacing follows the same Replaces/Adds rule, so two stacked Text Spacings behave the way
+         the mode says they do. A layer has no word-spacing property of its own, so at mode 0 this is
+         simply the absolute value. */
+      /* ⚠️ `p.x == null` FIRST, not tnum's fallback. FM.evalProp answers 0 for a param that is not
+         there, and 0 is a legitimate value — so tnum's default never fires and a missing key reads as
+         "the user set it to zero". Harmless for word spacing, whose default IS 0; FATAL for line
+         height, where it meant every existing Text Spacing collapsed its leading to the clamp floor.
+         The `mode` param above has always been written this way for the same reason. */
+      var wsp = p.word == null ? 0 : tnum(FM.evalProp(p.word, t), 0);
+      if (wsp < -40) wsp = -40; if (wsp > 200) wsp = 200;
+      st.wordSpacing = mode === 1 ? (st.wordSpacing || 0) + wsp : wsp;
+      /* Line height is a MULTIPLIER of the layer's own, not an absolute, and it ignores the mode — a
+         multiplier IS relative, so "replaces" and "adds to layer" would be the same question asked
+         twice. x1 changes nothing, and two stacked effects compound, which is the only reading of
+         "half again, then half again" that is not surprising. */
+      var lm = p.line == null ? 1 : tnum(FM.evalProp(p.line, t), 1);
+      if (lm < 0.05) lm = 0.05; if (lm > 8) lm = 8;
+      st.lineHeight = (st.lineHeight || 1.15) * lm;
     },
     texttransform: function (st, p, t) {
       var m = (p.mode | 0), s = st.text;
@@ -1718,9 +1744,13 @@ window.FM = window.FM || {};
   // layer, and layer.effects is the sub-structure with the weakest validation on the way in.
   Object.setPrototypeOf(TEXT_FX, null);
   FM.TEXT_FX = TEXT_FX;
-  // Fold every enabled text effect over the base string + spacing, in layer order. Returns {text, letterSpacing}.
+  /* Fold every enabled text effect over the base string + spacing, in layer order.
+     Returns {text, letterSpacing, wordSpacing, lineHeight}. lineHeight is seeded from the LAYER so an
+     effect that only touches word spacing still hands back the right line height, and every caller can
+     read one object rather than mixing effect output with raw layer fields. */
   FM.applyTextEffects = function (layer, baseText, baseSpacing, t, scene) {
-    var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0 };
+    var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0,
+               wordSpacing: 0, lineHeight: (layer && layer.lineHeight) || 1.15 };
     var fx = layer && layer.effects;
     if (fx && fx.length) {
       var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
@@ -1866,9 +1896,19 @@ window.FM = window.FM || {};
     const prevLS = ('letterSpacing' in ctx) ? ctx.letterSpacing : null;
     const sp = parseFloat(prevLS) || 0;
     if (prevLS != null) ctx.letterSpacing = '0px';
-    const widths = chars.map(c => ctx.measureText(c).width);
+    /* WORD SPACING NEEDS THE SAME TREATMENT, AND FOR A SHARPER REASON THAN LETTER SPACING.
+       Measured: `measureText(' ')` on a LONE space returns the same width whether word spacing is 0 or
+       40 — the browser only counts a separator that actually sits between words. This function measures
+       one character at a time, so every space here IS a lone space, and word spacing would have been
+       silently dropped on curved text while working everywhere else. So it is neutralised for the
+       measurement and added back explicitly, exactly as the letter spacing above is. */
+    const prevWS = ('wordSpacing' in ctx) ? ctx.wordSpacing : null;
+    const wsp = parseFloat(prevWS) || 0;
+    if (prevWS != null) ctx.wordSpacing = '0px';
+    const restore = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; };
+    const widths = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
     const tw = widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, chars.length - 1);
-    if (tw <= 0) { if (prevLS != null) ctx.letterSpacing = prevLS; return; }
+    if (tw <= 0) { restore(); return; }
     const ac = curveDeg * Math.PI / 180, R = tw / Math.abs(ac), sign = curveDeg >= 0 ? 1 : -1;
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1885,7 +1925,7 @@ window.FM = window.FM || {};
       s += w + sp;
     });
     ctx.textAlign = prevAlign; ctx.textBaseline = prevBase;
-    if (prevLS != null) ctx.letterSpacing = prevLS;
+    restore();
   }
 
   // ---- vector mask: clip the layer to a shape (rect/ellipse/polygon), in layer-local space ----
@@ -9319,8 +9359,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const te = FM.applyTextEffects(layer, src, (layer.letterSpacing || 0), t, FM.scene);
       src = te.text;
       if ('letterSpacing' in c) c.letterSpacing = te.letterSpacing + 'px';
+      if ('wordSpacing' in c) c.wordSpacing = (te.wordSpacing || 0) + 'px';
       const lines = FM.textLines(c, layer, src);
-      const fs = layer.fontSize || 96, lh = fs * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      const fs = layer.fontSize || 96, lh = fs * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
       return { w: maxW, h: total + fs };
     }
@@ -11310,10 +11351,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const _tEff = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = _tEff.text;
       if ('letterSpacing' in ctx) ctx.letterSpacing = _tEff.letterSpacing + 'px';
+      if ('wordSpacing' in ctx) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
       // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
       // pre-effect text would break the lines in the wrong places on every frame but the first.
       const lines = FM.textLines(ctx, layer, textSrc);
-      const lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15);
+      const lh = (layer.fontSize || 96) * (_tEff.lineHeight || 1.15);
       const total = (lines.length - 1) * lh;
       // Caption background pill: readable semi-transparent box behind the text (CapCut/AM style).
       if (layer.captionBg && String(textSrc).trim()) {
@@ -12393,7 +12435,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // The '_' prefix keeps this out of save/undo (see FM.jsonReplacer). TWO slots, not one: the draw
     // pass and layerSize call in with different letter-spacing (the draw pass has been through
     // applyTextEffects), so a single slot would miss on every call and cache nothing at all.
-    const key = src + ' ' + ww + ' ' + ctx.font + ' ' + (ctx.letterSpacing || '');
+    /* ⚠️ WORD SPACING BELONGS IN THIS KEY. measureText answers for it exactly as it does for letter
+       spacing, so leaving it out means a layer whose ONLY change is word spacing keeps the wrapping it
+       had — the lines break in the old places and the fix reads as doing nothing. */
+    const key = src + ' ' + ww + ' ' + ctx.font + ' ' + (ctx.letterSpacing || '') + ' ' + (ctx.wordSpacing || '');
     const cache = layer ? (layer._wrapCache || (layer._wrapCache = [])) : null;
     if (cache) { for (let i = 0; i < cache.length; i++) if (cache[i].key === key) return cache[i].lines; }
 

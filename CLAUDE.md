@@ -74,6 +74,21 @@ reports `✅ CAUGHT` and proves exactly nothing. It happened three times before 
 The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the sources, so
 it costs one extra suite run per EDIT rather than per mutation.
 
+```bash
+tools/mutate.sh   # …and now REFUSES when the mutation changed nothing at all
+```
+Fourth one, added 24 Aug. The three gates above are all about the SEARCH string — is it there, is it
+unique, is the tree green. This is about the RESULT, and it closes the case they all miss: a mutation
+that is found, is unique, applies cleanly **and changes nothing**, because `old` and `new` are the same
+text. The suite then passes for the honest reason that the code is untouched, and mutate.sh announces
+**"❌ SURVIVED — the assertion is DEAD"**, which is a false accusation against a perfectly good test —
+the exact inverse of the failure the other gates prevent, and it costs you a rewrite of working code.
+The cause is worth naming because nothing looks wrong at the call site: `js/compositor.js` builds a
+cache key with **NUL separators**, the strings were passed as `"$(cat file)"`, and **command
+substitution truncates at the first NUL byte**. Both arguments became the same harmless prefix. The gate
+compares the file with its own backup, so it catches that and every other silent no-op. It runs before
+the suite, so a mistake costs a second rather than four minutes.
+
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 

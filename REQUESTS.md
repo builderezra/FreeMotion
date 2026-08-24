@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.30
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.31
 >
-> **State:** v12.30, **914 tests green**, tree clean.
+> **State:** v12.31, **918 tests green**, tree clean.
+>
+> **✅ v12.31 — Text Spacing finally does WORD SPACING and LINE HEIGHT.** Both were named as "still
+> open" in the oldest entry on this list and then sat there; they are a text-layout change rather than
+> another slider, which is why they kept getting skipped. Both default to changing nothing, so nothing
+> you already made moves.
 >
 > **✅ v12.30 — THE LAST SLOW EFFECT IS FIXED.** Turbulent Displace was the only one left costing more
 > than 150 ms a frame at your project size; it is now 35.8 ms, 4.2x faster. Nothing in the effect list
@@ -4662,6 +4667,28 @@ better still, keep working inside the turn rather than parking work for a later 
       **Still open from that same request:** word spacing and line height. They need the text renderer
       to carry two more fields and the line-breaking loop to honour them — a layout change, not a
       slider, so I have left it rather than bolt it on badly.
+      ✅ **DONE v12.31 — and "I have left it" had turned into months, which is the honest bit.** Text
+      Spacing now has four controls: Letter spacing, **Word spacing**, **Line height** and Applies.
+      Word spacing widens the gaps between words without touching the letters. Line height is a
+      MULTIPLIER (x1 = exactly what you have now), so it reads the same whichever way you stack it.
+      **Both default to changing nothing**, so every Text Spacing already in one of your projects
+      renders identically to before — a new control that quietly re-flows old work is a bug wearing a
+      feature's clothes.
+      Three things had to follow it, none of which is a slider:
+      · **the wrap cache is keyed on word spacing.** Without that a caption with a wrap width kept its
+        OLD line breaks and the new control looked completely dead — on exactly the layers it is for.
+      · **curved text measures one glyph at a time**, and a lone space does not pick up word spacing
+        (measured), so it would have silently done nothing on curved text while working everywhere
+        else. The gaps are added back explicitly there.
+      · **a missing parameter now reads as absent rather than zero.** This one was a real bug I wrote
+        and the tests caught: the app answers 0 for a parameter that is not there, and 0 is a legal
+        line height — so every EXISTING Text Spacing collapsed its leading to the minimum. Caught
+        before it went anywhere near you.
+      ⚠️ **Two measurements went wrong before either worked, both my instrument rather than the code.**
+      The metrics API reported word spacing doing nothing when the drawn pixels showed it working
+      perfectly; and my first picture test measured opaque pixels, which on a scene with a background
+      is the whole frame, so it reported the text as 699px wide no matter what. Both tests now measure
+      the drawn ink and carry a control that fails if the measurement has caught the background.
       *Round 17, v9.02:* the repeat warps. Grid Repeat could only build a square wall of identical
       tiles with a hard seam at every join; Radial Repeat's kaleidoscope seam was stuck at 0° and its
       wedges butt-joined; Mirror Tile's reflection line was welded to the frame corner. All three fixed

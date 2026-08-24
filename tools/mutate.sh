@@ -81,6 +81,27 @@ open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
 PY
 
 
+# ---- AND THE FILE MUST ACTUALLY HAVE CHANGED (24 Aug) ---------------------------------------------
+# The two guards above are about the SEARCH string. This one is about the RESULT, and it closes the
+# case they both miss: a mutation that was found, was unique, applied cleanly - and changed nothing,
+# because old and new were the same text. Then the suite passes for the honest reason that the code is
+# untouched, and this script announces "SURVIVED - the assertion is DEAD", which is a false accusation
+# against a perfectly good test.
+#
+# It happened on 24 Aug and the cause is worth naming, because nothing about it looks wrong at the call
+# site: js/compositor.js builds a cache key with NUL separators, the strings were passed in as
+# "$(cat file)", and COMMAND SUBSTITUTION TRUNCATES AT THE FIRST NUL BYTE. Both arguments were cut down
+# to the same harmless prefix, so old == new. The not-found gate was satisfied (the prefix really is
+# there), the ambiguity gate was satisfied (it occurs once), and the verdict was still wrong.
+# Comparing the file against its own backup catches that and every other silent no-op, whatever caused it.
+if cmp -s "$FILE" "$BAK"; then
+  echo "mutate: the file is BYTE-IDENTICAL after the replace - the mutation changed nothing, so a green"
+  echo "        run proves nothing about the test. Usually old and new are the same text."
+  echo "        If either string contains a NUL, a tab or a newline, \$(cat ...) will have mangled it -"
+  echo "        pass the strings as literals, or make the edit in python and diff instead."
+  exit 7
+fi
+
 OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
 FAILS="$(printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
 if [ -z "$FAILS" ]; then

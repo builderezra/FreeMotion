@@ -28061,6 +28061,158 @@
     if (added !== 37) throw new Error('adding 30 to the fixture\'s own 7px of tracking gave ' + added + ', not 37');
   });
 
+  /* ═══ WORD SPACING AND LINE HEIGHT (the oldest entry in REQUESTS.md, "still open from that same
+     request"). They were left out when Text Spacing was rebuilt because they are a LAYOUT change, not
+     another slider, and then sat unbuilt.
+     ⚠️ THE CONTROL THAT MATTERS MOST HERE IS THE NO-OP ONE. Both new params default to "change
+     nothing" — 0px and x1 — because he has projects with this effect already in them, and a new
+     control that quietly re-flows existing work is indistinguishable from a bug. */
+  test('effects: Text Spacing does word spacing and line height, and defaults to changing neither', { item: 'fx-text' }, function () {
+    // Defaults: an existing instance carries neither key, and must come out exactly as it went in.
+    var plain = textRun('textspacing', { spacing: 30 });
+    if (plain.wordSpacing !== 0) throw new Error('an existing Text Spacing with no word-spacing key produced ' + plain.wordSpacing + 'px of it — that re-flows projects he already has');
+    if (plain.lineHeight !== 1.15) throw new Error('an existing Text Spacing changed the line height to ' + plain.lineHeight + ' without being asked');
+    // Spelling the defaults out explicitly must be the same as leaving them off.
+    var spelt = textRun('textspacing', { spacing: 30, word: 0, line: 1 });
+    if (spelt.wordSpacing !== plain.wordSpacing || spelt.lineHeight !== plain.lineHeight)
+      throw new Error('writing the new keys at their own defaults changed the result');
+    // Word spacing, both modes.
+    if (textRun('textspacing', { spacing: 0, word: 25 }).wordSpacing !== 25) throw new Error('word spacing did not reach the layout state');
+    var twice = { text: 'x', letterSpacing: 0, wordSpacing: 10, lineHeight: 1.15 };
+    FM.TEXT_FX.textspacing(twice, { spacing: 0, word: 25, mode: 1 }, 0.5, { localT: 0, fps: 30 });
+    if (twice.wordSpacing !== 35) throw new Error('"Adds to layer" gave ' + twice.wordSpacing + ' instead of 10 + 25');
+    // Line height is a MULTIPLIER, so two stacked effects compound rather than the last one winning.
+    var lh = textRun('textspacing', { spacing: 0, line: 2 }).lineHeight;
+    if (Math.abs(lh - 2.3) > 1e-9) throw new Error('a x2 line height on the 1.15 default gave ' + lh + ', not 2.3');
+    var st2 = { text: 'x', letterSpacing: 0, wordSpacing: 0, lineHeight: 1.15 };
+    FM.TEXT_FX.textspacing(st2, { spacing: 0, line: 2 }, 0.5, { localT: 0, fps: 30 });
+    FM.TEXT_FX.textspacing(st2, { spacing: 0, line: 2 }, 0.5, { localT: 0, fps: 30 });
+    if (Math.abs(st2.lineHeight - 4.6) > 1e-9) throw new Error('two stacked x2 line heights gave ' + st2.lineHeight + ' instead of compounding to 4.6');
+    // Absurd values must be clamped rather than collapsing the layout to zero or infinity.
+    if (textRun('textspacing', { spacing: 0, line: 0 }).lineHeight <= 0) throw new Error('a line height of 0 was allowed through and collapses every line onto one');
+  });
+
+  test('word spacing and line height change the PICTURE, measured on drawn ink', { item: 'fx-text' }, async function () {
+    /* ⚠️ MEASURED ON THE DRAWN PIXELS, NOT ON measureText — and that is not caution for its own sake.
+       While building this, a probe using measureText reported that word spacing did nothing at all;
+       drawing the same string and finding its ink showed it working perfectly. The metrics API was the
+       faulty instrument. It also turned up the fact the curved-text path needed: `measureText(' ')` on
+       a LONE space ignores word spacing, because the browser only counts a separator sitting between
+       words — so a per-character measurement drops it silently. */
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      const PW = 700, PH = 400;
+      FM.scene.project.width = PW; FM.scene.project.height = PH;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { text: 'a b c', x: PW / 2, y: PH / 2, size: 48, fill: '#ffffff' });
+      L.start = 0; L.duration = 5; L.fontSize = 48; L.align = 'center';
+      FM.scene.layers.push(L); FM.refreshAll();
+      const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+      const ctx = cv.getContext('2d');
+      /* ⚠️ THRESHOLD ON BRIGHTNESS, NOT ALPHA — and the alpha version is what I wrote first. A rendered
+         scene paints the project BACKGROUND, so every pixel in the frame is opaque and an alpha test
+         reports the ink as the full 699px width no matter what the text does. It duly said word spacing
+         changed nothing. The text is white on a dark background, so brightness separates them. */
+      const inkBox = () => {
+        ctx.clearRect(0, 0, PW, PH);
+        FM.renderScene(ctx, FM.scene, 0.5);
+        const d = ctx.getImageData(0, 0, PW, PH).data;
+        let x0 = PW, x1 = -1, y0 = PH, y1 = -1;
+        for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+          const i = (y * PW + x) * 4;
+          if (d[i] + d[i + 1] + d[i + 2] > 250) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        return { w: x1 - x0, h: y1 - y0, any: x1 >= 0 };
+      };
+      L.effects = [];
+      const base = inkBox();
+      /* THE CONTROL FOR THE THRESHOLD ITSELF: 'a b c' at 48px is about 102px wide. A reading anywhere
+         near the frame width means the measurement has caught the background instead of the glyphs,
+         which is exactly the fault this test was written through. */
+      if (!base.any || base.w < 20) throw new Error('the plain text layer drew nothing measurable, so every comparison below is against an empty frame');
+      if (base.w > 250) throw new Error('the plain text measured ' + base.w + 'px wide in a ' + PW + 'px frame — that is the background being measured, not the text');
+
+      // WORD SPACING: 'a b c' has two separators, so +30px each must widen the ink by about 60.
+      L.effects = [{ type: 'textspacing', params: { spacing: 0, word: 30, line: 1 } }];
+      const wide = inkBox();
+      const gained = wide.w - base.w;
+      if (gained < 45 || gained > 75) throw new Error('30px of word spacing on two gaps widened the text by ' + gained + 'px; expected about 60');
+
+      // …and the no-op default must leave the same layer exactly as it was.
+      L.effects = [{ type: 'textspacing', params: { spacing: 0 } }];
+      const noop = inkBox();
+      if (Math.abs(noop.w - base.w) > 1) throw new Error('a Text Spacing left at its defaults changed the width by ' + (noop.w - base.w) + 'px — existing projects would re-flow');
+
+      // LINE HEIGHT: two lines, so the multiplier must move the ink height and nothing else.
+      L.text = 'ab\ncd'; L.effects = [];
+      delete L._wrapCache;
+      const two = inkBox();
+      L.effects = [{ type: 'textspacing', params: { spacing: 0, line: 2 } }];
+      delete L._wrapCache;
+      const tall = inkBox();
+      if (!(tall.h > two.h + 20)) throw new Error('doubling the line height moved the two-line block from ' + two.h + 'px to ' + tall.h + 'px — that is not a doubling');
+      if (Math.abs(tall.w - two.w) > 2) throw new Error('the line-height multiplier also changed the WIDTH, from ' + two.w + ' to ' + tall.w + ' — it is affecting more than the leading');
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.refreshAll();
+    }
+  });
+
+  test('Text Spacing shows all four controls and does not run off a phone', { item: 'fx-text' }, async function () {
+    /* THE MOBILE HALF OF THIS CHANGE, AS A TEST RATHER THAN A SCREENSHOT. ship.sh runs the whole suite
+       a second time at 380px, so an assertion here is a phone check that happens on every release
+       instead of one I remember to do — and this effect just went from two controls to four, on the
+       panel that already has an open complaint about option rows running off the side of the screen. */
+    var L = FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, size: 48, fill: '#ffffff', start: 0, duration: 5 });
+    var keep = FM.scene.layers.slice();
+    L.effects = [{ type: 'textspacing', enabled: true, params: { spacing: 24, word: 20, line: 1.5 }, _expanded: true }];
+    FM.scene.layers.push(L); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    try {
+      var cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label'))
+        .filter(function (n) { return /^Effects$/i.test((n.textContent || '').trim()); })[0];
+      if (!cat) throw new Error('no Effects category card in the inspector to open');
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      var body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+      if (!body) throw new Error('the Text Spacing row did not open its editor body, so nothing below is being measured');
+      var txt = (body.textContent || '');
+      ['Letter spacing', 'Word spacing', 'Line height'].forEach(function (lab) {
+        if (txt.indexOf(lab) < 0) throw new Error('the panel has no "' + lab + '" control: ' + txt.slice(0, 160));
+      });
+      /* THE CONTROL FOR THE CONTROL: three sliders must actually be three ROWS, not three words in one
+         paragraph — a label present in textContent proves nothing about it having rendered a scrubber. */
+      var rows = body.querySelectorAll('.fx-scrub-row');
+      if (rows.length < 3) throw new Error('expected three slider rows (letter, word, line), found ' + rows.length);
+      // …and nothing may scroll sideways. At the phone pass this is 380px wide, which is the point.
+      if (body.scrollWidth > body.clientWidth + 1)
+        throw new Error('the Text Spacing controls scroll sideways at ' + window.innerWidth + 'px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ') — the new rows do not fit on a phone');
+      Array.prototype.slice.call(rows).forEach(function (r) {
+        if (r.scrollWidth > r.clientWidth + 1)
+          throw new Error('a slider row itself overflows at ' + window.innerWidth + 'px: ' + (r.textContent || '').slice(0, 40));
+      });
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+  });
+
+  test('the wrap cache notices word spacing, or a wrapped layer keeps its old line breaks', { item: 'fx-text' }, async function () {
+    /* The wrapping is cached per layer, keyed by string + column + font + spacing. Word spacing widens
+       every word gap, so it moves where the lines break — and if it is missing from that key the cache
+       hands back the OLD breaks and the effect looks like it does nothing on exactly the layers that
+       need it most (captions, which is what wrapWidth is for). */
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '48px sans-serif';
+    const layer = { wrapWidth: 300, fontSize: 48 };
+    if (!('wordSpacing' in c)) return;               // engine without the property; nothing to guard
+    c.wordSpacing = '0px';
+    const tight = FM.textLines(c, layer, 'aa bb cc dd ee');
+    c.wordSpacing = '60px';
+    const loose = FM.textLines(c, layer, 'aa bb cc dd ee');
+    if (tight.length < 2) throw new Error('the fixture did not wrap at all (' + tight.length + ' line), so the cache cannot be shown to notice anything');
+    if (loose.length <= tight.length) throw new Error('60px of word spacing gave the same ' + loose.length + ' lines as none — the wrap cache is keyed without word spacing and is returning a stale answer');
+  });
+
   /* ---------------- EFFECTS-PLAN round 17: the repeat warps ---------------- */
 
   /* A WARP is not a pixel kernel: it takes (x,y,W,H,cx,cy,maxR,p,t,ps) and RETURNS the source point to

@@ -97,7 +97,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.30, 914 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.31, 918 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.31: Text Spacing gained word spacing + line height** — named "still open" in the oldest entry and
+left for months because it is a layout change, not a slider. Both default to a no-op so old projects do
+not move. Follow-ons that mattered: the wrap cache is keyed on word spacing; curved text adds the gaps
+back by hand (a LONE space does not pick up word spacing — measured); and a missing param now reads as
+absent rather than 0, which had collapsed the line height of every existing instance.
+⚠️ **mutate.sh gained a fourth gate: it refuses when the mutation changed NOTHING.** It had reported
+"SURVIVED — the assertion is DEAD" about a healthy test, because `$(cat …)` truncates at a NUL byte and
+both strings collapsed to the same prefix. **A false SURVIVED is as expensive as a false CAUGHT** — it
+sends you to rewrite working code.
 **v12.30: Turbulent Displace 151.3 → 35.8 ms (4.2x)** — the last effect over 150 ms, and the only thing
 still actionable in the OLDEST entry ("editing lags"). Field built on a coarse lattice once a frame,
 read back with Catmull-Rom. ⚠️ **My first version used LINEAR interpolation and was out by 9.9 px** — the
