@@ -97,7 +97,23 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.34, 921 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.35, 922 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.35: the Media/Audio menus on PC (#542).** The add menu was never held to the inspector panel — body
+ran y=203→302 in a 231px box. That panel is `overflow: visible` ON PURPOSE (the resize handle lives above
+its top edge), so the spill was clipped by #app: unreachable, not merely ugly. The rule that set it
+carried a safety argument — "planGrid sizes the tiles to the panel, and the body scrolls when it cannot"
+— and BOTH halves had silently stopped being true. Restored, plus two real side-faults: perPage was
+computed for 4 columns while the CSS draws 5, and the row count came from a 390px-phone measurement.
+⚠️ **THREE process lessons, all expensive this tick.**
+1. **My first diagnosis was confidently wrong** and I only caught it by measuring the REAL inspector
+   instead of the synthetic host I had been testing in. *Measure the layout you ship to.*
+2. **A CSS comment I wrote had no `/*`** — the parser dropped the whole rule block and the fix "did
+   nothing" for three rounds. `styles.css` comment balance is worth checking when a rule mysteriously
+   fails to apply.
+3. **My first version of the 542 test was DEAD and reported green.** It silently `return`ed when the add
+   menu was absent, and it never seeded a media library — an empty library shows 3 tiles and hides the
+   bug completely. A mutation deleting the whole containment survived it. **Both guards are loud now.**
+**NEXT: oldest-first from `./tools/next.sh`.** #47 is the oldest numbered item still open.
 **v12.34: the template icon (#546, closing #432 and #510).** He chose the STAMP — dashed master, solid
 copy — from five drawn options. Fourth attempt at this icon, first one he picked, and the difference is
 that he could SEE them: #432 "put four options to him" in words while the drawings sat in a local file he

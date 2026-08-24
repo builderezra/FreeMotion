@@ -7425,6 +7425,34 @@ body.fm-pushing #toast { z-index: 213; }
      of 560, 620 and 800, the panel's content exactly equalled its box every time, so its own scrollbar
      was never doing anything here. */
   body #inspector-panel:has(.addmenu--panel) { overflow: visible; }
+  /* ⚠️ AND THE SENTENCE ABOVE IS WHERE QUEUE 542 CAME FROM. "Safe rather than lucky … planGrid() sizes
+     the tile area to the panel and the body gives it its own scroller when it cannot" — that is exactly
+     right, and it stopped being true. `planGrid()` returns NULL when the panel is too short to plan
+     with, and its fallback only accepts a grid fitting on ONE page, which a media/audio library never
+     does. So on a short panel nothing sized the tiles; and the body could not fall back to its own
+     scroller either, because NOTHING CONSTRAINED THE ADD MENU TO THE PANEL'S HEIGHT — measured on his
+     window: panel 232px, add-menu root 293px, body running from y=203 to y=302 inside a 231px box. The
+     body was already outside the panel, so its `overflow-y: auto` had nothing to do.
+     With `overflow: visible` above (which the resizer NEEDS — it lives at top:-9px, outside the panel,
+     and a scroller would clip it) the spill was then cut off by #app's `overflow: hidden`. Not scrolled
+     past, not paged: gone. Ezra: "media and audio menus have broke on pc".
+     So the invariant that comment relies on is restored rather than replaced. The menu is held to the
+     panel's height, and the body becomes the scroller — which is what it was always meant to be.
+     ⚠️ `max-height: 100%` WAS TRIED FIRST AND DOES NOT WORK: the panel is `display: block`, so the
+     percentage resolves against its full 232px while #inspector starts 38px down — it can still be
+     taller than the room left for it. The height has to come from a FLEX COLUMN, which is not a new
+     mechanism here: `#inspector-panel.insp-ease` a few hundred lines up does exactly this, and works.
+     Mirrored rather than reinvented. `#am-resizer` is absolutely positioned, so making the panel a flex
+     container leaves it exactly where it is — verified, it is still at top:-9px outside the panel. */
+  body #inspector-panel:has(.addmenu--panel) { display: flex; flex-direction: column; }
+  body #inspector-panel:has(.addmenu--panel) > #insp-grab,
+  body #inspector-panel:has(.addmenu--panel) > .panel-title { flex: none; }
+  body #inspector-panel:has(.addmenu--panel) > #inspector {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  body #inspector-panel:has(.addmenu--panel) .addmenu--panel,
+  body #inspector-panel:has(.addmenu--panel) .addmenu-main { min-height: 0; flex: 1 1 auto; }
+  body #inspector-panel:has(.addmenu--panel) .addmenu-body { min-height: 0; overflow-y: auto; }
   /* z-index 31, and that number is load-bearing. Moving this strip outside the panel walked it
      straight into `#tl-resizer`, which is at z-index 30 and — deliberately, see the rule below —
      reaches back across the inspector AND the rail so the whole band's top edge resizes the timeline.

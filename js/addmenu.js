@@ -612,6 +612,10 @@ window.FM = window.FM || {};
    * only the fit reads it. Those 11 extra pixels are the whole price of the pager being usable
    * with a mouse, and they are taken out of the grid, so keep the CSS and this number in step. */
   var FIT_DOTS = 26;
+  /* One library tile plus its gap, in the PC panel. MEASURED off the rendered grid (63px tile, 8px
+     gap) rather than assumed — and CSS still owns the truth, so a test asserts the rendered pitch
+     matches these. If that test goes red the numbers here are stale, not the layout. */
+  var LIB_ROW_H = 63, LIB_GAP = 8, LIB_PITCH = LIB_ROW_H + LIB_GAP;
   var FS_MIN = 9.6;       // the label font at the smallest tile; the height floors are derived from it
   var FIT_CFG = {
     /* The minimums are not taste — each is the geometric floor of the tile it describes, and this
@@ -1229,7 +1233,12 @@ window.FM = window.FM || {};
           }
         }
         applyPlan(plan, box);
-        var COLS = iconOnly ? (variant === 'sheet' ? 5 : 6) : (variant === 'sheet' ? 3 : 4);
+        /* ⚠️ 5, NOT 4 — THIS HAD TO MATCH THE CSS AND DID NOT (queue 542). styles.css line ~4644 lays a
+           panel's library grid out as `repeat(5, 1fr)`, while this said 4. So every page was FILLED for
+           four columns and RENDERED in five: the top row carried five tiles, the rows under it did not
+           line up with it, and the page count was wrong. Measured on his own window — the grid reported
+           five 53.2px columns while perPage was still being computed from 4. */
+        var COLS = iconOnly ? (variant === 'sheet' ? 5 : 6) : (variant === 'sheet' ? 3 : 5);
         var perPage = plan ? plan.perPage : (iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12));   // shapes 5x3 / 6x3; others 3x3 / 4x3
         /* TWO ROWS, PAGED SIDEWAYS — queue 358, correcting queue 299 / v9.47.
            His words: "When I said I wanted the media and audio rows to be only two rows instead of three
@@ -1254,7 +1263,47 @@ window.FM = window.FM || {};
            screenshot. Three rows come to ~208px and still fit, which is the "don't make anything worse"
            half — a shorter sheet is the risk #431 was about, and this was checked against the tallest
            stage (9:16), not just the aspect he happened to send. */
-        if (isLib) perPage = Math.max(1, 3 * COLS);
+        /* ⚠️ THREE ROWS IS A PHONE MEASUREMENT, AND IT WAS BEING APPLIED TO A PC PANEL A THIRD ITS
+           HEIGHT (queue 542). Ezra: "media and audio menus have broke on pc" — his screenshot shows the
+           bottom row of tiles sliced through by the panel edge and the pager pushed below it.
+           `3 * COLS` was measured on a 390px phone, where the note above records the library body as
+           260px and three rows as ~208px. Measured on PC at his own window: the inspector column is
+           232px tall with a 63px body. Three rows cannot fit, so the third is cut off.
+           There was a SECOND fault stacked on it, and it is the one that made the arrangement ragged
+           rather than merely tall: `COLS` here is a hardcoded 4, but the grid actually renders with
+           `plan.cols` from the fit solver — 5 in his screenshot. So the page was being FILLED for four
+           columns and LAID OUT in five, which is why his top row had five tiles and the rows below it
+           did not line up.
+           Both come out by using the plan, which is the machinery sitting immediately above this line
+           and being bypassed: it already sizes columns AND rows to the real box.
+           ⚠️ THE PHONE IS DELIBERATELY UNTOUCHED. `fitOn` (see above) is `variant === 'panel'` AND
+           min-width 701px, so `plan` is null on a phone and the 3-row fallback below is exactly what
+           shipped — which matters, because three rows is what he ASKED for in queue 473 and two rows
+           paging sideways is what he asked for in 358. Neither of his numbers is overridden here; the
+           PC simply stops pretending it has a phone's height. */
+        if (isLib) {
+          if (plan) perPage = plan.perPage;
+          else if (fitOn) {
+            /* NO PLAN CAME BACK, WHICH IS THE CASE THAT WAS BROKEN. The fit solver's fallback only
+               accepts a grid that fits on ONE page, and a library with more items than fit never will —
+               so on a short PC panel it returns nothing and this fell through to the phone's constant of
+               three rows. Take the row count from the MEASURED body instead: the same question the
+               solver answers, asked directly. Clamped to his three (queue 473) at the top.
+               ⚠️ AND TO **ONE** WHEN THERE IS NO ROOM AT ALL, which is his actual window: measured on it,
+               the tab strip and the Import/Sound-effects/Record strip take 203px of a 231px panel, so
+               fitBox reports ZERO usable height and returns null. Three rows there is 204px of tiles in
+               26px of space. One row plus the pager is the most that can honestly be offered, and the
+               panel's own scroll (see styles.css, same queue) reaches the rest. */
+            var lb = fitBox(FIT_DOTS) || fitBox(0);
+            var rows = lb ? Math.max(1, Math.min(3, Math.floor((lb.h + LIB_GAP) / LIB_PITCH))) : 1;
+            perPage = Math.max(1, rows * COLS);
+          }
+          /* ⚠️ THE PHONE IS UNTOUCHED, and this branch is what guarantees it. `fitOn` is false on a
+             sheet, so `host` is null, so fitBox returns null there for a reason that has nothing to do
+             with space — meaning the measured path above would have quietly given his phone ONE row
+             where queue 473 asked for three. Kept explicit rather than relying on the clamp. */
+          else perPage = Math.max(1, 3 * COLS);
+        }
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';

@@ -28144,6 +28144,91 @@
     }
   });
 
+  test('on PC the Add menu stays inside the inspector panel on every tab (queue 542)', { item: '542' }, async function () {
+    /* Ezra: "media and audio menus have broke on pc". Measured on his window: the panel is 232px tall,
+       the Audio tab's content was 344px, and NOTHING held the menu to the panel — the add-menu root was
+       293px and the body ran from y=203 to y=302 inside a 231px box. The panel is deliberately
+       `overflow: visible` there (the resize handle lives at top:-9px, OUTSIDE it, and a scroller would
+       clip it), so the spill was cut off by #app's `overflow: hidden`. Not scrolled past, not paged:
+       gone. Every tile below the fold was unreachable by any gesture.
+       ⚠️ The rule that set `overflow: visible` carried a safety argument — "planGrid() sizes the tile
+       area to the panel and the body gives it its own scroller when it cannot". Both halves had quietly
+       stopped being true: planGrid returns NULL on a panel too short to plan with, and the body could
+       not scroll because nothing constrained it to the panel in the first place.
+       So what is asserted is the INVARIANT that comment assumed, for every tab rather than the two he
+       happened to report: the menu's body ends inside the panel. Where the content still cannot fit, the
+       body must be a scroller — that is the honest fallback, and it is checked too. */
+    if (window.innerWidth < 701) return;              // the panel layout only exists on PC
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) throw new Error('no #inspector-panel at ' + window.innerWidth + 'px wide — this test cannot see the thing it is about');
+    const saved = FM.scene.selectedId;
+    /* ⚠️ THE LIBRARY HAS TO HAVE THINGS IN IT, AND THIS IS THE CONTROL THAT WAS MISSING. A fresh
+       profile has an empty media library, so Media and Audio show three buttons and nothing overflows —
+       the bug is invisible. The first version of this test did not seed anything, and a mutation
+       deleting the panel's entire containment SURVIVED it: the test ran, measured a menu with nothing
+       in it, and reported green. Fourteen entries is what his own screenshot shows. */
+    const LIBKEY = 'fm.medialib';
+    const libBefore = localStorage.getItem(LIBKEY);
+    const now = Date.now();
+    localStorage.setItem(LIBKEY, JSON.stringify(Array.from({ length: 14 }, (_, i) => ({
+      mid: 't' + i, key: 'tk' + i, fp: 'tf' + i, name: 'Probe ' + i + '.wav', kind: 'video',
+      audio: true, w: 0, h: 0, dur: 1.2, size: 1000, added: now - i
+    }))));
+    try {
+      FM.selectLayer(null);
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+      await sleep(120);
+      /* ⚠️ NO SILENT RETURN HERE. The first version of this test skipped when the add menu was not
+         showing, and a mutation that deleted the panel's whole containment SURVIVED it — the test was
+         no-opping and reporting green. If the menu is not there, that is a broken test, not a pass. */
+      const root = panel.querySelector('.addmenu');
+      if (!root) throw new Error('deselecting everything did not put the Add menu in the inspector panel, so this test measured nothing (panel showed: ' + (panel.textContent || '').trim().slice(0, 80) + ')');
+      const tabs = [].slice.call(root.querySelectorAll('.addmenu-tab'));
+      if (tabs.length < 3) throw new Error('only ' + tabs.length + ' tabs rendered, so this is not measuring the real menu');
+      const bad = [];
+      let sawOverflowingTab = false;
+      for (const t of tabs) {
+        t.click(); await sleep(90);
+        const body = root.querySelector('.addmenu-body');
+        if (!body) continue;
+        /* Did this tab actually have more content than room? If none does, the assertions below are
+           true of a menu that never needed containing, and prove nothing.
+           ⚠️ MEASURED ON THE BODY, not on the menu as a whole — and the difference matters, because the
+           first version of this control got it wrong. Once the fix is in, NOTHING overflows the menu:
+           that is the point of it. What survives is the body having more content than its own height,
+           which is exactly the state the fix converts into a scroller instead of a clipped spill. */
+        if (body.scrollHeight > body.clientHeight + 1) sawOverflowingTab = true;
+        const pr = panel.getBoundingClientRect(), br = body.getBoundingClientRect();
+        const past = Math.round(br.bottom - pr.bottom);
+        if (past > 1) bad.push(t.dataset.key + ': its body ends ' + past + 'px BELOW the panel, where #app clips it — unreachable');
+        /* …and if the content is taller than the body, the body has to be the scroller, or the same
+           content is simply hidden one level further in. */
+        if (body.scrollHeight > body.clientHeight + 1 && getComputedStyle(body).overflowY === 'visible') {
+          bad.push(t.dataset.key + ': its content overflows the body by ' + (body.scrollHeight - body.clientHeight) + 'px and the body does not scroll');
+        }
+      }
+      /* THE CONTROL FOR THE RULE THAT MADE THIS FIXABLE: the resize handle must still sit OUTSIDE the
+         panel. Making the panel itself a scroller would satisfy every assertion above and quietly clip
+         the handle he asked to be there — "the button to do it shouldnt be at the top of the screen". */
+      const rez = document.getElementById('am-resizer');
+      if (rez && getComputedStyle(rez).display !== 'none') {
+        const top = rez.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+        if (top > -1) bad.push('the add-menu resize handle is at ' + Math.round(top) + 'px inside the panel — it is meant to sit above its top edge');
+      }
+      /* THE REAL FAULT REPORTS FIRST. Both of these fire when the containment is removed — the body
+         escapes the panel AND, because it is no longer constrained, it stops being a scroller so the
+         control below trips too. Checked in this order so the message names the actual defect rather
+         than the side effect. */
+      if (bad.length) throw new Error(bad.join(' | '));
+      if (!sawOverflowingTab) throw new Error('no tab had more content than the panel has room for, so "it all stays inside" is true of nothing — the seeded library did not reach the menu');
+    } finally {
+      if (libBefore == null) localStorage.removeItem(LIBKEY); else localStorage.setItem(LIBKEY, libBefore);
+      FM.selectLayer(saved || null);
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+      await sleep(40);
+    }
+  });
+
   test('the Template icon does not depend on matching the background (queue 546)', { item: '546' }, async function () {
     /* Ezra picked the "stamp" — a dashed master with a solid copy in front — from five drawn options,
        after three earlier attempts at this icon he rejected.

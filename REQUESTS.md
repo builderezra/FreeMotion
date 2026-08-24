@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.34
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.35
 >
-> **State:** v12.34, **921 tests green**, tree clean.
+> **State:** v12.35, **922 tests green**, tree clean.
+>
+> **✅ v12.35 — THE MEDIA AND AUDIO MENUS ON PC ARE FIXED (#542).** The add menu was not being held
+> inside the inspector panel at all, so everything past the fold spilled out and was clipped by the app
+> shell — unreachable by any gesture, not merely ugly. Two smaller faults came out with it: pages were
+> being filled for four columns while the CSS draws five, and the row count came from a phone
+> measurement. Your phone is untouched.
 >
 > **✅ v12.34 — the template icon is finally settled (#546, and it closes #432 and #510 with it).** You
 > picked the stamp: a dashed master with a solid copy in front. Fourth attempt at this icon, first one
@@ -17662,10 +17668,41 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Check the recent releases first.** v12.29 changed `styles.css`, v12.30 and v12.31 changed
       `js/compositor.js`. None of them is obviously the timeline, but "obviously" is not a check.
 
-- [ ] **542 — 🔴 PC: the Media and Audio menus are broken.** (24 Aug, PC screenshot at v12.30.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **542 — 🔴 PC: the Media and Audio menus are broken.** (24 Aug, PC screenshot at v12.30.)
 
-      📐 **THE CAUSE, FOUND 24 Aug — one line in `js/addmenu.js`:**
+      🔴 **WHAT IT ACTUALLY WAS — measured in the real inspector, not in a probe.** Your panel is 232px
+      tall; the Audio tab's content was 344px. **Nothing held the add menu to the panel** — its body ran
+      from y=203 to y=302 inside a 231px box, so it was already outside before anything was clipped.
+      That panel is `overflow: visible` ON PURPOSE: the add menu's resize handle sits just above its top
+      edge (queue 302, your *"it can sit outside on the top"*), and a scrollbar would clip it. So the
+      overflow was cut off by the app shell instead — not scrolled past, not paged, just **gone**. Every
+      tile below the fold was unreachable by any gesture, which is what your screenshot shows.
+      ⚠️ **The rule that set `overflow: visible` had a safety argument written into it** — that the grid
+      solver sizes the tiles to the panel, and the body falls back to its own scrollbar when it cannot.
+      **Both halves had quietly stopped being true**, which is how this broke with nobody touching it:
+      the solver returns NOTHING on a panel too short to plan with, and the body could not scroll because
+      nothing constrained it to the panel in the first place. Both are restored, so that argument holds
+      again — and there is now a test for the invariant it assumed, across every tab rather than the two
+      you happened to report.
+      **Two smaller faults came out with it, both real:**
+      · the page size was computed for **four** columns while the CSS lays a panel library out in **five**
+        (styles.css ~4644), so pages were under-filled and the rows did not line up — which is why your
+        top row had five tiles and the ones under it did not match it;
+      · when the solver returns nothing, the row count now comes from the **measured height** instead of
+        the three measured on a 390px phone. **Your phone is deliberately untouched** — three rows there
+        is #473, and two-rows-paging-sideways is #358. Neither of your numbers is overridden.
+      ⚠️ **Where it still cannot fit, the body scrolls rather than hiding anything.** On a 232px panel the
+      tabs plus the Import / Sound effects / Record strip take ~138px, so the library genuinely has little
+      room left. Nothing is unreachable now, and the resize handle exists to give it more — but if it
+      still feels cramped, the thing to change is that action strip, and that is a design call for you.
+
+      📐 **MY FIRST DIAGNOSIS, KEPT BECAUSE IT WAS WRONG IN A USEFUL WAY.** I concluded the cause was the
+      one line below forcing three rows. That line IS a real fault and is fixed — but it was not why the
+      tiles vanished, and I only found that out by measuring the REAL inspector instead of the synthetic
+      host I had been testing in, which could not reproduce the containment the panel actually has.
+      **Measure the layout you ship to, not the one you built to look like it.**
+
+      📐 **THE FIRST (INCOMPLETE) CAUSE — one line in `js/addmenu.js`:**
       ```
       if (isLib) perPage = Math.max(1, 3 * COLS);
       ```
