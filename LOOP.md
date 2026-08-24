@@ -97,7 +97,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.28, 911 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.29, 912 tests green, tree clean, `HEAD == ssh/main`.**
+**Last tick: #456 + #507 shipped** — the two rainbow ＋ buttons are now cool (home, hue-drifting) vs warm
+(in-project, turning AND breathing on a different period). They had been the identical ramp and the home
+one was not animated at all.
+⚠️ **A test I had written demanded they be IDENTICAL, and that is part of why this sat four days.** Queue
+384 said "siblings"; I encoded that as *the same conic gradient*, which is an inference, not his words —
+and it then guarded against what he asked for on 21 Aug. **Lesson now recorded in #507: a test that
+encodes MY reading of a word must say so in its comment**, or the next session reads it as his instruction.
+Still open on the ＋: option A as pitched was "warm + counter-sweep"; the counter-sweep needs a third layer
+(disc and specular already own `::before`/`::after`), so I shipped warm + breathe. If he says it still just
+spins, the counter-sweep is a small follow-up, not a redesign.
 **✅ LIVE DEPLOY RE-VERIFIED END TO END, 24 Aug at v12.20** (the previous claim was v11.50, twenty releases
 stale). On the real Pages URL at 380px: boots, service worker controlling, all 71 assets served from cache,
 running version matches the HTML, renders a layer WITH an effect, and produces a real MP4 — `3 KB · 0:01 ·

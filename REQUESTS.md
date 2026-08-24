@@ -17463,3 +17463,19 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Blend modes have a real trap: the overlay must composite against the LAYER, not the canvas
       underneath it, or "multiply" will darken everything behind the layer too. Verify with a layer on a
       contrasting background before calling it done.
+
+- [ ] **538 — Tapping the canvas while the effects menu is open should pause playback, with a pause animation and a briefly-appearing pause button.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make it so if you tap the canvas when in the effects menu it pauses the playback, make it have a nice pause animation and a little pause button appears briefly before fading away
+      **Clauses — tick separately:**
+      1. [ ] **Tap the canvas while the effects menu is open → playback pauses.** Note the scope: he says
+             *"when in the effects menu"*, so this is not a blanket tap-to-pause on the canvas. Check what
+             a canvas tap currently does in that state before adding to it — if it selects or deselects a
+             layer, pausing has to coexist with that rather than replace it.
+      2. [ ] **A nice pause animation**, not an instant stop of the transport.
+      3. [ ] **A little pause button appears briefly and fades away** — the YouTube/player convention: the
+             glyph blooms in the middle of the canvas, holds for a moment, then fades. It is feedback, not
+             a control, so it must not eat the tap or sit in the way of the layer underneath.
+      ⚠️ Mobile-first: verify at ~380px that the glyph is centred on the CANVAS, not the viewport, and that
+      it cannot be left stuck on screen if you tap again mid-fade.
