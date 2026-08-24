@@ -42354,4 +42354,65 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+
+  /* ═══ 499: HOLDING THE TIMELINE MUST NOT OFFER TO WIPE EVERY MARKER.
+     Ezra, 24 Aug: "Get rid of the feature where holding on the timeline gives you an option to get rid
+     of all markers." Same objection as queue 337, which took "Add marker here" off this menu one item
+     earlier; 337's note said Rename/Remove/Clear stay, and he has now overruled the Clear part.
+     Both halves are asserted, because "remove the item" is easy to overshoot into "remove the menu":
+     on empty ruler nothing may open at all, and ON a marker the Rename/Remove pair must survive. */
+  test('499: long-pressing the ruler never offers to clear all markers', { item: '499' }, async function () {
+    const ruler = document.getElementById('tl-ruler');
+    if (!ruler) throw new Error('#tl-ruler is missing');
+    if (!FM.contextMenu || typeof FM.contextMenu.show !== 'function') throw new Error('FM.contextMenu.show is missing — the menu cannot be captured');
+    const P = FM.scene.project;
+    const savedMarkers = (P.markers || []).slice();
+    const realShow = FM.contextMenu.show;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    let shown = null;
+    try {
+      FM.contextMenu.show = function (x, y, items) { shown = items; return null; };
+      P.markers = [{ t: 0.5, label: 'A' }, { t: 2.0, label: 'B' }];
+      FM.timeline.rebuild();
+      await sleep(150);
+
+      const rb = ruler.getBoundingClientRect();
+      if (!(rb.width > 30)) throw new Error('the ruler has no width on screen (' + rb.width + '), so a press cannot be aimed at it');
+      const press = (frac) => {
+        shown = null;
+        const x = rb.left + rb.width * frac, y = rb.top + rb.height / 2;
+        ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+        return shown;
+      };
+
+      /* ── ON a marker: the menu must still exist and still offer its two items. This is the control —
+         if pressing produced nothing anywhere, the assertion below would pass having tested nothing. */
+      let onMarker = null;
+      for (let f = 0.02; f <= 0.98 && !onMarker; f += 0.02) {
+        const got = press(f);
+        if (got && got.some(i => /rename/i.test(i.label || ''))) onMarker = got;
+      }
+      if (!onMarker) throw new Error('no press anywhere along the ruler produced a marker menu, so this test cannot tell whether the Clear item is gone or the whole menu is');
+      if (!onMarker.some(i => /remove/i.test(i.label || ''))) throw new Error('the marker menu no longer offers Remove — taking Clear away has taken more with it than he asked for: ' + onMarker.map(i => i.label).join(' / '));
+
+      /* ── and nowhere on the ruler may offer to wipe them all. */
+      const offenders = [];
+      for (let f = 0.02; f <= 0.98; f += 0.02) {
+        const got = press(f) || [];
+        got.forEach(i => { if (/clear all|all markers|remove all/i.test(i.label || '')) offenders.push(i.label); });
+      }
+      if (offenders.length) throw new Error('holding the ruler still offers "' + offenders[0] + '" — that is the item he asked to be removed, and it wipes every marker in the project with no confirmation');
+
+      /* ── with no marker under the press and nothing else to offer, NOTHING should open. */
+      P.markers = [{ t: 99, label: 'far away' }];
+      FM.timeline.rebuild();
+      await sleep(120);
+      const empty = press(0.5);
+      if (empty && empty.length) throw new Error('pressing empty ruler opens a menu holding ' + JSON.stringify(empty.map(i => i.label)) + ' — with Add and Clear both gone it should open nothing at all');
+    } finally {
+      FM.contextMenu.show = realShow;
+      P.markers = savedMarkers;
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();

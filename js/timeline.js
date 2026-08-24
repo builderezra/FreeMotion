@@ -3140,7 +3140,16 @@ window.FM = window.FM || {};
            timecode chip (js/app.js:3795) and M on a keyboard (js/app.js:4995). Worth knowing for later:
            queue 364 moves that first route onto the playhead's top, so the two changes agree rather than
            leaving the feature unreachable. */
-        if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { const hadThumb = P.markers.some(m => m.thumb); P.markers = []; unpinIf(hadThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
+        /* NO "CLEAR ALL MARKERS" EITHER (queue 499). Ezra, 24 Aug: *"Get rid of the feature where holding
+           on the timeline gives you an option to get rid of all markers"* — the same objection as queue
+           337 above, one item later. Wiping every marker in the project is not something a long-press on
+           empty ruler should offer: it is the one action here that destroys work you cannot see from
+           where you are pressing, and there is no confirmation step in front of it.
+           Rename and Remove stay. They act on a marker you are already pointing at, he did not ask for
+           them, and 337's note warned specifically against taking the whole gesture away with the item.
+           Markers are still removable one at a time, which is the only route he has asked to keep.
+           With this gone, a long-press on a stretch of ruler with no marker under it now produces NO
+           menu at all — both callers below already refuse to open an empty one, and skip the buzz too. */
         return items;
       };
       rulerEl.addEventListener('contextmenu', (e) => {

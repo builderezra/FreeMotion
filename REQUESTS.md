@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.19
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.20
 >
-> **State:** v12.19, **903 tests green**, tree clean.
+> **State:** v12.20, **904 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16803,8 +16803,14 @@ re-opened #480, which I had marked done and had not fixed.
       The export dialog got better too: scrolled to the end, its last row is now completely clear of the
       buttons instead of tucked under them, and Export stays reachable exactly as #494 requires.
 
-- [ ] **499 — Remove the "clear all markers" option from the timeline long-press.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **499 — Remove the "clear all markers" option from the timeline long-press.** ✅ **DONE v12.20 — same day.** (24 Aug.)
+      It is gone. **Rename and Remove stayed**, because they act on a marker you are already pointing at and
+      you did not ask for those — #337's note warned specifically against taking the whole gesture away
+      along with the item, which is the mistake to avoid here.
+      **A side effect worth knowing:** with both Add (#337) and Clear now removed, holding a stretch of
+      ruler with no marker under it opens **nothing at all** — no menu, no buzz. Both paths already
+      refused to open an empty menu, so that came for free.
+      Markers are still removable one at a time, and still addable from the timecode chip or the M key.
       His words, verbatim:
       > Get rid of the feature where holding on the timeline gives you an option to get rid of all markers
 

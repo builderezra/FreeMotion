@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.19, 903 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.20, 904 tests green, tree clean, `HEAD == ssh/main`.**
 **⚠️ THE "EVERYTHING IS BLOCKED ON EZRA" READING WAS WRONG, and rule 8b called it.** That audit concluded
 every open entry needed a word from him. On 23 Aug a 60-agent adversarial review of the week's own work
 produced **14 confirmed defects**, every one verified against an independent attempt to refute it, and every
