@@ -83,8 +83,16 @@ or a gate — not a paragraph.
 So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
 the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
 
+⚠️ **`timeout: 900000` DOES NOT WORK — the Bash tool caps at 600000 and silently clamps.** Asking for 900s
+gets 600s, and at 911 tests a double suite run plus the push now exceeds that, so ship.sh gets backgrounded
+mid-flight (24 Aug, v12.28). It still finishes and still pushes — the notification arrives and the output
+file has the result — but that is exactly the background-and-poll this section exists to stop.
+**So: pass `timeout: 600000` (the real maximum) and expect ship.sh to sometimes land in the background.
+When it does, do NOT re-run it.** Read the output file, then verify with `git rev-parse HEAD` against
+`ssh/main` — re-running would re-run two four-minute suites for nothing.
+
 **Always pass an explicit timeout instead:** `timeout: 500000` for a bare suite run — but **`timeout:
-900000` for `tools/ship.sh`, which runs the suite TWICE** (desktop, then again at 380px) whenever a
+600000` (the cap) for `tools/ship.sh`, which runs the suite TWICE** (desktop, then again at 380px) whenever a
 `js/*.js`, `styles.css` or `index.html` change is being shipped. 500s is not enough for that and the
 ship gets backgrounded mid-push, which is exactly the background-and-poll this section exists to stop.
 Measured at v11.83: two green passes plus the push took just over eight minutes. One call, one result,
