@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.32
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.33
 >
-> **State:** v12.32, **919 tests green**, tree clean.
+> **State:** v12.33, **920 tests green**, tree clean.
+>
+> **✅ v12.33 — the two icons you picked (#543).** Sample clip is a real clapperboard; AI Scene is a
+> drawn sparkle pair instead of the emoji. You were right about the lines: the crossbar ran exactly
+> along the box's own edges and the caps grew past them.
 >
 > **✅ v12.32 — THE TIMELINE BUG IS FIXED, AND YOU DID NOT BREAK IT.** Grabbing a layer by its ≡ handle
 > and then having the pointer taken away (a right-click, an app switch) left the rows stacked on top of
@@ -17646,16 +17650,21 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ This is the PC layout again (#511, #481), and it is the same shape of fault as #494/#498: a
       panel whose content is taller than its box and is being clipped rather than scrolled or paged.
 
-- [ ] **543 — The AI Scene button needs a real designed icon, not an emoji; and the sample-clip icon has lines running through it.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **543 — The AI Scene button needs a real designed icon, not an emoji; and the sample-clip icon has lines running through it.** (24 Aug.)
       His words, verbatim:
       > Create a design for the ai scene button instead of just an emoji and also fix up the sample clip icon because the lines are going through it
       **Two separate things — tick separately:**
-      1. [ ] **AI Scene is using an EMOJI as its icon.** Every other tile in that menu has a drawn SVG,
+      1. [x] ✅ **v12.33 — A2, the sparkle pair.** AI Scene is using an EMOJI as its icon. Every other tile in that menu has a drawn SVG,
              so this one reads as unfinished next to them — and an emoji also renders differently on
              every platform, which is why it looks out of place. Draw it as an inline SVG in the same
              stroke weight and corner style as its neighbours.
-      2. [ ] **The sample-clip icon has lines passing through it.** Something behind or around the icon
+      2. [x] ✅ **v12.33 — S2, a real clapperboard. And you were describing the geometry exactly:** the
+             crossbar ran `x=4 → 20`, which IS the box's own left and right edges, and the two ticks
+             started at `y=5`, the top edge. Every icon in this menu uses a ROUND line cap, so all three
+             ends grew another 0.9px past the border. **It was never the drawing, it was the endpoints** —
+             which is why redrawing the glyph would have fixed nothing, as this entry warned. The new
+             clapper has a tilted slate above the body, so no line has to stop precisely on a border.
+             **The sample-clip icon has lines passing through it.** Something behind or around the icon
              (a row rule, a grid line, the tile border) is crossing the artwork instead of sitting
              behind or outside it. **Find what the lines actually are before redrawing the icon** — if
              they are a container's border, redrawing the glyph fixes nothing.

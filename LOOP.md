@@ -97,7 +97,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.32, 919 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.33, 920 tests green, tree clean, `HEAD == ssh/main`.**
+⏸️ **PAUSED FOR DESIGN WORK AT HIS REQUEST (#544).** He picked the icons (#543) and both shipped in
+v12.33. Ask him what is next before resuming the oldest-first list.
+**v12.33: the Add menu's two odd tiles.** AI Scene was the ONLY `emoji:` entry in the menu; now a drawn
+sparkle pair. Sample clip's "lines going through it" was endpoints, not artwork — the crossbar spanned
+`x=4→20`, the box's own edges, and ico()'s ROUND linecap grew every end 0.9px past them.
+⚠️ **Two process notes from this one.** (1) The browser served a CACHED `addmenu.js` and the new icon
+read as missing — the `?v=` bump is what fixed it, exactly as CLAUDE.md warns. (2) My first test demanded
+viewBox+stroke-width from EVERY tile and went red on 47: the SHAPE tiles use icoPoly at each shape's own
+aspect ON PURPOSE (queue 159). **A test asserting a rule the app never had is not a safeguard.**
+**NEXT once he says go: #542**, the Media and Audio menus broken on PC.
 ⏸️ **THE LOOP IS PAUSED AT HIS REQUEST — he asked to do design work together (#544).** Not stopped, not
 cron-deleted (rule 8b): waiting on him to say WHICH things. Resume the oldest-first list after that.
 **v12.32: the timeline froze mid-drag (queue 541)** — a ≡ reorder whose pointer was LOST left the rows

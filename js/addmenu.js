@@ -362,8 +362,30 @@ window.FM = window.FM || {};
           + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
           + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#fm-ic-imp)"/>'
           + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#fm-ic-imp)"/>'), add: fileImport },
-        { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
-        { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
+        /* SAMPLE CLIP — a real clapperboard (queue 543). Ezra: "fix up the sample clip icon because
+           the lines are going through it", and he was describing the geometry exactly. The old art was
+           `rect x=4 w=16` with `M4 9.5h16` across it and two ticks starting at `y=5`: the crossbar ran
+           from x=4 to x=20, which IS the rect's left and right edge, and the ticks began ON the top
+           edge. ico() sets stroke-linecap="round", so every one of those ends grew another 0.9px past
+           the border — three lines poking out of the box. It was never the drawing, it was the
+           endpoints, which is why it looked like something was overlapping it.
+           Now the slate is its own tilted panel above the body, so there is no line that has to stop
+           exactly on a border to look right — the shape cannot come back. */
+        { label: 'Sample clip', icon: ico(
+          '<rect x="3.5" y="9.6" width="17" height="9.9" rx="1.6"/>'
+          + '<path d="M3.9 6.6 18.7 4.5a1 1 0 0 1 1.1.85l.3 2.1a1 1 0 0 1-.85 1.13L4.6 10.7a1 1 0 0 1-1.13-.85l-.3-2.1a1 1 0 0 1 .85-1.13Z"/>'
+          + '<path d="M4.4 9.6 6.9 6.1M10.1 9.6l2.5-3.5M15.8 9.6l2.5-3.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
+        /* AI SCENE — a drawn mark, not an emoji (queue 543). Ezra: "Create a design for the ai scene
+           button instead of just an emoji". It was the ONLY entry in this menu using `emoji`, so it sat
+           among fourteen line icons as a filled yellow glyph — and an emoji is rendered by the platform,
+           so it looked like a different thing on his phone than on his PC.
+           The four-point sparkle pair is the mark AI has settled on, and its silhouette carries no
+           rectangle, which matters here: almost every neighbour in this grid is box-shaped, so a shape
+           with no box is the one that is easy to find. It is also the closest thing to the ✨ it
+           replaces, so nobody has to re-learn where the button is. */
+        { label: 'AI Scene', icon: ico(
+          '<path d="M10.5 3.8l1.75 4.15 4.15 1.75-4.15 1.75-1.75 4.15-1.75-4.15L4.6 9.7l4.15-1.75Z"/>'
+          + '<path d="M17.4 14.2l.85 2 2 .85-2 .85-.85 2-.85-2-2-.85 2-.85Z"/>'), add: function () { FM.aiPanel && FM.aiPanel.show(); } },
       ];
       // …then everything you've imported before, newest first. One tap re-adds it — no picker, no
       // trip through the Photos app. (A browser can't read the camera roll; this is the closest

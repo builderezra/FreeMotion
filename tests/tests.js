@@ -28160,6 +28160,53 @@
     }
   });
 
+  test('every Add-menu tile is a DRAWN icon, never an emoji (queue 543)', { item: '543' }, async function () {
+    /* Ezra: "Create a design for the ai scene button instead of just an emoji". AI Scene was the only
+       entry in the whole menu using an emoji, which is why it stood out — fourteen line drawings and
+       one filled yellow glyph. An emoji is also drawn by the PLATFORM, so it was a different picture on
+       his phone than on his PC, which no amount of CSS fixes.
+       This asserts the rule rather than the one tile: no tile anywhere in the menu may be an emoji, and
+       every icon must use the shared contract its neighbours use. Replacing one glyph would have solved
+       today; this stops the next one going in. */
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      const tabs = FM.addMenu._tabs();
+      if (!tabs || !tabs.length) throw new Error('the Add menu exposes no tabs, so nothing below is being checked');
+      let seen = 0, checked = 0, emoji = [], offContract = [];
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      for (const tb of [].slice.call(host.querySelectorAll('.addmenu-tab'))) {
+        tb.click(); await sleep(60);
+        for (const card of [].slice.call(host.querySelectorAll('.addmenu-card'))) {
+          const label = ((card.querySelector('.addmenu-lbl') || {}).textContent || '').trim();
+          const ic = card.querySelector('.addmenu-ic');
+          if (!ic) continue;
+          seen++;
+          if (ic.querySelector('.add-emoji')) { emoji.push(label || '(unlabelled)'); continue; }
+          const svg = ic.querySelector('svg');
+          if (!svg) { offContract.push((label || '(unlabelled)') + ': no svg at all'); continue; }
+          /* ⚠️ THE GEOMETRY IS ONLY ASSERTED ON THE TWO ICONS THIS CHANGE DREW. My first version
+             demanded viewBox 0 0 24 24 and stroke-width 1.8 from EVERY tile and went red on 47 of
+             them — the shape tiles are built by icoPoly, which sizes each shape to its own aspect
+             ratio on purpose (queue 159, his "make them 1-1"). That is a deliberate difference, and a
+             test that called it a fault would have been me inventing a rule the app never had. */
+          if (/^(AI Scene|Sample clip)$/.test(label)) {
+            if ((svg.getAttribute('viewBox') || '') !== '0 0 24 24') offContract.push(label + ': viewBox "' + svg.getAttribute('viewBox') + '"');
+            if (String(svg.getAttribute('stroke-width')) !== '1.8') offContract.push(label + ': stroke-width ' + svg.getAttribute('stroke-width'));
+            checked++;
+          }
+        }
+      }
+      /* THE CONTROL: if the menu rendered no tiles, "none of them is an emoji" is true of nothing. */
+      if (seen < 12) throw new Error('only ' + seen + ' tiles rendered across every tab, so this test is not looking at the real menu');
+      if (checked !== 2) throw new Error('expected to find both the AI Scene and Sample clip tiles to check, found ' + checked + ' — the labels have moved and the geometry half of this test is measuring nothing');
+      if (emoji.length) throw new Error('these Add-menu tiles are still using an emoji instead of a drawn icon: ' + emoji.join(', '));
+      if (offContract.length) throw new Error('these icons do not match the geometry every other icon uses, so they will look wrong beside them: ' + offContract.join(' | '));
+    } finally { host.remove(); }
+  });
+
   test('a reorder drag whose pointer is LOST cannot freeze the timeline (queue 541)', { item: '541' }, async function () {
     /* HIS BUG, REPRODUCED. Ezra: "i broke the timeline somehow, fix this issue" — his PC screenshot
        shows the layer rows drawn on top of each other with the reorder handles piled in a stack, and
