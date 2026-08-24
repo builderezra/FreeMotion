@@ -113,8 +113,13 @@ into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
 **⚡ 24 AUG: EZRA SENT 26 REQUESTS IN ONE SITTING (498-523).** Log every one VERBATIM as it lands — he asked
 twice. Work them OLDEST-FIRST; he said *"don't actually do a straight away"*. **Workflows are authorised
-for any task that needs one** (his words, #516). 498-504 are done. **Next: 505 — elements/templates editable in their own sections. He is fed up about it
-("stop doing the lazy way out"), it goes with 340/342, and it needs a PLAN before any code.** **The white-chrome look (501+503) is gated on `WHITE_CHROME` in js/app.js —
+for any task that needs one** (his words, #516). 498-504 are done. **505 IS IN FLIGHT — measured, not yet built.** Tapping an element creates a real
+project every time, saving back MINTS A DUPLICATE element instead of updating it, and the draft project
+is left behind (all three verified by running it: projects 4->5, elements 1->2). So an element cannot be
+edited at all today, only forked. A workflow is pressure-testing two designs — (A) teach storage that the
+open document can BE an element, (B) keep a hidden draft but carry the element id, update in place and
+delete the draft on exit — against data-safety, faithfulness and simplicity. **Build it next tick from that
+plan. Acceptance is his: tap an element, change it, come back — one element, changed, no new project.** **The white-chrome look (501+503) is gated on `WHITE_CHROME` in js/app.js —
 he asked to be able to undo it in one move, so keep 503 on that same switch.**
 **ALL 14 REVIEW FINDINGS ARE CLOSED (485-496), plus 497.** `next.sh` now reports 1 actionable and 22 blocked.
 **That is not a reason to idle — rule 8b.** Audited the blocked list by hand on 24 Aug: 425, 96 and the rest
