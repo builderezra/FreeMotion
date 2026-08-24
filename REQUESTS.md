@@ -17208,3 +17208,25 @@ re-opened #480, which I had marked done and had not fixed.
       genuinely editing an element differently from these orphans. Do NOT auto-delete them — they may hold
       work he never saved as an element, and that is his to decide, not mine.
 
+- [ ] **526 — The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The lines around the middle play button should align with the lines on all the other buttons on the row - I think this would look good but make sure you're checking it's good as ur doing it and maybe adjust other variables to make it perfect
+      **Follows straight on from #503**, which gave the pill a white outline. Now that it HAS an outline, it
+      does not agree with its neighbours — his screenshot shows the pill's box a different height and its
+      edges not on the same lines as the skip / undo / redo / fullscreen buttons either side.
+      ⚠️ **He asked for it to be checked while doing it, and for other values to be adjusted to make it
+      right** — so this is measure-and-tune, not one guess: the pill's height, padding and radius against
+      the `.tbtn` box, at phone width AND on PC, and a screenshot each time rather than trusting numbers.
+
+- [ ] **527 — Remove the "No audio effects yet" line.** (24 Aug, phone screenshot at v12.25, circled.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Get rid of this text
+      **What he circled:** *"No audio effects yet — add one to shape this clip's sound."* in the Effects ▸
+      Audio panel, sitting directly above a "+ Add Audio Effect" button that already says the same thing.
+      Two lines telling you the same fact, one of them redundant — remove the sentence, keep the button.
+      ⚠️ Check whether the Visual and Filters tabs carry the same empty-state line; if they do, he will
+      almost certainly want those gone too, but he circled the audio one, so ask before removing all three
+      rather than assuming.
+
