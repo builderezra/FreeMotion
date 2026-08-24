@@ -147,6 +147,13 @@ HUNG at 'Encoding video 100%'. It had succeeded every time. The MP4 path deliber
 while that card is up, by design. I nearly reported 'export is broken on the live site'. **The control that
 saved it was running the same flow on localhost** — identical behaviour meant it was my probe, not the
 deploy. Read the completion path before instrumenting it.
+⚠️ **THE CLASSIFIER WAS READING ITS OWN STAMP — 14 ITEMS WERE UNREACHABLE (24 Aug).** `tools/status.sh`
+writes a STATUS line into each entry FROM `classify()`'s verdict, and the blocked stamp it writes
+("waiting on your answer") matches BLOCKED. So a blocked item stayed blocked forever regardless of what
+was written under it — #456 stayed hidden even after Ezra chased it. Two fixes, both self-tested:
+`classify()` now STRIPS `**STATUS:` lines before matching, and an explicit `UNBLOCKED` in the BODY beats
+both the prose and `WAITING ON EZRA`. **Put such markers in the body, never in the status line — that
+line is stripped.** ACTIONABLE went 13 → 27. `next.sh` saying "blocked" is a claim to audit, not a fact.
 ⚠️ **497: TWO BUGS CAN HIDE EACH OTHER, AND A LOOKUP THAT FINDS NOTHING REPORTS NOTHING.** A cleanup helper
 closed `#cv-dialog`, which does not exist (`#canvas-dialog` does), so it left the dialog open over the editor
 for the rest of every run — and a second test's stray inline `display:none` on that same dialog covered it up

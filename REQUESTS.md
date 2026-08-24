@@ -24,6 +24,14 @@
 > **#505 (elements/templates editable in their own sections) is the big one** and I am treating it as
 > such — it goes with #342 and #340, which say the same thing.
 >
+> ⚠️ **24 Aug: HALF THIS LIST WAS INVISIBLE TO MY OWN TOOL, and that is on me.** The script that picks
+> what to work on next was hiding 14 open items. Two bugs in it, both mine: it stamped "NEEDS YOU —
+> waiting on your answer" onto an entry and then READ ITS OWN STAMP back as proof you were still
+> being waited on — so once an item was marked as needing you, it could never become workable again.
+> And because this file keeps its history on purpose, the words that once placed a block sit in it
+> forever: **#456 was invisible because of a note I wrote, even after you chased me about it.** Both
+> are fixed with self-tests, and actionable items went 13 → 27.
+>
 > ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
 > 0. **Five seconds: drag a layer onto the add-layer row and tell me if it sticks.** I have now told
 >    you this was fixed three times (#357, #443, and my own v11.94 two days ago). v12.03 fixes a real,
@@ -2987,7 +2995,7 @@ better still, keep working inside the turn rather than parking work for a later 
         magnifier, at the identical magnitude you spotted there. All three glyphs now measure 0.00.
 
 - [ ] **250 — The slam Easter egg on PC is completely broken now. (16 Aug, REGRESSION.)** His words:
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       *"the slam easter egg on pc is competely broken now"* — told to me mid-task with *"dont let this
       distract you but also dont forget to log it"*, so it is written down here and waits its turn
       rather than jumping the queue.
@@ -15747,9 +15755,10 @@ wait for them to report back."*
       used and the test reads the FINISHED control, which catches both directions.
       **Two facts either side of a seam are not a test of the seam.**
 - [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      done any of that?"* — see #507. He told me what he wanted on 21 Aug; deciding to show him options
-      first was MY choice, and it turned a clear instruction into a four-day wait. Just build it.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **UNBLOCKED 24 Aug — I was wrong to be waiting.** He chased it: *"why haven't you done any of
+      that?"* — see #507. He told me what he wanted on 21 Aug; deciding to show him options first was MY
+      choice, and it turned a clear instruction into a four-day wait. **Build it.**
       better animation than a slow spin.** (21 Aug, from his phone.) His words, verbatim: *"I want the
       create button in the menu and in the project that are both rainbow to be different colours not the
       same (both moving)  and the one in the project that moves currently just spins In a slow circle
@@ -16986,7 +16995,7 @@ re-opened #480, which I had marked done and had not fixed.
       entry the moment it arrives, verbatim, and the queue is worked oldest-first rather than newest-first.
 
 - [ ] **507 — The two + buttons are STILL identical, and the moving one still just spins. He is asking why nothing has happened.** (24 Aug, two phone screenshots at v12.20.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > These plus buttons are still the same as each other and also the one that's moving inside the projects doesn't move interestingly like I've asked you to change it up like it's still the exact same like why haven't you done any of that?
       **What the shots show:** the in-project "Tap here to start creating" + and the home screen's floating +
@@ -17000,6 +17009,8 @@ re-opened #480, which I had marked done and had not fixed.
       to be built.**
       **Lesson worth keeping:** when he states what he wants, that is the decision. Options are for when I
       genuinely cannot tell what he means — not for taste calls he has already made.
+      ✅ **UNBLOCKED 24 Aug** — the "waiting on your answer" quoted above is my own past mistake being
+      recorded, not a live question. Nothing is outstanding from him on this one.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -17229,4 +17240,40 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check whether the Visual and Filters tabs carry the same empty-state line; if they do, he will
       almost certainly want those gone too, but he circled the audio one, so ask before removing all three
       rather than assuming.
+
+- [ ] **528 — The effects menu should sit slightly higher — there is a gap above it.** (24 Aug, phone screenshot at v12.25, circled.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Effects menu could pop up slightly higher to remove this slight gap
+      **What he circled:** the strip between the bottom of the canvas and the top of the effects sheet.
+      The sheet's rounded top edge sits a few pixels below where the canvas area ends, leaving a thin band
+      of background showing through, with the X and search buttons just under it.
+      **Measure the gap before moving anything** — it may be the sheet's own top offset, or the canvas
+      area's bottom padding, and nudging the wrong one will just move the seam somewhere else.
+
+- [ ] **529 — Multi-selecting effects worked once and is broken again.** (24 Aug, phone screenshot at v12.25.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > You got the effects I have selected working at one point but now they aren't again :(
+      **What the shot shows:** the Colouring category with eight effects carrying blue numbered badges —
+      1 Brightness, 2 Contrast, 3 Saturation, 4 Hue Shift, 5 Grayscale, 6 Sepia, **8 Invert, 7 Glow** —
+      so the picks are being counted, but the numbering is out of order and Saturation (3) has a grey star
+      while its neighbours are gold.
+      ⚠️ **"worked at one point but now they aren't again" means a REGRESSION**, so find what changed
+      rather than redesigning: git-log the effect browser's multi-pick and compare against the version he
+      is describing. The out-of-sequence 7/8 is a concrete clue — the order the badges show is not the
+      order they were tapped in.
+      ⚠️ Reproduce the whole gesture: tap several, then Done, and check that **every** one lands on the
+      layer, in the order shown.
+
+- [ ] **530 — Make the third canvas background swatch a green-screen green.** (24 Aug, phone screenshot at v12.25, circled.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Replace this default colour choice with a green screen green
+      **What he circled:** the third background swatch in Canvas settings — currently a very dark
+      near-black that is almost indistinguishable from the first (pure black) beside it. Two of the five
+      presets are effectively the same colour.
+      **Replace it with a proper chroma-key green** — the standard is `#00b140`; `#00ff00` is the other
+      common choice and reads brighter on a phone. Pick one, and check the swatch row still reads clearly
+      against the panel.
 

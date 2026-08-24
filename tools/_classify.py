@@ -64,6 +64,16 @@ BUCKETS = ['ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own sessi
 
 def classify(body):
     """body = the entry's full text, header line included. Returns one of BUCKETS."""
+    # ⚠️ IGNORE OUR OWN STATUS STAMP, OR THE VERDICT FEEDS ITSELF FOREVER (24 Aug).
+    # tools/status.sh writes a line into each entry from THIS function's answer, and the line it
+    # writes for a blocked item is "STATUS: 🟠 NEEDS YOU — waiting on your answer". That text matches
+    # the BLOCKED pattern below. So the moment an entry was stamped blocked it could never become
+    # actionable again: the stamp kept it blocked, no matter what was written underneath it.
+    # Found on #456 — Ezra chased it ("why haven't you done any of that?"), the entry was rewritten to
+    # say UNBLOCKED and "Just build it", and `next.sh` went on hiding it, because the stale stamp was
+    # still in the body. An item that cannot be un-blocked is exactly the unreachable-request failure
+    # this whole file exists to prevent, and the call was coming from inside the house.
+    body = '\n'.join(l for l in body.split('\n') if '**STATUS:' not in l)
     open_clauses = [l for l in body.split('\n') if CLAUSE.match(l)]
     hedged_only = bool(open_clauses) and all(HEDGED.search(l) for l in open_clauses)
     # AN ANSWER FROM HIM OUTRANKS EVERY "waiting on him" PHRASE IN THE ENTRY (21 Aug). The blocked
@@ -79,6 +89,14 @@ def classify(body):
     # a mere answer — he can answer and still say not yet — so lifting one has to be explicit rather
     # than inferred. Same shape as the answered-beats-blocked rule above.
     lifted = 'HOLD LIFTED' in body
+    # AN EXPLICIT UNBLOCK BEATS THE PROSE THAT PLACED THE BLOCK (24 Aug). Same shape as the two rules
+    # above, and needed for the same reason: this file keeps its history on purpose, so the words that
+    # once made an entry blocked are still sitting in it afterwards. #456 carried an old clause reading
+    # "⏳ WAITING ON EZRA — a letter, or a mix", and #507 QUOTES my own past mistake ("I marked it
+    # 'waiting on your answer' and left it") — both live blocks as far as a regex is concerned, and both
+    # long since decided. Ezra had chased #456 with "why haven't you done any of that?", which is the
+    # opposite of waiting on him. So a decision to proceed has to be sayable in a way the tool honours.
+    unblocked = 'UNBLOCKED' in body
     # LOOKING IS NOT ANSWERING. #250's measurable bug was fixed and the entry says plainly that only his
     # EYE is outstanding — but he had also answered a different question about it ("still want it at
     # all?" / "yes i want it"), and `answered` promoted it to actionable. The next loop tick would then
@@ -108,7 +126,7 @@ def classify(body):
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
-            'blocked on Ezra' if (needs_eye or BLOCKED.search(tail)) else
+            'blocked on Ezra' if (not unblocked and (needs_eye or BLOCKED.search(tail))) else
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
 
 
@@ -117,6 +135,32 @@ def classify(body):
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
 # else would notice if one stopped working. Each case below IS one of those bugs, in its own words.
 _CASES = [
+    # AN EXPLICIT UNBLOCK BEATS BOTH THE PROSE AND THE "needs his eye" MARKER (24 Aug). Real cases:
+    # #456 carried an old "WAITING ON EZRA — a letter, or a mix" clause and #507 quotes my own past
+    # "waiting on your answer" as history. Both were decided; both stayed invisible.
+    ("""- [ ] **456 — two buttons should differ**
+      ⏳ **WAITING ON EZRA — a letter, or a mix.**
+      **UNBLOCKED 24 Aug — he chased it, so build it.**""",
+     'ACTIONABLE',
+     "an explicit UNBLOCKED must beat WAITING ON EZRA — otherwise a decided item can never be worked"),
+    # …and without it, that same marker must still block.
+    ("""- [ ] **998 — something**
+      ⏳ **WAITING ON EZRA — a letter, or a mix.**""",
+     'blocked on Ezra',
+     "WAITING ON EZRA still blocks when nothing has un-blocked it"),
+    # THE STAMP MUST NOT DECIDE THE VERDICT (24 Aug). status.sh writes this line from classify()'s own
+    # answer; if classify() then reads it, a blocked item is blocked forever. Real case: #456.
+    ("""- [ ] **456 — two buttons should differ**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      He chased it on 24 Aug. Just build it — nothing is outstanding from him.""",
+     'ACTIONABLE',
+     "a stale STATUS stamp must not keep an entry blocked — that loop made #456 permanently invisible"),
+    # …and a REAL blocked phrase in the prose must still block.
+    ("""- [ ] **999 — something**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      This one genuinely needs one word from you before it can be built.""",
+     'blocked on Ezra',
+     "stripping the stamp must not stop real blocked prose from counting"),
     # The bug this file was extracted to fix: two copies of the rule drifting apart. Nothing to assert
     # there — but these are the behaviours that must survive any future edit.
     ('- [ ] **1 — plain** something to build', 'ACTIONABLE',
