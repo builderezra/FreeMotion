@@ -17277,3 +17277,42 @@ re-opened #480, which I had marked done and had not fixed.
       common choice and reads brighter on a phone. Pick one, and check the swatch row still reads clearly
       against the panel.
 
+- [ ] **531 — Adding a layer leaves a gap between the editor panel and the timeline until you start editing.** (24 Aug, phone screenshot at v12.25.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim, across three messages:
+      > When you add a layer and it instantly opens up it leaves this gap untill you start editing
+      > The gap between the editor and the timeline I mean
+      > As you can see per image
+      **What the shot shows:** a freshly added image layer, its panel already open — the eight numbered
+      cards, and above them the two trim buttons. Between the clip's row in the timeline and the top of
+      that panel there is a **band of empty background**, roughly a row's height. It closes once he starts
+      editing, so something sizes correctly on the first interaction and not on the way in.
+      **Likely shape:** the panel's height or the timeline's bottom inset is computed before the panel has
+      laid out, so the first measurement is stale and only a later reflow corrects it. **Measure the gap on
+      the frame it appears, not after** — and check whether it also happens when selecting an EXISTING
+      layer, which would tell you whether it is about the add or about the panel opening.
+
+- [ ] **532 — Standing instruction, restated: log everything and work oldest-first.** (24 Aug.)
+      **STATUS: 🟢 STANDING — not a build**
+      His words, verbatim:
+      > Make sure you're logging and continuing through everything from oldest first
+      Same as **#506**, said again after another run of requests. Recorded rather than merged, because the
+      repetition is itself the signal: he has had to say it twice.
+
+- [ ] **533 — 🔴 CORRECTION to #502: he meant the ADD-LAYER SWITCH does not update live, not the picture.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > I don't remember what I said when I mentioned dragging a layer updates the picture live but what I meant was the switch that you press to move the add layer wasn't updating live when it should, also fix that
+      ⚠️ **So #502 answered a question he did not ask.** What I shipped in v12.23 — the canvas following a
+      layer drag — is real and worth having (the reorder used to be invisible until you let go), but it is
+      NOT what he was reporting. **What he actually means:** while you drag a layer, the add-row switch
+      should track where the add row is going, and it is not doing so on his device.
+      ⚠️ **This is the third entry about that switch** — #438 made it follow the drag, and #480 fixed the
+      coordinate bug that made it lean to the wrong place (it was publishing a position among ROWS into a
+      value that indexes LAYERS). Both are shipped and tested, so **reproduce it on a phone before
+      changing anything**: the likely gap is a case those tests do not cover — dragging the ADD ROW
+      ITSELF, or a drag that never moves far enough to change the gap index, since the switch is only
+      republished when the gap changes.
+      **Do not assume #480's fix is wrong** — measure first, and if it is right, find which gesture is
+      not covered.
+
