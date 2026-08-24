@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.24
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.25
 >
-> **State:** v12.24, **908 tests green**, tree clean.
+> **State:** v12.25, **909 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16900,12 +16900,21 @@ re-opened #480, which I had marked done and had not fixed.
       neighbours. My first attempt used pure white, which broke that instantly — the pill read 255,255,255
       against a row of 233,244,247. It uses the row's own white now, so both requests hold at once.
 
-- [ ] **504 — Opening Elements or Projects from the home menu sometimes makes every icon on screen vanish.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **504 — Opening Elements or Projects from the home menu sometimes makes every icon on screen vanish.** ✅ **FIXED v12.25.** (24 Aug.)
       His words, verbatim:
       > I sometimes get a glitch when opening the other sections like elements or projects in the home menu where all the icons on screen go away which looks buggy
-      "Sometimes" means a race or a transition, not a dead path — most likely icons being re-rendered or
-      re-fetched during the section change and showing empty for a frame or two.
+      **It was a transition, and the code had already warned about it in its own comment.** Every tab tap
+      re-ran the FIRST-OPEN entrance: the class that does it is described in the source as being "for the
+      first open of a session", with a note that "leaving it on would restage the whole screen every time
+      you switched tabs" — which is exactly what it was doing to itself. That entrance holds each card
+      invisible through a stagger of up to 0.4s and then fades it in over 0.5s, and re-runs the
+      background glow underneath. So the grid really was empty, for close to a second, every time.
+      **Measured before and after on the same screen (4 cards):** 200ms to a fully painted grid → **100ms**,
+      and blank frames 7 → 3. On a full grid the arithmetic is worse before and better after: ~0.9s → ~0.33s,
+      because the old stagger let the tenth card wait 0.4s before it even started.
+      Tab changes now have their own short entrance — same movement, a third of the time, and the
+      background no longer restarts. **The first-open animation is untouched**; that one is yours (#207)
+      and it should still play when you open Home.
 
 - [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

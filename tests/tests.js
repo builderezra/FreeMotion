@@ -21882,8 +21882,13 @@
       const other = Array.prototype.filter.call(tabs, function (t) { return !t.classList.contains('active'); })[0];
       if (!other) throw new Error('every tab reports itself active');
       other.click(); await frame();
-      // The class is what arms the shared keyframes — reused, not a second set.
-      if (!root.classList.contains('hm-intro')) throw new Error('the grid was not armed for the entrance animation on a tab switch');
+      /* The class is what arms the shared keyframes — reused, not a second set.
+         ⚠️ EITHER class counts (queue 504). A tab switch used to re-arm `hm-intro`, the FIRST-OPEN
+         entrance, which also re-blooms the background and staggers the cards over the best part of a
+         second — Ezra reported that as "all the icons on screen go away". It now arms `hm-restage`:
+         the same keyframes, shorter, and without the backdrop. What this test protects — the cards
+         restage top to bottom with a capped stagger — is unchanged either way. */
+      if (!root.classList.contains('hm-intro') && !root.classList.contains('hm-restage')) throw new Error('the grid was not armed for the entrance animation on a tab switch');
       const grid = root.querySelector('.hm-grid');
       /* Drive the stagger against a KNOWN grid rather than whatever projects happen to exist. The
          first version read the real grid and returned early when it was empty — so "no stagger at
@@ -21894,7 +21899,7 @@
       try {
         grid.textContent = '';
         for (let i = 0; i < 40; i++) grid.appendChild(document.createElement('div'));
-        FM._hmStampCards();
+        FM._hmStampCards('restage');   // the mode a real tab change uses (queue 504)
         const cards = Array.prototype.slice.call(grid.children);
         let prev = -1, maxDelay = 0, distinct = {};
         cards.forEach(function (c, i) {
@@ -42701,6 +42706,75 @@
       if (!whiteish(backBorder)) throw new Error('after playback stops the pill\'s outline stayed ' + backBorder + ' instead of returning to white');
     } finally {
       document.body.classList.toggle('fm-playing', wasPlaying);
+    }
+  });
+
+  /* ═══ 504: SWITCHING SECTION MUST NOT REPLAY THE WHOLE OPENING SEQUENCE.
+     Ezra: "I sometimes get a glitch when opening the other sections like elements or projects in the
+     home menu where all the icons on screen go away which looks buggy."
+     `stampCards()` re-added `hm-intro` on every tab change — the class whose own comment says it is
+     "for the first open of a session" and warns that "leaving it on would restage the whole screen
+     every time you switched tabs". It holds each card at keyframe zero through a stagger of up to 0.4s
+     and then rises it over 0.5s, and it re-runs the background blooms underneath. So the grid really
+     did go empty, for the best part of a second, every time he tapped Elements.
+     MEASURED here with only four cards: 200ms to a fully painted grid before, 100ms after; on a full
+     grid the arithmetic is ~0.9s against ~0.33s.
+     Asserted on the CLASS and the DURATIONS rather than on frame counts, which vary by machine. */
+  test('504: changing home tab restages the cards briefly, not the whole screen', { item: '504' }, async function () {
+    if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
+    if (typeof FM._hmStampCards !== 'function') throw new Error('FM._hmStampCards is missing — the restage cannot be driven');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen && FM.home.isOpen();
+    try {
+      if (!wasOpen) FM.home.open();
+      await sleep(1500);                       // let the genuine first-open intro finish and strip
+      const root = document.getElementById('home-screen');
+      if (!root) throw new Error('#home-screen is missing');
+      const tabs = [].slice.call(root.querySelectorAll('.hm-tab'));
+      if (tabs.length < 2) throw new Error('only ' + tabs.length + ' home tabs found — nothing to switch between');
+
+      /* CONTROL: there must be cards, or "the icons go away" has no subject. */
+      const cards = () => [].slice.call(root.querySelectorAll('.hm-card'));
+      if (!cards().length) throw new Error('the home grid has no cards at all, so this test cannot see anything vanish');
+
+      root.classList.remove('hm-intro', 'hm-restage');
+      await sleep(120);
+
+      /* ── the two entrances must be genuinely different, and the tab one must be the short one. */
+      const durationUnder = (cls) => {
+        root.classList.remove('hm-intro', 'hm-restage');
+        root.classList.add(cls);
+        const c = cards()[0];
+        c.classList.remove('hm-in'); c.classList.add('hm-in');
+        const d = getComputedStyle(c).animationDuration;
+        root.classList.remove(cls);
+        return parseFloat(d) || 0;
+      };
+      const intro = durationUnder('hm-intro');
+      const restage = durationUnder('hm-restage');
+      if (!(intro > 0)) throw new Error('cards have no entrance animation under hm-intro (' + intro + 's), so this test is not measuring the thing that blanks the grid');
+      if (!(restage > 0)) throw new Error('cards have no entrance under hm-restage — switching tab would show them appearing with no movement at all');
+      if (!(restage < intro)) throw new Error('the tab-change entrance (' + restage + 's) is not shorter than the first-open one (' + intro + 's) — switching section still replays the full opening sequence, which is what empties the grid');
+
+      /* ── and a real tab change must use the short one, never the first-open class. */
+      root.classList.remove('hm-intro', 'hm-restage');
+      const current = tabs.find(t => t.classList.contains('active')) || tabs[0];
+      const other = tabs.find(t => t !== current);
+      other.click();
+      await sleep(30);
+      const cls = root.className;
+      if (/hm-intro/.test(cls)) throw new Error('changing tab put `hm-intro` back on the home screen (classes: "' + cls + '") — that is the first-open sequence, blooms and all, replaying on every section tap');
+      if (!/hm-restage/.test(cls)) throw new Error('changing tab did not stage the cards at all (classes: "' + cls + '") — they would pop in with no movement');
+
+      /* ── and it must clear itself, or the next render inherits it. */
+      await sleep(900);
+      if (/hm-restage|hm-intro/.test(root.className)) throw new Error('the entrance class is still on the home screen a second later ("' + root.className + '"), so every later re-render restages too');
+      current.click();
+      await sleep(400);
+    } finally {
+      const root = document.getElementById('home-screen');
+      if (root) root.classList.remove('hm-restage');
+      if (!wasOpen && FM.home.close) FM.home.close();
     }
   });
 })();

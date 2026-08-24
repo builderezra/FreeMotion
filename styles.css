@@ -5694,6 +5694,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 #home-screen.hm-intro::before { animation: hm-bloom 1.15s ease-out backwards, hm-drift-a 17s ease-in-out infinite alternate; }
 #home-screen.hm-intro::after  { animation: hm-bloom 1.7s ease-out backwards, hm-drift 12s ease-in-out infinite alternate; }
 #home-screen.hm-intro .hm-in     { animation: hm-rise .5s cubic-bezier(.22, .9, .32, 1) backwards; }
+/* SWITCHING TAB restages only the CARDS, and quickly (queue 504). The full `hm-intro` above also
+   blooms the background and holds each card at keyframe zero through a long stagger — replaying it on
+   every tab tap left the grid looking empty for the best part of a second, which is what he reported
+   as "all the icons on screen go away". Same movement, a third of the time, and no backdrop. */
+#home-screen.hm-restage .hm-in   { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) backwards; }
+@media (prefers-reduced-motion: reduce) { #home-screen.hm-restage .hm-in { animation: none; } }
 #home-screen.hm-intro .hm-in-fab { animation: hm-rise-fab .55s cubic-bezier(.22, .9, .32, 1) backwards; }
 @media (prefers-reduced-motion: reduce) {
   #home-screen.hm-intro::before, #home-screen.hm-intro::after,

@@ -1960,7 +1960,7 @@ window.FM = window.FM || {};
   // keystroke in the search box.
   function stripIntro() {
     if (!root) return;
-    root.classList.remove('hm-intro');
+    root.classList.remove('hm-intro', 'hm-restage');
     root.querySelectorAll('.hm-in, .hm-in-fab').forEach(n => {
       n.classList.remove('hm-in', 'hm-in-fab');
       n.style.animationDelay = '';
@@ -1979,10 +1979,24 @@ window.FM = window.FM || {};
    * · a tighter step and a lower cap. First load is a moment you are watching; a tab switch is one
    *   you are trying to get through, and the entry says to cap it so a long list does not take a
    *   second to finish appearing. 10 × 0.04 = 0.4s to the last card, whatever the count. */
-  function stampCards() {
+  /* ⚠️ A TAB CHANGE IS NOT A FIRST OPEN (queue 504). Ezra: "I sometimes get a glitch when opening the
+     other sections like elements or projects in the home menu where all the icons on screen go away
+     which looks buggy."
+     This re-added `hm-intro` on every tab change — the class the comment beside it says is "for the
+     first open of a session", and warns that "leaving it on would restage the whole screen every time
+     you switched tabs". That is precisely what it did to itself. `hm-intro` drives the background
+     blooms AND is what scopes the cards' entrance, so switching section replayed the whole opening
+     sequence: each card held at its keyframe-zero state through a stagger of up to 0.4s and then rose
+     over 0.5s, while the backdrop bloomed again underneath. For ~0.9s the grid is mostly empty, which
+     is exactly "all the icons go away".
+     So tab changes get their OWN class: the same rise, shorter, staggered tighter, and without the
+     background restarting. The first open is untouched — that animation is his (queue 207) and he
+     likes it; it just should not fire when you tap Elements. */
+  function stampCards(mode) {
     if (!root || !grid) return;
-    root.classList.add('hm-intro');
-    const step = 0.04, cap = 10;
+    const restage = mode === 'restage';
+    root.classList.add(restage ? 'hm-restage' : 'hm-intro');
+    const step = restage ? 0.018 : 0.04, cap = restage ? 6 : 10;
     Array.prototype.forEach.call(grid.children, (n, i) => {
       if (n._fmNoIntro) return;   // pushed off this screen already — see queue 222
       n.classList.remove('hm-in');
@@ -1990,7 +2004,8 @@ window.FM = window.FM || {};
       n.style.animationDelay = (Math.min(i, cap) * step).toFixed(3) + 's';
     });
     clearTimeout(introTimer);
-    introTimer = setTimeout(stripIntro, 1200);   // past 0.4s delay + 0.5s duration
+    // past the longest delay + duration for whichever entrance is running
+    introTimer = setTimeout(stripIntro, restage ? 500 : 1200);
   }
   FM._hmStampCards = stampCards;   // read by the suite
 
@@ -2113,7 +2128,7 @@ window.FM = window.FM || {};
         b.classList.add('hm-tab-pop');
         // …and the cards restage, but ONLY when the tab actually changed. Re-tapping the tab you are
         // already on should do nothing rather than replay the whole grid.
-        if (changed) stampCards();
+        if (changed) stampCards('restage');   // the short one — a tab change is not a first open (queue 504)
       }));
       document.getElementById('hm-new').addEventListener('click', newFromTab);   // per-tab: project / template / element
       // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)
