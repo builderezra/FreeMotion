@@ -28181,6 +28181,18 @@
         if (r.bottom > q.top + 2) throw new Error(label + ': the panel ends at y=' + Math.round(r.bottom) + ' but the timeline starts at y=' + Math.round(q.top));
       };
       check('default band');
+
+      /* CLAUSE 4 — the background he asked for, and the lesson from drawing it.
+         "give the director menu … a little bit of a cool background with some interesting colours so it
+         stands out a bit." He picked the bold one (prism) from three options screenshotted in the real
+         panel. A hue is a taste call and is not asserted; two things are.
+         ⚠️ NO CONIC GRADIENT. The first draft of this was conic, and a conic's `transparent` stop lands
+         on a hard edge — it drew a visible diagonal SEAM straight across the panel at its real 376px
+         width. It looked fine reasoned about and bad screenshotted. Radials fade to nothing without an
+         edge, so that is what this must stay. */
+      const bg = getComputedStyle(panel).backgroundImage;
+      if (!/gradient/.test(bg)) throw new Error('the Director panel is back to a flat fill — it no longer stands out from any other dialog');
+      if (/conic-gradient/.test(bg)) throw new Error('the Director panel background uses a conic gradient, which draws a hard diagonal seam across it at 376px wide — that is why it is radial');
       /* …and it must FOLLOW the band, not just happen to line up at the default height. */
       root.style.setProperty('--tl-h', '420px');
       check('timeline dragged to 420px');

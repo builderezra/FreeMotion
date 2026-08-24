@@ -1,12 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.40
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.41
 >
-> **State:** v12.40, **928 tests green**, tree clean.
+> **State:** v12.41, **928 tests green**, tree clean.
 >
-> **✅ v12.40 — the Director menu was sitting ON the timeline (#511 clause 3).** It ran the full height of
-> the window and buried 38.7% of the track. It stops above the band now and follows it when you drag it.
-> **⬅️ Clause 4 (its background) is drawn and waiting on you — three options, in the chat.**
+> **✅ v12.40 + v12.41 — the Director menu (#511 clauses 3 and 4).** It was running the full height of the
+> window and burying 38.7% of the timeline; it stops above the band now and follows it when you drag it.
+> And it has the prism background you picked — sky, violet, mint from the top-right corner.
 >
 > **✅ v12.39 — the second cause of the inspector being "inconsistent and random" (#511).** Raise the add
 > menu, then tap a layer, and the panel stayed floating over the canvas showing the wrong thing — with
@@ -17378,7 +17378,18 @@ re-opened #480, which I had marked done and had not fixed.
              **It now stops exactly where the timeline band begins**, and FOLLOWS that band when you drag
              it taller or shorter (`--tl-h`) rather than assuming a number. Mutation-checked: restoring
              the full-height rail puts it back over 62.7% of the track.
-      4. [ ] **Give the director menu a distinctive background with some interesting colours** so it stands out.
+      4. [x] ✅ **v12.41 — PRISM, chosen by you.** Give the director menu a distinctive background with some
+             interesting colours so it stands out.
+             Sky → violet → mint, thrown from the top-right corner. **You picked it from three options
+             drawn into the real panel and screenshotted** — and picked it over the quieter one I had
+             recommended, which is exactly why they get drawn rather than described (#545).
+             The colour sits where the chrome is and fades out before the content: this panel holds your
+             API-key field and a lot of small print, and a wash behind small text is the one change that
+             would make it harder to read instead of nicer to look at.
+             ⚠️ **The first attempt was a CONIC gradient and it looked bad** — a conic's `transparent`
+             stop lands on a hard edge and drew a visible diagonal SEAM across the panel at its real
+             376px width. Fine reasoned about, ugly on screen, caught only by screenshotting it. There is
+             a test that refuses a conic here so nobody re-derives it.
 
 - [x] **512 — PC: the inspector cannot be dragged up as far on its own as it can when dragged together with the timeline.** (24 Aug.)
       ✅ **Measured on an 820px-tall window: dragging the panel ALONE stopped at 508px; dragging it up

@@ -3395,7 +3395,24 @@ body.white-chrome #time-readout:active {
 #ai-panel {
   position: fixed; top: 50px; right: 0; bottom: var(--tl-h, 232px); width: 376px; z-index: 58;
   display: flex; flex-direction: column;
-  background: var(--panel); border-left: 1px solid var(--line);
+  /* THE PRISM (queue 511 clause 4). Ezra: "if you could maybe give the director menu like the AI menu
+     like a little bit of a cool background with some interesting colours so it stands out a bit."
+     He picked this from three drawn options, each screenshotted in the real panel rather than described
+     — and picked it over the quieter one I had recommended, which is exactly why the options get drawn.
+     Sky into violet into mint, thrown from the top-right corner: the boldest of the three and the same
+     colour family as the rainbow ＋ buttons.
+     The PLACEMENT is the load-bearing part, not the hue. This panel holds an API-key field, small print
+     and buttons, and a colour wash behind small text is the one change that would make it harder to read
+     instead of nicer to look at — so the colour sits where the chrome is and is gone before the content.
+     ⚠️ THIS WAS A CONIC GRADIENT FIRST AND IT LOOKED BAD. A conic's `transparent` stop lands on a hard
+     edge, which drew a visible diagonal SEAM straight across a 376px panel — fine in the abstract, ugly
+     at the real size. Radials only: they fade to nothing without an edge. Caught by screenshotting it
+     rather than by reasoning about it, which is the whole point of drawing options in the real app. */
+  background:
+    radial-gradient(115% 62% at 100% -6%,
+      rgba(127, 212, 255, .30), rgba(200, 107, 255, .20) 38%, rgba(107, 240, 200, .12) 62%, transparent 80%),
+    var(--panel);
+  border-left: 1px solid var(--line);
   box-shadow: -14px 0 40px rgba(0,0,0,.45);
   transform: translateX(102%); transition: transform .24s ease;
   overscroll-behavior: contain;
