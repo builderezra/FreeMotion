@@ -3383,8 +3383,17 @@ body.white-chrome #time-readout:active {
 .btn-ai:hover { background: linear-gradient(180deg, rgba(41,217,187,.28), rgba(41,217,187,.12)); border-color: var(--accent); }
 .ai-spark { font-size: 13px; line-height: 1; filter: drop-shadow(0 0 4px rgba(41,217,187,.5)); }
 
+/* ⚠️ IT STOPS WHERE THE TIMELINE BEGINS (queue 511 clause 3). Ezra: "the AI menu that pops up the
+   director menu doesn't fit on the screen nicely on PC because it hasn't been designed for the new
+   layout properly yet so it looks kind of weird."
+   Measured at 1280x820 with the panel open: it is a full-height rail from y=50 to the bottom, and it
+   **buried 38.7% of the timeline** — the right-hand 376px of a 973px-wide track. In the Studio layout
+   the timeline is the thing you are working in, so covering a third of it is not a rail, it is a lid.
+   Its own content is 711px and does not scroll, so the extra height was not even being used.
+   `--tl-h` is the band's height and is kept current by both resizers, so the panel follows the timeline
+   wherever he drags it rather than assuming a number. */
 #ai-panel {
-  position: fixed; top: 50px; right: 0; bottom: 0; width: 376px; z-index: 58;
+  position: fixed; top: 50px; right: 0; bottom: var(--tl-h, 232px); width: 376px; z-index: 58;
   display: flex; flex-direction: column;
   background: var(--panel); border-left: 1px solid var(--line);
   box-shadow: -14px 0 40px rgba(0,0,0,.45);

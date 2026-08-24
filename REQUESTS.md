@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.39
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.40
 >
-> **State:** v12.39, **927 tests green**, tree clean.
+> **State:** v12.40, **928 tests green**, tree clean.
+>
+> **✅ v12.40 — the Director menu was sitting ON the timeline (#511 clause 3).** It ran the full height of
+> the window and buried 38.7% of the track. It stops above the band now and follows it when you drag it.
+> **⬅️ Clause 4 (its background) is drawn and waiting on you — three options, in the chat.**
 >
 > **✅ v12.39 — the second cause of the inspector being "inconsistent and random" (#511).** Raise the add
 > menu, then tap a layer, and the panel stayed floating over the canvas showing the wrong thing — with
@@ -17365,7 +17369,15 @@ re-opened #480, which I had marked done and had not fixed.
              same thing but the other way around by snapping them back together."*
              **Left for a later sweep:** the same orderings while a drag is INTERRUPTED (pointer lost
              mid-drag), and the phone layout, which has its own resizer rules.
-      3. [ ] **The AI / director menu does not fit the PC layout** — it was not redesigned for it.
+      3. [x] ✅ **v12.40 — it was burying the timeline.** The AI / director menu does not fit the PC layout
+             — it was not redesigned for it.
+             **Measured at 1280x820 with it open:** a fixed rail from just under the top bar to the bottom
+             of the window, **covering 38.7% of the timeline** — the right-hand 376px of a 973px track —
+             in the one layout where the timeline is the thing you are working in. Its own content was
+             711px and did not scroll, so the extra height was not even being used.
+             **It now stops exactly where the timeline band begins**, and FOLLOWS that band when you drag
+             it taller or shorter (`--tl-h`) rather than assuming a number. Mutation-checked: restoring
+             the full-height rail puts it back over 62.7% of the track.
       4. [ ] **Give the director menu a distinctive background with some interesting colours** so it stands out.
 
 - [x] **512 — PC: the inspector cannot be dragged up as far on its own as it can when dragged together with the timeline.** (24 Aug.)

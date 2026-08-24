@@ -102,7 +102,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.39, 927 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.40, 928 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.40 worked #511 clause 3.** The Director panel was a full-height fixed rail **covering 38.7% of the
+timeline** at 1280x820 — a lid over the track he works in. Its bottom is `--tl-h` now, so it stops at the
+band and follows it when either resizer moves. Mutation: the full-height rail covers 62.7%.
+⬅️ **Clause 4 (a "cool background with some interesting colours") is DRAWN AND WAITING ON HIM** — three
+options screenshotted in the real panel: A aurora (violet→cyan, recommended), B ember (amber→pink,
+matches the AI tile's own yellow), C prism (bold glow, top-right). ⚠️ C's first draft had a hard diagonal
+seam from a conic `transparent` stop; softened to a radial before showing him. **Do not ship a background
+until he picks** — #545 is the standing rule (draw options, send a picture, never ship a visual unseen).
+**Also open in #511:** clause 2's remaining sweep (interrupted drags, phone layout).
+⚠️ #508 still needs a visible preview pane (rule 11).
 **v12.39 worked #511 clauses 1-2** (the sweep he asked for). Drove the inspector drag through ORDERINGS
 with invariants after each step instead of reading it. Found: 🔴 a raised add menu stays floating when you
 select a layer — showing the wrong contents, handle hidden, **no way to lower it**; the rule was already

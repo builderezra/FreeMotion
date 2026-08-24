@@ -28144,6 +28144,58 @@
     }
   });
 
+  test('the Director panel stops above the timeline instead of burying it (queue 511 clause 3)', { item: '511' }, async function () {
+    /* Ezra: "the AI menu that pops up the director menu doesn't fit on the screen nicely on PC because
+       it hasn't been designed for the new layout properly yet so it looks kind of weird."
+       Measured at 1280x820 with it open: it was a fixed rail running from y=50 to the bottom of the
+       window, and it **covered 38.7% of the timeline** — the right-hand 376px of a 973px track. In the
+       Studio layout the timeline is the thing you are working in, so a lid over a third of it is the
+       "doesn't fit". Its own content was 711px and did not scroll, so the height was not even used.
+       Its bottom is `--tl-h` now, which both resizers keep current, so it follows the band rather than
+       assuming a number — that is the half this test pins. */
+    if (window.innerWidth < 701) return;                   // the rail layout is PC-only; the phone gets a sheet
+    if (!FM.aiPanel || !FM.aiPanel.show) throw new Error('FM.aiPanel is missing — this test cannot open the thing it is about');
+    const root = document.documentElement;
+    const tlBefore = getComputedStyle(root).getPropertyValue('--tl-h').trim();
+    const panel = (() => { FM.aiPanel.show(); return document.getElementById('ai-panel'); })();
+    if (!panel) throw new Error('showing the Director panel produced no #ai-panel');
+    const prevTransition = panel.style.transition;
+    try {
+      /* The open transform is a TRANSITION, and this suite can run with the page hidden — where
+         transitions do not advance — so it is neutralised rather than waited on. Geometry is what is
+         being measured, not the animation. */
+      panel.classList.add('open');
+      panel.style.transition = 'none';
+      const tl = document.getElementById('timeline-panel');
+      if (!tl) throw new Error('no #timeline-panel to measure against');
+      const check = (label) => {
+        panel.getBoundingClientRect();
+        const r = panel.getBoundingClientRect(), q = tl.getBoundingClientRect();
+        /* THE CONTROL: an unopened or zero-size panel covers nothing, and would pass everything below
+           while proving nothing. */
+        if (r.width < 200 || r.height < 100) throw new Error(label + ': the panel measured ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — it is not open, so "it does not cover the timeline" is meaningless');
+        const ox = Math.max(0, Math.min(r.right, q.right) - Math.max(r.left, q.left));
+        const oy = Math.max(0, Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top));
+        const covered = (ox * oy) / Math.max(1, q.width * q.height) * 100;
+        if (covered > 1) throw new Error(label + ': the Director panel covers ' + covered.toFixed(1) + '% of the timeline — it is sitting on top of the track he is working in');
+        if (r.bottom > q.top + 2) throw new Error(label + ': the panel ends at y=' + Math.round(r.bottom) + ' but the timeline starts at y=' + Math.round(q.top));
+      };
+      check('default band');
+      /* …and it must FOLLOW the band, not just happen to line up at the default height. */
+      root.style.setProperty('--tl-h', '420px');
+      check('timeline dragged to 420px');
+      /* Its body has to scroll once the panel is short, or the content is merely clipped somewhere else. */
+      const body = panel.querySelector('.ai-body');
+      if (body && body.scrollHeight > body.clientHeight + 1 && getComputedStyle(body).overflowY === 'visible')
+        throw new Error('the panel body overflows by ' + (body.scrollHeight - body.clientHeight) + 'px and does not scroll');
+    } finally {
+      root.style.setProperty('--tl-h', tlBefore || '232px');
+      panel.style.transition = prevTransition;
+      if (FM.aiPanel.hide) FM.aiPanel.hide();
+      await sleep(40);
+    }
+  });
+
   test('a raised Add menu comes back down when the panel stops showing it (queue 511)', { item: '511' }, async function () {
     /* Ezra: "with all the moving parts that come with the inspector and being [dragged] up and down I
        find it's very inconsistent and bugs a lot depending on … what order you do stuff."
