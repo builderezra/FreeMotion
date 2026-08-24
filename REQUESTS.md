@@ -17521,3 +17521,39 @@ re-opened #480, which I had marked done and had not fixed.
              a control, so it must not eat the tap or sit in the way of the layer underneath.
       ⚠️ Mobile-first: verify at ~380px that the glyph is centred on the CANVAS, not the viewport, and that
       it cannot be left stuck on screen if you tap again mid-fade.
+
+- [ ] **539 — 🔴 Squish must work with EVERY effect (shakes especially), needs a layer picker so shapes interact with each other, and it still fails in corners.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim, across two messages:
+      > Shakes and effects still don't work with the squish effect, I want the squish effect to work no matter what, also in the squish effect give it an option to select layers that will effect it, so if you have another shape it will interact with it - this will be very complicated as shapes take many sizes, also have a tick box to affect every layer
+      > It still doesn't even work in corners very well so it's got a long way to go
+      **Clauses — tick separately:**
+      1. [ ] **Shakes and other effects do not work together with Squish. He wants Squish to work "no
+             matter what".** Squish is deliberately NOT a WARP_FX entry — it needs a plate BIGGER than
+             the frame, so the part hanging past the wall still exists to be squashed back in (see the
+             long note above `SQUISH` in `js/compositor.js`). That is very likely why it does not
+             compose with effects that render on a comp-sized plate. **Find the actual interaction
+             before designing anything** — "works with shakes" and "works with all 105 effects" are
+             different sizes of job and he asked for the second.
+      2. [ ] **A layer picker inside Squish: choose which layers it collides with**, so one shape can
+             squash against another rather than only against the canvas edges.
+      3. [ ] **A tick box for "affect every layer"** — the all-in shortcut beside the picker.
+      4. [ ] **Corners still handle badly.** Today the walls are treated independently; a layer arriving
+             at a corner is being squashed by two of them at once and the two are fighting. He is right
+             that this is visible.
+      ⚠️ **He said it himself: "this will be very complicated as shapes take many sizes."** Colliding
+      arbitrary shapes is a real geometry problem, not a slider. **Plan it before writing anything**, and
+      say plainly if a first pass will only handle axis-aligned bounds — an honest partial beats a
+      quiet one.
+
+- [ ] **540 — Motion blur needs to go much further than it currently can.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Motion blur still needs the ability to crank up the effectiveness a lot
+      **What to check first:** whether the ceiling is the slider's max or the algorithm running out of
+      samples. If it is only the range, raising it is a one-line change and he gets what he asked for; if
+      the effect stops looking stronger past a point regardless of the number, raising the max just gives
+      him a slider that lies. **Measure the output at the current max before touching the range.**
+      ⚠️ Cost warning: motion blur usually costs one extra render of the layer per sample, so "a lot
+      more" can be the expensive kind of change on a phone. If so, say what the frame cost becomes rather
+      than shipping it quietly — the oldest entry on this list is about lag.
