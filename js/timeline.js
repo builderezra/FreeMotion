@@ -1214,7 +1214,18 @@ window.FM = window.FM || {};
         const ai = statics.findIndex(sr => sr.isAdd);
         FM.dragAddAt = ai < 0 ? null : (baseAbove(ai) + (g <= ai ? dragged.length : 0));
         if (FM.syncAddSwitch) FM.syncAddSwitch();
-        if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
+        if (g !== lastGap) {
+          lastGap = g;
+          try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {}   // tick on Android; iOS ignores
+          /* …and repaint the CANVAS in the order this drop would produce (queue 502). Only when the gap
+             actually changes, not on every pointermove: the picture can only differ when the insertion
+             point does, and a re-render per frame of a drag is exactly the cost #387 is about.
+             View-only — see FM.renderScene. The real reorder still happens once, at the drop. */
+          const ins = baseAbove(g);
+          const order = restOrder.slice(0, ins).concat(dragged.map(d => d.id), restOrder.slice(ins));
+          FM._dragOrderIds = order.length === FM.scene.layers.length ? order : null;
+          if (FM.requestRender) FM.requestRender();
+        }
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
           const target = listTop + j * slotH + (j >= ge ? blockH : 0);   // packed layout with the gap open at ge — the SAME number the drop uses (queue 443)
@@ -1255,6 +1266,9 @@ window.FM = window.FM || {};
       const unlisten = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort); if (autoRAF) cancelAnimationFrame(autoRAF); };
       const cleanup = () => {
         reorderActive = false;
+        /* The order preview is view-only and must not outlive the gesture (queue 502) — cleared HERE,
+           which every ending runs through: the drop, a cancel, and a browser-stolen pointer alike. */
+        FM._dragOrderIds = null;
         FM.dragLayerId = null;                                  // the switch goes back to its own colour (queue 416)
         FM.dragAddAt = null;                                    // …and back to the real index (queue 438)
         if (FM.syncAddSwitch) FM.syncAddSwitch();

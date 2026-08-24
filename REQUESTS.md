@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.22
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.23
 >
-> **State:** v12.22, **906 tests green**, tree clean.
+> **State:** v12.23, **907 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16860,15 +16860,23 @@ re-opened #480, which I had marked done and had not fixed.
       for the new look hangs off it. Flip it to `false` and the row is exactly what it was, in one line.
       The play-button half (#503) will hang off the same switch, so both revert together as you asked.
 
-- [ ] **502 — Dragging a layer does not live update.** (24 Aug, phone screenshot at v12.19.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **502 — Dragging a layer does not live update.** ✅ **FIXED v12.23.** (24 Aug, phone screenshot at v12.19.)
       His words, verbatim:
       > Also when dragging a layer it doesn't live update
       **What the shot shows:** mid-drag on the phone. The dragged row is lifted out and the rows below have
       NOT opened a gap for it — the list looks unchanged behind the held row, and "Tap to add a layer" is
       half-scrolled under the transport. Whatever is meant to move as you drag is not moving on his device.
-      ⚠️ This is the same gesture #480 and #443 are about, and both of those were verified in a desktop
-      frame. **Reproduce it at phone width with a real touch drag before assuming it is the same code.**
+      **You meant the PICTURE, and you were right.** The rows do open a gap as you drag — that part works.
+      What did not update was the canvas: reordering layers changes what is on top, and the reorder was
+      deliberately held back until you let go, so the preview kept showing the old stacking.
+      **Measured before:** two overlapping squares, red over green. Drag green above red and the centre
+      pixel read red → red → red, then green **only on release**. Now it reads red → **green** → green.
+      **The scene itself is not touched while you drag.** The new order is a view-only overlay used at
+      render time, which matters for three reasons the test checks separately: a cancelled drag leaves the
+      project exactly as it was, the drop is still **one** undoable step, and what you see mid-drag is
+      exactly what you get when you let go.
+      Only recomputed when the insertion point changes, not on every frame of the gesture — re-rendering
+      per pointermove is the cost #387 is about.
 
 - [ ] **503 — Play button: clear background, white outline at rest, blue when pressed — and give me a quick way to undo the change.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -17117,4 +17125,16 @@ re-opened #480, which I had marked done and had not fixed.
       > Currently, when you... they select the layer, but you're in the text edit screen, the text edit screen stays up, and you have to press the blue tick still, and it's kinda glitchy. So change that. So as soon as you don't have a layer selected that you were editing the text for, that whole screen just goes away.
       **The editor outlives its subject.** Deselect the text layer and the editing surface stays, still
       demanding the blue tick. It should close itself when the layer it was editing stops being selected.
+
+- [ ] **524 — Dragging a clip right stops dead at the project end instead of extending the project.** (24 Aug, phone screenshot at v12.22.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Dragging to the right breaks when you reach the project end instead of extending out the project please fix
+      **What the shot shows:** a project at 00:28:30 with a "Snowflake" clip pinned at the far left of a
+      long timeline — the playhead is well to the right of it and the ruler runs out beyond.
+      **What he wants:** dragging a clip past the end of the project should GROW the project to fit, not
+      stop the clip at the old boundary. Today the drag "breaks" there — find out whether it clamps, snaps
+      back, or drops the gesture, since those need different fixes.
+      ⚠️ Check what already grows the project: trimming a clip's out-point and adding a long clip may
+      already extend `project.duration`. If so, this is the same rule missing from the MOVE path.
 

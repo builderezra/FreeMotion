@@ -42543,4 +42543,101 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  /* ═══ 502: THE PICTURE FOLLOWS THE DRAG, NOT THE DROP.
+     Ezra: "Also when dragging a layer it doesn't live update." He is right, and it was by design rather
+     than by accident — a reorder is DEFERRED (the timeline holds off every rebuild while the finger is
+     down, and moveLayers only runs at the drop), so the rows opened a gap while the canvas went on
+     showing the old stacking until release.
+     MEASURED before: two overlapping squares, red over green; drag green above red and the centre pixel
+     read red, red, red — then green, only on release.
+     The preview is view-only, and the three things that could make that dangerous are each asserted:
+     the scene must not be mutated mid-drag, a cancelled drag must leave no trace, and the drop must
+     still be ONE undoable step. */
+  test('502: dragging a layer updates the picture live, without touching the scene', { item: '502' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      await sleep(80);
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const red = FM.makeLayer('shape', { name: 'R502', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: Math.round(P.width * 0.7), shapeH: Math.round(P.height * 0.7), fill: '#ff0000' });
+      const grn = FM.makeLayer('shape', { name: 'G502', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: Math.round(P.width * 0.7), shapeH: Math.round(P.height * 0.7), fill: '#00ff00' });
+      red.start = 0; red.duration = 5; grn.start = 0; grn.duration = 5;
+      FM.scene.layers.push(red, grn);
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      /* ⚠️ COMMIT THE FIXTURE FIRST. These layers are pushed straight onto the scene, so nothing has
+         recorded them — and the undo check below would then step back past this test entirely, into
+         whatever the previous test left on the stack. It did exactly that: the failure named a scene
+         from the queue-480 fixture. Resetting makes THIS order the committed baseline, which is what
+         "one undo returns to where the drag started" is supposed to mean. */
+      if (FM.history && FM.history.reset) FM.history.reset();
+      await sleep(400);
+
+      const cv = document.getElementById('preview');
+      if (!cv || !cv.width) throw new Error('no preview canvas to read');
+      const centre = () => { const d = cv.getContext('2d').getImageData(Math.round(cv.width / 2), Math.round(cv.height / 2), 1, 1).data; return [d[0], d[1], d[2]].join(','); };
+      const order = () => FM.scene.layers.map(l => l.name).join(',');
+      const before = centre(), orderBefore = order();
+      /* CONTROL: the two layers must actually be stacked so that order decides the colour. */
+      if (!/^2\d\d,\d+,\d+$/.test(before) && before.indexOf('255,0,0') !== 0) throw new Error('the centre pixel is ' + before + ', not the top layer\'s red — the fixture is not stacked as this test assumes');
+
+      const rows = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row'));
+      const src = rows().filter(r => { const hd = r.querySelector('.track-head'); return hd && (FM.scene.layers[parseInt(hd.dataset.idx, 10)] || {}).name === 'G502'; })[0];
+      if (!src) throw new Error('no row for the lower layer to drag');
+      const h = src.querySelector('.row-drag');
+      if (!h) throw new Error('that row has no drag handle');
+      const hr = h.getBoundingClientRect();
+      const x = hr.left + hr.width / 2, y0 = hr.top + hr.height / 2;
+      const rr = rows(); const slotH = rr[1].getBoundingClientRect().top - rr[0].getBoundingClientRect().top;
+      const pe = (t, cy, id) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: cy, pointerId: id, pointerType: 'touch', isPrimary: true, button: 0, buttons: (t === 'pointerup' || t === 'pointercancel') ? 0 : 1 });
+
+      // ── drag it above, and read the canvas WITH THE FINGER STILL DOWN
+      h.dispatchEvent(pe('pointerdown', y0, 84)); await sleep(60);
+      const tgt = y0 - slotH * 1.2;
+      for (let k = 1; k <= 6; k++) { await sleep(28); h.dispatchEvent(pe('pointermove', y0 + (tgt - y0) * k / 6, 84)); await sleep(28); }
+      await sleep(260);
+      const during = centre();
+      const sceneTouched = order() !== orderBefore;
+      h.dispatchEvent(pe('pointerup', tgt, 84)); await sleep(600);
+      const after = centre(), orderAfter = order();
+
+      /* CONTROL: if the drop did not reorder anything, "the picture updated live" is unfalsifiable. */
+      if (orderAfter === orderBefore) throw new Error('the drop did not reorder the layers (' + orderBefore + '), so the gesture never happened and nothing below is measured');
+      if (after === before) throw new Error('the final picture is the same as the starting one, so this fixture cannot show a stacking change at all');
+
+      if (during === before) throw new Error('with the finger still down the canvas still showed ' + during + ', the OLD stacking — it only changed to ' + after + ' on release. That is queue 502: "when dragging a layer it doesn\'t live update".');
+      if (during !== after) throw new Error('the preview during the drag (' + during + ') is not what the drop produced (' + after + ') — a live preview that lies is worse than none');
+      if (sceneTouched) throw new Error('the scene was reordered while the finger was still down — the preview is meant to be view-only, so a cancelled drag would leave the project changed');
+
+      /* ── ONE undoable step, despite the live preview. */
+      if (FM.history && FM.history.canUndo && FM.history.canUndo()) {
+        FM.history.undo(); await sleep(500);
+        if (order() !== orderBefore) throw new Error('one undo left the order at ' + order() + ' instead of ' + orderBefore + ' — the live preview has cost the drop its single clean history entry');
+        FM.history.redo && FM.history.redo(); await sleep(400);
+      }
+
+      /* ── a cancelled drag leaves nothing behind. */
+      const preCancel = { c: centre(), o: order() };
+      const src2 = rows().filter(r => { const hd = r.querySelector('.track-head'); return hd && (FM.scene.layers[parseInt(hd.dataset.idx, 10)] || {}).name === 'G502'; })[0];
+      if (src2) {
+        const h2 = src2.querySelector('.row-drag'), h2r = h2.getBoundingClientRect();
+        const x2 = h2r.left + h2r.width / 2, y2 = h2r.top + h2r.height / 2;
+        const pe2 = (t, cy) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x2, clientY: cy, pointerId: 85, pointerType: 'touch', isPrimary: true, button: 0, buttons: t === 'pointercancel' ? 0 : 1 });
+        h2.dispatchEvent(pe2('pointerdown', y2)); await sleep(60);
+        for (let k = 1; k <= 6; k++) { await sleep(28); h2.dispatchEvent(pe2('pointermove', y2 + slotH * 1.2 * k / 6)); await sleep(28); }
+        h2.dispatchEvent(pe2('pointercancel', y2 + slotH * 1.2)); await sleep(500);
+        if (order() !== preCancel.o) throw new Error('a cancelled drag reordered the project anyway (' + preCancel.o + ' → ' + order() + ')');
+        if (centre() !== preCancel.c) throw new Error('a cancelled drag left the preview showing ' + centre() + ' instead of ' + preCancel.c + ' — the order override outlived the gesture');
+        if (FM._dragOrderIds) throw new Error('FM._dragOrderIds is still set after the drag ended, so every later render is using a stale order');
+      }
+    } finally {
+      FM._dragOrderIds = null;
+      FM.scene.layers = keep; FM.selectLayer(keepSel || null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 })();

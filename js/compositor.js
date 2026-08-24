@@ -12021,6 +12021,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM._camBlurSlices = camBlurSlices;   // suite seam
 
   FM.renderScene = function (ctx, scene, t) {
+    /* ⚠️ SHOW THE ORDER YOU ARE DRAGGING TOWARDS (queue 502). Ezra: "when dragging a layer it doesn't
+       live update." He is right, and it is by design rather than by accident: a reorder is DEFERRED —
+       the timeline holds off every rebuild while the finger is down (a rebuild would destroy the
+       captured handle) and `moveLayers` does not run until the drop. So the rows open a gap, and the
+       PICTURE goes on showing the old stacking until you let go.
+       MEASURED before the change: two overlapping squares, red over green; drag green above red and the
+       centre pixel reads red, red, red — then green, only on release.
+       The scene itself is deliberately NOT touched. `_dragOrderIds` is a view-only override applied to a
+       SHALLOW COPY here, so nothing can be left reordered by a cancelled drag, and `moveLayers` still
+       sees the untouched order at the drop and still writes exactly one history entry. */
+    if (FM._dragOrderIds && scene && scene.layers && scene === FM.scene) {
+      const byId = {};
+      scene.layers.forEach(l => { byId[l.id] = l; });
+      const reordered = [];
+      for (let i = 0; i < FM._dragOrderIds.length; i++) { const L = byId[FM._dragOrderIds[i]]; if (L) reordered.push(L); }
+      if (reordered.length === scene.layers.length) scene = Object.assign({}, scene, { layers: reordered });
+    }
     const P = scene.project;
     // Supersample factor for THIS target: how many canvas pixels exist per project pixel. Export and
     // thumbnails hand us a canvas sized exactly to the project, so this is 1 and nothing changes.
