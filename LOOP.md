@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.25, 909 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.26, 910 tests green, tree clean, `HEAD == ssh/main`.**
 **✅ LIVE DEPLOY RE-VERIFIED END TO END, 24 Aug at v12.20** (the previous claim was v11.50, twenty releases
 stale). On the real Pages URL at 380px: boots, service worker controlling, all 71 assets served from cache,
 running version matches the HTML, renders a layer WITH an effect, and produces a real MP4 — `3 KB · 0:01 ·
@@ -113,13 +113,12 @@ into a layer index), v12.04 (queue 481, the PC
 effects browser dressed for a wide screen while docked in a 346px column).
 **⚡ 24 AUG: EZRA SENT 26 REQUESTS IN ONE SITTING (498-523).** Log every one VERBATIM as it lands — he asked
 twice. Work them OLDEST-FIRST; he said *"don't actually do a straight away"*. **Workflows are authorised
-for any task that needs one** (his words, #516). 498-504 are done. **505 IS IN FLIGHT — measured, not yet built.** Tapping an element creates a real
-project every time, saving back MINTS A DUPLICATE element instead of updating it, and the draft project
-is left behind (all three verified by running it: projects 4->5, elements 1->2). So an element cannot be
-edited at all today, only forked. A workflow is pressure-testing two designs — (A) teach storage that the
-open document can BE an element, (B) keep a hidden draft but carry the element id, update in place and
-delete the draft on exit — against data-safety, faithfulness and simplicity. **Build it next tick from that
-plan. Acceptance is his: tap an element, change it, come back — one element, changed, no new project.** **The white-chrome look (501+503) is gated on `WHITE_CHROME` in js/app.js —
+for any task that needs one** (his words, #516). 498-504 done. **505: the ELEMENTS half shipped v12.26 and his acceptance test passes** (tap, change, come
+back — one element updated in place, no project, no workspace left). Design B won because A would have let
+the boot orphan-sweep DELETE every element's media — that sweep keeps only files reachable from `fm.proj.*`.
+**505 STAYS OPEN FOR TEMPLATES**, which still mint a project and still mint-then-patch on save back.
+⚠️ **When discarding a workspace, switch away FIRST** — `discardDraft` refuses to delete the current doc, and
+`remove()` would mint an Untitled instead. The test catches both orders. **The white-chrome look (501+503) is gated on `WHITE_CHROME` in js/app.js —
 he asked to be able to undo it in one move, so keep 503 on that same switch.**
 **ALL 14 REVIEW FINDINGS ARE CLOSED (485-496), plus 497.** `next.sh` now reports 1 actionable and 22 blocked.
 **That is not a reason to idle — rule 8b.** Audited the blocked list by hand on 24 Aug: 425, 96 and the rest

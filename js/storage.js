@@ -1405,6 +1405,10 @@ window.FM = window.FM || {};
       // Anything else is rejected rather than written into the doc — this value goes straight to fillStyle.
       if ('background' in opts) fresh.project.background = /^#[0-9a-f]{6}$/i.test(String(opts.background || '')) ? opts.background : null;
       clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
+      /* WHICH element this workspace is editing (queue 505), stamped on the DOC so it survives a reload
+         — the same two-place trick `fromTemplate` uses. Without it the editing session cannot know
+         which element it came from, which is the whole reason saving could only ever mint a new one. */
+      if (opts.ofElement) fresh.project.ofElement = opts.ofElement;
       writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
       const idx = this.list();
       /* `elementDraft` marks a project that exists only as a WORKSPACE for building an element (queue
@@ -1414,6 +1418,7 @@ window.FM = window.FM || {};
          project. Flagged here, hidden from the Projects tab, and shown under Elements as a draft. */
       const rec = { id: id, name: fresh.project.name, created: Date.now(), modified: Date.now(), width: fresh.project.width, height: fresh.project.height, fps: fresh.project.fps, duration: fresh.project.duration, thumb: null };
       if (opts.elementDraft) rec.elementDraft = true;
+      if (opts.ofElement) rec.ofElement = opts.ofElement;   // …and on the index, so Home can label the card without reading every doc
       idx.unshift(rec);
       this.saveIndex(idx);
       await this.open(id);
@@ -1450,6 +1455,26 @@ window.FM = window.FM || {};
       const doc = readJSON('fm.proj.' + id, null);
       if (doc && doc.project) { doc.project.name = name; writeJSON('fm.proj.' + id, doc); }
       if (id === curId()) { FM.scene.project.name = name; if (FM.refreshAll) FM.refreshAll(); }
+    },
+    /* ═══ DISCARD A DRAFT WITHOUT EVER MINTING A PROJECT (queue 505).
+       `remove()` below deliberately opens another project — or CREATES an "Untitled" — when you delete
+       the one that is currently open. That is right for a project you chose to delete, and exactly
+       wrong here: tidying away an element's workspace must never manufacture the very thing he is
+       complaining about. So this deletion has no such branch, and is only safe on a draft that is NOT
+       current — every caller switches away first, and this refuses if that was not done. */
+    async discardDraft(id) {
+      if (!id || id === curId()) return false;
+      const doc = readJSON('fm.proj.' + id, null);
+      try {
+        const db = await openDB();
+        const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);
+        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id)) await idbDel(db, l.id); }
+        await delThumb(db, id);
+        db.close();
+      } catch (e) {}
+      try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
+      this.saveIndex(this.list().filter(p => p.id !== id));
+      return true;
     },
     async remove(id) {
       const doc = readJSON('fm.proj.' + id, null);
@@ -1773,6 +1798,91 @@ window.FM = window.FM || {};
       const idx = this.list();
       idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
+      return true;
+    },
+    /* ═══ UPDATE AN ELEMENT IN PLACE (queue 505). Ezra, for the third time: "Elements and templates are
+       still not working… I don't like that when you tap on them they created as a project. I just want
+       them to be editable in their own sections… stop doing the lazy way out."
+       MEASURED before this existed: editing an element and following the app's own instruction produced
+       a SECOND element (1 became 2) and left the workspace project behind. There was no update path at
+       all — both save routes call `newId('e')`, so an element could only ever be forked.
+       Same pack key, same index position, same name: only the contents, the layer count and the
+       thumbnail move. Deliberately NOT built like `templates.updateFrom`, which mints a new id and then
+       spends four compensations papering over it (delete the old pack, re-splice the index so the card
+       does not jump, rewrite every project's pointer, patch the live scene) — each of those is a window
+       where a crash leaves the library inconsistent. */
+    /* ═══ OPEN AN ELEMENT FOR EDITING (queue 505). One workspace per element, reused — without the
+       lookup below, every tap minted another draft and they piled up forever (measured: projects 4→5
+       on a single tap, and one left behind per edit). */
+    async openForEdit(eid) {
+      const meta = this.list().find(e => e.id === eid);
+      if (!meta) return null;
+      const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
+      if (existing) { await FM.projects.open(existing.id); return existing.id; }
+      const returnTo = curId();
+      const pid = await FM.projects.create({ name: meta.name || 'Element', width: 1080, height: 1080, elementDraft: true, ofElement: eid });
+      if (!pid) return null;
+      FM.scene.project.background = null;              // transparent, like the element itself
+      if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
+      const ok = await this.insert(eid);
+      if (!ok) { await FM.projects.discardDraft(pid); return null; }   // nothing to edit — do not strand a draft
+      if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+      return pid;
+    },
+    /* ═══ SAVE THE EDIT BACK AND PUT THE WORKSPACE AWAY (queue 505).
+       ⚠️ THE ORDER IS THE WHOLE SAFETY ARGUMENT, and each step earns its place:
+       1. no element id on the doc → this is not an element edit, do nothing;
+       2. flush, so the pack is built from what he just saw rather than a doc up to 600ms stale;
+       3. element deleted while he was editing → keep the draft; resurrecting it would be worse, and
+          discarding it would throw the work away;
+       4. write failed → keep the draft, for the same reason;
+       5. pick somewhere to land, and if there is nowhere, STOP AND KEEP THE DRAFT — discarding here
+          would leave the current-project pointer dangling, and the next boot mints "My project";
+       6. switch away FIRST, then discard. `discardDraft` refuses to delete the current document, so
+          doing these two in the other order simply leaves the draft behind. */
+    async commitDraft() {
+      const P = FM.scene && FM.scene.project;
+      const eid = P && P.ofElement;
+      if (!eid) return false;
+      const pid = curId();
+      if (!pid) return false;
+      if (FM.storage) FM.storage.flushSync();
+      if (!this.list().some(e => e.id === eid)) return false;     // deleted mid-edit — keep the draft
+      const ok = await this.updateFrom(eid, pid);
+      if (!ok) return false;                                       // failed write — keep the draft
+      const list = FM.projects.list().filter(p => !p.elementDraft && p.id !== pid);
+      const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
+      if (!back) return true;                                      // nowhere to land — edit saved, draft kept
+      await FM.projects.open(back);
+      await FM.projects.discardDraft(pid);
+      return true;
+    },
+    async updateFrom(eid, projectId) {
+      const idx = this.list();
+      const at = idx.findIndex(e => e.id === eid);
+      if (at < 0) return false;                      // element deleted while it was being edited — refuse BEFORE writing anything
+      const id = projectId || curId();
+      if (id === curId()) FM.storage.flushSync();    // the draft on disk must be what he just saw
+      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
+      const layers = doc.layers || []; if (!layers.length) return false;
+      const pack = { layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      try {
+        const db = await openDB();
+        for (const l of pack.layers) {
+          const mem = (id === curId()) ? FM.media.get(l.id) : null;
+          if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
+          else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
+        }
+        await idbPut(db, 'elem:' + eid, pack);       // SAME key — this is the update
+        db.close();
+      } catch (e) { return false; }
+      /* The pack is the element. If the index write fails the edit has still landed, so report success
+         and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
+         here would make the caller keep a draft for an element that is already up to date. */
+      idx[at].count = pack.layers.length;
+      const th = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);
+      if (th) idx[at].thumb = th;
+      writeJSON(ELEM_INDEX, idx);
       return true;
     },
     async remove(eid) {

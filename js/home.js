@@ -1532,17 +1532,18 @@ window.FM = window.FM || {};
        Editing reuses `elements.insert` wholesale rather than re-deriving media hydration: a fresh transparent
        draft is opened first, so "insert into the current project" and "open for editing" are the same code
        path pointed at different projects. */
+    /* ⚠️ EDITING AN ELEMENT NOW EDITS THAT ELEMENT (queue 505). This used to mint a fresh workspace on
+       every tap and tell him to run "⋯ → Save as element" — advice that MADE A DUPLICATE, because that
+       route always mints a new element id. Measured: one element became two, and the workspace was left
+       behind each time. `openForEdit` reuses the element's own workspace and carries its id, and going
+       Home writes the edit back into the same element and puts the workspace away. */
     async function edit() {
       holdPress();
       try {
-        const pid = await FM.projects.create({ name: e.name || 'Element', width: 1080, height: 1080, elementDraft: true });
-        if (!pid) { if (FM.toast) FM.toast('Could not open that element'); return; }
-        FM.scene.project.background = null;   // transparent, like the element itself
-        const ok = await FM.elements.insert(e.id);
-        if (!ok) { if (FM.toast) FM.toast('That element’s data is missing — save it again'); return; }
-        if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
+        const pid = await FM.elements.openForEdit(e.id);
+        if (!pid) { if (FM.toast) FM.toast('That element’s data is missing — save it again'); return; }
         FM.home.close({ push: true, lead: card });
-        if (FM.toast) FM.toast('Editing “' + (e.name || 'element') + '” — ⋯ → Save as element when you’re done', 3600);
+        if (FM.toast) FM.toast('Editing “' + (e.name || 'element') + '” — your changes save back to it when you go Home', 3600);
       } finally { clearPress(true); }
     }
     async function use() {
@@ -2221,6 +2222,13 @@ window.FM = window.FM || {};
        * of it was this one call**. The card grid needs the metadata to render; it does not need the
        * new picture until you can see it, and the cards are sliding in. */
       FM.projects.touchCurrent(false, true);   // name/size/duration/layer count only — no capture
+      /* ⚠️ COMING HOME IS WHAT SAVES AN ELEMENT EDIT (queue 505). This is the one funnel out of the
+         editor, so it is where the workspace hands its layers back to the element it came from and
+         then puts itself away. Read BEFORE the commit, because committing switches project.
+         Deliberately not awaited: open() is animation-critical (the note above measures 62ms of it as
+         a visible stall), and this does IndexedDB work. Same fire-and-re-render idiom as
+         migrateThumbs two lines below. */
+      const draftingElement = !!(FM.scene && FM.scene.project && FM.scene.project.ofElement);
       if (selectMode) { selectMode = false; selected.clear(); }
       // First open of the session only — this is the arrival, not a screen you keep re-entering.
       const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2229,6 +2237,9 @@ window.FM = window.FM || {};
       toggleSearch(false);    // Home always opens on the full library, never a stale filter
       // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill
       if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
+      if (draftingElement && FM.elements && FM.elements.commitDraft) {
+        FM.elements.commitDraft().then(() => { if (root && !root.classList.contains('hidden')) render(); }).catch(() => {});
+      }
       render();
       root.classList.remove('hidden');
       // Only RETURNING plays the pop. The first open of the session is the app arriving from the

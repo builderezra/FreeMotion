@@ -42777,4 +42777,107 @@
       if (!wasOpen && FM.home.close) FM.home.close();
     }
   });
+
+  /* ═══ 505: EDITING AN ELEMENT EDITS THAT ELEMENT — one element, changed, and no new project.
+     Ezra, for the third time (340, 342, then this): "Elements and templates are still not working…
+     I don't like that when you tap on them they created as a project… stop doing the lazy way out."
+     MEASURED BEFORE: tapping an element created a real project (4 → 5), following the app's own
+     "⋯ → Save as element" instruction produced a DUPLICATE element (1 → 2, the original untouched
+     because both save routes mint a new id), and the workspace was left behind on every edit. So an
+     element could not be edited at all — only forked.
+     The assertions below ARE his acceptance test, in his words: tap an element, change it, come back —
+     one element, changed, no new project anywhere. */
+  test('505: editing an element updates that element and leaves no project behind', { item: '505' }, async function () {
+    if (!FM.elements || typeof FM.elements.openForEdit !== 'function' || typeof FM.elements.commitDraft !== 'function') {
+      throw new Error('FM.elements.openForEdit / commitDraft are missing — editing an element still has no way back to it');
+    }
+    if (typeof FM.elements.updateFrom !== 'function') throw new Error('FM.elements.updateFrom is missing — saving can still only mint a new element, which is the duplicate he reported');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const keepLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let eid = null, madeElement = false;
+    try {
+      if (hadHome) FM.home.close();
+      await sleep(120);
+      /* A real element of our own, so this never depends on what happens to be on the machine. */
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'e505', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 120, shapeH: 120, fill: '#ffcc00' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.storage.markDirty(); await FM.storage.save();
+      await sleep(200);
+      const pid0 = FM.projects.currentId();
+      if (!pid0) throw new Error('no current project to save an element from');
+      if (!await FM.elements.saveFromProject(pid0, 'E505 fixture')) throw new Error('could not create the fixture element');
+      await sleep(200);
+      const mine = FM.elements.list().filter(e => e.name === 'E505 fixture');
+      if (mine.length !== 1) throw new Error('expected exactly one fixture element, got ' + mine.length);
+      eid = mine[0].id; madeElement = true;
+      const countBefore = mine[0].count;
+      const elementsBefore = FM.elements.list().length;
+      const visibleBefore = FM.projects.list().filter(p => !p.elementDraft).length;
+      const draftsBefore = FM.projects.list().filter(p => p.elementDraft).length;
+
+      /* ── TAP IT. A workspace may exist, but nothing he can see may appear in Projects. */
+      const pid = await FM.elements.openForEdit(eid);
+      if (!pid) throw new Error('tapping the element did not open it for editing');
+      await sleep(300);
+      if (FM.scene.project.ofElement !== eid) throw new Error('the editing session does not know which element it came from (ofElement = ' + FM.scene.project.ofElement + ') — that is exactly why saving used to mint a new one');
+      const visibleDuring = FM.projects.list().filter(p => !p.elementDraft).length;
+      if (visibleDuring !== visibleBefore) throw new Error('opening an element for editing added ' + (visibleDuring - visibleBefore) + ' project(s) to the Projects list — "I don\'t like that when you tap on them they created as a project"');
+      /* CONTROL: it must actually have opened the element's layers, or "it updated" below is vacuous. */
+      if (!FM.scene.layers.length) throw new Error('the editor opened with no layers, so the element was never loaded and nothing below is measuring an edit');
+
+      /* ── one workspace per element, reused. Tapping twice must not stack them up. */
+      await FM.elements.openForEdit(eid);
+      await sleep(200);
+      const draftsAfterTwoTaps = FM.projects.list().filter(p => p.elementDraft).length;
+      if (draftsAfterTwoTaps > draftsBefore + 1) throw new Error('tapping the same element twice made ' + (draftsAfterTwoTaps - draftsBefore) + ' workspaces — they pile up forever');
+
+      /* ── CHANGE IT ── */
+      const before = FM.scene.layers.length;
+      const L2 = FM.makeLayer('shape', { name: 'e505-added', shape: 'ellipse', x: P.width / 2, y: P.height / 2, shapeW: 60, shapeH: 60, fill: '#ff00aa' });
+      L2.start = 0; L2.duration = 3; FM.scene.layers.push(L2);
+      FM.refreshAll(); FM.storage.markDirty(); await FM.storage.save();
+      await sleep(250);
+      if (FM.scene.layers.length !== before + 1) throw new Error('the edit did not take, so the round trip below proves nothing');
+
+      /* ── COME BACK ── */
+      const ok = await FM.elements.commitDraft();
+      if (!ok) throw new Error('committing the edit reported failure, so the change never reached the element');
+      await sleep(300);
+
+      const after = FM.elements.list();
+      const mineAfter = after.filter(e => e.id === eid);
+      if (after.length !== elementsBefore) throw new Error('the library went from ' + elementsBefore + ' elements to ' + after.length + ' — editing forked it instead of updating it, which is the duplicate he reported');
+      if (mineAfter.length !== 1) throw new Error('the original element is gone from the library');
+      if (mineAfter[0].count !== countBefore + 1) throw new Error('the element still has ' + mineAfter[0].count + ' layers, not ' + (countBefore + 1) + ' — the edit did not reach it');
+      /* ⚠️ AND READ THE ELEMENT ITSELF BACK, not just its card. The line above checks the library
+         INDEX — the name, the count, the thumbnail — which is only what is drawn on the card. A
+         mutation that wrote the edited layers to a NEW pack key while still updating the index sailed
+         straight through it: the card claimed two layers and the element he would actually insert
+         still had one. What is stored under this element's own id is the only thing that matters. */
+      const pack = await FM.elements.getPack(eid);
+      if (!pack || !Array.isArray(pack.layers)) throw new Error('the element has no stored data any more — the edit destroyed it');
+      if (pack.layers.length !== countBefore + 1) {
+        throw new Error('the element CARD says ' + mineAfter[0].count + ' layers but the element itself still holds ' +
+          pack.layers.length + ' — the edit was written somewhere else, so inserting it would give him the old version');
+      }
+      const visibleAfter = FM.projects.list().filter(p => !p.elementDraft).length;
+      if (visibleAfter !== visibleBefore) throw new Error('a project appeared in his library (' + visibleBefore + ' → ' + visibleAfter + ')');
+      const draftsAfter = FM.projects.list().filter(p => p.elementDraft && p.ofElement === eid).length;
+      if (draftsAfter !== 0) throw new Error('the workspace was left behind after coming home — one accumulates per edit, which is what he is seeing');
+      if (!FM.projects.currentId()) throw new Error('coming back from an element edit left no project open — the next boot would mint one');
+    } finally {
+      try { if (eid && madeElement) await FM.elements.remove(eid); } catch (e) {}
+      try {
+        for (const p of FM.projects.list().filter(p => p.elementDraft && p.ofElement === eid)) {
+          if (p.id !== FM.projects.currentId()) await FM.projects.discardDraft(p.id);
+        }
+      } catch (e) {}
+      FM.scene.layers = keepLayers; FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 })();

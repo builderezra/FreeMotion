@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.25
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.26
 >
-> **State:** v12.25, **909 tests green**, tree clean.
+> **State:** v12.26, **910 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16917,7 +16917,7 @@ re-opened #480, which I had marked done and had not fixed.
       and it should still play when you open Home.
 
 - [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Elements and templates are still not working. How I want where you can tap on them to edit them without them needing to be created as a project. I don't like that when you tap on them they created as a project. I just want them to be editable in their own sections like I know this is gonna be a hard thing to hardwire and figure out but just put the effort in like stop doing the lazy way out like I've asked for this so many times
       ⚠️ **He is right that he has asked before: this is #342 and #340**, both still open, both about exactly
@@ -16954,6 +16954,29 @@ re-opened #480, which I had marked done and had not fixed.
         on the way out. Far less risk to your projects; delivers everything visible you asked for.
       Whichever wins, the acceptance test is yours: **tap an element, change it, come back — one element,
       changed, and no new project anywhere.**
+
+      ✅ **ELEMENTS HALF DONE v12.26 — your acceptance test passes.** Measured on a clean run: tap the
+      element → **no new project appears**, change it, come back → **one element, updated in place**
+      (same id, layer count 2 → 3), **no workspace left behind**, and you land back in the project you
+      came from.
+      **Design B won, and one finding decided it.** I had two candidates and put both through a review:
+      teaching storage that an open document can BE an element (A), or keeping a hidden workspace but
+      carrying the element's id, updating in place, and clearing up on exit (B). **A would have silently
+      destroyed the media in every element on your next launch** — the boot sweep that clears orphaned
+      files builds its keep-list only from project keys, so element files stored anywhere else get
+      deleted, permanently, with no backend and no trash. Two of three reviewers picked B; the one that
+      picked A listed that same risk itself.
+      What changed: an element can now be **updated** rather than only forked (there was no update path
+      at all — both save routes minted a new id); the workspace carries the element's id and is **reused**
+      rather than minted per tap; and coming Home writes the edit back and puts the workspace away.
+      ⚠️ **The order of those last two is load-bearing** and the test proves it: switching away must come
+      before discarding, because a discard refuses to delete the document you are standing in — reversed,
+      the workspace is left behind every time, which is what you were seeing.
+      ⚠️ **TEMPLATES ARE NOT DONE — this entry stays open.** You said "elements *and* templates", and
+      templates still make a project (`useAsNew`), with the same mint-then-patch shape: saving back to a
+      template creates a new id and then papers over it in four places. Same three pieces will fix it.
+      ⚠️ **Old workspaces from before this change** (they have no element id on them) are still sitting in
+      your Elements tab — logged as #525 so they get cleared rather than lingering.
 
 - [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**
@@ -17175,4 +17198,13 @@ re-opened #480, which I had marked done and had not fixed.
       back, or drops the gesture, since those need different fixes.
       ⚠️ Check what already grows the project: trimming a clip's out-point and adding a long clip may
       already extend `project.duration`. If so, this is the same rule missing from the MOVE path.
+
+- [ ] **525 — Clear out the old element workspaces left behind by the pre-v12.26 behaviour.** (Found 24 Aug while doing #505.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Not something he asked for in words — it is the residue of the bug in #505. Every element edit before
+      v12.26 left a workspace project behind, and those old ones carry no element id, so the new clean-up
+      cannot tell what they belonged to and leaves them alone. They show in the Elements tab as drafts.
+      **What to do:** give the draft card a way to be discarded by hand, and label the ones that are
+      genuinely editing an element differently from these orphans. Do NOT auto-delete them — they may hold
+      work he never saved as an element, and that is his to decide, not mine.
 
