@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.36
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.37
 >
-> **State:** v12.36, **924 tests green**, tree clean.
+> **State:** v12.37, **925 tests green**, tree clean.
+>
+> **✅ v12.37 — you were right about the play row's numbers (#509), and right to hedge.** On a PC they
+> are dead centre; on a phone the pill stretches and the digits were sitting 71px to the left of it.
+>
+> **⛔ #508 (the janky project-open animation) I could NOT work this tick and did not guess at.** The
+> preview pane was genuinely hidden — rAF fired 0 frames in 1.6s and a control animation never moved —
+> so nothing about smoothness was measurable. Picking a nicer easing curve by eye is exactly the trap
+> #125 documents, so it is skipped with the reason recorded rather than half-done.
 >
 > **✅ v12.36 — a THIRD cause found for "the song won't play at all" (#96).** A file whose length the
 > browser will not report could import as a clip with NO length — nothing to play. Audio now asks the
@@ -17250,7 +17258,7 @@ re-opened #480, which I had marked done and had not fixed.
       from my inference. That one didn't, so it read as his.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Also the animation when opening a project still looks really Jany like the button you press on like the project you press one to open doesn't smoothly glide to the left with like a nice animation and then the project comes in smoothly from the right. It's always junkie every time it doesn't look good.
       **He is describing a specific transition**, not "make it nicer": the card he tapped slides OUT to the
@@ -17260,8 +17268,39 @@ re-opened #480, which I had marked done and had not fixed.
       rebuild, first render all land together), so any animation is competing with real work. **Measure the
       frame gaps during an open before picking an easing curve.**
 
-- [ ] **509 — The play row's numbers may not be centred.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ⛔ **SKIPPED 24 Aug — I COULD NOT MEASURE IT, AND WOULD NOT GUESS.** This entry's own instruction is
+      to measure the frame gaps before touching an easing curve, and in that session the preview pane was
+      genuinely hidden: `document.hidden` **true**, `requestAnimationFrame` fired **0 frames in 1.6s**, and
+      a throwaway control animation sat at `translateX(0)` for its whole run. Nothing about smoothness can
+      be measured in that state.
+      **This is worth recording rather than retrying blind**, because the alternative — picking a nicer
+      curve by eye and declaring it smoother — is precisely the pattern #125 spent five passes documenting:
+      *"every time lag comes up I have measured on THIS machine, found acceptable numbers, and moved on"*.
+      ⚠️ **AND IT UPDATES LOOP RULE 11.** That rule cites a v11.68 measurement of `document.hidden` as
+      **FALSE** in the pane. Today it is **TRUE**. Both readings are real; the pane's visibility simply
+      varies with how the session is running — which is the whole reason the rule says CHECK IT WITH A
+      CONTROL rather than stating an answer. The control is what caught it here.
+      **Next attempt needs the pane actually visible** (or a device profile). Two things already known and
+      worth keeping: the two-phase push exists (queue 128/459) so the transition is not missing, and the
+      dead time it was built to hide measured 28ms desktop / 113ms at 6x throttle — so if it still reads as
+      janky, the suspect is the phase-2 join competing with the editor's first build, not the curve.
+
+- [x] **509 — The play row's numbers may not be centred.** (24 Aug.)
+      ✅ **Measured, and your hedge was the accurate part.** On a desktop you would have been wrong: at
+      1000px the pill shrink-wraps the digits — 84.4px wide, 1.0px of slack each side, dead centre both
+      horizontally (offset 0.00) and vertically (ink, pill and the skip buttons all centre on 429.0).
+      At 380px I measured that same pill **226.6px wide with the digits 71.1px LEFT of its centre** —
+      1.0px of slack on the left, **143.2px on the right** — because `#time-readout` had no `text-align`
+      at all and inherited `start`, so the numbers hugged the left edge of a pill that had stretched.
+      **Fixed with `text-align: center`, deliberately NOT a width.** The note beside that rule records
+      that pinning a width here once pushed the desktop play control 3px off screen centre and broke a
+      v4.97 assertion — so the box is left exactly as it was, and the test asserts that too.
+      ⚠️ **One honest limit.** I could not get the stretched state back on demand afterwards — through
+      reloads, resizes, white-chrome and selection changes the transport's middle track measured a
+      content-sized 84.4px every time. So the test asserts the PROPERTY rather than replaying the state:
+      widen the pill and the digits must stay centred. **The corroboration is good, though** — forcing
+      the pill to 226px reproduces the offset at **−70.81px** against the **−71.11px** I measured live,
+      which is the same mechanism to within a third of a pixel.
       His words, verbatim:
       > Also I'm not 100% sure but I believe that the play buttons Numbers aren't scented. I may be wrong but I feel like they are scented not scented scented scented in the middle. Centred*********
       (Autocorrect fought him — he means **centred**.) The timecode readout in the transport row: he thinks

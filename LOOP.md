@@ -52,6 +52,11 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     The original observation was real: a slam animation sampled at six points returned the same frozen
     transform every time and looked exactly like a bug. Throttling happens. It is just not a constant
     of the pane, so it has to be read at the moment of measuring.
+    ⚠️ **AND ON 24 AUG IT REPORTED `true` AGAIN** — rAF fired 0 frames in 1.6s and a control animation
+    never advanced, so queue 508 (a smoothness item) could not be worked at all that tick. So the pane's
+    visibility VARIES between sessions: v11.68 measured false, 24 Aug measured true. Neither is the rule.
+    **The rule is the control.** If it comes back hidden, the honest move is to skip the timing work and
+    say so — not to pick an easing curve by eye and call it smoother.
     Check `document.hidden` before believing any timing measurement — and CHECK IT WITH A CONTROL:
     run a throwaway `element.animate()` and confirm it actually advances. Queue 250 was blocked on this
     for two separate sessions, both of which recorded "motion cannot be timed here"; at v11.71 the pane
@@ -97,7 +102,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.36, 924 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.37, 925 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.37 worked #509** — the timecode digits. He hedged ("not 100% sure") and the hedge was the accurate
+part: on PC dead centre both ways; at 380px the pill stretches to 226.6px and the digits sat **71.1px
+left** of it, because `#time-readout` had no `text-align` and inherited `start`. Fixed with
+`text-align: center`, NOT a width — the note there records a pinned width once shoving the desktop play
+control 3px off centre. Test asserts the property (widen the pill → digits stay centred) because I could
+not get the stretched state back on demand; mutation reproduces it at **−70.81px** vs the **−71.11px**
+measured live, i.e. the same mechanism to a third of a pixel.
+⛔ **#508 SKIPPED, DELIBERATELY, AND IT IS THE MORE IMPORTANT NOTE.** It is a smoothness item and the
+preview pane was HIDDEN: `document.hidden` true, rAF 0 frames in 1.6s, control animation never advanced.
+**Rule 11 updated** — v11.68 measured hidden FALSE, 24 Aug measured TRUE, so the pane VARIES and the rule
+is the control, not either answer. When it comes back hidden, skip the timing work and say so.
+**Queue reading, since three of the four oldest are blocked on him:** #47 (worker move + a phone call
+interrupt), #95 and #125 (both want the lag readout tapped once on his phone), #96 (wants the mp3),
+#98 (wants a photo of the iOS keyboard bar). 33 of 59 open items are READY; oldest actionable now #511.
 **v12.36 worked #96** (after #47 last tick and #95, which is genuinely blocked on a number from his phone).
 **A THIRD cause for "the song won't play at all": the clip could be born with duration 0.** The import's
 bogus-length branch (element says Infinity/NaN/0) was written for phone recordings and applied their

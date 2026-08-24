@@ -28144,6 +28144,52 @@
     }
   });
 
+  test('the timecode digits stay centred in their pill however wide it gets (queue 509)', { item: '509' }, async function () {
+    /* Ezra: "I believe that the play buttons Numbers aren't … Centred", and he said he was not sure —
+       which fits, because on a desktop he would have been wrong. Measured at 1000px the pill shrink-wraps
+       the text: 84.4px wide, 1.0px of slack each side, digits dead centre horizontally AND vertically.
+       At 380px I measured the same pill 226.6px wide with the digits 71.1px LEFT of its centre — 1.0px of
+       slack on the left and 143.2px on the right — because it had no `text-align` and inherited `start`.
+       ⚠️ HONEST LIMIT, STATED RATHER THAN GLOSSED: I could not get that stretched state back on demand
+       afterwards (the transport grid measured a content-sized 84.4px track through reloads, resizes,
+       white-chrome and selection changes alike). So this does NOT assert a repair I can demonstrate end
+       to end — it asserts the PROPERTY that makes the fault impossible: whenever the pill is wider than
+       its digits, for whatever reason, the digits sit in the middle of it. That is true of the state I
+       measured and of any other, and it is what `text-align: center` buys. */
+    const tc = document.getElementById('time-readout');
+    if (!tc) throw new Error('no #time-readout in the transport row — the thing this test is about is missing');
+    const measure = () => {
+      const cs = getComputedStyle(tc), box = tc.getBoundingClientRect();
+      const rng = document.createRange(); rng.selectNodeContents(tc);
+      const ink = rng.getBoundingClientRect();
+      return { boxW: box.width, inkW: ink.width,
+        offH: ((ink.left + ink.right) / 2) - ((box.left + box.right) / 2),
+        offV: ((ink.top + ink.bottom) / 2) - ((box.top + box.bottom) / 2),
+        align: cs.textAlign };
+    };
+    const natural = measure();
+    if (!(natural.inkW > 10)) throw new Error('the readout has no visible digits to measure (' + natural.inkW + 'px of ink)');
+    if (Math.abs(natural.offH) > 1) throw new Error('at its natural width the digits are ' + natural.offH.toFixed(2) + 'px off centre horizontally');
+    if (Math.abs(natural.offV) > 1) throw new Error('at its natural width the digits are ' + natural.offV.toFixed(2) + 'px off centre vertically');
+
+    /* NOW FORCE THE STATE HE SAW: a pill far wider than its text. Before the fix this put the digits
+       ~71px left; the slack has to be shared instead. */
+    const hadInline = tc.style.width;
+    try {
+      tc.style.width = '226px';
+      const wide = measure();
+      if (!(wide.boxW > natural.boxW + 60)) throw new Error('the pill did not actually widen (' + wide.boxW.toFixed(1) + 'px), so the stretched case is not being tested');
+      if (Math.abs(wide.offH) > 1.5) throw new Error('stretched to ' + wide.boxW.toFixed(0) + 'px the digits sit ' + wide.offH.toFixed(2) + 'px off centre — that is the fault he reported, where the numbers hug the left edge');
+      if (Math.abs(wide.offV) > 1) throw new Error('stretched, the digits are ' + wide.offV.toFixed(2) + 'px off centre vertically');
+    } finally { tc.style.width = hadInline; }
+
+    /* CONTROL FOR THE WHOLE THING: the pill's own position must not have moved. The CSS note beside this
+       rule records that pinning a WIDTH here once pushed the desktop play control 3px off screen centre
+       and broke a v4.97 assertion — so the fix had to be text-align, and this proves the box is untouched. */
+    const after = measure();
+    if (Math.abs(after.boxW - natural.boxW) > 0.5) throw new Error('the pill\u2019s own width changed from ' + natural.boxW.toFixed(1) + ' to ' + after.boxW.toFixed(1) + ' — centring the text must not resize the box');
+  });
+
   test('a song whose element will not report its length still gets a real duration (queue 96)', { item: '96' }, async function () {
     /* Ezra: "I just tried adding a song and it's really buggy and won't even play at all sometimes, and
        it's the only thing in the timeline."

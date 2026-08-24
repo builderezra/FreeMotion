@@ -2269,6 +2269,20 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      The residual 1.00px is stated rather than quietly called "aligned" — one CSS pixel, identical through
      two different centring mechanisms, and not worth trading a real regression for. */
 
+  /* CENTRE THE DIGITS IN THE PILL (queue 509). Ezra: "I believe that the play buttons Numbers aren't
+     … Centred", and he added that he was not sure — which fits exactly, because ON A DESKTOP HE WOULD
+     HAVE BEEN WRONG. Measured at 1000px the pill shrink-wraps the text: 84.4px wide, 1.0px of slack
+     each side, digits dead centre horizontally AND vertically.
+     On a phone the same pill STRETCHES to fill its grid track between the two skip buttons — 226.6px at
+     380px wide — and with no `text-align` it inherited `start`, so the digits hugged the left edge:
+     **1.0px of slack on the left and 143.2px on the right, putting them 71.1px left of the pill's own
+     centre.** That is what he was seeing, and it only exists at phone widths.
+     ⚠️ Deliberately `text-align`, NOT a width. The note above records that pinning a width here pushed
+     the desktop play control 3px off screen centre and broke a v4.97 assertion. Centring the TEXT leaves
+     the box exactly as it was, so that regression cannot come back — and the suite still holds the pill's
+     own position. */
+  text-align: center;
+
   cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
   transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease, transform .09s ease;
 }
