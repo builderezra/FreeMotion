@@ -97,8 +97,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.35, 923 tests green, tree clean, `HEAD == ssh/main`.** (No version bump this tick — verification
-work, nothing user-visible changed, so no POLISH-LOG entry either.)
+**v12.36, 924 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.36 worked #96** (after #47 last tick and #95, which is genuinely blocked on a number from his phone).
+**A THIRD cause for "the song won't play at all": the clip could be born with duration 0.** The import's
+bogus-length branch (element says Infinity/NaN/0) was written for phone recordings and applied their
+seek-to-the-end trick to audio too; when it lands nothing it recorded 0, so the clip had no length and
+play did nothing. Audio now asks the DECODER first — already known to be 24x faster and righter (queue 72:
+26.384s in 25ms vs 13.453s in 600ms), just never wired in here. Video keeps the old route, with a control.
+⚠️ **The test fakes the ELEMENT, deliberately.** Chromium recovers a correct 3s from every malformed WAV
+buildable in-browser (data size 0 and 0xFFFFFFFF both tried), so no synthesised file can provoke the lie.
+The FILE is real and goes through the real decoder. Mutation-checked: removing decode-first returns 0s.
+**Still open in #96:** cannot prove it was HIS bug — the file itself is still the useful thing.
 **Last tick worked #47, the OLDEST numbered item, and closed its "backgrounding" ground.** That entry had
 said for weeks that backgrounding mid-export needed a real device. **Rule 11 again: it was a claim with a
 date, not a fact.** "Backgrounded" is two imposable effects — rAF stops, setTimeout clamps ~84x — so it

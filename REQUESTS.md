@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.35
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.36
 >
-> **State:** v12.35, **922 tests green**, tree clean.
+> **State:** v12.36, **924 tests green**, tree clean.
+>
+> **✅ v12.36 — a THIRD cause found for "the song won't play at all" (#96).** A file whose length the
+> browser will not report could import as a clip with NO length — nothing to play. Audio now asks the
+> decoder instead of guessing. It matches your symptom exactly, on the file type this entry already
+> suspected, but I still cannot prove it was YOUR bug: if it happens again, send the file.
 >
 > **✅ v12.35 — THE MEDIA AND AUDIO MENUS ON PC ARE FIXED (#542).** The add menu was not being held
 > inside the inspector panel at all, so everything past the fold spilled out and was clipped by the app
@@ -1836,6 +1841,30 @@ better still, keep working inside the turn rather than parking work for a later 
       **The taste call in (c) is still yours and still unanswered** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+
+      ✅ **v12.36 — A THIRD CAUSE, AND IT PRODUCES YOUR SYMPTOM EXACTLY: the clip could be born with NO
+      LENGTH.** Found by taking this entry's own lead seriously — that the suspect is an mp3 whose length
+      the browser is unsure of — and asking what the import does when the element will not give a figure
+      at all (Infinity, NaN or 0). That branch was written for phone recordings, and it applied their fix
+      to everything: seek to the end and wait up to 1500ms for the file to reveal itself. **When that
+      lands nothing it recorded the length as ZERO** — the element's own figure is bogus too — so the
+      clip arrived with no duration and pressing play did nothing whatsoever.
+      **"Sometimes" is the tell, and it fits:** whether the trick lands depends on how fast the file
+      decodes, which is why it worked most of the time and not always.
+      **The fix:** an audio file asks the DECODER first. That was already known to be better and about
+      24x faster — queue 72 measured 26.384s in 25ms against the seek trick's 13.453s in 600ms — it was
+      simply never wired into this branch. Video keeps the old route, which is what it was written for,
+      and there is a control test for that so this fix cannot quietly break phone recordings.
+      ⚠️ **An honest note on the test.** The element is FAKED, which is normally a smell. It is the one
+      thing that cannot be synthesised here: I built WAVs declaring a zero-length data chunk and a
+      0xFFFFFFFF one, and Chromium recovered the correct 3s from every variant. No file this suite can
+      make will provoke a browser into lying, so the lie is supplied directly — but the FILE is real and
+      goes through the real decoder, which is the half that has to be genuine. Mutation-checked: removing
+      the decode-first path brings back 0s exactly.
+      ⚠️ **This does NOT close the entry, because I still cannot prove it is YOUR bug.** It is a real
+      defect that produces your exact symptom on the exact file type this entry already suspected. If it
+      happens again, the file itself (or just its format and rough length) is still the most useful thing
+      you could send.
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
       it's the only thing in the timeline."* "Only thing in the timeline" rules out mixing, layer count,
       render load and effect cost — this is the audio path failing on its own. "Sometimes" means a RACE,

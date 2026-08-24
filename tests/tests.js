@@ -28144,6 +28144,64 @@
     }
   });
 
+  test('a song whose element will not report its length still gets a real duration (queue 96)', { item: '96' }, async function () {
+    /* Ezra: "I just tried adding a song and it's really buggy and won't even play at all sometimes, and
+       it's the only thing in the timeline."
+       The import path has a branch for an element that reports Infinity / NaN / 0 at `loadedmetadata`.
+       It was written for MediaRecorder webm and used a seek-to-the-end trick for EVERYTHING, audio
+       included — and when that trick lands nothing within 1500ms it resolved **0**. The element's own
+       figure is bogus too, so the record carried duration 0, the clip was born with no length, and
+       pressing play did nothing at all. "Sometimes" is exactly right: whether the trick lands depends
+       on how fast the file decodes.
+       ⚠️ WHY THE ELEMENT IS FAKED HERE, since that is normally a smell. It is the ONE thing that cannot
+       be synthesised: I built WAVs declaring a zero-length data chunk and a 0xFFFFFFFF one, and
+       Chromium recovered the correct 3s from every single variant. There is no file this test can make
+       that provokes a browser into lying, so the lie is supplied directly. The FILE is real — decoded
+       by the real decoder — which is the half that has to be genuine for the assertion to mean
+       anything. */
+    if (typeof FM._bogusDuration !== 'function') throw new Error('FM._bogusDuration is missing — the import path\u2019s bogus-length branch is not reachable from the suite');
+
+    // A real, decodable 3-second WAV.
+    const SR = 8000, SECS = 3, n = SR * SECS;
+    const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const wr = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    wr(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); wr(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    wr(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.sin(i / 20) * 8000, true);
+    const file = new File([buf], 'probe-song.wav', { type: 'audio/wav' });
+
+    /* An element that behaves exactly as a VBR mp3's does: it never learns its own length, and the
+       seek trick therefore never fires an event. Before the fix this returned 0 after 1500ms. */
+    const liar = {
+      duration: Infinity, videoWidth: 0, currentTime: 0,
+      addEventListener() {}, removeEventListener() {}
+    };
+    const t0 = Date.now();
+    const got = await FM._bogusDuration(liar, file);
+    const ms = Date.now() - t0;
+
+    if (!(got > 0)) throw new Error('an audio file whose element never reports a length came back as ' + got + 's — that is a clip with no duration, which is exactly "it will not play at all"');
+    if (Math.abs(got - SECS) > 0.15) throw new Error('the recovered length is ' + got + 's for a ' + SECS + 's file — it is not reading the file, it is guessing');
+    /* AND IT MUST NOT HAVE WAITED FOR THE SEEK TRICK TO TIME OUT. Decoding is the fast path (queue 72
+       measured 25ms against the trick's 600ms); if this took over a second it fell through to the
+       1500ms net and merely got lucky. */
+    if (ms > 900) throw new Error('it took ' + ms + 'ms, so it went through the 1500ms seek-trick timeout rather than asking the decoder first');
+
+    /* THE CONTROL: a VIDEO element with a bogus length must still use the seek trick, not the audio
+       decode — otherwise this "fix" would have quietly changed the webm path this branch exists for. */
+    let sawSeekAttempt = false;
+    const vid = {
+      duration: Infinity, videoWidth: 640,
+      set currentTime(x) { if (x > 1000) sawSeekAttempt = true; }, get currentTime() { return 0; },
+      addEventListener() {}, removeEventListener() {}
+    };
+    const vgot = await FM._bogusDuration(vid, file);
+    if (!sawSeekAttempt) throw new Error('a VIDEO with a bogus length no longer tries the seek-to-the-end trick — the webm path this branch was written for is broken');
+    if (vgot !== 0) throw new Error('the video path invented a length of ' + vgot + ' from an element that never resolved');
+  });
+
   test('an export survives the tab being backgrounded (queue 47)', { item: '47' }, async function () {
     /* ⚠️ THIS TURNS A "NEEDS A REAL DEVICE" BLOCKER INTO A MEASUREMENT, which is LOOP rule 11: a blocker
        written in an entry is a claim with a date on it, not a fact. Queue 47's remaining safety ground is

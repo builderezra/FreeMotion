@@ -110,23 +110,7 @@ window.FM = window.FM || {};
         const meta = el.duration;
         const bogus = !isFinite(meta) || isNaN(meta) || meta === 0;   // MediaRecorder webm: Infinity until forced
         if (bogus) {
-          let best = 0;
-          const cleanup = () => {
-            el.removeEventListener('durationchange', onResolve);
-            el.removeEventListener('timeupdate', onResolve);
-            el.removeEventListener('seeked', onResolve);
-          };
-          function onResolve() {
-            if (isFinite(el.duration) && el.duration > best) best = el.duration;
-            if (isFinite(el.duration) && el.duration > 0) {
-              cleanup(); try { el.currentTime = 0; } catch (e) {} finish(best);
-            }
-          }
-          el.addEventListener('durationchange', onResolve);
-          el.addEventListener('timeupdate', onResolve);
-          el.addEventListener('seeked', onResolve);
-          try { el.currentTime = 1e7; } catch (e) {}
-          setTimeout(() => { cleanup(); try { el.currentTime = 0; } catch (e) {} finish(best); }, 1500);   // never hang
+          finish(await FM._bogusDuration(el, file));
         } else if (!el.videoWidth) {
           /* AUDIO-ONLY: TRUST THE DECODE, NOT THE CONTAINER (queue 72). A VBR mp3 whose Xing/VBRI
            * header is missing or clobbered — a stream rip, a concatenation, a tag editor that ate the
@@ -145,20 +129,73 @@ window.FM = window.FM || {};
            * Bounded three ways: only for audio, only under the waveform's own size ceiling, and inside
            * a try/catch that falls back to the container figure. Whichever is LARGER wins, so a decode
            * that learns nothing can never SHORTEN a clip. */
-          let dec = 0;
-          if (!(file && file.size > WAVE_MAX_BYTES)) {
-            try {
-              const ab = await FM.decodeAudio(file, { rate: WAVE_RATE });
-              if (ab && isFinite(ab.duration) && ab.duration > 0) dec = ab.duration;
-            } catch (e) {}
-          }
-          finish(dec);
+          finish(await FM._audioDurationFromDecode(file));
         } else {
           finish();
         }
       }, { once: true });
       el.addEventListener('error', () => { if (settled) return; settled = true; clearTimeout(metaTimer); try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
     });
+  };
+
+  /* ASK THE FILE ITSELF HOW LONG IT IS, by decoding it at 8kHz (queue 72, reused by queue 96).
+   * Pulled out of the audio branch below so BOTH duration paths can use it — see the note in the
+   * bogus branch for why that matters. Bounded the same three ways it always was: audio only, under
+   * the waveform's size ceiling, and inside a try/catch, so a file it cannot read costs nothing and
+   * returns 0 rather than throwing into an import. */
+  /* HOW LONG IS A FILE WHOSE ELEMENT WILL NOT SAY? (queue 96.)
+   * `loadedmetadata` can report Infinity, NaN or 0 — MediaRecorder webm always does until you seek it,
+   * and a VBR mp3 with a missing Xing header can too. Pulled out as its own function because the
+   * element's behaviour is the one thing that cannot be synthesised in a test: Chromium recovers a
+   * correct length from every malformed WAV that can be built in the browser, so the only way to drive
+   * this path is to hand it an element that lies. That is what the suite does.
+   *
+   * ⚠️ AUDIO ASKS THE DECODER FIRST, and that is the fix. This branch was written for webm and applied
+   * its seek-to-the-end trick to everything, including audio — where queue 72 had ALREADY measured the
+   * trick as worse and slower: on a 26.384s fixture it recovered 13.453s in 600ms, against an 8kHz
+   * decode returning 26.384s exactly in 25ms.
+   * The part that loses the song is what happened when the trick landed nothing: after 1500ms this
+   * resolved 0, and the element's own figure is bogus too, so the record carried **duration 0**,
+   * addMediaLayer made a clip with no length, and pressing play did nothing whatsoever. That is his
+   * report word for word — *"it's really buggy and won't even play at all sometimes, and it's the only
+   * thing in the timeline"* — and "sometimes" is exactly right, because whether the seek trick lands
+   * depends on how quickly the file decodes. */
+  FM._bogusDuration = function (el, file) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (v) => { if (settled) return; settled = true; resolve((isFinite(v) && v > 0) ? v : 0); };
+      const seekTrick = () => {
+        let best = 0;
+        const cleanup = () => {
+          el.removeEventListener('durationchange', onResolve);
+          el.removeEventListener('timeupdate', onResolve);
+          el.removeEventListener('seeked', onResolve);
+        };
+        function onResolve() {
+          if (isFinite(el.duration) && el.duration > best) best = el.duration;
+          if (isFinite(el.duration) && el.duration > 0) { cleanup(); try { el.currentTime = 0; } catch (e) {} done(best); }
+        }
+        el.addEventListener('durationchange', onResolve);
+        el.addEventListener('timeupdate', onResolve);
+        el.addEventListener('seeked', onResolve);
+        try { el.currentTime = 1e7; } catch (e) {}
+        setTimeout(() => { cleanup(); try { el.currentTime = 0; } catch (e) {} done(best); }, 1500);   // never hang
+      };
+      if (!el.videoWidth) {
+        FM._audioDurationFromDecode(file).then((d) => { if (d > 0) done(d); else seekTrick(); });
+        return;
+      }
+      seekTrick();
+    });
+  };
+
+  FM._audioDurationFromDecode = async function (file) {
+    if (!file || file.size > WAVE_MAX_BYTES) return 0;
+    try {
+      const ab = await FM.decodeAudio(file, { rate: WAVE_RATE });
+      if (ab && isFinite(ab.duration) && ab.duration > 0) return ab.duration;
+    } catch (e) {}
+    return 0;
   };
 
   /* ---- Repaint the preview when a clip becomes DECODABLE -----------------------------------------
