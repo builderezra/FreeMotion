@@ -2145,6 +2145,32 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   transition: top 220ms cubic-bezier(.22,.8,.3,1), background 160ms ease;   /* clause 9 — the clean animation */
 }
 @media (prefers-reduced-motion: reduce) { .sw-knob { transition: none; } }
+
+/* ═══ WHITE AT REST, BLUE WHEN IT MOVES (queue 501). Ezra: "Make the switch button white by default and
+   if you press it to move the add button then it will change to the blue colour for a second or whatever
+   to signify you moved the add button."
+   The knob was accent blue all the time, which spent the app's one attention colour on a control that is
+   not doing anything. White at rest, and the blue now MEANS something: the add row it moves is usually
+   scrolled out of view, so the flash is the only feedback that the press landed.
+   ⚠️ EVERYTHING HERE IS UNDER `body.white-chrome`, which js/app.js sets from one constant — his own
+   condition: "I may want to undo this so make sure you have a way to quickly un do if I decide to."
+   The dragging state (#416, the switch wearing the dragged layer's colour) is deliberately NOT touched:
+   it sets --sw-colour and its rules come later, so it still wins while a layer is in hand. */
+body.white-chrome .sw-knob { background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.5); }
+body.white-chrome #btn-addside.sw-moved .sw-knob {
+  background: var(--accent);
+  box-shadow: 0 0 9px rgba(78,168,255,.85);
+}
+body.white-chrome #btn-addside.sw-moved .sw-track {
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.35), 0 0 8px -1px var(--accent);
+}
+/* The flash fades back rather than snapping, but the knob's own travel keeps its easing. */
+body.white-chrome .sw-knob,
+body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.22,.8,.3,1), background 260ms ease, box-shadow 260ms ease, border-color 260ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  body.white-chrome .sw-knob, body.white-chrome #btn-addside .sw-track { transition: none; }
+}
 /* DESKTOP transport (v4.96). Ezra: "you can move in all the buttons so they fit, they dont need to
    keep the same spacing anymore, and you can move the view options button to the far right."
    Phone keeps the rule above — seven controls spread edge to edge, which is right on a 375px row.

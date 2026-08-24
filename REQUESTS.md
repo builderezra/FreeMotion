@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.21
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.22
 >
-> **State:** v12.21, **905 tests green**, tree clean.
+> **State:** v12.22, **906 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16841,16 +16841,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#425 clause 3 is still open and asks whether COPY moves right too.** Answer that at the same time
       if he touches this one — the two are the same question about two different rows.
 
-- [ ] **501 — The add-row switch should be white at rest and flash blue when you press it.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **501 — The add-row switch should be white at rest and flash blue when you press it.** ✅ **DONE v12.22.** (24 Aug.)
       His words, verbatim:
       > Make the switch button white by default and if you press it to move the add button then it will change to the blue colour for a second or whatever to signify you moved the add button
       **Two clauses:**
       1. [ ] The switch (`#btn-addside`) is **white by default** — it is accent-coloured now.
       2. [ ] Pressing it (which sends the add row to the other end) **flashes blue briefly**, as the
              acknowledgement that the row actually moved.
+      **Both done, and measured:** white at rest (`rgb(255,255,255)`), the accent exactly (`#5ac7ed`) within
+      a third of a second of the press, back to white about a second later.
+      **The flash earns its keep** — the add row this switch moves is usually scrolled out of sight, so the
+      colour is the only confirmation the press did anything. The test refuses to pass if the row did not
+      actually move, so it can never end up confirming something that did not happen.
       ⚠️ It already carries the dragged layer's colour while you drag a layer (#416) — that behaviour is his
-      too, so the new resting/flash colours must not fight it. Check both states before calling it done.
+      too, and it still wins: verified the knob goes to the layer colour mid-drag, not white.
+      🔄 **The undo switch you asked for in #503 is built and this is behind it.** One constant in
+      `js/app.js` — `const WHITE_CHROME = true` — sets a `white-chrome` class on the page, and every rule
+      for the new look hangs off it. Flip it to `false` and the row is exactly what it was, in one line.
+      The play-button half (#503) will hang off the same switch, so both revert together as you asked.
 
 - [ ] **502 — Dragging a layer does not live update.** (24 Aug, phone screenshot at v12.19.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -705,6 +705,18 @@ window.FM = window.FM || {};
   //   (none)      nothing selected            → project header
   //   m-editing   exactly 1, not selecting    → clip header
   //   sel-mode    long-press select mode, OR any 2+ selection (shift-click, Select All) → selection header
+  /* ═══ THE WHITE-CHROME LOOK, AND ITS OFF SWITCH (queue 501 + 503).
+     Ezra asked for the add-row switch to be white at rest (501) and for the play button to lose its blue
+     fill and wear a white outline (503) — in his words, "to hopefully make that row of buttons look more
+     coherent". He also said, in the same breath: "But I may want to undo this so make sure you have a
+     way to quickly un do if I decide to."
+     So both changes are gated on ONE body class, set from the single constant below. Every rule for the
+     new look is written under `body.white-chrome` in styles.css and nothing else changes behaviour —
+     flip this to `false` and the row is exactly what it was, in one line and one release. */
+  const WHITE_CHROME = true;
+  try { document.body.classList.toggle('white-chrome', WHITE_CHROME); } catch (e) {}
+  FM._whiteChrome = WHITE_CHROME;   // read by the suite
+
   FM.syncSelectionChrome = function () {
     const n = FM.selectionIds ? FM.selectionIds().length : 0;
     if (n === 0 && FM.selectMode) FM.selectMode = false;   // select-mode ends when the selection empties
@@ -5009,7 +5021,23 @@ window.FM = window.FM || {};
        camera would hijack the view, so the button had no useful second thing to do. Nothing here ever
        DELETES a camera — hide and unhide are the only states after the first tap. */
     const addSide = document.getElementById('btn-addside');
-    if (addSide) { addSide.addEventListener('click', () => FM.toggleAddSide()); syncAddSwitch(); }
+    if (addSide) {
+      addSide.addEventListener('click', () => {
+        FM.toggleAddSide();
+        /* FLASH BLUE TO SAY IT MOVED (queue 501). Ezra: "if you press it to move the add button then it
+           will change to the blue colour for a second or whatever to signify you moved the add button".
+           The knob is white at rest now, so the accent colour is free to mean "that press did something"
+           — which is the one thing this control could not previously tell you, since the row it moves is
+           often scrolled out of sight. Restarted rather than queued, so a second press re-flashes
+           instead of being swallowed by the first one still running. */
+        addSide.classList.remove('sw-moved');
+        void addSide.offsetWidth;                       // reflow, or removing and re-adding in one frame is a no-op
+        addSide.classList.add('sw-moved');
+        clearTimeout(addSide._swFlash);
+        addSide._swFlash = setTimeout(() => addSide.classList.remove('sw-moved'), 900);
+      });
+      syncAddSwitch();
+    }
     const vbCam = document.getElementById('vb-camera');
     if (vbCam) {
       const cam = () => FM.scene.layers.filter(l => l.type === 'camera')[0] || null;

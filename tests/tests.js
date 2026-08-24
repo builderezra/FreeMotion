@@ -42478,4 +42478,69 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  /* ═══ 501: THE ADD-ROW SWITCH IS WHITE AT REST AND FLASHES BLUE WHEN IT MOVES THE ROW.
+     Ezra: "Make the switch button white by default and if you press it to move the add button then it
+     will change to the blue colour for a second or whatever to signify you moved the add button."
+     The point of the flash is not decoration: the add row this control moves is usually scrolled out of
+     sight, so the colour is the only confirmation the press did anything.
+     Also asserted: the switch still wears the dragged layer's colour while a layer is in hand (#416,
+     also his), and the whole look sits behind one revert switch (#503 clause 4: "I may want to undo
+     this so make sure you have a way to quickly un do if I decide to"). */
+  test('501: the add-row switch is white at rest and flashes accent when it moves the row', { item: '501' }, async function () {
+    const btn = document.getElementById('btn-addside');
+    if (!btn) throw new Error('#btn-addside is missing');
+    const knob = btn.querySelector('.sw-knob');
+    if (!knob) throw new Error('the switch has no knob to colour');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const rgb = (s) => (String(s).match(/\d+/g) || []).slice(0, 3).map(Number);
+    const near = (a, b, tol) => a.length === 3 && b.length === 3 && a.every((v, i) => Math.abs(v - b[i]) <= tol);
+    const hexToRgb = (h) => h.startsWith('#') ? [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)) : rgb(h);
+    const accent = hexToRgb(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+
+    /* CONTROL: white and the accent must be different colours, or every check below is vacuous. */
+    if (near(accent, [255, 255, 255], 24)) throw new Error('--accent is itself near-white (' + accent + '), so "white at rest, accent on press" cannot be told apart and this test proves nothing');
+
+    /* THE REVERT SWITCH (#503 clause 4). One class, one constant — he asked to be able to undo it. */
+    if (typeof FM._whiteChrome !== 'boolean') throw new Error('FM._whiteChrome is missing — there is no single switch to turn this look off again, which he asked for explicitly');
+    if (FM._whiteChrome !== document.body.classList.contains('white-chrome')) throw new Error('the white-chrome constant and the body class disagree, so flipping the constant would not actually revert the look');
+    if (!FM._whiteChrome) return;   // deliberately reverted — the rules below are not meant to apply
+
+    const keepAt = FM.addAt;
+    try {
+      btn.classList.remove('sw-moved', 'sw-dragging');
+      btn.style.removeProperty('--sw-colour');
+      await sleep(340);
+      const rest = getComputedStyle(knob).backgroundColor;
+      if (!near(rgb(rest), [255, 255, 255], 4)) throw new Error('the switch knob is ' + rest + ' at rest, not white — that is the whole of his first sentence');
+
+      /* ── pressing it must MOVE the row and flash. Both, because a flash on a press that did nothing
+         would be worse than no flash: it would confirm something that did not happen. */
+      const before = FM.addAt;
+      btn.click();
+      await sleep(340);
+      if (FM.addAt === before) throw new Error('pressing the switch did not move the add row (still at ' + before + '), so the flash would be confirming nothing');
+      const peak = getComputedStyle(knob).backgroundColor;
+      if (!near(rgb(peak), accent, 10)) throw new Error('the knob is ' + peak + ' just after the press, not the accent colour (' + accent + ') — there is no flash to say the row moved');
+
+      /* ── and it must go back, or "for a second or whatever" has become permanent. */
+      await sleep(1300);
+      const back = getComputedStyle(knob).backgroundColor;
+      if (!near(rgb(back), [255, 255, 255], 4)) throw new Error('the knob is still ' + back + ' more than a second after the press — the flash never ends, so it stops meaning "that press did something"');
+
+      /* ── #416 still wins: while dragging a layer the switch wears THAT layer's colour. */
+      btn.classList.add('sw-dragging');
+      btn.style.setProperty('--sw-colour', 'rgb(255, 0, 128)');
+      await sleep(340);
+      const dragging = getComputedStyle(knob).backgroundColor;
+      if (!near(rgb(dragging), [255, 0, 128], 8)) throw new Error('while dragging a layer the knob is ' + dragging + ' instead of the layer colour — the new resting white has overridden queue 416, which is also his');
+    } finally {
+      btn.classList.remove('sw-moved', 'sw-dragging');
+      btn.style.removeProperty('--sw-colour');
+      FM.addAt = keepAt;
+      if (FM.clampAddAt) FM.clampAddAt();
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();
