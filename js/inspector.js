@@ -5741,6 +5741,12 @@ window.FM = window.FM || {};
         }
       }
       const layer = FM.selectedLayer(FM.scene);
+      /* THE RAISED ADD MENU HAS TO COME BACK DOWN WHEN IT STOPS BEING THE ADD MENU (queue 511).
+         Selecting a layer swaps this panel's contents, and a panel raised over the canvas would
+         otherwise stay raised while showing something else entirely — with its drag handle hidden, so
+         there is no way to lower it. See the note on FM.syncAddMenuFloat. Called here because this is
+         the one path every selection change already goes through. */
+      if (FM.syncAddMenuFloat) FM.syncAddMenuFloat();
       // The LABEL span, not the whole row — the row also holds the project-name field (v6.13), and
       // writing textContent on the row would delete it on the next refresh.
       const title = document.querySelector('#inspector-panel .panel-title-label');

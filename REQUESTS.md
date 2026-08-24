@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.38
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.39
 >
-> **State:** v12.38, **926 tests green**, tree clean.
+> **State:** v12.39, **927 tests green**, tree clean.
+>
+> **✅ v12.39 — the second cause of the inspector being "inconsistent and random" (#511).** Raise the add
+> menu, then tap a layer, and the panel stayed floating over the canvas showing the wrong thing — with
+> its drag handle hidden, so there was no way to lower it. Found by driving the drag through orderings,
+> which is the sweep you asked for; the sweep also confirmed the arithmetic itself is consistent.
 >
 > **✅ v12.38 — the inspector drag limit (#512). You had it exactly right.** Dragging the panel alone
 > stopped 82px short of where dragging it with the timeline reached. Two ceilings had been written down
@@ -17326,12 +17331,40 @@ re-opened #480, which I had marked done and had not fixed.
       > Also on PC with all the moving parts that come with the inspector and being Dragonball up and down I find it's very inconsistent and bugs a lot depending on it. What order do you do stuff and you can change up like on you just by pressing it multiple times and it's just like really weird and inconsistent like it's not breaking the software anyway so it's like not humongous issue but it's just like really inconsistent and random and it doesn't really look too good like as a lot of weird issues with it like I think it's good it would be a good idea to give it a lot of testing and try and see every possible way it can break and not look good. Also the AI menu that pops up the director menu doesn't fit on the screen nicely on PC because it hasn't been designed for the new layout properly yet so it looks kind of weird if you could maybe give the director menu like the AI menu like a little bit of a cool background with some interesting colours so it stands out a bit.
       ("Dragonball" is autocorrect for **dragged**.)
       **Clauses — tick separately:**
-      1. [ ] **The inspector's drag up/down on PC is inconsistent and order-dependent** — the state changes
-             depending on what you did before and how many times you press. He is explicit that it does not
-             break the app, it just behaves randomly and looks bad.
-      2. [ ] **He is asking for exhaustive testing of it**, in his words: *"try and see every possible way it
+      1. [x] ✅ **v12.38 + v12.39 — TWO concrete causes found and fixed.** The inspector's drag up/down on
+             PC is inconsistent and order-dependent — the state changes depending on what you did before
+             and how many times you press. He is explicit that it does not break the app, it just behaves
+             randomly and looks bad.
+             · **v12.38 (#512): two different ceilings.** Dragging the panel alone capped 82px lower than
+               dragging it with the timeline. Tied together now.
+             · **v12.39: a raised panel got STUCK with no handle.** Raise the add menu, tap a layer — the
+               panel kept floating at 582px while showing that layer's options, and the drag handle only
+               exists alongside the add menu, so there was nothing left to lower it with. Deselecting did
+               not clear it either. The rule was already written in the code ("the menu must never be
+               left floating over a canvas it is no longer showing") and was enforced for a window resize
+               and a layout switch — but not for SELECTING A LAYER, the one thing that actually changes
+               what that panel shows. **The same two taps in the other order behaved completely
+               differently**, which is your sentence exactly.
+             · Also removed a panel height that was written to storage on every drag and **never read by
+               anything**. If you want the panel to remember its height between sessions, say so — that
+               is a real feature, and I did not want to resurrect it by leaving a dead write behind.
+      2. [~] **He is asking for exhaustive testing of it**, in his words: *"try and see every possible way it
              can break and not look good"*. That is a request for a systematic sweep of the state machine,
              not a spot fix.
+             🔎 **FIRST SWEEP DONE 24 Aug — and it is what found both fixes above.** Rather than reading the
+             code, the drag was DRIVEN through orderings with invariants checked after every step (the
+             heights obey their own clamps; the rendered panel matches the variable; the same end gesture
+             from different histories lands in the same place). Results:
+             · ✅ **path independence holds** — reaching the ceiling in one drag or three lands on 590px both ways;
+             · ✅ **a 10px nudge moves it 10px**, with no jump, even right after the timeline was raised;
+             · ✅ **the heights never violated their own clamps** in any ordering tried;
+             · 🔴 **the selection-change hole** (fixed v12.39) and 🔴 **the two ceilings** (fixed v12.38).
+             ⚠️ **One thing looked like a bug and is NOT** — worth recording so it is not "fixed" later:
+             dragging the timeline up past a raised menu drops the float and re-couples them. That is
+             queue 244, his own spec: *"until you reach to where the add menu is at then it will do the
+             same thing but the other way around by snapping them back together."*
+             **Left for a later sweep:** the same orderings while a drag is INTERRUPTED (pointer lost
+             mid-drag), and the phone layout, which has its own resizer rules.
       3. [ ] **The AI / director menu does not fit the PC layout** — it was not redesigned for it.
       4. [ ] **Give the director menu a distinctive background with some interesting colours** so it stands out.
 

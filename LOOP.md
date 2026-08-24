@@ -102,7 +102,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.38, 926 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.39, 927 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.39 worked #511 clauses 1-2** (the sweep he asked for). Drove the inspector drag through ORDERINGS
+with invariants after each step instead of reading it. Found: 🔴 a raised add menu stays floating when you
+select a layer — showing the wrong contents, handle hidden, **no way to lower it**; the rule was already
+in the code but only enforced for resize/layout, not selection. Fixed on inspector.refresh, the one path
+every selection runs through. Also deleted `fm_am_h`, written every drag and **read by nothing**.
+✅ The sweep also CLEARED things: path independence holds (1 drag or 3 → 590px), a 10px nudge moves 10px,
+clamps never violated. ⚠️ **One thing looked like a bug and is his own spec** (queue 244): dragging the
+timeline past a raised menu re-couples them. Recorded so nobody "fixes" it.
+**Still open in #511:** clause 3/4 — the AI director menu doesn't fit the PC layout and wants a
+distinctive background. Clause 2 left: orderings with an INTERRUPTED drag, and the phone layout.
+⚠️ #508 still needs a visible preview pane (rule 11).
 **v12.38 worked #512** (taken ahead of #511 clause 1 because it is the same gesture family and names a
 precise defect). **He was exactly right:** dragging the inspector alone capped at 508px while dragging it
 with the timeline reached 590px — 82px apart on an 820px window. Two ceilings written down separately

@@ -28144,6 +28144,67 @@
     }
   });
 
+  test('a raised Add menu comes back down when the panel stops showing it (queue 511)', { item: '511' }, async function () {
+    /* Ezra: "with all the moving parts that come with the inspector and being [dragged] up and down I
+       find it's very inconsistent and bugs a lot depending on … what order you do stuff."
+       This is one concrete cause, found by driving the drag state machine through orderings rather than
+       by reading it. The rule was already written down — the comment on `dropAddMenuFloat` says "the
+       menu must never be left floating over a canvas it is no longer showing" — and it was enforced for
+       a window resize and a layout switch but NOT for selecting a layer, which is the thing that happens
+       constantly and is the ONLY way the panel's contents change.
+       Measured before the fix: raise the add menu to 582px, tap a layer. The panel stayed floating at
+       582px over the canvas while showing that layer's category list, and `#am-resizer` is
+       `display: none` in that state — **so it was stuck tall with no handle to pull it back down**, and
+       deselecting did not clear it either. The same two taps in the other order behaved completely
+       differently, which is exactly what he was describing. */
+    if (window.innerWidth < 701) return;                       // the floating panel only exists in the PC layout
+    const panel = document.getElementById('inspector-panel');
+    const rez = document.getElementById('am-resizer');
+    if (!panel || !rez) return;
+    const savedSel = FM.scene.selectedId;
+    const madeLayer = !FM.scene.layers.length;
+    if (madeLayer) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
+      if (!panel.querySelector('.addmenu--panel')) throw new Error('deselecting did not put the Add menu in the panel, so this test cannot raise it');
+      if (getComputedStyle(rez).display === 'none') throw new Error('the add-menu resize handle is not shown even with the add menu up');
+
+      // raise it
+      const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+      ev('pointerdown', y0, 1);
+      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (350 * i / 6), 1);
+      ev('pointerup', y0 - 350, 0);
+      await sleep(60);
+
+      /* THE CONTROL: it has to have actually gone up, or "it came back down" is true of a panel that
+         never moved. */
+      const raisedH = panel.getBoundingClientRect().height;
+      if (!document.body.classList.contains('am-floating')) throw new Error('the drag did not raise the panel at all — nothing below is being tested');
+      if (raisedH < 300) throw new Error('the panel only reached ' + Math.round(raisedH) + 'px, which is not raised enough to tell the states apart');
+
+      // …now select a layer, which swaps what the panel is showing
+      FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(90);
+      const nowH = panel.getBoundingClientRect().height;
+      if (panel.querySelector('.addmenu--panel')) throw new Error('selecting a layer did not change what the panel shows, so the ordering this test is about did not happen');
+      if (document.body.classList.contains('am-floating'))
+        throw new Error('the panel is STILL floating at ' + Math.round(nowH) + 'px while showing the layer\u2019s options — and its drag handle is hidden in this state, so there is no way to lower it again');
+      if (nowH > raisedH - 100) throw new Error('the panel is still ' + Math.round(nowH) + 'px tall after the add menu left it (was ' + Math.round(raisedH) + ')');
+
+      // …and it must still be raisable afterwards, or the fix has simply broken the feature
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
+      ev('pointerdown', y0, 1);
+      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (350 * i / 6), 1);
+      ev('pointerup', y0 - 350, 0);
+      await sleep(60);
+      if (!document.body.classList.contains('am-floating')) throw new Error('the panel can no longer be raised after a selection dropped it — the fix broke the feature it was protecting');
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      if (madeLayer) FM.scene.layers.length = 0;
+      FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+    }
+  });
+
   test('the inspector drags as high on its own as it does with the timeline (queue 512)', { item: '512' }, async function () {
     /* Ezra: "it gets to a limit on how far it can be dragged up by itself. But if you drag it up with
        the timeline at the same time, then it lets it drag up higher, which is really weird."

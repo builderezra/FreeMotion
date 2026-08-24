@@ -4441,7 +4441,6 @@ window.FM = window.FM || {};
      * become a tall, resizable browser that must never cover the canvas". */
     const amRez = document.getElementById('am-resizer');
     if (amRez) {
-      const AM_KEY = 'fm_am_h';
       const STICK = STICK244;             // px of travel past the floor before the two couple (draw-tool's snapCursor uses the same idea)
       const amFloor = () => parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10) || 232;
       const amClamp = (h) => {
@@ -4548,8 +4547,16 @@ window.FM = window.FM || {};
         if (!amDrag) return;
         amDrag = false;
         document.body.classList.remove('am-resizing');
-        const cur = parseInt(getComputedStyle(root).getPropertyValue('--am-h'), 10);
-        try { if (cur) localStorage.setItem(AM_KEY, cur); } catch (_) {}
+        /* ⚠️ THE PANEL'S OWN HEIGHT IS NOT PERSISTED, AND THAT IS NOW DELIBERATE (queue 511).
+           It used to be written to `fm_am_h` here on every drag — and **nothing in the app has ever read
+           that key**. A dead write is worth removing on its own, but there is a stronger reason now: the
+           raised state is TRANSIENT by design, dropped the moment the panel stops showing the add menu
+           (see FM.syncAddMenuFloat). Restoring a height across a reload would put the panel back up
+           while contradicting the rule that just took it down, which is more of the inconsistency this
+           queue item is about, not less.
+           The TIMELINE's height is persisted and always has been — that one is read back at startup. If
+           he wants the panel to remember its height too, that is a real feature and a decision for him,
+           not something to resurrect by leaving a write nobody reads. */
         try { const tl = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10); if (tl) localStorage.setItem('fm_tl_h', tl); } catch (_) {}
       };
       amRez.addEventListener('pointerup', amEnd);
@@ -4562,6 +4569,26 @@ window.FM = window.FM || {};
         ['--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
       };
       window.addEventListener('resize', () => { if (!studioAdd()) FM.dropAddMenuFloat(); });
+      /* ⚠️ …AND A SELECTION CHANGE IS THE CASE THAT WAS MISSING (queue 511 clause 1).
+         The comment above `dropAddMenuFloat` states the rule plainly — "the menu must never be left
+         floating over a canvas it is no longer showing" — and it was enforced for a window resize and a
+         layout switch, but NOT for the one thing that happens constantly: selecting a layer. The panel
+         only shows the add menu while NOTHING is selected, so tapping any layer swaps its contents.
+         Measured: raise the add menu to 582px, then select a layer. The panel stays floating at 582px
+         over the canvas while showing the layer's category list instead of the add menu — and
+         `#am-resizer` is `display: none` in that state, because it only appears alongside the add menu.
+         **So the panel is stuck tall over the canvas with no handle to pull it back down.** Deselecting
+         does not clear it either; nothing does, short of a window resize.
+         That is his *"very inconsistent and bugs a lot depending on what order you do stuff"* — the same
+         two taps in the other order behave completely differently.
+         Checked on the one path every selection change already runs through, rather than at each of the
+         dozen call sites that can change what is selected. */
+      FM.syncAddMenuFloat = function () {
+        if (!document.body.classList.contains('am-floating')) return;
+        if (studioAdd()) return;            // the add menu is still what the panel is showing — leave it raised
+        FM.dropAddMenuFloat();
+        stageResized();
+      };
     }
     /* A WINDOW RESIZE OR A PHONE ROTATION IS A STAGE RESIZE TOO, and it is the case the BUG-HUNT entry
        leads with ("rotate the phone / resize the window / open the on-screen keyboard"). Kept separate
