@@ -28160,6 +28160,60 @@
     }
   });
 
+  test('a reorder drag whose pointer is LOST cannot freeze the timeline (queue 541)', { item: '541' }, async function () {
+    /* HIS BUG, REPRODUCED. Ezra: "i broke the timeline somehow, fix this issue" — his PC screenshot
+       shows the layer rows drawn on top of each other with the reorder handles piled in a stack, and
+       it does not come back.
+       The cause is two things holding at once. A gesture flag left set means (a) the rows keep the
+       `row-part` transforms that glide them apart, measured at exactly one row height so row 2 lands ON
+       row 1, and (b) `rebuild()` refuses every future rebuild, so nothing ever clears them. The DOM
+       freezes mid-drag for the rest of the session while the real scene moves on underneath.
+       A pointer really can vanish without pointerup OR pointercancel — a browser-stolen pointer, an OS
+       window switch, a captured element torn out from under the drag — so this drives exactly that. */
+    const saved = FM.scene.layers.slice();
+    try {
+      while (FM.scene.layers.length < 2) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+        FM.scene.layers.push(L);
+      }
+      FM.timeline.rebuild(); await sleep(80);
+      const rows = [].slice.call(document.querySelectorAll('.track-row'));
+      if (rows.length < 2) throw new Error('need two timeline rows to drag one past the other, found ' + rows.length);
+      const h = rows[0].querySelector('.row-drag');
+      if (!h) throw new Error('no reorder handle on the first row, so this test is not driving the gesture it claims to');
+      const r = h.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const send = (type, cy, buttons) => h.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: buttons }));
+      send('pointerdown', y, 1); send('pointermove', y + 30, 1); send('pointermove', y + 60, 1);
+
+      /* THE CONTROL, and without it this test would pass against a timeline that never dragged at all:
+         the rows must actually BE displaced first, or "they are not displaced afterwards" is vacuous. */
+      const moved = [].slice.call(document.querySelectorAll('.track-row')).filter(e => e.style.transform);
+      if (!moved.length) throw new Error('the drag did not displace any row, so there is no stuck state to recover from and this test proves nothing');
+
+      /* …and now the pointer is simply GONE. No pointerup. No pointercancel. He carries on using the
+         app — mouse moves with no button held, which refresh nothing — and the next thing that asks the
+         timeline to redraw is what heals it. The wait is past the staleness window on purpose. */
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: x + 6, clientY: y + 61, buttons: 0 }));
+      await sleep(1350);
+      FM.timeline.rebuild();
+      await sleep(40);
+
+      const left = [].slice.call(document.querySelectorAll('.track-row')).filter(e => e.style.transform);
+      if (left.length) throw new Error(left.length + ' row(s) are still carrying a drag transform after the pointer was lost — they will sit on top of each other exactly as in his screenshot');
+      const parts = document.querySelectorAll('.track-row.row-part, .track-row.row-dragging, .track-row.row-moving');
+      if (parts.length) throw new Error(parts.length + ' row(s) kept a drag class after the pointer was lost');
+
+      /* AND THE HALF THAT MADE IT PERMANENT: rebuilds must work again. A timeline that looks right but
+         refuses to redraw is the same bug one repaint later. */
+      const before = document.querySelectorAll('.track-row')[0];
+      FM.timeline.rebuild(); await sleep(40);
+      if (document.querySelectorAll('.track-row')[0] === before)
+        throw new Error('rebuild() is still refusing to run — the gesture flag outlived the gesture, so the timeline is frozen even though the rows look right');
+    } finally {
+      FM.scene.layers = saved; FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
   test('Text Spacing shows all four controls and does not run off a phone', { item: 'fx-text' }, async function () {
     /* THE MOBILE HALF OF THIS CHANGE, AS A TEST RATHER THAN A SCREENSHOT. ship.sh runs the whole suite
        a second time at 380px, so an assertion here is a phone check that happens on every release

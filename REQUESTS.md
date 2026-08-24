@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.31
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.32
 >
-> **State:** v12.31, **918 tests green**, tree clean.
+> **State:** v12.32, **919 tests green**, tree clean.
+>
+> **✅ v12.32 — THE TIMELINE BUG IS FIXED, AND YOU DID NOT BREAK IT.** Grabbing a layer by its ≡ handle
+> and then having the pointer taken away (a right-click, an app switch) left the rows stacked on top of
+> each other AND stopped the timeline redrawing for the rest of the session. Reproduced first try.
+>
+> **⚠️ #542 IS LOGGED BUT NOT FIXED YET** — the Media and Audio menus on PC. That is next.
 >
 > **✅ v12.31 — Text Spacing finally does WORD SPACING and LINE HEIGHT.** Both were named as "still
 > open" in the oldest entry on this list and then sat there; they are a text-layout change rather than
@@ -17584,3 +17590,86 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Cost warning: motion blur usually costs one extra render of the layer per sample, so "a lot
       more" can be the expensive kind of change on a phone. If so, say what the frame cost becomes rather
       than shipping it quietly — the oldest entry on this list is about lag.
+
+- [x] **541 — 🔴 PC: the timeline is drawing its rows on top of each other.** (24 Aug, PC screenshot at v12.30.)
+
+      ✅ **FOUND IT, AND YOU DID NOT BREAK IT — the app did.** Reproduced on the first try: grab a
+      layer by its ≡ reorder handle, drag it, and then let the POINTER BE LOST — no mouse-up, no
+      cancel. That is what a browser stealing the pointer, an OS window switch or a right-click can
+      look like from inside the app. Two things then hold at once, and together they are fatal:
+      · the rows keep the transforms that glide them apart to open a gap — **measured at exactly one
+        row height (-42px), so row 2 lands directly on top of row 1**, which is your screenshot; and
+      · the timeline **refuses every rebuild while a drag is in flight** (a rebuild mid-drag would rip
+        the DOM out from under it), so nothing ever clears those transforms.
+      **So the timeline froze mid-drag for the rest of the session** while your real project carried on
+      changing underneath it. That is also why it looked like the rows and the headers disagreed: they
+      did not, the whole row was just sitting 42px too high.
+      **The fix is not another listener for one more way a pointer can vanish** — I would only have
+      covered the ways I thought of. A refused rebuild now NOTICES when the gesture it is waiting on has
+      gone quiet and clears the wreckage instead, which covers every drag in the timeline (reorder, clip
+      move, trim, slip, keyframe) rather than the one I found.
+      ⚠️ **One thing I got wrong on the way, worth recording.** My first version treated "a mouse move
+      with no button held" as proof the drag was dead and cancelled it on the spot. Two trim tests went
+      red. I could have edited those two tests; that would have been bending a passing test to fit new
+      code, and it would have rested on every browser and input device reporting the button state
+      perfectly for the whole of a drag. If that is ever wrong, trimming and clip-dragging die under
+      your hands — much worse than the bug. The shipped version cannot cancel anything by itself.
+      His words, verbatim:
+      > i broke the timeline somehow, fix this issue
+      **What the shot shows** (Project 32, Studio layout, wide PC window): there are only TWO layer
+      headers down the left (a T and a ♪) but FOUR clip bars stacked in the lane beside them, overlapping
+      each other — a green bar, a cyan bar, an orange "…an" bar and a red "Beat" bar all crammed into the
+      same vertical space, with the audio waveform bar underneath partly covering them. On the right edge
+      the row hamburger buttons are PILED UP on each other rather than one per row.
+      **So the clip lane and the header column disagree about how many rows there are and how tall they
+      are.** The headers are laying out at one height and the clips at another, which is why the
+      hamburgers stack: each is positioned from its own row's top.
+      ⚠️ **He says "I broke it somehow", but treat that as a description, not a diagnosis** — whatever he
+      did, the timeline should not be able to reach this state. Find what he could have done (a drag on
+      the row-height/divider, a collapsed group, a layer count change while the panel was resizing) and
+      make it impossible, not just repair the one project.
+      ⚠️ **Check the recent releases first.** v12.29 changed `styles.css`, v12.30 and v12.31 changed
+      `js/compositor.js`. None of them is obviously the timeline, but "obviously" is not a check.
+
+- [ ] **542 — 🔴 PC: the Media and Audio menus are broken.** (24 Aug, PC screenshot at v12.30.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > media and audio menus have broke on pc
+      **What the shot shows** (Audio tab open in the PC inspector): the sound-effect tiles are CUT OFF at
+      the bottom of the panel — the last row ("0:00 ♪♪" and "0:02 ♪♪") is sliced through the middle by
+      the panel edge, and the top row of tiles (Fire crackle / Riser / Zap / Bubble / Sparkle) has lost
+      its duration badges and its icons entirely, so those five read as bare labels in boxes while the
+      row below them is a proper tile. The pager dots and ‹ › arrows sit below the cut, so the grid is
+      taller than the space it is given rather than paging into it.
+      **He named MEDIA as well as Audio**, and the shot only shows Audio — check both; they are very
+      likely the same grid component.
+      ⚠️ This is the PC layout again (#511, #481), and it is the same shape of fault as #494/#498: a
+      panel whose content is taller than its box and is being clipped rather than scrolled or paged.
+
+- [ ] **543 — The AI Scene button needs a real designed icon, not an emoji; and the sample-clip icon has lines running through it.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Create a design for the ai scene button instead of just an emoji and also fix up the sample clip icon because the lines are going through it
+      **Two separate things — tick separately:**
+      1. [ ] **AI Scene is using an EMOJI as its icon.** Every other tile in that menu has a drawn SVG,
+             so this one reads as unfinished next to them — and an emoji also renders differently on
+             every platform, which is why it looks out of place. Draw it as an inline SVG in the same
+             stroke weight and corner style as its neighbours.
+      2. [ ] **The sample-clip icon has lines passing through it.** Something behind or around the icon
+             (a row rule, a grid line, the tile border) is crossing the artwork instead of sitting
+             behind or outside it. **Find what the lines actually are before redrawing the icon** — if
+             they are a container's border, redrawing the glyph fixes nothing.
+      ⚠️ Both are icon work, so check them at 24px as well as full size — an icon that reads at 64px
+      and turns to mush at 24 is the trap #432 has already hit twice.
+
+- [ ] **544 — He wants to pause the loop and use Claude's design tools for some specific things.** (24 Aug.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > Can we pause after your done and try using claude design for some specifc stuff when you are ready?
+      **Answered: yes.** The loop stops after the item in flight (#541, the timeline) ships. What is
+      needed from him is only WHICH things — likely candidates already on this list are **#543** (the AI
+      Scene icon and the sample-clip icon), **#510/#432** (the template button, which has been through
+      five rejected options), and **BEFORE-PUBLISHING.md** (the whole visual identity, which is
+      deliberately not started).
+      ⚠️ **If it turns into the identity pass, raise BEFORE-PUBLISHING.md first** — that is the standing
+      rule, and it is his call when to spend time on it rather than mine.

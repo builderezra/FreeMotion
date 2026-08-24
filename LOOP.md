@@ -97,7 +97,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.31, 918 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.32, 919 tests green, tree clean, `HEAD == ssh/main`.**
+⏸️ **THE LOOP IS PAUSED AT HIS REQUEST — he asked to do design work together (#544).** Not stopped, not
+cron-deleted (rule 8b): waiting on him to say WHICH things. Resume the oldest-first list after that.
+**v12.32: the timeline froze mid-drag (queue 541)** — a ≡ reorder whose pointer was LOST left the rows
+carrying their parting transforms (exactly one row height, so rows stacked) AND `rebuild()` refuses every
+rebuild while a gesture flag is set, so nothing cleared them, for the whole session. Fixed by making a
+REFUSED REBUILD notice a gesture that has gone quiet, which covers all five drag types rather than the
+one way in I found. ⚠️ My first version cancelled on `buttons === 0` and reddened two trim tests; I did
+NOT edit those tests to suit it — bending a passing test to fit new code, on an assumption about input
+devices, would have risked killing trimming for him.
+**NEXT: #542**, the Media and Audio menus broken on PC — logged, reproduced only from his screenshot.
 **v12.31: Text Spacing gained word spacing + line height** — named "still open" in the oldest entry and
 left for months because it is a layout change, not a slider. Both default to a no-op so old projects do
 not move. Follow-ons that mattered: the wrap cache is keyed on word spacing; curved text adds the gaps

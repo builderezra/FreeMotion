@@ -162,6 +162,53 @@ window.FM = window.FM || {};
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
   let reorderActive = false;       // a ≡ reorder drag is in flight (its listeners live on the captured handle — a rebuild would kill it)
+  /* ⚠️ A GESTURE FLAG THAT OUTLIVES ITS GESTURE BREAKS THE TIMELINE PERMANENTLY, AND IT DID (queue 541).
+     Ezra: "i broke the timeline somehow, fix this issue" — his PC screenshot shows layer rows drawn on
+     top of one another with the ≡ handles piled up in a stack, and it does not recover.
+     Reproduced exactly: start a ≡ reorder drag and then let the pointer be LOST — no pointerup, no
+     pointercancel, which is what a browser-stolen pointer, an OS window switch or a torn-out captured
+     element all look like from here. Two things then hold at once, and together they are fatal:
+       · the rows are still carrying the `row-part` transforms that glide them apart — measured
+         translateY(-42px), i.e. exactly one row height, so row 2 sits ON TOP of row 1; and
+       · `rebuild()` below refuses EVERY future rebuild while a gesture flag is set, so nothing ever
+         clears them. The DOM is frozen mid-drag for the rest of the session while the real scene keeps
+         moving underneath it.
+     The cleanup path itself is thorough — it just never runs. So the fix is not another `removeEventListener`
+     for one more way a pointer can vanish; it is that a REFUSED REBUILD MUST BE ABLE TO NOTICE THE
+     GESTURE IS DEAD. `gestureStamp` is touched whenever a gesture starts or the pointer actually moves,
+     and a refusal older than STALE_MS is treated as wreckage and cleared. That turns "broken until you
+     reload" into "self-heals at the next rebuild request", for every one of the flags below rather than
+     for the one way in I happened to think of. */
+  let gestureStamp = 0;
+  const STALE_MS = 1200;
+  function touchGesture() { gestureStamp = (typeof performance !== 'undefined' ? performance.now() : Date.now()); }
+  FM._timelineTouchGesture = touchGesture;   // suite seam
+  /* WHAT KEEPS THE STAMP FRESH — and note what this deliberately does NOT do.
+     A `pointermove` carrying `buttons !== 0` is a live drag, so it refreshes the stamp and the gesture
+     is never mistaken for wreckage however long he takes. A move with `buttons === 0` refreshes
+     NOTHING, so a gesture whose pointer has gone quietly accrues staleness while he carries on using
+     the app, and the next rebuild request heals it.
+     ⚠️ THE FIRST VERSION TREATED `buttons === 0` AS PROOF AND CANCELLED THE GESTURE ON THE SPOT. Two
+     trim tests went red, because they synthesise pointermove without a `buttons` field — which defaults
+     to 0. I could have "fixed" those two tests; that would have been reshaping a passing test to fit
+     new code, and it would have rested on the assumption that every real browser and every input device
+     reports `buttons` correctly for the whole of a drag. If that assumption is ever wrong the cost is
+     trimming and clip-dragging dying under his hands, which is far worse than the bug being fixed.
+     Not stamping is strictly safer: it cannot cancel anything by itself, and it still heals. */
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pointermove', function (ev) {
+      if (!(clipMove || trimDrag || kfDrag || slipDrag || reorderActive)) return;
+      if (ev.buttons !== 0) touchGesture();
+    }, true);
+  }
+  function recoverStuckGesture() {
+    reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
+    FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null;
+    if (FM.syncAddSwitch) FM.syncAddSwitch();
+    if (tracksEl) [].slice.call(tracksEl.querySelectorAll('.track-row, .tl-addrow')).forEach(r => {
+      r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = '';
+    });
+  }
   /* ONE answer to "what colour is this clip", because queue 416 gives the add-row switch that colour while
      you drag a layer — and a second copy of this expression would be the switch and the clip disagreeing
      about which layer you are holding. */
@@ -1042,6 +1089,7 @@ window.FM = window.FM || {};
       if (reorderActive) return;  // a prior drop is still settling (150ms) — its deferred moveLayers would otherwise wipe this one
       e.preventDefault(); e.stopPropagation();
       try { h.setPointerCapture(e.pointerId); } catch (_) {}
+      touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
       reorderActive = true;   // defers rebuilds (a rebuild would destroy this captured handle → dead drag + zombie autoscroll) and blocks pinch-start
       /* …and say WHICH layer, for queue 416. Ezra: "when you're dragging a layer the toggle button will
          change colour to the colour of that layer then when you press the toggle button while dragging a
@@ -1498,6 +1546,7 @@ window.FM = window.FM || {};
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
                   group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
                 }
+                touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
                 clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
                 /* Ezra, twice: "I still need it so I can drag clips on the timeline without it opening
                    up the editing panel." The selectLayer above is deliberate — you must be able to SEE
@@ -1529,6 +1578,7 @@ window.FM = window.FM || {};
       // else: NOT selected here any more. A mouse press that turns into a drag must not change the
       // selection; a press that turns out to be a plain click selects on release, below.
       if (layer.locked) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for
+      touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
       clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       if (FM.playing) FM.pause();
@@ -1561,6 +1611,7 @@ window.FM = window.FM || {};
         const m = FM.media.get(layer.id);
         // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
         // same way `start`/`dur`/`trim` above do. Shifting the live list per move would compound.
+        touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
         trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
@@ -1608,6 +1659,7 @@ window.FM = window.FM || {};
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           if (pinch) return;
           try { slip.setPointerCapture(e.pointerId); } catch (_) {}
+          touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
           slipDrag = { layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal, m: m, pps: pxPerSec() };
           FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
@@ -1795,6 +1847,7 @@ window.FM = window.FM || {};
           // arm delay and nulled kfDrag, so a hold-to-drag could never have armed on a phone. The two
           // now share one hold — arm at KF_HOLD_MS, and if you let go without moving, that same hold
           // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
+          touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
           kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
                      downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here
                      // Carry the menu opener WITH the gesture. Release is handled by a window-level
@@ -2971,6 +3024,7 @@ window.FM = window.FM || {};
        * passes is the exact kind of dead test this feature has already produced. The layer's start is
        * put back, so nothing survives the call. */
       const save = L.start;
+      touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
       clipMove = { layer: L, origStart: L.start, origProjDur: (FM.scene.project.duration || 0), startX: 0, moved: true, group: [], _excl: {}, sup: null };
       try { applyClipMoveAt(0, false, quiet !== false); }
       finally { L.start = save; clipMove = null; hideSnap(); }
@@ -3589,7 +3643,18 @@ window.FM = window.FM || {};
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
       const ae = document.activeElement;
-      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
+      const editingMarker = !!(ae && ae.classList && ae.classList.contains('marker-edit'));
+      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || editingMarker) {
+        /* …UNLESS THE GESTURE IS DEAD (queue 541 — see the note on `gestureStamp`). A drag whose pointer
+           was lost leaves its flag set forever, and this refusal is what makes that permanent rather
+           than momentary. A live drag touches the stamp on every pointermove — including the ones
+           autoscroll generates — so a stamp this old means nobody is holding anything.
+           The marker rename is deliberately NOT recovered this way: it is held by keyboard FOCUS, not
+           by a pointer, so sitting still for two seconds mid-rename is completely normal. */
+        const stale = !editingMarker && (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - gestureStamp) > STALE_MS);
+        if (!stale) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
+        recoverStuckGesture();
+      }
       rebuildPending = false;
       /* THE SWITCH IS A READOUT OF WHERE THE ADD ROW IS, so it has to be re-read whenever the STACK
          changes — not only when the row MOVES (queue 373 clause 6, reopened by him at v10.20). His
