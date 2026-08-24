@@ -28144,6 +28144,70 @@
     }
   });
 
+  test('an export survives the tab being backgrounded (queue 47)', { item: '47' }, async function () {
+    /* ⚠️ THIS TURNS A "NEEDS A REAL DEVICE" BLOCKER INTO A MEASUREMENT, which is LOOP rule 11: a blocker
+       written in an entry is a claim with a date on it, not a fact. Queue 47's remaining safety ground is
+       "backgrounding the app mid-export", parked for months as unstageable here.
+       It is stageable, because "backgrounded" is not one thing — it is two concrete effects on the page:
+         · `requestAnimationFrame` stops being called at all, and
+         · `setTimeout` is clamped hard (measured elsewhere in this repo at ~84x: 211 ticks/s → 2.5/s).
+       Both can be imposed directly. If the export loop depends on either, it stalls; if it depends on
+       neither, backgrounding cannot stall it. That is the whole property, and it is now checked rather
+       than assumed. (The third effect — the tab being DISCARDED outright — is the crash-resume half of
+       this entry, which has its own end-to-end probe.)
+       The export path was audited alongside this: no requestAnimationFrame in exporter.js, compositor.js,
+       media.js, audio-play.js, gif-encode.js or export-resume.js, and the per-frame yield is a
+       MessageChannel post precisely because timers are throttled. This test is what stops that quietly
+       regressing to a `setTimeout` the next time someone needs a yield. */
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
+      throw new Error('this browser has no WebCodecs, so the export safety net cannot be measured here — that is a broken test environment, not a passing test');
+
+    const realRAF = window.requestAnimationFrame, realCAF = window.cancelAnimationFrame;
+    const realTimeout = window.setTimeout;
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height, fps: FM.scene.project.fps };
+    let rafAsked = 0, clamped = 0;
+    try {
+      FM.scene.project.width = 160; FM.scene.project.height = 120; FM.scene.project.fps = 10;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: 30, shapeH: 30, fill: '#ffcc00' });
+      L.start = 0; L.duration = 3;
+      FM.scene.layers.push(L);
+      if (FM.refreshAll) FM.refreshAll();
+
+      /* THE TAB GOES TO SLEEP. rAF never fires again — exactly what a hidden tab does — and every timer
+         is dragged out to a second, which is the background clamp. Anything in the export that waits on
+         either will now hang, and the assertion below is a wall-clock one, so a hang shows up as a
+         failure rather than as this test waiting forever. */
+      window.requestAnimationFrame = function () { rafAsked++; return 0; };
+      window.cancelAnimationFrame = function () {};
+      window.setTimeout = function (fn, ms) { clamped++; return realTimeout(fn, Math.max(1000, ms || 0)); };
+
+      let frames = 0;
+      const t0 = Date.now();
+      await FM.exporter.run({
+        scale: 1, fps: 10, bitrate: 300000, name: 'bg-probe', from: 0, to: 3, outW: 160, outH: 120,
+        silent: true,
+        onProgress: (p, what) => { if (what === 'video' || what === 'audio + video') frames++; }
+      });
+      const ms = Date.now() - t0;
+
+      window.requestAnimationFrame = realRAF; window.cancelAnimationFrame = realCAF; window.setTimeout = realTimeout;
+
+      /* THE CONTROL: if the export rendered nothing, "it did not stall" is true of no work at all. */
+      if (frames < 20) throw new Error('the export only reported ' + frames + ' frames for a 3s/10fps render, so there was not enough work here for a stall to show up');
+      /* AND THE ASSERTION. One clamped timer per frame would be 30 seconds on its own; the real loop
+         yields through MessageChannel, so it should finish in a small fraction of that. 10s leaves room
+         for a slow CI machine while still being impossible for a setTimeout-driven loop to reach. */
+      if (ms > 10000) throw new Error('the export took ' + ms + 'ms with timers clamped to 1s — it is waiting on throttled timers, so backgrounding the app mid-export will stall or massively slow it');
+    } finally {
+      window.requestAnimationFrame = realRAF; window.cancelAnimationFrame = realCAF; window.setTimeout = realTimeout;
+      FM.scene.layers.length = 0;
+      saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h; FM.scene.project.fps = saved.fps;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('on PC the Add menu stays inside the inspector panel on every tab (queue 542)', { item: '542' }, async function () {
     /* Ezra: "media and audio menus have broke on pc". Measured on his window: the panel is 232px tall,
        the Audio tab's content was 344px, and NOTHING held the menu to the panel — the add-menu root was

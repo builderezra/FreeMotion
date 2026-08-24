@@ -4522,10 +4522,28 @@ better still, keep working inside the turn rather than parking work for a later 
       right. **The gate that matters is untouched and still tested:** a saved render from DIFFERENT
       settings is still refused, because splicing that in is the one failure that ships a wrong movie.
 
-      **Still untested ground for a later tick:** backgrounding the app mid-export and an export
-      interrupted by a call. Both need a real device — they cannot be staged here (LOOP.md rule 11 was
-      corrected at v11.68: the preview pane reports `document.hidden` FALSE, so measuring in the pane
-      does NOT stage a backgrounded tab). **Long renders have now had a real pass.**
+      **✅ FOURTH SAFETY PIECE — 24 Aug: BACKGROUNDING IS NO LONGER "UNTESTED GROUND". It is tested, and
+      the export already survives it.** This entry had said for weeks that backgrounding needed a real
+      device and could not be staged here. **That was a claim with a date on it, not a fact** (LOOP rule
+      11), and it was wrong in a specific way: it treated "backgrounded" as one unstageable thing, when
+      it is really two concrete effects on the page, both of which can be imposed directly —
+      `requestAnimationFrame` stops firing entirely, and `setTimeout` is clamped hard (measured in this
+      repo at ~84x: 211 ticks/s → 2.5/s). If the export depends on either, it stalls. If it depends on
+      neither, backgrounding cannot stall it.
+      **Audited: it depends on neither.** No `requestAnimationFrame` anywhere in `exporter.js`,
+      `compositor.js`, `media.js`, `audio-play.js`, `gif-encode.js` or `export-resume.js`, and the
+      per-frame yield is a MessageChannel post — chosen for exactly this reason back at #47's first pass.
+      **Now proved rather than reasoned:** a real 30-frame export runs with rAF stubbed dead and every
+      timer clamped to 1s, and finishes in a fraction of the time a timer-driven loop could. Mutating the
+      yield back to `setTimeout` takes the same export to **30,106 ms** and the test catches it — so the
+      property is pinned, not just currently true.
+      ⚠️ **The 1500ms stale-seek net IS a `setTimeout` and is deliberately left alone.** Throttling makes
+      it fire LATER, which means the export waits longer for a real `seeked` before giving up — safer,
+      not wrong. Worth knowing before someone "fixes" it.
+
+      **Still untested ground for a later tick:** an export interrupted by a phone call. That one really
+      does need a real device — it is an OS-level interruption, not a page-visibility state, so there is
+      nothing here to impose. **Long renders and backgrounding have now both had a real pass.**
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

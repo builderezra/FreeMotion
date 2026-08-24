@@ -97,7 +97,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.35, 922 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.35, 923 tests green, tree clean, `HEAD == ssh/main`.** (No version bump this tick — verification
+work, nothing user-visible changed, so no POLISH-LOG entry either.)
+**Last tick worked #47, the OLDEST numbered item, and closed its "backgrounding" ground.** That entry had
+said for weeks that backgrounding mid-export needed a real device. **Rule 11 again: it was a claim with a
+date, not a fact.** "Backgrounded" is two imposable effects — rAF stops, setTimeout clamps ~84x — so it
+stages fine. Audited: no rAF anywhere in the export path, and the per-frame yield is MessageChannel.
+Proved with a real 30-frame export under both conditions; mutating the yield back to `setTimeout` takes it
+to **30,106 ms** and the test catches it.
+⚠️ Left deliberately: the 1500ms stale-seek `setTimeout`. Throttling makes it fire LATER, i.e. it waits
+longer for a real `seeked` — safer, not wrong.
+**What is left in #47:** (b) the OffscreenCanvas worker move, and an export interrupted by a phone call
+(genuinely needs a device — an OS interruption, not a page-visibility state).
+**NEXT: `./tools/next.sh`** — #95 is the next numbered item after 47.
 **v12.35: the Media/Audio menus on PC (#542).** The add menu was never held to the inspector panel — body
 ran y=203→302 in a 231px box. That panel is `overflow: visible` ON PURPOSE (the resize handle lives above
 its top edge), so the spill was clipped by #app: unreachable, not merely ugly. The rule that set it
