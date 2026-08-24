@@ -97,7 +97,7 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.26, 910 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.27, 911 tests green, tree clean, `HEAD == ssh/main`.**
 **✅ LIVE DEPLOY RE-VERIFIED END TO END, 24 Aug at v12.20** (the previous claim was v11.50, twenty releases
 stale). On the real Pages URL at 380px: boots, service worker controlling, all 71 assets served from cache,
 running version matches the HTML, renders a layer WITH an effect, and produces a real MP4 — `3 KB · 0:01 ·

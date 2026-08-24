@@ -42810,6 +42810,11 @@
       if (!pid0) throw new Error('no current project to save an element from');
       if (!await FM.elements.saveFromProject(pid0, 'E505 fixture')) throw new Error('could not create the fixture element');
       await sleep(200);
+      /* ⚠️ A SECOND ELEMENT, SAVED AFTER, so "the edited one moves to the top" is observable at all.
+         With one element the position is 0 no matter what, and the assertion proved nothing — a mutation
+         deleting the reorder outright sailed through it. */
+      if (!await FM.elements.saveFromProject(pid0, 'E505 decoy')) throw new Error('could not create the second fixture element');
+      await sleep(200);
       const mine = FM.elements.list().filter(e => e.name === 'E505 fixture');
       if (mine.length !== 1) throw new Error('expected exactly one fixture element, got ' + mine.length);
       eid = mine[0].id; madeElement = true;
@@ -42822,6 +42827,9 @@
       const pid = await FM.elements.openForEdit(eid);
       if (!pid) throw new Error('tapping the element did not open it for editing');
       await sleep(300);
+      /* Read on ARRIVAL — an edit must not open with the whole document selected (his "every layer
+         selected"). Captured here and asserted at the end, so the rest of the round trip still runs. */
+      const openedSelected = !!FM.scene.selectedId || (FM.scene.selectedIds || []).length > 0;
       if (FM.scene.project.ofElement !== eid) throw new Error('the editing session does not know which element it came from (ofElement = ' + FM.scene.project.ofElement + ') — that is exactly why saving used to mint a new one');
       const visibleDuring = FM.projects.list().filter(p => !p.elementDraft).length;
       if (visibleDuring !== visibleBefore) throw new Error('opening an element for editing added ' + (visibleDuring - visibleBefore) + ' project(s) to the Projects list — "I don\'t like that when you tap on them they created as a project"');
@@ -42848,6 +42856,7 @@
       await sleep(300);
 
       const after = FM.elements.list();
+      const idxAfter = after.findIndex(e => e.id === eid);   // most recently edited belongs first
       const mineAfter = after.filter(e => e.id === eid);
       if (after.length !== elementsBefore) throw new Error('the library went from ' + elementsBefore + ' elements to ' + after.length + ' — editing forked it instead of updating it, which is the duplicate he reported');
       if (mineAfter.length !== 1) throw new Error('the original element is gone from the library');
@@ -42868,8 +42877,18 @@
       const draftsAfter = FM.projects.list().filter(p => p.elementDraft && p.ofElement === eid).length;
       if (draftsAfter !== 0) throw new Error('the workspace was left behind after coming home — one accumulates per edit, which is what he is seeing');
       if (!FM.projects.currentId()) throw new Error('coming back from an element edit left no project open — the next boot would mint one');
+
+      /* ═══ AND THE THREE THINGS HE CAME BACK ABOUT after the first version shipped (24 Aug):
+         "it's just opening you having every layer selected…. Broooooooooooo … you delete it then leave
+         the element, now you're still in the element section … and the element is at the top of the
+         element list because you just edited it". All three were true of v12.26 and none of them is
+         cosmetic — together they are the difference between "the data is saved" and "this works". */
+      if (openedSelected) throw new Error('opening an element for editing arrived with every layer selected and the bulk-edit header up — `insert()` selects what it adds, which is right for dropping an element INTO a project and wrong for opening one to edit');
+      if (after.length < 2) throw new Error('only ' + after.length + ' element(s) in the library, so "moves to the top" cannot be measured — the decoy fixture is missing');
+      if (idxAfter !== 0) throw new Error('the element he just edited sits at position ' + idxAfter + ' in the Elements list instead of the top — "the element is at the top of the element list because you just edited it"');
     } finally {
       try { if (eid && madeElement) await FM.elements.remove(eid); } catch (e) {}
+      try { for (const e of FM.elements.list().filter(e => e.name === 'E505 decoy')) await FM.elements.remove(e.id); } catch (e) {}
       try {
         for (const p of FM.projects.list().filter(p => p.elementDraft && p.ofElement === eid)) {
           if (p.id !== FM.projects.currentId()) await FM.projects.discardDraft(p.id);

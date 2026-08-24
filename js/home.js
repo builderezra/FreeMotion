@@ -2238,7 +2238,15 @@ window.FM = window.FM || {};
       // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill
       if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
       if (draftingElement && FM.elements && FM.elements.commitDraft) {
-        FM.elements.commitDraft().then(() => { if (root && !root.classList.contains('hidden')) render(); }).catch(() => {});
+        /* ⚠️ AND LAND HIM BACK IN THE ELEMENTS TAB (queue 505). Ezra: "you delete it then leave the
+           element, now you're still in the element section". Committing has to switch the open document
+           to a real project — storage always has one — but that is plumbing, not where he should find
+           himself. He came from Elements, he was editing an element, so that is the tab that should be
+           in front when he gets back. It was dropping him on Projects. */
+        FM.elements.commitDraft().then((ok) => {
+          if (ok) tab = 'elements';
+          if (root && !root.classList.contains('hidden')) render();
+        }).catch(() => {});
       }
       render();
       root.classList.remove('hidden');

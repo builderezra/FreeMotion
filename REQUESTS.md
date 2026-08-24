@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.26
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.27
 >
-> **State:** v12.26, **910 tests green**, tree clean.
+> **State:** v12.27, **910 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16987,6 +16987,28 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Old workspaces from before this change** (they have no element id on them) are still sitting in
       your Elements tab — logged as #525 so they get cleared rather than lingering.
 
+      🔴 **HIS REPLY, 24 Aug — verbatim, and it names two things v12.26 does NOT do:**
+      > Editing elements stillllll isn't actually editing the element it's just opening you having every layer selected…. Broooooooooooo
+      > Here's how it should work - you open an element or template in their respective tabs, let's say the element is a colour correction you designed - maybe you want to delete the saturation effect, you delete it then leave the element, now you're still in the element section, that elements changes are saved and the element is at the top of the element list because you just edited it, and if you tap back on the same element in its tab it will have the changes still - right now if you do this it will jus create a new project and not save the changes to the element and will request you to save it manually as an element again.
+      **First, the timing:** his screenshots in this batch are v12.25 and the fix shipped in **v12.26**, so
+      the "creates a project / save it manually again" half is very likely him testing the old build —
+      that behaviour is measurably gone (see the run above). **Confirm which version he is on before
+      arguing about it.** If v12.26 is on his phone and it still does that, the fix is wrong and this
+      matters more than everything below.
+      ✅ **ALL THREE FIXED v12.27 — and all three were real on v12.26, not just on his old build.** Measured
+      walking his exact scenario (two elements, tap the one at the BOTTOM, delete a layer, leave): arrives
+      with **nothing selected**, lands on the **Elements tab**, the edited element is **first in the list**,
+      the element itself went from 3 layers to 2, still two elements, no workspace left behind.
+      **He was right that v12.26 was not finished**, even though the data was being saved correctly:
+      1. [x] ✅ **v12.27 — You should still be in the ELEMENTS SECTION when you leave.** v12.26 saves the edit and
+             then opens a PROJECT, so he is dropped into an editor he did not ask for. He wants to land
+             back on the Elements tab he came from.
+      2. [x] ✅ **v12.27 — The edited element should jump to the TOP of the Elements list**, because he just edited
+             it — the index keeps its old position today.
+      3. [x] ✅ **v12.27 — "just opening you having every layer selected"** — check what the editor looks like on
+             arrival. If every layer is selected, that is `insert()` doing what it does for an insert
+             (select what you just added) being wrong for an EDIT, where nothing should be selected yet.
+
 - [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**
       His words, verbatim:
@@ -17293,7 +17315,7 @@ re-opened #480, which I had marked done and had not fixed.
       layer, which would tell you whether it is about the add or about the panel opening.
 
 - [ ] **532 — Standing instruction, restated: log everything and work oldest-first.** (24 Aug.)
-      **STATUS: 🟢 STANDING — not a build**
+      **STATUS: 📌 NOTE — nothing to build**
       His words, verbatim:
       > Make sure you're logging and continuing through everything from oldest first
       Same as **#506**, said again after another run of requests. Recorded rather than merged, because the
@@ -17316,3 +17338,50 @@ re-opened #480, which I had marked done and had not fixed.
       **Do not assume #480's fix is wrong** — measure first, and if it is right, find which gesture is
       not covered.
 
+- [ ] **534 — "Convert to outline" should say coming soon, and its current behaviour should become a proper effect.** (24 Aug, two Alight Motion screenshots for reference.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > In alight motion what the convert to outline button does isn't literally convert the shape into an outline- but to understand what it does you must understand this - in alight motion every shape has very thought out edit points you can grab and change before even pressing the edit points button, you just grab them and change it, real simple and effective- the convert to outline button just gets rid of those points and just makes it one outline that hugs the shape and you cant no longer just simply grab a point and extend or whatever.
+      > Ours is a bit different because we havent yet put the effort to add those practical points yet into our project so for now just make it so when you press it it says coming soon, re word it, and then put its current function as an effect in the effects menu and make sure you build it to work like an effect. Sometimes you just add it but it doesn't really work coz it's not meant for that menu.
+      **He is explaining what the AM feature actually is** — not "draw an outline", but *flatten a shape's
+      editable points into a single outline path*. His screenshots show AM's shape with grabbable points
+      on the canvas before any "edit points" mode is entered, which is the thing ours does not have.
+      **Clauses:**
+      1. [ ] Our "Convert to outline" button says **coming soon** — and **reword it**, since the name
+             describes something we are not doing yet.
+      2. [ ] Its **current** behaviour moves into the **Effects menu as a real effect**, built to work
+             there — his complaint is that things added to that menu sometimes do not work because they
+             were not written for it.
+      ⚠️ **A bigger thing is named in passing and should NOT be silently adopted:** AM's directly-grabbable
+      shape points. He says *"we havent yet put the effort to add those practical points yet"* — that is a
+      feature, not a fix, and worth its own entry when he wants it.
+
+- [ ] **535 — Remove the "you can sketch on the canvas" popup.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also when you're fixing sketching make sure you get rid of the pop up saying that you can sketch on the canvas like no shit
+      The toast that appears when the drawing tool opens, telling you to draw on the canvas. **Goes with
+      #513 and #514** (the sketch menu's PC layout, and strokes after the first being invisible) — do all
+      three in one pass, since they are the same feature.
+
+- [ ] **536 — 🔴 The play button now sets the thumbnail instead of looping; the bookmark button needs the hold, needs to look like a button, and bookmarks don't reach the bottom of the timeline.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The play button now sets the projects thumbnail but it should function like it used to where it would activate looped playback
+      > Also make the book mark button that now exists as the playhead actually be holdable to set thumbnail
+      > Also make the bookmark button look more obvious like a button coz rn you can't really tell it's a button at the top
+      > Also book marks are weird because they show up on the timeline but don't reach the bottom
+      **Clauses — tick separately:**
+      1. [ ] **REGRESSION — holding the play pill sets the project thumbnail, and it used to start looped
+             playback.** The hold-to-set-thumbnail is in the pill's own title text
+             (*"hold: set this frame as the project thumbnail"*), so the two behaviours have been swapped
+             onto the wrong controls. Restore looped playback on the pill's hold.
+      2. [ ] **The bookmark button on the playhead takes over the hold-to-set-thumbnail** — that is where
+             he wants it, and clause 1 frees it up.
+      3. [ ] **Make that bookmark button look like a button.** In his words *"rn you can't really tell it's
+             a button at the top"*.
+      4. [ ] **Bookmarks don't reach the bottom of the timeline** — they are drawn on the ruler but stop
+             short, so they read as floating rather than marking a position through the tracks.
+      ⚠️ Clause 1 is a swap, not an addition — check what moved the thumbnail hold onto the pill (queue 364
+      made the pill the play button) before changing either, so the fix does not just add a third meaning
+      to one press.

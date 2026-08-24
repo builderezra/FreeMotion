@@ -1826,6 +1826,16 @@ window.FM = window.FM || {};
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
       const ok = await this.insert(eid);
       if (!ok) { await FM.projects.discardDraft(pid); return null; }   // nothing to edit — do not strand a draft
+      /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
+         `insert()` selects what it just added, which is right when you are dropping an element INTO a
+         project — you want to move the thing you added. It is wrong for an EDIT: you are opening a
+         document, and no editor opens with everything selected. Measured before this: all three layers
+         selected and the multi-select header up, so the first thing he saw was a bulk-edit bar. */
+      if (FM.selectLayer) FM.selectLayer(null);
+      FM.scene.selectedIds = [];
+      if (FM.selectMode) FM.selectMode = false;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      if (FM.refreshAll) FM.refreshAll();
       if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
       return pid;
     },
@@ -1882,6 +1892,10 @@ window.FM = window.FM || {};
       idx[at].count = pack.layers.length;
       const th = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);
       if (th) idx[at].thumb = th;
+      /* MOST RECENTLY EDITED FIRST. Ezra: "the element is at the top of the element list because you
+         just edited it". The Projects tab has sorted this way for months; the Elements list kept its
+         creation order, so the one you were working on a second ago could be anywhere. */
+      idx.unshift(idx.splice(at, 1)[0]);
       writeJSON(ELEM_INDEX, idx);
       return true;
     },
