@@ -42415,4 +42415,67 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  /* ═══ 500: IN SELECT MODE THE BUTTONS COLLECT ON THE RIGHT — NO STRANDED PAIR IN THE MIDDLE.
+     Ezra, circling the help and bin buttons on a phone screenshot: "These buttons like the bin are still
+     all the way over to the left for no reason fix this."
+     The stylesheet already said what should happen — #m-selcount is `flex: 1` and "does the pushing" —
+     and then the bin carried `margin-right: 52px`, which ate the free space before the label could take
+     it. MEASURED at 380px with 4 selected: ? 143-185, bin 186-228, a 56px hole, then group at 284.
+     Asserted as "no big hole between the buttons" rather than as coordinates, so the bar can be
+     rearranged freely and only stranding a button again fails. */
+  test('500: the select-mode header keeps its buttons together on the right', { item: '500' }, async function () {
+    const bar = document.getElementById('topbar-m');
+    if (!bar) throw new Error('#topbar-m is missing');
+    const fe = window.frameElement;
+    const w0 = fe && fe.style.width;
+    const keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedIds ? FM.scene.selectedIds.slice() : [];
+    const sleep = ms => new Promise(r => setTimeout(r, 150));
+    try {
+      if (fe) { fe.style.width = '380px'; window.dispatchEvent(new Event('resize')); await sleep(); }
+      if (!matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not narrow to a phone width, and this header is phone-only — nothing below would be measured');
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < 4; i++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 120, shapeH: 120, fill: '#4ea8ff' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      FM.syncSelectionChrome(); FM.refreshAll();
+      await sleep();
+
+      /* CONTROL: this only means anything in the multi-select header, with its buttons on screen. */
+      if (!document.body.classList.contains('sel-multi')) throw new Error('the body is not in multi-select mode, so the header under test is not the one on screen');
+      const shown = [].slice.call(bar.children)
+        .map(e => ({ id: e.id || (e.className || '').toString().split(' ')[0], r: e.getBoundingClientRect() }))
+        .filter(x => x.r.width > 1)
+        .sort((a, b) => a.r.left - b.r.left);
+      if (shown.length < 4) throw new Error('only ' + shown.length + ' items visible in the select header — too few to be the real bar');
+      const del = shown.find(x => x.id === 'm-del');
+      if (!del) throw new Error('the delete button is not in the select-mode header at all');
+
+      /* THE FAULT: a large gap anywhere BETWEEN the buttons. The one legitimate gap is the flexible
+         label, which is why it is excluded — it is supposed to absorb the slack. */
+      const holes = [];
+      for (let i = 1; i < shown.length; i++) {
+        const gap = shown[i].r.left - shown[i - 1].r.right;
+        const spans = shown[i - 1].id === 'm-selcount' || shown[i].id === 'm-selcount';
+        if (!spans && gap > 16) holes.push(shown[i - 1].id + ' → ' + shown[i].id + ' = ' + gap.toFixed(0) + 'px');
+      }
+      if (holes.length) throw new Error('the select header has a hole between its buttons: ' + holes.join(', ') +
+        ' — that is what strands the bin and the "?" mid-bar instead of grouping them on the right (queue 500, measured 56px).');
+
+      /* …and the group really is at the right-hand end. */
+      const last = shown[shown.length - 1];
+      const barR = bar.getBoundingClientRect().right;
+      if (barR - last.r.right > 20) throw new Error('the rightmost button ends ' + (barR - last.r.right).toFixed(0) + 'px from the edge of the bar — the group is not anchored right');
+      if (del.r.left < bar.getBoundingClientRect().width * 0.45) throw new Error('the bin sits at x=' + del.r.left.toFixed(0) + ' in a ' + bar.getBoundingClientRect().width.toFixed(0) + 'px bar — still in the left half, which is his complaint');
+    } finally {
+      if (fe) { fe.style.width = w0; window.dispatchEvent(new Event('resize')); }
+      FM.scene.layers = keep; FM.scene.selectedIds = keepSel;
+      FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();

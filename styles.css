@@ -3258,7 +3258,15 @@ body.fm-playing #time-readout {
      `flex: 1`, so it does the pushing; only the orders change. */
   body.sel-mode #m-back     { order: -3; }
   body.sel-mode #m-selcount { order: -2; }
-  body.sel-mode #m-del      { order: 1; margin-right: 52px; }
+  /* ⚠️ NO SPACER HERE (queue 500). This carried `margin-right: 52px`, and that single declaration
+     undid the paragraph directly above it. The design is that #m-selcount is `flex: 1` and does the
+     pushing, so the buttons collect on the right — but a fixed margin on the bin ate the free space
+     first, so the label stopped at 91px and the help and bin buttons were left stranded in the middle
+     with 56px of nothing after them. MEASURED at 380px with 4 selected: back 2-44, "4 selected"
+     48-139, ? 143-185, bin 186-228, then a 56px hole, then group 284-326 and mask-group 330-372.
+     Ezra circled exactly that pair: "These buttons like the bin are still all the way over to the left
+     for no reason fix this". The 52px was reserving room for #m-more, which sel-mode hides. */
+  body.sel-mode #m-del      { order: 1; }
   /* The phone bin is RED (queue 259). Ezra: "Make the trash icon red." The PC transport row has done
      this since v7.79, so this is the phone catching up rather than a new idea: the one destructive
      control in a row of neutral ones should not look like its neighbours.

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.20
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.21
 >
-> **State:** v12.20, **904 tests green**, tree clean.
+> **State:** v12.21, **905 tests green**, tree clean.
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -16821,8 +16821,7 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > Get rid of the feature where holding on the timeline gives you an option to get rid of all markers
 
-- [ ] **500 — The bin and ? in the multi-select header are stranded over on the LEFT.** (24 Aug, phone screenshot at v12.20, circled in red.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **500 — The bin and ? in the multi-select header are stranded over on the LEFT.** ✅ **FIXED v12.21 — same day.** (24 Aug, phone screenshot at v12.20, circled in red.)
       His words, verbatim:
       > These buttons like the bin are still all the way over to the left for no reason fix this
       **What the shot shows:** the header while 4 clips are selected — `‹  4 selected   ? 🗑   ⋮   ⧉  ⧉+`.
@@ -16831,6 +16830,14 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **"still" matters** — this is the same complaint as **#425**, which moved the layer-action buttons to
       the right on the PC transport row. This is a DIFFERENT bar (the multi-select header) and it never got
       the same treatment, so from where he sits the fix looks half-done.
+      **It was one stray line of CSS.** The bin carried a hardcoded `margin-right: 52px`, and that single
+      declaration undid the design written in the comment directly above it — which says the count label is
+      `flex: 1` and *"does the pushing"* so the buttons collect on the right. The fixed margin ate the free
+      space first, so the label stopped short and the two buttons were left mid-bar.
+      **Measured at 380px with 4 selected.** Before: `? 143–185, bin 186–228,` then **56px of nothing**, then
+      group 284–326. After: label grows 91px → 143px and the four buttons sit together — `? 195–237, bin
+      238–280, group 284–326, mask 330–372`, with the biggest gap anywhere in the bar now 4px.
+      The 52px was reserving room for the ⋯ button, which this mode hides.
       ⚠️ **#425 clause 3 is still open and asks whether COPY moves right too.** Answer that at the same time
       if he touches this one — the two are the same question about two different rows.
 
@@ -16995,4 +17002,111 @@ re-opened #480, which I had marked done and had not fixed.
       flush. Find where a finished stroke is committed and what the in-progress overlay draws.
       ⚠️ **Higher priority than most of this batch** — it makes a whole feature unusable, and he has
       reported it before ("still broken").
+
+- [ ] **515 — Drag across the eye icons to hide/show many layers in one gesture, on phone and PC.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make it so that you can mass unselect stuff. I mean, not unselect, like, hide stuff on, like, phone and PC. Like, make it so if you press on the eye icon and then drag your finger down to make stuff hidden, you can just keep doing that. You can just keep dragging it down and down and, like, quickly do a lot, like, when you're selecting when you're selecting layers. Like, make it so if you just press on the eye button and, like, just, you know, keep holding or dragging the cursor down, it'll do a bunch of the eyes.
+      **What he means:** press an eye, keep the finger/cursor down, drag down the column and every eye you
+      pass over takes the same state. The paint-drag gesture every file manager and DAW has.
+      **Clauses:**
+      1. [ ] Press an eye and drag DOWN the column — each eye passed over toggles.
+      2. [ ] **Both phone (touch) and PC (mouse held down)**, in his words *"on, like, phone and PC"*.
+      3. [ ] It must apply the state of the FIRST eye you pressed to everything you drag over, not toggle
+             each one independently — otherwise dragging back over a row undoes it and the gesture is
+             useless. (He describes it as "make stuff hidden", i.e. one intent for the whole sweep.)
+      ⚠️ The eye column shares the row with the drag handle and the timeline's own scroll, so the gesture has
+      to claim the pointer without stealing a vertical timeline scroll that started elsewhere.
+
+- [ ] **516 — PC: the bin icon and the black bar behind that button group both look bad — try several designs and pick the best.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > On PC, the bin icon doesn't look really good there. It might need some work. And then also the black bar in the background looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make it, like, an outline or something instead. Just make it look good. Just work with a bunch of different things, and then maybe use a workflow to decide what looks best. Also, feel free to use a workflow for any other task that may need it.
+      **What the shot shows:** the desktop transport row — undo, redo, then a dark rounded slab holding
+      group / bin / ⋯ . The slab is near-black against an already dark bar, so it reads as a hole rather
+      than a container, and the red bin sits in it looking loud and unbalanced.
+      **Clauses:**
+      1. [ ] The **bin icon** itself needs work — his words, *"doesn't look really good there"*.
+      2. [ ] The **black backdrop** behind that group: he suggests **an outline instead of a filled slab**,
+             and otherwise *"just make it look good"*.
+      3. [ ] **Try several and compare** — he asked for options to be explored rather than one guess.
+      ✅ **WORKFLOWS ARE AUTHORISED, in his words:** *"maybe use a workflow to decide what looks best. Also,
+      feel free to use a workflow for any other task that may need it."* That is a standing permission, not
+      just for this item — it also covers #511's *"try and see every possible way it can break"*.
+
+- [ ] **517 — PC: the glow outlines on the inspector cards look glitched, like they are clipping under the buttons.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Un PC all of the outlines look really bad. Like, I think they're kinda glitching underneath the buttons. So you need to fix that. So the glow outlines of the animations and stuff actually look good on PC.
+      ("Un PC" = **on PC**.)
+      **What the shot shows:** the Sketch inspector's eight numbered cards — Colouring, Outline & Shadows,
+      Mixing, Position/Scale, Speed, Customise Points, Presets, Effects. Each has a coloured glow outline
+      and they are visibly **cut off / squared at the card edges** rather than surrounding them cleanly, so
+      the glow reads as a rendering fault instead of a highlight.
+      **Likely cause to check first:** a glow drawn with `box-shadow`/`filter` on a child while an ancestor
+      has `overflow: hidden` — the glow is clipped at the bounding box. That is the classic version of
+      exactly this look. Check the card, its grid and the panel that holds them.
+      ⚠️ Goes with **#511** (PC inspector) and **#513** (PC sketch menu) — all three are the same panel on
+      the same platform, and it is worth looking at them together rather than three times over.
+      **His own diagnosis, verbatim (and it sounds right):**
+      > I think it might be happening because the glow that's supposed to show with the mouse that goes around the edges is fighting for that space, but I feel like you could make it work together where it still has that, like, blue glow when your mouse is near it, but also has the colorful glow when your mouse isn't near it, like how it is on mobile.
+      So: **two glows on one element, both wanted.** The cursor-proximity blue glow (PC only) and the card's
+      own colour glow (which mobile shows correctly). They are almost certainly competing for the same
+      property — one `box-shadow` or one pseudo-element being overwritten — so one wins and the other
+      flickers or clips. **The target he describes: colour glow at rest, blue glow as the mouse approaches,
+      both visible together rather than one replacing the other.**
+
+- [ ] **518 — The menu shown when text is selected is bugged and looks weird.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The menu when you have text selected is really bugged out and looks weird. Please fix that.
+      **What the shot shows:** the PC inspector with a text layer selected — a "Text to Voice" button, then
+      nine numbered cards (Colouring, Outline & Shadows, Mixing, Position/Scale, Speed, Customise Text,
+      Captions, Presets, Effects). The card glows are clipped the same way as **#517**, and the panel sits
+      in a large empty column with the cards crammed into the top third.
+
+- [ ] **519 — While editing text, stop showing the other option cards underneath — pressing one bugs it out.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When you are editing tags, it shouldn't show up with the other options below it, like the effects and stuff like... because if you press it, it's just gonna bug it out and be weird. Just get rid of that.
+      ("editing tags" = **editing text** — dictation.)
+      **What the shot shows:** the text editor open (font, size, alignment, the text box) with Captions /
+      Presets / Effects cards **half-hidden behind it**, sliced off mid-row. They are reachable enough to
+      tap and, in his words, doing so bugs it out.
+      **So: while the text editor is open, those cards should not be there at all** — not merely covered.
+
+- [ ] **520 — PC: the font list should fill the empty space below and scroll up/down, not sideways.** (24 Aug, PC screenshot at v12.20.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Reminder to keep logging stuff and don't actually do a straight away. Just keep going from the list from olders and newest, but also now for the screenshot that I've just sent. Make it so that all of the different font options actually use the space below it, and they, like, go down and you swipe up and down, not left and right, only for PC because all that space down there could be where all of the font show up. But currently, you don't use that space up. So change that.
+      **What the shot shows:** the font picker as a single horizontal strip — Inter, Helvetica, Georgia,
+      Times N… — cut off at the panel edge, with a large empty column beneath it doing nothing.
+      **Clauses:**
+      1. [ ] **PC only** — his words, *"only for PC"*. The phone strip stays as it is.
+      2. [ ] The fonts fill the space below and **scroll vertically**, not horizontally.
+
+- [ ] **521 — 🚨 A layer dropped BELOW the add-layer row jumps back on top of it. He has asked repeatedly.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When I try to place a layer below the ad layer, the layer that's for creating stuff, it just automatically jumps on top of it, which I don't want. I want you to fix that. I've asked a similar thing to this many times before, and I don't know if you've fixed it or even tried yet.
+      ⚠️ **This is the OTHER HALF of #480, and it is a fair hit.** #480 (v12.03) was about a layer dropped ON
+      the add row not staying ABOVE it. This is the mirror image: dropping BELOW it and being pushed back
+      above. **#357, #443, #480 have all been about this one row**, so before touching anything, reproduce
+      THIS direction specifically — dropping under the marker — rather than assuming the earlier fix covers it.
+      His *"I don't know if you've fixed it or even tried yet"* is the part to take seriously: three entries
+      claim fixes and he still cannot do the thing.
+
+- [ ] **522 — Mobile: hide the drag handle while a layer is selected.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > This was only mobile, but on mobile make it so that when you have a layer selected, the drag button goes away because you're not gonna be using it when you have a layer selected because you can't even see the other layers to drag it with
+      His reasoning is the argument: with a layer selected the phone shows only that clip's row, so there is
+      nothing to drag it past — the handle is a control that cannot do anything.
+
+- [ ] **523 — The text edit screen should close the moment the layer is deselected.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Currently, when you... they select the layer, but you're in the text edit screen, the text edit screen stays up, and you have to press the blue tick still, and it's kinda glitchy. So change that. So as soon as you don't have a layer selected that you were editing the text for, that whole screen just goes away.
+      **The editor outlives its subject.** Deselect the text layer and the editing surface stays, still
+      demanding the blue tick. It should close itself when the layer it was editing stops being selected.
 
