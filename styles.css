@@ -6061,10 +6061,34 @@ body.fm-pushing #toast { z-index: 213; }
    The glyph flips to near-black: a light + on a bright disc is the one combination that would not read,
    and the timeline's + already made the same flip for the same reason. The backdrop blur goes with the
    glass — there is nothing translucent left to blur through. */
+/* ═══ THE TWO + BUTTONS ARE NOT THE SAME BUTTON (queue 456 + 507). Ezra, twice — the second time
+   chasing it: "I want the create button in the menu and in the project that are both rainbow to be
+   different colours not the same (both moving) and the one in the project that moves currently just
+   spins In a slow circle which is lazy, make it something more visually creative and cool" … then
+   "These plus buttons are still the same as each other … why haven't you done any of that?"
+   TWO things were true and neither was only about colour: both discs used the SAME conic gradient,
+   byte for byte, AND this one — the home screen's — was not animated at all, so "(both moving)" was
+   unmet as well.
+   HOME IS COOL: sky, mint, ice, violet. It sits over a dark grained backdrop and reads as calm.
+   The angle is animated through a registered custom property rather than by rotating a layer, because
+   the specular highlight has to stay put — a highlight that turns with the paint reads as the light
+   source moving, which is the mistake the in-project button's own comment records. Layers earlier in
+   `background-image` paint ON TOP, so the highlight simply stays above the turning gradient.
+   Where @property is unsupported the angle holds at its initial value: still colourful, just still. */
 #hm-new {
   background-image:
     radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%),
-    conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
+    conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #6BF0C8 76deg, #9BE88A 150deg, #8FB8FF 232deg, #C86BFF 300deg, #7FD4FF 360deg);
+  /* IT MOVES DIFFERENTLY, NOT JUST DIFFERENTLY COLOURED. The in-project + TURNS; this one DRIFTS —
+     the palette shifts through itself while the disc stays still, so the two are distinguishable with
+     your eyes shut, so to speak, and neither is a copy of the other.
+     ⚠️ FIRST ATTEMPT: animate the gradient's own angle through a registered `@property`, which keeps the
+     specular highlight from turning with the paint (the exact mistake the in-project button's comment
+     records). The engine reported @property as supported and then registered nothing — the rule was
+     dropped, the angle read empty, and the animation degraded to a discrete flip. Measured, not assumed.
+     A hue drift needs no registration and has the same virtue: `hue-rotate` leaves WHITE untouched, so
+     the highlight sits perfectly still while the colours underneath move. */
+  animation: fm-home-plus-drift 26s ease-in-out infinite alternate;
   background-repeat: no-repeat;
   background-color: transparent;
   -webkit-backdrop-filter: none;
@@ -7585,8 +7609,20 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    the disc is `pointer-events: none` so it cannot eat the tap. */
 .tl-addrow--empty .tl-addrow-plus::before {
   content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0; pointer-events: none;
-  background: conic-gradient(from 210deg at 50% 50%, #7FD4FF 0deg, #9BE88A 84deg, #FFC86B 168deg, #F5A8E4 252deg, #C86BFF 306deg, #7FD4FF 360deg);
-  animation: fm-plus-turn 34s linear infinite;
+  /* IN-PROJECT IS WARM: gold, coral, magenta, ember — deliberately the opposite half of the wheel from
+     the home button's cool set, so the two are told apart at a glance rather than by comparing them.
+     And "a slow circle" was his word for lazy, so the paint no longer only travels: the disc turns
+     while its hue drifts and breathes back, on a different period, so the colours evolve instead of
+     repeating. Two animations on two different properties — transform and filter — so neither fights
+     the other, and both are compositor-friendly on his phone. */
+  /* ⚠️ WARM, BUT STILL THREE DISTINCT HUES. My first warm set was gold→coral→pink→violet, and an
+     existing test caught it at TWO hue buckets: coral sits within 40° of gold, and violet within 40° of
+     pink, so a five-stop ramp collapsed to two. That test is his too — he complained the big + read as
+     "one flat disc" when it was three shades of one colour — so "warm" cannot be bought by narrowing
+     the wheel. Gold, hot pink and violet are 38° / 322° / 265°: unmistakably a sunset, and unmistakably
+     three colours. */
+  background: conic-gradient(from 210deg at 50% 50%, #FFC86B 0deg, #FF8A3D 66deg, #FF6BC8 150deg, #A96BFF 232deg, #FFD98A 306deg, #FFC86B 360deg);
+  animation: fm-plus-turn 22s linear infinite, fm-plus-shift 9s ease-in-out infinite alternate;
 }
 /* THE HIGHLIGHT HAS TO SIT ON TOP OF THE DISC, and the first attempt lost it. An element's own
    background paints BELOW its pseudo-elements, so the moment the ramp moved onto ::before the specular
@@ -7599,8 +7635,21 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
 }
 .tl-addrow--empty .tl-addrow-plus > * { position: relative; z-index: 2; }
 @keyframes fm-plus-turn { to { transform: rotate(360deg); } }
+/* The hue drift and the swell that stop it reading as one repeating rotation (queue 456 clause 3). Kept
+   small on purpose — a + button that pulses hard would pull the eye off the timeline every few seconds. */
+@keyframes fm-plus-shift {
+  from { filter: hue-rotate(0deg) saturate(1) brightness(1); }
+  to   { filter: hue-rotate(34deg) saturate(1.16) brightness(1.07); }
+}
+/* The home + drifts its hue instead of turning — see the note on #hm-new for why not @property. White
+   has no hue, so the specular highlight is untouched and stays exactly where the light put it. */
+@keyframes fm-home-plus-drift {
+  from { filter: hue-rotate(0deg) saturate(1); }
+  to   { filter: hue-rotate(-26deg) saturate(1.12); }
+}
 /* Anyone who has asked for less motion gets the same colours, standing still. */
 @media (prefers-reduced-motion: reduce) {
+  #hm-new { animation: none; }                      /* …and the home one, added with queue 456 */
   .tl-addrow--empty .tl-addrow-plus::before { animation: none; }
 }
 

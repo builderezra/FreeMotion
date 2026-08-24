@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.28
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Aug at v12.29
 >
-> **State:** v12.28, **911 tests green**, tree clean.
+> **State:** v12.29, **912 tests green**, tree clean.
+>
+> **✅ v12.29 — THE TWO + BUTTONS ARE FINALLY DIFFERENT (#456 / #507).** Home is cool — sky, mint,
+> periwinkle, violet — and it now MOVES, which it never did: it was the one you called out as not
+> animated and it genuinely was not. In-project is warm — gold, orange, hot pink, violet — and it no
+> longer only spins; it turns on 22s while its colour breathes on 9s, so the two never line up.
+> **Part of why this sat for four days is uglier than "I forgot": a test I wrote demanded they be
+> IDENTICAL.** Queue 384 asked for them to look like "siblings", I read that as *the same gradient*,
+> and that inference then blocked what you asked for. It is rewritten to guard what 384 actually
+> wanted (both real, both multi-coloured) without forcing sameness.
+>
+> **Also logged: #537** — Gradient Overlay needs blend modes "and other stuff that you can think of".
 >
 > **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
 > **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
@@ -15772,8 +15783,7 @@ wait for them to report back."*
       helper worked, and nothing tested the wire between them. The strip now stamps the notch it really
       used and the test reads the FINISHED control, which catches both directions.
       **Two facts either side of a seam are not a test of the seam.**
-- [ ] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **456 — The two rainbow Create buttons should be DIFFERENT colours, and the in-project one needs a
       ✅ **UNBLOCKED 24 Aug — I was wrong to be waiting.** He chased it: *"why haven't you done any of
       that?"* — see #507. He told me what he wanted on 21 Aug; deciding to show him options first was MY
       choice, and it turned a clear instruction into a four-day wait. **Build it.**
@@ -15782,14 +15792,29 @@ wait for them to report back."*
       same (both moving)  and the one in the project that moves currently just spins In a slow circle
       which is lazy, make it something more visually creative and cool"*.
       **Three clauses — tick separately:**
-      1. [ ] The Create button on the home/menu screen and the one inside a project must use DIFFERENT
-             colour sets, not the same rainbow.
-      2. [ ] BOTH must still be animated — "(both moving)" is explicit, so this is not "make one static".
-      3. [ ] The in-project one currently just rotates its gradient slowly. He calls that lazy and wants
+      1. [x] The Create button on the home/menu screen and the one inside a project must use DIFFERENT
+             colour sets, not the same rainbow. — **v12.29. Home is COOL** (sky `#7FD4FF` → mint → pale
+             green → periwinkle → violet); **in-project is WARM** (gold `#FFC86B` → orange → hot pink →
+             violet → sand). Opposite halves of the wheel, so they are told apart at a glance rather than
+             by holding them side by side.
+      2. [x] BOTH must still be animated — "(both moving)" is explicit, so this is not "make one static".
+             — **v12.29, and this clause was the one actually failing: the home + was not animated AT ALL.**
+             It now drifts its hue over 26s. The in-project one keeps its turn and gains a breathe.
+      3. [x] The in-project one currently just rotates its gradient slowly. He calls that lazy and wants
              something genuinely more interesting. **This is a taste call and he has asked for
              creativity, so it is worth showing him more than one option rather than picking silently** —
              his standing instruction of the same day: *"I just want options. Yu can just say recommended
              next to the best option"*.
+             — **v12.29.** It no longer only turns: the disc rotates on 22s while its hue, saturation and
+             brightness breathe on a 9s alternate cycle, so the two periods never line up and the colours
+             evolve instead of repeating. Transform and filter are separate properties, so neither fights
+             the other and both stay on the compositor on his phone.
+             ⚠️ **Honest note on what I did NOT build.** Option A as I pitched it was "warm + counter-
+             sweep", and a counter-sweep needs a third layer — the disc and the specular highlight already
+             own `::before` and `::after`, and one element cannot rotate two ways. That means a new child
+             element in the JS that builds the button. I shipped warm + breathe instead, which meets all
+             three of his clauses. **If he opens it and it still reads as "just spinning", the counter-
+             sweep is the next move and it is a small change, not a redesign.**
       Both buttons appear in his screenshots: the home screen's floating ＋ (a soft rainbow disc, bottom
       centre) and the in-project one in the top-right of the editor toolbar.
 
@@ -17034,8 +17059,7 @@ re-opened #480, which I had marked done and had not fixed.
       Restating what CLAUDE.md already requires, after six requests in one sitting: every message gets an
       entry the moment it arrives, verbatim, and the queue is worked oldest-first rather than newest-first.
 
-- [ ] **507 — The two + buttons are STILL identical, and the moving one still just spins. He is asking why nothing has happened.** (24 Aug, two phone screenshots at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **507 — The two + buttons are STILL identical, and the moving one still just spins. He is asking why nothing has happened.** (24 Aug, two phone screenshots at v12.20.)
       His words, verbatim:
       > These plus buttons are still the same as each other and also the one that's moving inside the projects doesn't move interestingly like I've asked you to change it up like it's still the exact same like why haven't you done any of that?
       **What the shots show:** the in-project "Tap here to start creating" + and the home screen's floating +
@@ -17051,6 +17075,19 @@ re-opened #480, which I had marked done and had not fixed.
       genuinely cannot tell what he means — not for taste calls he has already made.
       ✅ **UNBLOCKED 24 Aug** — the "waiting on your answer" quoted above is my own past mistake being
       recorded, not a live question. Nothing is outstanding from him on this one.
+
+      🔒 **v12.29 — AND A TEST OF MINE HAD TO BE OVERTURNED TO DO IT, WHICH IS WORTH RECORDING.**
+      Queue 384 asked for the two + buttons to "end up looking like siblings rather than two separate
+      attempts". I encoded "siblings" as *the same conic ramp, byte for byte*, and wrote a test that
+      failed if they differed. That was my reading of one word, not his instruction — and it then sat
+      there as a guard AGAINST what he asked for on 21 Aug and chased on 24 Aug. So part of the answer to
+      "why haven't you done any of that" is that my own suite would have gone red if I had.
+      The test is now **"a family, not one disc copied twice"**: both must be real conic ramps, both must
+      carry ≥3 distinct hues (the queue-313 "flat disc" complaint, and the half of 384 that was genuinely
+      his), and they must **NOT** be identical. Mutation-checked in both directions.
+      **The lesson is not "delete tests that get in the way".** It is that a test encoding my
+      INTERPRETATION of a word should say so in its comment, so the next session can tell his instruction
+      from my inference. That one didn't, so it read as his.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -17403,3 +17440,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Clause 1 is a swap, not an addition — check what moved the thumbnail hold onto the pill (queue 364
       made the pill the play button) before changing either, so the fix does not just add a third meaning
       to one press.
+
+- [ ] **537 — Gradient Overlay needs blend modes, and whatever else it is missing.** (24 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Gradient overlay effect needs blending options and other stuff that you can think of
+      **Clauses — tick separately:**
+      1. [ ] **Blend modes on the Gradient Overlay effect.** This is the explicit ask, and it is the one
+             control that turns a gradient overlay from a sticker into a grade — screen for glows,
+             multiply for burns, overlay/soft-light for a colour cast, hard-light for a look.
+      2. [ ] **"and other stuff that you can think of"** — an open invitation, so audit the effect against
+             what a gradient overlay is expected to do and fill the real gaps rather than padding the
+             panel. Check FIRST what it already has before proposing anything: angle, stop colours,
+             midpoint/position, opacity, and whether it supports more than two stops or only two.
+             Likely candidates once the audit is in: **radial / conic as well as linear**, **a third
+             stop**, **feather/spread on the midpoint**, **preserve-alpha** so it only paints where the
+             layer is rather than over the whole frame, and **dither** to stop banding on wide subtle
+             ramps (which is what makes an 8-bit gradient look cheap).
+      ⚠️ **Do not just add controls.** He has complained before about effects that "sometimes you just add
+      it but it doesn't really work" (#502) — every option added here has to be wired into the kernel and
+      have a visible, correct result, not just appear in the panel.
+      ⚠️ Blend modes have a real trap: the overlay must composite against the LAYER, not the canvas
+      underneath it, or "multiply" will darken everything behind the layer too. Verify with a layer on a
+      contrasting background before calling it done.

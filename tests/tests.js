@@ -961,14 +961,21 @@
     }
   });
 
-  test('the home + and the timeline + are the same coloured disc, not two attempts at one', { item: 'plus-siblings' }, function () {
+  test('the home + and the timeline + are a family, not one disc copied twice', { item: 'plus-siblings' }, function () {
     /* Queue 384. Ezra: "Make the plus button in this menu an array of colours and look pretty like what you
        did with the background but instead specialised for the button. I want things to stand out."
-       The entry asked for this and queue 354's timeline + to "end up looking like siblings rather than two
-       separate attempts", so that is what is asserted: both discs must carry the SAME conic ramp. A check
-       that merely said "the home + has some colours" would pass two different rainbows, which is the exact
-       outcome the entry warned against — and it would also pass a full-screen gradient shrunk onto a 58px
-       circle, which is the queue 313 mud. Sharing one ramp is what makes that impossible. */
+       ⚠️ **THIS TEST USED TO DEMAND THEY BE IDENTICAL, AND HE OVERRULED THAT — TWICE (queue 456, then 507).**
+       384 said the two should "end up looking like siblings rather than two separate attempts", and I
+       encoded "siblings" as *the same conic ramp, byte for byte*. That was my reading, not his words. On
+       21 Aug he asked for the opposite in as many words — "I want the create button in the menu and in the
+       project that are both rainbow to be different colours not the same (both moving)" — and on 24 Aug he
+       chased it: "These plus buttons are still the same as each other … why haven't you done any of that?"
+       The newer instruction wins, so what this test protects has to change with it. What 384 was ACTUALLY
+       guarding against is still guarded below, and it was never sameness:
+         · not "the home + has some colours", which would pass anything;
+         · not a full-screen gradient shrunk onto a 58px circle (the queue 313 mud);
+         · not one of them quietly reverting to plain glass and vanishing into the list.
+       So: both must be real conic ramps, both must be multi-hued, and they must NOT be the same one. */
     const fab = document.getElementById('hm-new');
     if (!fab) throw new Error('#hm-new — the home + — is missing');
     const probeRow = document.createElement('div');
@@ -996,7 +1003,28 @@
       const cHome = conic(home), cTl = conic(tl);
       if (!cTl) throw new Error('the timeline + no longer has a conic ramp to be a sibling OF — read [' + String(tl).slice(0, 90) + ']');
       if (!cHome) throw new Error('the home + has no conic ramp — it is back to plain glass and will disappear into the list again: [' + String(home).slice(0, 90) + ']');
-      if (cHome !== cTl) throw new Error('the two + buttons have DIFFERENT colour ramps, which is the "two separate attempts" the entry asked to avoid:\n  home     ' + cHome.slice(0, 120) + '\n  timeline ' + cTl.slice(0, 120));
+      if (cHome === cTl) throw new Error('both + buttons carry the IDENTICAL colour ramp — that is what he came back about twice: "These plus buttons are still the same as each other".');
+      /* …and each must still be a real multi-colour ramp, which is the half of #384 that survives: a
+         "difference" achieved by making one of them two shades of grey would pass a mere inequality. */
+      const hues = (ramp) => {
+        const out = [];
+        (String(ramp).match(/rgba?\([^)]*\)/g) || []).forEach(c => {
+          const n2 = c.replace(/^rgba?\(|\)$/g, '').split(',').map(parseFloat);
+          const r = n2[0], g = n2[1], b = n2[2];
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          if (mx - mn < 26) return;
+          let h;
+          if (mx === r) h = 60 * (((g - b) / (mx - mn)) % 6);
+          else if (mx === g) h = 60 * ((b - r) / (mx - mn) + 2);
+          else h = 60 * ((r - g) / (mx - mn) + 4);
+          if (h < 0) h += 360;
+          if (!out.some(x => { const d = Math.abs(x - h); return Math.min(d, 360 - d) < 40; })) out.push(h);
+        });
+        return out;
+      };
+      const hHome = hues(cHome), hTl = hues(cTl);
+      if (hHome.length < 3) throw new Error('the home + is down to ' + hHome.length + ' distinct hue(s) — it has stopped being "an array of colours" and will disappear into the list again');
+      if (hTl.length < 3) throw new Error('the timeline + is down to ' + hTl.length + ' distinct hue(s)');
     } finally { probeRow.remove(); }
   });
 
@@ -37046,10 +37074,17 @@
         throw new Error('the spinning disc carries no conic ramp — the colours it is supposed to move are not on it: [' + String(cs.backgroundImage).slice(0, 80) + ']');
       }
       if (!cs.animationName || cs.animationName === 'none') throw new Error('the + disc has no animation — the colours do not move');
-      if (cs.animationIterationCount !== 'infinite') throw new Error('the + spins ' + cs.animationIterationCount + ' time(s) and then stops');
+      /* ⚠️ READ THE FIRST ANIMATION, NOT THE WHOLE LIST (queue 456). This disc used to run one animation
+         and these three checks read the computed values as single tokens. It now runs TWO — the turn,
+         plus a hue drift on a different period, because Ezra called a bare slow spin "lazy" — so the
+         computed values are comma-separated lists ("infinite, infinite", "22s, 9s", "linear, ease-in-out").
+         The turn is first, and the turn is what this test is about: it still has to be endless, slow and
+         even. The drift rides on `filter`, which none of these three properties describe. */
+      const first = (v) => String(v).split(',')[0].trim();
+      if (first(cs.animationIterationCount) !== 'infinite') throw new Error('the + spins ' + cs.animationIterationCount + ' time(s) and then stops');
       const secs = parseFloat(cs.animationDuration);
       if (!(secs >= 8)) throw new Error('the + turns once every ' + cs.animationDuration + ' — that is a spinner, not the "subtle" movement he asked for');
-      if (cs.animationTimingFunction !== 'linear') throw new Error('the turn eases (' + cs.animationTimingFunction + '), so it speeds up and slows down every cycle instead of drifting');
+      if (first(cs.animationTimingFunction) !== 'linear') throw new Error('the turn eases (' + cs.animationTimingFunction + '), so it speeds up and slows down every cycle instead of drifting');
     } finally { probeRow.remove(); }
   });
 
@@ -42964,6 +42999,83 @@
       const root = document.getElementById('home-screen');
       if (root) root.classList.remove('hm-slam');
       if (!wasOpen && FM.home.close) FM.home.close();
+    }
+  });
+
+  /* ═══ 456 + 507: THE TWO + BUTTONS MUST NOT BE THE SAME BUTTON.
+     Ezra, 21 Aug: "I want the create button in the menu and in the project that are both rainbow to be
+     different colours not the same (both moving) and the one in the project that moves currently just
+     spins In a slow circle which is lazy, make it something more visually creative and cool."
+     Then, 24 Aug, chasing it: "These plus buttons are still the same as each other … why haven't you
+     done any of that?" — and he was right twice over. The two discs used the SAME conic gradient byte
+     for byte, AND the home one was not animated at all, so "(both moving)" was unmet too.
+     ⚠️ This entry sat marked "waiting on your answer" for four days because I decided to offer him
+     options first. He had already said what he wanted. That is why this test exists at all. */
+  test('456: the home + and the in-project + are different colours, and both move', { item: '456' }, async function () {
+    const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const keep = FM.scene.layers.slice();
+    const probes = [];
+    try {
+      if (!wasOpen && FM.home && FM.home.open) { FM.home.open(); await sleepMs(400); }
+      const home = document.getElementById('hm-new');
+      if (!home) throw new Error('#hm-new (the home + button) is missing');
+      const conic = (v) => { const m = String(v).match(/conic-gradient\([^)]*\)/); return m ? m[0] : null; };
+      const hcs = getComputedStyle(home);
+      const homeGrad = conic(hcs.backgroundImage);
+      if (!homeGrad) throw new Error('the home + has no conic gradient any more, so "different colours" cannot be compared');
+
+      /* ⚠️ BUILD A PROBE ROW rather than emptying the real timeline. The in-project + only exists on the
+         EMPTY add-row, and clearing the scene inside the suite does not reliably put that row on screen —
+         my first version failed with "not on screen" while the button was perfectly fine. The
+         queue-'plus-spin' test beside this one already solved it this way: the CSS is what is under test,
+         so a detached element carrying the same classes answers the question exactly. */
+      const probeRow = document.createElement('div');
+      probeRow.className = 'tl-addrow tl-addrow--empty';
+      probeRow.style.cssText = 'position:absolute;left:-9999px;top:0';
+      const plus = document.createElement('div');
+      plus.className = 'tl-addrow-plus';
+      probeRow.appendChild(plus);
+      document.body.appendChild(probeRow);
+      probes.push(probeRow);
+      const bcs = getComputedStyle(plus, '::before');
+      const projGrad = conic(bcs.background) || conic(bcs.backgroundImage);
+      if (!projGrad) throw new Error('the in-project + has no conic gradient any more');
+
+      /* ── HIS FIRST COMPLAINT: not the same. */
+      if (homeGrad === projGrad) throw new Error('both + buttons still use the identical conic gradient — that is exactly "These plus buttons are still the same as each other"');
+
+      /* ── AND BOTH MUST MOVE. "(both moving)" is his, in brackets, so it is not optional. */
+      const homeAnim = (hcs.animationName || '').split(',').map(x => x.trim()).filter(x => x && x !== 'none');
+      if (!homeAnim.length) throw new Error('the home + has no animation at all — it was static while the other one turned, which is the other half of what he noticed');
+      const projAnim = (bcs.animationName || '').split(',').map(x => x.trim()).filter(x => x && x !== 'none');
+      if (!projAnim.length) throw new Error('the in-project + has stopped moving');
+
+      /* ── AND THE IN-PROJECT ONE MUST DO MORE THAN TURN. He called a plain slow spin lazy. */
+      if (projAnim.length < 2) throw new Error('the in-project + is back to a single animation (' + projAnim.join(', ') + ') — one steady rotation is the "just spins In a slow circle which is lazy" he asked to be replaced');
+
+      /* ── the two must not merely differ in name but in what they DO, or they read as the same idea. */
+      if (homeAnim.join() === projAnim.join()) throw new Error('both buttons run the same animation set (' + homeAnim.join(', ') + '), so they still move identically');
+
+      /* CONTROL: a reduced-motion user must get neither, which is the one case where "not moving" is
+         correct — and proves these rules are the ones actually driving the movement. */
+      let reduceRule = false;
+      [].slice.call(document.styleSheets).forEach(sh => {
+        let rs; try { rs = sh.cssRules; } catch (e) { return; }
+        [].slice.call(rs).forEach(r => {
+          if (!r.media || !/prefers-reduced-motion/.test(r.media.mediaText) || !r.cssRules) return;
+          [].slice.call(r.cssRules).forEach(inner => {
+            if (inner.selectorText && /#hm-new/.test(inner.selectorText)
+                && /none/.test(inner.style && inner.style.animation || '')) reduceRule = true;
+          });
+        });
+      });
+      if (!reduceRule) throw new Error('the home + animation is not switched off under prefers-reduced-motion — a disc that never stops moving is a problem for someone who asked for less motion');
+    } finally {
+      probes.forEach(p => p.remove());
+      FM.scene.layers = keep; FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (wasOpen && FM.home && FM.home.open) FM.home.open(); else if (FM.home && FM.home.close) FM.home.close();
     }
   });
 })();
