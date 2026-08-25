@@ -1,11 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.52
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.53
 >
-> **State:** v12.52, **940 tests green**, tree clean.
+> **State:** v12.53, **941 tests green**, tree clean.
 >
-> **🟠 ONE SMALL THING: export something with sound again and tell me whether a message appears.**
-> That is the whole of what I need — why is two paragraphs down.
+> **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
+> why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
+> the three drawn at phone size; nothing ships until you choose.
+>
+> **✅ v12.53 — on your phone the drag handle now goes away when a layer is selected (#522).** Your
+> reasoning was the fix: with one row on screen there is nothing to drag it past. Your PC is untouched.
 >
 > **✅ v12.51 — you can drop a layer BELOW the add row (#521). You were right that it had never worked.**
 > You said *"I've asked a similar thing to this many times before, and I don't know if you've fixed it or
@@ -17867,12 +17871,27 @@ re-opened #480, which I had marked done and had not fixed.
       uniform layout it fails loudly instead of passing for free, which is the exact hole the last three
       fixes fell through.
 
-- [ ] **522 — Mobile: hide the drag handle while a layer is selected.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **522 — Mobile: hide the drag handle while a layer is selected.** (24 Aug.) ✅ v12.53
       His words, verbatim:
       > This was only mobile, but on mobile make it so that when you have a layer selected, the drag button goes away because you're not gonna be using it when you have a layer selected because you can't even see the other layers to drag it with
       His reasoning is the argument: with a layer selected the phone shows only that clip's row, so there is
       nothing to drag it past — the handle is a control that cannot do anything.
+
+      ✅ **DONE v12.53.** His reasoning turned out to be the implementation note too. `soloLayerId()`
+      already means exactly what he described — a phone, with exactly one layer selected — and in that
+      state the timeline draws exactly ONE row. So the handle is simply not built there.
+      **Measured at 380px:** nothing selected → 3 rows, 3 handles; one selected → 1 row, **0 handles**.
+      **Desktop asserted UNCHANGED** (3 rows, 3 handles, selected or not) — *"This was only mobile"* is
+      his scoping, and a silent desktop change is a regression he did not ask for.
+      ⚠️ **NOT BUILT rather than hidden with CSS, deliberately.** A `display:none` handle is still a real
+      element carrying a real pointerdown listener, and the gesture it starts reasons about `statics` —
+      which in solo view is EMPTY, the one case that code's own comment calls out as having "nowhere to
+      drop". Not creating it removes the state instead of covering it over.
+      ⚠️ **Two controls in the test, both load-bearing:** nothing-selected on the SAME phone width must
+      still have handles (otherwise a build that never drew the handle on mobile at all would pass, which
+      would take the feature away instead of the one state he named), and the desktop must be untouched.
+      Multi-select is safe by construction: `soloLayerId()` already returns null while selecting a set,
+      so the handles you need to reorder that set are still there.
 
 - [ ] **523 — The text edit screen should close the moment the layer is deselected.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

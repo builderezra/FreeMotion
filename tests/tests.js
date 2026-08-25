@@ -2737,6 +2737,68 @@
     }
   });
 
+  test('522: the phone drops the reorder handle while a layer is selected', { item: '522' }, async function () {
+    /* Queue 522. Ezra: "This was only mobile, but on mobile make it so that when you have a layer
+       selected, the drag button goes away because you're not gonna be using it when you have a layer
+       selected because you can't even see the other layers to drag it with."
+       His reasoning is the whole specification. On a phone, selecting a clip puts the timeline in SOLO
+       view — one row, the selected one — so a reorder handle has nothing to reorder against.
+       Two controls carry this test, and it is worth saying why each is here:
+       · Nothing selected on the SAME phone width must still have handles. Without that, a build which
+         simply never drew the handle on mobile would pass, and that would take the feature away
+         entirely rather than in the one state he described.
+       · DESKTOP must be untouched. "This was only mobile" is his scoping, and a silent desktop change
+         is a regression he did not ask for — the same rule #520 was held to. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const seed = async () => {
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < 3; i++) {
+        const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(200);
+    };
+    const tally = () => ({ rows: document.querySelectorAll('#tl-tracks .track-row').length,
+                           handles: document.querySelectorAll('#tl-tracks .track-row .row-drag').length });
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+
+      await atPhoneWidth(async function () {
+        await seed();
+        const before = tally();
+        if (before.rows < 2) throw new Error('only ' + before.rows + ' row(s) drawn with nothing selected — the fixture is not showing the multi-row state this test compares against');
+        if (before.handles !== before.rows) throw new Error('with nothing selected, ' + before.handles + ' of ' + before.rows + ' rows carry a drag handle — they all should, and if they do not this test cannot tell his change from the handle being gone everywhere');
+
+        FM.selectLayer(FM.scene.layers[1].id); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(250);
+        /* CONTROL: this must actually BE the solo state. If the phone did not solo, there would be
+           several rows on screen, the handle would be genuinely useful, and asserting its absence
+           would be asserting the wrong thing. */
+        if (!(FM._soloLayerId && FM._soloLayerId())) throw new Error('selecting a layer at phone width did not put the timeline in solo view, so the premise of queue 522 does not hold here and the assertion below would be testing something else');
+        const after = tally();
+        if (after.rows !== 1) throw new Error('solo view drew ' + after.rows + ' rows, not 1 — his argument ("you cannot even see the other layers") depends on there being exactly one');
+        if (after.handles !== 0) throw new Error('the selected row still carries ' + after.handles + ' drag handle(s) — queue 522: with one row on screen there is nothing to drag it past');
+      }, 380);
+
+      // …and the desktop must be exactly as it was. His words: "This was only mobile".
+      await seed();
+      FM.selectLayer(FM.scene.layers[1].id); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(250);
+      const desk = tally();
+      if (desk.rows < 2) throw new Error('the desktop drew ' + desk.rows + ' row(s) with a layer selected — it must not solo, so this control is not measuring what it claims');
+      if (desk.handles !== desk.rows) throw new Error('selecting a layer on the DESKTOP removed a drag handle (' + desk.handles + ' on ' + desk.rows + ' rows) — he scoped this to mobile only');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

@@ -2529,7 +2529,17 @@ window.FM = window.FM || {};
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));
-      row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
+      /* NO REORDER HANDLE ON THE PHONE'S SOLO ROW (queue 522). Ezra: "on mobile make it so that when
+         you have a layer selected, the drag button goes away because you're not gonna be using it when
+         you have a layer selected because you can't even see the other layers to drag it with."
+         His reasoning IS the implementation note: `soloId` is set only on a phone with exactly one
+         layer selected, and in that state this loop draws exactly ONE row. A reorder handle then has
+         nothing to reorder against — there is no second row on screen to drop past.
+         NOT BUILT rather than hidden with CSS, deliberately: a `display:none` handle is still a real
+         element with a real pointerdown listener, and the gesture code it starts (acquire/layout)
+         reasons about `statics` — which in solo view is empty, the one case its own comment calls out
+         as having "nowhere to drop". Not creating it removes the state instead of covering it up. */
+      if (!soloId) row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
       tracksEl.appendChild(row);
     });
     /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
