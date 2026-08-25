@@ -5770,7 +5770,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * frame the alpha bbox and the walls are measured in. Mixing the two conventions is not cosmetic:
    * indexing by the integer i put the shape's centre half a pixel off and a floor squash came out
    * visibly LOP-SIDED (measured: 1208 channels differing between the render and its own mirror). */
-  function sqAxis(N, wLo, wHi, pLo, pHi, Llo, Lhi, Dlo, Dhi, out, jac) {
+  /* The spread ceiling at which a layer is considered to have room to bulge freely (queue 539). Below
+     it, the compression is progressively allowed to reach the far edge instead — see farPull in sqAxis.
+     ⚠️ 1.15, AND THE FIRST VALUE — 1.5 — WAS MEASURABLY TOO WIDE. The measured fade begins late: sliding
+     a 150px ball down a 480 wall, limY runs 3.2 (y=240) → 1.067 (y=400) → 1 (the corner), so the visible
+     squash only dies over that last stretch, and a threshold of 1.5 reached well past it. What it caught
+     was a case that is not a corner at all: at wall inset 150 a 150px ball is squeezed between the two
+     SIDE walls with limY 1.2, and pulling its far edge in there took the continuity sweep from a
+     baseline of 0.83 to 1.45 against a limit of 1.5 — passing, by 3%, which is a flaky test rather than
+     a working feature. Measured with the term bypassed to be sure the baseline was not already high.
+     1.15 engages only where the bulge is genuinely gone, which is what he is describing. */
+  const SQ_ROOMY = 1.15;
+
+  function sqAxis(N, wLo, wHi, pLo, pHi, Llo, Lhi, Dlo, Dhi, out, jac, farPull, tMin) {
     /* The shift is normalised to land on EXACTLY zero at the layer's far edge D:
      *     s(d) = p ((1-d/L)^3 - c0) / (1 - c0),   c0 = max(0, 1 - D/L)^3
      * When the falloff already dies inside the shape (L <= D, a light touch) c0 is 0 and this IS
@@ -5782,8 +5794,67 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * with L clamped to D, 40px with this, against 38px for the drifting version that was not
      * contained at all.) The far edge is the shape's own extremity, so the slope break there has
      * no material on the other side of it to crease. */
+    /* ⚠️ farPull — THE CORNER (queue 539 clause 4). `c0` is what PINS the far edge: subtracting it
+       makes s(D) exactly 0, so the far side never moves and the silhouette stays full. That is right
+       whenever the layer has room to bulge sideways, because the bulge is what you SEE.
+       In a corner there is no room either way — both spread ceilings clamp to 1 — and the measured
+       result is a ball that compresses (1410 px change, 8.5% less area) without ever looking squashed.
+       ⚠️ AND THE ENTRY'S OWN NOTE SAID "zero px differ", which is wrong: that reading came from a
+       BOUNDING BOX, and the wall clips the bbox either way, so it cannot see this. The same blindness
+       the entry warns about, in the correction written to cure it. Measured properly above.
+       So when the bulge is denied, the compression is allowed to reach the far edge instead: scaling
+       c0 down by farPull leaves s(0) EXACTLY p — containment is untouched, which is what keeps the
+       layer inside the frame — while s(D) rises to p·c0·farPull/(1-c0'), so the layer genuinely
+       flattens into the corner rather than only losing area off its clipped edge.
+       farPull is 0 wherever there is room to bulge, so every wall case away from a corner is
+       byte-identical to what it has always been. */
+    const fp = farPull > 0 ? (farPull < 1 ? farPull : 1) : 0;
     const c0Hi = pHi > 0 ? Math.pow(Math.max(0, 1 - Dhi / Lhi), 3) : 0;
     const c0Lo = pLo > 0 ? Math.pow(Math.max(0, 1 - Dlo / Llo), 3) : 0;
+    /* The far-edge pull is a SEPARATE, linear term, and the first attempt at it was not — it scaled
+       `c0` down instead, on the theory that c0 is what pins the far edge. Measured: byte-identical,
+       because c0 is ALREADY 0 in every case that matters. c0 is only non-zero on a deep hit where the
+       falloff outruns the shape (L > D); in a normal wall contact the cubic simply dies before it
+       reaches the far edge, so there is nothing there to unpin. Recorded because it is a plausible,
+       wrong reading of this function, and the next person will have it too.
+       `kFar` is a straight ramp: zero at the wall, so contact and containment are untouched, and
+       fp·p at the far edge, so the body loses exactly the depth the wall pushed in — the material has
+       to go somewhere, and with no room to bulge it goes into the layer itself.
+       ⚠️ AND IT IS BOUNDED BY THE FIRMNESS FLOOR, which the first version was not — the suite caught
+       it, which is the whole reason that test exists. `firm` is the minimum thickness the walls may
+       squash a layer to, enforced upstream by an EFFECTIVE wall that rides with the layer once the cap
+       binds. This term compresses on top of that map, so left unbounded it walks straight through the
+       floor: at inset 200 a 150px layer came out 25px wide against a 45px floor — the "nub" that
+       function's own comment says it exists to prevent. The budget is what is left above the floor,
+       `D - tMin`, halved when both walls of an axis are live because then the two shifts add. Where the
+       cap already binds, D IS tMin, the budget is 0 and this term switches itself off — which is
+       correct: at the firmness floor there is no room left to give. */
+    /* ⚠️ ONE SHARED BUDGET FOR THE AXIS, and it must be CONTINUOUS — this is the third version, and
+       the two before it both failed the suite's continuity sweep for the same underlying reason.
+       v1 clipped hard at the floor and walked through it anyway. v2 halved each wall's budget when
+       both walls of an axis were live — `pLo > 0 && pHi > 0 ? 0.5 : 1` — which is a HARD SWITCH, and
+       this function's own comments already say what those do: "a hard switch pops wherever its
+       condition is reachable on screen". Instrumented at inset 200, the right wall's penetration goes
+       0 → 1 at s=206 and that factor flipped 1 → 0.5 in a single pixel of travel, halving the budget
+       and moving the far edge several px at once. Ratio 5.68 against a limit of 1.5.
+       So there is no switch. `thick` is the span the layer will actually occupy — bounded by the far
+       edge on each side and, when both walls bind, by the gap between them — and every one of those
+       three quantities is continuous in position, so the min of them is too. The two walls then share
+       what is left above the floor IN PROPORTION to their own penetration, which goes to zero
+       smoothly as a wall stops binding rather than being switched out of the sum. */
+    const thick = Math.min(Dhi, Dlo, wHi - wLo);
+    const roomAxis = tMin > 0 ? Math.max(0, thick - tMin) : thick;
+    const wantHi = pHi > 0 && fp > 0 ? fp * pHi : 0;
+    const wantLo = pLo > 0 && fp > 0 ? fp * pLo : 0;
+    const want = wantHi + wantLo;
+    /* …and it still FADES rather than clipping. Bounded by the room alone, the pull TRACKS the room
+       once that binds, and the room moves as the layer travels — which is a jump by another route.
+       This dies away quadratically as the cap is approached instead of following it down. */
+    const fade = roomAxis > 0 ? roomAxis / (roomAxis + (tMin > 0 ? tMin : 1)) : 0;
+    const share = want > 0 && roomAxis > 0 ? Math.min(1, roomAxis / want) * fade : 0;
+    const farHi = wantHi * share, farLo = wantLo * share;
+    const kFarHi = farHi > 0 ? farHi / Dhi : 0;
+    const kFarLo = farLo > 0 ? farLo / Dlo : 0;
     const nHi = 1 / (1 - c0Hi), nLo = 1 / (1 - c0Lo);
     const kHi = pHi > 0 ? 3 * pHi * nHi / Lhi : 0, kLo = pLo > 0 ? 3 * pLo * nLo / Llo : 0;
     const eHi = Math.min(Lhi, Dhi), eLo = Math.min(Llo, Dlo);
@@ -5796,11 +5867,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // strip between wall and frame edge reads from beyond the layer — i.e. stays empty.
         if (dd <= 0) { m += pHi - dd * kHi; J += kHi; }
         else if (dd < eHi) { const u = 1 - dd / Lhi; m += pHi * (u * u * u - c0Hi) * nHi; J += kHi * u * u; }
+        if (kFarHi > 0 && dd > 0) { m -= kFarHi * (dd < Dhi ? dd : Dhi); if (dd < Dhi) J += kFarHi; }
       }
       if (pLo > 0) {
         const dd = pos - wLo;
         if (dd <= 0) { m -= pLo - dd * kLo; J += kLo; }
         else if (dd < eLo) { const u = 1 - dd / Llo; m -= pLo * (u * u * u - c0Lo) * nLo; J += kLo * u * u; }
+        if (kFarLo > 0 && dd > 0) { m += kFarLo * (dd < Dlo ? dd : Dlo); if (dd < Dlo) J += kFarLo; }
       }
       out[i] = m; jac[i] = J;
     }
@@ -6126,18 +6199,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const MY = sqBuf(slot, 'my', H, Float64Array), JY = sqBuf(slot, 'jy', H, Float64Array);
       const invExOfY = sqBuf(slot, 'iex', H, Float64Array);   // indexed by ROW, scales x
       const invEyOfX = sqBuf(slot, 'iey', W, Float64Array);   // indexed by COLUMN, scales y
-      sqAxis(W, wL, wR, pL, pR, LxL, LxR, DxL, DxR, MX, JX);
-      sqAxis(H, wT, wB, pT, pB, LyT, LyB, DyT, DyB, MY, JY);
-
       // How far can each axis spread before it runs into ITS OWN walls? (an x-squash spreads in y,
       // so the y walls are what cap it). Never below 1 — that would turn the spread into a second
       // compression — and infinite when the bbox is already past that wall.
+      /* MOVED ABOVE THE MAPS (queue 539). These depend only on the bbox and the walls, never on MX/MY,
+         so computing them first costs nothing — and the far-edge pull inside sqAxis needs them. */
       const limY = Math.max(1, Math.min(sqRoom(yB - Cy, by1 - Cy), sqRoom(Cy - yT, Cy - by0)));
       const limX = Math.max(1, Math.min(sqRoom(xR - Cx, bx1 - Cx), sqRoom(Cx - xL, Cx - bx0)));
+      /* HOW MUCH BULGE WAS DENIED, per axis. An x-squash bulges in Y, so the X map's pull is read off
+         limY and vice-versa. 1 means no room at all (a corner); at SQ_ROOMY there is room to spare and
+         the pull is 0, which is every case this effect has ever shipped. Continuous in between, because
+         the suite sweeps a layer across a wall one pixel at a time and asserts the picture never jumps —
+         a step here would be a jump there. */
+      const fpX = Math.max(0, Math.min(1, (SQ_ROOMY - limY) / (SQ_ROOMY - 1)));
+      const fpY = Math.max(0, Math.min(1, (SQ_ROOMY - limX) / (SQ_ROOMY - 1)));
+      sqAxis(W, wL, wR, pL, pR, LxL, LxR, DxL, DxR, MX, JX, fpX, tMinX);
+      sqAxis(H, wT, wB, pT, pB, LyT, LyB, DyT, DyB, MY, JY, fpY, tMinY);
       /* …and the two spread ceilings, which are the thing queue 539's corner case turns on: an
          x-squash bulges in Y, so the Y WALLS cap it. In a corner there is no room either way and both
          clamp to 1 — see the seam. */
-      if (FM._squishDebug && FM._squishInfo) { FM._squishInfo.limX = limX; FM._squishInfo.limY = limY; }
+      if (FM._squishDebug && FM._squishInfo) { FM._squishInfo.limX = limX; FM._squishInfo.limY = limY; FM._squishInfo.fpX = fpX; FM._squishInfo.fpY = fpY; }
       // An inert wall is passed as NaN, which fails every comparison in sqStretch — so it neither
       // flattens against a wall nothing crossed nor needs a second flag threaded through.
       // x-compression spreads in y, and the profile that needs is the layer's height per COLUMN,

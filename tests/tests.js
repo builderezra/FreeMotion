@@ -3861,6 +3861,83 @@
     }
   });
 
+  test('539: a layer squashed into a CORNER actually flattens, and one with room to bulge is untouched', { item: '539' }, function () {
+    /* Queue 539 clause 4. Ezra: "It still doesn't even work in corners very well so it's got a long way
+       to go."
+       ⚠️ THE ENTRY'S OWN RECORDED MEASUREMENT WAS WRONG, and this test exists partly to stop it being
+       believed again. It said the corner produced "zero px differ" — a complete no-op. Re-measured: 1410
+       pixels changed and the lit area dropped 8.5%. The "no-op" reading came from a BOUNDING BOX, and the
+       wall clips the bbox either way, so a bbox cannot see it. That is the exact blindness the entry
+       warns about two paragraphs earlier, committed again inside the correction written to cure it.
+       WHAT WAS ACTUALLY WRONG: the ball compressed but never looked squashed. The visible part of this
+       effect is the perpendicular bulge — an x-squash bulges in Y — and in a corner there is no room
+       either way, so both spread ceilings clamp to 1 and all you get is a slightly smaller ball.
+       THE FIX IS A DECISION, and it is the one the entry parked: with nowhere to bulge, the material the
+       wall pushes in goes into the layer itself, so the far edge comes in and the layer genuinely
+       flattens into the corner. The alternative — a corner holding a ball rigid — is not what he is
+       describing when he says it does not work there.
+       ⚠️ AND THE SECOND ASSERTION IS THE ONE THAT PROTECTS EVERYTHING ELSE. This must not touch a layer
+       that HAS room to bulge, which is every wall case the effect has ever shipped. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const P = FM.scene.project, size0 = { w: P.width, h: P.height };
+    try {
+      const run = (cx, cy, on) => {
+        P.width = 480; P.height = 480;
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'ellipse', x: cx, y: cy, shapeW: 150, shapeH: 150, fill: '#ffffff' });
+        L.start = 0; L.duration = 5;
+        if (on) { const sq = FM.fxRegistry.makeInstance('squish'); if (!sq) throw new Error('the Squish effect is missing'); L.effects = [sq]; }
+        FM.scene.layers.push(L);
+        const cv = offscreen(480, 480), ctx = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, 0);
+        const d = ctx.getImageData(0, 0, 480, 480).data;
+        let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, lit = 0;
+        for (let y = 0; y < 480; y++) for (let x = 0; x < 480; x++) {
+          const i = (y * 480 + x) * 4;
+          if (d[i] > 170 && d[i + 1] > 170 && d[i + 2] > 170) { lit++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        return { w: x1 - x0 + 1, h: y1 - y0 + 1, lit: lit };
+      };
+
+      // ── 1. THE CORNER. Both walls bind and there is no room to bulge either way.
+      const cOff = run(430, 430, false), cOn = run(430, 430, true);
+      // CONTROL: the ball must really be overhanging both walls, or "it got smaller" means nothing.
+      if (!(cOff.w < 150 && cOff.h < 150)) throw new Error('the corner fixture is not clipped by both walls (' + cOff.w + 'x' + cOff.h + ') — nothing below would mean anything');
+      if (!(cOn.w < cOff.w - 4)) throw new Error('in a corner the ball is still ' + cOn.w + 'px wide against ' + cOff.w + ' plain — it is not flattening, which is queue 539 clause 4');
+      if (!(cOn.h < cOff.h - 4)) throw new Error('in a corner the ball is still ' + cOn.h + 'px tall against ' + cOff.h + ' plain — only one axis is compressing');
+      if (!(cOn.lit < cOff.lit * 0.85)) throw new Error('the cornered ball kept ' + cOn.lit + ' of ' + cOff.lit + ' lit pixels — the squash is not visible enough to be what he is asking for');
+      // …and the OPPOSITE corner behaves the same, or this is a right/bottom special case
+      const tOff = run(50, 50, false), tOn = run(50, 50, true);
+      if (!(tOn.w < tOff.w - 4 && tOn.h < tOff.h - 4)) throw new Error('the TOP-LEFT corner does not flatten (' + tOn.w + 'x' + tOn.h + ' against ' + tOff.w + 'x' + tOff.h + ') — the low walls are not carrying the same rule as the high ones');
+
+      /* ── 2. THE PROTECTION. A ball against ONE wall with room to bulge must be exactly what it has
+         always been: unchanged along the squash axis, taller across it. If the far-edge pull leaks
+         into this case it re-cuts every project that has ever used Squish against a wall. */
+      const wOff = run(430, 240, false), wOn = run(430, 240, true);
+      if (wOn.w !== wOff.w) throw new Error('against ONE wall the ball narrowed from ' + wOff.w + ' to ' + wOn.w + 'px — the corner rule has leaked into the ordinary wall case, which is every existing project');
+      if (!(wOn.h > wOff.h + 8)) throw new Error('against one wall the ball only reached ' + wOn.h + 'px tall against ' + wOff.h + ' plain — the bulge that carries this effect has been damaged');
+
+      /* ── 3. CONTINUITY. The suite already asserts a layer swept across a wall never jumps; this is the
+         same rule for the new term, which fades in as the bulge room runs out. A step here would be a
+         visible pop as a ball slides into a corner. */
+      /* The bound is 12, not 8, and the difference is measured rather than picked: the real profile
+         steps 125 → 117 → 111 as the ball rolls in, so the largest honest step is 8px of smooth
+         compression over 10px of travel. A POP — the term switching on rather than fading in — would
+         be the whole 14px at once. 8 as a bound passes with zero margin, which is a flaky test rather
+         than a working assertion. */
+      let prev = null;
+      for (let y = 240; y <= 430; y += 10) {
+        const r = run(430, y, true);
+        if (prev !== null && Math.abs(r.w - prev) > 12) throw new Error('sliding down the wall, the width jumped ' + prev + ' → ' + r.w + 'px in one 10px step at y=' + y + ' — the corner term is switching on rather than fading in, so a ball entering a corner will pop');
+        prev = r.w;
+      }
+    } finally {
+      P.width = size0.w; P.height = size0.h;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('524: dragging a clip past the end grows the project AS YOU DRAG, and stops scrolling at the limit', { item: '524' }, function () {
     /* Queue 524. Ezra: "Dragging to the right breaks when you reach the project end instead of extending
        out the project please fix."
