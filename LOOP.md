@@ -141,7 +141,43 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.58, 946 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.64, 954 tests green, tree clean, `HEAD == ssh/main`.**
+
+**⚡ BATCHED SHIPPING IS ON (rule 15), on his instruction.** Six releases this stretch — v12.59 → v12.64 —
+closing **#529, #530, #531, #533, #534, #536, #537, #538, #540**. Nine items, ~20 clauses.
+· **#529** the whole multi-select path verified end to end (it works); the real cause is FOUR effects that
+  render nothing at their defaults, now marked *"Needs a setting"*.
+· **#531** same root cause as #523 — creators bypass `FM.selectLayer`. **That pattern has now bitten
+  twice; grep for direct `scene.selectedId` writes before trusting the named setter.**
+· **#536** four clauses; the bookmark lines were a hardcoded `320px`.
+· **#537** Gradient Overlay: 8 blend modes, radial/conic, midpoint, dither. Defaults reproduce the old
+  render exactly.
+· **#540** motion blur measured BEFORE changing: linear to the old max, so the ceiling was the slider.
+  4 → 12 shutter, 32 → 48 samples. 3.2× the unblurred width.
+
+⚠️ **THREE OF MY OWN FAILURES THIS STRETCH, all the same shape — I trusted something instead of checking:**
+· A helper inserted INSIDE an object literal broke the whole app. The **browser console** named it in one
+  line; the suite had not been run yet. **Open the page after touching the compositor.**
+· The #538 tap listener silently never fired, TWICE — bound to `#preview`, then to `#canvas-wrap`. That
+  area is rebuilt, so any node captured at load is dead by the time the feature runs, **and that is the
+  only state it runs in**. Document-level capture is the answer.
+· #540 cost FOUR wrong measurements because `layer.x` is not what moves a layer — it is
+  **`layer.transform.x`**. `evalProp` returns the right numbers for `layer.x` and the picture never moves.
+  Worse, my "control" compared the smear WIDTH at two times, which is identical whether it moved or not.
+  **A control that cannot fail is not a control.**
+
+**📌 #539 (Squish) MEASURED BUT DELIBERATELY NOT BUILT — read this before starting it.**
+· **Clause 1's premise is largely WRONG.** With a Shake on, Squish acted on **10 of 13 sampled frames**;
+  the three misses are exactly when the shake pulled the ball off the wall. Queue 323's fix works. What is
+  real is the FEEL — it pops in and out and the height jumps 158→234→183→288 frame to frame. **That is a
+  damping design decision, not a composition bug.**
+· **Clause 4 is real and worse than reported: the corner is a COMPLETE no-op** (125×125 → 125×125), and
+  the right wall's squish FADES as the ball merely approaches the floor (236 → 230 → 210 → 160 → dead).
+· **The decisive clue: dead in the corner in EVERY wall mode, including `Sides`, which excludes the
+  floor.** So it is NOT two walls fighting — the entry's own theory is ruled out. Points at the padded
+  plate or the alpha-bbox scan in `drawSquish`.
+· Clauses 2/3 (layer picker) not started — arbitrary-shape collision, and it should not be rushed in
+  behind an open corner bug.
 **v12.58 did #528** — the effects sheet re-pins to the canvas bottom when the canvas moves.
 ⚠️ **MEASURING FIRST IS WHAT STOPPED THIS BEING CLOSED AS "ALREADY FIXED".** At the moment of opening,
 the sheet already sat **0.17–0.35px** under the canvas — at 380px AND his own 440px, on 1:1, 9:16, 16:9
@@ -335,8 +371,8 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #529** (multi-selecting effects worked once and is broken again) — #524 is parked on his pick,
-not skipped.
+**NEXT: #539** (Squish — start from the measurements above), then #541 onward. **#524, #564, #215 and the
+"rename Stroke Colour?" question are parked on HIS pick, not skipped.**
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or

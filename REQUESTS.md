@@ -18572,6 +18572,44 @@ re-opened #480, which I had marked done and had not fixed.
       say plainly if a first pass will only handle axis-aligned bounds — an honest partial beats a
       quiet one.
 
+      🔬 **MEASURED 26 Aug at v12.64 — nothing built yet, on purpose. Two of the four clauses now have
+      hard numbers, and one of them CORRECTS the entry's own premise.**
+      **CLAUSE 1 IS LARGELY WRONG, and that is worth knowing before anyone rewrites the compositor.**
+      A 150px ball driven into the right wall of a 480² comp with a Shake on it, sampled every 0.1s:
+      **Squish acted on 10 of 13 frames.** Examples: t=0.3 `93×164 → 99×288`, t=0.7 `87×163 → 95×263`,
+      t=1.1 `55×158 → 60×286`. **The three frames where it did nothing are exactly the frames where the
+      shake had pulled the ball OFF the wall** (right edge 420, 406, 449 against a 480 wall) — with no
+      penetration there is correctly nothing to squash. So queue 323's fix works and Squish composes.
+      ⚠️ **What is REAL in his report is the FEEL, not the composition.** With a shake on, the ball is
+      only touching the wall about two frames in three, so the deformation pops in and out — and when it
+      acts the height jumps 158 → 234 → 183 → 288 → 213 → 263 frame to frame. It is not that Squish does
+      nothing; it is that the result is unusable. **That is a damping problem** (smooth the response over
+      time, or measure penetration against the un-shaken position), which is a design decision, not a bug.
+      🐛 **CLAUSE 4 IS REAL AND WORSE THAN HE SAID — "doesn't work very well" is a complete NO-OP.**
+      | ball at | plain | with Squish |
+      |---|---|---|
+      | right wall only (430, 240) | 125×150 | **125×236** ✓ |
+      | bottom wall only (240, 430) | 150×125 | **236×125** ✓ |
+      | **bottom-right corner (430, 430)** | 125×125 | **125×125 — nothing** ✗ |
+      | **top-left corner (50, 50)** | 125×125 | **125×125 — nothing** ✗ |
+      **And it FADES on the way in**, sliding the ball down the right wall: y=240 → 236 tall, y=300 → 230,
+      y=360 → 210, y=400 → 160, **y=430 → dead.** So it is not two walls fighting at the moment of
+      contact — the right wall's own squish weakens as the ball merely APPROACHES the floor.
+      ⚠️ **The decisive clue: it is dead in the corner in EVERY wall mode, including `Sides`** — which
+      excludes the floor entirely. So the floor is not "winning" the fight; something about hanging off
+      the bottom kills the whole effect, X axis included. That rules out the obvious "the two walls are
+      fighting" theory the entry proposes, and points at the padded plate or the alpha-bbox scan
+      (`drawSquish` measures the ALPHA BOUNDING BOX of a plate padded past every side — see the long note
+      above `SQUISH` in js/compositor.js).
+      **DELIBERATELY NOT FIXED TONIGHT.** The cause is in the plate/bbox geometry and I have not traced it
+      yet; a guess there would be a change to the most heavily-reasoned function in the compositor, and
+      the entry itself says to plan before writing. **The measurements above are the plan's starting
+      point** — the next session begins from a fade profile and a ruled-out theory rather than from a
+      one-line report.
+      **CLAUSES 2 and 3 (the layer picker + "affect every layer") NOT STARTED** — they need collision
+      against arbitrary shapes, which he himself called very complicated, and they should not be rushed in
+      behind a corner bug that is still open.
+
 - [x] **540 — Motion blur needs to go much further than it currently can.** (24 Aug.) ✅ v12.64
       His words, verbatim:
       > Motion blur still needs the ability to crank up the effectiveness a lot
