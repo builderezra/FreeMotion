@@ -2799,6 +2799,89 @@
     }
   });
 
+  test('523: the text editor closes itself when its layer stops being selected', { item: '523' }, async function () {
+    /* Queue 523. Ezra: "when you... they select the layer, but you're in the text edit screen, the text
+       edit screen stays up, and you have to press the blue tick still, and it's kinda glitchy. So as
+       soon as you don't have a layer selected that you were editing the text for, that whole screen
+       just goes away."
+       A lifetime bug, not a missing button: the editor is bound to ONE layer and never noticed the
+       selection move on, so it sat there orphaned, still demanding the tick.
+       FOUR things are asserted, and the two CONTROLS matter as much as the two closes — a build that
+       simply tore the editor down on every refresh would satisfy the closes and make the editor
+       unusable, which is a worse bug than the one being fixed. */
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const P = FM.scene.project;
+    const seed = async () => {
+      FM.scene.layers.length = 0;
+      const t = FM.makeLayer('text', { name: 'Words', text: 'Hello', x: P.width / 2, y: P.height / 2 });
+      t.start = 0; t.duration = 4; FM.scene.layers.push(t);
+      const b = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 100, shapeH: 100, fill: '#3a7bd5' });
+      b.start = 0; b.duration = 4; FM.scene.layers.push(b);
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(150);
+      return { t: t, b: b };
+    };
+    const shut = () => !FM.textEdit.isActive() && !document.querySelector('.te-panel') && !document.body.classList.contains('text-editing');
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+
+      // ---- CONTROL 1: it opens, and re-selecting the SAME layer leaves it open.
+      let { t, b } = await seed();
+      FM.textEdit.start(t.id); await sleep(300);
+      if (!FM.textEdit.isActive()) throw new Error('the editor did not open at all, so none of the closes below would mean anything');
+      if (!document.querySelector('.te-panel')) throw new Error('the editor reports active but drew no .te-panel — the probe below reads the DOM, so it would pass for the wrong reason');
+      FM.selectLayer(t.id); await sleep(250);
+      if (!FM.textEdit.isActive()) throw new Error('re-selecting the SAME layer closed the editor — the check is comparing the wrong thing, and editing text would be impossible');
+
+      // ---- CONTROL 2: an ordinary refresh with the selection unchanged must leave it open.
+      FM.refreshAll(); await sleep(200);
+      if (!FM.textEdit.isActive()) throw new Error('a plain refreshAll() closed the editor — the hook is firing on every refresh rather than on a selection CHANGE, which would tear the editor down mid-type');
+
+      // ---- HIS CASE: deselect entirely and the whole screen goes away.
+      FM.selectLayer(null); await sleep(300);
+      if (!shut()) throw new Error('deselecting left the text editor up (active ' + FM.textEdit.isActive() + ', panel ' + !!document.querySelector('.te-panel') + ', body class ' + document.body.classList.contains('text-editing') + ') — queue 523, "that whole screen just goes away"');
+
+      // ---- and selecting a DIFFERENT layer is the same thing.
+      ({ t, b } = await seed());
+      FM.textEdit.start(t.id); await sleep(300);
+      FM.selectLayer(b.id); await sleep(300);
+      if (!shut()) throw new Error('selecting a different layer left the text editor bound to the old one — that is the orphaned-modal state he called glitchy');
+
+      // ---- WHAT HE TYPED MUST SURVIVE. He asked for the screen to go, not the text.
+      ({ t, b } = await seed());
+      FM.textEdit.start(t.id); await sleep(300);
+      const input = document.getElementById('te-input');
+      if (!input) throw new Error('the editor has no #te-input, so this cannot check that typing survives');
+      input.value = 'Typed while open';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(150);
+      FM.selectLayer(null); await sleep(300);
+      const kept = (FM.scene.layers.find(l => l.id === t.id) || {}).text;
+      if (kept !== 'Typed while open') throw new Error('closing on deselect threw the typing away (layer.text is ' + JSON.stringify(kept) + ') — tapping off already commits, and losing his words would be a worse bug than the one being fixed');
+
+      /* ---- THE SECOND CHOKE POINT, and it needs its own case. Every layer CREATOR writes
+         FM.scene.selectedId directly and calls refreshAll() — it never goes through FM.selectLayer. A
+         fix hooked only to selectLayer passes everything above and still strands the editor here. */
+      ({ t, b } = await seed());
+      FM.textEdit.start(t.id); await sleep(300);
+      if (!FM.textEdit.isActive()) throw new Error('the editor did not open for the layer-creation case');
+      if (typeof FM.addAdjustmentLayer !== 'function') throw new Error('FM.addAdjustmentLayer is missing — this case needs a creator that bypasses selectLayer');
+      FM.addAdjustmentLayer(); await sleep(300);
+      if (FM.scene.selectedId === t.id) throw new Error('creating a layer did not move the selection, so this case is not exercising the bypass it exists for');
+      if (!shut()) throw new Error('creating a new layer while the editor was open left it stranded — the creators set selectedId directly and never call FM.selectLayer, so hooking only that API is not enough');
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive()) { try { FM.textEdit.stop(); } catch (e) {} }
+      FM.scene.layers = layers0;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

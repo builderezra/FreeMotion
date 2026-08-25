@@ -1,12 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.53
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.54
 >
-> **State:** v12.53, **941 tests green**, tree clean.
+> **State:** v12.54, **942 tests green**, tree clean.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
 > the three drawn at phone size; nothing ships until you choose.
+>
+> **✅ v12.54 — the text edit screen now disappears the moment you deselect the layer (#523).** No more
+> blue tick to get out of it. What you typed is kept — you asked for the screen to go, not the words.
 >
 > **✅ v12.53 — on your phone the drag handle now goes away when a layer is selected (#522).** Your
 > reasoning was the fix: with one row on screen there is nothing to drag it past. Your PC is untouched.
@@ -17893,12 +17896,32 @@ re-opened #480, which I had marked done and had not fixed.
       Multi-select is safe by construction: `soloLayerId()` already returns null while selecting a set,
       so the handles you need to reorder that set are still there.
 
-- [ ] **523 — The text edit screen should close the moment the layer is deselected.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **523 — The text edit screen should close the moment the layer is deselected.** (24 Aug.) ✅ v12.54
       His words, verbatim:
       > Currently, when you... they select the layer, but you're in the text edit screen, the text edit screen stays up, and you have to press the blue tick still, and it's kinda glitchy. So change that. So as soon as you don't have a layer selected that you were editing the text for, that whole screen just goes away.
       **The editor outlives its subject.** Deselect the text layer and the editing surface stays, still
       demanding the blue tick. It should close itself when the layer it was editing stops being selected.
+
+      ✅ **DONE v12.54.** The editor now checks the selection and commits itself out of the way. Measured
+      at 380px: deselect → `isActive` false, `.te-panel` gone, the `text-editing` body class gone; select
+      a different layer → the same.
+      **It COMMITS rather than discards, deliberately.** Tapping off the editor already commits and so
+      does the blue tick, so losing what he typed because he tapped elsewhere would be a worse bug than
+      the one being fixed. He asked for the *screen* to go away, not the text. Asserted: type, deselect,
+      the words are still on the layer.
+      ⚠️ **ONE HOOK WOULD NOT HAVE BEEN ENOUGH, and this is the part worth remembering.** `FM.selectLayer`
+      is the named API — it is where the crop tool and Isolate already self-close for exactly this reason
+      — but **every layer CREATOR** (`addAdjustmentLayer`, `addCamera` and a dozen more) writes
+      `FM.scene.selectedId` directly and then calls `refreshAll()`, never touching `selectLayer`. A fix
+      hooked only to the obvious API passes every deselect test and still strands the editor the moment
+      you add a layer while it is open. Both choke points are hooked, and the test drives the creator
+      path specifically so the second hook cannot be quietly deleted.
+      ⚠️ **Two CONTROLS carry the test, and they matter as much as the closes:** re-selecting the SAME
+      layer must leave the editor open, and a plain `refreshAll()` must leave it open. Without those, a
+      build that tore the editor down on every refresh would pass — and that is unusable, a worse bug
+      than the original.
+      *Re-entrancy needed no flag: `commit()` runs `teardown()` (which nulls `active`) BEFORE it calls
+      `inspector.refresh()`, so a hook on that path finds nothing left to do.*
 
 - [ ] **524 — Dragging a clip right stops dead at the project end instead of extending the project.** (24 Aug, phone screenshot at v12.22.)
       **STATUS: 🟢 READY — nothing is stopping this**

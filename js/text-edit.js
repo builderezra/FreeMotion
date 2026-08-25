@@ -646,5 +646,24 @@ window.FM = window.FM || {};
     },
     // Esc / external close → commit-and-exit (the live value is already applied).
     stop() { if (active) commit(); },
+    /* THE EDITOR MUST NOT OUTLIVE ITS SUBJECT (queue 523). Ezra: "as soon as you don't have a layer
+       selected that you were editing the text for, that whole screen just goes away."
+       He is describing a lifetime bug, not a missing button. The editor is bound to ONE layer and had
+       no idea the selection had moved on, so deselecting left the whole surface up, still demanding
+       the blue tick — "and it's kinda glitchy", which is what an orphaned modal always looks like.
+       COMMITS rather than discards, deliberately: tapping off the editor already commits (see
+       onDocDown), the blue tick commits, and losing what he typed because he tapped the wrong thing is
+       a worse bug than the one being fixed. He asked for the screen to go away, not for the text to.
+       `nextId` is passed by callers that know the selection they are MOVING TO, so the check works
+       before the assignment lands; callers that have already written it just omit it.
+       Re-entrancy is safe without a flag: commit() runs teardown() — which nulls `active` — BEFORE it
+       calls inspector.refresh(), so a hook on that path finds nothing to do. */
+    syncToSelection(nextId) {
+      if (!active) return false;
+      const sel = arguments.length ? nextId : FM.scene.selectedId;
+      if (sel === active.layerId) return false;
+      commit();
+      return true;
+    },
   };
 })(window.FM);

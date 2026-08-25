@@ -674,6 +674,12 @@ window.FM = window.FM || {};
 
   function refreshAll() {
     if (FM.autoFitDuration) FM.autoFitDuration();   // timeline length always tracks the clips
+    /* SECOND CHOKE POINT FOR QUEUE 523, and it is needed: `FM.selectLayer` is the named API, but every
+       layer CREATOR (addCamera, addAdjustmentLayer and a dozen more) writes `FM.scene.selectedId`
+       directly and then calls this. Hooking only selectLayer would leave the editor stranded whenever a
+       new layer was made while it was open. No argument here — the assignment has already happened, so
+       it reads the live selection. */
+    if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection();
     FM.inspector.refresh();
     FM.timeline.rebuild();
     updateDropHint();
@@ -2461,6 +2467,11 @@ window.FM = window.FM || {};
     // Isolate is scoped to the layer it was armed on — selecting anything else drops it, so you can
     // never be left looking at a filtered scene and wondering why the others vanished.
     if (FM.isolate && FM.isolate.id !== id && FM.setIsolate) FM.setIsolate(0);
+    // …and the text editor, for the same reason the crop tool is stopped two lines up: it is bound to
+    // ONE layer and never self-closes, so deselecting left the whole editing surface up, still asking
+    // for the blue tick (queue 523). Passed the INCOMING id, because selectedId has not been written
+    // yet at this point.
+    if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection(id);
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.syncSelectionChrome();   // BEFORE the rebuild — sel-mode/sel-multi change what it renders
