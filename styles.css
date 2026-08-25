@@ -7463,8 +7463,20 @@ body.fm-pushing #toast { z-index: 213; }
        The 88 is measured, not guessed: title 33 + quick-row 16 + the wrap's own gaps and padding, which
        came to a further 20 that a first pass at this arithmetic missed and left as a constant 20px of
        scroll at every band height. */
-    --cat-h: clamp(40px, calc((var(--tl-h, 264px) - 88px) / 3), 101px);
-    --cat-pad: clamp(4px, calc((var(--tl-h, 264px) - 120px) / 12), 17px);
+    /* ⚠️ …AND ANYTHING ELSE THE PANEL HAPPENS TO BE CARRYING (queue 518). Ezra, with a text layer
+       selected: "The menu when you have text selected is really bugged out and looks weird."
+       The 88 above is title + quick-row + gaps, and it is right — for most layers. A TEXT layer adds a
+       48px "Text to Voice" row that no other type has, and the solver had no idea it was there, so the
+       arithmetic handed the three rows more height than the panel had left. Measured with a text layer
+       on an 820px window: title 33 + tts 48 + quick-row 16 + grid 162, i.e. **46px past the panel** —
+       which is that row, near enough exactly.
+       Named as a variable rather than folded into the constant, so the next per-type row that appears
+       here has an obvious place to declare itself. The test that guards this walks EVERY layer type
+       rather than the one he happened to report, because the constant being wrong is the bug, not the
+       particular row that exposed it. */
+    --insp-extra: 0px;
+    --cat-h: clamp(40px, calc((var(--tl-h, 264px) - 88px - var(--insp-extra, 0px)) / 3), 101px);
+    --cat-pad: clamp(4px, calc((var(--tl-h, 264px) - 120px - var(--insp-extra, 0px)) / 12), 17px);
     --cat-ico: clamp(14px, calc((var(--tl-h, 264px) - 120px) / 5.6), 26px);
     --cat-inner-gap: clamp(2px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
     /* The gap BETWEEN tiles comes down too. Three rows means two of them, and at the floor they were
@@ -7483,7 +7495,10 @@ body.fm-pushing #toast { z-index: 213; }
     height: var(--cat-h); box-sizing: border-box;
     padding: var(--cat-pad) 8px; gap: var(--cat-inner-gap);
   }
-  body #inspector-panel .cat-label { overflow: hidden; }   /* a long label crops; the card's ring does not */
+  body #inspector-panel .cat-label { overflow: hidden; }
+  /* The one per-type row that exists today. `:has()` is already used elsewhere in this file for exactly
+     this kind of state-dependent layout. */
+  body #inspector-panel:has(.tts-row) { --insp-extra: 48px; }   /* a long label crops; the card's ring does not */
   body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
   /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
      it — at three rows, 1.3 line-height is another 10px of nothing. */

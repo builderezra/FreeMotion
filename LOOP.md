@@ -102,7 +102,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.47, 934 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.48, 935 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.48 closed #518.** Half of it was #517 (shipped v12.47). The rest: the card grid solves row height as
+`(band − 88 chrome) / 3`, and TEXT is the one type with an extra 48px `.tts-row` — uncounted, so the grid
+overflowed **46px at every band height**. Now `--insp-extra` (named, not folded into the constant); text
+fits from band 260 up (cards 41→55→68) and at the floor band it scrolls rather than hiding anything.
+⚠️ **First attempt used `:has(#tts-row)` — it is a CLASS not an id, so it matched nothing.** Caught by
+re-measuring instead of assuming the fix landed. Mutation reproduces the 46px exactly.
+⚠️ **The test walks EVERY layer type on purpose** — the bug was a constant going stale when the panel
+gained a row, so the guard must catch the NEXT such row, not this one.
+**NEXT: #519** — while the text editor is open, the option cards behind it should not be there at all
+(he says tapping one bugs it out). Same panel, same screenshot as 518.
 **v12.47 fixed #517** — and "clipping" was literal. `.cat-card` had `overflow: hidden` (so long labels
 could not stretch the tile) while its colour ring is a `::before` at `inset: -1px` — a DESCENDANT one
 pixel outside the padding box, so the card clipped its own ring; radius 11px against a 10px clip sliced

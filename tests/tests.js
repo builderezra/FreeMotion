@@ -28216,6 +28216,74 @@
     }
   });
 
+  test('the inspector panel fits its own contents for every layer type (queue 518)', { item: '518' }, async function () {
+    /* Ezra, with a text layer selected: "The menu when you have text selected is really bugged out and
+       looks weird."
+       The card grid's row height is SOLVED, not guessed — `(band - 88px of chrome) / 3` — and the 88 is
+       title + quick-row + gaps, measured and correct for most layers. A TEXT layer adds a 48px "Text to
+       Voice" row that no other type has, and the solver had no idea it was there, so it handed the three
+       rows more height than the panel had left. Measured before: **46px past the panel, at every band
+       height**. After: it fits exactly from band 260 up (cards 41 → 55 → 68 as the band grows), and only
+       at the smallest band does it exceed by 22px, where the card floor of 40px is reached and the panel
+       scrolls instead — which is the honest outcome for more content than space.
+       ⚠️ THIS WALKS EVERY LAYER TYPE ON PURPOSE. The bug was not "the text row was forgotten", it was
+       "a constant went stale when the panel gained a row" — so the guard has to notice the NEXT per-type
+       row, not just this one. */
+    if (window.innerWidth < 701) return;                       // the PC inspector's card grid
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+    const root = document.documentElement;
+    const bandBefore = getComputedStyle(root).getPropertyValue('--tl-h').trim();
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId;
+    try {
+      /* A roomy band, so this measures the ARITHMETIC rather than the floor. The floor case is checked
+         separately below — it is allowed to scroll, but never to hide anything. */
+      root.style.setProperty('--tl-h', '300px');
+      const made = [];
+      const want = [
+        ['text', () => FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' })],
+        ['shape', () => FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' })]
+      ];
+      const bad = [];
+      let checked = 0;
+      for (const [kind, mk] of want) {
+        let L = FM.scene.layers.find(l => l.type === kind);
+        if (!L) { L = mk(); L.start = 0; L.duration = 4; FM.scene.layers.push(L); made.push(L); }
+        FM.selectLayer(L.id);
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(90);
+        const cards = panel.querySelectorAll('.cat-card');
+        if (!cards.length) continue;                            // this type does not show the card grid
+        checked++;
+        const over = panel.scrollHeight - panel.clientHeight;
+        if (over > 2) bad.push(kind + ': the panel holds ' + panel.scrollHeight + 'px of content in ' + panel.clientHeight + 'px (' + over + 'px past it) — something in this layout is not counted by the row-height arithmetic');
+      }
+      /* CONTROL: if no type rendered a card grid, "none of them overflow" is true of nothing. */
+      if (checked < 2) throw new Error('only ' + checked + ' layer type(s) rendered the card grid — this test is not comparing types, so a per-type row could not be detected');
+      if (bad.length) throw new Error(bad.join(' | '));
+
+      /* …AND AT THE SMALLEST BAND, where the cards hit their floor and the content genuinely cannot fit,
+         it must SCROLL rather than clip. Unreachable is the failure that matters; tight is not. */
+      root.style.setProperty('--tl-h', '150px');
+      const txt = FM.scene.layers.find(l => l.type === 'text');
+      if (txt) {
+        FM.selectLayer(txt.id);
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(90);
+        if (panel.scrollHeight > panel.clientHeight + 2 && getComputedStyle(panel).overflowY === 'visible')
+          throw new Error('at the smallest band the panel overflows by ' + (panel.scrollHeight - panel.clientHeight) + 'px and does not scroll — the bottom cards would be unreachable');
+      }
+      made.forEach(L => { const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1); });
+    } finally {
+      root.style.setProperty('--tl-h', bandBefore || '232px');
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('an inspector card does not clip its own glow ring (queue 517)', { item: '517' }, async function () {
     /* Ezra: "all of the outlines look really bad. Like, I think they're kinda glitching underneath the
        buttons. So you need to fix that."

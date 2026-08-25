@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.47
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.48
 >
-> **State:** v12.47, **934 tests green**, tree clean.
+> **State:** v12.48, **935 tests green**, tree clean.
+>
+> **✅ v12.48 — the text layer's menu (#518).** Text is the one layer type with a "Text to Voice" row, and
+> the card grid's height sum did not know about it — so the bottom row ran 46px past the panel at every
+> size. It fits now, and at the very smallest band it scrolls rather than hiding anything.
 >
 > **✅ v12.47 — the PC card outlines (#517), and "clipping" was literally right.** Each card was hiding
 > its own glow: the ring is drawn one pixel outside the card, and the card had been told to hide anything
@@ -17641,8 +17645,21 @@ re-opened #480, which I had marked done and had not fixed.
       flickers or clips. **The target he describes: colour glow at rest, blue glow as the mouse approaches,
       both visible together rather than one replacing the other.**
 
-- [ ] **518 — The menu shown when text is selected is bugged and looks weird.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **518 — The menu shown when text is selected is bugged and looks weird.** (24 Aug, PC screenshot at v12.20.)
+      ✅ **The clipped card glows were #517 and shipped in v12.47** — each card was hiding its own ring.
+      ✅ **v12.48 — and TEXT specifically was the one type that overflowed.** The card grid solves its row
+      height from what the panel has left — `(band − 88px of chrome) ÷ 3` — and that 88 is title +
+      quick-row + gaps, correct for every layer except text, which adds a **48px "Text to Voice" row**
+      nothing else has. The solver had no idea it was there, so it handed the three rows more height than
+      there was. **Measured before: 46px past the panel, at every band height.**
+      **After:** a text layer fits exactly from band 260 upward (cards growing 41 → 55 → 68 as you drag
+      the band taller), and only at the smallest band does it exceed by 22px — where the cards hit the
+      40px floor they refuse to shrink past, and the panel scrolls rather than hiding anything.
+      **The count is a named value** (`--insp-extra`) rather than another constant folded into the sum, so
+      the next per-type row has an obvious place to declare itself — and **the test walks every layer
+      type**, because the bug was a constant going stale when the panel gained a row, not the text row.
+      ⚠️ My first attempt used `:has(#tts-row)` and matched nothing: it is a CLASS, not an id. Caught by
+      measuring rather than by assuming the fix had worked.
       His words, verbatim:
       > The menu when you have text selected is really bugged out and looks weird. Please fix that.
       **What the shot shows:** the PC inspector with a text layer selected — a "Text to Voice" button, then
