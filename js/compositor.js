@@ -587,7 +587,24 @@ window.FM = window.FM || {};
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'luma', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ] },
-    { type: 'gradientoverlay', label: 'Gradient Overlay', params: [{ key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
+    /* GRADIENT OVERLAY — queue 537. Ezra: *"Gradient overlay effect needs blending options and other
+       stuff that you can think of"*.
+       ⚠️ EVERY NEW DEFAULT REPRODUCES THE OLD RENDER EXACTLY — blend 0 = Normal (the plain lerp it always
+       did), shape 0 = Linear, mid 0.5 = the unbiased ramp, dither 0 = off. So no project that already
+       uses this effect changes by a single pixel; the new controls only do something once you move them.
+       ⚠️ The audit the entry asked for, before adding anything: it already had angle, both stop colours
+       and amount, and it ALREADY preserved alpha (the kernel skips pixels with a<=0), so "preserve-alpha"
+       was not a gap. What was missing is below. Two stops remain two stops — a third was on the entry's
+       candidate list but it changes the param shape for every saved project, and he asked for blending
+       first. */
+    { type: 'gradientoverlay', label: 'Gradient Overlay', params: [
+        { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+        { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial'], [2, 'Conic']] },
+        { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft Light'], [5, 'Hard Light'], [6, 'Add'], [7, 'Difference']] },
+        { key: 'mid', label: 'Midpoint', min: 0.05, max: 0.95, step: 0.01, def: 0.5 },
+        { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
+        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
+      ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
     { type: 'hexarray', label: 'Hexagon Array', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
@@ -2796,6 +2813,35 @@ window.FM = window.FM || {};
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
 
+  /* ONE PIXEL, ONE BLEND MODE (queue 537). The eight modes Ezra's ask implies — "screen for glows,
+     multiply for burns, overlay/soft-light for a colour cast, hard-light for a look".
+     `src` is what the effect wants to paint, `dst` is what the layer already has, both 0-255. Returns the
+     blended value BEFORE the effect's own Amount mixes towards it, so Amount stays a strength and does
+     not change the character of the mode.
+     Kept as a shared function rather than inlined: it is the same arithmetic every future effect that
+     gains blend modes will want, and eight formulas copied twice is eight chances to get one wrong.
+     Soft Light is the W3C/Photoshop curve rather than the cheap `2*s*d` approximation, because the cheap
+     one is visibly wrong in the shadows — which is exactly where a soft-light colour cast is used. */
+  function fxBlendPx(mode, src, dst) {
+    var s = src / 255, dv = dst / 255, r;
+    switch (mode) {
+      case 1: r = s * dv; break;                                            // Multiply
+      case 2: r = 1 - (1 - s) * (1 - dv); break;                            // Screen
+      case 3: r = dv <= 0.5 ? (2 * s * dv) : (1 - 2 * (1 - s) * (1 - dv)); break;   // Overlay
+      case 4: {                                                             // Soft Light (W3C)
+        var g = dv <= 0.25 ? ((16 * dv - 12) * dv + 4) * dv : Math.sqrt(dv);
+        r = s <= 0.5 ? dv - (1 - 2 * s) * dv * (1 - dv) : dv + (2 * s - 1) * (g - dv);
+        break;
+      }
+      case 5: r = s <= 0.5 ? (2 * s * dv) : (1 - 2 * (1 - s) * (1 - dv)); break;    // Hard Light
+      case 6: r = s + dv; break;                                            // Add
+      case 7: r = Math.abs(s - dv); break;                                  // Difference
+      default: r = s;                                                       // Normal
+    }
+    r *= 255;
+    return r < 0 ? 0 : (r > 255 ? 255 : r);
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -4683,7 +4729,59 @@ window.FM = window.FM || {};
             if(crNr>255)crNr=255; if(crNg>255)crNg=255; if(crNb>255)crNb=255; } }
         if(crFull){ d[crI]=crNr; d[crI+1]=crNg; d[crI+2]=crNb; }
         else { d[crI]=crR+(crNr-crR)*crMix; d[crI+1]=crG+(crNg-crG)*crMix; d[crI+2]=crB+(crNb-crB)*crMix; } } },
-    gradientoverlay: function(d, W, H, p, t){ var go_ang = FM.evalProp(p.angle, t); if(go_ang===null||go_ang===undefined) go_ang = 0; var go_amt = FM.evalProp(p.amount, t); if(go_amt===null||go_amt===undefined) go_amt = 0.8; if(go_amt<0) go_amt=0; if(go_amt>1) go_amt=1; var go_rad = go_ang * Math.PI / 180; var go_dx = Math.cos(go_rad), go_dy = Math.sin(go_rad); var go_c1 = hexToRGB(p.color); var go_c2 = hexToRGB(p.color2); if(!go_c1) go_c1 = [255,61,127]; if(!go_c2) go_c2 = [61,123,255]; var go_cx = W/2, go_cy = H/2; var go_half = (Math.abs(go_dx)*go_cx + Math.abs(go_dy)*go_cy); if(go_half < 1e-6) go_half = 1; for(var go_y=0; go_y<H; go_y++){ var go_ry = go_y - go_cy; for(var go_x=0; go_x<W; go_x++){ var go_i = (go_y*W + go_x)*4; var go_a = d[go_i+3]; if(go_a<=0) continue; var go_rx = go_x - go_cx; var go_proj = go_rx*go_dx + go_ry*go_dy; var go_g = (go_proj + go_half) / (2*go_half); if(go_g<0) go_g=0; if(go_g>1) go_g=1; var go_gr = go_c1[0] + (go_c2[0]-go_c1[0])*go_g; var go_gg = go_c1[1] + (go_c2[1]-go_c1[1])*go_g; var go_gb = go_c1[2] + (go_c2[2]-go_c1[2])*go_g; d[go_i]   = d[go_i]   + (go_gr - d[go_i])*go_amt; d[go_i+1] = d[go_i+1] + (go_gg - d[go_i+1])*go_amt; d[go_i+2] = d[go_i+2] + (go_gb - d[go_i+2])*go_amt; } } },
+    /* GRADIENT OVERLAY (queue 537). Rewritten from a one-liner because it now has shape, blend, midpoint
+       and dither — and the entry was explicit that a control which appears in the panel and does nothing
+       is the failure to avoid ("sometimes you just add it but it doesn't really work").
+       ⚠️ IT COMPOSITES AGAINST THE LAYER, NOT THE CANVAS, which is the trap the entry names: `d` is this
+       layer's own buffer and pixels with a<=0 are skipped, so Multiply darkens the LAYER and not the
+       scene behind it. That was already true and is preserved.
+       ⚠️ Blend then mix, in that order: the blend decides what colour the gradient WOULD paint, and
+       `amount` decides how far towards it the pixel travels. Mixing first and blending after would make
+       Amount change the character of the blend rather than its strength. */
+    gradientoverlay: function(d, W, H, p, t){
+      var ang = FM.evalProp(p.angle, t); if (ang === null || ang === undefined) ang = 0;
+      var amt = FM.evalProp(p.amount, t); if (amt === null || amt === undefined) amt = 0.8;
+      if (amt < 0) amt = 0; if (amt > 1) amt = 1;
+      var shape = p.shape == null ? 0 : (FM.evalProp(p.shape, t) | 0);
+      var blend = p.blend == null ? 0 : (FM.evalProp(p.blend, t) | 0);
+      var mid = p.mid == null ? 0.5 : FM.evalProp(p.mid, t);
+      if (!(mid > 0.01)) mid = 0.5; if (mid > 0.99) mid = 0.99;
+      var dith = p.dither == null ? 0 : (FM.evalProp(p.dither, t) | 0);
+      var rad = ang * Math.PI / 180, dx = Math.cos(rad), dy = Math.sin(rad);
+      var c1 = hexToRGB(p.color) || [255, 61, 127], c2 = hexToRGB(p.color2) || [61, 123, 255];
+      var cx = W / 2, cy = H / 2;
+      var half = (Math.abs(dx) * cx + Math.abs(dy) * cy); if (half < 1e-6) half = 1;
+      var maxR = Math.sqrt(cx * cx + cy * cy) || 1;
+      // midpoint as a gamma on the ramp: mid 0.5 → exponent 1 → exactly the old linear behaviour
+      var gam = Math.log(0.5) / Math.log(mid);
+      // 4x4 ordered dither, ±1/2 LSB of the gradient parameter — kills the banding that makes a wide
+      // subtle 8-bit ramp look cheap, and is invisible on a steep one.
+      var BAYER = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+      for (var y = 0; y < H; y++) {
+        var ry = y - cy;
+        for (var x = 0; x < W; x++) {
+          var i4 = (y * W + x) * 4;
+          if (d[i4 + 3] <= 0) continue;              // transparent stays transparent — see the note above
+          var rx = x - cx, g;
+          if (shape === 1) { g = Math.sqrt(rx * rx + ry * ry) / maxR; }
+          else if (shape === 2) { g = (Math.atan2(ry, rx) - rad) / (Math.PI * 2); g = g - Math.floor(g); }
+          else { g = ((rx * dx + ry * dy) + half) / (2 * half); }
+          if (dith) g += ((BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5) / 255;
+          if (g < 0) g = 0; if (g > 1) g = 1;
+          if (gam !== 1) g = Math.pow(g, gam);
+          var sr = c1[0] + (c2[0] - c1[0]) * g,
+              sg = c1[1] + (c2[1] - c1[1]) * g,
+              sb = c1[2] + (c2[2] - c1[2]) * g;
+          var dr = d[i4], dg = d[i4 + 1], db = d[i4 + 2];
+          if (blend) {
+            sr = fxBlendPx(blend, sr, dr); sg = fxBlendPx(blend, sg, dg); sb = fxBlendPx(blend, sb, db);
+          }
+          d[i4]     = dr + (sr - dr) * amt;
+          d[i4 + 1] = dg + (sg - dg) * amt;
+          d[i4 + 2] = db + (sb - db) * amt;
+        }
+      }
+    },
     lensflare: function(d,W,H,p,t){ var lfx=FM.evalProp(p.x,t); if(lfx==null)lfx=0.3; if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy=FM.evalProp(p.y,t); if(lfy==null)lfy=0.3; if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI=FM.evalProp(p.intensity,t); if(lfI==null)lfI=1; if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; var lfFR=255, lfFG=240, lfFB=210; var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; var lfAddR=lfFR*lfAmt/255; var lfAddG=lfFG*lfAmt/255; var lfAddB=lfFB*lfAmt/255; var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t){ var re_amt=FM.evalProp(p.amount,t); if(re_amt==null)re_amt=6; re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl=FM.evalProp(p.scale,t); if(re_scl==null)re_scl=10; re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
     hexarray: function(d,W,H,p,t){ var hx_s=FM.evalProp(p.size,t); if(hx_s==null) hx_s=24; if(hx_s<8) hx_s=8; if(hx_s>80) hx_s=80; var hx_col=hexToRGB(p.color||'#19d6c0'); var hx_cr=hx_col[0], hx_cg=hx_col[1], hx_cb=hx_col[2]; var hx_rh=hx_s*0.8660254;

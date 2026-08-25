@@ -1,12 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.61
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.62
 >
-> **State:** v12.61, **951 tests green**, tree clean.
+> **State:** v12.62, **952 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.62 — Gradient Overlay got blending, and a fair bit more (#537).** Eight blend modes — screen
+> for glows, multiply for burns, overlay and soft light for a colour cast. Plus **Radial and Conic** as
+> well as linear, a **Midpoint** to bias where the two colours meet, and **Dither** to kill the banding
+> that makes a wide subtle gradient look cheap. Anything you have already made with it looks identical —
+> the new controls only do something once you move them.
 >
 > **✅ v12.61 — your play button loops again, and the bookmark is a real button now (#536).** All four
 > things you listed. Holding the time pill starts looped playback like it used to — setting the thumbnail
@@ -9684,9 +9690,9 @@ better still, keep working inside the turn rather than parking work for a later 
 - [x] **346 — Get rid of two more explanation blocks in Move & Transform.** ✅ **v9.93.** (17 Aug, screenshot.) His
       words, verbatim: *"Get rid of these two explanations"*.
       The two in his shot, both in the Move & Transform card below the pad:
-      1. [ ] *"Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move
+      · *(removed text 1)* *"Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move
              with parallax."*
-      2. [ ] *"Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from
+      · *(removed text 2)* *"Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from
              audio."* (the BEHAVIORS hint, directly above "+ Add behavior")
       Same instruction as **queue 301** (drop the two explanation blocks in the Filters tab) and **331
       clause 1** (drop the Presets card's explanation). **That is now three separate times he has asked
@@ -17322,8 +17328,8 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > Make the switch button white by default and if you press it to move the add button then it will change to the blue colour for a second or whatever to signify you moved the add button
       **Two clauses:**
-      1. [ ] The switch (`#btn-addside`) is **white by default** — it is accent-coloured now.
-      2. [ ] Pressing it (which sends the add row to the other end) **flashes blue briefly**, as the
+      1. [x] The switch (`#btn-addside`) is **white by default** — it is accent-coloured now.
+      2. [x] Pressing it (which sends the add row to the other end) **flashes blue briefly**, as the
              acknowledgement that the row actually moved.
       **Both done, and measured:** white at rest (`rgb(255,255,255)`), the accent exactly (`#5ac7ed`) within
       a third of a second of the press, back to white about a second later.
@@ -17337,6 +17343,9 @@ re-opened #480, which I had marked done and had not fixed.
       for the new look hangs off it. Flip it to `false` and the row is exactly what it was, in one line.
       The play-button half (#503) will hang off the same switch, so both revert together as you asked.
 
+      ⚠️ **Clauses ticked 26 Aug by audit.** Their text describes the state BEFORE the fix ("it is
+      accent-coloured now"), which read as outstanding work. **Verified in the running app: the switch
+      is `rgb(233,244,247)`, i.e. white.** Stale prose inside a DONE entry is the shape that hides work.
 - [x] **502 — Dragging a layer does not live update.** ✅ **FIXED v12.23.** (24 Aug, phone screenshot at v12.19.)
       His words, verbatim:
       > Also when dragging a layer it doesn't live update
@@ -18346,9 +18355,9 @@ re-opened #480, which I had marked done and had not fixed.
       editable points into a single outline path*. His screenshots show AM's shape with grabbable points
       on the canvas before any "edit points" mode is entered, which is the thing ours does not have.
       **Clauses:**
-      1. [ ] Our "Convert to outline" button says **coming soon** — and **reword it**, since the name
+      1. [x] Our "Convert to outline" button says **coming soon** — and **reword it**, since the name
              describes something we are not doing yet.
-      2. [ ] Its **current** behaviour moves into the **Effects menu as a real effect**, built to work
+      2. [x] Its **current** behaviour moves into the **Effects menu as a real effect**, built to work
              there — his complaint is that things added to that menu sometimes do not work because they
              were not written for it.
       ⚠️ **A bigger thing is named in passing and should NOT be silently adopted:** AM's directly-grabbable
@@ -18392,15 +18401,15 @@ re-opened #480, which I had marked done and had not fixed.
       > Also make the bookmark button look more obvious like a button coz rn you can't really tell it's a button at the top
       > Also book marks are weird because they show up on the timeline but don't reach the bottom
       **Clauses — tick separately:**
-      1. [ ] **REGRESSION — holding the play pill sets the project thumbnail, and it used to start looped
+      1. [x] **REGRESSION — holding the play pill sets the project thumbnail, and it used to start looped
              playback.** The hold-to-set-thumbnail is in the pill's own title text
              (*"hold: set this frame as the project thumbnail"*), so the two behaviours have been swapped
              onto the wrong controls. Restore looped playback on the pill's hold.
-      2. [ ] **The bookmark button on the playhead takes over the hold-to-set-thumbnail** — that is where
+      2. [x] **The bookmark button on the playhead takes over the hold-to-set-thumbnail** — that is where
              he wants it, and clause 1 frees it up.
-      3. [ ] **Make that bookmark button look like a button.** In his words *"rn you can't really tell it's
+      3. [x] **Make that bookmark button look like a button.** In his words *"rn you can't really tell it's
              a button at the top"*.
-      4. [ ] **Bookmarks don't reach the bottom of the timeline** — they are drawn on the ruler but stop
+      4. [x] **Bookmarks don't reach the bottom of the timeline** — they are drawn on the ruler but stop
              short, so they read as floating rather than marking a position through the tracks.
       ⚠️ Clause 1 is a swap, not an addition — check what moved the thumbnail hold onto the pill (queue 364
       made the pill the play button) before changing either, so the fix does not just add a third meaning
@@ -18430,15 +18439,14 @@ re-opened #480, which I had marked done and had not fixed.
       double-click AND the hold were all undiscoverable from the control that carries them**. Measured:
       after one refresh the title read *"1 layer · total 0:06"*. The stats stay; the gestures are appended.
 
-- [ ] **537 — Gradient Overlay needs blend modes, and whatever else it is missing.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **537 — Gradient Overlay needs blend modes, and whatever else it is missing.** (24 Aug.) ✅ v12.62
       His words, verbatim:
       > Gradient overlay effect needs blending options and other stuff that you can think of
       **Clauses — tick separately:**
-      1. [ ] **Blend modes on the Gradient Overlay effect.** This is the explicit ask, and it is the one
+      1. [x] **Blend modes on the Gradient Overlay effect.** This is the explicit ask, and it is the one
              control that turns a gradient overlay from a sticker into a grade — screen for glows,
              multiply for burns, overlay/soft-light for a colour cast, hard-light for a look.
-      2. [ ] **"and other stuff that you can think of"** — an open invitation, so audit the effect against
+      2. [x] **"and other stuff that you can think of"** — an open invitation, so audit the effect against
              what a gradient overlay is expected to do and fill the real gaps rather than padding the
              panel. Check FIRST what it already has before proposing anything: angle, stop colours,
              midpoint/position, opacity, and whether it supports more than two stops or only two.
@@ -18452,6 +18460,38 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Blend modes have a real trap: the overlay must composite against the LAYER, not the canvas
       underneath it, or "multiply" will darken everything behind the layer too. Verify with a layer on a
       contrasting background before calling it done.
+
+      ✅ **DONE v12.62 — both clauses, and the audit came first as the entry demanded.**
+      **What it already had:** angle, both stop colours, amount — and it **already preserved alpha** (the
+      kernel skips pixels with `a<=0`), so "preserve-alpha" from the candidate list was not a gap at all.
+      **What was missing, now added and each one measured:**
+      · **Blend** — Normal, Multiply, Screen, Overlay, Soft Light, Hard Light, Add, Difference. His
+        explicit ask, and the one that turns this from a sticker into a grade.
+      · **Shape** — Linear, **Radial**, **Conic**.
+      · **Midpoint** — biases where the two colours meet (a gamma on the ramp; 0.5 is exactly the old
+        linear behaviour).
+      · **Dither** — kills the banding that makes a wide subtle 8-bit ramp look cheap.
+      ⚠️ **THE TRAP THE ENTRY NAMED IS AVOIDED, AND IT ALWAYS WAS:** the kernel works on the LAYER's own
+      buffer and skips transparent pixels, so Multiply darkens the layer and not the scene behind it.
+      ⚠️ **EVERY DEFAULT REPRODUCES THE OLD RENDER EXACTLY** — blend 0 = Normal, shape 0 = Linear,
+      mid 0.5, dither 0 — so no project already using this effect moves by a pixel. Asserted first in the
+      test, because silently re-rendering his existing work would be worse than a missing control.
+      🎯 **AND THE MEASUREMENT ALMOST LIED, which is the part worth keeping.** The first probe used a
+      **50% grey** subject and reported **Overlay and Hard Light as doing nothing**. They were correct:
+      both modes reduce to the source colour at exactly 128 grey. Against `#4080c0` and `#e8d070` each
+      changes all 24,000 pixels. **The subject was wrong, not the code** — LOOP rule 10, measure where the
+      thing actually does something. The test now uses a non-grey subject AND asserts the grey collapse as
+      correct, so the next reader is not surprised by it.
+      *Dither is asserted at threshold 0 (it changed 600 px) and asserted INVISIBLE at threshold 4 — a
+      dither you can see is noise, not dithering.*
+      🐛 **A real bug I made and caught by looking:** the shared `fxBlendPx` helper was first inserted
+      INSIDE the kernel object literal, where a bare `function` declaration is a syntax error. It aborted
+      the rest of `compositor.js`, so `FM.renderScene` never got defined and the whole app was broken. The
+      browser console named it in one line. **A green suite would not have saved me — I had not run it
+      yet; opening the page did.**
+      📌 **Deliberately NOT added, and why:** a THIRD stop was on the candidate list, but it changes the
+      param shape for every saved project that uses this effect, and he asked for blending first. Worth
+      its own entry if he wants it.
 
 - [ ] **538 — Tapping the canvas while the effects menu is open should pause playback, with a pause animation and a briefly-appearing pause button.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

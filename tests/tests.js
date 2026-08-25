@@ -3398,6 +3398,70 @@
     }
   });
 
+  test('537: every Gradient Overlay control does something, and the defaults render as they always did', { item: '537' }, function () {
+    /* Queue 537. Ezra: "Gradient overlay effect needs blending options and other stuff that you can think
+       of". The entry's warning is the thing this test exists for: *"Do not just add controls… every
+       option added here has to be wired into the kernel and have a visible, correct result, not just
+       appear in the panel"* — he has complained before about effects you add that do nothing.
+       ⚠️ AND THE DEFAULTS MUST NOT MOVE. blend 0 = Normal, shape 0 = Linear, mid 0.5 = unbiased, dither
+       0 = off, so every project already using this effect renders byte-for-byte as before. That is
+       asserted first, because a silent re-render of his existing work would be a worse bug than a missing
+       control. */
+    const reg = FM.fxRegistry.get('gradientoverlay');
+    if (!reg) throw new Error('the Gradient Overlay effect is gone');
+    const P = { width: 160, height: 120, duration: 4, fps: 30, background: null };
+    const sceneWith = (fx, fill) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 140, shapeH: 90, fill: fill });
+      L.start = 0; L.duration = 4; L.effects = fx ? [fx] : [];
+      return { project: P, layers: [L] };
+    };
+    const render = (fx, fill) => {
+      const c = offscreen(160, 120);
+      FM.renderScene(c.getContext('2d'), sceneWith(fx, fill), 0.5);
+      return c.getContext('2d').getImageData(0, 0, 160, 120).data;
+    };
+    const inst = (over) => { const e = FM.fxRegistry.makeInstance('gradientoverlay'); Object.assign(e.params, over || {}); return e; };
+    const diff = (a, b, th) => { let n = 0; for (let i = 0; i < a.length; i += 4) { if (a[i + 3] > 8 && (Math.abs(a[i] - b[i]) > th || Math.abs(a[i + 1] - b[i + 1]) > th || Math.abs(a[i + 2] - b[i + 2]) > th)) n++; } return n; };
+
+    const SUBJ = '#4080c0';
+    const plain = render(null, SUBJ);
+    const base = render(inst(), SUBJ);
+    // CONTROL: the effect must actually paint at its defaults, or every comparison below is against nothing.
+    if (diff(plain, base, 4) < 500) throw new Error('the effect changes almost nothing at its defaults, so the per-control comparisons below would all be measuring an unpainted layer');
+
+    const d = inst().params;
+    if (d.blend !== 0 || d.shape !== 0 || d.dither !== 0 || Math.abs(d.mid - 0.5) > 1e-6) throw new Error('the new defaults are not the old behaviour (blend ' + d.blend + ', shape ' + d.shape + ', mid ' + d.mid + ', dither ' + d.dither + ') — every project already using this effect would re-render');
+
+    /* ⚠️ THE SUBJECT MATTERS, and getting it wrong is how this test first reported two working modes as
+       dead. Overlay and Hard Light BOTH reduce to the source colour when the layer sits at exactly 50%
+       grey — that is the correct maths, not a bug — so measured against #808080 they show zero change.
+       The subject is deliberately not grey. (LOOP rule 10: measure where the thing actually does
+       something.) */
+    const modes = { Multiply: 1, Screen: 2, Overlay: 3, 'Soft Light': 4, 'Hard Light': 5, Add: 6, Difference: 7 };
+    const dead = [];
+    Object.keys(modes).forEach(name => {
+      if (diff(base, render(inst({ blend: modes[name] }), SUBJ), 4) < 200) dead.push(name);
+    });
+    if (dead.length) throw new Error('blend mode(s) that change nothing against Normal: ' + dead.join(', ') + ' — a control in the panel that does not reach the kernel is exactly what he complained about');
+
+    // …and the grey case is asserted as CORRECT rather than left as a surprise for the next reader
+    const grey = render(inst(), '#808080');
+    if (diff(grey, render(inst({ blend: 3 }), '#808080'), 4) > 200) throw new Error('Overlay differs from Normal on a 50% grey layer — it should collapse to the source there; if this changed, the blend maths has drifted');
+
+    if (diff(base, render(inst({ shape: 1 }), SUBJ), 4) < 200) throw new Error('Radial renders the same as Linear');
+    if (diff(base, render(inst({ shape: 2 }), SUBJ), 4) < 200) throw new Error('Conic renders the same as Linear');
+    if (diff(base, render(inst({ mid: 0.2 }), SUBJ), 4) < 200) throw new Error('the Midpoint control does nothing');
+
+    /* Dither is a +/-1 LSB adjustment BY DEFINITION — it exists to break banding, not to be seen. So it
+       is measured at threshold 0 on a deliberately narrow ramp, and asserted to be INVISIBLE at the
+       ordinary threshold. A dither you can see at threshold 4 would be noise. */
+    const subtle = { color: '#6a6a6a', color2: '#767676', amount: 1 };
+    const flat = render(inst(subtle), SUBJ);
+    const dithered = render(inst(Object.assign({}, subtle, { dither: 1 })), SUBJ);
+    if (diff(flat, dithered, 0) < 50) throw new Error('turning Dither on changed nothing at all — it is not wired to the kernel');
+    if (diff(flat, dithered, 4) > 50) throw new Error('Dither is visible as more than a 1-level adjustment — that is noise, not dithering');
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."
