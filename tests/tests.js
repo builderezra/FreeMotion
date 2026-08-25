@@ -2882,6 +2882,93 @@
     }
   });
 
+  test('525: an element draft can be thrown away by hand, and says which kind it is', { item: '525' }, async function () {
+    /* Queue 525 — the residue of #505. Every element edit before v12.26 left a workspace project
+       behind, and those carry no element id, so the automatic clean-up cannot tell what they belonged
+       to and correctly leaves them alone. They sit in the Elements tab as drafts with no way out.
+       ⚠️ NOT auto-deleted, deliberately and on the entry's own instruction: an orphan may hold work he
+       never saved as an element, and that is his to decide.
+       ⚠️ AND THE LABEL DOES NOT PRETEND TO KNOW MORE THAN IT DOES. A workspace EDITING an element
+       carries `ofElement` and is named as such. One WITHOUT it is either a brand-new "Build a new
+       one…" draft or a pre-v12.26 orphan — those two are created identically and are not
+       distinguishable, so both keep the honest draft label rather than one of them being guessed at. */
+    if (!FM.projects || !FM.projects.create || !FM.home) throw new Error('projects/home are not reachable');
+    if (typeof FM.projects.discardDraft !== 'function') throw new Error('FM.projects.discardDraft is missing — the card has nothing safe to call (remove() would mint an Untitled project, which is queue 505 exactly)');
+    const made = [];
+    const homeWasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    const realConfirm = window.confirm, realToast = FM.toast;
+    const elemIdx = FM.elements && FM.elements.list ? FM.elements.list().slice() : null;
+    try {
+      const eid = '__qa525elem';
+      if (FM.elements && FM.elements.list) {
+        const idx = FM.elements.list();
+        if (!idx.find(e => e.id === eid)) { idx.unshift({ id: eid, name: 'QA Watermark', count: 1, thumb: null }); localStorage.setItem('fm.elements', JSON.stringify(idx)); }
+      }
+      const orphan = await FM.projects.create({ name: '__qa525 orphan', width: 640, height: 640, elementDraft: true });
+      if (orphan) made.push(orphan);
+      const editing = await FM.projects.create({ name: '__qa525 editing', width: 640, height: 640, elementDraft: true, ofElement: eid });
+      if (editing) made.push(editing);
+      // discardDraft refuses on the CURRENT project by design, so step off the ones under test
+      const other = FM.projects.list().filter(p => !p.elementDraft)[0];
+      if (other) await FM.projects.open(other.id);
+      await sleep(200);
+
+      FM.home.open(); await sleep(350);
+      const tabBtn = [].slice.call(document.querySelectorAll('#hm-tabs button, .hm-tab')).filter(b => /element/i.test(b.textContent))[0];
+      if (!tabBtn) throw new Error('could not find the Elements tab, so no draft card can be read');
+      tabBtn.click(); await sleep(350);
+
+      const cards = [].slice.call(document.querySelectorAll('.hm-card-draft'));
+      const find = (name) => cards.filter(c => c.textContent.indexOf(name) >= 0)[0];
+      const oCard = find('__qa525 orphan'), eCard = find('__qa525 editing');
+      if (!oCard || !eCard) throw new Error('the two seeded drafts are not both on screen (' + cards.length + ' draft card(s)), so nothing below is measured');
+
+      /* A <button> inside a <button> is invalid and browsers drop one of them — the card had to stop
+         being a button when it gained a ⋯, the same fix elementCard and projectCard already carry. */
+      if (oCard.tagName === 'BUTTON') throw new Error('the draft card is still a <button> while containing one — invalid nesting, and the browser will drop one of the two');
+      if (oCard.getAttribute('role') !== 'button') throw new Error('the card stopped being a <button> without gaining role="button" — that loses it to screen readers and to keyboard users');
+      if (!oCard.querySelector('.hm-card-more')) throw new Error('the draft card has no ⋯ — there is still no way to throw an orphan away, which is the whole of queue 525');
+
+      const sub = (c) => (c.querySelector('.hm-sub') || {}).textContent || '';
+      if (!/Editing/.test(sub(eCard))) throw new Error('a draft that is editing a real element is labelled "' + sub(eCard) + '" — it must say so, because deleting it is not the same act as binning an unfinished sketch');
+      if (/Editing/.test(sub(oCard))) throw new Error('a draft with no element id claims to be editing one ("' + sub(oCard) + '") — that is a guess dressed as a fact');
+      if (sub(eCard) === sub(oCard)) throw new Error('both kinds of draft carry the identical label, so the tab still cannot be told apart');
+
+      // ---- it actually deletes
+      window.confirm = () => true;
+      const draftsBefore = FM.projects.list().filter(p => p.elementDraft).length;
+      oCard.querySelector('.hm-card-more').click(); await sleep(250);
+      const items = [].slice.call(document.querySelectorAll('.ctx-item, .cm-item, [role="menuitem"]'));
+      const del = items.filter(i => /Delete draft/i.test(i.textContent))[0];
+      if (!del) throw new Error('the ⋯ menu has no Delete entry (' + items.map(i => i.textContent.trim()).join(' | ') + ')');
+      del.click(); await sleep(600);
+      const draftsAfter = FM.projects.list().filter(p => p.elementDraft).length;
+      if (draftsAfter !== draftsBefore - 1) throw new Error('deleting the draft left ' + draftsAfter + ' of ' + draftsBefore + ' — the menu entry did not remove it');
+
+      /* ---- AND THE REFUSAL SPEAKS. discardDraft returns false on the project you have open; without a
+         message that reads as a tap that did nothing. Stubbed rather than driven by switching the open
+         project, which would disturb every test after this one. */
+      const realDiscard = FM.projects.discardDraft;
+      const toasts = [];
+      FM.toast = m => toasts.push(String(m));
+      FM.projects.discardDraft = async () => false;
+      try {
+        const left = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(c => c.textContent.indexOf('__qa525 editing') >= 0)[0];
+        if (!left) throw new Error('the second draft vanished too — the delete took more than it was asked to');
+        left.querySelector('.hm-card-more').click(); await sleep(250);
+        const d2 = [].slice.call(document.querySelectorAll('.ctx-item, .cm-item, [role="menuitem"]')).filter(i => /Delete draft/i.test(i.textContent))[0];
+        d2.click(); await sleep(400);
+        if (!toasts.length) throw new Error('a refused delete said nothing at all — that is a tap that appears to do nothing');
+      } finally { FM.projects.discardDraft = realDiscard; }
+    } finally {
+      window.confirm = realConfirm; FM.toast = realToast;
+      if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (elemIdx) { try { localStorage.setItem('fm.elements', JSON.stringify(elemIdx.filter(e => e.id !== '__qa525elem'))); } catch (e) {} }
+      if (!homeWasOpen && FM.home.close) { try { FM.home.close(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

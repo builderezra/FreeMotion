@@ -1600,12 +1600,52 @@ window.FM = window.FM || {};
     /* Built with el(), not innerHTML — the name is user text, and every other card in this file already
        goes through el() so it lands as textContent. Following the idiom is both safer and shorter than
        introducing an escaper this file has never needed. */
-    const card = el('button', 'hm-card hm-card-draft');
+    /* DIV, NOT BUTTON (queue 525) — the same nested-button fix elementCard and projectCard already
+       carry. This card gained a ⋯ button of its own, and a <button> inside a <button> is invalid HTML
+       that browsers resolve by dropping one of them. */
+    const card = el('div', 'hm-card hm-card-draft');
+    card.setAttribute('role', 'button'); card.tabIndex = 0;
     card.appendChild(el('div', 'hm-thumb hm-thumb-draft', '◇'));
     const body = el('div', 'hm-meta');
     body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));
-    body.appendChild(el('div', 'hm-sub', 'Draft — open it, build it, then ⋯ → Save as element'));
+    /* SAY WHICH KIND OF DRAFT THIS IS (queue 525). Two very different things wear this card:
+       · `ofElement` set → a workspace that is EDITING an existing element (queue 505's one-workspace-
+         per-element route). Closing it writes back into that element. Worth naming, because deleting it
+         is not the same act as deleting an unfinished sketch.
+       · no `ofElement` → either a brand-new "Build a new one…" workspace, or one of the orphans left
+         behind by the pre-v12.26 behaviour.
+       ⚠️ **Those last two are NOT distinguishable and this does not pretend otherwise.** Both are
+       created with `{ elementDraft: true }` and no element id, so a label claiming "orphan" would be a
+       guess dressed as a fact — and the guess would be wrong every time he had just started one. They
+       share the honest label they already had; what is new is that he can now throw either away. */
+    const ofName = p.ofElement && ((FM.elements && FM.elements.list ? FM.elements.list() : []).find(e => e.id === p.ofElement) || {}).name;
+    body.appendChild(el('div', 'hm-sub', p.ofElement
+      ? ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back')
+      : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
+    /* A WAY TO THROW ONE AWAY BY HAND (queue 525). Deliberately NOT automatic: an orphan may hold work
+       he never got round to saving as an element, and that is his to decide. `discardDraft` is the
+       right call rather than `remove` — remove() opens another project, or CREATES an "Untitled" when
+       you delete the current one, which would manufacture the very thing queue 505 was about. */
+    const more = el('button', 'hm-card-more', '⋯');
+    more.setAttribute('aria-label', 'Draft actions');
+    more.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const r = more.getBoundingClientRect();
+      FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
+        { label: 'Open and keep building', action: () => card.click() },
+        { sep: true },
+        { label: 'Delete draft…', danger: true, action: async () => {
+          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved as an element will be lost.')) return;
+          const ok = await FM.projects.discardDraft(p.id);
+          /* discardDraft REFUSES on the draft that is currently open, by design — say so rather than
+             letting the card sit there looking like a tap that did nothing. */
+          if (!ok && FM.toast) FM.toast('That draft is the project you have open — open another one first');
+          render();
+        } },
+      ]);
+    });
+    card.appendChild(more);
     card.addEventListener('click', async () => {
       await FM.projects.open(p.id);
       FM.home.close({ push: true, lead: card });

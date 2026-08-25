@@ -1,12 +1,27 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.54
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.55
 >
-> **State:** v12.54, **942 tests green**, tree clean.
+> **State:** v12.55, **943 tests green**, tree clean.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
 > the three drawn at phone size; nothing ships until you choose.
+>
+> **🟠 AND A THIRD, because two of your own instructions disagree and I will not guess (#524).**
+> Dragging a clip right stops dead at the project end. I reproduced it: the clip freezes under your
+> finger, and the project only grows when you let go. **But that stop exists because you asked for it** —
+> you reported the opposite once, with a screenshot: *"when you drag a layer to the right too far it
+> breaks the project timeline… it just keeps going past the timeline"*, a clip stranded out in empty
+> space. Both complaints are real and they cannot both be fully satisfied.
+> · **A (recommended)** — keep a limit, but the timeline **grows as you drag** instead of on release, so
+>   you see the project extending under the clip rather than the clip freezing.
+> · **B** — no limit at all. Literally what you asked, and it brings back the stranded-clip problem.
+> · **C** — a bigger limit, roughly twice as far in one go, then it stops.
+>
+> **✅ v12.55 — old element drafts can be deleted now (#525).** The Elements tab was collecting leftover
+> workspaces with no way to bin them. Nothing is deleted automatically — some may hold work you never
+> saved, so it is your call.
 >
 > **✅ v12.54 — the text edit screen now disappears the moment you deselect the layer (#523).** No more
 > blue tick to get out of it. What you typed is kept — you asked for the screen to go, not the words.
@@ -17935,14 +17950,59 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check what already grows the project: trimming a clip's out-point and adding a long clip may
       already extend `project.duration`. If so, this is the same rule missing from the MOVE path.
 
-- [ ] **525 — Clear out the old element workspaces left behind by the pre-v12.26 behaviour.** (Found 24 Aug while doing #505.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      🔬 **REPRODUCED 25 Aug, and it CLAMPS** — not a snap-back, not a dropped gesture. Measured with a
+      4s clip in a 4s project, dragging right in 45px steps: `start` goes 1.51 → 2.93 → **4.00, and then
+      sits at 4.00 for the next seventeen moves** while the finger keeps going. On RELEASE the project
+      grows to 8s. So the project does extend — but only after you let go, and the clip freezes dead
+      under your finger before that. That freeze is what "breaks" means.
+      ⚠️ **AND THE CEILING IS THERE BECAUSE YOU ASKED FOR IT — this is two of your instructions
+      disagreeing, so I am not guessing.** `groupDragCeil` (js/timeline.js) exists because of an earlier
+      report of yours: *"when you drag a layer to the right too far it breaks the project timeline"* and,
+      with a screenshot, *"it just keeps going past the timeline"*. A clip could be dragged arbitrarily
+      far right and stranded in empty space with the ruler growing to follow. The rule that fixed it: a
+      clip may not START later than the project's end as it was when the drag began — so one gesture can
+      lengthen the project by at most one clip's length.
+      **#524 asks for the opposite of that rule.** Both complaints are real and they cannot both be fully
+      satisfied: dragging a clip far past everything else NECESSARILY leaves a gap between it and the
+      rest, which is what the first report was about.
+      *Also measured, and it bears on the fix: the per-move path is deliberately cheap — it sets
+      `clip.style.left` directly and never rebuilds. Growing the project mid-drag means moving the ruler
+      and the scroll width every frame, which is real work the current design avoids on purpose.*
+      **🟠 SO THIS IS A PICK-ONE FOR HIM:**
+      | | what happens when you drag past the end |
+      |---|---|
+      | **A (recommended)** | Keep the limit, but the **timeline grows as you drag** instead of on release — you see the project extending under the clip rather than the clip freezing. Still one clip-length per drag; drag again to go further. |
+      | **B** | **No limit.** The clip follows your finger anywhere and the project grows to fit. Literally what you asked — and it brings back the thing you complained about before: a clip stranded far out in empty space. |
+      | **C** | **A bigger limit** — push out to, say, twice the project length in one gesture, then it stops. A halfway house. |
+
+- [x] **525 — Clear out the old element workspaces left behind by the pre-v12.26 behaviour.** (Found 24 Aug while doing #505.) ✅ v12.55
       Not something he asked for in words — it is the residue of the bug in #505. Every element edit before
       v12.26 left a workspace project behind, and those old ones carry no element id, so the new clean-up
       cannot tell what they belonged to and leaves them alone. They show in the Elements tab as drafts.
       **What to do:** give the draft card a way to be discarded by hand, and label the ones that are
       genuinely editing an element differently from these orphans. Do NOT auto-delete them — they may hold
       work he never saved as an element, and that is his to decide, not mine.
+
+      ✅ **DONE v12.55.** The draft card gained a **⋯** with *Open and keep building* and *Delete draft…*
+      (confirmed, and it names what will be lost). Nothing is auto-deleted, per the instruction above.
+      **It calls `discardDraft`, not `remove`** — and that distinction is the whole point: `remove()`
+      opens another project, or CREATES an "Untitled" when you delete the one you have open, which would
+      manufacture the very stray project #505 was about. `discardDraft` refuses on the current project
+      instead, and the card now SAYS SO (*"That draft is the project you have open — open another one
+      first"*) rather than looking like a tap that did nothing.
+      **The labels are split by `ofElement`:** a workspace editing a real element reads *"Editing
+      "<name>" — close it to save your changes back"*; everything else keeps the plain draft text.
+      ⚠️ **AND THE LABEL DOES NOT PRETEND TO KNOW MORE THAN IT DOES, which is a correction to this
+      entry's own wording.** It asks to distinguish orphans from real edits — but a brand-new "Build a
+      new one…" draft is created with `{ elementDraft: true }` and NO element id, exactly like a
+      pre-v12.26 orphan. **They are not distinguishable.** Labelling either as an orphan would be a guess
+      dressed as a fact, and it would be wrong every time he had just started one. So the split is
+      "editing an element" vs "a draft", which is the honest line, and both sides can now be binned.
+      🐛 **Found while building it:** the card was a `<button>`, and it needed to contain one. A button
+      inside a button is invalid and browsers drop one of the two — the same nested-button fix
+      `elementCard` and `projectCard` already carry. It is a `div` with `role="button"` now.
+      *Measured in the real app: two seeded drafts render with the two different labels, both carry a ⋯,
+      deleting the orphan takes it from the list and the screen, and the refusal toasts.*
 
 - [ ] **526 — The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.)
       **STATUS: 🟢 READY — nothing is stopping this**
