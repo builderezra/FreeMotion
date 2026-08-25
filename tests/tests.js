@@ -3628,6 +3628,106 @@
     if (!(atMax > at4 + 30)) throw new Error('the smear stops growing past the old ceiling: shutter 4 gives ' + at4 + 'px and shutter ' + shutterMax + ' gives ' + atMax + 'px. The slider goes further than the picture does — check the kernel clamp beside the param, which is a SECOND number that has to move.');
   });
 
+  test('549: the last instant of a clip still shows it — unless something else takes over', { item: '549' }, function () {
+    /* Queue 549. Ezra, with two screenshots one frame apart — 00:03:119 fills the canvas, 00:04:00 is
+       BLACK: "when you go to the end of a layer you can't see it anymore… even if it wasn't the last
+       thing it should still be visible when you're at the end of it".
+       A layer's window is half-open [start, start+duration), which is the CORRECT convention: a 4s clip
+       at 30fps owns frames 0-119 and frame 120 belongs to whatever comes next.
+       ⚠️ SO THE RULE IS NARROWER THAN "INCLUSIVE", AND IT LIVES ON THE PREVIEW PATH ONLY. Putting it
+       inside renderScene broke the export — the exporter samples `f / fps` and those samples DO land on a
+       clip's end, so a 2s clip came out 61 frames. The suite caught it in one line. This test therefore
+       checks the RULE (`FM._endInstantTime`) and asserts it has NOT leaked into renderScene. */
+    if (typeof FM._endInstantTime !== 'function') throw new Error('FM._endInstantTime is missing — the preview has no rule to apply');
+    const P = { width: 200, height: 120, duration: 4, fps: 30, background: '#000000' };
+    const mk = (start, dur, fill) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 60, shapeW: 160, shapeH: 90, fill: fill }); L.start = start; L.duration = dur; return L; };
+    const CYAN = '#00c8ff', ORANGE = '#ff8800';
+    const look = (layers, t) => {
+      const c = offscreen(200, 120);
+      FM.renderScene(c.getContext('2d'), { project: P, layers: layers }, t);
+      const d = c.getContext('2d').getImageData(0, 0, 200, 120).data;
+      let n = 0, r = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i] + d[i + 1] + d[i + 2] > 60) { n++; r += d[i]; b += d[i + 2]; } }
+      return n ? { lit: n, r: Math.round(r / n), b: Math.round(b / n) } : { lit: 0 };
+    };
+
+    // ---- HIS CASE: one clip filling the project. The playhead can rest exactly on the end.
+    const solo = [mk(0, 4, CYAN)], sceneSolo = { project: P, layers: solo };
+    const tSolo = FM._endInstantTime(sceneSolo, 4.0);
+    if (!(tSolo < 4.0)) throw new Error('at the very end of the project the rule left the time at ' + tSolo + ', so the preview still renders one past the end — his 00:04:00 screenshot');
+    if (!(look(solo, tSolo).lit > 100)) throw new Error('the nudged time still renders an empty canvas');
+    // CONTROL: the fixture really does go blank without the nudge, or the line above proves nothing
+    if (look(solo, 4.0).lit !== 0) throw new Error('the raw end instant is NOT blank in this fixture, so the nudge is not what is being measured');
+
+    // ---- HIS GENERAL RULE: a clip ending mid-timeline with nothing following it
+    const gap = [mk(0, 2, CYAN), mk(3, 1, ORANGE)], sceneGap = { project: P, layers: gap };
+    if (!(FM._endInstantTime(sceneGap, 2.0) < 2.0)) throw new Error('a clip that ends at 2s with nothing until 3s is not given its last instant — he asked for the general rule, not a special case for the last layer');
+    // CONTROL: a real gap is left alone — the rule must not smear the outgoing clip across it
+    if (FM._endInstantTime(sceneGap, 2.5) !== 2.5) throw new Error('the middle of a genuine gap was nudged — the rule is leaking past the boundary');
+
+    /* ---- THE CONTROL THAT MATTERS: at a CUT the incoming clip owns the frame, so the rule must NOT
+       fire. An inclusive end would put both on screen, and if the outgoing one is higher in the stack it
+       wins — a frame of the OLD clip after the cut. */
+    const cut = [mk(0, 2, CYAN), mk(2, 2, ORANGE)], sceneCut = { project: P, layers: cut };
+    if (FM._endInstantTime(sceneCut, 2.0) !== 2.0) throw new Error('the rule fired at a CUT, where the incoming clip is already on screen — that is the overlap bug it exists to avoid');
+    const at2 = look(cut, 2.0);
+    if (!(at2.r > 150 && at2.b < 100)) throw new Error('at a cut the boundary frame is not the incoming clip (r ' + at2.r + ', b ' + at2.b + ')');
+
+    /* ---- AND IT MUST NOT HAVE LEAKED INTO renderScene, which is what the exporter draws through. */
+    if (look(solo, 4.0).lit !== 0) throw new Error('renderScene itself now paints past a clip\'s end — the export would gain a frame, which is the regression the suite caught once already');
+  });
+
+  test('550/551: the add row is tinted only between the divider and the project end', { item: '551' }, async function () {
+    /* Queue 550 clause 1 and queue 551, from one annotated screenshot:
+         "that line should stop the blue dotted lines and blue background but keep the plus"
+         "Make the add layer also end at the end of the project and not the end of the screen, so you can
+          see easier when the actual project has hit its end"
+       One rectangle, so one test. The ROW still spans the full width — it is the tap and drag target —
+       and only its decoration is bounded.
+       ⚠️ The project is deliberately SHORT here: at the default length the end lands within a couple of
+       pixels of the screen edge, so "stops before the edge" would pass without the fix. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const P = FM.scene.project, dur0 = P.duration;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#4080c0' });
+        L.start = 0; L.duration = 2; FM.scene.layers.push(L);
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(350);
+        const row = document.querySelector('#tl-tracks .tl-addrow');
+        const head = document.querySelector('#tl-tracks .track-head');
+        const clip = document.querySelector('#tl-tracks .clip');
+        const scroller = document.getElementById('tl-tracks');
+        if (!row) throw new Error('there is no add row on the timeline');
+        if (!head || !clip) throw new Error('no track head / clip to measure the divider and the project end against');
+        const x0 = parseFloat(row.style.getPropertyValue('--ar-x0'));
+        const x1 = parseFloat(row.style.getPropertyValue('--ar-x1'));
+        if (!isFinite(x0) || !isFinite(x1)) throw new Error('the add row publishes no --ar-x0/--ar-x1, so its decoration is still full-width');
+        const rb = row.getBoundingClientRect(), hb = head.getBoundingClientRect(), cb = clip.getBoundingClientRect();
+        /* CONTROL: the fixture must actually leave room. If the project already reaches the screen edge,
+           "it stops short of the edge" is true of the broken build too. */
+        const sr = scroller.getBoundingClientRect();
+        if (!(cb.right < sr.right - 40)) throw new Error('the project already fills the timeline (clip ends ' + cb.right.toFixed(1) + ', scroller ' + sr.right.toFixed(1) + ') — shorten the fixture or this proves nothing');
+        if (Math.abs((rb.left + x0) - hb.right) > 2) throw new Error('the tint starts at ' + (rb.left + x0).toFixed(1) + ' but the head divider is at ' + hb.right.toFixed(1) + ' — queue 550: it should stop at that line');
+        if (Math.abs((rb.left + x1) - cb.right) > 3) throw new Error('the tint ends at ' + (rb.left + x1).toFixed(1) + ' but the project ends at ' + cb.right.toFixed(1) + ' — queue 551');
+        // …and the ＋ must NOT have moved out of the head column with it
+        const plus = row.querySelector('.tl-addrow-plus');
+        if (!plus) throw new Error('the ＋ is gone from the add row');
+        if (!(plus.getBoundingClientRect().left < hb.right)) throw new Error('the ＋ moved out of the head column — he asked to keep it where it is');
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null); P.duration = dur0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."
@@ -6348,7 +6448,13 @@
         await sleep(90);
         const slim = document.querySelector('.tl-addrow');
         if (!slim || slim.classList.contains('tl-addrow--empty')) throw new Error('the row did not go back to its slim state with a clip present');
-        if (getComputedStyle(slim).backgroundImage === 'none') throw new Error('the slim add row lost its own wash — this was meant to change the empty state only');
+        /* ⚠️ THE WASH MOVED TO ::before (queue 550/551), it did not go away — updated rather than deleted,
+           because what this line is FOR is still exactly right: the empty-state change must not strip the
+           slim row's colour. Ezra asked for the tint to stop at the head divider and end with the project,
+           and a full-width background on the row itself cannot do either, so the paint is on a bounded
+           pseudo-element now and the row's own background is deliberately `none`. Reading the row would
+           report a loss that has not happened. */
+        if (getComputedStyle(slim, '::before').backgroundImage === 'none') throw new Error('the slim add row lost its own wash — this was meant to change the empty state only');
       }, 380);
     } finally {
       FM.scene.layers = layers0;

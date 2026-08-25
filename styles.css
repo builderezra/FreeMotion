@@ -7214,6 +7214,21 @@ body.fm-pushing #toast { z-index: 213; }
   min-height: 40px; margin: 1px 0;
   cursor: pointer; position: relative;
   border-radius: 10px;
+  /* ⚠️ THE DECORATION IS A PSEUDO-ELEMENT, NOT THE ROW (queue 550 clause 1 + queue 551). Ezra, from one
+     annotated screenshot: *"that line should stop the blue dotted lines and blue background but keep the
+     plus"* and *"Make the add layer also end at the end of the project and not the end of the screen"*.
+     The ROW still spans the full width — the ＋ sits in the head column and must not move, and the row
+     is still the tap/drag target across its whole length. What was crossing the divider and running to
+     the screen edge is the dashed outline and the tint, so those move to ::before, bounded by --ar-x0
+     (the head divider) and --ar-x1 (the project's end), both published by buildAddRow from the LIVE head
+     width — `--head-w` reads 82px while the phone's real head is 66. */
+  border: 1px dashed transparent;
+  background: none;
+}
+.tl-addrow::before {
+  content: ""; position: absolute; top: -1px; bottom: -1px;
+  left: var(--ar-x0, 0px); width: calc(var(--ar-x1, 100%) - var(--ar-x0, 0px));
+  border-radius: 10px;
   border: 1px dashed rgba(120, 214, 240, .45);
   /* "make that whole bar stand out with some nice colours like the background menu does" (queue 324).
      A single cyan wash fading to nothing read as a disabled strip; this runs the app's accent through it
@@ -7221,6 +7236,7 @@ body.fm-pushing #toast { z-index: 213; }
   background:
     linear-gradient(90deg, rgba(90, 199, 237, .17) 0%, rgba(41, 217, 187, .12) 42%, rgba(150, 232, 255, .05) 78%, transparent 100%);
   box-shadow: 0 0 9px rgba(90, 199, 237, .16);
+  pointer-events: none;   /* decoration only — the ROW keeps every gesture it had */
 }
 /* EMPTY PROJECT (queue 326): the row becomes the whole timeline, with a big + in the MIDDLE, so the
    first thing a beginner sees is where to start. Reverts to the slim row the moment a clip exists. */

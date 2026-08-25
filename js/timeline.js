@@ -2217,6 +2217,28 @@ window.FM = window.FM || {};
       hint.innerHTML = '<span></span><span></span><span></span>';
       row.appendChild(hint);
     }
+    /* ⚠️ THE TINT AND THE DASHES STOP AT THE HEAD DIVIDER, AND END WITH THE PROJECT (queue 550 clause 1
+       and queue 551). Ezra, twice, from one annotated screenshot:
+         *"that line should stop the blue dotted lines and blue background but keep the plus"*
+         *"Make the add layer also end at the end of the project and not the end of the screen, so you
+          can see easier when the actual project has hit its end"*
+       Both describe the same rectangle, so they are one measurement. The ROW keeps its full width — the
+       ＋ lives in the head column and must not move — and the decoration moves onto a pseudo-element
+       spanning [divider, project end], which is what --ar-x0 / --ar-x1 carry.
+       ⚠️ MEASURED at 380px rather than derived: the head is **66px** there while `--head-w` says 82px
+       (the phone overrides it), so reading the variable would have put the line 16px wrong. Clips sit at
+       `PAD + t * pxPerSec()` inside the lane, so the project's end is head + PAD + duration x pps.
+       Read off the live head for exactly that reason. */
+    (function () {
+      const firstHead = tracksEl.querySelector('.track-head');
+      const headW = firstHead ? firstHead.getBoundingClientRect().width : 0;
+      const dur = Math.max(0, (FM.scene.project && FM.scene.project.duration) || 0);
+      const x0 = headW;
+      const x1 = headW + PAD + dur * pxPerSec();
+      row.style.setProperty('--ar-x0', x0.toFixed(1) + 'px');
+      // never shorter than a nub: a 0s project would otherwise draw a hairline with no bar beside the ＋
+      row.style.setProperty('--ar-x1', Math.max(x0 + 24, x1).toFixed(1) + 'px');
+    })();
     return row;
   }
 

@@ -91,7 +91,15 @@ window.FM = window.FM || {};
   }
   function render() {
     if (!ctx) return;
-    FM.renderScene(ctx, FM.scene, FM.time);
+    /* THE PREVIEW ONLY (queue 549). Ezra: "when you go to the end of a layer you can't see it anymore…
+       even if it wasn't the last thing it should still be visible when you're at the end of it".
+       A layer's window is half-open, which is the right convention — and the EXPORTER must keep it, or a
+       2s clip lands 61 frames long (an existing test caught exactly that when this nudge lived inside
+       renderScene). But the playhead can be PARKED on an exact boundary, and there the alternative is
+       staring at an empty canvas. So the nudge is here, on the preview path, and the file is untouched.
+       `_endInstantTime` returns t unchanged unless nothing is live at t and something ends exactly
+       there — so a cut still shows the incoming clip. */
+    FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
     if (FM.onionSkin && !FM.playing) drawOnionSkin();
     if (FM.showGuides) drawGuides();
     if (FM.canvasEdit) FM.canvasEdit.update();

@@ -12287,6 +12287,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM._camBlurSlices = camBlurSlices;   // suite seam
 
+  /* ⚠️ THE LAST INSTANT OF A CLIP IS STILL THE CLIP (queue 549). Ezra, with two screenshots one frame
+     apart — 00:03:119 fills the canvas, 00:04:00 is BLACK: *"when you go to the end of a layer you can't
+     see it anymore… even if it wasn't the last thing it should still be visible when you're at the end
+     of it"*.
+     `FM.layerLocalTime` returns null for `t >= start + duration` — a half-open window, which is the
+     correct convention: a 4s clip at 30fps owns frames 0-119 and frame 120 belongs to whatever comes
+     next. Making it inclusive would put two adjacent clips on screen together for one frame, which is a
+     worse bug than the one being fixed, and the entry says so.
+     ⚠️ SO THE RULE IS NARROWER THAN "INCLUSIVE", AND IT IS EXACTLY HIS SENTENCE: an ending layer keeps
+     the boundary instant only when NOTHING ELSE IS THERE TO TAKE IT. If another clip starts at that
+     instant, something is on screen, the rule does not fire, and the cut behaves as it always has —
+     the incoming clip owns the frame, as it should. It only fires where the alternative is an empty
+     canvas: the end of the project, or a gap in the middle.
+     Applied by nudging the TIME rather than by widening any layer's window, so nothing downstream needs
+     to learn a new convention — layerLocalTime, the effect clocks and audio keep the single rule they
+     already share. The nudge is 1e-4 s, far under one frame at any fps.
+     ⚠️ APPLIED AT THE PREVIEW CALL SITE, **NOT** INSIDE renderScene — and an existing test caught me
+     putting it there. The exporter renders through renderScene too, sampling `f / fps`, and those samples
+     DO land exactly on a clip's end when the end falls on a frame boundary: a 2s clip started at 1s came
+     out **61 frames instead of 60**. The suite named it in one line ("a clip occupies exactly its own
+     frames — no flicker at either edge"), which is the test that exists precisely to catch a one-frame
+     slip. So the export keeps the clean half-open rule and the FILE is unchanged; only the playhead you
+     can park on an exact boundary gets the last instant. */
+  function endInstantTime(scene, t) {
+    const ls = (scene && scene.layers) || [];
+    let endsHere = false;
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (!l || l.visible === false) continue;
+      const s0 = l.start || 0, e0 = s0 + (l.duration || 0);
+      if (t >= s0 && t < e0) return t;                 // something is live — leave the cut alone
+      if (!endsHere && Math.abs(t - e0) < 1e-6 && (l.duration || 0) > 0) endsHere = true;
+    }
+    return endsHere ? t - 1e-4 : t;
+  }
+  FM._endInstantTime = endInstantTime;   // suite seam: the real rule, not a copy of it
+
   FM.renderScene = function (ctx, scene, t) {
     /* ⚠️ SHOW THE ORDER YOU ARE DRAGGING TOWARDS (queue 502). Ezra: "when dragging a layer it doesn't
        live update." He is right, and it is by design rather than by accident: a reorder is DEFERRED —

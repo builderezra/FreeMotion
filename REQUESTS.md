@@ -1,12 +1,23 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.65
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.66
 >
-> **State:** v12.65, **954 tests green**, tree clean.
+> **State:** v12.66, **956 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.66 — the layer no longer vanishes at the end of itself (#549).** Your 00:04:00 screenshot. It
+> was the last instant falling just outside the clip. It now holds the picture **whenever nothing else is
+> there to take over** — the end of the project, or a gap — and at a proper cut the NEW clip still owns
+> the frame, as it should. Your exports are byte-identical; the fix is on the preview only.
+>
+> **✅ v12.66 — the add-layer row (#550 part, #551).** The blue tint and dashes now stop at the divider
+> instead of running through it (the ＋ stays put), and the bar ends where your PROJECT ends rather than
+> at the screen edge — so it doubles as the end marker you wanted. **One bit I could not do:** you said a
+> line is "cut short where the arrows are" and I cannot tell which line you mean — the divider and the ≡
+> arrows are at opposite ends of the row. Circle it again when you get a sec.
 >
 > **🔎 v12.65 — I found out WHY Squish dies in a corner (#539), and it is not what I told you an hour ago.**
 > From the outside it looks like the effect does nothing there. It actually runs completely — it sees the
@@ -18904,8 +18915,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check what each of the four currently does first — the cog is said to already pop from its button,
       so part of this may be extending one existing mechanism rather than building four.
 
-- [ ] **549 — 🔴 At the very END of a layer it disappears, even when it should still be on screen.** (25 Aug, two phone screenshots at v12.42.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **549 — 🔴 At the very END of a layer it disappears, even when it should still be on screen.** (25 Aug, two phone screenshots at v12.42.) ✅ v12.66
       His words, verbatim:
       > There's an issue where when you go to the end of a layer you can't see it anymore, like the layer ends even tho it should still be visible because it's the last thing in the project, even if it wasn't the last thing it should still be visible when you're at the end of it
       **His two shots are the proof, one frame apart:** at **00:03:119** the cyan layer fills the canvas; at
@@ -18937,6 +18947,24 @@ re-opened #480, which I had marked done and had not fixed.
       **What needs HIS answer** is the mid-timeline half: when a clip ends at 2s and another begins there,
       should the boundary frame show the outgoing clip, the incoming one, or both? Do not guess it.
 
+      ✅ **DONE v12.66 — and the mid-timeline question answered itself once phrased properly.** It is not
+      three options; it is **his own sentence**: the ending layer keeps the boundary instant **only when
+      nothing else is there to take it**. If another clip starts at that instant something IS on screen,
+      the rule does not fire, and the cut behaves exactly as it always has — the incoming clip owns the
+      frame, which is the standard convention and the right one. It only fires where the alternative is an
+      empty canvas: **the end of the project, or a gap in the middle.** No decision needed from him.
+      **Measured, all four cases:** one clip at t=4.0 → visible (was black); a clip ending at 2s with
+      nothing until 3s → visible; the middle of a real gap at 2.5s → correctly empty; and at a **cut** the
+      boundary frame is the **incoming** clip (orange, not cyan).
+      🐛 **AND THE SUITE CAUGHT ME PUTTING IT IN THE WRONG PLACE.** I first applied the nudge inside
+      `FM.renderScene` — which the EXPORTER draws through. Its frame loop samples `f / fps`, and those
+      samples DO land exactly on a clip's end when the end falls on a frame boundary, so **a 2s clip came
+      out 61 frames instead of 60.** The existing test *"a clip occupies exactly its own frames — no
+      flicker at either edge"* named it in one line. **That is precisely the export/preview disagreement
+      this entry warned about, arriving from the direction I was not watching.** The rule now lives on the
+      preview call site only: the file is untouched, and only the playhead you can park on an exact
+      boundary gets the last instant. The new test asserts it has NOT leaked back into `renderScene`.
+
 - [ ] **550 — The add-layer row should stop at the header divider like every other row, and the line by the arrows is cut short.** (25 Aug, phone screenshot with red annotation.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
@@ -18949,12 +18977,32 @@ re-opened #480, which I had marked done and had not fixed.
              continuous. **Find why it stops** rather than just extending it.
       ⚠️ *"I also asked ages ago"* — search the file for the earlier request before treating this as new.
 
-- [ ] **551 — The add-layer row should end where the PROJECT ends, not at the edge of the screen.** (25 Aug, phone screenshot with red annotation.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLAUSE 1 DONE v12.66.** The dashed outline and the blue tint now start at the head divider
+      instead of running through it, and the ＋ has not moved. **Measured at 380px: the tint starts at
+      x=66.0, and the divider is at x=66.0.**
+      ⚠️ **The decoration moved to a pseudo-element rather than the row being narrowed** — the ROW still
+      spans the full width because it is the tap and drag target across its whole length; only the paint
+      is bounded.
+      ⚠️ **`--head-w` says 82px and the phone's real head is 66px**, so the bounds are read off the LIVE
+      head. Deriving them from the variable would have put the line 16px wrong.
+      ⏳ **CLAUSE 2 (the divider "cut short where the arrows are") NOT DONE.** I could not identify from
+      his screenshot which line he means — the head divider runs the full height of every row here, and
+      the ≡ arrows sit at the far right, so the two are nowhere near each other. **Needs him to circle it
+      again, or a fresh screenshot.** Not guessed at.
+
+- [x] **551 — The add-layer row should end where the PROJECT ends, not at the edge of the screen.** (25 Aug, phone screenshot with red annotation.) ✅ v12.66
       His words, verbatim:
       > Make the add layer also end at the end of the project and not the end of the screen, so you can see easier when the actual project has hit its end
       **His reason is the useful part:** it would double as a visible marker of where the project ends.
       Goes with #550 — same row, same screenshot.
+
+      ✅ **DONE v12.66.** The add row's bar now ends where the project ends. **Measured at 380px with a
+      deliberately short project: the tint ends at x=315.6 and the clip's right edge — the project's end —
+      is x=315.6, against a scroller running to 505.6.** So it stops 190px short of the screen edge and
+      reads as the marker he wanted.
+      ⚠️ **The fixture had to be shortened to test it at all:** at the default length the project already
+      ends within a couple of pixels of the screen edge, so "it stops before the edge" is true of the
+      broken build too. The test asserts that gap exists before measuring anything.
 
 - [ ] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
