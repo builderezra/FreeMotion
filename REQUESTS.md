@@ -1,12 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.64
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.65
 >
-> **State:** v12.64, **954 tests green**, tree clean.
+> **State:** v12.65, **954 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **🔎 v12.65 — I found out WHY Squish dies in a corner (#539), and it is not what I told you an hour ago.**
+> From the outside it looks like the effect does nothing there. It actually runs completely — it sees the
+> ball pressing into both walls — and produces an identical picture. The squash you can SEE is the bulge
+> sideways, and in a corner there is nowhere to bulge, so it comes out looking untouched. That also
+> explains the fade you noticed: sliding down the wall it goes 236 → 230 → 210 → 160 → nothing.
+> **I have not fixed it**, because the fix is a taste call: should a corner squash the ball flatter, or
+> should a corner legitimately hold it rigid? Your call. The measuring tool is now built in either way.
 >
 > **✅ v12.64 — motion blur cranks much further (#540).** I measured it before changing anything: the
 > effect was still getting stronger right up to the old maximum, so the limit was the slider and not the
@@ -18595,17 +18603,34 @@ re-opened #480, which I had marked done and had not fixed.
       **And it FADES on the way in**, sliding the ball down the right wall: y=240 → 236 tall, y=300 → 230,
       y=360 → 210, y=400 → 160, **y=430 → dead.** So it is not two walls fighting at the moment of
       contact — the right wall's own squish weakens as the ball merely APPROACHES the floor.
-      ⚠️ **The decisive clue: it is dead in the corner in EVERY wall mode, including `Sides`** — which
-      excludes the floor entirely. So the floor is not "winning" the fight; something about hanging off
-      the bottom kills the whole effect, X axis included. That rules out the obvious "the two walls are
-      fighting" theory the entry proposes, and points at the padded plate or the alpha-bbox scan
-      (`drawSquish` measures the ALPHA BOUNDING BOX of a plate padded past every side — see the long note
-      above `SQUISH` in js/compositor.js).
-      **DELIBERATELY NOT FIXED TONIGHT.** The cause is in the plate/bbox geometry and I have not traced it
-      yet; a guess there would be a change to the most heavily-reasoned function in the compositor, and
-      the entry itself says to plan before writing. **The measurements above are the plan's starting
-      point** — the next session begins from a fade profile and a ruled-out theory rather than from a
-      one-line report.
+      ⚠️ **CORRECTION — my first pass at this got the cause WRONG, and the wrong version is left here on
+      purpose.** I wrote that it was dead in every wall mode including `Sides`, that the floor was
+      therefore not involved, and that "two walls fighting" was ruled out. **All of that was inference
+      from a BOUNDING BOX, and a bbox cannot see a deformation that preserves extents.** Instrumenting the
+      effect (`FM._squishDebug`, added for this) says the opposite.
+      🔬 **THE ACTUAL MECHANISM, measured from inside `drawSquish`:**
+      | ball at | penetration | limX | limY | visible? |
+      |---|---|---|---|---|
+      | right wall only (430,240) | R 25 | 1 | **3.2** | yes — 2,316 px differ |
+      | near the floor (430,400) | R 25 | 1 | **1.067** | barely — 150→160 tall |
+      | **corner (430,430)** | **R 25, B 25** | 1 | **1** | **zero px differ** |
+      | floor only (240,430) | B 25 | **3.2** | 1 | yes |
+      **Squish does NOT early-out in the corner — the seam reports `deforming` with 25px of penetration on
+      both walls.** It runs the whole map and produces a byte-identical picture.
+      🎯 **Because the visible effect is carried ENTIRELY by the perpendicular spread.** An x-squash bulges
+      in Y, and `limY` is how much room the layer has to bulge before hitting the Y walls — so as the ball
+      nears the floor, `limY` falls 3.2 → 1.067 → **1**, and at 1 there is no bulge at all. The inward
+      compression on its own changes nothing measurable because the far edge is pinned. **That is exactly
+      the fade profile from the outside: 236 → 230 → 210 → 160 → dead.**
+      **So it IS the two walls interacting** — not fighting over the same pixels, but each one closing off
+      the room the other needs to bulge into.
+      **DELIBERATELY NOT FIXED.** The remedy is a design decision in the most heavily-reasoned function in
+      the compositor: when there is no room to bulge, should the squash still flatten the layer (unpin the
+      far edge) or should a corner legitimately hold a ball rigid? A guess there is exactly the kind of
+      change that looks right and quietly breaks the ten squish cases the suite already pins.
+      **`FM._squishDebug` is committed** — flip it and `FM._squishInfo` reports the bbox, both walls, the
+      effective walls, per-wall penetration, `limX`/`limY` and whether it early-outed. **That is the tool
+      this entry lacked for three rounds.**
       **CLAUSES 2 and 3 (the layer picker + "affect every layer") NOT STARTED** — they need collision
       against arbitrary shapes, which he himself called very complicated, and they should not be rushed in
       behind a corner bug that is still open.

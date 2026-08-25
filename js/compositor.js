@@ -6092,7 +6092,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * This is NOT the switch that was removed: p rises from 0 continuously as the layer arrives at
        * a wall and never returns to 0 while it is engaged, so the branch is only ever taken on the
        * identity side of a continuous boundary. */
-      if (pR < EPS && pL < EPS && pB < EPS && pT < EPS) return drawSquishOff(ctx, layer, t, scene, fx);
+      /* Seam (queue 539): what the walls ACTUALLY resolved to, straight from the code that resolved
+         them. Ezra reports Squish doing nothing in a corner, and from the outside a no-op is a no-op —
+         an early-out here and a deformation that happens to be invisible look identical. Behind a flag
+         because this runs per frame per squished layer. */
+      if (FM._squishDebug) {
+        FM._squishInfo = { bbox: [bx0, by0, bx1, by1], ex: [exX, exY],
+                           walls: { xL: xL, xR: xR, yT: yT, yB: yB },
+                           effective: { wL: wL, wR: wR, wT: wT, wB: wB },
+                           live: { x: !!liveX, b: !!liveB, t: !!liveT },
+                           pen: { L: pL, R: pR, T: pT, B: pB }, firm: firm, amt: amt, EPS: EPS };
+      }
+      if (pR < EPS && pL < EPS && pB < EPS && pT < EPS) {
+        if (FM._squishDebug) FM._squishInfo.result = 'EARLY-OUT (no penetration)';
+        return drawSquishOff(ctx, layer, t, scene, fx);
+      }
+      if (FM._squishDebug) FM._squishInfo.result = 'deforming';
 
       // Falloff and far-edge distance, per WALL, measured against the EFFECTIVE wall. D is how far
       // it is from that wall to the layer's own far edge; sqAxis normalises the shift to reach
@@ -6118,6 +6133,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // compression — and infinite when the bbox is already past that wall.
       const limY = Math.max(1, Math.min(sqRoom(yB - Cy, by1 - Cy), sqRoom(Cy - yT, Cy - by0)));
       const limX = Math.max(1, Math.min(sqRoom(xR - Cx, bx1 - Cx), sqRoom(Cx - xL, Cx - bx0)));
+      /* …and the two spread ceilings, which are the thing queue 539's corner case turns on: an
+         x-squash bulges in Y, so the Y WALLS cap it. In a corner there is no room either way and both
+         clamp to 1 — see the seam. */
+      if (FM._squishDebug && FM._squishInfo) { FM._squishInfo.limX = limX; FM._squishInfo.limY = limY; }
       // An inert wall is passed as NaN, which fails every comparison in sqStretch — so it neither
       // flattens against a wall nothing crossed nor needs a second flag threaded through.
       // x-compression spreads in y, and the profile that needs is the layer's height per COLUMN,
