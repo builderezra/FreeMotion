@@ -1,12 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.63
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.64
 >
-> **State:** v12.63, **953 tests green**, tree clean.
+> **State:** v12.64, **954 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.64 — motion blur cranks much further (#540).** I measured it before changing anything: the
+> effect was still getting stronger right up to the old maximum, so the limit was the slider and not the
+> blur. Shutter now goes to **12** instead of 4 and samples to 48 — a fast object smears **3.2× its own
+> width** now, against 1.8× before. **Your existing projects are untouched**: the defaults did not move,
+> so you only pay the extra render cost when you actually crank it.
 >
 > **✅ v12.63 — tap the canvas with the effects menu open and it pauses (#538).** A pause button blooms
 > over the picture and fades away. Only in that menu, as you asked — everywhere else a canvas tap still
@@ -18566,8 +18572,7 @@ re-opened #480, which I had marked done and had not fixed.
       say plainly if a first pass will only handle axis-aligned bounds — an honest partial beats a
       quiet one.
 
-- [ ] **540 — Motion blur needs to go much further than it currently can.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **540 — Motion blur needs to go much further than it currently can.** (24 Aug.) ✅ v12.64
       His words, verbatim:
       > Motion blur still needs the ability to crank up the effectiveness a lot
       **What to check first:** whether the ceiling is the slider's max or the algorithm running out of
@@ -18577,6 +18582,36 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Cost warning: motion blur usually costs one extra render of the layer per sample, so "a lot
       more" can be the expensive kind of change on a phone. If so, say what the frame cost becomes rather
       than shipping it quietly — the oldest entry on this list is about lag.
+
+      ✅ **DONE v12.64 — and the entry's question was the right one to ask first.** *Is the ceiling the
+      slider or the algorithm?* **Measured before touching anything**, a 60px bar crossing 500px/s, smeared
+      width at t=0.5:
+      | shutter | 0 | 0.5 | 1 | 2 | **4 (old max)** |
+      |---|---|---|---|---|---|
+      | smear | 48px | 52 | 57 | 66 | **106** |
+      **Linear, no plateau** — so the range was the limit, and raising it gives him more rather than a
+      slider that lies.
+      **Shutter 4 → 12, Samples 32 → 48.** After: **106 → 126 → 146 → 190px** at shutter 4/6/8/12. That is
+      **3.2× the unblurred width**, against 1.8× at the old ceiling.
+      ⚠️ **The two numbers move together on purpose.** The smear is `samples` copies spread across the
+      shutter window, so a longer window at the same sample count is a ghost train, not a blur. At shutter
+      12 the bar travels ~200px and 48 samples put a copy every ~4px.
+      ⚠️ **COST, stated rather than shipped quietly** (the entry's warning, and the oldest item in this
+      file is about lag): each sample is ONE extra render of the layer. **Defaults are untouched at 0.5
+      and 8**, so nothing already made costs a penny more — you only pay when you crank it.
+      ⚠️ **The test guards the subtle half:** the kernel carries its OWN clamp beside the param's max.
+      Raise the param and forget the clamp and the slider runs to 12 while the picture stops changing at
+      4 — a control that lies. The assertion is that the smear keeps GROWING past 4, which no amount of
+      param editing alone can satisfy.
+      🐛 **FOUR WRONG MEASUREMENTS BEFORE THE RIGHT ONE, and the cause is worth remembering:** setting
+      `layer.x` to a keyframe object **evaluates correctly through `evalProp`** (80 → 200 → 320) and moves
+      **nothing on screen** — position lives at **`layer.transform.x`**. So the blur read no movement and
+      reported a flat zero at every shutter, which looks exactly like a broken effect. My first "control"
+      compared the smear WIDTH at two times, which is identical whether or not the layer moved; the fix
+      was to compare its LEFT EDGE. **A control that cannot fail is not a control.**
+      📌 **Not touched: Motion Blur (Footage)** (shutter 0–2) and **Directional Blur** (distance 0–60px).
+      He said "motion blur", and Object is the one queue 379 raised and the one he said was "still" too
+      weak. Say the word if either of the others needs the same.
 
 - [x] **541 — 🔴 PC: the timeline is drawing its rows on top of each other.** (24 Aug, PC screenshot at v12.30.)
 

@@ -862,8 +862,20 @@ window.FM = window.FM || {};
        talks in degrees and that swap is one multiplication whenever Ezra wants it. */
     { type: 'objectblur', label: 'Motion Blur (Object)', desc: 'Smears the layer along its OWN movement — position, scale or rotation. It cannot see movement inside the picture; for that use Motion Blur (Footage). It does nothing on a layer that is not moving.',
       params: [
-      { key: 'shutter', label: 'Shutter', min: 0, max: 4, step: 0.05, def: 0.5 },   // 4 frames of travel, not 1 — queue 379
-      { key: 'samples', label: 'Samples', min: 2, max: 32, step: 1, def: 8 },
+      /* CEILING RAISED AGAIN, 4 → 12 (queue 540). Ezra: *"Motion blur still needs the ability to crank up
+         the effectiveness a lot"* — "still", i.e. after queue 379 took it from 1 to 4.
+         MEASURED BEFORE TOUCHING IT, which is what the entry asked for: a 60px bar crossing 500px/s, the
+         smeared width at t=0.5 went 48px unblurred → 52 (shutter 0.5) → 57 (1) → 66 (2) → **106 (4)**.
+         It grows LINEARLY and does not plateau, so the ceiling was the slider and not the algorithm —
+         raising it gives him more rather than a slider that lies.
+         SAMPLES 32 → 48 in step, and that pairing is the point: the smear is `samples` copies spread
+         across the shutter window, so a longer window at the same sample count is a ghost train rather
+         than a blur. At shutter 12 the bar travels ~200px, and 48 samples put a copy every ~4px.
+         ⚠️ COST, stated rather than shipped quietly (the entry's warning, and the oldest item on the list
+         is about lag): each sample is ONE extra render of the layer. Defaults are untouched at 0.5 and 8,
+         so nothing already made costs a penny more — you only pay when you crank it. */
+      { key: 'shutter', label: 'Shutter', min: 0, max: 12, step: 0.05, def: 0.5 },
+      { key: 'samples', label: 'Samples', min: 2, max: 48, step: 1, def: 8 },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
     { type: 'softglow', label: 'Soft Glow', params: [
@@ -2126,14 +2138,14 @@ window.FM = window.FM || {};
     // evalProp, not `mb.samples || 8`: a KEYFRAMED shutter/samples is an object, Math.round of which
     // is NaN — the sample loop then ran zero times and the layer silently vanished.
     const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
-    const samples = Math.max(2, Math.min(32, Math.round(_num(mb.samples, 8))));
+    const samples = Math.max(2, Math.min(48, Math.round(_num(mb.samples, 8))));   // 48 to match the param (queue 540)
     const fps = (scene && scene.project && scene.project.fps) || 30;
     /* CEILING RAISED 1 → 4 (queue 379). Ezra: *"needs to be able to be stronger, the cranks should be
        able to crank more, currently the strongest setting is only subtle"*. A real shutter cannot stay
        open longer than a frame, and clamping to 1 was that physical honesty — which is exactly why a
        full crank looked timid. Nothing here needs to be physically honest. Default is unchanged at 0.5,
        so nothing already made moves. */
-    const dt = Math.max(0, Math.min(4, _num(mb.shutter, 0.5))) / fps;   // shutter window in seconds
+    const dt = Math.max(0, Math.min(12, _num(mb.shutter, 0.5))) / fps;   // shutter window in seconds — 12 since queue 540
     /* NOTHING MOVING → NOTHING TO BLUR. Without this, switching it on cost a flat N full renders of
      * the layer every frame whether it moved or not, and averaged N identical sub-frames back into
      * the sharp original — all of the cost, none of the effect. Returning false hands the caller

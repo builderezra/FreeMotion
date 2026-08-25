@@ -3572,6 +3572,62 @@
     }
   });
 
+  test('540: Motion Blur (Object) keeps getting stronger past its old ceiling', { item: '540' }, function () {
+    /* Queue 540. Ezra: "Motion blur still needs the ability to crank up the effectiveness a lot" —
+       "still", i.e. after queue 379 already took the shutter from 1 to 4.
+       The entry asked the right question first: is the ceiling the SLIDER or the ALGORITHM? Measured
+       before touching anything — a 60px bar crossing 500px/s, smeared width at t=0.5: 48 unblurred, then
+       52 / 57 / 66 / 106 at shutter 0.5 / 1 / 2 / 4. Linear, no plateau. So the range was the limit and
+       raising it gives him more rather than a slider that lies.
+       ⚠️ THIS TEST GUARDS THE SUBTLE HALF: the kernel has its OWN clamp beside the param's max. Raise the
+       param and forget the clamp and the slider goes to 12 while the picture stops changing at 4 — a
+       control that lies, which is precisely what the entry warned against. The assertion is that the
+       smear keeps GROWING past 4, which no amount of param-editing alone can satisfy. */
+    const reg = FM.fxRegistry.get('objectblur');
+    if (!reg) throw new Error('Motion Blur (Object) is gone from the registry');
+    const P = { width: 800, height: 400, duration: 2, fps: 30, background: '#000000' };
+    const sceneAt = (fx) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 200, shapeW: 60, shapeH: 160, fill: '#ffffff' });
+      L.start = 0; L.duration = 2; L.effects = fx ? [fx] : [];
+      /* ⚠️ transform.x, NOT layer.x — and this cost four wrong measurements before I checked. Setting
+         `layer.x` to a keyframe object evaluates correctly through evalProp and moves NOTHING on screen,
+         so the blur reads no movement and every reading is a flat zero that looks like a broken effect. */
+      L.transform.x = { kf: [{ t: 0, v: 150, ease: 'linear' }, { t: 1, v: 650, ease: 'linear' }] };
+      return { project: P, layers: [L] };
+    };
+    const spreadAt = (fx, t) => {
+      const c = offscreen(800, 400);
+      FM.renderScene(c.getContext('2d'), sceneAt(fx), t);
+      const d = c.getContext('2d').getImageData(0, 0, 800, 400).data;
+      let min = 1e9, max = -1;
+      for (let y = 0; y < 400; y += 2) for (let x = 0; x < 800; x++) {
+        const i = (y * 800 + x) * 4;
+        if (d[i] + d[i + 1] + d[i + 2] > 120) { if (x < min) min = x; if (x > max) max = x; }
+      }
+      return max < 0 ? { spread: 0, left: -1 } : { spread: max - min + 1, left: min };
+    };
+    const blur = (shutter, samples) => { const e = FM.fxRegistry.makeInstance('objectblur'); e.params.shutter = shutter; e.params.samples = samples || 48; return e; };
+
+    /* CONTROL — the layer must actually MOVE. Without this the whole test measures a still frame and a
+       motion blur that reads nothing correctly reports zero, which looks identical to a broken effect. */
+    const a = spreadAt(null, 0.2), b = spreadAt(null, 0.8);
+    if (a.left < 0 || b.left < 0) throw new Error('the fixture drew nothing at all');
+    if (Math.abs(b.left - a.left) < 100) throw new Error('the layer barely moved between t=0.2 and t=0.8 (left ' + a.left + ' → ' + b.left + ') — nothing below is measuring motion blur');
+
+    // CONTROL — the defaults must not have moved, or every existing project re-renders
+    const d0 = FM.fxRegistry.makeInstance('objectblur').params;
+    if (Math.abs(d0.shutter - 0.5) > 1e-9 || d0.samples !== 8) throw new Error('the defaults changed (shutter ' + d0.shutter + ', samples ' + d0.samples + ') — raising a ceiling must not move what everyone already has');
+
+    const shutterMax = (reg.params.find(p => p.key === 'shutter') || {}).max;
+    if (!(shutterMax >= 8)) throw new Error('the Shutter ceiling is ' + shutterMax + ' — he asked to crank it "a lot" and 4 was already the old limit');
+
+    const base = spreadAt(null, 0.5).spread;
+    const at4 = spreadAt(blur(4), 0.5).spread;
+    const atMax = spreadAt(blur(shutterMax), 0.5).spread;
+    if (!(at4 > base + 20)) throw new Error('shutter 4 barely smears (' + base + ' → ' + at4 + ') — the effect is not reading the movement, so the ceiling is not the thing being tested');
+    if (!(atMax > at4 + 30)) throw new Error('the smear stops growing past the old ceiling: shutter 4 gives ' + at4 + 'px and shutter ' + shutterMax + ' gives ' + atMax + 'px. The slider goes further than the picture does — check the kernel clamp beside the param, which is a SECOND number that has to move.');
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."
