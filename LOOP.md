@@ -102,7 +102,31 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.54, 942 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.55, 943 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.55 did #525** — element drafts can be binned by hand, and the card says which kind it is. Uses
+`discardDraft`, NOT `remove`: remove() opens another project or CREATES an "Untitled" when you delete
+the current one, which would manufacture the very stray project #505 was about. The refusal on the
+current project now speaks instead of reading as a dead tap.
+⚠️ **The label deliberately does NOT claim to spot orphans, and that CORRECTS the entry's own wording.**
+It asked to tell orphans from real edits — but a brand-new "Build a new one…" draft is created with
+`{ elementDraft: true }` and no element id, *exactly* like a pre-v12.26 orphan. They are not
+distinguishable. The honest line is "editing an element" vs "a draft", and both can now be thrown away.
+**An entry's instructions are a hypothesis about the code, not a fact about it.**
+🐛 The card was a `<button>` that needed to contain one — invalid nesting browsers resolve by dropping
+one of the two. Now a `div` with `role="button"`, the same fix elementCard/projectCard already carry.
+🔒 **ship.sh's open-item gate earned its keep:** the POLISH-LOG entry MENTIONED "queue 505" in
+explanatory prose and the gate read that as a closure claim and refused. Reworded to "#505". Worth
+knowing when writing a log entry that references a still-open item — say `#N`, not `queue N`.
+
+**🟠 #524 IS REPRODUCED AND IS NOW A PICK-ONE FOR HIM — do not guess it.** Dragging a clip right
+**CLAMPS**: measured with a 4s clip in a 4s project, `start` goes 1.51 → 2.93 → **4.00 and sits there
+for seventeen more moves** while the finger keeps going; the project grows to 8s only on RELEASE.
+⚠️ **The ceiling exists BECAUSE HE ASKED FOR IT** — `groupDragCeil` came from his earlier report *"when
+you drag a layer to the right too far it breaks the project timeline… it just keeps going past the
+timeline"*. **Two of his instructions disagree and they cannot both be fully satisfied**, so three
+options with a recommendation are in the entry and in the summary he reads. Also measured: the per-move
+path is deliberately cheap (sets `clip.style.left`, never rebuilds), so growing the project mid-drag
+means moving the ruler and scroll width every frame — real work the current design avoids on purpose.
 **v12.54 did #523** — the text edit screen closes the moment its layer stops being selected. A LIFETIME
 bug, not a missing button: the editor binds to one layer and never noticed the selection move on, so it
 sat orphaned, still demanding the blue tick (*"and it's kinda glitchy"*). Commits rather than discards —
@@ -203,7 +227,8 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #524** (dragging a clip right stops dead at the project end instead of extending the project).
+**NEXT: #526** (the play pill's outline should line up with the outlines on the other buttons) — #524 is
+parked on his pick, not skipped.
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
