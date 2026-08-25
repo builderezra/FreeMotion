@@ -4846,7 +4846,30 @@ window.FM = window.FM || {};
         items.push({ label: 'Stretch to Composition Area', action: () => FM.fitLayer(sel, 'stretch') });
       }
       items.push({ label: (sel.blendMode === 'mask-include' ? '✓ ' : '') + 'Create Clipping Mask', action: () => FM.toggleClippingMask(sel) });
-      if (sel.type === 'shape' && sel.shape !== 'path') items.push({ label: 'Convert to Outline', action: () => FM.convertToOutline(sel) });
+      /* ⚠️ "COMING SOON", AND REWORDED, ON HIS INSTRUCTION (queue 534). Ezra explained what Alight
+         Motion's button actually does, and it is not what ours does: *"in alight motion every shape has
+         very thought out edit points you can grab and change before even pressing the edit points
+         button… the convert to outline button just gets rid of those points and just makes it one
+         outline that hugs the shape"*. So it FLATTENS a shape's editable points into a single outline —
+         and the thing it removes is a feature we do not have yet (*"we havent yet put the effort to add
+         those practical points yet"*).
+         Ours did something else entirely: it turned the shape into a stroked path with no fill. That is
+         a perfectly good LOOK, and it belongs in the effects menu where looks live — which is his second
+         clause and is already served by the **Outline** effect ("Draws an outline around the layer's own
+         shape"). So the menu item stops doing it and says what it is waiting for.
+         Kept visible rather than deleted: he asked for "coming soon", not for it to vanish, and a name
+         that disappears is a feature nobody can find when it arrives. Renamed because the old label
+         described something we are not doing. */
+      if (sel.type === 'shape' && sel.shape !== 'path') {
+        items.push({ label: 'Flatten to One Outline — coming soon', action: () => {
+          /* Names the effect EXACTLY as the menu lists it. The first draft of this line said "the
+             Outline effect" — there is no effect by that name; the one that draws an outline is called
+             **Stroke Colour**, which is precisely why he could not find it and asked for the behaviour
+             to be put in the effects menu when it was already there. A pointer to a name that does not
+             exist is worse than no pointer. */
+          if (FM.toast) FM.toast('Coming soon — it will flatten a shape’s edit points into one outline. For the LOOK now, add the “Stroke Colour” effect.', 4600);
+        } });
+      }
       if (sel.type === 'video') items.push({ label: 'Extract Audio', action: () => FM.extractAudio(sel) });
       items.push({ label: 'Media Info', action: () => FM.mediaInfoToast(sel) });
       items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });

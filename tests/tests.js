@@ -3279,6 +3279,45 @@
     }
   });
 
+  test('534: Convert to Outline says coming soon, and the look it used to do is a real effect', { item: '534' }, async function () {
+    /* Queue 534. Ezra explained that Alight Motion's button FLATTENS a shape's editable points into one
+       outline — and the points it removes are a feature we do not have. Ours did something else: it
+       turned the shape into a stroked path with no fill. So: the button says coming soon and is
+       reworded, and the LOOK lives in the effects menu, where it already did.
+       ⚠️ THE SECOND HALF IS THE INTERESTING ONE. `stroke` already draws an outline and works — measured,
+       836 px on a shape — so nothing needed building. His complaint was still true, because the effect is
+       labelled "Stroke Colour" and nothing in that name says outline. This test therefore checks the
+       MENU no longer performs the conversion, and that the effect it points at is real and named exactly
+       as the pointer claims — a pointer to a name that does not exist is worse than no pointer, which is
+       a mistake this fix nearly shipped. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4; L.effects = []; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      if (!FM.layerMenuItems) throw new Error('cannot reach the layer ⋯ menu items to check the label');
+      const items = FM.layerMenuItems(L) || [];
+      const labels = items.map(i => String(i.label || i.swatchLabel || ''));
+      /* CONTROL: the menu built at all and is the SHAPE menu — otherwise "no Convert to Outline" is
+         trivially true of an empty list. */
+      if (labels.length < 3) throw new Error('the ⋯ menu returned ' + labels.length + ' item(s) — it did not build, so nothing below is measured');
+      if (labels.some(l => /^Convert to Outline$/i.test(l.trim()))) throw new Error('the menu still offers the old "Convert to Outline" — he asked for it to say coming soon and be reworded');
+      const soon = labels.filter(l => /coming soon/i.test(l));
+      if (!soon.length) throw new Error('nothing in the shape menu says "coming soon" (' + labels.join(' | ') + ') — he asked for the button to stay and say that, not to vanish');
+
+      /* …and the effect the toast points at must EXIST, under exactly that name. */
+      const reg = FM.fxRegistry && FM.fxRegistry.get ? FM.fxRegistry.get('stroke') : null;
+      if (!reg) throw new Error('the `stroke` effect is gone, so the look the old button produced is no longer available anywhere');
+      if (!/stroke colour/i.test(String(reg.label || ''))) throw new Error('the outline effect is labelled "' + reg.label + '", but the coming-soon toast names it "Stroke Colour" — the pointer and the menu must agree or it sends him looking for something that is not there');
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

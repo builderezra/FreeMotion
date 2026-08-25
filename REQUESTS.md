@@ -1,12 +1,22 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.59
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.60
 >
-> **State:** v12.59, **949 tests green**, tree clean.
+> **State:** v12.60, **950 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.60 — the add-layer switch (#533).** You were right that something was off, and it was already
+> fixed — by the drag work two days after you reported it. Before that the switch leaned one way while
+> you dragged and then snapped back when you let go, because the live value and the applied value were
+> two different numbers. They are one number now. I measured both gestures to be sure.
+>
+> **✅ v12.60 — Convert to Outline (#534).** It says **"Flatten to One Outline — coming soon"** now and
+> explains itself. The look it used to do did not need building — it is already an effect and it works.
+> **But you were still right that you could not find it: it is called "Stroke Colour"**, which says
+> nothing about outlines. Say the word and I will rename it.
 >
 > **✅ v12.59 — the effects you select DO work, and I found why they look like they don't (#529).** I
 > drove every path: picking, the numbers, the live preview, Done, Back, the X, switching tabs — all fine,
@@ -18285,8 +18295,7 @@ re-opened #480, which I had marked done and had not fixed.
       Same as **#506**, said again after another run of requests. Recorded rather than merged, because the
       repetition is itself the signal: he has had to say it twice.
 
-- [ ] **533 — 🔴 CORRECTION to #502: he meant the ADD-LAYER SWITCH does not update live, not the picture.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **533 — 🔴 CORRECTION to #502: he meant the ADD-LAYER SWITCH does not update live, not the picture.** (24 Aug.) ✅ v12.60
       His words, verbatim:
       > I don't remember what I said when I mentioned dragging a layer updates the picture live but what I meant was the switch that you press to move the add layer wasn't updating live when it should, also fix that
       ⚠️ **So #502 answered a question he did not ask.** What I shipped in v12.23 — the canvas following a
@@ -18302,8 +18311,27 @@ re-opened #480, which I had marked done and had not fixed.
       **Do not assume #480's fix is wrong** — measure first, and if it is right, find which gesture is
       not covered.
 
-- [ ] **534 — "Convert to outline" should say coming soon, and its current behaviour should become a proper effect.** (24 Aug, two Alight Motion screenshots for reference.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **DONE v12.60 — measured first, as the entry says, and BOTH gestures update the switch live.**
+      | gesture | `FM.dragAddAt` while dragging | the switch's `--sw` lean |
+      |---|---|---|
+      | dragging the ADD ROW itself | 2 → 3 → 4 | 0.5 → 0.75 → 1 |
+      | dragging a LAYER past it | 2 → 1 | 0.5 → 0.25 |
+      Both track continuously and the drop applies the value that was showing. **#480's fix is not wrong**
+      and neither is #438's.
+      🎯 **What he was seeing has a mechanism, and it was fixed two days after he reported it — by #521.**
+      Until v12.51 the live value and the DROP disagreed: `FM.dragAddAt` (what the switch shows) was
+      computed on every move, but `dropAddAt` (what actually gets written) was only set when the finger
+      landed ON the add row. **Measured at the time: the switch read 1 while the drop wrote 2.** From his
+      side a switch that leans one way during the drag and then snaps back on release is exactly *"wasn't
+      updating live"* — the lean was real, it just did not survive the drop. #521 made them one number.
+      ⚠️ Recorded rather than assumed: this is a mechanism that explains the report, not a "cannot
+      reproduce". If it happens again on his phone it is genuinely new and the table above is the baseline.
+      ⚠️ *A probe bug worth remembering: the first attempt dispatched pointermove on `window` and measured
+      `dragAddAt: null` throughout — the ROW drag binds its listeners to the HANDLE, not window, so the
+      gesture never started. The tell was `order=ABCD` unchanged. A drag probe must assert the order moved
+      before believing anything it reports.*
+
+- [x] **534 — "Convert to outline" should say coming soon, and its current behaviour should become a proper effect.** (24 Aug, two Alight Motion screenshots for reference.) ✅ v12.60
       His words, verbatim:
       > In alight motion what the convert to outline button does isn't literally convert the shape into an outline- but to understand what it does you must understand this - in alight motion every shape has very thought out edit points you can grab and change before even pressing the edit points button, you just grab them and change it, real simple and effective- the convert to outline button just gets rid of those points and just makes it one outline that hugs the shape and you cant no longer just simply grab a point and extend or whatever.
       > Ours is a bit different because we havent yet put the effort to add those practical points yet into our project so for now just make it so when you press it it says coming soon, re word it, and then put its current function as an effect in the effects menu and make sure you build it to work like an effect. Sometimes you just add it but it doesn't really work coz it's not meant for that menu.
@@ -18319,6 +18347,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **A bigger thing is named in passing and should NOT be silently adopted:** AM's directly-grabbable
       shape points. He says *"we havent yet put the effort to add those practical points yet"* — that is a
       feature, not a fix, and worth its own entry when he wants it.
+
+      ✅ **DONE v12.60 — both clauses.**
+      1. [x] **The button says coming soon and is reworded.** It is now **"Flatten to One Outline — coming
+             soon"**, and tapping it explains what it will do rather than doing the old thing. Renamed
+             because the old label described something we are not doing; kept VISIBLE rather than deleted,
+             because he asked for "coming soon", and a name that disappears is a feature nobody can find
+             when it arrives.
+      2. [x] **Its current behaviour is already an effect, and it works — measured.** The old button turned
+             a shape into a stroked path with no fill; that LOOK is the **`stroke`** effect, and a real
+             render proves it: adding it to a shape changed **836 pixels (0.41% of the frame)**, which is
+             right for a 4px outline. So there was nothing to build.
+      🎯 **BUT HIS COMPLAINT WAS STILL TRUE, AND THE REASON IS THE NAME.** The effect is labelled **"Stroke
+      Colour"** — nothing in that name says *outline*, so looking for one in the effects menu you would
+      never find it. That is why he thought the behaviour was missing from a menu it was already in.
+      🐛 **And I nearly shipped the same mistake:** the first version of the new toast told him to *"add the
+      Outline effect"* — **there is no effect by that name.** A pointer to a name that does not exist is
+      worse than no pointer. It names "Stroke Colour" exactly as the menu lists it.
+      📌 **Left for him, not decided:** renaming `stroke` to something with "Outline" in it would make it
+      findable, but it is a visible rename of an effect he already uses, so it is his call rather than a
+      silent change.
 
 - [x] **535 — Remove the "you can sketch on the canvas" popup.** (24 Aug.)
       ✅ *"Draw on the canvas — keep drawing, then Done"* is gone. **The stroke COUNT stays**, because that
