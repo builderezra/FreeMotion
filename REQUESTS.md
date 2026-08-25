@@ -18281,3 +18281,33 @@ re-opened #480, which I had marked done and had not fixed.
       response curve so the travel is spread evenly. **Do not just halve the max**; that is a guess, and
       it would clip the top of the range he may still want.
       ⚠️ Check whether it is ALL the wipes or only some — he says "the wipe effects", plural.
+
+- [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Masks still don’t work like effects and have their own menu fix this
+      **What the shot shows:** the Effects panel with Visual / Filters / Audio tabs, one effect
+      (*Motion Blur (Object)*), **+ Add Effect**, then Copy / Paste / Save effects only… — and BELOW all
+      of that a separate **MASKS** section with "Mask 1" in a row of its own with its own eye, chevron, ◆
+      and bin. So a mask is a second-class citizen sitting under the effects list rather than in it.
+      **What he wants:** a mask should BE an effect — same list, same row treatment, same add route,
+      same reordering, same copy/paste — not a parallel system with its own menu.
+      ⚠️ *"still"* — he has asked before. **Find the earlier entry and link it** rather than starting fresh.
+      ⚠️ This is a real structural change: masks are their own field on the layer (`layer.masks`), and the
+      compositor applies them at a different stage from the effect stack. **Plan it before writing
+      anything** — and say plainly if the honest first step is only making the UI consistent (one list,
+      one row treatment) while the underlying model stays separate.
+
+- [ ] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Zooming in the project bugs out the edit points and probably other stuff
+      **A coordinate-space bug, and this app has had exactly this one before:** queue 165.3/v8.00 records
+      the drawing overlay being laid out in SCREEN pixels inside a wrapper the viewport transform also
+      scales, so zooming applied the scale twice — *"measured at 2x: overlay 984x1501 against a 492x751
+      canvas, exactly double"*. The edit-point handles are very likely making the same mistake.
+      ⚠️ **Measure at 1x and 2x** and compare handle positions against the shape's real corners, exactly
+      as that entry did — do not eyeball it.
+      ⚠️ *"and probably other stuff"* — he is right to suspect it. Once the cause is known, **sweep every
+      other on-canvas overlay** (selection box, mask handles, the drawing overlay, the gizmo) at the same
+      zoom levels rather than fixing only the one he happened to notice.
