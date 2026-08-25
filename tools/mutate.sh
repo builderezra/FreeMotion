@@ -34,7 +34,7 @@ BASE_HASH="$(cat index.html styles.css theme-glass.css js/*.js tests/tests.js 2>
 GREEN_FILE="tools/.mutate-green"
 if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
   echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after)…"
-  BASE_OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
+  BASE_OUT="$(python3 tests/_cdp.py --port 8777 --timeout 1800 2>&1)"
   BASE_FAILS="$(printf '%s' "$BASE_OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
   if [ -n "$BASE_FAILS" ]; then
     echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
@@ -102,7 +102,7 @@ if cmp -s "$FILE" "$BAK"; then
   exit 7
 fi
 
-OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
+OUT="$(python3 tests/_cdp.py --port 8777 --timeout 1800 2>&1)"
 FAILS="$(printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
 if [ -z "$FAILS" ]; then
   echo "❌ SURVIVED — the mutation broke the code and every test still passed."

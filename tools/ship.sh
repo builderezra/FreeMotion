@@ -121,12 +121,38 @@ fi
 # A label written by hand is true the day it is written and misleading a week later.
 ./tools/status.sh >/dev/null 2>&1 || true
 
-echo "→ running the suite (3-4 minutes)…"
-OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
+# ⚠️ A SUITE THAT RAN OUT OF TIME IS NOT A SUITE THAT FAILED, and this gate could not tell them apart
+# (25 Aug). `_cdp.py` gives up after `--timeout` seconds and prints `"ok": false` with an `error` and
+# NO failures — so a slow-but-healthy run arrived here as "SUITE IS RED", followed by an empty list of
+# what broke. That reads as "the tests failed and I cannot tell you which", which sends the next hour
+# looking for a fault that does not exist; it cost one this morning. The runner's default is 600s and
+# the suite is over 900 tests now, so the margin only shrinks from here.
+# Two changes, both structural: ask for real headroom, and SAY which of the two things happened.
+SUITE_TIMEOUT=1800
+echo "→ running the suite (4-5 minutes)…"
+OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"
+if printf '%s' "$OUT" | grep -q 'did not finish within'; then
+  echo "⏱  THE SUITE RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing is committed or pushed."
+  printf '%s' "$OUT" | grep -o '"lastTest": "[^"]*"' | head -1
+  echo "   Nothing here says a test is broken. Either the machine is loaded or the suite has outgrown"
+  echo "   ${SUITE_TIMEOUT}s — check the last test above before assuming a regression."
+  exit 1
+fi
 if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
-  echo "❌ SUITE IS RED — not committing, not pushing."
-  printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | head -6
+  # ⚠️ "not green" is not the same as "a test failed", and this branch used to assert the second.
+  # It printed "SUITE IS RED" followed by the FAIL lines — and when the cause was anything OTHER than
+  # a failing test (wrong port, no server, a crashed browser) there were no FAIL lines to print, so it
+  # announced a red suite and then listed nothing. That is the most misleading output this script can
+  # produce. If nothing actually failed, say what DID happen instead of implying a regression.
+  if printf '%s' "$OUT" | grep -q 'FAIL'; then
+    echo "❌ SUITE IS RED — not committing, not pushing."
+    printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | head -6
+  else
+    echo "⚠️  THE SUITE DID NOT RUN — no test failed. Nothing is committed or pushed."
+    printf '%s' "$OUT" | grep -o '"error": "[^"]*"' | head -1
+    echo "   Nothing above says a test is broken. Fix the run, then ship."
+  fi
   exit 1
 fi
 # …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
@@ -148,8 +174,18 @@ echo "✅ $SUM"
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
   echo "→ running the suite again at PHONE width (380px)…"
-  POUT="$(python3 tests/_cdp.py --port 8777 --width 380 2>&1)"
+  POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT 2>&1)"
   PSUM="$(printf '%s' "$POUT" | grep -o '"summary": "[^"]*"' | head -1)"
+  if printf '%s' "$POUT" | grep -q 'did not finish within'; then
+    echo "⏱  THE PHONE PASS RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing committed or pushed."
+    printf '%s' "$POUT" | grep -o '"lastTest": "[^"]*"' | head -1
+    exit 1
+  fi
+  if ! printf '%s' "$POUT" | grep -q '"ok": true' && ! printf '%s' "$POUT" | grep -q 'FAIL'; then
+    echo "⚠️  THE PHONE PASS DID NOT RUN — no test failed. Nothing is committed or pushed."
+    printf '%s' "$POUT" | grep -o '"error": "[^"]*"' | head -1
+    exit 1
+  fi
   if ! printf '%s' "$POUT" | grep -q '"ok": true'; then
     echo "❌ SUITE IS RED AT PHONE WIDTH — not committing, not pushing."
     echo "   It is GREEN at 1280px, so this is a layout that only breaks on a phone — which is the"

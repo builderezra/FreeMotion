@@ -60,6 +60,31 @@
     }
   }
 
+  /* THE OPPOSITE OF atPhoneWidth, and queue 521 is the whole reason it exists. Three fixes to the
+     add-row drag (#357, #443, #480) were all measured at 380px — the one width where the add row is a
+     full-height track row and the drag's uniform-slot arithmetic is correct. On PC it is a 7px LINE,
+     every row below it sat a third of a row off, and dropping below the marker was unreachable. So the
+     bug lived in the width nothing tested, through three repairs that each came back green.
+     A test that only runs at the suite's ambient width would fall into the same hole on the 380px pass,
+     so this FORCES a desktop width in both passes and asserts it got one. */
+  async function atWideWidth(fn, w) {
+    var fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe (no window.frameElement) to reach a desktop width');
+    var w0 = fe.style.width;
+    var settle = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    fe.style.width = (w || 1100) + 'px';
+    window.dispatchEvent(new Event('resize'));
+    await settle();
+    if (matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not widen to a desktop width (innerWidth ' + window.innerWidth + ') — this test would then measure the phone layout, which is the exact mistake it exists to catch');
+    try {
+      return await fn();
+    } finally {
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      await settle();
+    }
+  }
+
   var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
@@ -2619,6 +2644,90 @@
           throw new Error('the gap opened before ' + gapBefore + ' but the layer landed before ' + landedBefore + ' — what you see is not where it goes');
         }
       }, 380);
+    } finally {
+      FM.dragAddAt = null; FM.dragLayerId = null;
+      FM.scene.layers = layers0; FM.addAt = at0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('521: on PC a layer can be dropped BELOW the add row, where the line actually is', { item: '521' }, async function () {
+    /* Queue 521. Ezra: "When I try to place a layer below the ad layer, the layer that's for creating
+       stuff, it just automatically jumps on top of it, which I don't want."
+       ⚠️ THIS IS THE FOURTH TIME. #357, #443 and #480 were all this same row, all shipped as fixed,
+       and all measured at 380px — where the add row is a full-height track row. On PC it is a 7px LINE
+       (`.tl-addrow--line`), and the reorder used to resolve every position from `listTop + j * slotH`,
+       one uniform slot per row. That handed the line a 43px slot it does not draw, so every row below
+       it sat ~34px above where the model put it. MEASURED at 1280px, marker after 2 of 4 layers: the
+       whole band from the line down through three quarters of the next row resolved to one gap, and
+       that gap dropped the layer ABOVE the marker. Below it needed the finger two rows lower.
+       So this test FORCES a desktop width in both suite passes, and it refuses to run if the add row
+       is not actually the short variant — a version of this that quietly measured a uniform layout
+       would be the exact hole the last three fixes fell through.
+       It aims at what the EYE sees: the dragged row's top edge is steered onto the add line's own
+       on-screen bottom edge, read live mid-drag, not computed from the app's arithmetic. */
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(100);
+      return await atWideWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.addAt = 2; FM.dragAddAt = null;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(250);
+
+        const all = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row, #tl-tracks .tl-addrow'));
+        const addRow = all().filter(r => r.classList.contains('tl-addrow'))[0];
+        if (!addRow) throw new Error('there is no add row on the timeline');
+        const trackRow = all().filter(r => !r.classList.contains('tl-addrow'))[0];
+        if (!trackRow) throw new Error('there are no layer rows on the timeline');
+        const addH = addRow.getBoundingClientRect().height, rowH = trackRow.getBoundingClientRect().height;
+        /* THE PRECONDITION IS AN ASSERTION, not an if. If the add row is full height here then this is
+           the phone layout, the uniform-slot arithmetic is correct, and every line below would pass
+           while proving nothing about the bug — which is how the last three fixes came back green. */
+        if (!(addH < rowH * 0.6)) throw new Error('the add row is ' + Math.round(addH) + 'px against a ' + Math.round(rowH) + 'px layer row, i.e. NOT the short PC line — this test would then be measuring the phone layout, which is exactly the mistake queue 521 is about');
+
+        const src = all().filter(r => { const hd = r.querySelector('.track-head'); return hd && (FM.scene.layers[parseInt(hd.dataset.idx, 10)] || {}).name === 'L0'; })[0];
+        if (!src) throw new Error('could not find L0’s row to drag');
+        const h = src.querySelector('.row-drag');
+        if (!h) throw new Error('L0’s row has no .row-drag handle');
+        const hr = h.getBoundingClientRect();
+        const x = hr.left + hr.width / 2;
+        let y = hr.top + hr.height / 2;
+        const pe = (t, cy) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: cy, pointerId: 121, pointerType: 'touch', isPrimary: true, button: 0, buttons: t === 'pointerup' ? 0 : 1 });
+
+        h.dispatchEvent(pe('pointerdown', y));
+        await sleep(40);
+        // get the gesture going, then steer by what is on screen
+        for (let k = 1; k <= 5; k++) { y += 12; h.dispatchEvent(pe('pointermove', y)); await sleep(30); }
+        // two correction passes: the statics glide (.row-part, 150ms), so the first read of the add
+        // line is mid-transition and the second is where it has actually settled
+        let gap = null;
+        for (let pass = 0; pass < 2; pass++) {
+          await sleep(240);
+          const want = addRow.getBoundingClientRect().bottom + 2;   // just under the line, as the eye sees it
+          y += (want - src.getBoundingClientRect().top);
+          h.dispatchEvent(pe('pointermove', y));
+          gap = { addBottom: Math.round(addRow.getBoundingClientRect().bottom), rowTop: Math.round(src.getBoundingClientRect().top) };
+        }
+        await sleep(240);
+        h.dispatchEvent(pe('pointerup', y));
+        await sleep(500);
+
+        const names = FM.scene.layers.map(l => l.name);
+        const pos = names.indexOf('L0');
+        if (pos < 0) throw new Error('L0 vanished from the scene');
+        const picture = names.slice(0, FM.addAt).join(',') + ' | ADD | ' + names.slice(FM.addAt).join(',');
+        if (pos === 0 && FM.addAt === 2) throw new Error('nothing moved at all (' + picture + '), so the drag never happened and the check below would prove nothing');
+        if (pos < FM.addAt) throw new Error('dropped with its top edge on the add line’s bottom edge (line bottom ' + gap.addBottom + ', row top ' + gap.rowTop + ') and the layer still landed ABOVE the marker: ' + picture + ' — queue 521, "it just automatically jumps on top of it"');
+      }, 1100);
     } finally {
       FM.dragAddAt = null; FM.dragLayerId = null;
       FM.scene.layers = layers0; FM.addAt = at0;
@@ -44164,10 +44273,27 @@
         const pe2 = (t, cy) => new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x2, clientY: cy, pointerId: 85, pointerType: 'touch', isPrimary: true, button: 0, buttons: t === 'pointercancel' ? 0 : 1 });
         h2.dispatchEvent(pe2('pointerdown', y2)); await sleep(60);
         for (let k = 1; k <= 6; k++) { await sleep(28); h2.dispatchEvent(pe2('pointermove', y2 + slotH * 1.2 * k / 6)); await sleep(28); }
-        h2.dispatchEvent(pe2('pointercancel', y2 + slotH * 1.2)); await sleep(500);
+        /* ⚠️ CLEARING THE OVERRIDE AND UNDOING IT ARE DIFFERENT THINGS, and the pixel check below
+           cannot reliably tell them apart (25 Aug). The canvas keeps the last frame that was painted,
+           so a cancel that clears `_dragOrderIds` without asking for a repaint leaves the picture
+           showing the order you almost dropped into — and this test still passed, because in a busy
+           suite something ELSE usually repaints within the 500ms sleep. It failed only when the timing
+           happened to line up. A guard that fires once in a while is not a guard.
+           So the repaint is asserted DIRECTLY, by counting the request, which does not depend on what
+           else the app felt like doing. The pixel check stays: it is what the eye sees. */
+        const hadPreview = !!FM._dragOrderIds;
+        const realRR = FM.requestRender; let rrCount = 0;
+        FM.requestRender = function () { rrCount++; return realRR.apply(this, arguments); };
+        try {
+          h2.dispatchEvent(pe2('pointercancel', y2 + slotH * 1.2)); await sleep(500);
+        } finally { FM.requestRender = realRR; }
         if (order() !== preCancel.o) throw new Error('a cancelled drag reordered the project anyway (' + preCancel.o + ' → ' + order() + ')');
         if (centre() !== preCancel.c) throw new Error('a cancelled drag left the preview showing ' + centre() + ' instead of ' + preCancel.c + ' — the order override outlived the gesture');
         if (FM._dragOrderIds) throw new Error('FM._dragOrderIds is still set after the drag ended, so every later render is using a stale order');
+        /* CONTROL: if the drag never established a preview there is no repaint to demand, and asserting
+           one would fail for a reason that has nothing to do with the bug. */
+        if (!hadPreview) throw new Error('the cancelled drag never opened a live preview (FM._dragOrderIds was null before the cancel), so the repaint assertion below would be meaningless — the gesture did not do what this block assumes');
+        if (!rrCount) throw new Error('the cancelled drag cleared the order override but never asked for a repaint, so the canvas keeps showing the order you almost dropped into until something else happens to paint — tidy variable, wrong screen');
       }
     } finally {
       FM._dragOrderIds = null;

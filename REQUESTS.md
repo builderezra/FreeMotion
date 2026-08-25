@@ -1,21 +1,24 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.50
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.51
 >
-> **State:** v12.50, **937 tests green**, tree clean.
+> **State:** v12.51, **938 tests green**, tree clean.
 >
-> **✅ v12.50 — the PC font list (#520).** It was 538px wide holding 987px of fonts, so ~450px were hidden
-> off the right while 244px of window sat empty below. Eleven fonts over three rows now, scrolling down
-> instead of sideways. Your phone is untouched, as you asked.
+> **Nothing is waiting on you right now.** You answered the export-audio question, which was the only
+> blocker — thank you, it was the useful half.
 >
-> **🔴 THE EXPORT WITH NO AUDIO — I NEED ONE ANSWER FROM YOU, AND IT DECIDES THE WHOLE FIX.**
-> Your settings (MP4, 2160, 60fps, High, whole project, all layers, on your phone) are the best evidence
-> this bug has ever had — thank you. **Did a toast appear saying "exporting WITHOUT SOUND"?**
-> · **No toast** → the audio was lost somewhere that still reports success, and our own drop report is
->   lying to us. That is a different bug from the five already fixed here.
-> · **Yes, a toast** → the mix really is running out of memory at 2160p/60 on a phone, and the fix is
->   about memory rather than reporting.
-> They need opposite fixes, so I do not want to guess. Everything else about it I can chase myself.
+> **✅ v12.51 — you can drop a layer BELOW the add row (#521). You were right that it had never worked.**
+> You said *"I've asked a similar thing to this many times before, and I don't know if you've fixed it or
+> even tried yet."* Three entries claimed a fix. Here is why none of them landed: **every one was measured
+> on your phone.** On the phone the add row is a normal-height row and the maths was correct. On PC it is
+> a 7-pixel line, and the drag was still giving it a full row's worth of space — so every row below it sat
+> a third of a row away from where the drag thought it was. Aim just under the line, land on top of it.
+> Measured at your PC width: the whole band from the line down through three quarters of the next row put
+> the layer above the marker. Fixed, and the guard now forces a PC width so it cannot hide there again.
+>
+> **✅ Your no-audio answer unblocked #215, and it ruled out half the search.** No toast means the mix did
+> not fail — so it is not the memory theory, and it is not any of the five things already fixed. It points
+> at the muxer, the one part of that path with no witness. That is next, and it is the oldest thing left.
 >
 > **✅ v12.49 — editing text no longer leaves the option cards live behind the editor (#519).** The phone
 > has hidden them for ages; the desktop layout never got the rule, so nine cards sat there tappable.
@@ -9168,6 +9171,20 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **Reproduce at HIS settings, not at a convenient size** — every previous pass here measured on
       smaller exports and came back clean. 2160x3840 at 60fps is roughly 8x the pixels per second of a
       1080p/30 export.
+
+      ✅ **ANSWERED, 25 Aug — and it is the first of the two branches.** His words, verbatim:
+      > I don’t think I got a message saying no audio
+      **So: NO TOAST.** Which settles the question above and rules out the entire half of the search that
+      five previous rounds kept re-treading. The mix did not throw. Every one of the three reporting
+      paths built into this entry — the mixer naming a clip, the AAC probe, the soundtrack failing to
+      encode — stayed silent, and the file was still silent. That combination is defined three times over
+      in the notes above as exactly one thing: **the MUXER, the one region with no witness.**
+      It also means the memory theory is wrong, or at least not what happened to him. 2160p/60fps on a
+      phone was a good guess and it is not the answer — a mix that ran out of memory would have thrown,
+      flagged `mix-failed`, and spoken. Reproducing at his heavy settings is therefore NOT the first
+      move any more; the first move is a normal-sized export whose muxer output is inspected directly.
+      **STATUS CHANGES: this is no longer waiting on him.** 🟢 READY, and it is the oldest ready item in
+      the file, so it is next.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
 
@@ -17742,8 +17759,7 @@ re-opened #480, which I had marked done and had not fixed.
       ONLY popover safe to cap — true while it was the only one that scrolled — so the comment was
       updated rather than left to contradict the code.
 
-- [ ] **521 — 🚨 A layer dropped BELOW the add-layer row jumps back on top of it. He has asked repeatedly.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **521 — 🚨 A layer dropped BELOW the add-layer row jumps back on top of it. He has asked repeatedly.** (24 Aug.) ✅ v12.51
       His words, verbatim:
       > When I try to place a layer below the ad layer, the layer that's for creating stuff, it just automatically jumps on top of it, which I don't want. I want you to fix that. I've asked a similar thing to this many times before, and I don't know if you've fixed it or even tried yet.
       ⚠️ **This is the OTHER HALF of #480, and it is a fair hit.** #480 (v12.03) was about a layer dropped ON
@@ -17752,6 +17768,47 @@ re-opened #480, which I had marked done and had not fixed.
       THIS direction specifically — dropping under the marker — rather than assuming the earlier fix covers it.
       His *"I don't know if you've fixed it or even tried yet"* is the part to take seriously: three entries
       claim fixes and he still cannot do the thing.
+
+      ✅ **DONE v12.51 — and the reason three fixes missed it is the whole story: THEY WERE ALL MEASURED
+      AT THE WRONG WIDTH.**
+      Reproduced it first, in the direction he named, before touching anything — as the warning above
+      says to. At 1280px with four layers and the marker after two of them, I swept a drag down the
+      whole timeline and recorded where each finger position actually resolved. The add line sits at
+      y 736–744. **Every position from 739 to 774 — the line itself plus three quarters of the row under
+      it — dropped the layer ABOVE the marker.** To land below it the finger had to reach y 781, inside
+      a row that is already past the marker. That is his sentence exactly: aim just under the line, get
+      pushed on top of it.
+      **The cause is one assumption, and it is in the geometry, not the logic.** The reorder laid every
+      row out as `listTop + j * slotH` — one uniform slot each. On the phone that is true. **On PC the
+      add row is a 7px LINE** (`.tl-addrow--line`; it grows to 24px only on hover), so it was being
+      handed a 43px slot it does not draw, and every row below it sat ~34px above where the model
+      believed it was. The gap you could see and the gap the drop used were a third of a row apart.
+      **#357, #443 and #480 were all real repairs, and all of them measured at 380px** — via
+      `tests/_adddrop.html` and an `atPhoneWidth(…, 380)` test — which is the one width where the add row
+      IS a full-height row and the uniform arithmetic is CORRECT. Three fixes, three green runs, and the
+      bug lived the whole time in the layout he actually uses. Same lesson as v7.79, which this file
+      already records: *measure the layout you ship to, not the one you have open.*
+      **The fix, both halves:**
+      1. **Every row now carries its own measured pitch** and the drop positions are a running sum of
+         them instead of multiples of one slot height. On the phone every pitch is equal, so that is
+         precisely the old arithmetic — nothing there changes.
+      2. **The marker moves when the block crosses it.** The drop used to write `FM.addAt` only when the
+         finger landed exactly ON the add row; every other gap left it alone. So dropping into the gap
+         *below* the line got the right layer order and a marker that never followed — the layer ends up
+         above it again. The live add-switch had been computing the right number since #438 and showing
+         it to you mid-drag: measured before the fix, the switch read 1 while the drop wrote 2. **They
+         had been disagreeing on screen the entire time.** One number now, shown live and applied at the
+         drop.
+      **Measured after, same sweep:** the gap directly below the line is reachable, and dropping there
+      gives `B | ADD | A,C,D` — the layer under the marker. The position ABOVE it (which #480 was about)
+      still works, so this does not trade one direction for the other. Also checked with a COLLAPSED
+      GROUP on screen, since the marker counts layers and the timeline was showing fewer rows than the
+      project has: the marker landed on the right index with two hidden members.
+      **The guard is the part that matters.** The old test for this row asserted `atPhoneWidth(…, 380)`,
+      so it could never have caught this. The new one FORCES a desktop width in both suite passes and
+      **refuses to run if the add row is not the short variant** — if it ever finds itself measuring a
+      uniform layout it fails loudly instead of passing for free, which is the exact hole the last three
+      fixes fell through.
 
 - [ ] **522 — Mobile: hide the drag handle while a layer is selected.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -121,6 +121,25 @@ def main():
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
+
+    # ⚠️ THIS SCRIPT DOES NOT START THE SERVER — it assumes one is already up (see Usage above), and
+    # for four years that assumption was only ever stated in a docstring. Point it at a port with
+    # nothing on it and Chrome loads a connection-refused page, the runner never appears, and this
+    # waits out the ENTIRE --timeout before reporting `"ok": false, "lastTest": ""` — which reads as
+    # a hung or failing suite rather than "wrong port". On 25 Aug that cost two runs and forty
+    # minutes, the second one waiting a full 1800s for a page that was never going to load.
+    # One HTTP probe turns a half-hour of nothing into an instant, specific error.
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            if r.status != 200:
+                raise RuntimeError(f"HTTP {r.status}")
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"nothing is serving {url} ({e}) — this script does "
+                                                f"not start a server, it expects one already running "
+                                                f"on port {a.port}. The suite did NOT run.",
+                          "lastTest": ""}))
+        return 2
+
     dbg = free_port()
     profile = tempfile.mkdtemp(prefix="fm-cdp-")
     proc = launch(dbg, a.width, a.height, profile)

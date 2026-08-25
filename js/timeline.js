@@ -1191,7 +1191,7 @@ window.FM = window.FM || {};
 
       // NATURAL geometry model — snapshotted at grab (no transforms exist yet), in CONTENT coordinates
       // (viewport top + scrollTop), so it stays valid through auto-scroll and row transforms.
-      let statics = [], dragged = [], slotH = 43, blockH = 43, listTop = 0, grabOffset = 0, lastGap = -1;
+      let statics = [], dragged = [], slotH = 43, blockH = 43, listTop = 0, grabOffset = 0, lastGap = -1, gapTops = [];
       function acquire() {
         const sc = timelineEl.scrollTop;
         /* THE ADD ROW IS A SLOT TOO (queue 357). Ezra: "currently you can't drag a layer on top of the
@@ -1212,10 +1212,34 @@ window.FM = window.FM || {};
           return { id: (!isAdd && L) ? L.id : null, isAdd: isAdd, el: r, top: r.getBoundingClientRect().top + sc };
         });
         if (!all.length) { statics = []; dragged = []; return; }
-        slotH = all.length > 1 ? (all[1].top - all[0].top) : (all[0].el.getBoundingClientRect().height + 1);
+        /* ⚠️ ROWS ARE NOT ALL THE SAME HEIGHT — queue 521, and the reason #357, #443 and #480 all
+           shipped green and he kept seeing the same bug. On PC the add row is a 7px LINE
+           (`.tl-addrow--line`, see the class list in the add-row builder); on the phone it is a full
+           42px row. Every position in this gesture used to be resolved from `listTop + j * slotH`, an
+           assumption that the rows are evenly spaced — so the add LINE was handed a 43px slot it does
+           not draw, and every row below it sat ~34px above where the model put it. MEASURED at 1280px
+           with the marker after 2 of 4 layers: the whole visible band from the line down through three
+           quarters of the next row (y 739–774) resolved to the same gap, and that gap dropped the
+           layer ABOVE the marker. Landing below it needed the finger two rows lower, inside a row that
+           is already past it. Ezra: "When I try to place a layer below the ad layer, the layer that's
+           for creating stuff, it just automatically jumps on top of it, which I don't want."
+           The three earlier repairs were all measured with `tests/_adddrop.html` at 380px — the one
+           width where the add row IS a full row and the uniform model is correct. Same lesson as
+           v7.79: measure the layout you ship to, not the one you have open.
+           So each row carries its OWN pitch now and the gap positions are a running sum of them. On
+           the phone every pitch is equal and this is exactly the old arithmetic. */
+        all.forEach((r, i) => {
+          r.pitch = Math.max(1, i < all.length - 1 ? (all[i + 1].top - all[i].top)
+                                                   : (r.el.getBoundingClientRect().height + 1));
+        });
         listTop = all[0].top;
         statics = all.filter(r => r.isAdd || !groupSet[r.id]);
         dragged = all.filter(r => !r.isAdd && groupSet[r.id]);
+        // the lifted block is all track rows, so IT is uniform — slotH stays the block's own pitch
+        slotH = (dragged[0] || all[0]).pitch;
+        // gapTops[j] = where the top of the block lands if it is inserted before statics[j]
+        gapTops = [listTop];
+        statics.forEach(sr => gapTops.push(gapTops[gapTops.length - 1] + sr.pitch));
         /* ⚠️ ROWS ARE NOT LAYERS — queue 480, RE-OPENED after I shipped this as fixed at v11.94.
            `statics` is what is ON SCREEN. A collapsed group (`hiddenByCollapse`), Edit Group and the
            phone's solo row each hide layers that still occupy slots in `scene.layers`. But `FM.addAt`
@@ -1254,10 +1278,16 @@ window.FM = window.FM || {};
         const pi = Math.max(0, dragged.findIndex(d => d.id === layer.id));
         // the grabbed layer stays under the finger; the rest of the selection stacks tight around it
         let blockTop = (lastEv.clientY + sc) - grabOffset - pi * slotH;
-        const maxTop = listTop + (statics.length + dragged.length) * slotH - blockH;
+        const maxTop = gapTops[statics.length];
         blockTop = Math.max(listTop - slotH * 0.4, Math.min(maxTop + slotH * 0.4, blockTop));   // soft clamp to the list
-        // gap index from the block's position on GAPLESS coordinates — independent of the gap itself, so no feedback
-        const g = Math.max(0, Math.min(statics.length, Math.round((blockTop - listTop) / slotH)));
+        // gap index from the block's position on GAPLESS coordinates — independent of the gap itself, so no
+        // feedback. Nearest entry in the table rather than a division, because the rows it measures are not
+        // all the same height (queue 521 — see acquire).
+        let g = 0;
+        for (let j = 1, best = Math.abs(blockTop - gapTops[0]); j < gapTops.length; j++) {
+          const d2 = Math.abs(blockTop - gapTops[j]);
+          if (d2 < best) { best = d2; g = j; }
+        }
         // bottom slot: inside Edit Group the view shows ONLY the group's members, so "very bottom"
         // must mean the bottom of the GROUP (before whatever follows its last member in the full
         // stack) — a raw null sent the member to the bottom of the entire project.
@@ -1301,7 +1331,7 @@ window.FM = window.FM || {};
         // the add row is not a layer, so the LAYER still lands past it; only the marker differs
         const tIdx = onAdd ? g + 1 : g;
         dropBeforeId = statics[tIdx] ? statics[tIdx].id : bottomBefore;
-        dropAddAt = onAdd ? (baseAbove(addIdx) + dragged.length) : null;   // LAYER index, not a row index (queue 480)
+        dropAddAt = null;                                                  // set below, from the SAME number the switch shows
         /* Seam (queue 449): what the gesture ACTUALLY resolved, straight from the code that resolved it.
            A probe inferring the gap from row TRANSFORMS read the top of the list as disagreeing by one
            slot, and could not tell a real off-by-one from its own reading — near the top the block's
@@ -1329,8 +1359,18 @@ window.FM = window.FM || {};
            lifted out — NOT its index among statics, which is only the same number when every layer has
            a row on screen (see acquire). If the block has opened its gap at or above the marker it ends
            up above it too, so the marker's layer index rises by the block's size. */
+        /* …and the DROP now applies that same number (queue 521, second half). It used to be written
+           only when the finger landed ON the add row, so every other gap left `FM.addAt` alone — which
+           is why dropping into the gap directly BELOW the line put the layer above the marker: the
+           order was right and the marker never moved to match. MEASURED before the fix: the live
+           switch already read 1 while the drop left it at 2, so the preview and the result had been
+           disagreeing on screen the whole time. One number, computed once, shown live and applied at
+           the drop. A drag that does not cross the marker computes the value it already has, so
+           `applyDrop`'s `!== FM.addAt` guard keeps it a no-op — the marker only moves when the block
+           actually crosses it. */
         const ai = statics.findIndex(sr => sr.isAdd);
-        FM.dragAddAt = ai < 0 ? null : (baseAbove(ai) + (g <= ai ? dragged.length : 0));
+        dropAddAt = ai < 0 ? null : (baseAbove(ai) + (g <= ai ? dragged.length : 0));
+        FM.dragAddAt = dropAddAt;
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         if (g !== lastGap) {
           lastGap = g;
@@ -1346,7 +1386,7 @@ window.FM = window.FM || {};
         }
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
-          const target = listTop + j * slotH + (j >= ge ? blockH : 0);   // packed layout with the gap open at ge — the SAME number the drop uses (queue 443)
+          const target = gapTops[j] + (j >= ge ? blockH : 0);   // packed layout with the gap open at ge — the SAME number the drop uses (queue 443)
           const shift = target - s.top;
           s.el.style.transform = shift ? ('translateY(' + shift + 'px)') : '';
         });
@@ -1385,8 +1425,15 @@ window.FM = window.FM || {};
       const cleanup = () => {
         reorderActive = false;
         /* The order preview is view-only and must not outlive the gesture (queue 502) — cleared HERE,
-           which every ending runs through: the drop, a cancel, and a browser-stolen pointer alike. */
+           which every ending runs through: the drop, a cancel, and a browser-stolen pointer alike.
+           ⚠️ CLEARING THE OVERRIDE IS NOT THE SAME AS UNDOING IT (25 Aug, found while fixing 521).
+           The canvas keeps whatever was last painted, so a drag that ends without reordering — a
+           cancel, a pointer the browser steals — left the picture showing the order you ALMOST dropped
+           into, with nothing to correct it until something else happened to repaint. The variable was
+           tidy and the screen was wrong. So ask for a frame on the way out. */
+        const hadPreview = !!FM._dragOrderIds;
         FM._dragOrderIds = null;
+        if (hadPreview && FM.requestRender) FM.requestRender();
         FM.dragLayerId = null;                                  // the switch goes back to its own colour (queue 416)
         FM.dragAddAt = null;                                    // …and back to the real index (queue 438)
         if (FM.syncAddSwitch) FM.syncAddSwitch();
@@ -1403,7 +1450,7 @@ window.FM = window.FM || {};
         // DOM reorders underneath — dropping used to teleport everything into place. (iOS feel)
         if (moved && dragged.length && dragged[0].el.isConnected) {
           const g = Math.max(0, lastGap);
-          const targetTop = listTop + g * slotH;   // the open gap's top, in the same content coords as layout()
+          const targetTop = gapTops[Math.min(g, gapTops.length - 1)];   // the open gap's top, in the same content coords as layout()
           dragged.forEach((d, k) => {
             d.el.classList.add('row-part');        // row-part's transition outranks row-dragging's none
             d.el.style.transform = 'translateY(' + (targetTop + k * slotH - d.top) + 'px)';
