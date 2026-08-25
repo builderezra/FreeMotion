@@ -2,6 +2,7 @@
 # Ship a release, structurally — every gate is checked here so none can be skipped.
 #
 #   tools/ship.sh "<commit message>"
+#   tools/ship.sh -F <file>          # …or read the message from a file / from - for stdin
 #
 # Refuses to push unless: the tree is not mid-mutation, the suite is fully green, the version label
 # and the newest POLISH-LOG entry agree, and the push actually landed. That last one matters —
@@ -9,15 +10,40 @@
 # success is confirmed by comparing HEAD to ssh/main rather than by trusting the push output.
 # A red suite was pushed once by running the tests and the commit in the same breath; not possible now.
 set -uo pipefail
-MSG="${1:-}"
+# ⚠️ THE MESSAGE CAN COME FROM A FILE, AND FOR ANYTHING WITH CODE IN IT, IT SHOULD (25 Aug).
+# Backticks inside a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. The gate
+# below has guarded that since a message containing `void ic.offsetWidth` executed it and committed the
+# hole where the explanation should have been.
+# ⚠️ **BUT THAT GATE CANNOT FIRE IN THE CASE THAT ACTUALLY HAPPENS, and it took v12.53 to notice.**
+# The CALLER's shell performs the substitution BEFORE this script is invoked, so by the time `$1` gets
+# here the backticks and the text between them are already gone — there is nothing left to detect. The
+# gate only ever catches backticks that survived quoting, e.g. inside single quotes. v12.53 shipped with
+# "reasons about , which" in its log: the word `statics` was executed as a command and deleted, the
+# terminal said "command not found: statics", and this gate stayed silent because it was structurally
+# incapable of speaking. A safeguard that reads like protection and cannot fire is worse than none,
+# because it stops you being careful.
+# The only real fix is to stop passing prose through a shell argument at all, so: -F <file> (or -F - for
+# stdin) reads the message as bytes and nothing interprets it.
+FROM_FILE=0
+if [ "${1:-}" = "-F" ]; then
+  FROM_FILE=1
+  [ -n "${2:-}" ] || { echo "ship: -F needs a file (or - for stdin)"; exit 2; }
+  if [ "$2" = "-" ]; then MSG="$(cat)"; else
+    [ -f "$2" ] || { echo "ship: no such message file: $2"; exit 2; }
+    MSG="$(cat "$2")"
+  fi
+else
+  MSG="${1:-}"
+fi
 [ -n "$MSG" ] || { echo "ship: needs a commit message"; exit 2; }
-# Backticks in a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. A message
-# written with `void ic.offsetWidth` in it silently executed that and committed the gap where the
-# code should have been — the explanation was gone from the log and nobody would have noticed.
-case "$MSG" in
-  *'`'*) echo "❌ the commit message contains a backtick, which the shell will execute and delete."
-         echo "   Use plain quotes for code, or pass the message via: git commit -F -"; exit 2;;
-esac
+# …and the gate applies ONLY to the argument form. On the -F path nothing interprets the bytes, so a
+# backtick there is an ordinary code quote and refusing it would break the very route that is safe.
+if [ "$FROM_FILE" = "0" ]; then
+  case "$MSG" in
+    *'`'*) echo "❌ the commit message contains a backtick, which the shell will execute and delete."
+           echo "   Pass the message with: tools/ship.sh -F <file>   (nothing interprets it then)"; exit 2;;
+  esac
+fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
 
 # Anchored to the LABEL element, not the first version-shaped string in the file — a bare grep
