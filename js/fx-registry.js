@@ -206,7 +206,13 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen });
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, q: pp.q });
+        /* `q` is the ruler's NOTCH, and it has to survive this copy for exactly the reason `liveWhen`
+           does — see the warning immediately below, which was written when an option added at the
+           declaration was silently dropped here. It forces how far a drag moves the value: the strip
+           is pushed at 7px per notch, so a param whose notch is its own step feels coarse when that
+           step is large relative to what the effect does. Queue 559 (the wipes) is the second use;
+           the Speed slider (queue 455) was the first. */
         /* `liveWhen` has to survive this copy or it does not exist (queue 482). This normaliser
            rebuilds every param as a fresh object listing the keys it knows, so an option added at
            the declaration is silently dropped here — which is what happened first time: the panel

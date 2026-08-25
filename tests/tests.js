@@ -3861,6 +3861,90 @@
     }
   });
 
+  test('559: the wipe sliders are four times finer, and their RANGE is untouched', { item: '559' }, async function () {
+    /* Queue 559. Ezra: "The wipe effects sliders need to be more gradual they do too much too fast so I
+       can't be precise."
+       ⚠️ MEASURING CORRECTED THE ENTRY'S OWN DIAGNOSIS. It assumed "the useful part of the effect happens
+       across a small part of the track, so most of the travel is wasted". It is not: sampling the
+       rendered output across the range, Wipe is dead linear (1, 6, 11, 15, 21, 26 … 96, 100 percent of
+       the frame lit) and Radial Wipe is near enough, with every notch moving the picture by about the
+       same amount — avg 2.0%, min 1.2%, max 3.0%. There is no dead zone to narrow and no response curve
+       worth applying.
+       THE FAULT WAS RESOLUTION. The strip is pushed at 7px of drag per notch, and the notch fell back to
+       the param's step, so 7px of finger travel moved 0.02 — 2% of the frame. The app's other two 0..1
+       progress sliders were already at 0.01. `q` forces the notch to 0.005, so a drag now moves 0.5%.
+       ⚠️ AND THE RANGE IS THE THING THIS TEST GUARDS. The entry says in as many words: "Do not just halve
+       the max; that is a guess, and it would clip the top of the range he may still want." A range change
+       would also silently re-render every project already using these. A step change cannot — which is
+       the third assertion. */
+    if (!FM.fxRegistry || !FM.fxRegistry.paramsOf) throw new Error('the effect registry is not reachable');
+    const WIPES = ['wipe', 'radialwipe'];
+
+    for (const t of WIPES) {
+      const pr = (FM.fxRegistry.paramsOf(t) || []).filter(p => p.key === 'progress')[0];
+      if (!pr) throw new Error(t + ' has no progress param — this test is aimed at nothing');
+
+      // 1. THE RANGE IS EXACTLY WHAT IT WAS. His own instruction, and the safety of every saved project.
+      if (pr.min !== 0 || pr.max !== 1) throw new Error(t + ' progress now runs ' + pr.min + '..' + pr.max + ' — the range was 0..1 and narrowing it clips values he may already be using');
+
+      // 2. THE NOTCH IS FINER THAN THE OLD STEP. `q` is what the ruler is built from; without it the
+      //    notch falls back to `step` and tickQuantum would coarsen 0.005 back up to 0.01 anyway.
+      if (!(pr.q > 0)) throw new Error(t + ' progress has no forced notch (q) — the ruler falls back to the step and the drag is as coarse as it was');
+      if (!(pr.q <= 0.005 + 1e-9)) throw new Error(t + ' progress notch is ' + pr.q + ' — at 7px of drag per notch that is ' + (pr.q * 100).toFixed(1) + '% of the frame per 7px, which is the complaint');
+      if (!(pr.step <= 0.005 + 1e-9)) throw new Error(t + ' progress step is ' + pr.step + ', coarser than its notch — typing and keyframing would snap to something the slider can sit between');
+
+      /* 3. EVERY VALUE THE OLD SLIDER COULD HOLD IS STILL EXACT. This is what makes the change safe for
+         projects already saved: 0.02 multiples are a subset of 0.005 multiples, so nothing re-renders. */
+      for (let i = 0; i <= 50; i++) {
+        const old = i * 0.02;
+        const k = old / pr.step;
+        if (Math.abs(k - Math.round(k)) > 1e-6) throw new Error(t + ': the old value ' + old.toFixed(2) + ' is no longer an exact multiple of the new step ' + pr.step + ' — a saved project would shift when it is next edited');
+      }
+    }
+
+    /* 4. `q` HAS TO SURVIVE THE REGISTRY'S REBUILD. That normaliser constructs a fresh object listing
+       the keys it knows, so an option added at the declaration is silently dropped — which is exactly
+       what happened to `liveWhen` in queue 482, and the panel then used the old behaviour while the
+       declaration said otherwise. paramsOf() IS that rebuild, so the checks above already pass through
+       it; this asserts the raw catalogue and the rebuilt param agree, which is the thing that broke. */
+    const raw = (FM.EFFECTS || []).filter(e => e.type === 'wipe')[0];
+    if (raw && raw.params) {
+      const rp = raw.params.filter(p => p.key === 'progress')[0];
+      const np = FM.fxRegistry.paramsOf('wipe').filter(p => p.key === 'progress')[0];
+      if (rp && rp.q != null && np.q !== rp.q) throw new Error('the catalogue declares q=' + rp.q + ' but the registry rebuilt it as ' + np.q + ' — the notch is being dropped in the copy, the same way liveWhen was');
+    }
+
+    // 5. …and the effect still renders, so none of the above is true of a broken effect.
+    const W = 60, H = 45;
+    const lit = g => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = 200; d[i + 1] = 200; d[i + 2] = 200; d[i + 3] = 255; }
+      FM._pixelFx.wipe(d, W, H, { progress: g, angle: 0 }, 0, 1);
+      let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8) n++;
+      return n / (W * H);
+    };
+    const lo = lit(0.2), hi = lit(0.8);
+    if (!(hi > lo + 0.3)) throw new Error('Wipe lit ' + (lo * 100).toFixed(0) + '% at 0.2 and ' + (hi * 100).toFixed(0) + '% at 0.8 — the effect is not responding, so the slider tuning above is measuring nothing');
+    /* …and ONE NOTCH NOW MOVES LESS THAN ONE OLD NOTCH DID — measured against the old step at the same
+       size, which is the only comparison that means anything. A bare "the new notch is small" assertion
+       passes just as happily on a dead effect, and at a 60px probe 0.005 of progress is sub-pixel and
+       reads as 0.00% either way. So this measures on a wide plate, where 0.005 is ~2px of edge travel,
+       and compares the two notches directly. */
+    const BW = 400, BH = 120;
+    const litW = g => {
+      const d = new Uint8ClampedArray(BW * BH * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = 200; d[i + 1] = 200; d[i + 2] = 200; d[i + 3] = 255; }
+      FM._pixelFx.wipe(d, BW, BH, { progress: g, angle: 0 }, 0, 1);
+      let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8) n++;
+      return n / (BW * BH);
+    };
+    const base = litW(0.5);
+    const oneNew = Math.abs(litW(0.505) - base);   // one notch of the new slider
+    const oneOld = Math.abs(litW(0.52) - base);    // one notch of the old one
+    if (!(oneOld > 0.01)) throw new Error('the OLD 0.02 notch moved only ' + (oneOld * 100).toFixed(2) + '% on this plate — the probe is too small to tell the two apart, so the comparison below proves nothing');
+    if (!(oneNew < oneOld * 0.5)) throw new Error('one new notch moves ' + (oneNew * 100).toFixed(2) + '% against the old notch\'s ' + (oneOld * 100).toFixed(2) + '% — the slider is not meaningfully finer than it was');
+  });
+
   test('550: the head divider runs the FULL add-layer row and meets the next row exactly', { item: '550' }, async function () {
     /* Queue 550 clause 2. Ezra: "for some reason where the arrows are the line is like cut short for no
        reason. Please fix this so it has more continuity."

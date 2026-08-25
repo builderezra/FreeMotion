@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.74
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.75
 >
-> **State:** v12.74, **965 tests green**, tree clean.
+> **State:** v12.75, **966 tests green**, tree clean.
+>
+> **✅ v12.75 — the wipe sliders are four times finer (#559).** You said they "do too much too fast so I
+> can't be precise". I measured before changing anything, and it was not what the note in the list
+> assumed: the effect responds evenly across the whole slider, nothing is wasted. The problem was that
+> **7px of finger movement jumped 2% of the picture**. It now moves 0.5%. **The range is exactly what it
+> was**, so nothing you have already made will look different — every position the old slider could hold
+> still exists.
 >
 > **✅ v12.74 — the line by the add-layer row is no longer cut short (#550).** You said *"where the arrows
 > are the line is like cut short for no reason"*, and I had parked it because a previous round could not
@@ -19474,8 +19481,7 @@ re-opened #480, which I had marked done and had not fixed.
       choose its colour. **Goes with #555** — if colours become keyframable, this one should be a colour
       param from the start rather than a second mechanism.
 
-- [ ] **559 — The wipe effects' sliders move too much too fast to be precise.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **559 — The wipe effects' sliders move too much too fast to be precise.** (25 Aug.) — **DONE v12.75.**
       His words, verbatim:
       > The wipe effects sliders need to be more gradual they do too much too fast so I can’t be precise
       **This is a slider RANGE/curve problem, not a rendering one:** the useful part of the effect happens
@@ -19486,6 +19492,37 @@ re-opened #480, which I had marked done and had not fixed.
       response curve so the travel is spread evenly. **Do not just halve the max**; that is a guess, and
       it would clip the top of the range he may still want.
       ⚠️ Check whether it is ALL the wipes or only some — he says "the wipe effects", plural.
+
+      ✅ **DONE v12.75 — four times finer, and the RANGE is untouched.**
+      ❌ **FIRST, THIS ENTRY'S OWN DIAGNOSIS WAS WRONG, and measuring is what showed it.** It assumed
+      *"the useful part of the effect happens across a small part of the track, so most of the travel is
+      wasted"*. It is not. Sampling the rendered output across the whole range:
+      **Wipe — 1, 6, 11, 15, 21, 26, 31, 36, 41, 46, 51, 56, 61, 66, 71, 76, 81, 86, 91, 96, 100%** of the
+      frame. Dead linear. Radial Wipe is near enough the same, with no dead zones. Per notch: **avg 2.0%,
+      min 1.2%, max 3.0%** — every notch does about the same work. **There was no wasted travel to narrow
+      and no response curve worth applying.**
+      🎯 **The fault was RESOLUTION, and the number that names it is in `js/inspector.js`: `TICK = 7`.**
+      The strip is pushed at **7px of drag per notch**, and the notch fell back to the param's step — so
+      **7px of finger travel moved 0.02, which is 2% of the picture.** That is "too much too fast so I
+      can't be precise", precisely. For comparison the app's other two 0..1 progress sliders (Count
+      Up/Down, Text Randomizer) were already at 0.01; **the wipes were the outliers**, which also answers
+      his "plural": there are exactly two effects named Wipe and both had it.
+      🔧 **The fix uses the mechanism this codebase already had.** `tickQuantum` refuses to draw more than
+      ~100–120 notches, so simply shrinking the step would have been coarsened straight back. A row can
+      force its own notch (`q`) — that is how the Speed slider got its range in #455 — but effect params
+      had no way to reach it. `q` now travels from the catalogue through the registry to the strip.
+      ⚠️ **It had to be added to the registry's rebuild explicitly**, which is the trap #482 already
+      recorded: that normaliser constructs a fresh object listing the keys it knows, so anything declared
+      and not listed is dropped silently. There is an assertion for it.
+      📐 **Measured after, on a 400px plate:** one notch moves **0.50%** of the frame against the old
+      **2.00%** — **4.0× finer** — and the ruler went 350px → 1400px (50 notches → 200).
+      🛡️ **The max is deliberately unchanged**, per this entry's own warning not to guess at it. It also
+      keeps every saved project safe: **every value the old 0.02 step could hold is an exact multiple of
+      0.005**, so nothing re-renders. That is asserted over all 51 old positions.
+      *(The readout shows 3 decimals now — at 2dp, half the values the slider can hold would have
+      displayed as the same number.)*
+      ⚠️ **Verified at 380px:** the row fits the panel at 332px, the 1400px ruler sits inside an
+      `overflow: hidden` strip, and the page does not scroll sideways.
 
 - [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
       **STATUS: 🟢 READY — nothing is stopping this**

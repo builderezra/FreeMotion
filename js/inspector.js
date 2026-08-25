@@ -826,7 +826,10 @@ window.FM = window.FM || {};
   // AM signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
-    const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : 2);
+    /* Decimals follow the step, and the third tier is not decoration: queue 559 takes the wipes to a
+       0.005 step, and at 2dp every second value it can hold would render as the same number — a readout
+       that lies about what the slider is doing is worse than a coarse slider. */
+    const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : (p.step >= 0.01 ? 2 : 3));
     // An ABSENT param renders at the effect's own fallback — `legacy` where the schema declares one
     // (a param added to an existing effect keeps that effect's original hardcoded value), otherwise
     // the default. Same rule fxSegment already follows; a slider that displays a number the renderer
@@ -861,7 +864,7 @@ window.FM = window.FM || {};
       if (commit && FM.history) FM.history.commit();
     }
     const strip = tickStrip({
-      min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read,
+      min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read, q: p.q,
       apply: v => apply(v, false),
       // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
       release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },

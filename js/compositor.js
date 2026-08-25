@@ -538,8 +538,24 @@ window.FM = window.FM || {};
     ] },
     { type: 'blockdissolve', label: 'Block Dissolve', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }] },
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
-    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
+    /* ⚠️ THE WIPES' PROGRESS IS FINE-GRAINED ON PURPOSE (queue 559). Ezra: "The wipe effects sliders
+       need to be more gradual they do too much too fast so I can't be precise."
+       MEASURED FIRST, and it corrects this entry's own guess. The entry assumed "the useful part of the
+       effect happens across a small part of the track, so most of the travel is wasted" — it does not.
+       Sampling the rendered output across the range, Wipe is dead linear (1, 6, 11, 15, 21, 26 … 96,
+       100 percent of the frame) and Radial Wipe is near enough; every notch moves the picture by about
+       the same amount, avg 2.0% with a min of 1.2%. There is no dead zone to narrow and no curve worth
+       applying — the RANGE is right and the RESOLUTION was wrong.
+       The strip is pushed at 7px of drag per notch (TICK in js/inspector.js), and the notch was this
+       step, so **7px of finger travel moved 2% of the frame**. That is the complaint, exactly. The
+       app's other two 0..1 progress sliders (Count Up/Down, Text Randomizer) were already at 0.01.
+       `q` forces the notch rather than letting it fall back to the step, so a drag moves 0.5% per 7px —
+       four times finer — while `step` keeps typed and keyframed values at the same resolution.
+       The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
+       silently re-render every project that already uses these. A step change cannot — every value the
+       old step could hold is still exactly representable. */
+    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'solidmatte', label: 'Solid Matte', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
