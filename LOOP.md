@@ -102,7 +102,28 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.52, 940 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.53, 941 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.53 did #522** — on a phone the ≡ reorder handle is no longer built while a layer is selected. His
+own reasoning was the implementation note: `soloLayerId()` already means "phone, exactly one layer
+selected", and in that state exactly ONE row is drawn, so the handle has nothing to reorder against.
+Measured at 380px: nothing selected → 3 rows/3 handles; selected → 1 row/**0 handles**. Desktop asserted
+UNCHANGED, because *"this was only mobile"* is his scoping. Mutation-proven.
+⚠️ Not hidden with CSS: a `display:none` handle still carries a live pointerdown listener whose gesture
+reasons about `statics`, which in solo view is empty — the one case that code calls out as having
+nowhere to drop. Not creating it removes the state instead of covering it.
+
+🔧 **AND A SAFEGUARD THAT WAS STRUCTURALLY INCAPABLE OF FIRING — worth reading, because it is the exact
+failure mode this project's culture is built to prevent.** v12.53's own commit message shipped with
+*"reasons about , which"*: a word in backticks was executed by the CALLING shell as a command
+substitution and deleted. ship.sh has had a backtick gate for months, written after this exact accident
+— and it stayed silent, because **the substitution happens before the script is invoked**. By the time
+the text reaches `$1` there is nothing left to detect. It only ever caught backticks that survived
+quoting, which is not how the mistake happens.
+**A gate that reads like protection and cannot fire is worse than none, because it stops you being
+careful.** Fixed by removing the shell from the path entirely: `tools/ship.sh -F <file>` (or `-F -`)
+reads the message as bytes. The gate now applies only to the argument form — on the `-F` path a backtick
+is an ordinary code quote and refusing it would break the safe route. Proven by shipping the fix through
+it with backticks in the message and confirming they survived.
 **v12.52 worked #215** — the export that comes out silent. ⚠️ **AND IT CORRECTED THIS ENTRY'S OWN
 CONCLUSION.** His "no message" answer, plus reasoning stated three separate times in the entry, said
 *neither toast + silent file = THE MUXER*. Measured (`tests/_q215mux.html`, which walks the MP4 box tree
@@ -161,7 +182,15 @@ was updated rather than left contradicting the code.
 **No toast.** That kills the memory theory (a mix that OOM'd would have thrown and spoken) and rules out
 all five previously-fixed causes. Neither toast + a silent file is defined three times in that entry as
 exactly one thing: **the MUXER**, the only part of the path with no witness.
-**NEXT: #215** — it is the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
+**⚠️ THE READY QUEUE IS THIN AND THAT IS A REAL FINDING, not a reason to stop (rule 8b).** Audited by
+hand this tick: all three UNNUMBERED items are NEEDS-YOU / NOTE / HELD, and every numbered item from 47
+to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was re-read in full to check
+the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
+v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
+item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
+**NEXT: #523** (the text edit screen should close the moment the layer is deselected).
+
+**Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
 HELD. First move is a NORMAL-sized export whose muxer output is inspected directly, **not** a reproduction
 at his heavy 2160/60 settings, which is what the entry used to say and is now known to be the wrong end.
