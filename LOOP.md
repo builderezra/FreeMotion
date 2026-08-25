@@ -102,7 +102,33 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.50, 937 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.51, 938 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.51 did #521** — dropping a layer BELOW the add row on PC. **The interesting part is why three
+earlier fixes missed it: #357, #443 and #480 were ALL measured at 380px**, the one width where the add
+row is a full-height track row and the drag's uniform-`slotH` arithmetic is correct. On PC it is a 7px
+LINE, so it was handed a 43px slot it does not draw and every row below it sat ~34px above where the
+model put it. Measured at 1280px, marker after 2 of 4 layers: the whole band from the line down through
+three quarters of the next row dropped the layer ABOVE the marker; landing below it needed the finger
+two rows lower. Rows carry their own measured pitch now, and the drop applies the same marker index
+`FM.dragAddAt` had shown live since #438 — the switch read 1 while the drop wrote 2, so the preview and
+the result had been disagreeing on screen the whole time.
+⚠️ **The lesson generalises further than the fix: a test pinned to one width can only defend that width.**
+The old guard asserted `atPhoneWidth(…, 380)`. The new one uses a new `atWideWidth` helper and **refuses
+to run if it finds the add row full-height**, so it cannot quietly measure the wrong layout.
+🐛 **It exposed a latent bug too**: the new geometry makes a cancelled drag cross a gap it previously did
+not, opening a live order preview that `cleanup()` cleared without asking for a repaint — the canvas kept
+showing the order you almost dropped into. Fixed, mutation-proven (✅ CAUGHT).
+🔧 **Tooling, and this one cost 40 minutes today:** `tests/_cdp.py` does NOT start a server, it assumes
+one is on the port — stated only in a docstring. Point it at a dead port and it hangs for the ENTIRE
+timeout, then reports `"ok": false` with no failures, which reads as a broken suite. It HTTP-probes first
+now and fails in 0.1s naming the reason. `ship.sh`/`mutate.sh` got real headroom (the suite has outgrown
+the old 600s default), and ship.sh distinguishes **"the suite did not run"** from **"a test failed"**
+instead of printing SUITE IS RED with an empty list beneath it.
+⚠️ **Also: I nearly destroyed this file.** A regex meant to replace this block matched to the next `###`
+heading — 46KB below — and deleted the lot. `git checkout` restored it. This section is a running LOG,
+not a short block; edit it with exact anchors, never a range match.
+
+*(history below)*  **v12.50 — 937 tests green.**
 **v12.50 did #520** — PC font list. Before: rail 538px wide holding **987px** of cards (~450px hidden off
 the right) with **244px of window empty below**. After: grid, 11 fonts over 3 rows, no sideways scroll,
 popover 90→220px so only 12px empty, scrolls vertically. **Phone asserted UNCHANGED** (still flex, one
@@ -110,10 +136,13 @@ row) — "only for PC" is his scoping and a silent phone reflow would be a regre
 ⚠️ The height cap lives in JS beside the "Aa" sheet's, because the room below depends on where the card
 landed. That code's comment said Aa was the ONLY popover safe to cap — true until now — so the comment
 was updated rather than left contradicting the code.
-🔴 **STILL WAITING ON HIM: #215.** His 2160/60fps phone export came back silent. **Did he see the
-"exporting WITHOUT SOUND" toast?** No toast → audio lost on a path that reports success. Toast → the mix
-is OOMing. Opposite fixes; asked in the stamp; do not guess.
-**NEXT: #521** (a layer dropped BELOW the add-layer row jumps back on top — he has asked repeatedly).
+✅ **#215 IS UNBLOCKED — he answered on 25 Aug:** *"I don't think I got a message saying no audio"*.
+**No toast.** That kills the memory theory (a mix that OOM'd would have thrown and spoken) and rules out
+all five previously-fixed causes. Neither toast + a silent file is defined three times in that entry as
+exactly one thing: **the MUXER**, the only part of the path with no witness.
+**NEXT: #215** — it is now the oldest ready item. First move is a NORMAL-sized export whose muxer output
+is inspected directly, **not** a reproduction at his heavy 2160/60 settings, which is what the entry used
+to say and is now known to be the wrong end.
 **v12.49 fixed #519.** `body.text-editing #inspector-panel { display:none }` existed ONLY in the phone
 media block; PC never had it, so 9 cards sat live behind the editor (measured at 1280x820). Now 0 while
 editing, restored after, inspector column collapsed so the timeline widens. **Checked FIRST that the
