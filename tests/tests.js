@@ -28216,6 +28216,60 @@
     }
   });
 
+  test('editing text hides the option cards on PC, and gives them back after (queue 519)', { item: '519' }, async function () {
+    /* Ezra: "When you are editing [text], it shouldn't show up with the other options below it, like the
+       effects and stuff … because if you press it, it's just gonna bug it out and be weird."
+       The PHONE has hidden the inspector during `body.text-editing` for a long time. **PC never got that
+       rule** — it lives inside the max-width:700px block — so the whole card grid stayed behind the
+       editor and stayed live: measured at 1280x820 with the editor open, the panel still at (0,588)
+       307x232 with NINE tappable cards in it.
+       Safe to hide because the editor is NOT inside that panel — `.te-panel` is a floating box over the
+       canvas — which is the thing to check before hiding anything, and is asserted below. */
+    if (window.innerWidth < 701) return;                       // the phone already did this
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable — this test cannot open the editor');
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId;
+    let made = null;
+    try {
+      let t = FM.scene.layers.find(l => l.type === 'text');
+      if (!t) { t = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' }); t.start = 0; t.duration = 4; FM.scene.layers.push(t); made = t; }
+      FM.selectLayer(t.id);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(90);
+
+      const tappable = () => [].slice.call(panel.querySelectorAll('.cat-card')).filter(c => c.getBoundingClientRect().height > 4).length;
+      /* THE CONTROL: there must be cards to hide, or "none are showing" is true of an empty panel. */
+      const before = tappable();
+      if (before < 3) throw new Error('only ' + before + ' option card(s) before editing — nothing to hide, so this test proves nothing');
+
+      FM.textEdit.start(t.id);
+      await sleep(120);
+      if (!document.body.classList.contains('text-editing')) throw new Error('starting the editor did not put the app into text-editing');
+      const during = tappable();
+      if (during > 0) throw new Error(during + ' option card(s) are still on screen and tappable while the text editor is open — pressing one is what he says bugs it out');
+
+      /* …AND THE EDITOR ITSELF MUST SURVIVE. Hiding the panel would be a catastrophic fix if the editor
+         lived inside it, so this is the assertion that says it does not. */
+      const ed = document.querySelector('.te-panel');
+      if (!ed || ed.getBoundingClientRect().height < 20)
+        throw new Error('the text editor is not on screen while text-editing — hiding the inspector took the editor with it');
+
+      FM.textEdit.stop ? FM.textEdit.stop() : (FM.textEdit.finish && FM.textEdit.finish());
+      await sleep(120);
+      const after = tappable();
+      if (after < before) throw new Error('after closing the editor only ' + after + ' of ' + before + ' option cards came back — hiding them has to be temporary');
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { if (FM.textEdit.stop) FM.textEdit.stop(); }
+      if (made) { const i = FM.scene.layers.indexOf(made); if (i >= 0) FM.scene.layers.splice(i, 1); }
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('the inspector panel fits its own contents for every layer type (queue 518)', { item: '518' }, async function () {
     /* Ezra, with a text layer selected: "The menu when you have text selected is really bugged out and
        looks weird."

@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.48
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.49
 >
-> **State:** v12.48, **935 tests green**, tree clean.
+> **State:** v12.49, **936 tests green**, tree clean.
+>
+> **🔴 THE EXPORT WITH NO AUDIO — I NEED ONE ANSWER FROM YOU, AND IT DECIDES THE WHOLE FIX.**
+> Your settings (MP4, 2160, 60fps, High, whole project, all layers, on your phone) are the best evidence
+> this bug has ever had — thank you. **Did a toast appear saying "exporting WITHOUT SOUND"?**
+> · **No toast** → the audio was lost somewhere that still reports success, and our own drop report is
+>   lying to us. That is a different bug from the five already fixed here.
+> · **Yes, a toast** → the mix really is running out of memory at 2160p/60 on a phone, and the fix is
+>   about memory rather than reporting.
+> They need opposite fixes, so I do not want to guess. Everything else about it I can chase myself.
+>
+> **✅ v12.49 — editing text no longer leaves the option cards live behind the editor (#519).** The phone
+> has hidden them for ages; the desktop layout never got the rule, so nine cards sat there tappable.
 >
 > **✅ v12.48 — the text layer's menu (#518).** Text is the one layer type with a "Text to Voice" row, and
 > the card grid's height sum did not know about it — so the bottom row ran 46px past the panel at every
@@ -9131,6 +9143,27 @@ better still, keep working inside the turn rather than parking work for a later 
       never fed"*. **An assertion nothing has ever made fail is not yet a test.**
       **Still the one region without a witness: the muxer itself**, if a silent file ever arrives with
       NO toast. That still needs your screenshot.
+
+      🔴 **REPRODUCED BY HIM AGAIN, 25 Aug at v12.48, WITH THE EXACT SETTINGS — screenshot of the dialog.**
+      His words, verbatim:
+      > I just exported a video with these settings on my phone and got a video with no audio
+      **The settings, read off his screenshot:** Format **MP4 video**, Resolution **Same as project —
+      2160**, Frame rate **Same as project — 60 fps**, Quality **High**, Range **Whole project**,
+      **All layers**. On his **phone**.
+      **This is the single most useful piece of evidence this entry has ever had**, because it is a
+      configuration rather than a description. 2160p at 60fps on a phone is the heaviest export the app
+      offers — which is exactly the ground v11.67 predicted: *"a phone running out of memory building the
+      offline buffer for a LONG project lands exactly there"*.
+      ⚠️ **THE FIRST THING TO ESTABLISH: did he see a toast?** v11.67 made that failure SPEAK — it flags
+      `mix-failed` and toasts *"exporting WITHOUT SOUND"*. He did not mention one, and there are only two
+      possibilities and they need different fixes:
+      · **He saw no toast** → the mix did NOT throw; the audio was lost somewhere that still reports
+        success. That is a different bug from the five already fixed here, and the drop report is lying.
+      · **He saw one and did not say** → the mix really is failing on a 2160p/60fps phone export, and the
+        fix is about memory, not reporting. **Ask him before assuming.**
+      ⚠️ **Reproduce at HIS settings, not at a convenient size** — every previous pass here measured on
+      smaller exports and came back clean. 2160x3840 at 60fps is roughly 8x the pixels per second of a
+      1080p/30 export.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
 
@@ -17667,8 +17700,17 @@ re-opened #480, which I had marked done and had not fixed.
       Captions, Presets, Effects). The card glows are clipped the same way as **#517**, and the panel sits
       in a large empty column with the cards crammed into the top third.
 
-- [ ] **519 — While editing text, stop showing the other option cards underneath — pressing one bugs it out.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **519 — While editing text, stop showing the other option cards underneath — pressing one bugs it out.** (24 Aug, PC screenshot at v12.20.)
+      ✅ **Measured with the editor open at 1280x820: the panel was still there at (0,588) 307x232 with
+      NINE tappable cards in it.** The rule that hides it — `body.text-editing #inspector-panel` —
+      lives inside the `max-width: 700px` block, so the desktop layout never had it at all. That is why
+      pressing one bugged out: they were not merely visible, they were live.
+      **Now: 9 cards → 0 while you type, and back the moment you close it**, with the timeline widening
+      into the space rather than leaving a hole (same treatment drawing mode uses).
+      ⚠️ **Checked before hiding anything: the editor is NOT in that panel** — `.te-panel` is a floating
+      box over the canvas, measured at (360,430) 560x146. Hiding a column that contained the editor would
+      have been a far worse bug than the one being fixed, so **the test asserts the editor is still on
+      screen afterwards**, not just that the cards are gone.
       His words, verbatim:
       > When you are editing tags, it shouldn't show up with the other options below it, like the effects and stuff like... because if you press it, it's just gonna bug it out and be weird. Just get rid of that.
       ("editing tags" = **editing text** — dictation.)
@@ -18375,3 +18417,23 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ *"and probably other stuff"* — he is right to suspect it. Once the cause is known, **sweep every
       other on-canvas overlay** (selection box, mask handles, the drawing overlay, the gizmo) at the same
       zoom levels rather than fixing only the one he happened to notice.
+
+
+- [ ] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Previewing sound effects in the sound effect menu doesn’t work
+      **The menu is the one behind Audio ▸ Sound effects** — a list of generated effects, each with a ▶
+      button, a duration, a ★ and an Add button. The ▶ is meant to play the effect without adding it.
+      ⚠️ **Check the obvious first:** these effects are GENERATED in the app (the panel says so — "these
+      are generated in the app, so they cost nothing to download"), so a preview needs an AudioContext,
+      and a browser will not start one without a user gesture. If the context is created at load rather
+      than on the tap, it starts suspended and every preview is silent with no error.
+      ⚠️ Goes with the audio cluster (#96, #148, #215) — but this one is likely small and self-contained.
+
+- [ ] **563 — Add a bell sound effect.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Add a bell sound effect also
+      One more entry in the generated sound-effects library. **Do it with #562**, since testing a new
+      effect means playing it, and playing it is what #562 says is broken.

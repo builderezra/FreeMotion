@@ -102,7 +102,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.48, 935 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.49, 936 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.49 fixed #519.** `body.text-editing #inspector-panel { display:none }` existed ONLY in the phone
+media block; PC never had it, so 9 cards sat live behind the editor (measured at 1280x820). Now 0 while
+editing, restored after, inspector column collapsed so the timeline widens. **Checked FIRST that the
+editor is not inside that panel** (`.te-panel` floats at 360,430) — the test asserts the editor survives.
+🔴 **#215 (export with NO AUDIO) HAS HIS EXACT SETTINGS NOW** — MP4 / 2160 / 60fps / High / whole project
+/ all layers, on his PHONE. Heaviest export the app offers, which is the ground v11.67 predicted.
+**ONE QUESTION DECIDES THE FIX AND IT IS ASKED IN THE STAMP: did he see the "exporting WITHOUT SOUND"
+toast?** No toast → audio lost on a path that still reports success (the drop report is lying). Toast →
+the mix is OOMing at 2160p/60 and it is a memory fix. **Do not guess; they are opposite fixes.**
+**📝 Also logged: #562** (sound-effect previews silent — suspect an AudioContext created before a user
+gesture, so it starts suspended), **#563** (add a bell — do it with 562, since testing it means playing it).
+**NEXT: #520** (PC font list should fill the space below and scroll vertically).
 **v12.48 closed #518.** Half of it was #517 (shipped v12.47). The rest: the card grid solves row height as
 `(band − 88 chrome) / 3`, and TEXT is the one type with an extra 48px `.tts-row` — uncounted, so the grid
 overflowed **46px at every band height**. Now `--insp-extra` (named, not folded into the constant); text

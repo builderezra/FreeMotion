@@ -5336,6 +5336,19 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      canvas in a weird spot". Keep the rail its own width, collapse the inspector column, and give
      everything else to the stage (which spans columns 2-3). */
   body.drawing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  /* ⚠️ EDITING TEXT HIDES THE OPTION CARDS, TOO (queue 519). Ezra: "When you are editing [text], it
+     shouldn't show up with the other options below it, like the effects and stuff … because if you press
+     it, it's just gonna bug it out and be weird. Just get rid of that."
+     The phone has hidden #inspector-panel while `body.text-editing` for a long time — that rule lives in
+     the max-width:700px block. **PC never got it**, so the whole card grid stayed behind the editor,
+     fully live: measured with the editor open at 1280x820, the panel still at (0,588) 307x232 with NINE
+     tappable cards in it.
+     Safe to hide because the editor is NOT in this panel — `.te-panel` is a floating box over the canvas
+     (measured at 360,430, 560x146), so nothing you are typing into goes with it.
+     The inspector's COLUMN collapses as well rather than being left as a hole, which is the same thing
+     drawing mode does one line above; the timeline keeps its own column and widens into the space. */
+  body.text-editing #inspector-panel { display: none !important; }
+  body.text-editing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
   /* …AND THE BAND'S ROW HAS TO GO WITH IT (queue 513). Drawing already hides #timeline-panel and
      #inspector-panel outright, but this layout still RESERVED their row — `--tl-h`, 232px by default —
      so the stage was 628px of an 860px window and the canvas sat small with a wide black strip under it
