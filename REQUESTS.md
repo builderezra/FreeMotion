@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.56
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.57
 >
-> **State:** v12.56, **944 tests green**, tree clean.
+> **State:** v12.57, **945 tests green**, tree clean.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
@@ -18,6 +18,10 @@
 >   you see the project extending under the clip rather than the clip freezing.
 > · **B** — no limit at all. Literally what you asked, and it brings back the stranded-clip problem.
 > · **C** — a bigger limit, roughly twice as far in one go, then it stops.
+>
+> **✅ v12.57 — that "No audio effects yet" line is gone (#527).** It sat right above a button saying
+> "+ Add Audio Effect", so it was telling you something the button already said. I checked the Visual and
+> Filters tabs first, as the note said to — they never had it, so nothing to ask you about.
 >
 > **✅ v12.56 — the play pill lines up with the buttons either side of it (#526).** It was 24.5px tall
 > against their 34px boxes, so its outline sat about 5px inside them top and bottom. Now 0.00px out at
@@ -18055,8 +18059,7 @@ re-opened #480, which I had marked done and had not fixed.
         the reason `text-align: center` is in that rule. My first test asserted it shrink-wraps there and
         failed; that assertion was inventing a requirement nobody asked for, and was removed.
 
-- [ ] **527 — Remove the "No audio effects yet" line.** (24 Aug, phone screenshot at v12.25, circled.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **527 — Remove the "No audio effects yet" line.** (24 Aug, phone screenshot at v12.25, circled.) ✅ v12.57
       His words, verbatim:
       > Get rid of this text
       **What he circled:** *"No audio effects yet — add one to shape this clip's sound."* in the Effects ▸
@@ -18065,6 +18068,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check whether the Visual and Filters tabs carry the same empty-state line; if they do, he will
       almost certainly want those gone too, but he circled the audio one, so ask before removing all three
       rather than assuming.
+
+      ✅ **DONE v12.57 — and the question above answered itself, so there was nothing to ask.** Checked
+      before touching anything: the **Visual** effects section has **no such line at all** (list, then the
+      + Add Effect button, nothing between), and the **Behaviors** section carries a note in the code
+      saying *"the two explanation lines that were here are gone — queue 346/378"* — the same redundancy,
+      already removed at his request once before. **Audio was the odd one out**, so removing it makes the
+      three agree rather than making it the exception. No decision needed from him.
+      **What went:** one `insp-hint` div in `audioFxSection`. What stayed: the **+ Add Audio Effect**
+      button it was duplicating.
+      ⚠️ **TWO HINTS ELSEWHERE WERE DELIBERATELY LEFT, and the distinction is worth recording** so a
+      later sweep does not bin them as "the same thing": *"This filter is empty"* and *"Nothing on this
+      cue yet"* both say **where the effect will land** — into this filter, onto this one cue — which is
+      exactly what their buttons do not say. They carry information; the audio one repeated its button.
+      ⚠️ **The CONTROL is the load-bearing half of the test:** "the text is gone" is trivially true of a
+      panel that failed to render, so the test proves the **+ Add Audio Effect** button is present in the
+      same breath, and that the stack is genuinely empty (the only state the line ever appeared in).
+      *Verified on screen at 380px: ‹ Effects, the Visual/Filters/Audio tabs, the button, Copy/Paste — no
+      stray sentence and no leftover gap where it used to be.*
 
 - [ ] **528 — The effects menu should sit slightly higher — there is a gap above it.** (24 Aug, phone screenshot at v12.25, circled.)
       **STATUS: 🟢 READY — nothing is stopping this**

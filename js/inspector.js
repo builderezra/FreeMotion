@@ -1871,7 +1871,18 @@ window.FM = window.FM || {};
     const list = el('div', 'fx-list');
     (layer.audioFx || []).forEach((fx, idx) => list.appendChild(audioFxRow(layer, fx, idx)));
     s.appendChild(list);
-    if (!(layer.audioFx && layer.audioFx.length)) s.appendChild(el('div', 'insp-hint', 'No audio effects yet — add one to shape this clip’s sound.'));
+    /* NO EMPTY-STATE LINE HERE (queue 527). Ezra circled *"No audio effects yet — add one to shape this
+       clip's sound."* and said: "Get rid of this text".
+       It sat directly above a button reading **+ Add Audio Effect**, so the two lines carried one fact
+       between them and the sentence was the redundant half.
+       CHECKED BEFORE REMOVING, because the entry asked whether its siblings say the same thing and
+       warned against assuming: the VISUAL effects section has no such line at all (see the + Add Effect
+       button above — list, then button, nothing between), and the Behaviors section carries a note
+       saying its own two explanation lines were removed for this same reason at queue 346/378. So audio
+       was the odd one out, and removing it makes the three agree rather than making it the exception.
+       The two hints that REMAIN elsewhere are deliberately left: "This filter is empty" and "Nothing on
+       this cue yet" both say WHERE the effect will land — into this filter, onto this one cue — which is
+       something their buttons do not, so they are carrying information rather than repeating it. */
     const add = el('button', 'fx-add-btn', '+ Add Audio Effect');
     add.addEventListener('click', () => { if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer); });
     s.appendChild(add);

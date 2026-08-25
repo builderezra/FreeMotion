@@ -3059,6 +3059,58 @@
     }
   });
 
+  test('527: the Audio effects panel does not repeat its own button back at you', { item: '527' }, async function () {
+    /* Queue 527. Ezra circled *"No audio effects yet — add one to shape this clip\'s sound."* and said:
+       "Get rid of this text". It sat directly above a button reading **+ Add Audio Effect**, so the two
+       carried one fact between them and the sentence was the redundant half.
+       ⚠️ CHECKED BEFORE REMOVING rather than assumed, because the entry warned about exactly that: the
+       VISUAL effects section has no such line at all, and the Behaviors section carries a note saying
+       its own two explanation lines were removed for this same reason at queue 346/378. Audio was the
+       odd one out, so this makes the three agree instead of making it the exception.
+       The CONTROL is the important half here: "the text is gone" is trivially true of a panel that
+       failed to render, so the button it was duplicating must be proven present in the same breath. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      FM.scene.layers.length = 0;
+      // audio rides the 'video' layer type — an mp3 is a 0x0 'video' layer (see the exporter's mixer)
+      const L = FM.makeLayer('video', { name: 'Voice memo' });
+      L.start = 0; L.duration = 4; L.trimStart = 0; L.trimEnd = 4;
+      FM.scene.layers.push(L);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      FM.media.set(L.id, { file: new Blob(['a']), duration: 4, audioBuffer: ac.createBuffer(2, 48000 * 4, 48000) });
+      L.audioFx = [];   // the EMPTY state is the one the line appeared in
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('Effects');
+      await sleep(300);
+      if (FM.inspector.openFxTab) { try { FM.inspector.openFxTab('audio'); } catch (e) {} }
+      await sleep(350);
+
+      const panel = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('there is no #inspector-panel to read');
+      const addBtns = [].slice.call(panel.querySelectorAll('.fx-add-btn')).map(b => b.textContent.trim());
+      /* CONTROL 1 — the panel actually rendered, and it is the AUDIO one. Without this, a panel that
+         drew nothing at all would satisfy every assertion below. */
+      if (!addBtns.some(b => /Add Audio Effect/i.test(b))) throw new Error('the Audio effects panel did not render its "+ Add Audio Effect" button (buttons found: ' + JSON.stringify(addBtns) + ') — so "the text is gone" would be true of an empty panel and would prove nothing');
+      /* CONTROL 2 — and the stack really is empty, which is the only state the line ever appeared in. */
+      if (L.audioFx.length) throw new Error('the fixture has ' + L.audioFx.length + ' audio effect(s) on it, so the empty-state line would not have shown even before the fix');
+
+      const txt = panel.innerText || '';
+      if (/No audio effects yet/i.test(txt)) throw new Error('the Audio panel still says "No audio effects yet" directly above a button that says "+ Add Audio Effect" — queue 527, "Get rid of this text"');
+      if (/shape this clip/i.test(txt)) throw new Error('the second half of the removed sentence is still on screen — the line was split rather than removed');
+    } finally {
+      FM.scene.layers = layers0;
+      FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."
