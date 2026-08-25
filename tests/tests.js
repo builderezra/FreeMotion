@@ -28160,6 +28160,98 @@
     }
   });
 
+  test('dragging across the eyes hides a whole run of layers in one gesture (queue 515)', { item: '515' }, async function () {
+    /* Ezra: "make it so if you press on the eye icon and then drag your finger down to make stuff hidden,
+       you can just keep doing that … quickly do a lot".
+       Three things decide whether this gesture is usable, and all three are asserted:
+        · ONE INTENT for the whole sweep — the first eye you press decides the state and every row you
+          cross is set to THAT, not toggled. Toggling each would mean dragging back over a row undoes it,
+          which makes the gesture useless for "make stuff hidden";
+        · dragging BACK over rows already swept must change nothing;
+        · ONE history entry, not one per row, or Undo walks back through the sweep a row at a time.
+       ⚠️ And the constraint that shaped the code: the old handler rebuilt the whole timeline on every
+       toggle, which throws away the very element the pointer is captured on. Each eye is repainted in
+       place and the rebuild happens once at the end — so this test also fails if someone puts the
+       rebuild back inside the loop, because the eyes it is dragging over would be replaced mid-gesture. */
+    const saved = FM.scene.layers.slice();
+    const savedVis = saved.map(l => l.visible);
+    try {
+      while (FM.scene.layers.length < 5)
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+      FM.scene.layers.forEach(l => { l.visible = true; });
+      FM.scene.layers[2].visible = false;             // start MIXED, so "one intent" is provable
+      FM.timeline.rebuild(); await sleep(70);
+      /* A BASELINE SNAPSHOT, so the Undo assertion at the end measures the SWEEP and not this fixture.
+         The layers above were pushed straight into the scene rather than through an edit, so without
+         this the undo stack's newest entry predates them and one Undo rewinds past the whole setup —
+         which is what the first version of this test actually caught itself doing. */
+      if (FM.history && FM.history.commit) { FM.history.commit(); await sleep(40); }
+
+      const eyes = [].slice.call(document.querySelectorAll('.th-eye'));
+      if (eyes.length < 4) throw new Error('only ' + eyes.length + ' eye buttons in the timeline — not enough rows to sweep');
+      const vis = () => FM.scene.layers.map(l => l.visible !== false ? 1 : 0).join('');
+      const pt = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+      const move = el => window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: pt(el)[0], clientY: pt(el)[1], buttons: 1 }));
+
+      /* ⚠️ MAP EACH EYE TO ITS OWN LAYER BY ID. The timeline lists layers TOP-first, which is the reverse
+         of `FM.scene.layers`, and the add-row sits among them — so `eyes[i]` is not `layers[i]`, and the
+         first version of this test assumed it was and failed on a row it had never actually swept. */
+      const layerOf = el => FM.layerById(FM.scene, el.dataset.lid);
+      /* ⚠️ ONLY SWEEP EYES THAT ARE ACTUALLY HITTABLE. The gesture finds the row under the pointer with
+         `elementFromPoint`, so a row scrolled out of the timeline's own viewport — which the harness
+         page has less height for than the real app — is not reachable by any real finger either. The
+         first version of this test dispatched at all four and then blamed the code when the fourth never
+         registered. Ask the document what is actually under each point, exactly as the gesture does. */
+      const hittable = eyes.filter(el => {
+        const p = pt(el); const hit = document.elementFromPoint(p[0], p[1]);
+        return hit && hit.closest && hit.closest('.th-eye') === el && layerOf(el);
+      });
+      if (hittable.length < 3) throw new Error('only ' + hittable.length + ' eye button(s) are reachable at their own centre — not enough rows on screen to sweep across');
+      const swept4 = hittable.slice(0, Math.min(4, hittable.length));
+      const sweptIds = swept4.map(el => el.dataset.lid);
+      const untouched = eyes.map(layerOf).filter(L => L && sweptIds.indexOf(L.id) < 0);
+
+      const start = vis();
+      const firstBefore = layerOf(swept4[0]).visible !== false;
+      swept4[0].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: pt(swept4[0])[0], clientY: pt(swept4[0])[1], buttons: 1 }));
+      if (vis() === start) throw new Error('pressing an eye changed nothing, so there is no gesture to test');
+      if ((layerOf(swept4[0]).visible !== false) === firstBefore) throw new Error('the pressed eye did not flip its own layer');
+
+      swept4.slice(1).forEach(move);
+      const want = layerOf(swept4[0]).visible;
+      swept4.forEach((el, i) => {
+        const L = layerOf(el);
+        if (L.visible !== want)
+          throw new Error('the row under eye ' + i + ' ended ' + (L.visible ? 'visible' : 'hidden') + ' while the sweep was setting everything to ' + (want ? 'visible' : 'hidden') + ' — the rows are being toggled individually rather than painted, so dragging back would undo them');
+      });
+      /* CONTROL: one of the swept rows started in the OPPOSITE state to the rest. If the gesture toggled
+         rather than painted, that row would now be the odd one out — this is what tells the two apart,
+         so the test refuses to run without it. */
+      if (swept4.map(layerOf).indexOf(FM.scene.layers[2]) < 0)
+        throw new Error('the row that started hidden was not among those swept — this test is not exercising the paint-vs-toggle difference');
+      // …and rows the sweep never crossed must be untouched.
+      untouched.forEach(L => { if (L.visible !== true) throw new Error('a row the sweep never crossed was changed anyway'); });
+
+      const swept = vis();
+      swept4.slice(0, -1).reverse().forEach(move);
+      if (vis() !== swept) throw new Error('dragging back over rows already swept changed them (' + swept + ' → ' + vis() + ') — the sweep is toggling, not painting');
+
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 0, buttons: 0 }));
+      if (FM._eyePaintActive && FM._eyePaintActive()) throw new Error('the sweep is still live after the pointer came up');
+
+      /* ONE history entry for the whole sweep: a single Undo puts every row back. */
+      if (FM.history && FM.history.undo) {
+        FM.history.undo(); await sleep(60);
+        if (vis() !== start) throw new Error('one Undo left the layers at ' + vis() + ' instead of ' + start + ' — the sweep committed more than one history entry, so Undo walks back a row at a time');
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      saved.forEach((l, i) => { l.visible = savedVis[i]; FM.scene.layers.push(l); });
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('the drawing toolbar sits under the canvas on PC, and drawing gets the whole window (queue 513/535)', { item: '513' }, async function () {
     /* Ezra: "The sketching menu on PC looks really bad and, like, bugged, so maybe fix that up."
        Measured at 1440x860 before this: the canvas ended at y=524 while the toolbar was pinned to the

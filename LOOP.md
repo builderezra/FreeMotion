@@ -102,7 +102,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.44, 931 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.45, 932 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.45 built #515** — paint-drag across the eyes. Key constraint: the old handler REBUILT the timeline
+per toggle, which destroys the element the pointer is captured on; eyes are repainted in place and the
+rebuild happens once. Paints one intent (not per-row toggle) and commits ONE history entry.
+⚠️ **Three flaws in my own test, all caught before shipping:** (1) assumed `eyes[i] === layers[i]` — the
+timeline lists layers TOP-FIRST, i.e. reversed; (2) dispatched at rows scrolled out of the timeline
+viewport, unreachable by any real finger — it now asks `elementFromPoint` which rows are actually
+hittable; (3) the Undo assertion rewound past the fixture, because the test pushed layers straight into
+the scene — it commits a baseline snapshot first.
+**📝 Logged today: 549-559** (11 requests). Two are one job: **#555 colours should keyframe** + **#557
+Opacity has ◆ but no curve** → **the keyframe controls are applied unevenly; audit which rows have ◆ and
+which have the curve, in one pass.** Also #553 (project-open glitch, ties to #508), #554 (filter preview),
+#556 (delete should select nothing), #558 (lens flare colour), #559 (wipe sliders too coarse — MEASURE
+where the visible change happens before retuning).
+⚠️ #508 still needs a visible preview pane (rule 11).
 **v12.44 did #513 + #535** (one pass, as #535's entry instructed). Toolbar was pinned to the window
 bottom, 268px below the canvas. Real cause: drawing hides the timeline/inspector but the Studio grid
 still RESERVED their 232px row — stage 628 of 860. Collapsed it; canvas 578px → 746px tall, bar docked

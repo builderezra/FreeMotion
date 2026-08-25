@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.44
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.45
 >
-> **State:** v12.44, **931 tests green**, tree clean.
+> **State:** v12.45, **932 tests green**, tree clean.
+>
+> **✅ v12.45 — press an eye and drag down the column to hide a whole run of layers (#515).** Works with a
+> finger and with the mouse held down. The first eye you press decides the intent and every row you cross
+> is set to that, so dragging back does not undo it — and the whole sweep is a single undo step.
+>
+> **📝 Everything you sent today is logged: 549-559.** Two of them point at the same gap and I have noted
+> it as one job rather than two — **#555** (colours should keyframe) and **#557** (Opacity has a keyframe
+> diamond but no curve). The keyframe controls are not applied evenly across the app's rows, so that
+> wants one audit pass rather than fixing a row per report.
 >
 > **📊 WHERE THE LIST STANDS: 468 requests logged, 413 done, 55 open.** Of the 55 — **32 I can build now**,
 > **17 are waiting on you**, 4 are notes, 2 unmarked. **The five OLDEST are all waiting on you**, which is
@@ -17524,18 +17533,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Higher priority than most of this batch** — it makes a whole feature unusable, and he has
       reported it before ("still broken").
 
-- [ ] **515 — Drag across the eye icons to hide/show many layers in one gesture, on phone and PC.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **515 — Drag across the eye icons to hide/show many layers in one gesture, on phone and PC.** (24 Aug.)
       His words, verbatim:
       > Make it so that you can mass unselect stuff. I mean, not unselect, like, hide stuff on, like, phone and PC. Like, make it so if you press on the eye icon and then drag your finger down to make stuff hidden, you can just keep doing that. You can just keep dragging it down and down and, like, quickly do a lot, like, when you're selecting when you're selecting layers. Like, make it so if you just press on the eye button and, like, just, you know, keep holding or dragging the cursor down, it'll do a bunch of the eyes.
       **What he means:** press an eye, keep the finger/cursor down, drag down the column and every eye you
       pass over takes the same state. The paint-drag gesture every file manager and DAW has.
       **Clauses:**
-      1. [ ] Press an eye and drag DOWN the column — each eye passed over toggles.
-      2. [ ] **Both phone (touch) and PC (mouse held down)**, in his words *"on, like, phone and PC"*.
-      3. [ ] It must apply the state of the FIRST eye you pressed to everything you drag over, not toggle
-             each one independently — otherwise dragging back over a row undoes it and the gesture is
-             useless. (He describes it as "make stuff hidden", i.e. one intent for the whole sweep.)
+      1. [x] ✅ **v12.45.** Press an eye and drag DOWN the column — each eye passed over toggles.
+      2. [x] ✅ **v12.45 — pointer events, so touch and a held mouse button behave identically.** **Both
+             phone (touch) and PC (mouse held down)**, in his words *"on, like, phone and PC"*.
+      3. [x] ✅ **v12.45 — it PAINTS, it does not toggle.** It must apply the state of the FIRST eye you
+             pressed to everything you drag over, not toggle each one independently — otherwise dragging
+             back over a row undoes it and the gesture is useless.
+      **And one thing that had to change for the gesture to work at all:** hiding a layer used to rebuild
+      the WHOLE timeline, which throws away the very button your finger is captured on — the drag would
+      have died on its first row. Each eye is repainted in place now and the rebuild happens once, when
+      you let go. The whole sweep is also **one undo step**, not one per row.
+      ⚠️ Two flaws in my own test, both caught before shipping: it assumed `eyes[i]` was `layers[i]` (the
+      timeline lists layers top-first, so they are reversed), and it dispatched at rows that were scrolled
+      out of the timeline's viewport and therefore unreachable by any real finger. It now maps eyes to
+      layers by id and only sweeps rows the document actually reports as hittable.
       ⚠️ The eye column shares the row with the drag handle and the timeline's own scroll, so the gesture has
       to claim the pointer without stealing a vertical timeline scroll that started elsewhere.
 
@@ -18191,3 +18208,76 @@ re-opened #480, which I had marked done and had not fixed.
       stranded, that is a much better explanation of "it's always junkie every time" than an easing curve.
       **The black bar is probably the same cause** — `#app` parked off-origin leaves its background
       showing below the two panels — but check it rather than assuming.
+
+- [ ] **554 — Picking a filter does not preview what it will actually look like.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When selecting filters it doesn’t actually preview what it will look like when you add them
+      **What he expects:** highlighting/selecting a filter in the browser shows it applied to HIS canvas
+      before he commits, so choosing one is a look rather than a guess-then-undo.
+      ⚠️ **Check what the tiles show today first.** The effect browser already builds live animated
+      thumbnails of the SELECTED LAYER with the effect applied (that is queue 37's preset sheet) — so the
+      question is whether FILTERS specifically miss that, or whether the tile previews exist but the
+      CANVAS does not update on selection. Those are different fixes; measure which before building.
+      ⚠️ Related: #454 (presets are for effects only) and the filter-container work around queue 301.
+
+- [ ] **555 — Every effect's COLOURS should be keyframable, Gradient Overlay included.** (25 Aug, phone screenshot at v12.44.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Colours for every effect like gradient overly should be key frame able
+      **What the shot shows:** an Ellipse with Gradient Overlay open. **Amount has a ◆ and a curve icon**
+      beside it — it keyframes. **Start (#b18cfe) and End (#ffffff) have neither**: just a swatch, a hex
+      field, a swatch row and an eyedropper. So a numeric parameter animates and a colour cannot.
+      **The ask is general, not one effect:** *"colours for EVERY effect"*.
+      ⚠️ The keyframe machinery is per-parameter (`FM.evalProp`), so the work is making a COLOUR param
+      animatable: interpolating two hex values over time, and giving colour rows the same ◆ / curve
+      controls the numeric rows already have. **Check whether `FM.evalProp` can already carry a colour**
+      before building a second mechanism beside it.
+      ⚠️ Goes with **#537** (Gradient Overlay wants blend modes and "other stuff"), which is the same
+      effect and should be looked at in the same pass.
+
+- [ ] **556 — Deleting a layer should leave NOTHING selected, not fall back to the previously selected layer.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When deleting a layer it shouldn’t select the last layer selected but just close every layer and leave you in the timeline - also make sure every recent request is logged and you’re doing stuff in order
+      **Two things, and the second is a standing instruction rather than a task:**
+      1. [ ] **After a delete, select nothing** — close the layer panels and leave him looking at the
+             timeline. Today it falls back to whatever was selected before, which re-opens that layer's
+             options over the screen he was trying to get back to.
+      2. [x] *"make sure every recent request is logged and you're doing stuff in order"* — the standing
+             rule (see this file's header and CLAUDE.md). Confirmed: everything he has sent this session
+             is logged, and the loop is working oldest-first from `./tools/next.sh`.
+      ⚠️ `FM.inspector.refresh()` already re-establishes the truth when a `selectedId` no longer resolves;
+      the delete path is presumably PICKING a new one rather than clearing it. Look there first.
+
+- [ ] **557 — The Opacity slider has a keyframe diamond but no graph/easing option.** (25 Aug, phone screenshot at v12.44.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Opacity slider doesn’t have graphing options
+      **What the shot shows:** Mixing ▸ Opacity 0.92, with a ◆ keyframe button on the right — but **no
+      curve/graph icon beside it**. Compare #555's shot: Gradient Overlay's *Amount* row has BOTH a ◆ and
+      a curve icon. So the easing editor is wired to effect params but not to Opacity.
+      ⚠️ Same family as **#555** (colours should keyframe): the keyframe machinery is not evenly applied
+      across the app's rows. **Worth one pass that audits WHICH rows have ◆ and which have the curve**,
+      rather than adding them one report at a time — he has now sent two of these in a row.
+
+- [ ] **558 — Lens Flare needs colour options.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Lens flair should have colour options
+      ("flair" is autocorrect for **flare**.) The effect presumably renders a fixed warm flare; he wants to
+      choose its colour. **Goes with #555** — if colours become keyframable, this one should be a colour
+      param from the start rather than a second mechanism.
+
+- [ ] **559 — The wipe effects' sliders move too much too fast to be precise.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The wipe effects sliders need to be more gradual they do too much too fast so I can’t be precise
+      **This is a slider RANGE/curve problem, not a rendering one:** the useful part of the effect happens
+      across a small part of the track, so most of the travel is wasted and the part he wants is a few
+      pixels wide.
+      ⚠️ **Measure before retuning** — for each wipe effect, sample the rendered output across the slider's
+      range and find where the visible change actually happens. Then either narrow the range or apply a
+      response curve so the travel is spread evenly. **Do not just halve the max**; that is a guess, and
+      it would clip the top of the range he may still want.
+      ⚠️ Check whether it is ALL the wipes or only some — he says "the wipe effects", plural.

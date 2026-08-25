@@ -831,6 +831,75 @@ window.FM = window.FM || {};
     return false;
   }
 
+  /* ═══ DRAG ACROSS THE EYES TO HIDE A RUN OF LAYERS (queue 515) ═══════════════════════════════════
+   * Ezra: "make it so if you press on the eye icon and then drag your finger down to make stuff hidden,
+   * you can just keep doing that … quickly do a lot". The paint-drag every file manager and DAW has.
+   *
+   * THREE THINGS DECIDE THE SHAPE OF THIS, and the first is the one that would bite hardest:
+   *  1. **IT CANNOT REBUILD THE TIMELINE AS IT GOES.** The old handler called `FM.timeline.rebuild()`
+   *     on every toggle, which throws away and re-creates the very element the pointer is captured on —
+   *     the drag would die on its first row. So each eye is repainted IN PLACE and the rebuild happens
+   *     once, at the end.
+   *  2. **ONE INTENT FOR THE WHOLE SWEEP** (his clause 3). The first eye you press decides the state;
+   *     everything you drag over is set to THAT, not toggled individually. Otherwise dragging back over
+   *     a row undoes it and the gesture is useless for "make stuff hidden".
+   *  3. **ONE HISTORY ENTRY.** Committing per layer would make Undo walk back through a sweep one row at
+   *     a time, which is not what the gesture felt like doing.
+   * Mouse and touch alike, which is his "on, like, phone and PC" — pointer events cover both, and the
+   * capture means the row under the finger no longer has to be the row the gesture started on.
+   * `buttons === 0` ends a mouse sweep whose release we never heard, the same guard queues 511/541
+   * needed for the resizers — scoped to a mouse for the reason recorded there. */
+  var eyePaint = null;
+  function paintEyeEl(el, visible) {
+    if (!el) return;
+    el.classList.toggle('off', !visible);
+    el.title = visible ? 'Hide layer' : 'Show layer';
+    el.innerHTML = visible
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+  }
+  function applyEyeTo(el) {
+    if (!eyePaint || !el) return;
+    var id = el.dataset && el.dataset.lid;
+    if (!id || eyePaint.seen[id]) return;
+    var L = FM.layerById(FM.scene, id);
+    if (!L || L.visible === eyePaint.want) { eyePaint.seen[id] = 1; return; }
+    eyePaint.seen[id] = 1;
+    L.visible = eyePaint.want;
+    paintEyeEl(el, eyePaint.want);
+    eyePaint.changed++;
+    FM.requestRender();
+  }
+  function endEyePaint() {
+    if (!eyePaint) return;
+    var changed = eyePaint.changed;
+    eyePaint = null;
+    window.removeEventListener('pointermove', onEyeMove, true);
+    window.removeEventListener('pointerup', endEyePaint, true);
+    window.removeEventListener('pointercancel', endEyePaint, true);
+    if (!changed) return;
+    FM.timeline.rebuild();
+    if (FM.reconcileAudio) FM.reconcileAudio();
+    if (FM.history) FM.history.commit();          // ONE entry for the whole sweep
+  }
+  function onEyeMove(e) {
+    if (!eyePaint) return;
+    if (e.pointerType === 'mouse' && e.buttons === 0) { endEyePaint(); return; }
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    applyEyeTo(el && el.closest ? el.closest('.th-eye') : null);
+  }
+  function beginEyePaint(el, e) {
+    var id = el.dataset && el.dataset.lid;
+    var L = id ? FM.layerById(FM.scene, id) : null;
+    if (!L) return;
+    eyePaint = { want: !L.visible, seen: {}, changed: 0 };
+    applyEyeTo(el);
+    window.addEventListener('pointermove', onEyeMove, true);
+    window.addEventListener('pointerup', endEyePaint, true);
+    window.addEventListener('pointercancel', endEyePaint, true);
+  }
+  FM._eyePaintActive = function () { return !!eyePaint; };   // suite seam
+
   function buildHead(layer, index) {
     const head = document.createElement('div');
     head.className = 'track-head' + (isSelected(layer.id) ? ' sel' : '') + (layer.id === FM.scene.selectedId ? ' primary' : '');
@@ -842,7 +911,8 @@ window.FM = window.FM || {};
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
     eye.title = layer.visible ? 'Hide layer' : 'Show layer';
-    eye.addEventListener('click', (e) => { e.stopPropagation(); layer.visible = !layer.visible; FM.requestRender(); FM.timeline.rebuild(); if (FM.reconcileAudio) FM.reconcileAudio(); if (FM.history) FM.history.commit(); });
+    eye.dataset.lid = layer.id;                       // so a paint-drag can find which layer an eye belongs to
+    eye.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); beginEyePaint(eye, e); });
 
     // #117 — a locked layer wears a red padlock on its preview. Ezra: "When you lock a layer put a
     // red lock icon on the layer's preview image." The badge is a DOM overlay inside a wrapper, NOT
