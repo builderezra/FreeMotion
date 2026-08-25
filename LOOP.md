@@ -113,6 +113,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     recommend, ship it, and show him the picture in the morning with the alternatives named so he can
     change it in one word. A visual he can see and reject beats a tick spent waiting.
 
+17. **🧪 A TEST THAT OPENS THE REAL EFFECTS BROWSER LEAKS — it has now cost two items.**
+    `FM.fxBrowser.open()` starts the thumbnail machinery, and the next test that compares an effect tile
+    against its subject then reports SIX effects as *"indistinguishable from their subject"* — with
+    nothing wrong in the effects at all. Queue 528 and queue 538 hit it with **byte-identical numbers**.
+    **Drive `FM.fxSheet(root, true)` instead** when what you need is "the menu is on screen"; open the
+    real browser only when the thing under test is the browser itself, and then restore before handing on.
+    ⚠️ **And the meta-rule, which I broke twice in one night: when a NEW test turns an UNRELATED test red,
+    neuter the new test's body FIRST.** One run gives you the answer. I theorised about a stale thumbnail
+    cache, then about the adaptive-quality ladder, and was wrong both times — three runs spent to learn
+    what one bisection would have told me. Identical failure numbers across attempts is the tell that your
+    changes are not touching the cause.
+
 ## STATE
 
 ### 🎯 22 Aug — HIS STEER, AND IT CHANGES WHAT THIS LOOP SHOULD SPEND TICKS ON

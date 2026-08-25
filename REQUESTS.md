@@ -1,12 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.62
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.63
 >
-> **State:** v12.62, **952 tests green**, tree clean.
+> **State:** v12.63, **953 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.63 — tap the canvas with the effects menu open and it pauses (#538).** A pause button blooms
+> over the picture and fades away. Only in that menu, as you asked — everywhere else a canvas tap still
+> just selects and drags.
 >
 > **✅ v12.62 — Gradient Overlay got blending, and a fair bit more (#537).** Eight blend modes — screen
 > for glows, multiply for burns, overlay and soft light for a colour cast. Plus **Radial and Conic** as
@@ -18493,21 +18497,50 @@ re-opened #480, which I had marked done and had not fixed.
       param shape for every saved project that uses this effect, and he asked for blending first. Worth
       its own entry if he wants it.
 
-- [ ] **538 — Tapping the canvas while the effects menu is open should pause playback, with a pause animation and a briefly-appearing pause button.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **538 — Tapping the canvas while the effects menu is open should pause playback, with a pause animation and a briefly-appearing pause button.** (24 Aug.) ✅ v12.63
       His words, verbatim:
       > Make it so if you tap the canvas when in the effects menu it pauses the playback, make it have a nice pause animation and a little pause button appears briefly before fading away
       **Clauses — tick separately:**
-      1. [ ] **Tap the canvas while the effects menu is open → playback pauses.** Note the scope: he says
+      1. [x] **Tap the canvas while the effects menu is open → playback pauses.** Note the scope: he says
              *"when in the effects menu"*, so this is not a blanket tap-to-pause on the canvas. Check what
              a canvas tap currently does in that state before adding to it — if it selects or deselects a
              layer, pausing has to coexist with that rather than replace it.
-      2. [ ] **A nice pause animation**, not an instant stop of the transport.
-      3. [ ] **A little pause button appears briefly and fades away** — the YouTube/player convention: the
+      2. [x] **A nice pause animation**, not an instant stop of the transport.
+      3. [x] **A little pause button appears briefly and fades away** — the YouTube/player convention: the
              glyph blooms in the middle of the canvas, holds for a moment, then fades. It is feedback, not
              a control, so it must not eat the tap or sit in the way of the layer underneath.
       ⚠️ Mobile-first: verify at ~380px that the glyph is centred on the CANVAS, not the viewport, and that
       it cannot be left stuck on screen if you tap again mid-fade.
+
+      ✅ **DONE v12.63 — all three clauses, read as ONE feature described twice.** The "pause animation"
+      IS the little button blooming and fading; the transport itself stops at once, which is what you want
+      from a pause you asked for. A 72px disc blooms over the canvas (scale 0.72 → 1.06 → 1, fading out at
+      1.18) and is gone in 0.62s.
+      **Measured at 380px:** menu open + playing + canvas tap → **playing false, glyph opacity 1.0**, then
+      **0 after the fade**.
+      ⚠️ **THE SCOPE IS HALF THE REQUEST and is asserted three ways.** He said *"when in the effects
+      menu"*, so this is NOT a blanket tap-to-pause: outside that menu a canvas tap selects and drags
+      layers. Verified: **menu closed → no bloom**; **a tap on the SHEET → no bloom**; and the listener
+      never calls `stopPropagation`, so the selection or drag the tap would otherwise do still happens —
+      the entry's own requirement that pausing "coexist with that rather than replace it".
+      ⚠️ Centred on `#canvas-wrap`, not the viewport (on a phone the canvas is letterboxed, so those are
+      different places), and `pointer-events: none` so it can never eat the tap that caused it. Re-tapping
+      mid-fade restarts the bloom rather than being swallowed — a class removal plus a forced reflow,
+      because re-adding a class mid-animation is otherwise a no-op.
+      🐛 **TWO WRONG BINDINGS BEFORE THE RIGHT ONE, and it is worth recording because both failed
+      SILENTLY.** Holding a reference to `#preview` never fired — measured, a capture listener on that
+      element saw **zero** of the taps dispatched at it once the browser was open and playback running.
+      Re-binding to `#canvas-wrap` failed identically. Something in that path rebuilds the canvas area, so
+      any node captured at load is a corpse by the time this feature runs — **and this feature only ever
+      runs in that state**, so it was broken in exactly the situation it exists for. It is a
+      document-level capture listener with a `closest('#canvas-wrap')` check now, which cannot go stale.
+      ⚠️ **AND THE TEST LEAKED, for the second time in three items.** Opening the real browser in a test
+      starts the thumbnail machinery, and the next test comparing an effect tile against its subject then
+      reported six effects as "indistinguishable" — **byte-identical numbers to the failure queue 528's
+      test caused.** I theorised twice (thumbnail cache, then preview quality) and was wrong both times;
+      **neutering the body proved it in one run**, which is the rule I had already written down. The test
+      drives `FM.fxSheet` directly now: the hook keys off one thing, so the test creates exactly that
+      state and nothing else.
 
 - [ ] **539 — 🔴 Squish must work with EVERY effect (shakes especially), needs a layer picker so shapes interact with each other, and it still fails in corners.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

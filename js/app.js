@@ -1885,6 +1885,54 @@ window.FM = window.FM || {};
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
 
+  /* ⚠️ TAP THE CANVAS WHILE THE EFFECTS MENU IS OPEN → PAUSE (queue 538). Ezra: *"Make it so if you tap
+     the canvas when in the effects menu it pauses the playback, make it have a nice pause animation and
+     a little pause button appears briefly before fading away"*.
+     SCOPED, exactly as he wrote it — *"when in the effects menu"*. This is NOT a blanket tap-to-pause on
+     the canvas: outside that menu a canvas tap selects and drags layers, and turning every one of those
+     into a pause would break the editor.
+     ⚠️ CAPTURE PHASE, AND IT NEVER STOPS PROPAGATION. The entry's own warning: pausing has to COEXIST
+     with what the tap already does, not replace it. Capture means it runs before canvas-edit's
+     startMove regardless of z-order; not stopping propagation means the selection or drag still
+     happens. The tap does both things, which is what he asked for — he said pause, not "and stop
+     selecting".
+     ⚠️ Only while PLAYING. A tap on a paused canvas that bloomed a pause glyph would be a lie. */
+  (function () {
+    /* ⚠️ BOUND ON THE DOCUMENT, NOT ON THE CANVAS OR ITS WRAPPER — and this cost two wrong attempts,
+       so it is worth writing down. Holding a reference to #preview did not work: measured, a capture
+       listener registered on that element saw ZERO taps once the effects browser had been opened and
+       playback started. Re-binding to #canvas-wrap did not work either, for the same reason. Something
+       in that path rebuilds the canvas area, so ANY listener held on a node from load time is on a
+       corpse by the time this feature is used — and this feature ONLY runs in that state, so it was
+       broken in exactly the situation it exists for.
+       A document-level capture listener cannot go stale. The `closest` check keeps the scope exactly
+       where he put it: taps on the canvas area, not on the sheet below it. */
+    const fx = document.getElementById('pause-fx');
+    /* Re-tapping mid-fade has to RESTART the bloom, not be swallowed by the animation still running —
+       "it cannot be left stuck on screen if you tap again mid-fade". Removing the class and forcing a
+       reflow before re-adding is what makes the browser start the keyframes over. */
+    FM.flashPause = function () {
+      if (!fx) return;
+      fx.classList.remove('on');
+      void fx.offsetWidth;          // reflow: without this the re-added class is a no-op mid-animation
+      fx.classList.add('on');
+    };
+    const fxMenuOpen = () => {
+      const root = document.getElementById('fx-browser');
+      if (!root) return false;
+      if (root.classList.contains('hidden')) return false;
+      return getComputedStyle(root).display !== 'none';
+    };
+    FM._fxMenuOpen = fxMenuOpen;    // suite seam: the real condition, not a copy of it
+    document.addEventListener('pointerdown', (e) => {
+      if (!FM.playing || !fxMenuOpen()) return;
+      const t = e.target;
+      if (!t || !t.closest || !t.closest('#canvas-wrap')) return;   // the canvas area only — not the sheet
+      FM.pause();
+      FM.flashPause();
+    }, true);
+  })();
+
   // Review play (▶ at the far right of the transport): preview from the current frame, then snap back
   // to it when you stop — "play without moving the playhead". A second press stops + restores.
   FM.reviewPlay = function () {

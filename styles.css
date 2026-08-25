@@ -8037,3 +8037,32 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 
+/* THE PAUSE BLOOM (queue 538). Ezra: "make it so if you tap the canvas when in the effects menu it
+   pauses the playback, make it have a nice pause animation and a little pause button appears briefly
+   before fading away."
+   Read as ONE feature described twice — the "pause animation" IS the little button blooming and fading;
+   the transport itself stops immediately, which is what you want from a pause you asked for.
+   Centred on #canvas-wrap, not the viewport: on a phone the canvas is letterboxed inside the stage, so
+   a viewport-centred glyph would sit off the picture. pointer-events:none so it cannot eat the tap. */
+#pause-fx {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 72px; height: 72px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(6, 10, 16, .55); color: #fff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(255, 255, 255, .14);
+  opacity: 0; pointer-events: none; z-index: 6;
+}
+#pause-fx.on { animation: fm-pausebloom .62s cubic-bezier(.16, .84, .34, 1) forwards; }
+@keyframes fm-pausebloom {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
+  22%  { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  55%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.18); }
+}
+/* Reduced motion still gets the FEEDBACK — it is how you know the tap did something — just without the
+   scale. Removing it entirely would make the tap feel like it did nothing. */
+@media (prefers-reduced-motion: reduce) {
+  #pause-fx.on { animation: fm-pausefade .62s linear forwards; }
+  @keyframes fm-pausefade { 0%, 62% { opacity: 1; } 100% { opacity: 0; } }
+}
+

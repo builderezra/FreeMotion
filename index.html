@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=606">
+<link rel="stylesheet" href="styles.css?v=607">
 <link rel="stylesheet" href="theme-glass.css?v=31">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -170,7 +170,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v12.62</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v12.63</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -317,6 +317,12 @@
       <section id="stage">
         <div id="canvas-wrap">
           <canvas id="preview"></canvas>
+          <!-- The pause bloom (queue 538). Ezra: "make it have a nice pause animation and a little pause
+               button appears briefly before fading away". It is FEEDBACK, not a control: pointer-events
+               none so it can never eat the tap that caused it, aria-hidden so it is not announced, and it
+               lives inside #canvas-wrap so it centres on the CANVAS rather than the viewport — which is
+               the difference you can see on a phone, where the canvas is letterboxed. -->
+          <div id="pause-fx" aria-hidden="true"><svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg></div>
           <div id="drop-hint">
             <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><!-- v5.92. Ezra: "this shape looks a little shitty, fix it up so the lines aren't going through." The clapstick was an OPEN path forming a wedge 4.5 thick at the hinge and 1.5 at the tip, and the three stripes were fixed-length diagonals that fitted neither end of it: measured against the wedge, all three overshot its TOP edge by ~1.0, and two crossed BELOW y=9 into the board — the third started at y=9.6, i.e. entirely inside it. Now the clapstick is a CLOSED bar of constant 3.6 thickness and the stripes are inset 0.8 from both of its edges, so nothing can protrude at either end. Declaration order is load-bearing, as it was for the Template icon: stripes first, bar over their ends, board last. --><path d="M7.55 7.5 7.28 5.53M12.0 6.9 11.73 4.93M16.44 6.3 16.18 4.33"/><path d="M3.2 8.9 21 6.5 20.52 2.93 2.72 5.33Z"/><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>
             <div>Drag a video or image here<br>or click <b>Import media</b></div>
@@ -935,7 +941,7 @@
   <script src="js/shortcuts.js?v=79"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=50"></script>
-  <script src="js/app.js?v=373"></script>
+  <script src="js/app.js?v=376"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=6"></script>

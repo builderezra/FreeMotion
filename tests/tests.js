@@ -3462,6 +3462,116 @@
     if (diff(flat, dithered, 4) > 50) throw new Error('Dither is visible as more than a 1-level adjustment — that is noise, not dithering');
   });
 
+  test('538: tapping the canvas pauses — but only while the effects menu is open', { item: '538' }, async function () {
+    /* Queue 538. Ezra: "Make it so if you tap the canvas when in the effects menu it pauses the playback,
+       make it have a nice pause animation and a little pause button appears briefly before fading away."
+       Read as ONE feature described twice — the "pause animation" IS the little button blooming and
+       fading; the transport stops at once, which is what you want from a pause you asked for.
+       ⚠️ THE SCOPE IS HALF THE REQUEST. He said "when in the effects menu". Outside it a canvas tap
+       selects and drags layers, and turning every one of those into a pause would break the editor — so
+       the controls below matter as much as the feature.
+       ⚠️ The listener is on the DOCUMENT, and two earlier attempts that held a reference to #preview and
+       then to #canvas-wrap both silently never fired: something in that path rebuilds the canvas area,
+       so a node captured at load is a corpse by the time this runs — and this only ever runs in that
+       state. Hence the seam below is the real condition, not a copy. */
+    if (typeof FM.fxSheet !== 'function') throw new Error('FM.fxSheet is missing — no way to put the browser into sheet mode');
+    if (typeof FM._fxMenuOpen !== 'function') throw new Error('FM._fxMenuOpen is missing — the tap hook has no way to know whether the menu is open');
+    /* ⚠️ IT DOES NOT OPEN THE REAL BROWSER, and that is deliberate. `FM.fxBrowser.open()` starts the
+       thumbnail machinery, and a test that does it leaks: measured twice, the next test that compares an
+       effect tile against its subject then reported SIX effects as "indistinguishable" with nothing wrong
+       in the effects at all — queue 528's test caused the identical failure, byte-for-byte the same
+       numbers, and neutering the body was what proved it both times.
+       The hook under test keys off ONE thing — `FM._fxMenuOpen()`, i.e. is #fx-browser on screen. So the
+       test puts the app in exactly that state through the sheet seam and nothing else. Smaller, faster,
+       and it exercises the code this fix actually touches. */
+    const fxRoot = document.getElementById('fx-browser');
+    if (!fxRoot) throw new Error('#fx-browser is not in the document');
+    const openMenu = () => { fxRoot.classList.remove('hidden'); FM.fxSheet(fxRoot, true); };
+    const closeMenu = () => { FM.fxSheet(fxRoot, false); fxRoot.classList.add('hidden'); };
+    const fx = document.getElementById('pause-fx');
+    if (!fx) throw new Error('#pause-fx is not in the document, so there is no glyph to bloom');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const tapCanvas = () => {
+      const cv = document.getElementById('preview');
+      const r = cv.getBoundingClientRect();
+      cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 151, pointerType: 'touch', isPrimary: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, buttons: 1 }));
+    };
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 300, shapeH: 300, fill: '#4080c0' });
+      L.start = 0; L.duration = 8; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+
+      /* CONTROL 1 — the glyph must never eat the tap that caused it, and must sit on the CANVAS rather
+         than the viewport (on a phone the canvas is letterboxed, so those are different places). */
+      if (getComputedStyle(fx).pointerEvents !== 'none') throw new Error('the pause glyph takes pointer events — it would swallow the next tap on the canvas');
+      const wrap = document.getElementById('canvas-wrap');
+      if (!wrap || !wrap.contains(fx)) throw new Error('the glyph is not inside #canvas-wrap, so it centres on the viewport rather than the picture');
+
+      // ---- THE CASE: menu open + playing + a canvas tap
+      openMenu(); await sleep(250);
+      if (!FM._fxMenuOpen()) throw new Error('the effects menu did not open, so the case below cannot be exercised');
+      FM.requestPlay(); await sleep(420);
+      if (!FM.playing) throw new Error('playback did not start, so "tapping pauses it" is unfalsifiable');
+      fx.classList.remove('on'); await sleep(60);
+      tapCanvas(); await sleep(140);
+      if (FM.playing) throw new Error('tapping the canvas with the effects menu open did not pause playback — queue 538 clause 1');
+      if (!fx.classList.contains('on')) throw new Error('playback paused but no pause glyph appeared — the feedback half of the request is missing');
+      if (!(parseFloat(getComputedStyle(fx).opacity) > 0.5)) throw new Error('the glyph is on but invisible (opacity ' + getComputedStyle(fx).opacity + ')');
+
+      // …and it goes away by itself
+      await sleep(900);
+      if (parseFloat(getComputedStyle(fx).opacity) > 0.05) throw new Error('the pause glyph did not fade away — he asked for it to appear BRIEFLY, and one left on screen sits over the layer');
+
+      /* CONTROL 2 — the SCOPE. A tap on the sheet itself is not a tap on the canvas. */
+      FM.requestPlay(); await sleep(380);
+      fx.classList.remove('on'); await sleep(60);
+      const sheet = fxRoot;
+      const sr = sheet.getBoundingClientRect();
+      sheet.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 152, pointerType: 'touch', isPrimary: true, clientX: sr.left + sr.width / 2, clientY: sr.top + 10, buttons: 1 }));
+      await sleep(220);
+      if (fx.classList.contains('on')) throw new Error('tapping the effects SHEET bloomed the pause glyph — the scope is the canvas, not the whole screen');
+      FM.pause(); await sleep(120);
+
+      /* CONTROL 3 — outside the effects menu a canvas tap must not bloom it. He scoped this deliberately;
+         a blanket tap-to-pause would fight with selecting and dragging layers. */
+      closeMenu(); await sleep(250);
+      if (FM._fxMenuOpen()) throw new Error('the effects menu did not close, so the out-of-scope control below proves nothing');
+      fx.classList.remove('on'); await sleep(60);
+      FM.requestPlay(); await sleep(380);
+      tapCanvas(); await sleep(240);
+      if (fx.classList.contains('on')) throw new Error('a canvas tap bloomed the pause glyph with the effects menu CLOSED — he scoped this to the menu');
+    } finally {
+      try { FM.pause(); } catch (e) {}
+      try { closeMenu(); } catch (e) {}
+      if (fx) fx.classList.remove('on');
+      FM.scene.layers = saved.layers; FM.selectLayer(saved.sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      /* ⚠️ PUT THE PREVIEW RESOLUTION BACK, and this is not defensive tidying — it is a cross-test leak
+         this test caused and the second time this exact shape has bitten. PLAYING drives the adaptive
+         quality ladder: `noteMotion` decides the app is in motion and calls resizeCanvas() to drop the
+         preview to a lower resolution, snapping back only a moment AFTER you stop. A test that plays and
+         then hands over immediately leaves the next one rendering into a downscaled canvas — the effects
+         thumbnail test then reported six tiles as "indistinguishable from their subject" with nothing
+         wrong in the effects at all. (Queue 528's test caused the identical failure by opening the
+         browser inside a phone-width block.)
+         So: pause, let the ladder climb back, and force one resize rather than trusting the timing. */
+      await sleep(500);
+      if (FM.resizeCanvas) { try { FM.resizeCanvas(); } catch (e) {} }
+      if (FM.requestRender) FM.requestRender();
+      await sleep(250);
+      if (FM.fxThumbs && FM.fxThumbs.remountLive) { try { FM.fxThumbs.remountLive(); } catch (e) {} }
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."
