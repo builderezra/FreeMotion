@@ -3950,6 +3950,13 @@ window.FM = window.FM || {};
     expPrefsApply();   // after the resolution list is rebuilt for THIS project, so the match can land
     syncExportFormat();
     document.getElementById('export-dialog').classList.remove('hidden');
+    /* POP OUT OF THE ⬆️ BUTTON (queue 548). It opened dead centre at 555,249 with no animation.
+       After the class is removed, because popFrom measures the card and a hidden card has no size. */
+    if (FM.popFrom) {
+      if (FM._expPop) { FM._expPop(); FM._expPop = null; }
+      const card = document.querySelector('#export-dialog .export-card');
+      FM._expPop = FM.popFrom(card, document.getElementById('btn-export'));
+    }
     checkExportAudioSupport();
   }
 
@@ -4077,7 +4084,10 @@ window.FM = window.FM || {};
     return parseFloat(raw) || 30;
   };
 
-  function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
+  function hideExportDialog() {
+    if (FM._expPop) { FM._expPop(); FM._expPop = null; }   // or the card keeps `position: fixed` and the button stays lifted
+    document.getElementById('export-dialog').classList.add('hidden');
+  }
 
   // Format picker → button label + transparent toggle + GIF note. MP4 can't carry alpha, so the
   // transparent checkbox is only available (and only shown) for GIF / PNG frames.
@@ -5897,12 +5907,20 @@ window.FM = window.FM || {};
           cvDialog.style.setProperty('--cv-anchor-top', Math.round(sr.bottom + 8) + 'px');
           cvDialog.style.setProperty('--cv-anchor-bottom', Math.max(8, Math.round(window.innerHeight - sr.top + 8)) + 'px');
           document.body.classList.add('cv-anchored');
+          /* THE TAIL, and ONLY the tail (queue 548). The cog already pops from its button with its own
+             cv-grow, and two suite tests pin that placement — so it takes the comic tail the other three
+             now have and keeps everything else. `placed: true` is what says "decorate, do not move". */
+          if (FM.popFrom) {
+            if (FM._cvPop) { FM._cvPop(); FM._cvPop = null; }
+            const cvCard = cvDialog.querySelector('.export-card');
+            if (cvCard) FM._cvPop = FM.popFrom(cvCard, src, { placed: true });
+          }
         } else {
           cvDialog.style.removeProperty('--cv-anchor-right');
           cvDialog.style.removeProperty('--cv-anchor-top');
         cvDialog.style.removeProperty('--cv-anchor-bottom');
         document.body.classList.remove('cv-up');
-          document.body.classList.remove('cv-anchored', 'cv-up');
+          (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         }
         cvDialog.classList.remove('hidden');
       });
@@ -5922,10 +5940,10 @@ window.FM = window.FM || {};
          without this a click on it would close and immediately reopen the dialog. */
       cvDialog.addEventListener('pointerdown', (e) => {
         if (e.target !== cvDialog) return;
-        document.body.classList.remove('cv-anchored', 'cv-up');
+        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
       });
-      document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored', 'cv-up'), cvDialog.classList.add('hidden')));
+      document.getElementById('cv-cancel').addEventListener('click', () => ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden')));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();
         /* MOVE THE WORK WITH THE FRAME. Changing the size here used to change two numbers and nothing
@@ -5947,7 +5965,7 @@ window.FM = window.FM || {};
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
-        (document.body.classList.remove('cv-anchored', 'cv-up'), cvDialog.classList.add('hidden'));
+        ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden'));
       });
     }
 

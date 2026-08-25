@@ -26,6 +26,8 @@ window.FM = window.FM || {};
     return P.notes;
   }
   function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  let popCleanup = null;   // queue 548 — see the popFrom call in open()
+
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
   /* The notes that will actually stop an export. Everything downstream asks THIS rather than filtering
@@ -115,11 +117,18 @@ window.FM = window.FM || {};
     document.body.appendChild(scrim);
     scrim.addEventListener('pointerdown', e => { if (e.target === scrim) close(); });
     render();
+    /* POP OUT OF THE 📒 BUTTON, WITH ITS OWN ANIMATION (queue 548 clauses 1-4). The notepad is the one
+       clause where he asked for invention rather than consistency: "it would be cool if the note pad one
+       had a unique animation that fit it". So it does not grow like the other three — it FLIPS OPEN over
+       its own top edge, the way you turn back the cover of a pad (`pop-note` in styles.css).
+       After render(), because popFrom measures the card and an empty card is the wrong size. */
+    if (FM.popFrom) popCleanup = FM.popFrom(card, document.getElementById('btn-notes'), { flavour: 'note' });
     // Nothing is focused on open: on a phone that would throw the keyboard up over the list you came
     // to read. The + button focuses its own new row, which is the moment you actually want to type.
   }
 
   function close() {
+    if (popCleanup) { popCleanup(); popCleanup = null; }   // the button stays lifted above the scrim otherwise
     document.querySelectorAll('.np-scrim').forEach(n => n.remove());
     badge();
   }

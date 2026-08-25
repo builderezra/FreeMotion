@@ -8082,3 +8082,96 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   @keyframes fm-pausefade { 0%, 62% { opacity: 1; } 100% { opacity: 0; } }
 }
 
+
+/* ---- MENUS THAT POP OUT OF THEIR BUTTON (queue 548) --------------------------------------------
+   Ezra: "i want their respective menus to pop out from the button like the settings cog one does …
+   i want it to be like how comics have the line around the text box directing it to where its coming
+   from, so like the ui for each menu actually has each button attached to it".
+   Placement is done in js/popfrom.js (it needs the button's runtime rect); this is the look.
+   ⚠️ DESKTOP ONLY — same gate the cog already used. On a phone these are full-width sheets and a tail
+   pointing at a 34px button under a full-screen card is nonsense. */
+@media (min-width: 701px) {
+  /* ⚠️ THE PLACEMENT AND THE ANIMATION SHARE `transform`, so the keyframes have to carry the offset
+     or the animation throws the placement away on its first frame. `--pop-dx/--pop-dy` are set by
+     js/popfrom.js and composed into every keyframe below; the card's own layout is never touched,
+     which is the whole point (see the note in popfrom.js — placing by `position: fixed` changed the
+     cards' size and put the notepad's card at 1150px wide). */
+  .pop-card {
+    z-index: 3100;
+    transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px));
+    transform-origin: var(--pop-tail-x, 50%) 100%;
+    animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) both;
+  }
+  /* The cog is decorated, not re-placed (see `placed` in js/popfrom.js) — it already has its own
+     placement and its own cv-grow, both pinned by tests. It takes the tail and nothing else. */
+  /* The cog is decorated, not re-placed (`placed: true` in js/popfrom.js) — it has its own placement
+     and its own cv-grow, both pinned by tests, so it takes the tail and nothing else. `position:
+     relative` from .pop-card above still applies, and must: the tail is absolute and needs the card
+     as its containing block, or it resolves against the scrim and lands 329px from the button, which
+     is exactly what it did the first time. `relative` does not move anything. */
+  .pop-card.pop-tailed { z-index: auto; animation: none; transform: none; }
+  /* The tail lives in <body>, so its colours are set on the tail itself by js/popfrom.js. */
+  .pop-card.pop-down { transform-origin: var(--pop-tail-x, 50%) 0%; }
+
+  /* THE COMIC TAIL. Two stacked triangles: the outer one is the card's border colour, the inner one
+     is the card's background sitting 1.5px inside it, which is the classic speech-bubble outline —
+     an outline that runs unbroken from the panel down to the button, which is what he described.
+     `--pop-tail-x` comes from the BUTTON's real centre, not the card's, so a card pushed sideways by
+     the viewport still has its tail over the button that opened it. */
+  /* ⚠️ FIXED, AND A SIBLING IN <body> — never a child of the card. A tail at `top: 100%` inside a card
+     with `overflow-y: auto` counts toward that card's SCROLL HEIGHT: the canvas-settings test went red
+     with "it needs 402px and has 391px", and the 11px is exactly this triangle. It would also have
+     scrolled away inside the very card it is meant to be attached to. js/popfrom.js places it in
+     viewport coordinates so it can never touch a card's layout. */
+  .pop-tail {
+    position: fixed;
+    width: 0; height: 0;
+    pointer-events: none;
+    z-index: 3102;
+    border-left: 11px solid transparent;
+    border-right: 11px solid transparent;
+  }
+  /* `--pop-tail-fill` / `--pop-tail-line` are copied off the host card at runtime by js/popfrom.js —
+     three of these cards are dark panels and the notepad is paper, and one hard-coded palette cannot
+     serve both. The vars fall back to the app's panel colours if that ever fails to run. */
+  .pop-tail-up   { border-top: 11px solid var(--pop-tail-line, var(--line, #2b3547)); }
+  .pop-tail-down { border-bottom: 11px solid var(--pop-tail-line, var(--line, #2b3547)); }
+  .pop-tail::after {
+    content: ""; position: absolute; left: -9px; width: 0; height: 0;
+    border-left: 9px solid transparent; border-right: 9px solid transparent;
+  }
+  .pop-tail-up::after   { top: -12px; border-top: 9px solid var(--pop-tail-fill, var(--panel, #161c28)); }
+  .pop-tail-down::after { bottom: -12px; border-bottom: 9px solid var(--pop-tail-fill, var(--panel, #161c28)); }
+
+  /* The button that opened it, lifted out of the scrim's blur — his note on the cog: "the settings
+     button wouldnt be blured like everything else". Only the button; lifting the row would put the
+     transport controls over a modal that is meant to own the screen. */
+  .pop-src { position: relative; z-index: 3101; }
+
+  @keyframes pop-grow {
+    from { opacity: 0; transform: translate(var(--pop-dx, 0px), calc(var(--pop-dy, 0px) + 6px)) scale(.86); }
+    to   { opacity: 1; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) scale(1); }
+  }
+  .pop-card.pop-down { animation-name: pop-grow-down; }
+  @keyframes pop-grow-down {
+    from { opacity: 0; transform: translate(var(--pop-dx, 0px), calc(var(--pop-dy, 0px) - 6px)) scale(.86); }
+    to   { opacity: 1; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) scale(1); }
+  }
+
+  /* THE NOTEPAD GETS ITS OWN — his idea, and the one clause where he asked for invention rather than
+     consistency: "it would be cool if the note pad one had a unique animation that fit it".
+     So the notepad does not grow, it FLIPS OPEN over its own top edge, like turning back the cover of
+     a pad. Perspective on the scrim rather than the card, because a card that owns its own perspective
+     gets it re-applied by its transform and the fold looks flat. */
+  .np-scrim { perspective: 1400px; }
+  .pop-card.pop-note { animation: pop-flip 340ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 0%; }
+  .pop-card.pop-note.pop-up { transform-origin: 50% 100%; }
+  @keyframes pop-flip {
+    from { opacity: 0; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) rotateX(-82deg); }
+    60%  { opacity: 1; }
+    to   { opacity: 1; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) rotateX(0deg); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop-card, .pop-card.pop-down, .pop-card.pop-note { animation: none; }
+}

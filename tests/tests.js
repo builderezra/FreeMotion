@@ -3861,6 +3861,118 @@
     }
   });
 
+  test('548: all four transport menus pop out of their own button, with a tail and an animation', { item: '548' }, async function () {
+    /* Queue 548. Ezra, with the four right-hand transport buttons boxed in red:
+       "i want their respective menus to pop out from the button like the settings cog one does but also
+        i want a nice animation for all of them opening up not just it spawning and i want it to be like
+        how comics have the line around the text box directing it to where its coming from … also it
+        would be cool if the note pad one had a unique animation that fit it"
+       MEASURED BEFORE BUILDING, and the entry's guess was right — this is one mechanism, not four. The
+       cog already popped from its button with its own animation; the other three opened dead centre
+       (500,63 / 555,249) with none at all.
+       ⚠️ DESKTOP ONLY, and the test says so rather than assuming: at 380px all four buttons are not
+       rendered at all — the phone has its own layout — so there is nothing to pop out of. The suite runs
+       at both widths, so this branches on whether the button actually has a box. */
+    if (typeof FM.popFrom !== 'function') throw new Error('FM.popFrom is missing — js/popfrom.js did not load');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const btn = id => document.getElementById(id);
+    const laidOut = el => !!el && el.getBoundingClientRect().width > 0;
+
+    /* THE MOBILE HALF. A no-op has to be ASSERTED, not assumed: a version that anchored a full-width
+       sheet to a 34px button would look absurd and no desktop test would ever see it. */
+    if (!window.matchMedia('(min-width: 701px)').matches) {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:0;top:0;width:120px;height:60px';
+      document.body.appendChild(probe);
+      const fake = document.createElement('button');
+      fake.style.cssText = 'position:fixed;left:10px;top:200px;width:30px;height:30px';
+      document.body.appendChild(fake);
+      try {
+        const undo = FM.popFrom(probe, fake);
+        if (document.querySelector('.pop-tail')) throw new Error('popFrom drew a comic tail at phone width — these menus are full-width sheets there and the tail would point at nothing');
+        if (probe.classList.contains('pop-card')) throw new Error('popFrom anchored a card at phone width');
+        if (typeof undo !== 'function') throw new Error('popFrom must always return a cleanup function, even when it does nothing');
+        undo();
+      } finally { probe.remove(); fake.remove(); }
+      return;
+    }
+
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (homeWasOpen) FM.home.close();
+    await sleep(250);
+
+    const CASES = [
+      { id: 'btn-help', card: '.shortcuts-card', name: 'keyboard shortcuts',
+        open: () => FM.shortcuts.show(), shut: () => FM.shortcuts.hide() },
+      { id: 'btn-notes', card: '.np-card', name: 'project notes',
+        open: () => FM.notepad.open(), shut: () => FM.notepad.close() },
+      { id: 'btn-export', card: '#export-dialog .export-card', name: 'export',
+        open: () => btn('btn-export').click(), shut: () => btn('exp-cancel').click() },
+      /* The cog is here for its TAIL only. Its placement and its cv-grow are its own and are pinned by
+         two other tests; queue 548 gave it the tail the other three now have, and nothing else. */
+      { id: 'btn-settings', card: '#canvas-dialog .export-card', name: 'canvas settings',
+        open: () => btn('btn-settings').click(), shut: () => btn('cv-cancel').click() }
+    ];
+    /* ⚠️ FORCE EVERYTHING SHUT ON THE WAY OUT, however this test ends (LOOP rule 17). A dialog left
+       open by a failed assertion is inherited by whatever runs next, and this suite has already lost
+       three separate items to exactly that shape of leak. */
+    const shutEverything = () => {
+      try { if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide(); } catch (e) {}
+      try { if (FM.notepad && FM.notepad.close) FM.notepad.close(); } catch (e) {}
+      ['export-dialog', 'canvas-dialog'].forEach(id => { const d = document.getElementById(id); if (d) d.classList.add('hidden'); });
+      document.body.classList.remove('cv-anchored', 'cv-up');
+      document.querySelectorAll('.pop-tail').forEach(n => n.remove());
+      document.querySelectorAll('.pop-src').forEach(n => n.classList.remove('pop-src'));
+    };
+    const seen = {};
+    try {
+    for (const c of CASES) {
+      const b = btn(c.id);
+      if (!laidOut(b)) continue;                 // not in this layout — the mobile branch above owns that
+      c.open(); await sleep(450);
+      const card = document.querySelector(c.card);
+      if (!card) throw new Error(c.name + ': no card appeared, so nothing below can be measured');
+      try {
+        const g = FM._popGeom(card, b);
+        const cr = card.getBoundingClientRect(), br = b.getBoundingClientRect();
+
+        // 1. IT COMES OUT OF ITS OWN BUTTON — the tail points at the button, within a pixel.
+        if (!g.hasTail) throw new Error(c.name + ': no comic tail — "the ui for each menu actually has each button attached to it" is the clause this misses');
+        if (Math.abs(g.tailCx - g.btnCx) > 6) throw new Error(c.name + ': the tail is at x=' + g.tailCx + ' and its button at x=' + g.btnCx + ' — it is pointing ' + Math.abs(g.tailCx - g.btnCx) + 'px away from the thing it came from');
+
+        // 2. …beside the button, not over it, and not off the screen.
+        if (!(g.gap >= 0 && g.gap <= 40)) throw new Error(c.name + ': the card sits ' + g.gap + 'px from its button — negative means it has opened straight over the button, which is what a card placed from a stale height does');
+        if (cr.top < -1 || cr.bottom > window.innerHeight + 1 || cr.left < -1 || cr.right > window.innerWidth + 1) throw new Error(c.name + ': the card is off screen at ' + Math.round(cr.left) + ',' + Math.round(cr.top) + ' ' + Math.round(cr.width) + 'x' + Math.round(cr.height));
+        if (!(cr.bottom <= br.top || cr.top >= br.bottom)) throw new Error(c.name + ': the card overlaps its own button');
+
+        // 3. A REAL OPENING ANIMATION — his words: "not just it spawning".
+        const anim = getComputedStyle(card).animationName;
+        if (!anim || anim === 'none') throw new Error(c.name + ': the card has no opening animation at all');
+        seen[c.name] = anim;
+
+        // 4. …and the button is lifted out of the scrim's blur, as the cog already was.
+        if (!b.classList.contains('pop-src')) throw new Error(c.name + ': the button that opened it was not lifted above the scrim, so it blurs with the rest');
+      } finally {
+        c.shut(); await sleep(450);
+      }
+      // 5. NOTHING SURVIVES THE CLOSE. The first build hooked each close path by hand and leaked on
+      //    three of them — the button stayed lifted and the card kept its placement.
+      if (document.querySelector('.pop-tail')) throw new Error(c.name + ': the tail outlived the menu');
+      if (b.classList.contains('pop-src')) throw new Error(c.name + ': the button is still lifted above a scrim that has gone');
+      if (card.classList.contains('pop-card')) throw new Error(c.name + ': the card kept its pop placement after closing, so the next open measures the old one');
+    }
+
+    // 6. THE NOTEPAD'S IS ITS OWN — the one clause where he asked for invention, not consistency.
+    if (seen['project notes'] && seen['export']) {
+      if (seen['project notes'] === seen['export']) throw new Error('the notepad opens with the same animation as the others (' + seen['export'] + ') — he asked for "a unique animation that fit it"');
+    }
+    } finally {
+      shutEverything();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('539: a layer squashed into a CORNER actually flattens, and one with room to bulge is untouched', { item: '539' }, function () {
     /* Queue 539 clause 4. Ezra: "It still doesn't even work in corners very well so it's got a long way
        to go."

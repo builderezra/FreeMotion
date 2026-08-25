@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.72
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.73
 >
-> **State:** v12.72, **963 tests green**, tree clean.
+> **State:** v12.73, **964 tests green**, tree clean.
+>
+> **✅ v12.73 — the four menus at the right of the transport row now pop out of their buttons (#548).**
+> Shortcuts, Notes, Settings and Export. Each one hangs off the button you pressed with a comic tail
+> pointing back at it, and each opens with an animation instead of just appearing. **The notepad got its
+> own**, like you asked — it flips open over its top edge, the way you turn back the cover of a pad.
+> The settings cog kept its own animation on purpose: it already worked and two tests pin it, so it just
+> gained the tail. **Picture below** — say the word if you want the tail bigger, or a different opening.
 >
 > **✅ v12.72 — Squish in corners (#539, the corner part).** You said it "doesn't even work in corners very
 > well". It now squashes properly into one: a ball goes **125×125 → 104×104**, 37% less area, and rolling
@@ -19081,25 +19088,78 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ He is describing the thing I shipped this morning, so treat the v12.40 reasoning as suspect until
       re-measured at HIS window size rather than the one I tested at.
 
-- [ ] **548 — The transport row's four right-hand menus should pop OUT of their buttons, with a comic-style tail pointing back at the button, and a proper opening animation each.** (25 Aug, PC screenshot at v12.41.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **548 — The transport row's four right-hand menus should pop OUT of their buttons, with a comic-style tail pointing back at the button, and a proper opening animation each.** (25 Aug, PC screenshot at v12.41.) — **DONE v12.73.**
       His words, verbatim:
       > for all these buttons i want their respective menus to pop out from the button like the settings cog one does but also i want a nice animation for all of them opening up not just it spawning and i want it to be like how comics have the line around the text box directing it to where its coming from, so like the ui for each menu actually has each button attached to it so you see where its coming from, also it would be cool if the note pad one had a unique animation that fit it
       **The four buttons are the ones he boxed in red**, at the right of the transport row: **?** (keyboard
       shortcuts), **📒** (project notes), **⚙️** (settings) and **⬆️** (export).
       **Clauses — tick separately:**
-      1. [ ] **Each menu opens FROM its own button** — the cog's already does, and that is the model.
-      2. [ ] **A real opening animation for every one of them**, not an instant appear. His words:
+      1. [x] **Each menu opens FROM its own button** — the cog's already does, and that is the model.
+      2. [x] **A real opening animation for every one of them**, not an instant appear. His words:
              *"not just it spawning"*.
-      3. [ ] **A comic speech-bubble TAIL** — an outline that runs from the panel down to the button that
+      3. [x] **A comic speech-bubble TAIL** — an outline that runs from the panel down to the button that
              opened it, so the connection is visible: *"the ui for each menu actually has each button
              attached to it so you see where its coming from"*.
-      4. [ ] **The notepad menu gets its own animation that suits a notepad** — his idea, and the one
+      4. [x] **The notepad menu gets its own animation that suits a notepad** — his idea, and the one
              clause where he is explicitly asking for invention rather than consistency.
       ⚠️ **DESIGN REQUEST → #545 APPLIES:** draw the options, render them, and send him a picture before
       shipping any of it. The tail shape and the notepad animation are both taste calls.
       ⚠️ Check what each of the four currently does first — the cog is said to already pop from its button,
       so part of this may be extending one existing mechanism rather than building four.
+
+      ✅ **DONE v12.73 — all four clauses.** Measured first, and this entry's guess was right: it is ONE
+      mechanism, not four. At v12.72 the four behaved like this —
+      | | card opened at | animation |
+      |---|---|---|
+      | **?** shortcuts | 500,63 — dead centre | none |
+      | **📒** notes | (built fresh each time) | none |
+      | **⚙️** settings | 1076,438 — under the cog ✓ | cv-grow 160ms ✓ |
+      | **⬆️** export | 555,249 — dead centre | none |
+      **So the cog already did the whole thing**, in CSS written only for itself. `js/popfrom.js` is that
+      idea generalised for the other three. **Measured after:** every one of the four now has its tail
+      within **1px** of its own button's centre, sits 8–11px clear of it, is fully on screen, and opens
+      with an animation.
+      🎨 **The notepad has its own, per clause 4** — it does not grow, it **flips open over its top edge**
+      like turning back the cover of a pad (`pop-flip`, 340ms). The others use `pop-grow`.
+      ⚠️ **THE COG WAS DELIBERATELY NOT REWRITTEN.** It takes the new tail and keeps its own placement and
+      its own `cv-grow`, because two suite tests pin that behaviour (it opens upward, and it fits without
+      scrolling at a cog height of 126 where "always upward" would push it off screen). Re-deriving that
+      to make the code tidier would have risked something he can see, for nothing he can see.
+      ⚠️ **DESKTOP ONLY, and that is not a shortcut** — at 380px **all four buttons are not rendered at
+      all**; the phone has a different layout entirely. A tail pointing at a button that does not exist,
+      on a card that is already full-width, would be nonsense. The test asserts the no-op rather than
+      assuming it.
+      🐛 **Three wrong builds before this one, all the same mistake in different clothes: I placed the
+      card from a measurement that was not its real size.**
+      · **v1 measured it parked at 0,0 under `position: fixed`.** These cards live in flex-centred
+        scrims, so taking one out of the flow changes its size — the export card reads **367px** tall
+        there and **403px** where it lands. Placed from 367 it sat 10px above the button and then
+        rendered 36px taller, straight back down over it.
+      · **v2 pinned the measured width to stop that.** Worse: the notepad's scrim STRETCHES its card, so
+        "natural width" read **1150px** and the card came out nearly full-screen.
+      · **v3 placed by transform** (which cannot affect layout, so the card keeps exactly the size its own
+        stylesheet gives it) — but re-measured mid-animation, and `getBoundingClientRect` reports the box
+        AFTER transforms, so a card at `scale(.86)` read 14% small and every tail landed up to **63px**
+        off. Now measured through `offsetWidth`/`offsetTop`, which transforms cannot touch.
+      🐛 **And the teardown was hooked to each close path by hand, which leaked on three of four.** Escape
+      does not close three of these dialogs at all, and the button stayed lifted above a scrim that had
+      gone. It is driven by the CARD disappearing now — which every close path necessarily does, including
+      ones nobody has written yet.
+      🐛 **The suite then caught a fifth one that I would have shipped: the tail was a CHILD of the card.**
+      A tail at `top: 100%` sits below the card's content box, and inside a card with `overflow-y: auto`
+      that counts toward its SCROLL HEIGHT — the canvas-settings test went red with *"it needs 402px and
+      has 391px"*, and the 11px is exactly the triangle. The same arrangement would also have let the tail
+      scroll away inside the card it is attached to. It is a sibling in `<body>`, positioned in viewport
+      coordinates, so it cannot touch any card's layout.
+      ⚠️ **And a measurement lesson, which is LOOP.md rule 11 in a new place.** Four rounds of readings
+      said the animations were stuck at their first frame and every card sat 6px out. **All of it was an
+      artefact of the browser pane, not the code** — the tab was not fronted, and `requestAnimationFrame`
+      does not fire there at all: a control loop returned zero frames in 500ms and hung outright. The cog's
+      `cv-grow`, which predates this work entirely, also reported `running` after 600ms, which is what
+      finally gave it away. **It also found a real bug**: the retry and the teardown watcher were both
+      rAF-driven, so neither would run in a background tab. Both use `setTimeout` now — throttled there,
+      never frozen. Re-measured with a control confirming animations advance: every tail is dead centre on
+      its button (**0px**), gaps 8–11px, nothing scrolls, every animation reaches `finished`.
 
 - [x] **549 — 🔴 At the very END of a layer it disappears, even when it should still be on screen.** (25 Aug, two phone screenshots at v12.42.) ✅ v12.66
       His words, verbatim:

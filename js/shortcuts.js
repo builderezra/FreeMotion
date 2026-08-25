@@ -99,10 +99,28 @@ window.FM = window.FM || {};
     overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) FM.shortcuts.hide(); });
     document.body.appendChild(overlay);
   }
+  /* POP OUT OF THE ? BUTTON (queue 548). The card opened dead centre at 500,63 with no animation;
+     his ask is that each of the four transport menus comes out of its own button with a comic tail
+     back to it. Placement lives in js/popfrom.js so all four share one rule.
+     `popCleanup` is not optional: popFrom sets `position: fixed` on the card and lifts the button
+     above the scrim, and both have to come off on close or the next open measures the old placement. */
+  let popCleanup = null;
+  function popOpen() {
+    if (popCleanup) { popCleanup(); popCleanup = null; }
+    const card = overlay && overlay.querySelector('.shortcuts-card');
+    const btn = document.getElementById('btn-help');
+    if (card && btn && FM.popFrom) popCleanup = FM.popFrom(card, btn);
+  }
+  function popShut() { if (popCleanup) { popCleanup(); popCleanup = null; } }
+
   FM.shortcuts = {
     isOpen() { return !!overlay && !overlay.classList.contains('hidden'); },
-    toggle() { if (!overlay) build(); overlay.classList.toggle('hidden'); },
-    show() { if (!overlay) build(); overlay.classList.remove('hidden'); },
-    hide() { if (overlay) overlay.classList.add('hidden'); },
+    toggle() {
+      if (!overlay) build();
+      overlay.classList.toggle('hidden');
+      if (overlay.classList.contains('hidden')) popShut(); else popOpen();
+    },
+    show() { if (!overlay) build(); overlay.classList.remove('hidden'); popOpen(); },
+    hide() { if (overlay) overlay.classList.add('hidden'); popShut(); },
   };
 })(window.FM);
