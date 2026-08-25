@@ -2118,7 +2118,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 360px) {
   #transport { padding-left: 6px; padding-right: 6px; }
   #transport .tbtn { min-width: 31px; width: 31px; }   /* min-width is what sizes .tbtn (styles.css:2130) — setting `width` alone never shrinks it */
-  #transport > #time-readout { padding: 4px 9px; }
+  #transport > #time-readout { padding: 0 9px; }   /* horizontal only — the height is fixed at 34px to match .tbtn (queue 526) */
   .t-left { padding-right: 4px; }
   .t-right { padding-left: 4px; }
 }
@@ -2128,7 +2128,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    be dropping a control, and that is his call, not mine. */
 @media (max-width: 340px) {
   #transport .tbtn { min-width: 28px; width: 28px; }
-  #transport > #time-readout { padding: 4px 7px; font-size: 12px; }
+  #transport > #time-readout { padding: 0 7px; font-size: 12px; }   /* horizontal only — see queue 526 */
 }
 
 /* THE SWITCH (queue 373, clauses 3-7 and 9). A vertical track with a knob: "if the switch is facing up
@@ -2277,7 +2277,23 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
    press state, and enough padding to be a thumb target rather than a label. */
 #time-readout {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
-  padding: 4px 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
+  /* THE OUTLINE SITS ON THE SAME LINES AS ITS NEIGHBOURS (queue 526). Ezra: "The lines around the
+     middle play button should align with the lines on all the other buttons on the row."
+     MEASURED at 380px before this: every `.tbtn` in the row is a 34x34 box with an 8px radius and a
+     border of ZERO width — an invisible box — while this pill was **24.5px tall** with a VISIBLE 1px
+     border and the same 8px radius. So the one outline you can actually see was inset 4.8px at the top
+     and 4.7px at the bottom from the boxes either side of it. That is the disagreement in his shot.
+     The fix is the height, not the border: 34px makes the visible outline trace exactly where each
+     neighbour's box edge already is, so the row reads as one set of controls — and a hover background
+     on a neighbour now lands on the same rectangle the pill draws.
+     ⚠️ HEIGHT, NEVER WIDTH. The note below records that pinning a width here pushed the desktop play
+     control 3px off screen centre and broke a v4.97 assertion. Height is free of that: the middle grid
+     track is `auto`, so the box still shrink-wraps its digits horizontally.
+     `display: flex` rather than leaving it blockified: at 34px a single 12.5px line needs centring
+     vertically, and flex does it without a line-height that would have to be re-derived every time the
+     font size changes in the two narrow-width blocks above. */
+  height: 34px; display: flex; align-items: center; justify-content: center;
+  padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
   /* NO PINNED WIDTH. Pinning an even 84px was an attempt to close the last pixel of clause 8 and it did
      two things, neither good: it did not close it (the grid's side tracks are already exactly equal at
      135/86/135 and the pill still landed 1.00px right, identically at 320, 380 and 1280), and it made the

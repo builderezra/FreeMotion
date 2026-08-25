@@ -2898,6 +2898,12 @@
     const homeWasOpen = !!(FM.home.isOpen && FM.home.isOpen());
     const realConfirm = window.confirm, realToast = FM.toast;
     const elemIdx = FM.elements && FM.elements.list ? FM.elements.list().slice() : null;
+    /* ⚠️ PUT THE OPEN PROJECT BACK. `FM.projects.create()` OPENS what it creates, and this test then
+       deliberately opens a third one so `discardDraft` is allowed to run — so by the end the suite is
+       sitting in a different project from the one it started in, with a different scene. Every later
+       test that expects "a layer to work from" then depends on ordering luck. It did not turn the CDP
+       suite red, which is exactly what makes it worth fixing now rather than after it does. */
+    const openBefore = FM.projects.currentId ? FM.projects.currentId() : null;
     try {
       const eid = '__qa525elem';
       if (FM.elements && FM.elements.list) {
@@ -2965,7 +2971,91 @@
       if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
       for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
       if (elemIdx) { try { localStorage.setItem('fm.elements', JSON.stringify(elemIdx.filter(e => e.id !== '__qa525elem'))); } catch (e) {} }
+      if (openBefore && FM.projects.currentId && FM.projects.currentId() !== openBefore) {
+        try { await FM.projects.open(openBefore); } catch (e) {}
+      }
       if (!homeWasOpen && FM.home.close) { try { FM.home.close(); } catch (e) {} }
+    }
+  });
+
+  test('526: the play pill\'s outline sits on the same lines as the buttons beside it', { item: '526' }, async function () {
+    /* Queue 526. Ezra: "The lines around the middle play button should align with the lines on all the
+       other buttons on the row - I think this would look good but make sure you're checking it's good
+       as ur doing it and maybe adjust other variables to make it perfect."
+       MEASURED at 380px before the fix: every `.tbtn` is a 34x34 box with an 8px radius and a border of
+       ZERO width — an invisible box — while the pill was 24.5px tall with a VISIBLE 1px border and the
+       same radius. The one outline you can see was inset 4.8px top and 4.7px bottom from the boxes
+       either side of it.
+       ⚠️ THE FIX IS THE HEIGHT, NEVER THE WIDTH, and that is not a detail: the CSS records that pinning
+       a width here pushed the desktop play control 3px off screen centre and broke a v4.97 assertion.
+       So the desktop centring is asserted below as well as the alignment. */
+    const T = () => document.getElementById('transport');
+    const measure = () => {
+      const t = T();
+      if (!t) throw new Error('there is no #transport row to measure');
+      const pill = document.getElementById('time-readout');
+      if (!pill) throw new Error('there is no #time-readout pill');
+      const btns = [].slice.call(t.querySelectorAll('.tbtn')).filter(b => b.getBoundingClientRect().width > 0);
+      if (btns.length < 3) throw new Error('only ' + btns.length + ' visible .tbtn in the row — nothing to align against');
+      const pb = pill.getBoundingClientRect();
+      /* MEASURE AGAINST THE BUTTONS ON THE PILL'S OWN LINE, not against every .tbtn in the row.
+         His complaint is about the controls either side of it, and requiring ALL of them to share a top
+         edge made this test fail for an unrelated reason: in the harness the app boots at desktop width
+         and is then narrowed, and one control ends up on a second line. That is worth knowing (it is
+         noted in the entry) but it is not queue 526, and a test that fails for the wrong reason is a
+         test nobody trusts. So: group by top edge, take the line the PILL is on, and require enough
+         buttons on it to be a meaningful target. */
+      const sameLine = btns.filter(b => Math.abs(b.getBoundingClientRect().top - pb.top) < 20);
+      if (sameLine.length < 3) throw new Error('only ' + sameLine.length + ' button(s) share the pill line (of ' + btns.length + ' in the row) — there is nothing beside it to align to');
+      const bb = sameLine[0].getBoundingClientRect();
+      const cs = getComputedStyle(pill);
+      return { pb: pb, bb: bb, btns: sameLine, borderW: parseFloat(cs.borderTopWidth) || 0,
+               radius: cs.borderTopLeftRadius, btnRadius: getComputedStyle(sameLine[0]).borderTopLeftRadius };
+    };
+    const check = (label) => {
+      const m = measure();
+      /* CONTROL, and it is the one that matters: "aligned" is trivially true of a pill with NO border.
+         The whole request is about the line you can SEE, so prove there is one before measuring it. */
+      if (!(m.borderW > 0)) throw new Error(label + ': the pill has no visible border (' + m.borderW + 'px), so there is no line to align and this test would pass on a pill he cannot see');
+      // every button in the row shares one box — if they disagree, "the other buttons" is not one target
+      const tops = m.btns.map(b => +b.getBoundingClientRect().top.toFixed(1));
+      if (new Set(tops).size !== 1) throw new Error(label + ': the buttons on the pill own line do not share a top edge (' + tops.join(', ') + '), so there is no single line to align it to');
+      const dTop = Math.abs(m.pb.top - m.bb.top), dBot = Math.abs(m.pb.bottom - m.bb.bottom);
+      if (dTop > 0.5 || dBot > 0.5) throw new Error(label + ': the pill outline is inset from the buttons beside it — top by ' + dTop.toFixed(2) + 'px, bottom by ' + dBot.toFixed(2) + 'px (pill ' + m.pb.height.toFixed(1) + 'px tall vs the buttons\' ' + m.bb.height.toFixed(1) + 'px). That is queue 526 exactly.');
+      if (m.radius !== m.btnRadius) throw new Error(label + ': the pill\'s corner radius is ' + m.radius + ' against the buttons\' ' + m.btnRadius + ' — the edges line up but the corners do not, which is the same complaint one step in');
+      return m;
+    };
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(150);
+      // ---- his layout first
+      await atPhoneWidth(async function () {
+        await sleep(200);
+        check('phone 380px');
+        /* ⚠️ NO WIDTH ASSERTION AT PHONE WIDTH, and the reason is worth recording because I got it wrong
+           first: I asserted the pill shrink-wraps here and it failed at 226.6px — which is EXACTLY the
+           number the CSS comment above `#time-readout` already records ("On a phone the same pill
+           STRETCHES to fill its grid track — 226.6px at 380px wide"). The stretch is pre-existing,
+           documented, and the reason `text-align: center` is in that rule at all. Asserting against it
+           would have been this test inventing a requirement nobody asked for.
+           The width regression that DOES matter — pinning a width pushes the desktop play control off
+           screen centre and breaks a v4.97 assertion — is guarded on the desktop pass below, which is
+           where it actually happens. */
+      }, 380);
+
+      // ---- and the desktop, where the centring assertion lives
+      await sleep(200);
+      const m = check('desktop');
+      const centre = (m.pb.left + m.pb.right) / 2;
+      const off = Math.abs(centre - window.innerWidth / 2);
+      if (off > 4) throw new Error('the play pill sits ' + off.toFixed(2) + 'px off true screen centre — v4.97 pins it there, and the CSS note records that changing this box is exactly how that gets broken');
+      /* CONTROL: on the desktop it DOES shrink-wrap, and that is the state the centring depends on — a
+         pill that filled its track would sit centred by accident rather than by construction. */
+      const row = T().getBoundingClientRect();
+      if (m.pb.width > row.width * 0.5) throw new Error('the desktop pill is ' + m.pb.width.toFixed(1) + 'px in a ' + row.width.toFixed(1) + 'px row — it has stopped shrink-wrapping, which is the width regression the CSS note warns about');
+    } finally {
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
     }
   });
 

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.55
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.56
 >
-> **State:** v12.55, **943 tests green**, tree clean.
+> **State:** v12.56, **944 tests green**, tree clean.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
@@ -18,6 +18,12 @@
 >   you see the project extending under the clip rather than the clip freezing.
 > · **B** — no limit at all. Literally what you asked, and it brings back the stranded-clip problem.
 > · **C** — a bigger limit, roughly twice as far in one go, then it stops.
+>
+> **✅ v12.56 — the play pill lines up with the buttons either side of it (#526).** It was 24.5px tall
+> against their 34px boxes, so its outline sat about 5px inside them top and bottom. Now 0.00px out at
+> 380, 320 and desktop. **One judgement call you can overrule in a word:** "the lines on the other
+> buttons" could mean their boxes (what I matched) or their icon strokes, which are a smaller 21px band.
+> I matched the boxes. Say "icons" and it is a one-number change.
 >
 > **✅ v12.55 — old element drafts can be deleted now (#525).** The Elements tab was collecting leftover
 > workspaces with no way to bin them. Nothing is deleted automatically — some may hold work you never
@@ -18004,8 +18010,7 @@ re-opened #480, which I had marked done and had not fixed.
       *Measured in the real app: two seeded drafts render with the two different labels, both carry a ⋯,
       deleting the orphan takes it from the list and the screen, and the refusal toasts.*
 
-- [ ] **526 — The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **526 — The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.) ✅ v12.56
       His words, verbatim:
       > The lines around the middle play button should align with the lines on all the other buttons on the row - I think this would look good but make sure you're checking it's good as ur doing it and maybe adjust other variables to make it perfect
       **Follows straight on from #503**, which gave the pill a white outline. Now that it HAS an outline, it
@@ -18014,6 +18019,41 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **He asked for it to be checked while doing it, and for other values to be adjusted to make it
       right** — so this is measure-and-tune, not one guess: the pill's height, padding and radius against
       the `.tbtn` box, at phone width AND on PC, and a screenshot each time rather than trusting numbers.
+
+      ✅ **DONE v12.56.** **Measured first, at 380px:** every `.tbtn` in the row is a **34x34** box with an
+      8px radius and a border of **ZERO width** — an invisible box — while the pill was **24.5px** tall
+      with a **visible** 1px border and the same 8px radius. So the one outline you can actually see was
+      inset **4.8px at the top and 4.7px at the bottom** from the boxes either side of it. That is the
+      disagreement in his screenshot, in numbers.
+      **The fix is the HEIGHT, not the border:** 34px, with the text flex-centred. The visible outline now
+      traces exactly where each neighbour's box edge already is.
+      **Measured after, at three widths — 0.00px top and bottom at every one:**
+      | width | pill | buttons | top Δ | bottom Δ |
+      |---|---|---|---|---|
+      | 380 | 34.0 | 34.0 | **0.00** | **0.00** |
+      | 320 (both narrow tiers) | 34.0 | 34.0 | **0.00** | **0.00** |
+      | 1280 desktop | 34.0 | 34.0 | **0.00** | **0.00** |
+      Digits stay centred both ways (9.8px above and below at 380; 10.0/10.0 at 320), and the desktop pill
+      is **0.00px off true screen centre**, so v4.97's assertion is safe.
+      ⚠️ **HEIGHT, NEVER WIDTH.** The CSS there already records that pinning a width pushed the desktop
+      play control 3px off centre and broke that assertion. Height is free of it — the middle grid track
+      is `auto`, so the box still shrink-wraps horizontally.
+      ⚠️ **ONE JUDGEMENT CALL, STATED SO HE CAN OVERRULE IT IN A WORD.** "The lines on all the other
+      buttons" has two possible targets, and I measured both: their **boxes** (34px, which is what I
+      matched) or their **icon strokes** (a 21px band, 390.5–411.5). The pill now overshoots the icon band
+      by 6.5px each way. I went with the boxes because that is what this entry's own reading of his
+      screenshot says — *"its edges not on the same lines as the skip / undo / redo / fullscreen
+      buttons"* — and because it is the only target that is a rectangle. **If he meant the icons, it is a
+      one-number change: 34px → 21px.**
+      🐛 **Two things the test found that are NOT this bug, both recorded rather than folded in:**
+      · **The row can end up on two lines.** In the harness the app boots at desktop width and is then
+        narrowed, and one control lands 34px below the rest. It does NOT reproduce on a fresh load at
+        355–380px (checked every 5px), so it looks like a resize-path fault rather than something a real
+        phone hits. Worth its own look.
+      · **The pill STRETCHES to 226.6px at phone width** in that same path — which is exactly the number
+        the CSS comment above `#time-readout` already records from queue 509, so it is pre-existing and is
+        the reason `text-align: center` is in that rule. My first test asserted it shrink-wraps there and
+        failed; that assertion was inventing a requirement nobody asked for, and was removed.
 
 - [ ] **527 — Remove the "No audio effects yet" line.** (24 Aug, phone screenshot at v12.25, circled.)
       **STATUS: 🟢 READY — nothing is stopping this**
