@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.45
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.46
 >
-> **State:** v12.45, **932 tests green**, tree clean.
+> **State:** v12.46, **933 tests green**, tree clean.
+>
+> **✅ v12.46 — the bin and the slab behind it (#516).** The dark slab is an outlined container now, and
+> the bin is calm at rest and turns red the instant you hover or press it.
+> ⚠️ **Both reverse things you asked for earlier** — the slab was dark because you asked for it darker,
+> and the bin was red because you asked for it red "so it's obvious". You picked both from pictures of
+> the real buttons, so the newer answer wins — but you should know, and **either is one line to undo**.
+> ⚠️ **Your phone's bin changed too**, even though you only mentioned PC: a test of ours says one red for
+> one action across both layouts, and it was right — red on phone and neutral on desktop is worse than
+> either. They move together.
 >
 > **✅ v12.45 — press an eye and drag down the column to hide a whole run of layers (#515).** Works with a
 > finger and with the mouse held down. The first eye you press decides the intent and every row you cross
@@ -17556,18 +17565,34 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ The eye column shares the row with the drag handle and the timeline's own scroll, so the gesture has
       to claim the pointer without stealing a vertical timeline scroll that started elsewhere.
 
-- [ ] **516 — PC: the bin icon and the black bar behind that button group both look bad — try several designs and pick the best.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **516 — PC: the bin icon and the black bar behind that button group both look bad — try several designs and pick the best.** (24 Aug, PC screenshot at v12.20.)
       His words, verbatim:
       > On PC, the bin icon doesn't look really good there. It might need some work. And then also the black bar in the background looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make it, like, an outline or something instead. Just make it look good. Just work with a bunch of different things, and then maybe use a workflow to decide what looks best. Also, feel free to use a workflow for any other task that may need it.
       **What the shot shows:** the desktop transport row — undo, redo, then a dark rounded slab holding
       group / bin / ⋯ . The slab is near-black against an already dark bar, so it reads as a hole rather
       than a container, and the red bin sits in it looking loud and unbalanced.
       **Clauses:**
-      1. [ ] The **bin icon** itself needs work — his words, *"doesn't look really good there"*.
-      2. [ ] The **black backdrop** behind that group: he suggests **an outline instead of a filled slab**,
-             and otherwise *"just make it look good"*.
-      3. [ ] **Try several and compare** — he asked for options to be explored rather than one guess.
+      1. [x] ✅ **v12.46 — calm at rest, red the moment you reach for it.** The **bin icon**.
+      2. [x] ✅ **v12.46 — a hairline outline over a 4% lift**, so the group sits slightly proud of the row
+             instead of being a hole cut into it. Measured before: `rgba(0,0,0,.45)` on a bar that is
+             already `rgb(10,20,26)`. The **black backdrop**.
+      3. [x] ✅ **Four container treatments and three bins were rendered with the REAL buttons and sent to
+             him as a picture**; he chose from those. **Try several and compare.**
+
+      ⚠️ **BOTH HALVES REVERSE EARLIER INSTRUCTIONS OF HIS — recorded, not buried, because three existing
+      tests were built to protect those instructions and all three went red.**
+      · The slab was dark because he once said *"instead of being brighter than everything else make its
+        lightly darker"*, and #425 added *"the background they have is too subtle"*.
+      · The bin was red because of **#232**: *"the delete button should be, like, red by default. Like, it
+        should just be a red icon. So it's, like, obvious."*
+      **A choice made from the rendered thing outranks one made from a description**, so the newer answer
+      stands — but the three tests were RESTATED rather than deleted, each keeping the half that was never
+      about the colour: the group must still read as ONE container (by fill or by outline), and the bin
+      must still carry a warning colour somewhere.
+      ⚠️ **AND THE PHONE BIN HAD TO MOVE WITH IT.** He asked only about PC — but an existing test says
+      *"one red for one action across two layouts"*, and it was right: a bin that is red on a phone and
+      neutral on a desktop is worse than either answer. Both are calm at rest now, both flash red on
+      press. **If you want the red back at rest, say so and it is one line** — on both, together.
       ✅ **WORKFLOWS ARE AUTHORISED, in his words:** *"maybe use a workflow to decide what looks best. Also,
       feel free to use a workflow for any other task that may need it."* That is a standing permission, not
       just for this item — it also covers #511's *"try and see every possible way it can break"*.

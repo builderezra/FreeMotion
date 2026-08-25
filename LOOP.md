@@ -102,7 +102,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.45, 932 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.46, 933 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.46 did #516** — the selection group's black slab became a hairline outline over a 4% lift, and the
+bin is neutral at rest / red on hover+press. Both chosen by HIM from pictures rendered with the REAL
+buttons (#545 working exactly as intended — he also asked me to explain the slab question again, so the
+second pass pointed at it in a screenshot of the app).
+⚠️ **BOTH REVERSE HIS OWN EARLIER INSTRUCTIONS, and THREE existing tests went red defending them:** the
+slab was dark because he asked for darker (and #425's "too subtle"); the bin was red because of #232
+("red by default … so it's obvious"). **All three tests were RESTATED, not deleted** — each keeps the
+half that was never about colour (the group must read as ONE container by fill OR outline; the bin must
+still carry a warning colour somewhere).
+⚠️ **The PHONE bin moved too although he only named PC** — a test said "one red for one action across two
+layouts" and it was right; split behaviour is worse than either. **One line reverts either, on both.**
+**NEXT: #517** (PC glow outlines look glitched under the buttons).
 **v12.45 built #515** — paint-drag across the eyes. Key constraint: the old handler REBUILT the timeline
 per toggle, which destroys the element the pointer is captured on; eyes are repainted in place and the
 rebuild happens once. Paints one intent (not per-row toggle) and commits ONE history entry.

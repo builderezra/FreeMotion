@@ -5223,8 +5223,32 @@
     const m = bg.match(/rgba?\(([^)]+)\)/);
     if (!m) throw new Error('the group has no background colour at all (' + bg + ')');
     const n = m[1].split(',').map(parseFloat), a = n.length > 3 ? n[3] : 1;
-    if (!(n[0] < 60 && n[1] < 60 && n[2] < 60)) throw new Error('the group background is a LIGHT wash (' + bg + ') — he asked for it darker than the row, not brighter');
-    if (!(a >= 0.35)) throw new Error('the group background is still faint (alpha ' + a + ') — "too subtle" was the complaint');
+    /* ⚠️ v12.46 — THIS USED TO DEMAND A DARK FILL AND HE OVERTURNED IT (queue 516). His words then:
+       "instead of being brighter than everything else make its lightly darker", which is where the
+       black slab came from. His words on 25 Aug, looking at the result: "the black bar in the background
+       looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
+       it, like, an outline or something instead." He was then shown four treatments rendered with the
+       REAL buttons and picked the outlined one.
+       What survives is the half that was never about the colour: the group must still READ as one
+       container rather than three loose icons — so it needs a visible edge, whichever side of the
+       background it sits on. */
+    const bgA = (String(bg).match(/[\d.]+/g) || []).map(Number);
+    const bgAlpha = bgA.length > 3 ? bgA[3] : 1;
+    const bgLum = bgA.length >= 3 ? (bgA[0] + bgA[1] + bgA[2]) / 3 : 0;
+    const selBorder = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
+    if (bgAlpha > 0.02 && bgLum < 60 && selBorder < 0.5)
+      throw new Error('the group is a dark fill with no outline (' + bg + ') — that is the "entire black backdrop" he asked to replace');
+    if (bgAlpha <= 0.02 && selBorder < 0.5)
+      throw new Error('the group has neither a fill nor an outline — it no longer reads as one container at all');
+    /* ⚠️ "TOO SUBTLE" IS ABOUT BEING ABLE TO SEE THE GROUP, NOT ABOUT THE ALPHA (queue 425 -> 516).
+       This demanded a fill of at least 0.35, which was the right answer while a FILL was the only way
+       the group was drawn. From v12.46 it is drawn with a hairline outline instead - his choice, from
+       four treatments rendered with the real buttons - and an outline delineates a group far more
+       cheaply than a wash. So the requirement is restated as what he actually complained about: the
+       group must be VISIBLY one thing. A strong fill satisfies that, and so does a real outline; having
+       neither does not, and that is still caught. */
+    if (!(a >= 0.35) && selBorder < 0.5)
+      throw new Error('the group has neither a strong fill (alpha ' + a + ') nor an outline - "too subtle" was the complaint, and it would be again');
 
     /* 4. …and the group survives a round trip. The wrapper now lives in .t-right rather than .t-left, so
           the narrow-the-window teardown that queue 405 built is walking a different tree than it was
@@ -22217,7 +22241,39 @@
         const m = col.match(/(\d+),\s*(\d+),\s*(\d+)/);
         if (!m) throw new Error('could not read the bin colour: ' + col);
         const r = +m[1], g = +m[2], b = +m[3];
-        if (!(r > 200 && r > g + 80 && r > b + 80)) throw new Error('the phone bin is not red: ' + col);
+        /* ⚠️ v12.46 — THE BIN IS NO LONGER RED AT REST, ON EITHER LAYOUT, AND THAT IS HIS CHOICE
+           (queue 516). It was red because of queue 232 — "the delete button should be, like, red by
+           default. Like, it should just be a red icon. So it's, like, obvious." On 25 Aug he said the PC
+           bin "doesn't look really good there", was shown three bins rendered in the real row, and chose
+           the one that is neutral at rest and red on hover/press.
+           **THE POINT THIS TEST EXISTS FOR IS UNCHANGED AND IS NOW THE WHOLE OF IT:** one red for one
+           action across both layouts. He only complained about PC — but a bin that is red on a phone and
+           neutral on a desktop is worse than either answer, so they move together, and this is what
+           stops them drifting apart again. */
+        const restIsRed = (r > 200 && r > g + 80 && r > b + 80);
+        const pcRestRed = (function () {
+          const el = document.getElementById('btn-del-layer');
+          if (!el) return null;
+          const c = getComputedStyle(el).color.match(/(\d+),\s*(\d+),\s*(\d+)/);
+          if (!c) return null;
+          return (+c[1] > 200 && +c[1] > +c[2] + 80 && +c[1] > +c[3] + 80);
+        })();
+        if (pcRestRed !== null && restIsRed !== pcRestRed)
+          throw new Error('the phone bin is ' + (restIsRed ? 'red' : 'neutral') + ' at rest but the PC one is ' + (pcRestRed ? 'red' : 'neutral') + ' — one action, two layouts, and they disagree');
+        /* …and whichever way they go, the warning colour must still exist SOMEWHERE, or "calm" has
+           quietly become "no warning before a delete at all". */
+        if (!restIsRed) {
+          let pressRed = false;
+          for (const sh of document.styleSheets) {
+            let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+            const walk = (list) => { for (const rule of list) {
+              if (rule.cssRules && rule.conditionText !== undefined) { walk(rule.cssRules); continue; }
+              if (rule.selectorText && /m-del:(active|hover)/.test(rule.selectorText) && /ff6b7a|255,\s*107/i.test(rule.cssText)) pressRed = true;
+            } };
+            walk(rules);
+          }
+          if (!pressRed) throw new Error('the phone bin is neutral at rest and never turns red — there is now no warning colour on delete at all');
+        }
         // CONTROL: its neighbours must still be neutral, or "red" means nothing
         const dup = document.getElementById('m-dup');
         if (dup && dup.getBoundingClientRect().width > 0) {
@@ -28160,6 +28216,73 @@
     }
   });
 
+  test('the selection button group is an outlined container, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
+    /* Ezra: "the bin icon doesn't look really good there … And then also the black bar in the background
+       looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
+       it, like, an outline or something instead."
+       Measured before: the group sat on `rgba(0,0,0,.45)` over a bar that is already `rgb(10,20,26)`, so
+       it read as a hole punched in the row rather than a container.
+       ⚠️ BOTH HALVES REVERSE EARLIER INSTRUCTIONS OF HIS, which is why they are pinned here rather than
+       left to be "corrected" by a future session reading the older entries:
+         · the slab was DARK because he once asked for exactly that — "instead of being brighter than
+           everything else make its lightly darker";
+         · the bin was RED because of queue 232 — "the delete button should be, like, red by default …
+           So it's, like, obvious."
+       On 25 Aug he was shown four container treatments and three bins rendered with the REAL buttons and
+       chose the outline-plus-lift and the calm bin. A choice made from the rendered thing outranks one
+       made from a description. The red is not gone: it arrives on hover and press, i.e. the moment
+       before the click that deletes. */
+    if (window.innerWidth < 701) return;                       // this group is the PC transport row
+    const saved = FM.scene.selectedId;
+    const made = !FM.scene.layers.length;
+    if (made) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.selectLayer(FM.scene.layers[0].id);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(90);
+      const del = document.getElementById('btn-del-layer');
+      if (!del) throw new Error('no #btn-del-layer in the transport row — nothing to measure');
+      const slab = del.parentElement;
+      const r = slab.getBoundingClientRect();
+      /* CONTROL: the group only exists while something is selected, and a 0x0 element has every colour
+         and none — every assertion below would pass against it. */
+      if (r.width < 40 || r.height < 20) throw new Error('the selection group measured ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — it is not on screen, so its styling proves nothing');
+
+      const cs = getComputedStyle(slab);
+      const rgba = (v) => (String(v).match(/[\d.]+/g) || []).map(Number);
+      const bg = rgba(cs.backgroundColor);
+      const alpha = bg.length > 3 ? bg[3] : 1;
+      const lum = bg.length >= 3 ? (bg[0] + bg[1] + bg[2]) / 3 : 0;
+      /* A DARK FILL IS THE THING HE ASKED TO BE RID OF. Either it is transparent, or what it paints is
+         LIGHTER than the bar behind it — not another layer of black. */
+      if (alpha > 0.02 && lum < 60)
+        throw new Error('the selection group is filled with a dark colour again (' + cs.backgroundColor + ') — that is the "entire black backdrop" he asked to replace with an outline');
+      if (parseFloat(cs.borderTopWidth) < 0.5)
+        throw new Error('the selection group has no outline (' + cs.borderTopWidth + ') — the outline IS the treatment he chose');
+
+      /* THE BIN: neutral at rest. Red is a hover/press state now, not the resting colour. */
+      const restCol = rgba(getComputedStyle(del).color);
+      if (restCol.length >= 3 && restCol[0] > 200 && restCol[1] < 160 && restCol[2] < 160)
+        throw new Error('the bin is red at rest again (' + getComputedStyle(del).color + ') — he chose the calm-until-you-reach-for-it version on 25 Aug, which reverses queue 232 deliberately');
+      /* …and the red must still EXIST somewhere, or "calm" has quietly become "no warning at all". */
+      let hasHoverRed = false;
+      for (const ss of document.styleSheets) {
+        let rules; try { rules = ss.cssRules; } catch (e) { continue; }
+        const walk = (list) => { for (const rule of list) {
+          if (rule.cssRules && rule.conditionText !== undefined) { walk(rule.cssRules); continue; }
+          if (rule.selectorText && /btn-del-layer:(hover|active)/.test(rule.selectorText) && /ff6b7a|255,\s*107/i.test(rule.cssText)) hasHoverRed = true;
+        } };
+        walk(rules);
+      }
+      if (!hasHoverRed) throw new Error('the bin never turns red at all any more — the warning colour should arrive on hover and press, not disappear');
+    } finally {
+      if (made) FM.scene.layers.length = 0;
+      FM.selectLayer(saved || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('dragging across the eyes hides a whole run of layers in one gesture (queue 515)', { item: '515' }, async function () {
     /* Ezra: "make it so if you press on the eye icon and then drag your finger down to make stuff hidden,
        you can just keep doing that … quickly do a lot".
@@ -31046,11 +31169,17 @@
       const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
       if (!m) throw new Error('could not read the cluster background: ' + bg);
       const r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4];
-      /* "instead of being brighter than everything else make its lightly darker" — a WHITE wash over a
-         dark row is a raised panel; a black one is a recess. Asserted as "the wash is dark", not as an
-         exact value, so a later tweak to the strength does not fail this. */
-      if (a > 0.02 && (r + g + b) / 3 > 40) {
-        throw new Error('the cluster is washed with a LIGHT colour (rgb ' + r + ',' + g + ',' + b + ') — he asked for slightly darker, not brighter than everything else');
+      /* ⚠️ v12.46 — THE "IT MUST BE DARK" HALF IS RETIRED, BY HIM (queue 516). It came from "instead of
+         being brighter than everything else make its lightly darker", and on 25 Aug he looked at what
+         that produced — "the black bar in the background looks kinda bad … maybe … just make it, like,
+         an outline or something instead" — was shown four treatments rendered with the real buttons, and
+         picked the outlined one. A choice made from the rendered thing outranks one made from a
+         description, so the colour is his to change; what this test protects now is that the cluster is
+         still READABLE AS ONE GROUP, which is what the entry was actually about.
+         The glyph-centring half below is untouched — that was never about the wash. */
+      const edge = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
+      if (a <= 0.02 && edge < 0.5) {
+        throw new Error('the cluster has neither a wash nor an outline — it no longer reads as one group, which is what "the background they have is too subtle" was about');
       }
       // the ink, not the boxes — the same class of fault as #209
       const kids = Array.prototype.slice.call(sel.children).filter(function (k) { return k.getBoundingClientRect().width > 0; });

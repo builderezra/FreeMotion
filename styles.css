@@ -3348,8 +3348,14 @@ body.white-chrome #time-readout:active {
      The SAME red the PC uses (#ff6b7a), not a second one — two reds for one action across two layouts
      is the kind of drift that ends up as a "why are these different" message later. The layer ⋯ menu's
      Delete was removed in v7.48, so there is no third door left to disagree with. */
-  #m-del { color: #ff6b7a; }
-  #m-del:active { background: rgba(255, 107, 122, .16); }
+  /* ⚠️ THE PHONE BIN FOLLOWS THE PC ONE (queue 516, v12.46). He asked only about PC — "On PC, the bin
+     icon doesn't look really good there" — and chose the calm-until-you-reach-for-it version there. But
+     leaving this one red would break the rule the note above states: ONE red for one action across two
+     layouts. A bin that is red on a phone and neutral on a desktop is worse than either answer, so both
+     move together. Same bargain as the PC rule: the red arrives on press, which on a phone is the only
+     moment before the delete happens. */
+  #m-del { color: var(--text); }
+  #m-del:active { color: #ff6b7a; background: rgba(255, 107, 122, .16); }
   body.sel-mode #m-group    { order: 2; }
   body.sel-mode #m-maskgroup { order: 3; }
   /* THE PAIR SITS TOGETHER IN THE CORNER AND THE BIN KEEPS ITS DISTANCE (queue 436). Measured at 380px
@@ -6838,8 +6844,18 @@ body.fm-pushing #toast { z-index: 213; }
 
   /* DELETE — "the delete button should be, like, red by default. Like, it should just be a red icon.
      So it's, like, obvious." (queue 232, same family, shipped together.) */
-  #transport #btn-del-layer { color: #ff6b7a; }
-  #transport #btn-del-layer:hover { background: rgba(255, 107, 122, .14); }
+  /* ⚠️ v12.46 — CALM AT REST, RED WHEN YOU REACH FOR IT (queue 516). "the bin icon doesn't look really
+     good there. It might need some work."
+     ⚠️ **AND THIS REVERSES QUEUE 232, WHICH IS ALSO HIS**: "the delete button should be, like, red by
+     default. Like, it should just be a red icon. So it's, like, obvious." That is why it was red.
+     On 25 Aug he was shown three bins rendered in the real row — red, neutral-until-hover, and a muted
+     red — and chose neutral-until-hover. The red has not gone anywhere; it now arrives on hover and on
+     press, which is the moment before the click that actually deletes. Recorded rather than quietly
+     swapped, because a future session finding queue 232 would otherwise "fix" this straight back. */
+  #transport #btn-del-layer { color: var(--text); }
+  #transport #btn-del-layer:hover,
+  #transport #btn-del-layer:focus-visible { color: #ff6b7a; background: rgba(255, 107, 122, .14); }
+  #transport #btn-del-layer:active { color: #ff6b7a; background: rgba(255, 107, 122, .22); }
 
   /* The refresh spin, next to the version chip — "put the little refresh spin icon next to the version
      refresh button." The phone chip has carried this glyph since the tap-to-force-update label existed;
@@ -6937,10 +6953,22 @@ body.fm-pushing #toast { z-index: 213; }
      can see without the group becoming the brightest thing in the row again.
      The other half of "too subtle" was structural and is fixed in app.js: the copy button, one of the
      three he named, sat OUTSIDE this pill and so had no background at all. */
+  /* ⚠️ v12.46 — AN OUTLINE AND A BREATH, NOT A RECESS (queue 516). He came back to it: "the black bar
+     in the background looks kinda bad as well. Maybe instead of it being an entire black backdrop, you
+     could just make it, like, an outline or something instead."
+     Measured: the slab was `rgba(0,0,0,.45)` painted on a bar that is already `rgb(10,20,26)`, so it
+     read as a hole punched in the row rather than a container holding three related buttons.
+     ⚠️ **THIS REVERSES THE FEEDBACK RECORDED IN THE NOTE ABOVE, AND HE WAS SHOWN IT BEFORE CHOOSING.**
+     That note quotes him asking for the opposite — "instead of being brighter than everything else make
+     its lightly darker" — which is where the .45 came from. On 25 Aug he was sent a picture of four
+     treatments rendered with the real buttons and picked the outline-plus-lift. A choice made from the
+     rendered thing outranks one made from a description, so the newer answer stands; the older one is
+     kept above rather than deleted, because it is the reason this was ever dark. */
   #t-sel.has-sel {
     padding: 0 5px; margin: 0 3px;
     border-radius: 11px;
-    background: rgba(0, 0, 0, .45);
+    background: rgba(255, 255, 255, .045);
+    border: 1px solid rgba(255, 255, 255, .13);
   }
 }
 
