@@ -147,9 +147,20 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.74, 965 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.75, 966 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.74, closing #556, #557, #558, #524, #474, #548, #550 and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.75, closing #556, #557, #558, #524, #474, #548, #550, #559 and #539 clause 4.**
+
+⚠️ **AN ENTRY'S DIAGNOSIS IS A HYPOTHESIS, NOT A FINDING — three in a row now.** Each of these was
+written down confidently by a past session and each was wrong, and one measurement settled every one:
+· **#539** — "the corner is a complete no-op, zero px differ". 1,410 pixels changed; the reading came
+  from a bounding box the wall clips either way.
+· **#550** — "the head divider runs the full height of every row here", so which line does he mean?
+  It ran 21px in a 40px row on the add row and 41px everywhere else. There was one break, not a puzzle.
+· **#559** — "a slider RANGE/curve problem: the useful part happens across a small part of the track".
+  The response is dead linear end to end; the range was right and the RESOLUTION was wrong.
+**Read the entry for what he ASKED. Measure the app for what is wrong.** The two are different, and the
+entry is the one that goes stale.
 
 ⚠️ **"NEEDS HIM TO CIRCLE IT AGAIN" IS USUALLY A MEASUREMENT YOU HAVE NOT TAKEN.** #550 clause 2 sat
 parked on that for a round, on the reasoning that "the head divider runs the full height of every row
