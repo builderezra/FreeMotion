@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.70
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.71
 >
-> **State:** v12.70, **962 tests green**, tree clean.
+> **State:** v12.71, **962 tests green**, tree clean.
+>
+> **🛠️ v12.71 — I caught myself breaking your oldest-first rule, so I made it impossible.** You told me
+> once to *"figure out a way to remember"* — and remembering is what failed. Twice in one day: I shipped
+> three items while six older ones were sitting there ready, then jumped another one while writing the
+> fix. The tool that lists them was right every time; I just did not obey it. **Now the ship script
+> refuses to release an item while an older workable one is open.** If you ever tell me to do something
+> right now, I write the reason into the skipped item and you can read it there.
 >
 > **✅ v12.70 — dragging a clip past the end (#524).** Measuring it again was worth it: the clip does not
 > freeze there, **it runs backwards** — it slid all the way back to where it started while my finger kept
@@ -5450,19 +5457,26 @@ better still, keep working inside the turn rather than parking work for a later 
       **Scope note:** he says "on pc", and the same grid exists on the phone sheet — decide whether the
       gradient applies to both or is desktop-only, and say which was assumed.
 
-- [ ] **474 — Steer, 22 Aug: workflows are allowed, do work that MATTERS, and mobile lag is the thing he
-      **STATUS: 🟢 READY — nothing is stopping this**
-      wants.** His words, verbatim:
+- [x] **474 — Steer, 22 Aug: workflows are allowed, do work that MATTERS, and mobile lag is the thing he
+      wants.** — **DONE v12.71.** His words, verbatim:
       > fyi u can run workflows if u need, also make sure youre doing either work i ask for or good important work. i dont know what ur doing as i just leave u on all day coz im busy and i just hope u make the project better for me, working on the lag being fixed for mobile would also be good (remember if ur doing something good rn dont stop coz i have no clue)
       **Three instructions, and the middle one is a correction I should take on the chin:**
       1. [x] **Workflows are authorised** — bounded per LOOP.md rule 13 (his own earlier instruction: a
              step budget and a wait limit, never `while(true)`).
-      2. [ ] **"make sure youre doing either work i ask for or good important work"** — he cannot see what
+      2. [x] **"make sure youre doing either work i ask for or good important work"** — he cannot see what
              the loop is doing and is trusting it to be worth the time. **Read honestly, the last several
              ticks have been queue HYGIENE** (closing entries that were already done, turning open
              questions into pick-ones, showing him options that had only been described). That work was
              real and it unblocked him — but it does not make the app better, and he has no way to tell
              the difference from where he sits. **Balance shifts back to shipping improvements.**
+             ✅ **TICKED v12.71, and a permanent steer can only be "done" one way: by moving out of the
+             queue and into the rules that govern every tick.** It has — his sentence is quoted verbatim
+             at [LOOP.md](LOOP.md) line 131, which is read at the start of every loop turn. Left as a
+             queue item it could never close, and an item that can never close is exactly the thing that
+             rots at the bottom of this list.
+             **And the balance did shift, which is checkable rather than asserted.** Everything since is
+             app work, not hygiene: #549, #550, #551, #553, #554, #555, #556, #557, #558 and #524 —
+             ten releases, every one a change he can see or feel.
       3. [x] **Mobile lag is what he wants worked on.** That is the #95 / #125 / #202 / #387 family. His
              own device readings are the evidence base; the third (v10.16) is the one with a measurable
              fault in OUR code — render 294.69ms on 9 shape layers with 24 effects at 1458k pixels.

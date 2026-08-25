@@ -130,6 +130,65 @@ def classify(body):
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
 
 
+# ── WHICH ITEM SHOULD BE WORKED NEXT ────────────────────────────────────────────────────────────────
+# WHY THIS IS HERE AND NOT IN A NOTE. CLAUDE.md has said "work the list oldest first" for weeks, and on
+# 26 Aug the loop shipped v12.69 closing #556, #557 and #558 while #524, #539, #545, #548 and #550 sat
+# ACTIONABLE and untouched — five items jumped, by the very session that had just re-read the rule.
+# Nothing was wrong with next.sh: it printed the right answer. The answer was simply not obeyed, because
+# obeying it was a thing to REMEMBER, and this project treats that as no safeguard at all.
+# The reason it is so easy to get wrong is written in CLAUDE.md too: an item parked on a decision feels
+# blocked even when the tool says READY, and a request he typed yesterday feels more urgent than one from
+# three weeks ago. Both feelings are wrong and both are persistent. So the check moves into ship.sh,
+# which refuses.
+ENTRY = re.compile(r'^- \[[ x]\] \*\*')
+OPEN  = re.compile(r'^- \[ \] \*\*')
+NUM   = re.compile(r'^- \[ \] \*\*(\d+)([a-z]?) ')
+# THE ESCAPE HATCH, and it has to exist. CLAUDE.md names two things that legitimately jump the queue:
+# something he says to do now ("do this asap"), and a real emergency like a broken build. Neither can be
+# inferred, so it is declared — put `JUMPED:` in the skipped entry with the reason, and the gate honours
+# it. A reason written down is the point: it turns a silent reordering into a line he can read.
+JUMPED = re.compile(r'JUMPED:')
+
+
+def entries(md):
+    """Split REQUESTS.md into whole entries, header line first. Shared so the gate and the listing
+       can never disagree about where one request ends and the next begins."""
+    out, cur = [], None
+    for line in md.split('\n'):
+        if ENTRY.match(line):
+            if cur is not None: out.append('\n'.join(cur))
+            cur = [line]
+        elif cur is not None:
+            cur.append(line)
+    if cur is not None: out.append('\n'.join(cur))
+    return out
+
+
+def sort_key(num, suffix):
+    """Unnumbered items sort FIRST — they predate the numbering, so they are the oldest. Letter
+       suffixes sort inside their number (#31b after #31), which the first version of next.sh got
+       wrong by sorting it to the bottom."""
+    if num is None: return (0, 0, '')
+    return (1, num, suffix)
+
+
+def next_up(md):
+    """The single lowest OPEN + ACTIONABLE entry — the one CLAUDE.md says to work.
+       Returns (num, suffix, header) or None. `num` is None for an unnumbered entry."""
+    best = None
+    for body in entries(md):
+        if not OPEN.match(body): continue
+        if JUMPED.search(body): continue          # declared, with a reason, so it does not hold the queue
+        if classify(body) != 'ACTIONABLE': continue
+        m = NUM.match(body)
+        num = int(m.group(1)) if m else None
+        suf = m.group(2) if m else ''
+        k = sort_key(num, suf)
+        if best is None or k < best[0]:
+            best = (k, num, suf, body.split('\n', 1)[0])
+    return None if best is None else (best[1], best[2], best[3])
+
+
 # ── SELF-TEST ───────────────────────────────────────────────────────────────────────────────────────
 # `python3 tools/_classify.py` and it checks its own rules. tools/ship.sh runs this and REFUSES to
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
@@ -191,6 +250,52 @@ _CASES = [
      'an entry whose every open clause is hedged is not queued work (#277, #343)'),
 ]
 
+# ── SELF-TEST FOR THE QUEUE-ORDER GATE ──────────────────────────────────────────────────────────────
+# Each case is the ordering bug it prevents, in the terms it actually happened in.
+_ORDER = [
+    # THE ONE IT WAS WRITTEN FOR (26 Aug). Three items shipped together while five lower-numbered ones
+    # sat ACTIONABLE. Everything about the tooling was right; the order simply was not obeyed.
+    ("""- [ ] **524 — drag past the end**
+      nothing is stopping this
+- [x] **556 — delete clears selection**
+      done
+- [ ] **558 — lens flare colours**
+      nothing is stopping this""",
+     (524, ''),
+     'the LOWEST open actionable item wins, and a ticked entry in between is not a candidate'),
+    # Unnumbered entries predate the numbering, so they are OLDER than #1 and must sort first. The
+    # first version of next.sh got the mirror of this wrong and made ten of them unreachable.
+    ("""- [ ] **an old one with no number**
+      nothing is stopping this
+- [ ] **12 — a numbered one**
+      nothing is stopping this""",
+     (None, ''),
+     'an unnumbered entry is the oldest thing in the file and outranks every number'),
+    # A letter suffix belongs INSIDE its number: #31b is older than #32, not younger than everything.
+    ("""- [ ] **32 — later**
+      nothing is stopping this
+- [ ] **31b — earlier**
+      nothing is stopping this""",
+     (31, 'b'),
+     '#31b sorts inside 31, not at the bottom — the exact bug the first next.sh shipped'),
+    # A BLOCKED lower item does NOT hold the queue. CLAUDE.md: "say so and move to the next-oldest".
+    ("""- [ ] **10 — blocked one**
+      waiting on your answer
+- [ ] **20 — a workable one**
+      nothing is stopping this""",
+     (20, ''),
+     'a lower item that is blocked on Ezra must not hold the queue behind it'),
+    # THE ESCAPE HATCH. Declared, with a reason, so it stops holding the queue — and the reason is
+    # written down instead of the reordering being silent.
+    ("""- [ ] **10 — skipped one**
+      JUMPED: he said do #20 right now
+- [ ] **20 — the one he asked for**
+      nothing is stopping this""",
+     (20, ''),
+     'a declared JUMPED: skip releases the queue; without it, #10 would still be next'),
+]
+
+
 if __name__ == '__main__':
     import sys as _s
     bad = 0
@@ -199,7 +304,13 @@ if __name__ == '__main__':
         if got != want:
             bad += 1
             print('FAIL: expected %-26s got %-26s — %s' % (want, got, why))
+    for md, want, why in _ORDER:
+        got = next_up(md)
+        got2 = None if got is None else (got[0], got[1])
+        if got2 != want:
+            bad += 1
+            print('FAIL: next_up expected %-14s got %-14s — %s' % (want, got2, why))
     if bad:
-        print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, len(_CASES)))
+        print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, len(_CASES) + len(_ORDER)))
         _s.exit(1)
-    print('classifier self-test: %d/%d ok' % (len(_CASES), len(_CASES)))
+    print('classifier self-test: %d/%d ok' % (len(_CASES) + len(_ORDER), len(_CASES) + len(_ORDER)))

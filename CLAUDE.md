@@ -51,6 +51,17 @@ by remembering:
   v9.94, "659 tests green", "70 items open" and a next-actionable item that had long since shipped, while
   the app was on v11.50 with 816 tests. Nothing noticed because prose has no test. The stamp is now
   checked against `index.html`'s version.
+- **ship.sh REFUSES to close an item while a lower-numbered workable one is open.** Added 26 Aug, and it
+  is a lock on the door this very file has been asking sessions to hold shut by hand for weeks. The
+  section below quotes him — *"I want the oldest things in the list done first, not what I just told
+  you, make sure you figure out a way to remember if you keep forgetting"* — and remembering was the
+  entire mechanism. It failed twice in one day: v12.69 shipped #556/#557/#558 with six lower items
+  workable, and v12.70 jumped #474 while I was writing the gate that catches it. **`tools/next.sh` was
+  right both times**; nothing was broken except the obeying. Two reasons it keeps happening and neither
+  goes away: an item parked on a decision FEELS blocked even when the tool says READY, and something he
+  typed yesterday feels more urgent than something from three weeks ago. The escape hatch is a
+  declaration, not a flag — write **`JUMPED: <reason>`** in the skipped entry and it stops holding the
+  queue, which turns a silent reordering into a line he can read.
 - **`python3 tools/_classify.py` self-tests the queue classifier, and ship.sh refuses if any rule fails.**
   Every rule in it cures a real bug — an answered item gone unreachable, a hold that would not lift, five
   real items hidden by a phrase in a note about them — and nothing else in the repo would notice if one
@@ -144,6 +155,10 @@ To find the next item, don't eyeball the file and **don't grep it either**:
 ```bash
 ./tools/next.sh
 ```
+
+**And since 26 Aug you cannot get this wrong quietly: `ship.sh` refuses a release that closes an item
+while a lower-numbered workable one is still open** (`next_up` in `tools/_classify.py`, self-tested).
+Reading `next.sh` was never the failing step — obeying it was.
 
 **The grep that used to live here was wrong, and wrong in the exact way this file warns about.** It
 matched `^- \[ \] \*\*[0-9]`, and that `[0-9]` is a silent filter: **ten open items have no number**

@@ -74,6 +74,51 @@ for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' 
     exit 1
   fi
 done
+# ---- OLDEST FIRST, ENFORCED (26 Aug) ------------------------------------------------------------
+# WHY. CLAUDE.md has said "work the list oldest first" for weeks, in its own section, with his words in
+# it: "Remember I want the oldest things in the list done first, not what I just told you, make sure you
+# figure out a way to remember if you keep forgetting." On 26 Aug v12.69 shipped #556, #557 and #558
+# while #474, #524, #539, #545, #548 and #550 sat ACTIONABLE and untouched — six items jumped, by the
+# session that had just re-read the rule, and then v12.70 jumped #474 again while writing this gate.
+# NOTHING WAS WRONG WITH THE TOOLING. next.sh printed the right answer both times. The answer was simply
+# not obeyed, because obeying it was a thing to REMEMBER — and "figure out a way to remember" is, by his
+# own later instruction, the wrong shape of fix: "every safe guard needs to be structural."
+# It is easy to get wrong for two reasons that do not go away: an item parked on a decision FEELS blocked
+# even when the tool says READY, and a request he typed yesterday feels more urgent than one from three
+# weeks ago. So the check refuses rather than reminds.
+# `next_up` lives in tools/_classify.py beside classify(), because next.sh, status.sh and this gate are
+# three readers of ONE rule — and this file's own history says a rule in two places is the most expensive
+# bug shape in the project. It has self-tests, and the run above refuses if any of them break.
+CLOSES="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u | tr '\n' ' ')"
+ORDER_MSG="$(CLOSES="$CLOSES" PARTIALS="$PARTIALS" python3 - <<'PYORDER'
+import io, os, sys
+sys.path.insert(0, 'tools')
+import _classify as C
+md = io.open('REQUESTS.md', encoding='utf-8').read()
+partials = set(os.environ.get('PARTIALS', '').split())
+closes = sorted(int(n) for n in os.environ.get('CLOSES', '').split() if n not in partials)
+nxt = C.next_up(md)
+if nxt and closes:
+    num, suf, head = nxt
+    late = [n for n in closes if C.sort_key(n, '') > C.sort_key(num, suf)]
+    if late:
+        name = 'an UNNUMBERED entry — those predate the numbering, so they are the oldest in the file' \
+               if num is None else '#%d%s' % (num, suf)
+        print('%s|%s|%s' % (','.join('#%d' % n for n in late), name, head.strip()[:130]))
+PYORDER
+)"
+if [ -n "$ORDER_MSG" ]; then
+  LATE="${ORDER_MSG%%|*}"; REST="${ORDER_MSG#*|}"; NEXTUP="${REST%%|*}"; NEXTHEAD="${REST#*|}"
+  echo "❌ QUEUE ORDER — this release closes $LATE, but $NEXTUP is open and workable and comes first."
+  echo "   $NEXTHEAD"
+  echo
+  echo "   He asked for this explicitly: \"I want the oldest things in the list done first, not what I"
+  echo "   just told you.\" Nothing rots at the bottom is the whole point of the list."
+  echo "   Either do $NEXTUP first, or — if he told you to do this now, or the build was broken —"
+  echo "   write \"JUMPED: <reason>\" into $NEXTUP's entry and it will stop holding the queue."
+  exit 1
+fi
+
 # ---- A CHANGED FILE MUST HAVE ITS CACHE-BUSTER BUMPED (22 Aug) ----------------------------------
 # WHY. CLAUDE.md has carried this warning for a long time — "a missed buster reads as 'the fix does not
 # work' — it has" — and the only thing enforcing it was remembering. That is exactly what this project
