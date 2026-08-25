@@ -51,6 +51,21 @@ window.FM = window.FM || {};
       commitH();
     });
     row.appendChild(kf);
+    /* ⚠️ THE CURVE, BESIDE THE DIAMOND (queue 557). Ezra: *"Opacity slider doesn't have graphing
+       options"* — his shot shows Opacity with a ◆ and no curve, while an effect's Amount row has both.
+       The easing editor was already wired to Move & Transform, Volume, Speed, Crop and every effect
+       param; opacity was simply never given the door. Same `buildEasingEditorFor` those four use, so
+       there is no second editor to keep in step — see the `_opaEasing` branch in the view switch.
+       ⚠️ ONLY WHEN IT IS ANIMATED. A curve button on a property with no keyframes opens an editor with
+       nothing to edit, which is the "control that does nothing" complaint from queue 529. It appears
+       with the first keyframe, exactly like the timeline's own curve affordances. */
+    if (opts.ease && FM.buildEasingEditorFor && FM.isAnimated(p)) {
+      const eb = el('button', 'kf-btn kf-ease-btn');
+      eb.innerHTML = (typeof MT_ICONS !== 'undefined' && MT_ICONS.ease) ? MT_ICONS.ease : '∿';
+      eb.title = label + ' easing curve';
+      eb.addEventListener('click', () => { FM._opaEasing = { key: key, label: label }; FM.inspector.refresh(); });
+      row.appendChild(eb);
+    }
     wrap.appendChild(row);
     if (opts.slider) {
       const sr = el('div', 'prop-slider');
@@ -3176,7 +3191,7 @@ window.FM = window.FM || {};
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
         if (cat.key === 'element' && layer.type === 'text' && FM.textEdit) { FM.textEdit.start(layer.id); return; }
         if (cat.key === 'effects') fxTab = 'visual';   // the card always means the visual stack; the toggle inside is how you reach the audio one
-        view = cat.key; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
+        view = cat.key; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);
     });
@@ -4957,7 +4972,7 @@ window.FM = window.FM || {};
       // and Invert trails because it's the specialist. Labels use Australian spelling and plain
       // words for the same operations — the ids underneath are unchanged, so projects, presets and
       // the AI ops keep working regardless of what a row is called.
-      body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
+      body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, ease: true, slider: { min: 0, max: 1, step: 0.01 } }));
       const CATS = [
         ['Basic', [['normal', 'Normal']]],
         ['Cutout', [['mask-include', 'Stencil'], ['mask-exclude', 'Punch Out']]],
@@ -5748,7 +5763,7 @@ window.FM = window.FM || {};
     // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
     // audio browser ask for, and because a project/session could have persisted it.
     openCategory(key) { _fltPicks = [];   // leaving the filters view drops an uncommitted selection, the same way the effects browser's close() clears its own (queue 464)
-      if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
+      if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       /* The canvas overlay has to be told (queue 205). Opening a section that owns the canvas changes
          whether the selection box should be showing, and nothing else was going to ask — the overlay
          only updates on a render or a canvas gesture, so without this the outline stayed up until you
@@ -5770,7 +5785,7 @@ window.FM = window.FM || {};
       const cat = catsFor(layer)[i - 1]; if (!cat) return false;
       if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return true; }
       if (cat.key === 'effects') fxTab = 'visual';
-      view = cat.key; kfNavSync(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
+      view = cat.key; kfNavSync(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       return true;
     },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
@@ -5778,8 +5793,13 @@ window.FM = window.FM || {};
     back() {
       const layer = FM.selectedLayer(FM.scene);
       if (!layer) return false;
-      if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._fxEasing || FM._cropEasing) {
-        FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); return true;
+      /* ⚠️ `_opaEasing` BELONGS IN THIS GUARD, not just in the body below (queue 557). The body has
+         always cleared all six; the CONDITION listed five. The opacity curve is the only one of them
+         gated on its flag ALONE rather than on a `view`, so with just that editor open this test failed
+         and fell through to the `view = 'home'` line — which changes the view, refreshes, and redraws
+         the very editor it was asked to leave. Back did nothing, twice, and there was no way out. */
+      if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._opaEasing || FM._fxEasing || FM._cropEasing) {
+        FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); return true;
       }
       if (view !== 'home') { view = 'home'; kfNavSync(); this.refresh(); return true; }
       FM.selectLayer(null); kfClearSel(); return true;   // at the grid → deselect (closes the editor)
@@ -5838,12 +5858,12 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; fxTab = 'visual'; }
-      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; fxTab = 'visual'; }
+      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // Every numbered category is a SINGLE-layer editor — it builds from the primary layer and writes
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
       // selecting more drops straight back to the multi actions.
-      if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
       /* A FLAG THE VIEW CANNOT HONOUR MUST NOT SURVIVE A REFRESH. The crop easing sub-view is gated on
        * layer.crop existing, and this panel deliberately does not create a crop just to show one — so a
        * _cropEasing left armed with no crop sat waiting and hijacked whatever refresh came next, the
@@ -5898,6 +5918,18 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditor(layer, FM._mtMode || 'move'));
         root.appendChild(bodyEl);
+      } else if (FM._opaEasing && FM.buildEasingEditorFor) {
+        /* Opacity easing curve — inline sub-view (queue 557), the same shape as Volume and Speed below.
+           Not gated on a `view`, because opacity's row lives in the Mixing panel while the same control
+           could reasonably be reached from elsewhere; the flag alone decides, and every panel switch
+           already clears it beside _volEasing and _spdEasing. */
+        const okey = FM._opaEasing.key || 'opacity';
+        const back = el('button', 'cat-back', '‹  ' + (FM._opaEasing.label || 'Opacity'));
+        back.addEventListener('click', () => { FM._opaEasing = null; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.transform[okey], [okey], okey));
+        root.appendChild(bodyEl);
       } else if (view === 'volume' && FM._volEasing && FM.buildEasingEditorFor) {
         // Volume easing curve — inline sub-view of the Volume panel.
         const back = el('button', 'cat-back', '‹  Volume');
@@ -5947,7 +5979,7 @@ window.FM = window.FM || {};
         const cat = CATEGORIES.find(c => c.key === view);
         const backLabel = (view === 'element') ? elementLabel(layer) : (view === 'tts') ? 'Text to Voice' : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
-        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
+        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
         // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
         // header — put them on the header row for media so they sit far right, not buried in the body.
         if (view === 'element' && (layer.type === 'video' || layer.type === 'image') && FM._inspectorCropToggles) {

@@ -3861,6 +3861,182 @@
     }
   });
 
+  test('556: deleting the selected layer leaves nothing selected', { item: '556' }, function () {
+    /* Queue 556. Ezra: "When you delete a layer it still says its selected at the top."
+       The layer went, its id did NOT — `selectedId` kept pointing at a layer that no longer exists, so
+       the header still named it and the inspector still claimed to be editing it.
+       BOTH doors are tested because there are two: the toolbar path (`deleteSelected`) and the
+       per-layer path (`deleteLayer`), and fixing one is exactly the half-fix this suite exists to catch. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const mk = n => { const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#4488cc' }); L.start = 0; L.duration = 2; return L; };
+      // ── the toolbar path
+      FM.scene.layers.length = 0;
+      const a = mk('A'), b = mk('B');
+      FM.scene.layers.push(a, b);
+      FM.selectLayer(a.id);
+      // CONTROL: it must really be selected first, or "nothing is selected" afterwards proves nothing.
+      if (FM.scene.selectedId !== a.id) throw new Error('the fixture never selected the layer, so the assertion below is vacuous');
+      FM.deleteSelected();
+      if (FM.scene.layers.some(l => l.id === a.id)) throw new Error('deleteSelected did not remove the layer at all');
+      if (FM.scene.selectedId) throw new Error('after deleteSelected, selectedId is still ' + FM.scene.selectedId + ' — the header keeps naming a layer that no longer exists (queue 556)');
+      if ((FM.scene.selectedIds || []).length) throw new Error('after deleteSelected, selectedIds still holds ' + FM.scene.selectedIds.length + ' id(s) — a multi-selection outlived its layers');
+      // …and a surviving layer must NOT have been dragged into the selection as a consolation
+      if (FM.scene.selectedId === b.id) throw new Error('deleting A silently selected B — he deleted a layer, he did not ask to edit another one');
+
+      // ── the per-layer path
+      FM.scene.layers.length = 0;
+      const c = mk('C'), d = mk('D');
+      FM.scene.layers.push(c, d);
+      FM.selectLayer(c.id);
+      if (FM.scene.selectedId !== c.id) throw new Error('the second fixture never selected the layer');
+      FM.deleteLayer(c.id);
+      if (FM.scene.layers.some(l => l.id === c.id)) throw new Error('deleteLayer did not remove the layer at all');
+      if (FM.scene.selectedId) throw new Error('after deleteLayer, selectedId is still ' + FM.scene.selectedId + ' — the same bug through the other door (queue 556)');
+
+      // ── and deleting a layer that is NOT selected must leave the selection alone
+      FM.scene.layers.length = 0;
+      const e = mk('E'), f = mk('F');
+      FM.scene.layers.push(e, f);
+      FM.selectLayer(e.id);
+      FM.deleteLayer(f.id);
+      if (FM.scene.selectedId !== e.id) throw new Error('deleting an UNSELECTED layer cleared the selection (now ' + FM.scene.selectedId + ') — the fix has gone too wide');
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('557: Opacity offers an easing curve, and only once it is animated', { item: '557' }, async function () {
+    /* Queue 557. Ezra: "opacity should have the easing option like the other ones do."
+       Position, Scale and Rotation each opened an easing curve; Opacity, which is the property people
+       fade most, had a ◆ and nothing else.
+       ⚠️ THE GATE IS HALF THE REQUEST. An easing curve edits the transition BETWEEN keyframes, so on a
+       static opacity there is nothing for it to edit — a button that opens an empty editor is the
+       "◆ that does nothing" complaint from queue 529 in a new place. So this asserts BOTH: absent while
+       static, present once animated. The first version of this probe reported the button present on a
+       static layer because it reused a layer the previous probe had already animated. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'fade', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#7788ff' });
+      L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('blend');   // ⚠️ the INTERNAL key. Opacity lives in the Mixing panel; 'transform' opens Position / Scale and finds no Opacity row at all.
+      await sleep(300);
+
+      const panel = document.getElementById('inspector-panel');
+      const opacityRow = () => {
+        const rows = [].slice.call(panel.querySelectorAll('.tr-row, .prop-row, .kf-row'));
+        return rows.filter(r => /opacity/i.test(r.textContent || ''))[0] || null;
+      };
+      const r1 = opacityRow();
+      if (!r1) throw new Error('no Opacity row in the transform panel at all — the fixture is wrong');
+      // CONTROL: the ◆ has always been there. If it is missing, this panel is not what we think it is.
+      if (!r1.querySelector('.kf-btn, .kf-diamond, [class*="kf-"]')) throw new Error('the Opacity row has no keyframe control, so it is not the row this test means');
+      if (FM.isAnimated(L.transform.opacity)) throw new Error('a fresh layer already reports an animated opacity — the gate below cannot be measured');
+      if (r1.querySelector('.kf-ease-btn')) throw new Error('a STATIC opacity offers an easing curve — it would open an editor with no transition in it (queue 557)');
+
+      // now animate it, exactly as the ◆ does
+      L.transform.opacity = { kf: [{ t: 0, v: 1, ease: 'linear' }, { t: 2, v: 0, ease: 'linear' }] };
+      FM.refreshAll();
+      await sleep(300);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('blend');   // ⚠️ the INTERNAL key. Opacity lives in the Mixing panel; 'transform' opens Position / Scale and finds no Opacity row at all.
+      await sleep(300);
+      const r2 = opacityRow();
+      if (!r2) throw new Error('the Opacity row vanished once it was animated');
+      const ease2 = r2.querySelector('.kf-ease-btn');
+      if (!ease2) throw new Error('an ANIMATED opacity still offers no easing curve — this is queue 557, the thing he actually asked for');
+
+      // …and it must open something, not just exist
+      ease2.click();
+      await sleep(350);
+      if (!FM._opaEasing) throw new Error('the easing button did nothing when clicked — a control that exists and does not work is the complaint, not the fix');
+      /* ⚠️ BOTH DOORS OUT. The sub-view draws its own `‹ Opacity` button, and the app's back also has
+         to work — this editor is the only easing sub-view gated on its flag alone rather than on a
+         `view`, so a back that clears the view and not the flag REDRAWS the editor it was asked to
+         leave. That is what `inspector.back()` did: its guard listed the other five flags and not this
+         one. Back did nothing, twice, with no way out. */
+      const ownBack = document.querySelector('#inspector-panel .cat-back');
+      if (!ownBack || !/opacity/i.test(ownBack.textContent || '')) throw new Error('the easing sub-view drew no `‹ Opacity` back button of its own');
+      ownBack.click(); await sleep(250);
+      if (FM._opaEasing) throw new Error('the sub-view\'s own back button left FM._opaEasing set');
+
+      ease2.click(); await sleep(300);
+      if (!FM._opaEasing) throw new Error('could not re-open the easing editor to test the app-level back');
+      if (FM.inspector && FM.inspector.back) { FM.inspector.back(); await sleep(250); }
+      if (FM._opaEasing) throw new Error('FM.inspector.back() left FM._opaEasing set — the flag survives, and because this sub-view is gated on the flag alone it redraws itself, so back appears to do nothing');
+    } finally {
+      FM._opaEasing = null;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('558: Lens Flare colours the core and the rays separately, and old flares are untouched', { item: '558' }, function () {
+    /* Queue 558. Ezra: "Lens flair should have colour options."
+       The flare was hardcoded warm white (255,240,210) and it draws TWO things — the round core and the
+       six streaks — so it gets two colours, which is what makes the anamorphic look (warm core, cold
+       streak) reachable at all.
+       ⚠️ THE THIRD ASSERTION IS THE LOAD-BEARING ONE. Queue 474 asserts this kernel BYTE-FOR-BYTE
+       against the original six-ray implementation, and that reference has no colour params. Splitting
+       one multiply into two — c*(core+ray) becomes c*core + c*ray — is equal in exact arithmetic and can
+       differ in the last float bit, which would break that proof for a cosmetic feature. The kernel
+       keeps the original single-multiply expression whenever the two colours match, and this pins that. */
+    const P = FM._pixelFx;
+    if (!P || typeof P.lensflare !== 'function') throw new Error('FM._pixelFx.lensflare is not reachable');
+    const W = 60, H = 45;
+    const run = p => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = 20; d[i + 1] = 20; d[i + 2] = 20; d[i + 3] = 255; }
+      P.lensflare(d, W, H, p, 0, 1);
+      return d;
+    };
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return { r: d[i], g: d[i + 1], b: d[i + 2] }; };
+    const at = { x: 0.3, y: 0.3, intensity: 1 };
+
+    // the registry has to OFFER them, or he can never set one
+    const defs = FM.fxRegistry.paramsOf('lensflare') || [];
+    const cols = defs.filter(d => d.type === 'color');
+    if (cols.length < 2) throw new Error('Lens Flare offers ' + cols.length + ' colour param(s) — he asked for colour options and there are two things to colour');
+    if (cols.some(d => d.keyframable === false)) throw new Error('a Lens Flare colour is flagged keyframable:false — every other effect colour keyframes since queue 555');
+    const inst = FM.fxRegistry.makeInstance('lensflare');
+    if (inst.params.color !== '#fff0d2' || inst.params.color2 !== '#fff0d2') throw new Error('a NEW Lens Flare starts at ' + inst.params.color + '/' + inst.params.color2 + ' rather than the warm white it has always been — adding a control changed how the effect looks by default');
+
+    const base = run(at);
+    // CONTROL: the flare must actually be lighting pixels, or every comparison below is between two
+    // identical untouched images.
+    let lit = 0;
+    for (let i = 0; i < base.length; i += 4) if (base[i] !== 20) lit++;
+    if (lit < (W * H) / 8) throw new Error('the flare lit only ' + lit + ' pixels — this fixture proves nothing');
+
+    // 1. an EXISTING flare (no colour keys at all) renders exactly as it always did
+    const same = run(Object.assign({}, at, { color: '#fff0d2', color2: '#fff0d2' }));
+    for (let i = 0; i < base.length; i++) {
+      if (base[i] !== same[i]) throw new Error('byte ' + i + ': a flare with no colour keys gives ' + base[i] + ' and one set to the old hardcoded warm white gives ' + same[i] + ' — the default has drifted, so every existing project re-renders');
+    }
+
+    // 2. the CORE takes `color`
+    const orange = run(Object.assign({}, at, { color: '#ff5a00', color2: '#fff0d2' }));
+    const c0 = px(base, 18, 13), c1 = px(orange, 18, 13);
+    if (!(c1.r >= c0.r - 2 && c1.b < c0.b - 60)) throw new Error('colouring the flare orange left the core at ' + c1.r + ',' + c1.g + ',' + c1.b + ' (was ' + c0.r + ',' + c0.g + ',' + c0.b + ') — `color` is not reaching the core');
+
+    // 3. the RAYS take `color2` INDEPENDENTLY — this is the half that a single shared colour would pass
+    const blue = run(Object.assign({}, at, { color: '#fff0d2', color2: '#3aa0ff' }));
+    const rDef = px(base, 52, 13), rBlue = px(blue, 52, 13);
+    if (!(rBlue.b > rDef.b + 3 && rBlue.r < rDef.r - 3)) throw new Error('a ray pixel went from ' + rDef.r + ',' + rDef.g + ',' + rDef.b + ' to ' + rBlue.r + ',' + rBlue.g + ',' + rBlue.b + ' when only the RAY colour changed — the streaks are still drawn in the core colour');
+    // …and colouring only the rays must leave the core essentially alone
+    const cUnchanged = px(blue, 18, 13);
+    if (Math.abs(cUnchanged.r - c0.r) > 6 || Math.abs(cUnchanged.b - c0.b) > 20) throw new Error('changing only the RAY colour moved the core to ' + cUnchanged.r + ',' + cUnchanged.g + ',' + cUnchanged.b + ' — the two colours are not independent');
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

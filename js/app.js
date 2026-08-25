@@ -2612,8 +2612,14 @@ window.FM = window.FM || {};
      * empty state, and any group created afterwards was written with `parent` pointing at a deleted
      * id — then autosaved. */
     exitDeadGroupContext();
-    FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
-    FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
+    /* ⚠️ DELETING SELECTS NOTHING (queue 556). Ezra: *"When deleting a layer it shouldn't select the
+       last layer selected but just close every layer and leave you in the timeline"*.
+       It was falling back to `layers[0]`, which on a phone immediately re-opens THAT layer's option
+       sheet over the timeline he was trying to get back to — so a delete ended with a panel up for a
+       layer he never chose. Nothing selected is also the honest state: he deleted the thing he was
+       working on. */
+    FM.scene.selectedId = null;
+    FM.scene.selectedIds = [];
     // Keyboard Delete/Backspace routes here; mirror deleteLayer's reversed-audio rebuild so a deleted
     // reversed clip's synthesized audio stops (forward elements were just paused above). (#6)
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
@@ -2647,7 +2653,10 @@ window.FM = window.FM || {};
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
     // VALIDATE, don't just compare to id: deleting a group cascades to its members, so selectedId may
     // point at a now-deleted DESCENDANT (not id itself) — a phone zombie edit-mode on a dead layer.
-    if (!FM.layerById(FM.scene, FM.scene.selectedId)) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
+    // …and the same on this path (queue 556) — see the note in deleteSelected. Still VALIDATED rather
+    // than blindly cleared: deleting a group cascades to its members, so a selection that survived the
+    // delete is a selection he still has, and only a dead one becomes "nothing".
+    if (!FM.layerById(FM.scene, FM.scene.selectedId)) FM.scene.selectedId = null;
     FM.scene.selectedIds = (FM.scene.selectedIds || []).filter(sid => FM.layerById(FM.scene, sid));
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)

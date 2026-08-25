@@ -1,12 +1,25 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.68
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.69
 >
-> **State:** v12.68, **958 tests green**, tree clean.
+> **State:** v12.69, **961 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.69 — deleting a layer now leaves nothing selected (#556).** Both ways of deleting, not just the
+> one — the toolbar button and the layer's own menu. You land back on the timeline instead of having the
+> previous layer's options open over the screen you were trying to get to.
+>
+> **✅ v12.69 — Opacity has its easing curve (#557).** It shows up once the opacity is actually animated,
+> because a curve edits the bit BETWEEN two keyframes and there is nothing to edit until there are two.
+> Building it turned up a worse bug next door: **back was broken inside every easing curve** — it looked
+> like nothing happened, twice, with no way out. Fixed.
+>
+> **✅ v12.69 — Lens Flare has colours (#558).** Two of them: **Flare** for the round core and **Rays** for
+> the six streaks, separately — so you can do the warm-core/cold-streak look, not just tint the lot. Both
+> keyframe. Existing flares look exactly the same as before.
 >
 > **✅ v12.68 — picking a filter now shows it on YOUR canvas (#554).** The little tiles always previewed;
 > your actual picture never did. Pick one and the whole composition updates live, pick a second and they
@@ -19139,22 +19152,35 @@ re-opened #480, which I had marked done and had not fixed.
       move, because Gradient Overlay goes through `drawPixelEffect`. Found by measuring again rather than
       assuming the first edit had landed.*
 
-- [ ] **556 — Deleting a layer should leave NOTHING selected, not fall back to the previously selected layer.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **556 — Deleting a layer should leave NOTHING selected, not fall back to the previously selected layer.** (25 Aug.) — **DONE v12.69.**
       His words, verbatim:
       > When deleting a layer it shouldn’t select the last layer selected but just close every layer and leave you in the timeline - also make sure every recent request is logged and you’re doing stuff in order
       **Two things, and the second is a standing instruction rather than a task:**
-      1. [ ] **After a delete, select nothing** — close the layer panels and leave him looking at the
+      1. [x] **After a delete, select nothing** — close the layer panels and leave him looking at the
              timeline. Today it falls back to whatever was selected before, which re-opens that layer's
              options over the screen he was trying to get back to.
+             **Done v12.69.** There were TWO doors, and fixing one would have been the usual half-fix:
+             the toolbar path (`deleteSelected`) and the per-layer path (`deleteLayer`). Both now clear
+             `selectedId` — and `selectedIds` with it, so a multi-selection cannot outlive its layers.
+             The test also pins the opposite mistake: deleting a layer that is NOT selected leaves the
+             selection exactly where it was.
       2. [x] *"make sure every recent request is logged and you're doing stuff in order"* — the standing
              rule (see this file's header and CLAUDE.md). Confirmed: everything he has sent this session
              is logged, and the loop is working oldest-first from `./tools/next.sh`.
       ⚠️ `FM.inspector.refresh()` already re-establishes the truth when a `selectedId` no longer resolves;
       the delete path is presumably PICKING a new one rather than clearing it. Look there first.
 
-- [ ] **557 — The Opacity slider has a keyframe diamond but no graph/easing option.** (25 Aug, phone screenshot at v12.44.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **557 — The Opacity slider has a keyframe diamond but no graph/easing option.** (25 Aug, phone screenshot at v12.44.) — **DONE v12.69.**
+      **Shipped:** Mixing ▸ Opacity now carries the curve button beside its ◆, opening the same easing
+      editor Position, Scale and Rotation use.
+      **It only appears once opacity is ANIMATED**, and that is deliberate: an easing curve edits the
+      transition BETWEEN keyframes, so on a static opacity it would open an empty editor — the "◆ that
+      does nothing" complaint from #529 in a new place.
+      ⚠️ **Building it exposed a second, worse bug, now fixed too.** `inspector.back()` clears six easing
+      flags but its CONDITION only listed five, and the opacity curve is the one sub-view gated on its
+      flag alone rather than on a `view`. So back fell through to the line that resets the view, refreshed,
+      and redrew the very editor it was asked to leave: **back did nothing, twice, with no way out.** The
+      test now asserts both doors — the sub-view's own `‹ Opacity` button and the app's back.
       His words, verbatim:
       > Opacity slider doesn’t have graphing options
       **What the shot shows:** Mixing ▸ Opacity 0.92, with a ◆ keyframe button on the right — but **no
@@ -19164,8 +19190,18 @@ re-opened #480, which I had marked done and had not fixed.
       across the app's rows. **Worth one pass that audits WHICH rows have ◆ and which have the curve**,
       rather than adding them one report at a time — he has now sent two of these in a row.
 
-- [ ] **558 — Lens Flare needs colour options.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **558 — Lens Flare needs colour options.** (25 Aug.) — **DONE v12.69.**
+      **Shipped: TWO colours, because the effect draws two things** — the round core and the six streaks.
+      **Flare** colours the core, **Rays** colours the streaks, so the anamorphic look (warm core, cold
+      streak) is reachable rather than just "the whole thing is now blue". Both keyframe, free, because
+      #555 landed first — which is exactly why the entry said to wait for it.
+      Both default to the warm white it was hardcoded to (`#fff0d2` = 255,240,210), so an existing flare
+      and a newly added one render exactly as they always did.
+      ⚠️ **The byte-identity proof survived.** #474 asserts this kernel byte-for-byte against the original
+      six-ray implementation, which has no colour params. Splitting one multiply into two is equal in
+      exact arithmetic and can differ in the last float bit — enough to break that proof for a cosmetic
+      feature. The kernel keeps the original single-multiply expression whenever the two colours match,
+      and the new test pins that branch.
       His words, verbatim:
       > Lens flair should have colour options
       ("flair" is autocorrect for **flare**.) The effect presumably renders a fixed warm flare; he wants to
