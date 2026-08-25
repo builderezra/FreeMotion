@@ -3861,6 +3861,87 @@
     }
   });
 
+  test('524: dragging a clip past the end grows the project AS YOU DRAG, and stops scrolling at the limit', { item: '524' }, function () {
+    /* Queue 524. Ezra: "Dragging to the right breaks when you reach the project end instead of extending
+       out the project please fix."
+       ⚠️ MEASURED FIRST, and what "breaks" means is worse than the entry recorded. Traced on a 4s clip in
+       a 4s project in 45px steps, the clip's SCREEN position went 584 → 560 → 516 → 472 → 428 → 404 once
+       `start` pinned at the ceiling: it ran BACKWARDS, away from the finger, all the way to where it
+       started. Not a freeze — the opposite of the gesture. The cause is the edge auto-scroll: it kept
+       scrolling right with nowhere left to go, and each scroll shifts the drag origin, so a pinned clip
+       slides left across the screen. That is brake 4.
+       ⚠️ THE CEILING ITSELF STAYS, and that is not a half-fix — it is HIS OWN EARLIER REQUEST ("when you
+       drag a layer to the right too far it breaks the project timeline"). The two reports pull opposite
+       ways and cannot both be fully satisfied; what this does is make the bounded version behave, by
+       growing the project WHILE the finger is down instead of only on release.
+       A real pointer drag cannot be driven in this iframe (clip rects come back 0), so the state half is
+       driven through the real `applyClipMoveAt` via `_dragTrace`, and the screen half is checked on the
+       source of the function that has to carry it — exactly how the ceiling is already checked. */
+    if (!FM.timeline || typeof FM.timeline._dragTrace !== 'function') throw new Error('FM.timeline._dragTrace is missing — the drag path cannot be driven at all');
+    if (typeof FM._clipEdgeScrollSrc !== 'function') throw new Error('FM._clipEdgeScrollSrc is missing — brake 4 has nowhere to be checked');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, dur0 = FM.scene.project.duration;
+    const mk = (n, st, d) => { const l = FM.makeLayer('shape', { name: n, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#4ad' }); l.start = st; l.duration = d; return l; };
+    try {
+      // ── 1. a 4s clip in a 4s project, dragged well past the end
+      FM.scene.layers.length = 0; FM.scene.layers.push(mk('A', 0, 4));
+      FM.selectLayer(FM.scene.layers[0].id);
+      const tr = FM.timeline._dragTrace([0, 1, 2, 3, 4, 5, 6], 4);
+      if (!tr || tr.length !== 7) throw new Error('the drag seam returned nothing to measure');
+      // CONTROL: the clip must actually MOVE, or every assertion below is true of a drag that never happened.
+      if (!(tr[1].start > tr[0].start + 0.1)) throw new Error('the driven drag did not move the clip at all (' + tr[0].start + ' → ' + tr[1].start + ') — nothing below would mean anything');
+
+      // the project grows WHILE the finger is down — this is the request
+      if (!(tr[1].dur > tr[0].dur + 0.1)) throw new Error('one step into the drag the project is still ' + tr[1].dur + 's — it is not growing until release, which is queue 524');
+      for (let i = 1; i < tr.length; i++) {
+        if (tr[i].dur < tr[i - 1].dur - 1e-6) throw new Error('the project SHRANK mid-drag at step ' + i + ' (' + tr[i - 1].dur + ' → ' + tr[i].dur + ') — the live path must only ever grow; the real fit belongs on release');
+        if (tr[i].dur + 1e-6 < tr[i].start + 4) throw new Error('at step ' + i + ' the clip ends at ' + (tr[i].start + 4) + 's but the project is only ' + tr[i].dur + 's — the timeline is not keeping up with the clip');
+      }
+
+      // …and the ceiling still binds, because that is his earlier request
+      const last = tr[tr.length - 1];
+      if (Math.abs(last.start - 4) > 1e-6) throw new Error('dragged 6s past a 4s ceiling the clip sits at ' + last.start + ' — the limit from his earlier report has gone, and a clip can be stranded arbitrarily far out again');
+      if (Math.abs(last.dur - 8) > 1e-6) throw new Error('at the ceiling the project should be exactly the clip end (8s) and it is ' + last.dur);
+
+      // …and the drag KNOWS it is pinned, which is what brake 4 reads
+      if (tr[0].atCeil || tr[1].atCeil) throw new Error('the drag reports itself pinned before it has reached the ceiling — brake 4 would stop the auto-scroll immediately and the drag could never travel');
+      if (!last.atCeil) throw new Error('the drag does not report itself pinned at the ceiling, so brake 4 can never fire and the clip keeps sliding backwards');
+
+      // ── 2. GROW ONLY. Dragging left must not re-cut the project mid-gesture.
+      FM.scene.layers.length = 0; FM.scene.layers.push(mk('A', 6, 2), mk('long', 0, 10));
+      FM.selectLayer(FM.scene.layers[0].id);
+      const lt = FM.timeline._dragTrace([0, -1, -2, -3], 10);
+      if (!(lt[3].start < lt[0].start - 0.1)) throw new Error('the leftward drag did not move the clip — this case proves nothing');
+      lt.forEach((v, i) => { if (Math.abs(v.dur - 10) > 1e-6) throw new Error('dragging LEFT changed the project to ' + v.dur + 's at step ' + i + ' — autoFitDuration also shrinks, and running it mid-drag would fight the ceiling and re-cut the project every frame'); });
+
+      // ── 3. a clip well inside a longer project must not grow anything
+      FM.scene.layers.length = 0; FM.scene.layers.push(mk('short', 1, 2), mk('long', 0, 20));
+      FM.selectLayer(FM.scene.layers[0].id);
+      const wi = FM.timeline._dragTrace([0, 1, 2, 3], 20);
+      if (!(wi[3].start > wi[0].start + 0.1)) throw new Error('the inside drag did not move the clip — this case proves nothing');
+      wi.forEach((v, i) => { if (Math.abs(v.dur - 20) > 1e-6) throw new Error('dragging a clip INSIDE a 20s project changed it to ' + v.dur + 's at step ' + i + ' — the growth is firing when the clip is nowhere near the end'); });
+      if (wi.some(v => v.atCeil)) throw new Error('a clip dragged nowhere near the end reports itself at the ceiling');
+
+      // ── 4. the seam must leave nothing behind
+      if (FM.timeline._dragState().any) throw new Error('_dragTrace left a gesture live — the next test would inherit a drag it never started');
+
+      // ── 5. brake 4 itself, on the source (the screen position it fixes cannot be produced here)
+      const src = FM._clipEdgeScrollSrc();
+      if (!/atCeil/.test(src)) throw new Error('clipEdgeScroll no longer mentions atCeil — brake 4 is gone, and a pinned clip will march backwards away from the finger again');
+      if (!/v > 0 && clipMove\.atCeil/.test(src.replace(/\s+/g, ' '))) throw new Error('clipEdgeScroll mentions atCeil but not as a guard on scrolling RIGHT — brake 4 has been rewritten into something else');
+      /* ⚠️ AND BRAKE 3 MUST NOT READ THE DURATION THIS DRAG NOW GROWS. It used to bound the scroller by
+         `FM.scene.project.duration`, which was safe only while nothing grew that mid-drag. Queue 524
+         does. A live read would be the runaway brake 3's own comment describes — measured once at
+         900px → 1904px off a single drag. */
+      if (!/origProjDur/.test(src)) throw new Error('the auto-scroll limit no longer reads origProjDur — if it reads the live duration, the clip grows the project, the project raises the limit, and the scroller runs away');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0;
+      FM.selectLayer(sel0 || null);
+      if (FM.timeline && FM.timeline._abortGestures) FM.timeline._abortGestures();
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('556: deleting the selected layer leaves nothing selected', { item: '556' }, function () {
     /* Queue 556. Ezra: "When you delete a layer it still says its selected at the top."
        The layer went, its id did NOT — `selectedId` kept pointing at a layer that no longer exists, so

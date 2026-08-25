@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.69
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.70
 >
-> **State:** v12.69, **961 tests green**, tree clean.
+> **State:** v12.70, **962 tests green**, tree clean.
+>
+> **✅ v12.70 — dragging a clip past the end (#524).** Measuring it again was worth it: the clip does not
+> freeze there, **it runs backwards** — it slid all the way back to where it started while my finger kept
+> going right. The auto-scroll was still scrolling with nowhere left to go. Fixed, and **the project now
+> stretches while you drag** instead of jumping when you let go, so you can watch the timeline grow under
+> the clip. **It still stops after one clip-length** — that limit is your own earlier complaint about
+> clips stranded far out in empty space, and I would not undo one of your requests to satisfy another
+> without asking. **Say the word and I will take the limit off entirely.**
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
@@ -18070,8 +18078,7 @@ re-opened #480, which I had marked done and had not fixed.
       *Re-entrancy needed no flag: `commit()` runs `teardown()` (which nulls `active`) BEFORE it calls
       `inspector.refresh()`, so a hook on that path finds nothing left to do.*
 
-- [ ] **524 — Dragging a clip right stops dead at the project end instead of extending the project.** (24 Aug, phone screenshot at v12.22.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **524 — Dragging a clip right stops dead at the project end instead of extending the project.** (24 Aug, phone screenshot at v12.22.) — **DONE v12.70 (option A).**
       His words, verbatim:
       > Dragging to the right breaks when you reach the project end instead of extending out the project please fix
       **What the shot shows:** a project at 00:28:30 with a "Snowflake" clip pinned at the far left of a
@@ -18106,6 +18113,35 @@ re-opened #480, which I had marked done and had not fixed.
       | **A (recommended)** | Keep the limit, but the **timeline grows as you drag** instead of on release — you see the project extending under the clip rather than the clip freezing. Still one clip-length per drag; drag again to go further. |
       | **B** | **No limit.** The clip follows your finger anywhere and the project grows to fit. Literally what you asked — and it brings back the thing you complained about before: a clip stranded far out in empty space. |
       | **C** | **A bigger limit** — push out to, say, twice the project length in one gesture, then it stops. A halfway house. |
+
+      ✅ **DONE v12.70 — I took A, and I did not wait for you to pick, because you told me not to:**
+      *"im off to bed now so dont ask me anything just do"*. **A is the only one of the three that does
+      not contradict something you already asked for.** B is literally your words here, but it undoes your
+      earlier report — a clip stranded far out in empty space with the ruler chasing it — and C is a
+      number I would be making up. Say the word and B is a two-line change.
+
+      🔬 **AND MEASURING IT AGAIN FIRST WAS WORTH IT, because "breaks" is worse than this entry recorded.**
+      The note above says the clip freezes under your finger. It does not freeze — **it runs backwards.**
+      Traced on a 4s clip in a 4s project in 45px steps, the clip's screen position went
+      **584 → 560 → 516 → 472 → 428 → 404** once it hit the limit: it slid all the way back to where it
+      started while your finger kept travelling right. That is the opposite of the gesture, and it is why
+      it reads as broken rather than as "that's as far as it goes".
+      **The cause was the edge auto-scroll.** It kept scrolling right with nowhere left to go, and every
+      scroll shifts the drag's origin — so a clip pinned at the limit slides left across the screen at the
+      speed of the scroll. There is now a fourth brake: **no scrolling right while the drag is pinned.**
+      Measured after: **0 backwards steps**, on desktop and at 380px.
+      **And the project now grows WHILE you drag** rather than jumping on release — 4s → 4.74 → 5.49 →
+      6.23 → 6.97 → 7.71 → 8s with the ruler following, so you can see the timeline extending under the
+      clip. Grow-only: dragging left does not re-cut the project mid-gesture, and a clip dragged around
+      inside a longer project does not touch it. Release still runs the real fit, so the committed result
+      is byte-for-byte what it was.
+      ⚠️ **One knock-on worth recording.** Brake 3 (the cap that stops the scroller running away) used to
+      read `project.duration` live, which was safe only while nothing grew it mid-drag. This does. Left
+      alone it would have been the exact runaway its own comment describes — clip grows the project,
+      project raises the cap, cap makes room to scroll further — measured once at 900px → 1904px off a
+      single drag. It reads the drag's starting duration now, so both its terms are frozen.
+      *(No screenshot: the change is motion, not appearance. A still frame of a drag shows nothing — the
+      numbers above are the evidence.)*
 
 - [x] **525 — Clear out the old element workspaces left behind by the pre-v12.26 behaviour.** (Found 24 Aug while doing #505.) ✅ v12.55
       Not something he asked for in words — it is the residue of the bug in #505. Every element edit before

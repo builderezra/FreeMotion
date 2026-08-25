@@ -2989,6 +2989,12 @@ window.FM = window.FM || {};
   }
   FM._groupDragFloor = groupDragFloor;
   FM._applyClipMoveAtSrc = function () { return String(applyClipMoveAt); };
+  /* Same reasoning as the line above, for the auto-scroll (queue 524). Brake 4 refuses to scroll right
+     while the drag is pinned at its ceiling, and its effect — the clip no longer marching backwards
+     away from the finger — is a SCREEN position under a real pointer, which this suite's iframe cannot
+     produce (clip rects are 0 there). So the brake is checked where the ceiling already is: on the
+     source of the function that has to carry it. */
+  FM._clipEdgeScrollSrc = function () { return String(clipEdgeScroll); };
 
   /* AND ONE CEILING FOR THE WHOLE SELECTION (queue 394). Ezra: *"Found a glitch where when you drag a
    * layer to the right too far it breaks the project timeline"*, and with a screenshot: *"it just keeps
@@ -3062,6 +3068,35 @@ window.FM = window.FM || {};
       const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
       if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
     });
+    /* ⚠️ PINNED AT THE CEILING — recorded here because this is where `ceil` is already known, and the
+       auto-scroll a hundred lines down needs it (brake 4). Recomputing it there would be a second copy
+       of a rule that exists once. */
+    clipMove.atCeil = clipMove.layer.start >= ceil - 1e-6;
+    /* ⚠️ THE PROJECT GROWS WHILE YOU DRAG, NOT ON RELEASE (queue 524). Ezra: "Dragging to the right
+       breaks when you reach the project end instead of extending out the project please fix."
+       It already extended — but only after you let go, so during the gesture the ruler simply stopped
+       and nothing said the project was about to get longer. Now the timeline lengthens underneath the
+       clip as it travels, which is the thing he could not see happening.
+       GROW ONLY. `FM.autoFitDuration` is the release path and it also SHRINKS to the furthest clip end;
+       running that mid-drag would fight the ceiling and re-cut the project on every frame. This only
+       ever pushes the end outwards, and pointerup still runs the real fit.
+       THE RULER IS REBUILT ONLY WHEN THE WHOLE SECOND CHANGES. buildRuler() is windowed to the visible
+       stretch (queue 101/95) so it is cheap, but this path runs on every pointermove of the most common
+       gesture in the app — the one three separate reports call laggy on his phone — and a rebuild per
+       frame is exactly the cost the per-move path was designed to avoid. Between boundaries the ruler
+       is at most a second short, which is under one tick and invisible. */
+    let farEnd = clipMove.layer.start + (clipMove.layer.duration || 0);
+    (clipMove.group || []).forEach(g => { const e = g.layer.start + (g.layer.duration || 0); if (e > farEnd) farEnd = e; });
+    const P = FM.scene.project;
+    if (farEnd > (P.duration || 0) + 1e-6) {
+      const wasWhole = Math.ceil(P.duration || 0);
+      P.duration = Math.round(farEnd * 1000) / 1000;
+      if (Math.ceil(P.duration) !== wasWhole) {
+        buildRuler();
+        const need = PAD + P.duration * pps + laneViewW();
+        if ((parseFloat(innerEl.style.width) || 0) < need) innerEl.style.width = need + 'px';
+      }
+    }
     /* `quiet` is the auto-scroll calling. It skips the canvas repaint, and that is not an
      * optimisation — it is the whole reason the previous three attempts at this feature went red.
      *
@@ -3112,6 +3147,16 @@ window.FM = window.FM || {};
     if (x > rect.right - TRIM_EDGE) v = Math.min(MAX, ((x - (rect.right - TRIM_EDGE)) / TRIM_EDGE) * MAX);
     else if (x < headRight + TRIM_EDGE) v = -Math.min(MAX, (((headRight + TRIM_EDGE) - x) / TRIM_EDGE) * MAX);
     if (v === 0) return;
+    /* BRAKE 4 — MEASURED, and it is the whole of what "breaks" means in queue 524.
+     * Once `start` is pinned at the ceiling the clip cannot move right any further, but this loop kept
+     * scrolling anyway, and every scroll shifts the drag origin (`clipMove.startX -= moved`) so the
+     * clip's SCREEN position marches left while the finger travels right. Traced on a 4s clip in a 4s
+     * project, 45px steps: left went 584 → 560 → 516 → 472 → 428 → 404 — the clip ran backwards, away
+     * from the finger, all the way to where it started. Not a freeze; the opposite of the gesture.
+     * Scrolling right at the ceiling reveals nothing, because nothing can go there. So: stop.
+     * Returning without re-arming is safe and is what `v === 0` above already relies on — the next
+     * pointermove near an edge re-arms the loop, so dragging back off the ceiling resumes normally. */
+    if (v > 0 && clipMove.atCeil) return;
     if (v > 0 && innerEl) {                                                    // brake 3
       /* The limit is computed from where the clip STARTED, never from where it is now. Deriving it
        * from the live position looks equivalent and is the runaway itself: the loop pushes the clip
@@ -3119,7 +3164,11 @@ window.FM = window.FM || {};
        * further. Measured — the scroller went 900px → 1904px off a single test drag, and stayed there.
        * `origStart` cannot move for the length of the drag, so this terminates by construction. */
       const pps = pxPerSec();
-      const far = Math.max(FM.scene.project.duration, clipMove.origStart + clipMove.layer.duration);
+      /* ⚠️ `origProjDur`, NOT the live duration — this used to read `FM.scene.project.duration`, which
+       * was safe only while nothing grew it mid-drag. Queue 524 now does, so a live read would be the
+       * runaway this brake's own comment warns about: the clip grows the project, the project raises
+       * the limit, the limit makes room to scroll further. Both terms are now frozen at drag start. */
+      const far = Math.max((clipMove.origProjDur != null ? clipMove.origProjDur : FM.scene.project.duration), clipMove.origStart + clipMove.layer.duration);
       const limit = PAD + far * pps + timelineEl.clientWidth;
       const need = Math.min(limit, timelineEl.scrollLeft + timelineEl.clientWidth + v + 120);
       if ((parseFloat(innerEl.style.width) || 0) < need) innerEl.style.width = need + 'px';
@@ -3176,6 +3225,37 @@ window.FM = window.FM || {};
      * repaint the canvas, because repainting every frame holds the preview in motion mode and resizes
      * it underneath anything measuring canvas geometry. Guarded on there being no live drag, so it
      * can never steer a real one. */
+    /* A SCRIPTED CLIP DRAG, driven through the real applyClipMoveAt (queue 524). A genuine pointer
+     * drag cannot be driven in the suite's iframe — clip rects come back 0 there, which is why the
+     * ceiling is checked on this function's SOURCE. But the two things queue 524 changed are pure
+     * state, not geometry: whether the project grows while the finger is still down, and whether the
+     * drag knows it is pinned at its ceiling. Both are reachable without a single rectangle.
+     * `applyClipMoveAt` reads a screen x and divides by pxPerSec(), so the caller passes SECONDS and
+     * this converts — and its only DOM read is a `.clip` lookup that is already null-guarded.
+     * Restores the layer starts and the duration on the way out, so nothing survives the call. */
+    _dragTrace: function (offsetsSec, projDur) {
+      if (clipMove) return null;                           // never reach into a real drag
+      const L = (FM.scene.layers || [])[0];
+      if (!L) return null;
+      const P = FM.scene.project;
+      const saveStarts = FM.scene.layers.map(l => l.start), saveDur = P.duration;
+      if (projDur != null) P.duration = projDur;
+      const pps = pxPerSec();
+      const out = [];
+      touchGesture();
+      clipMove = { layer: L, origStart: L.start, origProjDur: (P.duration || 0), startX: 0, moved: true, group: [], _excl: {}, sup: null };
+      try {
+        (offsetsSec || []).forEach(sec => {
+          applyClipMoveAt(sec * pps, true, true);          // shiftKey: bypass snapping, so this measures the clamp and the growth, not the snap targets
+          out.push({ start: +L.start.toFixed(3), dur: +(P.duration || 0).toFixed(3), atCeil: !!clipMove.atCeil });
+        });
+      } finally {
+        clipMove = null; hideSnap();
+        FM.scene.layers.forEach((l, i) => { l.start = saveStarts[i]; });
+        P.duration = saveDur;
+      }
+      return out;
+    },
     _edgeScrollTick: function (quiet) {
       if (clipMove) return false;                          // never reach into a real drag
       const L = (FM.scene.layers || [])[0];
