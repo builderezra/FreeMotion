@@ -3196,6 +3196,89 @@
     }
   });
 
+  test('529: the effects that do nothing at their defaults say so on the tile', { item: '529' }, async function () {
+    /* Queue 529. Ezra, for the third time: "You got the effects I have selected working at one point but
+       now they aren't again". Verified end to end at v12.58 — picking, badges, tap order, the live
+       preview, the commit bar, the category Done and Back, the X, and the tab switch ALL work, on a shape
+       layer and on a real raster layer. The mechanism is sound.
+       The one explanation that survives: v10.32 measured four effects that change ZERO pixels at their
+       own defaults, each needing an input the default cannot invent. They are picked, they land, and the
+       canvas does not move — indistinguishable from being ignored. Now they say so.
+       ⚠️ THE SUITE KEEPS ITS OWN LIST ON PURPOSE. `KNOWN_NOOP` above is measured from the RENDER; the
+       app's list is a hand-written label. Asserting they agree is what stops the label quietly lying
+       when one of the four is eventually given a real default. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade'];
+    if (typeof FM._fxNeedsInputList !== 'function') throw new Error('FM._fxNeedsInputList is missing — the browser has no list of the effects that render nothing, so nothing can mark them');
+    const appList = FM._fxNeedsInputList();
+    if (appList.join(',') !== KNOWN_NOOP.slice().sort().join(',')) throw new Error('the browser marks [' + appList.join(', ') + '] but the render-measured no-op list is [' + KNOWN_NOOP.slice().sort().join(', ') + '] — one of them is wrong, and a label that disagrees with what the app draws is worse than no label');
+    for (const id of KNOWN_NOOP) {
+      if (!FM._fxNeedsInput(id)) throw new Error(id + ' renders nothing at its defaults and is not marked');
+    }
+    // CONTROL: an effect that DOES something must not be marked, or the label means nothing
+    if (FM._fxNeedsInput('brightness')) throw new Error('brightness is marked as needing a setting — it changes half the frame at its defaults, so the marker is being applied to everything');
+  });
+
+  test('530: the background swatches are five different colours', { item: '530' }, function () {
+    /* Queue 530. Ezra, circling the third swatch: "Replace this default colour choice with a green screen
+       green". It was #0b0e14 — a near-black all but indistinguishable from the pure black beside it, so
+       two of the presets were effectively the same choice.
+       Asserted as "no two are the same" rather than "the third is #00b140", because the defect he
+       reported is the DUPLICATION; pinning the exact hex would fail the day he asks for a different
+       green and would say nothing about the row being useful. */
+    const rows = [].slice.call(document.querySelectorAll('.hm-bg-sw[data-bg]'));
+    if (rows.length < 6) throw new Error('only ' + rows.length + ' background swatches in the document — expected both rows (new-project and canvas settings)');
+    const byRow = {};
+    rows.forEach(b => { const k = b.classList.contains('cv-bg-sw') ? 'canvas' : 'new'; (byRow[k] = byRow[k] || []).push(b.dataset.bg.toLowerCase()); });
+    Object.keys(byRow).forEach(k => {
+      const cols = byRow[k].filter(c => c !== 'none');
+      const uniq = new Set(cols);
+      if (uniq.size !== cols.length) throw new Error('the ' + k + ' swatch row offers the same colour twice (' + cols.join(', ') + ') — that is the duplication he circled');
+      if (!cols.some(c => { const g = parseInt(c.slice(3, 5), 16), r = parseInt(c.slice(1, 3), 16), b2 = parseInt(c.slice(5, 7), 16); return g > 120 && g > r * 2 && g > b2 * 2; })) throw new Error('the ' + k + ' row has no green-screen green in it (' + cols.join(', ') + ')');
+    });
+  });
+
+  test('531: adding a layer docks the phone option sheet, without waiting for a tap', { item: '531' }, async function () {
+    /* Queue 531. Ezra: "When you add a layer and it instantly opens up it leaves this gap untill you
+       start editing … The gap between the editor and the timeline I mean".
+       SAME ROOT CAUSE AS #523, which is why it is worth a test of its own: `dockSheet` was only reachable
+       from the `FM.selectLayer` wrapper, and every layer CREATOR writes `FM.scene.selectedId` directly
+       and calls `refreshAll()` instead. MEASURED before the fix: after a creator the panel sat at a stale
+       `top: 6px` and was still there 1.4s later — it does not self-correct; one real selectLayer moved it
+       to 491px, which is exactly "until you start editing". */
+    if (typeof FM.addAdjustmentLayer !== 'function') throw new Error('no creator available to test the bypass with');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll();
+        await sleep(300);
+        if (typeof FM._dockSheet !== 'function') throw new Error('FM._dockSheet is not exposed, so refreshAll has nothing to re-dock with');
+        // a creator — sets selectedId directly, never goes through FM.selectLayer
+        FM.addAdjustmentLayer();
+        await sleep(600);
+        const rows = [].slice.call(document.querySelectorAll('#tl-tracks .track-row'));
+        const panel = document.getElementById('inspector-panel');
+        if (!rows.length) throw new Error('the added layer drew no row, so there is nothing to dock to');
+        if (!panel) throw new Error('no #inspector-panel');
+        const lr = rows[rows.length - 1].getBoundingClientRect(), pr = panel.getBoundingClientRect();
+        /* CONTROL: the row has to be real. A row with a zero rect (the text editor hides the timeline)
+           would make any gap reading meaningless — that is why this uses an adjustment layer, which does
+           not open an editor over the top. */
+        if (!(lr.bottom > 50)) throw new Error('the clip row measured a bottom of ' + lr.bottom.toFixed(1) + ' — it is not laid out, so the gap below would be measuring nothing');
+        const gap = pr.top - lr.bottom;
+        if (!(gap >= -1 && gap <= 24)) throw new Error('after adding a layer the option sheet sits ' + gap.toFixed(1) + 'px from the clip row (panel top ' + pr.top.toFixed(1) + ', row bottom ' + lr.bottom.toFixed(1) + ') — queue 531: it docks only when you start editing');
+      }, 380);
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

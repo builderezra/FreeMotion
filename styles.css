@@ -8004,3 +8004,13 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 /* The canvas card's height cap now comes from the shared `.export-card` rule (queue 494), which was
    added for the export dialog and covers this one too — the note added for queue 490 is what made this
    card need it. Kept as a comment rather than a duplicate rule so the reason survives. */
+
+/* "Needs a setting" on the four effects that render nothing at their own defaults (queue 529).
+   Faint and small on purpose: it is a footnote on a tile, not a warning — the effect is not broken,
+   it just cannot guess the colour/grade/band you meant. See NEEDS_INPUT in js/fx-browser.js. */
+.fxb-needs {
+  display: block; font-size: 9.5px; line-height: 1.2; margin-top: 1px;
+  color: var(--kf); opacity: .85; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+

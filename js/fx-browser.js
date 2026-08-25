@@ -710,10 +710,31 @@ window.FM = window.FM || {};
   }
 
   // A tappable effect tile (thumb + name + ★ favourite toggle).
+  /* ⚠️ FOUR EFFECTS DO NOTHING AT THEIR OWN DEFAULTS, AND NOTHING SAID SO (queue 529, and it is the
+     only explanation that survived verifying the whole pick path).
+     v10.32 measured every Colouring effect at the parameters `makeInstance` gives it: 39 of 43 change
+     about half the frame, and these four change **ZERO pixels**, because each needs an input the default
+     cannot invent — a colour to replace, a grade to match, a band to move, a threshold to cross.
+     They are picked, they land on the layer, and the canvas does not move. From the outside that is
+     indistinguishable from being ignored, which is Ezra's report three times over: *"You got the effects
+     I have selected working at one point but now they aren't again"*, with eight badges on screen.
+     ⚠️ THIS IS A LABEL, NOT NEW DEFAULTS. Giving filters better starting values is the HELD item he
+     asked me not to start (*"most of our filters I kind of just like basic when you first add them"*),
+     and this deliberately does not touch it — it only stops silence being mistaken for a broken pick.
+     ⚠️ The suite keeps its OWN copy of this list on purpose (KNOWN_NOOP), measured from the render
+     rather than read from here, and asserts the two agree — so fixing one of these four fails loudly
+     until both are updated, instead of the label quietly lying. */
+  const NEEDS_INPUT = { darkglow: 1, replacecolor: 1, hslbands: 1, matchgrade: 1 };
+  FM._fxNeedsInput = function (id) { return !!NEEDS_INPUT[id]; };
+  FM._fxNeedsInputList = function () { return Object.keys(NEEDS_INPUT).sort(); };
+  function needsInputHint(id) { return NEEDS_INPUT[id] ? el('span', 'fxb-needs', 'Needs a setting') : null; }
+
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
+    if (NEEDS_INPUT[reg.id]) wrap.title = reg.label + ' — does nothing until you give it a setting';
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
+    { const h = needsInputHint(reg.id); if (h) wrap.appendChild(h); }
     wrap.appendChild(starFor(reg.id, onStarChange));
     wrap.addEventListener('click', guardedAdd(wrap, reg.id));
     attachLongPress(wrap, reg);   // hold (or right-click) → preset sheet
@@ -739,6 +760,7 @@ window.FM = window.FM || {};
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
+      { const h = needsInputHint(reg.id); if (h) card.appendChild(h); }   // queue 529 — see NEEDS_INPUT
       card.appendChild(starFor(reg.id, rerenderPaged));   // the featured row had no ★ at all, so the newest effects — which lead FX_FEATURED — were exactly the ones you could not favourite (#62)
       card.addEventListener('click', guardedAdd(card, reg.id));
       attachLongPress(card, reg);

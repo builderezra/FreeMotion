@@ -86,6 +86,33 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     image — that mutation survived until the expensive path was counted. If a fix has a cost, measure
     the cost, not the output.
 
+15. **⚡ BATCH THE WORK, SHIP ONCE — his instruction, 25 Aug, and the reason is arithmetic.**
+    *"cant you have the test suite run while u move on to the next thing? … i want more progress faster
+    but not at the quality cost … if u notice that the testers actually notice a lot of good stuff dont
+    get rid of them."*
+    **He is right about the bottleneck.** The suite is ~946 tests and ~9 minutes a pass. One item was
+    costing up to FOUR passes — one to check, two inside ship.sh, one or two for a mutation — so ~35
+    minutes of idle waiting for a change that often takes two minutes to write. 33 releases in 36 hours,
+    almost all of it watching a progress bar.
+    **So: work 3–5 queue items, then ONE ship covering them all.** Same tests, same gates, a quarter of
+    the waiting.
+    ⚠️ **Do NOT edit the tree while a suite is running.** ship.sh runs the suite twice and the second
+    pass loads from disk, so a mid-flight edit lands in a run that is meant to be testing the previous
+    state. That is why the answer is BATCHING rather than literally editing while it runs.
+    ⚠️ **KEEP the mutation checks.** He singled them out — they have caught something real every single
+    time, including two of my own dead tests and a cross-test leak. Batch them too: mutate once per
+    batch on the riskiest assertion, not once per item.
+    ⚠️ **And his sharpest line, which is fair: *"u constantly dont do stuff i ask or just fail at it and
+    dont even realise"*.** The 25 Aug audit found #418 and #352 ticked DONE with unticked clauses inside
+    — invisible to `next.sh`, which reads the top-level checkbox only. **Re-run that audit at the end of
+    every batch**, not once: a DONE entry carrying an unticked clause is the shape that hides work.
+
+16. **🌙 WHEN HE IS ASLEEP, DECIDE — do not park work on a question.** His words, 25 Aug:
+    *"im off to bed now so dont ask me anything just do, based on all this info and ur own smarts"*.
+    This **overrides #545's "show him options first" for the duration** — pick the option I would
+    recommend, ship it, and show him the picture in the morning with the alternatives named so he can
+    change it in one word. A visual he can see and reject beats a tick spent waiting.
+
 ## STATE
 
 ### 🎯 22 Aug — HIS STEER, AND IT CHANGES WHAT THIS LOOP SHOULD SPEND TICKS ON

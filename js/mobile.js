@@ -254,6 +254,20 @@ window.FM = window.FM || {};
       insp.style.top = top + 'px';
       insp.style.maxHeight = 'none';
     }
+    /* ⚠️ THE DOCK HAS TO RUN AFTER AN ADD TOO (queue 531), and this is the SAME root cause as #523.
+       Ezra: *"When you add a layer and it instantly opens up it leaves this gap untill you start
+       editing … The gap between the editor and the timeline I mean"*.
+       `dockSheet` was only ever reached from the `FM.selectLayer` wrapper below — but every layer
+       CREATOR (`addTextLayer`, `addCamera`, `addAdjustmentLayer` and a dozen more) writes
+       `FM.scene.selectedId` DIRECTLY and calls `refreshAll()`, never touching `selectLayer`. So an added
+       layer opened its panel with whatever `top` the last dock left behind and nothing re-measured it.
+       MEASURED at 380px: after `FM.addTextLayer()` the panel sits at a stale `top: 6px` and is still
+       there 1.4s later — it does not self-correct. One real `selectLayer` moves it to 491px, which is
+       exactly "until you start editing".
+       Exposed rather than duplicated, and called from `refreshAll` — the one place every creator does
+       go through. It self-guards (not a phone, or not editing → it clears its own inline styles), so
+       calling it from a shared path is safe. */
+    FM._dockSheet = function () { try { dockSheet(); } catch (e) {} };
     window.addEventListener('resize', function () { if (isPhone() && document.body.classList.contains('m-editing')) { syncClipName(); requestAnimationFrame(dockSheet); } });
 
     // ---------- AM-style mobile chrome: top bar + green + FAB + Add sheet ----------

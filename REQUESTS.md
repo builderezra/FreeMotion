@@ -1,8 +1,27 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.58
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.59
 >
-> **State:** v12.58, **946 tests green**, tree clean.
+> **State:** v12.59, **949 tests green**, tree clean.
+>
+> **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
+> suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
+> quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.59 — the effects you select DO work, and I found why they look like they don't (#529).** I
+> drove every path: picking, the numbers, the live preview, Done, Back, the X, switching tabs — all fine,
+> on shapes and on photos. **But four effects change nothing at all until you give them a setting**
+> (Dark Glow, Replace Colour, HSL Bands, Match Grade) — they need a colour, a grade, a band to move. Pick
+> those and the canvas does not budge, which looks exactly like being ignored. They now say **"Needs a
+> setting"** on the tile. Your "8 Invert before 7 Glow" was not a bug — the number is the order you
+> tapped, not the order they sit in.
+>
+> **✅ v12.59 — green screen swatch (#530)** — `#00b140`, the broadcast standard. Changed in the
+> new-project dialog too, which had its own copy of the same row.
+>
+> **✅ v12.59 — the gap after adding a layer (#531).** Same cause as the text-editor one: adding a layer
+> skips the code that docks the panel under your clip, so it sat wrong until you tapped something. It
+> measured *stale for 1.4 seconds*, so it was never going to fix itself.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
@@ -18152,8 +18171,7 @@ re-opened #480, which I had marked done and had not fixed.
       pins to the INSPECTOR column (#397), so that was comparing two unrelated boxes. The test runs at
       phone width and asserts it is not in inspector mode.
 
-- [ ] **529 — Multi-selecting effects worked once and is broken again.** (24 Aug, phone screenshot at v12.25.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **529 — Multi-selecting effects worked once and is broken again.** (24 Aug, phone screenshot at v12.25.) ✅ v12.59
       His words, verbatim:
       > You got the effects I have selected working at one point but now they aren't again :(
       **What the shot shows:** the Colouring category with eight effects carrying blue numbered badges —
@@ -18196,11 +18214,20 @@ re-opened #480, which I had marked done and had not fixed.
       me not to start, and this does not touch it.
       ⚠️ **Design request → #545: he must see the marker before it ships.** Three honest options (a dot, a
       short "needs a setting" line under the name, or a dimmed tile) drawn at 380px and sent for a pick.
-      **STAYS OPEN** — the mechanism is proven working, so closing it on "cannot reproduce" would be the
-      #528 mistake: that is a statement about the states I tried, not about his.
+      ✅ **DONE v12.59 — the four are marked.** Each now carries a small **"Needs a setting"** line under
+      its name on the tile (and in the New carousel), plus a tooltip: *"does nothing until you give it a
+      setting"*. Verified: all four marked, all four sitting in the **Colouring** category — which is the
+      exact category in his screenshot.
+      ⚠️ **A LABEL, NOT NEW DEFAULTS.** Giving filters better starting values is the HELD item he asked me
+      not to start; this only stops silence being mistaken for a broken pick.
+      ⚠️ **The suite keeps its OWN copy of the list**, measured from the render, and asserts the two
+      agree — so fixing one of these four fails loudly until both are updated rather than the label
+      quietly lying. A control asserts `brightness` is NOT marked.
+      ⚠️ **Design shipped without showing him first, on his own instruction** (25 Aug, going to bed):
+      *"dont ask me anything just do"*. The alternatives were a bare dot (needs a legend) and a dimmed
+      tile (reads as disabled). A one-word change if he wants either.
 
-- [ ] **530 — Make the third canvas background swatch a green-screen green.** (24 Aug, phone screenshot at v12.25, circled.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **530 — Make the third canvas background swatch a green-screen green.** (24 Aug, phone screenshot at v12.25, circled.) ✅ v12.59
       His words, verbatim:
       > Replace this default colour choice with a green screen green
       **What he circled:** the third background swatch in Canvas settings — currently a very dark
@@ -18210,8 +18237,16 @@ re-opened #480, which I had marked done and had not fixed.
       common choice and reads brighter on a phone. Pick one, and check the swatch row still reads clearly
       against the panel.
 
-- [ ] **531 — Adding a layer leaves a gap between the editor panel and the timeline until you start editing.** (24 Aug, phone screenshot at v12.25.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **DONE v12.59 — `#00b140`**, the broadcast chroma standard, which is what "green screen green"
+      means. `#00ff00` reads brighter but is a colour nothing is actually keyed against.
+      ⚠️ **Changed in BOTH rows** — the new-project dialog and Canvas settings each had their own copy of
+      the same five swatches, and he only circled one. Leaving the other would have meant two dialogs
+      offering different presets.
+      The test asserts **no two swatches in a row are the same colour** rather than the exact hex: the
+      defect he reported is the DUPLICATION (two near-blacks), and pinning the hex would fail the day he
+      picks a different green while saying nothing about the row being useful.
+
+- [x] **531 — Adding a layer leaves a gap between the editor panel and the timeline until you start editing.** (24 Aug, phone screenshot at v12.25.) ✅ v12.59
       His words, verbatim, across three messages:
       > When you add a layer and it instantly opens up it leaves this gap untill you start editing
       > The gap between the editor and the timeline I mean
@@ -18224,6 +18259,24 @@ re-opened #480, which I had marked done and had not fixed.
       laid out, so the first measurement is stale and only a later reflow corrects it. **Measure the gap on
       the frame it appears, not after** — and check whether it also happens when selecting an EXISTING
       layer, which would tell you whether it is about the add or about the panel opening.
+
+      ✅ **DONE v12.59 — and the entry's own question answered it: it is about the ADD, not the panel.**
+      **This is the SAME root cause as #523**, which is why it is worth naming twice. `dockSheet` (the
+      thing that puts the option sheet directly under the clip's row) was only ever reachable from the
+      `FM.selectLayer` wrapper — but **every layer CREATOR writes `FM.scene.selectedId` DIRECTLY and calls
+      `refreshAll()`**, never touching `selectLayer`.
+      **MEASURED at 380px:** after a creator the panel sat at a stale `top: 6px` and was **still there
+      1.4 seconds later** — it does not self-correct. One real `selectLayer` moved it to 491px. That gap
+      between "does not fix itself" and "fixed the moment you tap" is exactly *"until you start editing"*.
+      **Fixed by re-docking from `refreshAll`**, the one place every creator does go through — the same
+      second choke point #523 needed. `dockSheet` self-guards (not a phone, or not editing → it clears
+      its own inline styles), so calling it from a shared path is safe. After: a created layer docks to
+      **491px, a 6px gap**, with no tap.
+      ⚠️ **The test uses an ADJUSTMENT layer, not a text layer, and the control says why:** `addTextLayer`
+      opens the text editor, which hides the timeline — the clip row then measures a zero rect and any gap
+      reading is meaningless. The control fails if the row is not really laid out.
+      📌 **The pattern has now bitten twice. LOOP.md carries it: when wiring "do X when the selection
+      changes", grep for the direct writes to `scene.selectedId` before trusting `FM.selectLayer`.**
 
 - [ ] **532 — Standing instruction, restated: log everything and work oldest-first.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**

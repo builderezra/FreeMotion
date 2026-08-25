@@ -681,6 +681,12 @@ window.FM = window.FM || {};
        it reads the live selection. */
     if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection();
     FM.inspector.refresh();
+    /* …and re-dock the phone's option sheet (queue 531). Same reasoning as the line above, and the same
+       root cause: every layer CREATOR writes scene.selectedId directly and lands here, never going
+       through FM.selectLayer where the dock used to be wired — so a freshly added layer opened its panel
+       at whatever top the previous dock left and never re-measured. rAF because the row it measures has
+       to be laid out first; the dock self-guards on phone + m-editing. */
+    if (FM._dockSheet) requestAnimationFrame(FM._dockSheet);
     FM.timeline.rebuild();
     updateDropHint();
     updateReadout();
