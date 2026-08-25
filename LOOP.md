@@ -147,9 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.73, 964 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.74, 965 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.73, closing #556, #557, #558, #524, #474, #548 and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.74, closing #556, #557, #558, #524, #474, #548, #550 and #539 clause 4.**
+
+⚠️ **"NEEDS HIM TO CIRCLE IT AGAIN" IS USUALLY A MEASUREMENT YOU HAVE NOT TAKEN.** #550 clause 2 sat
+parked on that for a round, on the reasoning that "the head divider runs the full height of every row
+here" — which was simply **false**, and one probe of the rendered page said so: the add row drew it 21px
+in a 40px row while every other row drew 41px. There was exactly one break in that line anywhere, so
+there was never anything to guess at. **Before asking him for another screenshot, measure the thing the
+screenshot is of.**
 
 ⚠️ **CHECK RULE 11 BEFORE MEASURING ANYTHING THAT MOVES — I lost four rounds to it on #548.** Readings
 said every animation was frozen at its first frame and every card sat 6px out. **All of it was the pane,
