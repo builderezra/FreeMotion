@@ -601,7 +601,13 @@ window.FM = window.FM || {};
     const p2 = n => (n < 10 ? '0' : '') + n;
     readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
-    readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0');
+    /* …and KEEP the gesture hint on it (queue 536 clause 1). This line runs on every readout update and
+       was silently overwriting the title set at init, so the pill's own tooltip advertised the project
+       stats and nothing else — the tap, the double-click and the hold were all undiscoverable from the
+       control that carries them. Measured: after one refresh the title read "1 layer · total 0:06".
+       The stats stay (they are useful and he can see them nowhere else); the gestures are appended. */
+    readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0')
+      + '\nTap: play / pause · double-click: type a time · hold: loop playback on/off';
     // Parked on a benchmark? Light the timecode chip in marker yellow. A phone has no hover, so
     // this is the half that actually reports "you are ON a marker" on device. (#61)
     const mks = FM.scene.project.markers || [], halfF = 0.5 / f;
@@ -4648,7 +4654,7 @@ window.FM = window.FM || {};
        Double-click (type a time) and hold (pin the thumbnail) are unchanged: neither collides with a tap,
        and both are already how you reach them. */
     readoutEl.style.cursor = 'pointer';
-    readoutEl.title = 'Tap: play / pause · double-click: type a time · hold: set this frame as the project thumbnail';
+    readoutEl.title = 'Tap: play / pause · double-click: type a time · hold: loop playback on/off';
     let tcTapTimer = null;
     // HOLD the timecode → pin the current frame as the project thumbnail (suppresses the trailing tap so
     // it doesn't also drop a benchmark).
@@ -4657,7 +4663,22 @@ window.FM = window.FM || {};
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       tcDown = { x: e.clientX, y: e.clientY }; tcLpFired = false;
       clearTimeout(tcLp);
-      tcLp = setTimeout(() => { tcLp = null; tcLpFired = true; if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; } if (FM.setThumbnailFrame) FM.setThumbnailFrame(); }, 550);
+      /* ⚠️ HOLD = LOOP, NOT THUMBNAIL (queue 536 clause 1). Ezra: *"The play button now sets the projects
+         thumbnail but it should function like it used to where it would activate looped playback"*.
+         Queue 364 made this pill the play button and moved the benchmark gesture off it, but the
+         thumbnail hold was left behind — so the control that IS the play button had a hold that did
+         something unrelated to playing. The thumbnail hold is not lost: it moves to the bookmark button
+         on the playhead (clause 2), which is where he asked for it.
+         `syncLoopUI` rather than just flipping the flag — there are two loop buttons on screen
+         (#btn-loop and #vb-loop) and a `loop-on` class on the play control, and a hold that changed the
+         behaviour without lighting them would be a state you cannot see. */
+      tcLp = setTimeout(() => {
+        tcLp = null; tcLpFired = true;
+        if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; }
+        FM.loop = !FM.loop;
+        if (typeof syncLoopUI === 'function') syncLoopUI();
+        if (FM.toast) FM.toast(FM.loop ? 'Looped playback ON' : 'Looped playback off', 1400);
+      }, 550);
     });
     readoutEl.addEventListener('pointermove', (e) => { if (tcDown && Math.hypot(e.clientX - tcDown.x, e.clientY - tcDown.y) > 8) { clearTimeout(tcLp); tcLp = null; } });
     const tcLpEnd = () => { clearTimeout(tcLp); tcLp = null; tcDown = null; };
@@ -4675,12 +4696,30 @@ window.FM = window.FM || {};
        read if "how do I add a bookmark" is ever asked again. */
     const headTap = document.getElementById('tl-headtap');
     if (headTap) {
+      /* HOLD IT → PIN THE THUMBNAIL FRAME (queue 536 clause 2). Ezra: *"make the book mark button that
+         now exists as the playhead actually be holdable to set thumbnail"*. Clause 1 freed that gesture
+         off the play pill, and this is where he asked for it — which makes sense: both things this
+         button does are about marking the frame you are parked on.
+         Same shape as the pill's hold so the two feel identical: 550ms, cancelled by an 8px drag, and it
+         suppresses the trailing click so a hold never also drops a bookmark. */
+      let hLp = null, hFired = false, hDown = null;
+      const hEnd = () => { clearTimeout(hLp); hLp = null; hDown = null; };
+      headTap.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();   // must not start a scrub, or the line jumps out from under the finger
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        hDown = { x: e.clientX, y: e.clientY }; hFired = false;
+        clearTimeout(hLp);
+        hLp = setTimeout(() => { hLp = null; hFired = true; if (FM.setThumbnailFrame) FM.setThumbnailFrame(); }, 550);
+      });
+      headTap.addEventListener('pointermove', (e) => { if (hDown && Math.hypot(e.clientX - hDown.x, e.clientY - hDown.y) > 8) { clearTimeout(hLp); hLp = null; } });
+      headTap.addEventListener('pointerup', hEnd);
+      headTap.addEventListener('pointercancel', hEnd);
       headTap.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();          // never let it fall through to a scrub
+        if (hFired) { hFired = false; return; }            // the hold already handled this press
         if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead();
       });
-      // and it must not start a scrub on the way down, or the line jumps out from under the finger
-      headTap.addEventListener('pointerdown', (e) => e.stopPropagation());
+      headTap.title = 'Tap: add or remove a bookmark here · hold: set this frame as the project thumbnail';
     }
     // double-click the time readout to type an exact playhead time
     readoutEl.addEventListener('dblclick', () => {

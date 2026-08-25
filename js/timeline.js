@@ -769,6 +769,18 @@ window.FM = window.FM || {};
     const t0 = Math.max(0, Math.floor(win.a / tickStep) * tickStep);
     for (let t = t0; t <= Math.min(dur, win.b) + 1e-6; t += tickStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     rulerEl.innerHTML = html;
+    /* HOW FAR THE BOOKMARK LINES REACH (queue 536 clause 4). They are drawn on the RULER and overflow
+       downwards over the tracks, so their length cannot come from their own box — it was a hardcoded
+       320px in the stylesheet, which is why they stopped short of the bottom at every timeline height
+       except the one it was written at. Measured from the panel each time the ruler is built, which is
+       every rebuild and every resize. */
+    (function () {
+      const panel = document.getElementById('timeline-panel');
+      const rb = rulerEl.getBoundingClientRect();
+      const pb = panel ? panel.getBoundingClientRect() : null;
+      const h = pb ? Math.max(0, Math.round(pb.bottom - rb.top - 7)) : 0;
+      if (h) rulerEl.style.setProperty('--tl-mark-h', h + 'px');
+    })();
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
       el.className = 'tl-marker' + (mk.thumb ? ' thumb' : '');   // the pinned thumbnail-frame marker is a smaller distinct pin

@@ -3318,6 +3318,86 @@
     }
   });
 
+  test('536: the pill holds for loop, the bookmark button holds for the thumbnail', { item: '536' }, async function () {
+    /* Queue 536. Ezra: "The play button now sets the projects thumbnail but it should function like it
+       used to where it would activate looped playback … make the book mark button that now exists as the
+       playhead actually be holdable to set thumbnail".
+       A SWAP, not an addition: queue 364 made the pill the play button and moved the benchmark gesture
+       off it, but left the thumbnail hold behind — so the control that IS the play button had a hold that
+       had nothing to do with playing. */
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, loop: FM.loop, markers: (P.markers || []).slice() };
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const hold = async (el) => {
+      const r = el.getBoundingClientRect();
+      const pe = (t) => new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'touch', isPrimary: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, buttons: t === 'pointerup' ? 0 : 1 });
+      el.dispatchEvent(pe('pointerdown'));
+      await sleep(750);                       // past the 550ms hold
+      el.dispatchEvent(pe('pointerup'));
+      el.click();                             // the real trailing click a finger produces
+      await sleep(300);
+    };
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 200, shapeH: 200, fill: '#4080c0' });
+      L.start = 0; L.duration = 6; FM.scene.layers.push(L);
+      P.markers = [];
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(300);
+
+      // ---- clause 1: the pill's hold is LOOP
+      const pill = document.getElementById('time-readout');
+      if (!pill) throw new Error('no #time-readout pill');
+      FM.loop = false;
+      await hold(pill);
+      if (!FM.loop) throw new Error('holding the play pill did not turn looped playback on — queue 536 clause 1, it still does something else');
+      /* CONTROL: the state has to be VISIBLE. A hold that flips a flag without lighting either loop
+         button is a mode you cannot see you are in. */
+      const lb = document.getElementById('btn-loop');
+      if (lb && !lb.classList.contains('active')) throw new Error('loop turned on but the loop button did not light — the hold changed a state with nothing on screen to show it');
+      // …and it must NOT pin a thumbnail any more
+      if ((P.markers || []).some(m => m.thumb)) throw new Error('holding the pill still pinned a thumbnail frame — the two gestures are still on the same control');
+
+      // ---- clause 2: the bookmark button's hold IS the thumbnail
+      const head = document.getElementById('tl-headtap');
+      if (!head) throw new Error('no #tl-headtap bookmark button');
+      P.markers = [];
+      await hold(head);
+      const marks = P.markers || [];
+      if (!marks.some(m => m.thumb)) throw new Error('holding the bookmark button did not pin the thumbnail frame — queue 536 clause 2');
+      /* CONTROL: the hold must SUPPRESS the trailing click, or every hold also drops a bookmark and the
+         two gestures fight. */
+      if (marks.filter(m => !m.thumb).length) throw new Error('the hold also added a plain bookmark (' + marks.length + ' markers) — the trailing click is not suppressed');
+
+      // ---- clause 3: it reads as a button
+      const cs = getComputedStyle(head, '::after');
+      if (cs.content === 'none' || !parseFloat(cs.width)) throw new Error('the bookmark button draws nothing of its own — it is still an invisible hit area, which is exactly what he could not see');
+
+      // ---- clause 4: the bookmark line reaches the bottom
+      P.markers = []; FM.timeline.rebuild(); await sleep(200);
+      head.click(); await sleep(350);
+      const marker = document.querySelector('.tl-marker:not(.thumb)');
+      const panel = document.getElementById('timeline-panel');
+      if (!marker) throw new Error('tapping the bookmark button drew no marker, so its length cannot be measured');
+      if (!panel) throw new Error('no #timeline-panel to measure against');
+      const lineH = parseFloat(getComputedStyle(marker, '::after').height) || 0;
+      if (!lineH) throw new Error('the marker line has no height at all');
+      const foot = marker.getBoundingClientRect().top + 7 + lineH;
+      const bottom = panel.getBoundingClientRect().bottom;
+      if (Math.abs(foot - bottom) > 6) throw new Error('the bookmark line ends ' + (bottom - foot).toFixed(1) + 'px short of the timeline bottom (line ' + lineH + 'px, panel bottom ' + bottom.toFixed(1) + ') — queue 536 clause 4, and a hardcoded height is how it got there');
+    } finally {
+      FM.loop = saved.loop;
+      P.markers = saved.markers;
+      FM.scene.layers = saved.layers;
+      FM.selectLayer(saved.sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

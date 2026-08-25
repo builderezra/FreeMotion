@@ -2419,7 +2419,12 @@ body.white-chrome #time-readout:active {
 .tick { position: absolute; top: 0; height: 10px; border-left: 1px solid var(--line); }
 .notch { position: absolute; top: 0; height: 6px; width: 0; border-left: 1px solid var(--line-soft); opacity: .5; pointer-events: none; }
 .tl-marker { position: absolute; top: 0; width: 0; height: 0; margin-left: -5px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--kf); z-index: 3; }
-.tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: 320px; background: rgba(255,206,74,.35); }
+/* ⚠️ ALL THE WAY DOWN (queue 536 clause 4). Ezra: *"book marks are weird because they show up on the
+   timeline but don't reach the bottom"*. The line was a HARDCODED 320px — right for whatever the
+   timeline happened to be the day it was written, and wrong at every other height, which is exactly what
+   he is describing. It is measured now and published as --tl-mark-h by the ruler build; the 320 stays
+   only as the fallback for the frame before the first measurement. */
+.tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: var(--tl-mark-h, 320px); background: rgba(255,206,74,.35); }
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
 .tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */
@@ -2774,12 +2779,30 @@ body.white-chrome #time-readout:active {
    small thing to hit with a thumb, and this is the only route to a bookmark on a phone now. Transparent
    and pointer-events:auto inside a pointer-events:none parent, so it takes its own taps and nothing
    else: a scrub that starts anywhere else on the line still reaches the timeline underneath. */
+/* ⚠️ IT HAS TO LOOK LIKE A BUTTON (queue 536 clause 3). Ezra: *"make the bookmark button look more
+   obvious like a button coz rn you can't really tell it's a button at the top"* — and he was right:
+   this was a 34x26 rectangle with `background: none` and `border: 0`, i.e. an invisible hit area sitting
+   over the playhead's triangle. Nothing about it said "press me", so the only way to discover it was to
+   be told.
+   A small filled disc, sized to the tap target that was already there. Deliberately NOT marker-yellow at
+   rest: yellow is what the head turns when you are PARKED on a bookmark, and that state means "a tap
+   removes this one" — colouring the button the same would collapse two meanings into one. */
 #tl-headtap {
   position: absolute; top: -3px; left: -17px; width: 34px; height: 26px;
   padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
+  display: grid; place-items: center;
 }
+#tl-headtap::after {
+  content: ""; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--panel-2, #1e2533); border: 1px solid var(--line, #2b3547);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 0 3px rgba(255, 206, 74, .9);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+#tl-headtap:hover::after { border-color: var(--kf, #ffce4a); box-shadow: 0 0 8px rgba(255, 206, 74, .5), inset 0 0 0 3px rgba(255, 206, 74, 1); }
 #tl-headtap:active { transform: scale(.9); }
+/* Parked ON a bookmark: the disc fills, because now the tap REMOVES rather than adds. */
+#tl-centerline.on-mark #tl-headtap::after { background: var(--kf, #ffce4a); box-shadow: 0 0 9px rgba(255, 206, 74, .6); }
 /* Parked on a bookmark → the head goes marker-yellow, which is also the affordance saying the tap will
    REMOVE rather than add. */
 /* Parked on a bookmark, OR hovering one (queue 364 clause 2) → the head goes marker-yellow. Parked is

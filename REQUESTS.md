@@ -1,12 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.60
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.61
 >
-> **State:** v12.60, **950 tests green**, tree clean.
+> **State:** v12.61, **951 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.61 — your play button loops again, and the bookmark is a real button now (#536).** All four
+> things you listed. Holding the time pill starts looped playback like it used to — setting the thumbnail
+> had been left on it by mistake, and that has moved to the bookmark button where you asked. That button
+> was genuinely invisible (no background, no border, just an empty tap area), so it is a proper disc now.
+> And the bookmark lines stopped short because their length was hardcoded to 320 pixels — measured now,
+> so they reach the bottom at any timeline height.
 >
 > **✅ v12.60 — the add-layer switch (#533).** You were right that something was off, and it was already
 > fixed — by the drag work two days after you reported it. Before that the switch leaned one way while
@@ -18378,8 +18385,7 @@ re-opened #480, which I had marked done and had not fixed.
       #513 and #514** (the sketch menu's PC layout, and strokes after the first being invisible) — do all
       three in one pass, since they are the same feature.
 
-- [ ] **536 — 🔴 The play button now sets the thumbnail instead of looping; the bookmark button needs the hold, needs to look like a button, and bookmarks don't reach the bottom of the timeline.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **536 — 🔴 The play button now sets the thumbnail instead of looping; the bookmark button needs the hold, needs to look like a button, and bookmarks don't reach the bottom of the timeline.** (24 Aug.) ✅ v12.61
       His words, verbatim:
       > The play button now sets the projects thumbnail but it should function like it used to where it would activate looped playback
       > Also make the book mark button that now exists as the playhead actually be holdable to set thumbnail
@@ -18399,6 +18405,30 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Clause 1 is a swap, not an addition — check what moved the thumbnail hold onto the pill (queue 364
       made the pill the play button) before changing either, so the fix does not just add a third meaning
       to one press.
+
+      ✅ **DONE v12.61 — all four, and it WAS a swap, exactly as the warning said.** Queue 364 made the
+      pill the play button and moved the benchmark gesture off it, but left the thumbnail hold behind — so
+      the control that IS the play button had a hold that did something unrelated to playing.
+      1. [x] **The pill's hold is looped playback again.** It calls `syncLoopUI()` rather than just
+             flipping `FM.loop`, because there are two loop buttons on screen and a `loop-on` class on the
+             play control — a hold that changed the behaviour without lighting them would be a state you
+             cannot see. **Measured: loop false → true, `#btn-loop` lit.**
+      2. [x] **The bookmark button takes the thumbnail hold**, in the same shape as the pill's (550ms,
+             cancelled by an 8px drag, suppresses the trailing click). **Measured: hold pins the thumbnail
+             frame and adds NO plain bookmark** — the suppression works.
+      3. [x] **It looks like a button.** It was a 34x26 rectangle with `background: none` and `border: 0`
+             — an invisible hit area over the playhead's triangle. Now an 18px disc with a ring and a
+             shadow. Deliberately NOT marker-yellow at rest: yellow is what the head turns when you are
+             PARKED on a bookmark, and that state means "a tap removes this one".
+      4. [x] **The bookmark lines reach the bottom.** The cause was a **hardcoded `height: 320px`** in the
+             stylesheet — right for whatever the timeline was the day it was written and wrong at every
+             other height, which is precisely *"they show up on the timeline but don't reach the bottom"*.
+             Measured from the panel on every ruler build now. **After: 392px against a 440px panel, and
+             the line's foot lands within 3px of the panel's bottom.**
+      🐛 **And a fifth thing, found while verifying clause 1:** the pill's tooltip is rewritten on every
+      readout update with the project stats, silently overwriting the one set at init — so **the tap, the
+      double-click AND the hold were all undiscoverable from the control that carries them**. Measured:
+      after one refresh the title read *"1 layer · total 0:06"*. The stats stay; the gestures are appended.
 
 - [ ] **537 — Gradient Overlay needs blend modes, and whatever else it is missing.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
