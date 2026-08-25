@@ -102,7 +102,31 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.55, 943 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.56, 944 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.56 did #526** — the play pill's outline now sits on the same lines as the buttons beside it.
+MEASURED first: every `.tbtn` is a 34x34 box, 8px radius, border width **ZERO** — an invisible box —
+while the pill was **24.5px** with a VISIBLE 1px border, so the only outline you can see was inset
+4.8/4.7px from the boxes either side. Fix is the HEIGHT, not the border. After: **0.00px** top and
+bottom at 380, 320 and 1280; digits centred both ways; desktop pill 0.00px off screen centre.
+⚠️ **HEIGHT, NEVER WIDTH** — the CSS records that pinning a width pushed the desktop play control 3px
+off centre and broke a v4.97 assertion. Mutation-proven (removing it → 17px pill, test names it).
+⚠️ **One judgement call, put to him rather than buried:** "the lines on all the other buttons" could
+mean their BOXES (34px, what I matched) or their ICON STROKES (a 21px band, measured). Went with boxes
+because that is the entry's own contemporaneous reading of his screenshot and the only rectangular
+target — and told him it is a one-number change if he meant the icons.
+
+⚠️ **MY OWN TEST FAILED TWICE FOR THE WRONG REASON, and both are worth remembering:**
+· It required EVERY `.tbtn` to share a top edge. In the harness the app boots wide and is then
+  narrowed, and one control lands on a second line — real, noted in the entry, **not** queue 526. Now
+  it measures against the buttons on the PILL'S OWN line.
+· It asserted the pill shrink-wraps at phone width and failed at **226.6px** — which is EXACTLY the
+  number the CSS comment already records from queue 509. Pre-existing, documented, and the reason
+  `text-align: center` is in that rule. **The test was inventing a requirement nobody asked for.**
+  Before adding a control, check whether the thing it forbids is already documented behaviour.
+🐛 **And a landmine in my #525 test, fixed before it bit:** `projects.create()` OPENS what it creates,
+and that test deliberately opens a third project so `discardDraft` is allowed — so it left the suite in
+a different project with a different scene. It did NOT turn the suite red, which is exactly what makes
+it worth fixing now. It restores `currentId()` in its finally.
 **v12.55 did #525** — element drafts can be binned by hand, and the card says which kind it is. Uses
 `discardDraft`, NOT `remove`: remove() opens another project or CREATES an "Untitled" when you delete
 the current one, which would manufacture the very stray project #505 was about. The refusal on the
@@ -227,8 +251,7 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #526** (the play pill's outline should line up with the outlines on the other buttons) — #524 is
-parked on his pick, not skipped.
+**NEXT: #527** (remove the "No audio effects yet" line) — #524 is parked on his pick, not skipped.
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
