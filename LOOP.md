@@ -102,7 +102,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.43, 930 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.44, 931 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.44 did #513 + #535** (one pass, as #535's entry instructed). Toolbar was pinned to the window
+bottom, 268px below the canvas. Real cause: drawing hides the timeline/inspector but the Studio grid
+still RESERVED their 232px row — stage 628 of 860. Collapsed it; canvas 578px → 746px tall, bar docked
+14px under it via `--fm-canvas-bottom` published from syncOverlay.
+⚠️ **AN EXISTING ERASER TEST BROKE AND IT WAS NOT A REGRESSION.** `eraseAt`'s bite is
+`stroke/2 + 14/dispScale()`, so a BIGGER canvas = smaller reach in project units = the eraser SPLITS a
+stroke instead of swallowing it, and the count goes UP ("took -1 strokes"). Splitting is deliberate. The
+test carried an unstated dependency on canvas size; it now widens the brush so it holds at any scale.
+⚠️ **My own 513 test was DEAD once** — it compared `#stage` height to `window.innerHeight`, which the
+harness page never satisfies, so restoring the reserved row survived it. Now asserts the GRID TEMPLATE.
+**📊 List: 468 logged, 413 done, 55 open — 32 ready, 17 waiting on him, 4 notes, 2 unmarked.**
+**📝 Logged this tick: #553** — leaving/re-opening a project leaves home AND the editor on screen at once
+plus a black bar; almost certainly the two-phase push never completing. **Ties to #508.**
+⚠️ #508 still needs a visible preview pane (rule 11).
 **v12.43 fixed #514** (taken ahead of #513, same feature: #514 is an unusable-feature bug, #513 is a
 layout redesign needing drawn options). Strokes after the first called `refitPathLayer` — pure data
 mutation — plus a timeline rebuild, and **never asked the canvas to repaint**; the overlay is wiped on

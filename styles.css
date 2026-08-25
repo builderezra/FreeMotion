@@ -4844,6 +4844,22 @@ body.drawing.draw-vector #stage { padding-bottom: 268px; }
 body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 #draw-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 170; display: flex; align-items: center; gap: 7px; padding: 8px 8px; border-radius: 14px; background: rgba(10,14,20,.94); border: 1px solid var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,.55); max-width: 94vw; }
 #draw-bar.hidden { display: none; }
+/* ⚠️ ON PC THE TOOLBAR SITS UNDER THE CANVAS, NOT AT THE BOTTOM OF THE WINDOW (queue 513).
+   Measured at 1440x860 before this: the canvas ended at y=524, the bar was pinned at y=792, and the
+   268px between them was empty black. His words: "The sketching menu on PC looks really bad and, like,
+   bugged" — and it is the same fault as the effects browser (#481) and the director menu (#511), a
+   sheet built bottom-anchored for a phone and never given a desktop arrangement.
+   `--fm-canvas-bottom` is published by the draw tool's own syncOverlay(), which already measures the
+   canvas and already re-runs on every layout change the overlay has to follow — so the bar tracks the
+   canvas through zooming, resizing and the timeline being dragged, rather than being placed once.
+   The PHONE is deliberately untouched: there the canvas nearly fills the screen, so the window bottom
+   and the canvas bottom are the same place, and its safe-area inset matters. */
+@media (min-width: 701px) {
+  #draw-bar {
+    top: calc(var(--fm-canvas-bottom, 60vh) + 14px);
+    bottom: auto;
+  }
+}
 #draw-bar .db-hint { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
 #draw-bar .db-color input, #draw-bar .db-width input { vertical-align: middle; }
 #draw-bar .db-color input { width: 26px; height: 28px; padding: 0; border: none; background: none; cursor: pointer; }
@@ -5314,6 +5330,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      canvas in a weird spot". Keep the rail its own width, collapse the inspector column, and give
      everything else to the stage (which spans columns 2-3). */
   body.drawing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  /* …AND THE BAND'S ROW HAS TO GO WITH IT (queue 513). Drawing already hides #timeline-panel and
+     #inspector-panel outright, but this layout still RESERVED their row — `--tl-h`, 232px by default —
+     so the stage was 628px of an 860px window and the canvas sat small with a wide black strip under it
+     that nothing could ever occupy. That strip is the "enormous empty black area" in his report, and it
+     is why the toolbar looked stranded at the bottom of the screen: it was pinned below a band that was
+     not there. The phone rule a few thousand lines up already collapses its rows for exactly this
+     reason; Studio simply never got the same treatment. Measured after: stage 628 → 860, and the canvas
+     grows with it. */
+  body.drawing #app { grid-template-rows: minmax(0, 1fr) 0 !important; }
 }
 
 /* Per-slider keyframe diamond inside a Move & Transform value box (v4.78). Each slider owns its own

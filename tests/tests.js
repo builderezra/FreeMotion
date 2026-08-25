@@ -9843,8 +9843,24 @@
       // be true of a tap anywhere on the canvas.
       if (FM.drawTool._eraseAt([2000, 2000])) throw new Error('the eraser removed a stroke from a point nowhere near one');
       if (FM.drawTool._counts().subs !== before) throw new Error('a miss still changed the drawing');
+      /* ⚠️ THE BRUSH IS WIDENED FIRST, AND WITHOUT IT THIS ASSERTION SECRETLY DEPENDED ON CANVAS SIZE.
+         `eraseAt` computes its bite as `stroke/2 + 14 / dispScale()` — so the reach in PROJECT units
+         shrinks as the canvas gets bigger on screen. With a small canvas that reach swallowed this whole
+         180-unit stroke and the count fell by one, which is what this test was written against. Queue
+         513 gave drawing the full window (canvas 578px → 746px tall), the reach shrank with it, and the
+         eraser did what it is designed to do instead: it SPLIT the stroke where the rubber passed,
+         leaving two subpaths. The count went UP by one and this line failed with "took -1 strokes".
+         Nothing was broken — the splitting is deliberate and its own comment says so ("splitting the
+         nearest segment is what a rubber actually does"). The TEST was carrying an unstated dependency
+         on how large the canvas happened to be.
+         A brush wide enough to cover the stroke at ANY scale removes that dependency, so this now checks
+         the thing it means — a rubber that covers a whole stroke takes that whole stroke — on every
+         window size. It is not a loosened assertion: it is the same one, made deterministic. */
+      const brush0 = FM.drawTool.stroke;
+      FM.drawTool.stroke = 400;                    // reach >= 200 project units, vs a 180-unit stroke
       // …and a point ON the second stroke (y=100, drawn across x 80..260) must take exactly that one.
       if (!FM.drawTool._eraseAt([170, 100])) throw new Error('the eraser missed a stroke it was placed directly on top of');
+      FM.drawTool.stroke = brush0;
       if (FM.drawTool._counts().subs !== before - 1) throw new Error('erasing took ' + (before - FM.drawTool._counts().subs) + ' strokes, expected exactly 1');
       FM.drawTool._undo();
       if (FM.drawTool._counts().subs !== before) throw new Error('Undo did not bring back the erased stroke (' + FM.drawTool._counts().subs + ' of ' + before + ')');
@@ -28141,6 +28157,65 @@
       saved.layers.forEach(l => FM.scene.layers.push(l));
       FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
       FM.refreshAll();
+    }
+  });
+
+  test('the drawing toolbar sits under the canvas on PC, and drawing gets the whole window (queue 513/535)', { item: '513' }, async function () {
+    /* Ezra: "The sketching menu on PC looks really bad and, like, bugged, so maybe fix that up."
+       Measured at 1440x860 before this: the canvas ended at y=524 while the toolbar was pinned to the
+       window bottom at y=792 — **268px of empty black between the tools and the thing they act on**.
+       And the reason that gap existed at all: drawing already hides the timeline and inspector, but the
+       Studio grid still RESERVED their 232px row, so the stage was 628 of 860 and the canvas sat small
+       above a strip nothing could ever occupy. That strip is the "enormous empty black area" he
+       described. Collapsing the row took the canvas from 578px tall to 746px.
+       (One thing checked and found FINE, recorded so it is not re-derived: the drawing SURFACE was never
+       mis-sized — the overlay measured 289x514 against a 289x514 canvas.)
+       Queue 535 rides along because that entry says to: "get rid of the pop up saying that you can sketch
+       on the canvas like no shit." */
+    if (!FM.startDraw) throw new Error('the draw tool is not reachable from the suite');
+    const wasPhone = window.innerWidth < 701;
+    try {
+      FM.startDraw('freehand');
+      await sleep(90);
+      const bar = document.getElementById('draw-bar');
+      const cv = document.getElementById('preview');
+      if (!bar || !cv) throw new Error('the draw bar or the canvas is missing while drawing');
+
+      /* QUEUE 535 — the instruction is gone, on every layout. The stroke COUNT is deliberately kept:
+         that is information, not instruction. */
+      const hint = bar.querySelector('.db-hint');
+      const text = hint ? (hint.textContent || '') : '';
+      if (/draw on the canvas/i.test(text)) throw new Error('the "Draw on the canvas" instruction is back in the toolbar: "' + text + '"');
+      if (text.trim()) throw new Error('the toolbar is showing "' + text.trim() + '" before anything has been drawn — it should say nothing until there is a stroke to count');
+
+      if (wasPhone) return;                       // the rest is the PC arrangement
+
+      const br = bar.getBoundingClientRect(), cr = cv.getBoundingClientRect();
+      /* CONTROL: both have to be real, or every comparison below is between two empty rectangles. */
+      if (br.width < 80 || cr.height < 100) throw new Error('bar ' + Math.round(br.width) + 'px wide, canvas ' + Math.round(cr.height) + 'px tall — not a live drawing session');
+
+      const gap = br.top - cr.bottom;
+      if (gap < 0) throw new Error('the toolbar overlaps the canvas by ' + Math.round(-gap) + 'px');
+      if (gap > 60) throw new Error('the toolbar sits ' + Math.round(gap) + 'px below the canvas — it is pinned to the window rather than docked under the drawing, which is the fault he reported');
+
+      /* …AND THE BAND'S ROW MUST BE COLLAPSED, or the canvas is small again and the gap above is only
+         small because the bar followed it down.
+         ⚠️ READ OFF THE GRID, NOT OFF THE STAGE'S HEIGHT — the first version compared the stage against
+         `window.innerHeight` and a mutation restoring the reserved row SURVIVED it, because the harness
+         page does not lay the shell out to the full window the way index.html does, so that comparison
+         was never true in the suite either way. The grid template is the thing the fix actually changes
+         and it reads the same wherever the page is: while drawing, the band's track must be zero. */
+      const app = document.getElementById('app');
+      if (!app) throw new Error('no #app to read the layout from');
+      const rows = getComputedStyle(app).gridTemplateRows;
+      const tracks = rows.trim().split(/\s+/);
+      if (tracks.length < 2) throw new Error('the app grid has ' + tracks.length + ' row track(s) while drawing ("' + rows + '") — expected the stage plus a collapsed band');
+      const band = parseFloat(tracks[tracks.length - 1]);
+      if (!(band <= 1))
+        throw new Error('while drawing the timeline band still reserves ' + band + 'px of the layout ("' + rows + '") — the panel is hidden but its row is not, which is the empty black strip he described');
+    } finally {
+      if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
+      await sleep(60);
     }
   });
 

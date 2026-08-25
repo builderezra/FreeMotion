@@ -66,6 +66,16 @@ window.FM = window.FM || {};
     overlay.height = Math.max(1, Math.round(cr.height * dpr));
     octx = overlay.getContext('2d');
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    /* WHERE THE TOOLBAR SHOULD SIT (queue 513). Ezra: "The sketching menu on PC looks really bad and,
+       like, bugged." Measured at 1440x860: the canvas ended at y=524 and the bar was pinned to the
+       window bottom at y=792 — **268px of empty black between the tools and the thing they act on**,
+       which is the "bugged" he means; it reads as a broken layout rather than a design.
+       (Also checked and found FINE, so nobody re-derives it: the drawing SURFACE is not mis-sized. The
+       overlay measured 289x514 against a 289x514 canvas — exactly right.)
+       The canvas's own bottom edge is published here because this function already measures it and
+       already runs on every layout change the overlay has to follow. The phone keeps the window-bottom
+       pin: there the canvas nearly fills the screen, so the two are the same place anyway. */
+    try { document.documentElement.style.setProperty('--fm-canvas-bottom', Math.round(cr.bottom) + 'px'); } catch (e) {}
   }
 
   function redraw() {
@@ -643,7 +653,12 @@ window.FM = window.FM || {};
     // exactly one id however much you draw and this counter was frozen at "1 stroke".
     var ns = sessionSubs.length;
     if (hint) hint.textContent = FM.drawTool.mode === 'freehand'
-      ? (ns ? ('Draw again, or Done (' + ns + ' stroke' + (ns === 1 ? '' : 's') + ')') : 'Draw on the canvas — keep drawing, then Done')
+      /* ⚠️ NO "DRAW ON THE CANVAS" INSTRUCTION (queue 535). Ezra: "get rid of the pop up saying that
+         you can sketch on the canvas like no shit." He is right — you have just tapped the pencil, and
+         the bar sits over the canvas with a colour and a brush size on it. The COUNT is kept, because
+         that is information rather than instruction: it tells you how many strokes are in the drawing
+         you are building, which is the one thing the bar knows and you cannot see. */
+      ? (ns ? (ns + ' stroke' + (ns === 1 ? '' : 's')) : '')
       : (n < 3 ? 'Tap the canvas or use the pad, then + Add point (' + n + ')' : 'Done / Enter to finish, or land on the first point (' + n + ')');
   }
 

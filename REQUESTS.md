@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.43
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.44
 >
-> **State:** v12.43, **930 tests green**, tree clean.
+> **State:** v12.44, **931 tests green**, tree clean.
+>
+> **📊 WHERE THE LIST STANDS: 468 requests logged, 413 done, 55 open.** Of the 55 — **32 I can build now**,
+> **17 are waiting on you**, 4 are notes, 2 unmarked. **The five OLDEST are all waiting on you**, which is
+> why the loop keeps starting further down:
+> · **one tap unblocks three of them** — play something that lags, wait for the toast, tap it, send me
+>   the text (the lag entries, #95 and #125);
+> · **#96** — the song that would not play: the file, or just its format and rough length;
+> · **#98** — a photo showing whether that second ✓ row sits flush on the keyboard.
+>
+> **✅ v12.44 — the sketching screen on PC (#513 + #535).** The toolbar was pinned to the bottom of the
+> window with 268px of black between it and the canvas; it sits under the canvas now, and drawing gets
+> the whole window so the canvas grew from 578 to 746px tall. The "Draw on the canvas" line is gone.
 >
 > **✅ v12.43 — YOU CAN SEE WHAT YOU ARE DRAWING AGAIN (#514).** The second and every later stroke now
 > appears the moment you lift the pen. One missing line: strokes after the first updated the drawing and
@@ -17451,8 +17463,26 @@ re-opened #480, which I had marked done and had not fixed.
       them is right. Find the clamp on the inspector's own drag and the clamp on the combined drag, and make
       the first match the second. **Goes with #511 clause 1** — same panel, same gesture family.
 
-- [ ] **513 — The sketching menu on PC looks bad and buggy.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **513 — The sketching menu on PC looks bad and buggy.** (24 Aug, PC screenshot at v12.20.)
+      ✅ **Measured at 1440x860 before the fix:** the canvas ended at y=524 while the toolbar was pinned to
+      the window bottom at y=792 — **268px of empty black between the tools and the thing they act on.**
+      **The gap had a cause, and fixing that is what actually mattered:** drawing already hides the
+      timeline and the inspector, but the Studio grid still RESERVED their 232px row. So the stage was
+      628px of an 860px window and the canvas sat small above a strip nothing could ever occupy — your
+      "enormous empty black area". Collapsing the row took the canvas from **578px to 746px tall**, and
+      the bar now sits 14px under it and follows it when you zoom or resize.
+      ✅ **Checked and found FINE**, recorded so nobody hunts it again: the drawing SURFACE was never
+      mis-sized — the overlay measured 289x514 against a 289x514 canvas.
+      ⚠️ **An existing test broke and it was NOT a regression — worth reading.** The eraser test began
+      failing with "erasing took -1 strokes". `eraseAt` computes its bite as `stroke/2 + 14/dispScale()`,
+      so the reach in PROJECT units SHRINKS as the canvas grows on screen. With the old small canvas that
+      reach swallowed the whole stroke; with the bigger one the eraser did what it is designed to do
+      instead and SPLIT the stroke where the rubber passed, so the count went UP. Nothing was broken —
+      the splitting is deliberate and its own comment says so. **The test had an unstated dependency on
+      how big the canvas happened to be**, and now widens the brush so it covers the stroke at any scale.
+      ⚠️ **And my own new test was DEAD once** — it compared the stage against `window.innerHeight`, which
+      the harness page never satisfies either way, so a mutation restoring the reserved row survived it.
+      It reads the grid template now, which is the thing the fix actually changes.
       His words, verbatim:
       > The sketching menu on PC looks really bad and, like, bugged, so maybe fix that up.
       **What the shot shows:** the drawing toolbar is a single wide pill pinned to the very bottom of a
@@ -17737,8 +17767,10 @@ re-opened #480, which I had marked done and had not fixed.
       shape points. He says *"we havent yet put the effort to add those practical points yet"* — that is a
       feature, not a fix, and worth its own entry when he wants it.
 
-- [ ] **535 — Remove the "you can sketch on the canvas" popup.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **535 — Remove the "you can sketch on the canvas" popup.** (24 Aug.)
+      ✅ *"Draw on the canvas — keep drawing, then Done"* is gone. **The stroke COUNT stays**, because that
+      is information rather than instruction: it is the one thing the bar knows that you cannot see. The
+      toolbar went from 680px wide to 411px with the sentence removed.
       His words, verbatim:
       > Also when you're fixing sketching make sure you get rid of the pop up saying that you can sketch on the canvas like no shit
       The toast that appears when the drawing tool opens, telling you to draw on the canvas. **Goes with
@@ -18085,6 +18117,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Check the EXPORT uses the same rule** — if the preview and the exporter disagree about the final
       frame, the file will differ from what he sees, which is far worse than the bug.
 
+      📐 **TRIAGED 25 Aug — the mechanism is confirmed, and it is NOT an export emergency.**
+      `FM.layerLocalTime` (js/scene.js) returns **null** for `t >= layer.start + layer.duration`, and the
+      compositor skips a layer whose local time is null. That is the exclusive end, and it is the whole bug.
+      · **The exporter uses the SAME helper** (js/exporter.js:215) — but its frame loop samples
+        `f / fps` for `f` in `0 … totalFrames-1`, so the last frame it renders is just BEFORE the end and
+        never lands exactly on it. So a normal export is not shipping a blank final frame. **Checked
+        before jumping the queue, and it is why this did not.**
+      ⚠️ **BUT THE GENERAL RULE HE STATES IS A REAL DESIGN CHOICE, NOT A ONE-LINE FIX.** An exclusive end
+      is the standard convention — a 4s clip at 30fps owns frames 0-119, and frame 120 belongs to
+      whatever comes next. Making the window INCLUSIVE would put two adjacent clips on screen together
+      for one frame, which is a different bug.
+      **So the cheap, safe fix is the headline case only:** at the very END of the project the playhead
+      can rest exactly on `project.duration`, where every layer has ended and the canvas is black — which
+      is his screenshots exactly (00:03:119 fills the frame, 00:04:00 is empty). Render that instant as
+      the last frame that HAS content rather than as one past the end.
+      **What needs HIS answer** is the mid-timeline half: when a clip ends at 2s and another begins there,
+      should the boundary frame show the outgoing clip, the incoming one, or both? Do not guess it.
+
 - [ ] **550 — The add-layer row should stop at the header divider like every other row, and the line by the arrows is cut short.** (25 Aug, phone screenshot with red annotation.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
@@ -18118,3 +18168,26 @@ re-opened #480, which I had marked done and had not fixed.
       than logging this as new; it belongs with #206/#361 (the edit-points thread).
       ⚠️ Clause 3 is the valuable one and clause 2 is its mechanism: a `trimStart`/`trimEnd` pair on the
       path, keyframed, with the renderer drawing only that span of the stroke.
+
+- [ ] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Leaving and opening a project glitches the app out like this
+      > Notice the black bar at the bottom also
+      **What the shot shows:** the home screen (FreeMotion title, Projects/Templates/Elements tabs, the
+      project list) occupying the LEFT ~78% of the screen, and the editor — back arrow, "Proje…", the
+      transport row, the add-layer row and two layer rows — occupying a strip down the RIGHT. **Both
+      screens are rendered at once**, the editor squeezed into what looks like the tail of a push
+      transition that never finished. There is also a **black bar across the bottom** below both.
+      ⚠️ **This is almost certainly the two-phase push (queue 128/459) failing to complete.** Phase 1
+      slides home out and parks `#app` off the right edge (`fm-push-wait`); phase 2 runs `fm-push-in`
+      when the project has loaded, and `endPush()` clears the classes on `animationend`. If phase 2
+      never fires — or its `animationend` never arrives — the app is left parked mid-transition, which is
+      EXACTLY this picture: home still present, `#app` still translated right.
+      ⚠️ **`home.js` has a `waitTimer` and an `_opening` guard for this**, and the file's own comment says
+      `_opening` "is never cleared at all if FM.projects.open()'s promise simply never settles". Start
+      there.
+      ⚠️ **Ties into #508** (the open animation looking janky) — same transition. If the push can be left
+      stranded, that is a much better explanation of "it's always junkie every time" than an easing curve.
+      **The black bar is probably the same cause** — `#app` parked off-origin leaves its background
+      showing below the two panels — but check it rather than assuming.
