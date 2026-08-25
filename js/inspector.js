@@ -1721,6 +1721,13 @@ window.FM = window.FM || {};
     const s = section('Effects');
     const list = el('div', 'fx-list');
     (layer.effects || []).forEach((fx, idx) => list.appendChild(fxRow(layer, fx, idx)));
+    /* MASKS GO IN THE SAME LIST (queue 560) — see the note above `maskRows`. They used to be appended
+       after this whole section, below Copy / Paste / Save, under their own "Masks" heading, which is the
+       "own menu" he is pointing at. Only when the layer actually has one: an empty heading explaining
+       itself was removed once already and should not come back by another route. */
+    if (maskableLayer(layer) && Array.isArray(layer.masks) && layer.masks.length) {
+      maskRows(layer).forEach(r => list.appendChild(r));
+    }
     s.appendChild(list);
     /* THE CUE'S OWN STACK, under the track's (queue 151). Shown only on a caption track while a cue is
      * actually on screen — an "effects for this cue" list with no cue under the playhead would be a
@@ -2344,17 +2351,30 @@ window.FM = window.FM || {};
      takes masks unchanged. This is the same two-key descriptor the audio stack uses. */
   const MASK_STACK = { list: l => (Array.isArray(l.masks) ? l.masks : []), after: afterMasks };
 
-  function masksBlock(layer) {
-    const wrap = el('div', 'mask-block');
-    wrap.appendChild(el('div', 'insp-sub-label', 'Masks'));
-    const masks = Array.isArray(layer.masks) ? layer.masks : [];   // caller only renders this block when it's non-empty
+  /* ONE LIST, NOT TWO (queue 560). Ezra: "Masks still don't work like effects and have their own menu
+     fix this" — his screenshot shows a MASKS heading sitting below the effect list, below even Copy /
+     Paste / Save, with Mask 1 in a card of its own.
+     ⚠️ MOST OF "BEHAVES LIKE AN EFFECT" WAS ALREADY TRUE, and checking that first is what kept this
+     small. #360 gave masks the chevron, the grip, the eye, the bin, swipe-to-delete and hold-to-reorder
+     (they already run through `attachFxGestures`), and the "+ Add mask" button is long gone — Mask is an
+     entry in the effect browser, so the add route is shared too. What was left is exactly what he can
+     see: a separate block with its own heading, and a card that looks different from an effect's.
+     So these are rows now, returned to `effectsSection` and appended to the SAME `.fx-list`, wearing
+     `fx-row`/`fx-head` so the shared styling, the chevron rotation and the swipe backdrop all apply.
+     ⚠️ THE MODEL IS STILL `layer.masks`, and that is stated rather than implied. #360 sized the real
+     migration: 30 call sites across 8 files, and the compositor applies masks at a different stage from
+     the effect stack. This is the UI half — one list, one row treatment, one way in — which is what he
+     is looking at. */
+  function maskRows(layer) {
+    const rows = [];
+    const masks = Array.isArray(layer.masks) ? layer.masks : [];   // caller only calls this when it's non-empty
     masks.forEach((mask, idx) => {
       /* `_expanded` is SAFE to hang on a mask, and it was worth checking before doing it: the mask
          sanitiser (js/storage.js:550) rebuilds every mask from a whitelist of eight keys, so a UI flag
          cannot reach a saved project — the same guarantee `fx._expanded` already relies on. */
       const expanded = !!mask._expanded;
-      const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : '') + (expanded ? ' fx-open' : ''));
-      const head = el('div', 'mask-item-head');
+      const item = el('div', 'fx-row mask-item' + (mask.enabled === false ? ' fx-off mask-off' : '') + (expanded ? ' fx-open' : ''));
+      const head = el('div', 'fx-head mask-item-head');
       const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
       disc.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       disc.title = expanded ? 'Close this mask' : 'Open this mask\u2019s controls';
@@ -2371,10 +2391,13 @@ window.FM = window.FM || {};
       eye.title = mask.enabled === false ? 'Mask off — enable' : 'Mask on — disable';
       eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
       eye.addEventListener('click', () => { mask.enabled = mask.enabled === false; afterMasks(layer); });
-      head.appendChild(eye);
+      /* SAME ORDER AS AN EFFECT ROW (queue 560): chevron, then name, then the icons on the right. The
+         mask put its eye FIRST, so in one list the two rows disagreed about where their controls live —
+         the disclosure arrow started in a different column on every other row. */
       head.appendChild(disc);
       head.appendChild(el('span', 'mask-name', 'Mask ' + (idx + 1)));
       head.appendChild(el('span', 'fx-spacer'));
+      head.appendChild(eye);
       const anim = FM.isAnimated(mask.path);
       const here = anim && FM.hasKeyframeAt(mask.path, FM.time);
       const kf = el('button', 'kf-btn' + (anim ? ' active' : '') + (here ? ' here' : ''), '◆');
@@ -2385,26 +2408,39 @@ window.FM = window.FM || {};
       del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
       del.addEventListener('click', () => { masks.splice(idx, 1); afterMasks(layer); });
       head.appendChild(del);
-      item.appendChild(head);
+      /* THE SAME SWIPE STRUCTURE AN EFFECT ROW HAS (queue 560), and it is not decoration. `.fx-row >
+         .fx-swipe-wrap > .fx-head > .fx-disc` is how the open-chevron rule is scoped, so without the
+         wrap the mask's chevron never rotated — an arrow that stays shut on an open row is the one
+         thing a disclosure triangle must not do, and it is exactly the "does not behave like an
+         effect" he is reporting. `attachFxGestures` also slides `row._wrap` to reveal the red delete
+         panel behind it; with no wrap the whole card translated and there was nothing underneath. */
+      const delBg = el('div', 'fx-del-bg');
+      delBg.innerHTML = '<span class="fx-del-ico">' + svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6') + '</span>';
+      const wrap = el('div', 'fx-swipe-wrap');
+      wrap.appendChild(head);
+      item.appendChild(delBg);
+      item.appendChild(wrap);
+      item._wrap = wrap; item._delBg = delBg;   // both, exactly as fxRow sets them
       // MINIMISED unless opened — the other half of "I can't … minimise it". Every mask used to render
       // its four controls and an Edit path button whether you were looking at it or not, so two masks
       // buried the rest of the panel.
       if (expanded) {
-        item.appendChild(segRow('Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => mask.mode || 'add', v => { mask.mode = v; }));
-        item.appendChild(rangeRow('Feather', () => mask.feather || 0, v => { mask.feather = Math.max(0, v); }, 0, 200, 1));
-        item.appendChild(rangeRow('Opacity', () => Math.round((mask.opacity != null ? mask.opacity : 1) * 100), v => { mask.opacity = Math.max(0, Math.min(1, v / 100)); }, 0, 100, 1));
-        item.appendChild(checkRow('Invert', !!mask.invert, v => { mask.invert = v; FM.requestRender(); }));
+        /* `.fx-row` is `padding: 0` — its head carries its own — so the body needs a box of its own or
+           the controls run to the card's edge. */
+        const bodyEl = el('div', 'mask-body');
+        wrap.appendChild(bodyEl);   // inside the wrap, so head and body travel together on a swipe
+        bodyEl.appendChild(segRow('Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => mask.mode || 'add', v => { mask.mode = v; }));
+        bodyEl.appendChild(rangeRow('Feather', () => mask.feather || 0, v => { mask.feather = Math.max(0, v); }, 0, 200, 1));
+        bodyEl.appendChild(rangeRow('Opacity', () => Math.round((mask.opacity != null ? mask.opacity : 1) * 100), v => { mask.opacity = Math.max(0, Math.min(1, v / 100)); }, 0, 100, 1));
+        bodyEl.appendChild(checkRow('Invert', !!mask.invert, v => { mask.invert = v; FM.requestRender(); }));
         const edit = el('button', 'mask-edit-btn', 'Edit path');
         edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
-        item.appendChild(edit);
+        bodyEl.appendChild(edit);
       }
       attachFxGestures(item, head, layer, mask, idx, MASK_STACK);   // swipe-left = delete · press-hold + drag = reorder
-      wrap.appendChild(item);
+      rows.push(item);
     });
-    // No "+ Add mask" button any more: Mask is an entry in the effect browser now (Ezra), so there
-    // is ONE way in for everything that shapes a layer. This block still lists and edits whatever
-    // masks the layer has.
-    return wrap;
+    return rows;
   }
 
   // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
@@ -5333,10 +5369,9 @@ window.FM = window.FM || {};
         const s = effectsSection(layer);
         const h4 = s.querySelector('h4'); if (h4) h4.remove();
         body.appendChild(s);
-        // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card) —
-        // but ONLY once the layer has one. An empty "Masks" heading whose entire content was a sentence
-        // pointing you back at the + Add Effect button directly above it was clutter explaining itself.
-        if (maskableLayer(layer) && layer.masks && layer.masks.length) body.appendChild(masksBlock(layer));
+        // Masks are rendered INSIDE the effect list by effectsSection now (queue 560) — they used to be
+        // appended here, after the whole section, which put them below Copy / Paste / Save under their
+        // own heading. That separate block is what he meant by "their own menu".
       }
     } else if (key === 'color') {
       /* Filters, at the top of Colouring (queue 113). Ezra asked for exactly this: "have a button at

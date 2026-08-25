@@ -3861,6 +3861,102 @@
     }
   });
 
+  test('560: a mask is a row in the effects list, not a section of its own', { item: '560' }, async function () {
+    /* Queue 560. Ezra: "Masks still don't work like effects and have their own menu fix this."
+       His screenshot: the effect list, then + Add Effect, then Copy / Paste / Save — and BELOW all of
+       that a separate MASKS heading with Mask 1 in a card of its own.
+       ⚠️ MOST OF IT WAS ALREADY TRUE, and checking that first is what kept this small. #360 gave masks
+       the chevron, grip, eye, bin, swipe-to-delete and hold-to-reorder — they already run through
+       `attachFxGestures` — and "+ Add mask" is long gone, because Mask is an entry in the effect browser.
+       What was left is what he can SEE: a separate block under its own heading, and a card that did not
+       match an effect's (it used `--line` where an effect uses `--line-soft`, its own padding against
+       `.fx-row`'s zero, and it put its eye BEFORE the chevron so the disclosure arrow started in a
+       different column on every other row).
+       ⚠️ THE MODEL IS STILL `layer.masks` — asserted below, so nobody reads this test as proof of a
+       migration that has not happened. #360 sized that: 30 call sites across 8 files, and the compositor
+       applies masks at a different stage from the effect stack. This is the UI half. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(200);
+      const L = FM.makeLayer('shape', { name: 'm', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#4ad' });
+      L.start = 0; L.duration = 4;
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      L.masks = [(FM.masks && FM.masks.make) ? FM.masks.make('add') : { id: 'm1', enabled: true, mode: 'add', points: [] }];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await sleep(400);
+
+      const panel = document.getElementById('inspector-panel');
+      const lists = [].slice.call(panel.querySelectorAll('.fx-list'));
+      const mask = panel.querySelector('.mask-item');
+      const fx = panel.querySelector('.fx-row:not(.mask-item)');
+      // CONTROL: both rows must be on screen, or every comparison below is between two nothings.
+      if (!mask) throw new Error('no mask row rendered at all');
+      if (!fx) throw new Error('no effect row rendered — the fixture cannot compare a mask against one');
+
+      // 1. ONE LIST, and the mask is in it. This is the clause.
+      if (lists.length !== 1) throw new Error(lists.length + ' effect lists on screen — a mask in a list of its own is the "own menu" he is reporting');
+      if (mask.parentElement !== lists[0]) throw new Error('the mask row is not inside the effect list');
+      if (panel.querySelector('.mask-block')) throw new Error('the separate mask block is back');
+      const heads = [].slice.call(panel.querySelectorAll('.insp-sub-label')).map(e => (e.textContent || '').trim());
+      if (heads.some(t => /mask/i.test(t))) throw new Error('a "Masks" heading is back: ' + JSON.stringify(heads));
+
+      // 2. …and it is BELOW nothing: Add / Copy / Paste come after both rows, not between them.
+      const add = panel.querySelector('.fx-add-btn');
+      if (add && !(add.getBoundingClientRect().top >= mask.getBoundingClientRect().bottom - 1)) throw new Error('+ Add Effect sits above the mask row — the mask is still stranded underneath the section');
+
+      // 3. SAME ROW TREATMENT: the card is styled by .fx-row, not by a parallel rule that drifts.
+      if (!mask.classList.contains('fx-row')) throw new Error('the mask row does not carry fx-row, so it is styled by its own rule and the two will drift apart again');
+      const a = getComputedStyle(mask), b = getComputedStyle(fx);
+      ['borderTopWidth', 'borderTopColor', 'borderTopLeftRadius', 'paddingTop', 'backgroundColor'].forEach(k => {
+        if (a[k] !== b[k]) throw new Error('the mask card differs from an effect card on ' + k + ': ' + a[k] + ' vs ' + b[k]);
+      });
+
+      /* 4. SAME STRUCTURE. `.fx-row > .fx-swipe-wrap > .fx-head > .fx-disc` is how the open-chevron rule
+         is scoped and how the red delete panel is revealed, so a row without the wrap silently loses
+         both — the chevron stayed shut on an open mask, which is the one thing a disclosure arrow must
+         never do. */
+      const shape = e => [].slice.call(e.children).map(c => '.' + (c.className || '').split(' ')[0]).join(' + ');
+      if (shape(mask) !== shape(fx)) throw new Error('mask row is ' + shape(mask) + ' but an effect row is ' + shape(fx));
+      if (!mask._wrap || !mask._delBg) throw new Error('the mask row has no _wrap/_delBg, so attachFxGestures slides the whole card with nothing behind it');
+
+      // 5. The chevron starts in the same column, which is what "one list" looks like when you scan it.
+      const cx = e => { const d = e.querySelector('.fx-disc'); return d.getBoundingClientRect().left - e.getBoundingClientRect().left; };
+      if (Math.abs(cx(mask) - cx(fx)) > 2) throw new Error('the mask chevron sits ' + Math.round(cx(mask)) + 'px in and the effect chevron ' + Math.round(cx(fx)) + 'px — they do not line up');
+
+      // 6. …and it still WORKS. A tidy row that no longer opens or toggles is not a fix.
+      mask.querySelector('.fx-head').click();
+      await sleep(300);
+      const open = panel.querySelector('.mask-item');
+      if (!open.classList.contains('fx-open')) throw new Error('the mask row no longer opens');
+      const body = open.querySelector('.fx-swipe-wrap .mask-body');
+      if (!body) throw new Error('the mask body is missing, or is outside the swipe wrapper so it would not travel with the head');
+      const labels = [].slice.call(body.children).map(c => (c.textContent || '').trim());
+      ['Mode', 'Feather', 'Opacity', 'Invert'].forEach(w => {
+        if (!labels.some(t => t.indexOf(w) === 0)) throw new Error('the mask body lost its ' + w + ' control');
+      });
+      const eye = open.querySelector('.fx-eye');
+      const was = L.masks[0].enabled;
+      eye.click(); await sleep(250);
+      if (FM.scene.layers[0].masks[0].enabled === was) throw new Error('the eye no longer toggles the mask');
+
+      // 7. THE MODEL HAS NOT MOVED, and this test does not pretend otherwise.
+      if (!Array.isArray(FM.scene.layers[0].masks) || !FM.scene.layers[0].masks.length) throw new Error('masks are no longer stored on layer.masks — that is the migration #360 sized, not this change');
+      if ((FM.scene.layers[0].effects || []).some(e => e && e.type === '_mask')) throw new Error('a mask has been pushed into layer.effects — the render path does not read it there');
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('559: the wipe sliders are four times finer, and their RANGE is untouched', { item: '559' }, async function () {
     /* Queue 559. Ezra: "The wipe effects sliders need to be more gradual they do too much too fast so I
        can't be precise."

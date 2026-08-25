@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.75
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.76
 >
-> **State:** v12.75, **966 tests green**, tree clean.
+> **State:** v12.76, **967 tests green**, tree clean.
+>
+> **✅ v12.76 — masks are in the effects list now, not their own menu (#560).** A mask is a row like any
+> other: same card, same chevron in the same column, same eye and bin, and **+ Add Effect / Copy / Paste
+> sit below it** instead of above it. It also fixes something I only found by looking — **a mask's arrow
+> never rotated when you opened it**, because it was missing the wrapper the effect rows use.
+> 🟠 **One thing left, and it is your call:** you still cannot drag a mask above or below an *effect* —
+> only among other masks. Making that work means moving masks into the effect stack properly, which
+> touches the render path in 30 places. **Say "migrate masks" if you want it.**
 >
 > **✅ v12.75 — the wipe sliders are four times finer (#559).** You said they "do too much too fast so I
 > can't be precise". I measured before changing anything, and it was not what the note in the list
@@ -19240,9 +19248,10 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > I also asked ages ago for the add layer that when it cross the line that every layer has that is there to cut it off from the layers and show the picture and eye icon, like that line should stop the blue dotted lines and blue background but keep the plus, and also for some reason where the arrows are the line is like cut short for no reason. Please fix this so it has more continuity
       **Two things, tick separately:**
-      1. [ ] **The add row's dashed blue outline and blue tint run straight through the vertical divider**
+      1. [x] **The add row's dashed blue outline and blue tint run straight through the vertical divider**
              that separates every other row's eye/thumbnail column from its clip lane. They should STOP at
-             that line — but the ＋ button itself stays where it is.
+             that line — but the ＋ button itself stays where it is. ✅ **DONE v12.66** (see below) — the
+             box was simply never ticked, which is what the new end-of-batch audit caught on its first run.
       2. [x] **The divider is cut short near the row's ≡ arrows**, for no visible reason. He wants the line
              continuous. **Find why it stops** rather than just extending it. ✅ **DONE v12.74.**
       ⚠️ *"I also asked ages ago"* — search the file for the earlier request before treating this as new.
@@ -19525,7 +19534,8 @@ re-opened #480, which I had marked done and had not fixed.
       `overflow: hidden` strip, and the page does not scroll sideways.
 
 - [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **THE MENU IS GONE — v12.76. The entry REMAINS OPEN on one question for you, at the bottom.**
       His words, verbatim:
       > Masks still don’t work like effects and have their own menu fix this
       **What the shot shows:** the Effects panel with Visual / Filters / Audio tabs, one effect
@@ -19539,6 +19549,37 @@ re-opened #480, which I had marked done and had not fixed.
       compositor applies them at a different stage from the effect stack. **Plan it before writing
       anything** — and say plainly if the honest first step is only making the UI consistent (one list,
       one row treatment) while the underlying model stays separate.
+
+      🔗 **The earlier one is #360** (18 Aug), which is why he says "still". It fixed the two symptoms he
+      NAMED then — *"I can't swipe it away to delete it or minimise it"* — and explicitly deferred the
+      rest, sizing it at 30 call sites across 8 files.
+      ✅ **DONE v12.76 — and MOST OF IT WAS ALREADY TRUE, which is what kept this small.** Checked before
+      building anything: masks already had the chevron, the grip, the eye, the bin, swipe-to-delete and
+      hold-to-reorder (they run through the same `attachFxGestures` an effect does), and **"+ Add mask" is
+      long gone — Mask is an entry in the effect browser, so the add route was already shared.**
+      **What was actually left is exactly what his screenshot shows:**
+      | | before | now |
+      |---|---|---|
+      | where it lives | its own block, below **Copy / Paste / Save** | a row in the effects list |
+      | heading | a separate **"Masks"** sub-label | none |
+      | card | `--line` border, its own padding | `.fx-row` — measured identical on all five properties |
+      | head order | **eye, then chevron** | chevron then name, like every effect row |
+      | structure | no swipe wrapper | `.fx-del-bg + .fx-swipe-wrap`, same as an effect |
+      🐛 **The missing wrapper was not cosmetic.** `.fx-row > .fx-swipe-wrap > .fx-head > .fx-disc` is how
+      the open-chevron rule is scoped, so **a mask's arrow never rotated when you opened it** — the one
+      thing a disclosure triangle must not do — and `attachFxGestures` slides `row._wrap` to reveal the red
+      delete panel, so with no wrapper the whole card slid with nothing behind it.
+      📐 Measured after: one list, chevrons aligned to the pixel, card styling identical, the row still
+      opens with Mode / Feather / Opacity / Invert, and the eye still toggles the mask.
+
+      🟠 **WHAT IS STILL DIFFERENT, AND IT NEEDS ONE WORD FROM YOU.** The STORAGE is unchanged — masks are
+      still `layer.masks`, and the compositor applies them at a different stage from the effect stack. You
+      will not see that anywhere **except in one place: you cannot drag a mask above or below an EFFECT.**
+      It reorders among masks only. Interleaving them is meaningless until the model moves, and moving it
+      is the 30-call-site job #360 sized — it touches the render path, so it is not something to do
+      quietly overnight.
+      **Say "migrate masks" and I will do it properly. If you never try to drag one past an effect, there
+      is nothing else left here.**
 
 - [ ] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

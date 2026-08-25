@@ -5157,7 +5157,11 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 
 /* ===== Pen masks (layer.masks) — reveal windows under Blending & Opacity ===== */
 .mask-block { margin-top: 6px; }
-.mask-item { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; margin: 8px 0; background: var(--panel-2); }
+/* ⚠️ THE CARD LOOK COMES FROM `.fx-row` NOW (queue 560). A mask row carries both classes and sits in
+   the effects list, so repeating the border/radius/padding/background here would fight it — and the
+   two did not match: this used `--line` where an effect uses `--line-soft`, and its own padding where
+   `.fx-row` is `padding: 0` with the head carrying its own. Only mask-specific rules stay. */
+.mask-body { padding: 0 10px 10px; }
 .mask-item.mask-off { opacity: .55; }
 .mask-item-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
 .mask-item-head .fx-icon-btn, .mask-item-head .kf-btn { width: 40px; height: 40px; }   /* 40px tap targets on phone */
