@@ -28144,6 +28144,65 @@
     }
   });
 
+  test('a resizer whose pointer is lost stops resizing (queue 511 clause 2)', { item: '511' }, async function () {
+    /* Ezra asked for the drag to be swept for every way it can break, not spot-fixed. This came out of
+       driving it rather than reading it, and it is the same shape as queue 541's frozen timeline: if the
+       pointer vanishes without a `pointerup` or `pointercancel` — a browser-stolen pointer, an OS window
+       switch, a right-click — the drag flag stays set forever.
+       Measured before the fix, on the add-menu resizer: after the loss, EVERY ordinary mouse move went
+       on resizing the panel with no button held — 432 → 492 → 232px, dragging the timeline down to 150
+       on the way. **The panel followed the mouse around the screen.**
+       ⚠️ Scoped to a MOUSE deliberately, and queue 541 is why. A blanket `buttons === 0` test there
+       reddened two trim tests that synthesise moves without the field, and worse, it would have rested
+       on every device reporting button state perfectly for a whole drag — if that is ever wrong, real
+       drags die under his hands. For a MOUSE, `buttons === 0` mid-drag is impossible unless the release
+       was missed, so it is proof; touch reports 1 while the finger is down and sends nothing after it
+       lifts, so a touch drag cannot be cut short by this. */
+    if (window.innerWidth < 701) return;                    // the add-menu resizer is PC-only
+    const root = document.documentElement;
+    const tlBefore = getComputedStyle(root).getPropertyValue('--tl-h').trim();
+    const savedSel = FM.scene.selectedId;
+    const made = !FM.scene.layers.length;
+    if (made) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
+      const rez = document.getElementById('am-resizer');
+      if (!rez || getComputedStyle(rez).display === 'none') return;   // add menu not in the panel here
+      const num = v => parseInt(getComputedStyle(root).getPropertyValue(v), 10) || 0;
+      const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+
+      ev('pointerdown', y0, 1);
+      ev('pointermove', y0 - 100, 1);
+      ev('pointermove', y0 - 200, 1);
+      const held = num('--am-h');
+      /* THE CONTROL: the drag has to have actually moved the panel, or "it stopped moving" is true of a
+         panel that never started. */
+      if (!(held > 300)) throw new Error('the drag did not raise the panel (' + held + 'px), so there is no live gesture to interrupt');
+
+      // …the pointer now vanishes. No pointerup, no pointercancel. He carries on using the app.
+      ev('pointermove', y0 - 260, 0);
+      ev('pointermove', y0 + 400, 0);
+
+      if (num('--am-h') !== held)
+        throw new Error('after the pointer was lost, ordinary mouse moves kept resizing the panel (' + held + ' → ' + num('--am-h') + 'px) — it follows the mouse around with no button held');
+      if (document.body.classList.contains('am-resizing'))
+        throw new Error('the panel is still in its resizing state after the pointer was lost');
+
+      /* …AND THE GESTURE MUST STILL WORK. A guard that ends drags too eagerly would satisfy everything
+         above and break the feature, which is the trap queue 541 fell into once. */
+      ev('pointerdown', y0, 1);
+      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (300 * i / 6), 1);
+      ev('pointerup', y0 - 300, 0);
+      if (num('--am-h') <= held) throw new Error('a normal drag no longer raises the panel after an interrupted one — the guard is ending live gestures');
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      root.style.setProperty('--tl-h', tlBefore || '232px');
+      if (made) FM.scene.layers.length = 0;
+      FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+    }
+  });
+
   test('the Director panel stops above the timeline instead of burying it (queue 511 clause 3)', { item: '511' }, async function () {
     /* Ezra: "the AI menu that pops up the director menu doesn't fit on the screen nicely on PC because
        it hasn't been designed for the new layout properly yet so it looks kind of weird."
@@ -28174,6 +28233,13 @@
         /* THE CONTROL: an unopened or zero-size panel covers nothing, and would pass everything below
            while proving nothing. */
         if (r.width < 200 || r.height < 100) throw new Error(label + ': the panel measured ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — it is not open, so "it does not cover the timeline" is meaningless');
+        /* ⚠️ AND IT REACHES THE TOP (queue 547). Ezra, the same day clause 3 shipped: "the menu doesnt go
+           to the top of the roof". It sat at `top: 50px`, clearance for a `#topbar` that PC does not
+           have — `body #topbar` is `display: none` above 701px, because the Studio layout moved its
+           contents down into the transport row. Measured at 1280x820: the bar reported height 0 and
+           `elementFromPoint` at y=20 and y=45 returned the canvas stage, so those 50px were bare
+           background above the panel — the gap in his screenshot. */
+        if (r.top > 2) throw new Error(label + ': the panel starts ' + Math.round(r.top) + 'px down the screen, leaving a band of empty background above it');
         const ox = Math.max(0, Math.min(r.right, q.right) - Math.max(r.left, q.left));
         const oy = Math.max(0, Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top));
         const covered = (ox * oy) / Math.max(1, q.width * q.height) * 100;
@@ -28196,10 +28262,16 @@
       /* …and it must FOLLOW the band, not just happen to line up at the default height. */
       root.style.setProperty('--tl-h', '420px');
       check('timeline dragged to 420px');
+      root.style.setProperty('--tl-h', '150px');
+      check('timeline at its floor');
+      /* "…and may be cut off by the timeline" — his second worry (queue 547), checked at the band's
+         TALLEST, where the panel is shortest and content is likeliest to be lost. */
+      root.style.setProperty('--tl-h', '560px');
+      check('timeline dragged tall');
       /* Its body has to scroll once the panel is short, or the content is merely clipped somewhere else. */
       const body = panel.querySelector('.ai-body');
       if (body && body.scrollHeight > body.clientHeight + 1 && getComputedStyle(body).overflowY === 'visible')
-        throw new Error('the panel body overflows by ' + (body.scrollHeight - body.clientHeight) + 'px and does not scroll');
+        throw new Error('the panel body overflows by ' + (body.scrollHeight - body.clientHeight) + 'px and does not scroll — content is being cut off');
     } finally {
       root.style.setProperty('--tl-h', tlBefore || '232px');
       panel.style.transition = prevTransition;

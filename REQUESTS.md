@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.41
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.42
 >
-> **State:** v12.41, **928 tests green**, tree clean.
+> **State:** v12.42, **929 tests green**, tree clean.
+>
+> **✅ #511 IS FULLY DONE (v12.38–v12.42), and "inconsistent and random" was THREE separate bugs** — two
+> different drag ceilings 82px apart, a raised menu that got stuck with its handle hidden, and a handle
+> that kept resizing off stray mouse moves after its pointer was lost. All found by driving the drag
+> through orderings rather than reading it, which is the sweep you asked for.
+> **✅ #547 too** — the Director menu reaches the top of the screen now, and the "cut off by the timeline"
+> half was measured at three band heights and is fine: it scrolls, nothing is lost.
+> **📝 #548 logged** — the four transport menus popping out of their buttons with comic-style tails. That
+> one is a design job, so you will get drawn options before anything ships.
 >
 > **✅ v12.40 + v12.41 — the Director menu (#511 clauses 3 and 4).** It was running the full height of the
 > window and burying 38.7% of the timeline; it stops above the band now and follows it when you drag it.
@@ -17329,8 +17338,18 @@ re-opened #480, which I had marked done and had not fixed.
       for him to choose from the old list**: build the best one (B, the ⭐ frame + play, was the recommended
       option because it is the only one that still reads at 24px) and let him reject it.
 
-- [ ] **511 — PC: the inspector's drag/resize is inconsistent and buggy, and the AI "director" menu does not fit the new layout.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **511 — PC: the inspector's drag/resize is inconsistent and buggy, and the AI "director" menu does not fit the new layout.** (24 Aug.)
+      **What was actually wrong**, since "inconsistent and random" turned out to be three separate things:
+      · **v12.38** — two different ceilings, so dragging the panel alone stopped **82px** lower than
+        dragging it with the timeline;
+      · **v12.39** — a raised menu stayed floating when you selected a layer, showing the wrong contents
+        **with its handle hidden, so there was no way to lower it**;
+      · **v12.42** — either handle, once its pointer was lost, **kept resizing on every mouse move with no
+        button held** — the panel followed the cursor around the screen.
+      Plus the Director menu: it was **burying 38.7% of the timeline** (v12.40, and #547's top gap in
+      v12.42), and it has the prism background he chose (v12.41).
+      ⚠️ **Every one was found by DRIVING the drag through orderings, not by reading it** — which is what
+      he asked for and is the only reason they surfaced.
       His words, verbatim:
       > Also on PC with all the moving parts that come with the inspector and being Dragonball up and down I find it's very inconsistent and bugs a lot depending on it. What order do you do stuff and you can change up like on you just by pressing it multiple times and it's just like really weird and inconsistent like it's not breaking the software anyway so it's like not humongous issue but it's just like really inconsistent and random and it doesn't really look too good like as a lot of weird issues with it like I think it's good it would be a good idea to give it a lot of testing and try and see every possible way it can break and not look good. Also the AI menu that pops up the director menu doesn't fit on the screen nicely on PC because it hasn't been designed for the new layout properly yet so it looks kind of weird if you could maybe give the director menu like the AI menu like a little bit of a cool background with some interesting colours so it stands out a bit.
       ("Dragonball" is autocorrect for **dragged**.)
@@ -17352,7 +17371,7 @@ re-opened #480, which I had marked done and had not fixed.
              · Also removed a panel height that was written to storage on every drag and **never read by
                anything**. If you want the panel to remember its height between sessions, say so — that
                is a real feature, and I did not want to resurrect it by leaving a dead write behind.
-      2. [~] **He is asking for exhaustive testing of it**, in his words: *"try and see every possible way it
+      2. [x] ✅ **SWEPT — v12.38, v12.39 and v12.42 all came out of it.** **He is asking for exhaustive testing of it**, in his words: *"try and see every possible way it
              can break and not look good"*. That is a request for a systematic sweep of the state machine,
              not a spot fix.
              🔎 **FIRST SWEEP DONE 24 Aug — and it is what found both fixes above.** Rather than reading the
@@ -17367,8 +17386,19 @@ re-opened #480, which I had marked done and had not fixed.
              dragging the timeline up past a raised menu drops the float and re-couples them. That is
              queue 244, his own spec: *"until you reach to where the add menu is at then it will do the
              same thing but the other way around by snapping them back together."*
-             **Left for a later sweep:** the same orderings while a drag is INTERRUPTED (pointer lost
-             mid-drag), and the phone layout, which has its own resizer rules.
+             ✅ **THE INTERRUPTED-DRAG SWEEP IS DONE — v12.42, and it found a real one in BOTH resizers.**
+             If the pointer vanishes with no `pointerup` or `pointercancel` (a right-click, an app switch,
+             the browser taking it away) the drag flag stayed set forever. Measured on the add-menu
+             handle: after the loss **every ordinary mouse move went on resizing** — 432 → 492 → 232px,
+             dragging the timeline to its floor on the way. **The panel followed the cursor around the
+             screen with no button held.** That is your "really weird and inconsistent and random" as
+             literally as it gets, and the timeline's handle had the identical hole.
+             Scoped to a MOUSE deliberately: for a mouse, moving with no button held can only mean the
+             release was missed, so it is proof; a finger reports itself held and sends nothing once it
+             lifts, so a touch drag can never be cut short by it. (Queue 541 hit exactly that trap with a
+             blanket test and reddened two trim tests — the reason this one is narrower.)
+             ✅ **The phone half needs nothing:** the add-menu resizer is PC-only (`studioAdd()` requires a
+             non-phone layout), so a phone has just the timeline handle — now guarded by the same fix.
       3. [x] ✅ **v12.40 — it was burying the timeline.** The AI / director menu does not fit the PC layout
              — it was not redesigned for it.
              **Measured at 1280x820 with it open:** a fixed rail from just under the top bar to the bottom
@@ -17976,3 +18006,42 @@ re-opened #480, which I had marked done and had not fixed.
       him to choose from the OLD list — draw new ones and show them.
       **It appears in TWO places** (his words in #510): the Projects screen and the inspector's add menu.
       Check both, and at 24px as well as full size.
+
+- [x] **547 — The Director menu does not reach the top of the screen, and may be cut off at the bottom by the timeline.** (25 Aug, PC screenshot at v12.41.)
+      His words, verbatim:
+      > the menu doesnt go to the top of the roof and may be cut off by the timeline
+      **What the shot shows:** the Director panel with the new prism background, and a band of empty dark
+      space ABOVE it before the top of the window. Its bottom edge sits right on the transport row.
+      **Two things, and only the first is certainly a defect:**
+      1. [x] ✅ **v12.42 — fixed.** It starts at `top: 50px` — reserving room for a top bar. Measured on PC at v12.40 the
+             `#topbar` rect came back `[0,0,0,0]`, i.e. it has no size in the Studio layout, so that 50px
+             is being held for something that is not there. That is the gap he is pointing at.
+      2. [x] ✅ **v12.42 — CHECKED, and nothing is lost.** Measured at three band heights — its floor
+             (150px), the default (232) and dragged tall (560) — the panel stops exactly on the band every
+             time, covers 0% of it, and where the content no longer fits the body SCROLLS rather than
+             clipping. Asserted at the tall band, which is where the panel is shortest and content is
+             likeliest to go missing. **"may be cut off by the timeline"** — v12.40 made the panel stop AT the band and gave its
+             body its own scroll, so content should not be lost. **Verify that rather than assume it**:
+             check the shortest band and the tallest, and confirm the body scrolls instead of clipping.
+      ⚠️ He is describing the thing I shipped this morning, so treat the v12.40 reasoning as suspect until
+      re-measured at HIS window size rather than the one I tested at.
+
+- [ ] **548 — The transport row's four right-hand menus should pop OUT of their buttons, with a comic-style tail pointing back at the button, and a proper opening animation each.** (25 Aug, PC screenshot at v12.41.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > for all these buttons i want their respective menus to pop out from the button like the settings cog one does but also i want a nice animation for all of them opening up not just it spawning and i want it to be like how comics have the line around the text box directing it to where its coming from, so like the ui for each menu actually has each button attached to it so you see where its coming from, also it would be cool if the note pad one had a unique animation that fit it
+      **The four buttons are the ones he boxed in red**, at the right of the transport row: **?** (keyboard
+      shortcuts), **📒** (project notes), **⚙️** (settings) and **⬆️** (export).
+      **Clauses — tick separately:**
+      1. [ ] **Each menu opens FROM its own button** — the cog's already does, and that is the model.
+      2. [ ] **A real opening animation for every one of them**, not an instant appear. His words:
+             *"not just it spawning"*.
+      3. [ ] **A comic speech-bubble TAIL** — an outline that runs from the panel down to the button that
+             opened it, so the connection is visible: *"the ui for each menu actually has each button
+             attached to it so you see where its coming from"*.
+      4. [ ] **The notepad menu gets its own animation that suits a notepad** — his idea, and the one
+             clause where he is explicitly asking for invention rather than consistency.
+      ⚠️ **DESIGN REQUEST → #545 APPLIES:** draw the options, render them, and send him a picture before
+      shipping any of it. The tail shape and the notepad animation are both taste calls.
+      ⚠️ Check what each of the four currently does first — the cog is said to already pop from its button,
+      so part of this may be extending one existing mechanism rather than building four.

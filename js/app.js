@@ -4391,6 +4391,8 @@ window.FM = window.FM || {};
     });
     rez.addEventListener('pointermove', (e) => {
       if (!dragging) return;
+      // Same lost-pointer hole as the add-menu resizer above — see the note there. (queue 511)
+      if (e.pointerType === 'mouse' && e.buttons === 0) { end(); return; }
       const want = clampH(startH + (startY - e.clientY));   // drag UP → taller timeline
       /* THE OTHER DIRECTION (queue 244, the clause that was left unbuilt at v8.30): "dragging the
          timeline brings the add menu with it unless they arent connected, until you reach to where the
@@ -4521,6 +4523,18 @@ window.FM = window.FM || {};
       });
       amRez.addEventListener('pointermove', (e) => {
         if (!amDrag) return;
+        /* ⚠️ THE BUTTON CAME UP AND WE NEVER HEARD (queue 511 clause 2, same shape as queue 541).
+           If the pointer is lost without a `pointerup` or `pointercancel` — a browser-stolen pointer, an
+           OS window switch, a right-click — `amDrag` stays true forever. Measured: after that, EVERY
+           ordinary mouse move went on resizing the panel with no button held, 432 → 492 → 232px, and it
+           dragged the timeline down to 150 on the way. The panel simply follows the mouse around the
+           screen. That is his "really weird and inconsistent and random" as literally as it gets.
+           Scoped to a MOUSE on purpose. For a mouse, `buttons === 0` mid-drag is impossible unless the
+           release was missed, so it is proof rather than a guess. A touch reports 1 while the finger is
+           down and delivers no moves after it lifts, so this can never cut a real touch drag short —
+           which is the failure mode queue 541 hit when a blanket `buttons === 0` test reddened two trim
+           tests, and the reason that one settled on the softer signal instead. */
+        if (e.pointerType === 'mouse' && e.buttons === 0) { amEnd(); return; }
         const want = amStartH + (amStartY - e.clientY);       // drag UP → taller menu
         const floor = amFloor();
         if (want >= floor) {

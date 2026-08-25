@@ -102,7 +102,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.41, 928 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.42, 929 tests green, tree clean, `HEAD == ssh/main`.**
+**#511 IS CLOSED (v12.38–v12.42).** "Inconsistent and random" was THREE bugs, all found by DRIVING the
+drag through orderings rather than reading it: two ceilings 82px apart (v12.38); a raised menu stuck
+floating with its handle hidden on selection (v12.39); and **either handle continuing to resize on stray
+mouse moves after its pointer was lost** (v12.42) — the panel followed the cursor, 432→492→232px.
+⚠️ That last guard is scoped to `pointerType === 'mouse'` ON PURPOSE — queue 541's blanket `buttons===0`
+test reddened two trim tests and would have risked killing real touch drags.
+**+ #547 (v12.42):** the Director panel sat at `top: 50px`, clearance for a `#topbar` that is
+`display: none` on PC. Now `top: 0`; the "cut off" half measured fine at bands 150/232/560 — it scrolls.
+**📝 #548 logged (design):** the four transport menus should pop OUT of their buttons with comic-style
+tails + per-menu open animations, notepad getting its own. **#545 applies — draw options, send a picture.**
+⚠️ #508 still needs a visible preview pane (rule 11).
 **v12.40 worked #511 clause 3.** The Director panel was a full-height fixed rail **covering 38.7% of the
 timeline** at 1280x820 — a lid over the track he works in. Its bottom is `--tl-h` now, so it stops at the
 band and follows it when either resizer moves. Mutation: the full-height rail covers 62.7%.

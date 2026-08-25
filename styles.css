@@ -3392,8 +3392,15 @@ body.white-chrome #time-readout:active {
    Its own content is 711px and does not scroll, so the extra height was not even being used.
    `--tl-h` is the band's height and is kept current by both resizers, so the panel follows the timeline
    wherever he drags it rather than assuming a number. */
+/* ⚠️ TOP: 0, NOT 50 (queue 547). Ezra, the same day #511 clause 3 shipped: "the menu doesnt go to the
+   top of the roof". The 50px was clearance for `#topbar` — and on PC there IS no top bar: `body #topbar`
+   is `display: none` inside the min-width:701px block, because the Studio layout moved its contents down
+   into the transport row. Measured at 1280x820: `#topbar` reports height 0, and `elementFromPoint` at
+   y=20 and y=45 returns the canvas stage, so those 50px were bare background above the panel — exactly
+   the gap in his screenshot. The phone rule below sets `top: auto` for its bottom sheet, so it is
+   untouched by this. */
 #ai-panel {
-  position: fixed; top: 50px; right: 0; bottom: var(--tl-h, 232px); width: 376px; z-index: 58;
+  position: fixed; top: 0; right: 0; bottom: var(--tl-h, 232px); width: 376px; z-index: 58;
   display: flex; flex-direction: column;
   /* THE PRISM (queue 511 clause 4). Ezra: "if you could maybe give the director menu like the AI menu
      like a little bit of a cool background with some interesting colours so it stands out a bit."
