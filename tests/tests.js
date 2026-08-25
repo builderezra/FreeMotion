@@ -40348,6 +40348,95 @@
     }
   });
 
+  /* Queue 215 — THE FIFTH SILENT LOSS, and the one that fits his report best.
+   * On 25 Aug he answered the question this entry had been stuck on for five rounds: *"I don't think I
+   * got a message saying no audio"*. NO TOAST — which rules out all three reporting paths at once and,
+   * by the entry's own reasoning, pointed at the muxer.
+   * Measuring it (tests/_q215mux.html) put the blame somewhere nobody had looked. The muxer is FINE:
+   * a normal export writes 22 audio samples that decode to a peak of 0.4038. But a layer that is
+   * `muted`, or whose volume sits at 0, passes every check in the mixer — not hidden, file decodes,
+   * window overlaps — so a real buffer renders, AAC encodes it, and the muxer writes a full set of
+   * samples of which EVERY ONE IS ZERO. Perfect file, perfect track, pure silence, nothing said.
+   * "Samples are not sound" was the missing question. Every previous check asked whether a clip reached
+   * the mix; none asked whether the mix makes a noise. */
+  async function q215SilentProbe(FM, tweak) {
+    const P = FM.scene.project;
+    const flags = { toasts: [] };
+    const realToast = FM.toast;
+    FM.toast = m => flags.toasts.push(String(m));
+    try {
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.3), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: buf });
+      if (tweak) tweak(song, box);
+      FM._audioTrackDropped = null; FM._lastMixPeak = undefined;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'q215s', onReady: async () => {} });
+      flags.dropped = FM._audioTrackDropped;
+      flags.peak = FM._lastMixPeak;
+      return flags;
+    } finally { FM.toast = realToast; }
+  }
+
+  test('export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)', { item: '215' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
+    try {
+      /* THE CONTROL FIRST, and it is load-bearing twice over: it proves a healthy export stays QUIET
+         (so the assertions below are not passing because everything toasts), and it proves the peak
+         scan actually ran and found sound (so "peak 0" later means something). */
+      const good = await q215SilentProbe(FM);
+      if (good.dropped) throw new Error('a healthy export flagged its audio as "' + good.dropped + '" — the control is not healthy, so nothing below is measured');
+      if (good.toasts.length) throw new Error('a healthy export toasted ' + JSON.stringify(good.toasts) + ' — a warning that fires on a good export is noise, and would make the check below meaningless');
+      if (!(good.peak > 0.01)) throw new Error('the mix peak on a healthy export read ' + good.peak + ' — the peak scan is not measuring the audio at all, so a reading of 0 below would prove nothing');
+
+      // …and now the case: the clip is there, decodes, overlaps the range — and is muted.
+      const muted = await q215SilentProbe(FM, song => { song.muted = true; });
+      if (!(muted.peak <= 0.0001)) throw new Error('a muted layer still rendered a mix peaking at ' + muted.peak + ' — this fixture is not actually producing silence, so it cannot test the report');
+      if (muted.dropped !== 'mix-silent') throw new Error('the export rendered a soundtrack of pure silence and flagged it as "' + muted.dropped + '" instead of "mix-silent" — that is queue 215: a perfect audio track containing nothing, with no way to tell from the outside');
+      if (!muted.toasts.some(t => /NO SOUND/i.test(t))) throw new Error('the export was silent and said nothing on screen: ' + JSON.stringify(muted.toasts));
+
+      // volume at zero is the same failure by a different route, and must report identically
+      const quiet = await q215SilentProbe(FM, song => { song.volume = 0; });
+      if (quiet.dropped !== 'mix-silent') throw new Error('a layer at zero volume flagged "' + quiet.dropped + '" — muted and volume-0 are the same silent file and must report the same way');
+    } finally {
+      FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._audioTrackDropped = null; FM._lastMixPeak = undefined;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  test('export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)', { item: '215' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
+    try {
+      /* SOLO IS THE TRAP, and it is worth stating why it is worse than hiding. `soloActive` is true if
+         ANY layer is soloed — including a SHAPE, which has no sound at all. Solo a shape to look at it
+         on its own, forget, export, and every soundtrack in the project vanishes. Nothing is hidden,
+         nothing is muted, nothing failed; there is simply no audio, and until now not one word about
+         why. Hiding the audio layer itself is at least self-explanatory; this is not. */
+      const soloed = await q215SilentProbe(FM, (song, box) => { box.solo = true; });
+      if (soloed.dropped !== 'all-suppressed') throw new Error('soloing a SHAPE silenced the whole export and flagged "' + soloed.dropped + '" instead of "all-suppressed" — the one cause a user could never guess is still the one with no witness');
+      if (!soloed.toasts.some(t => /NO SOUND/i.test(t))) throw new Error('soloing a shape silenced the export and said nothing: ' + JSON.stringify(soloed.toasts));
+      if (!soloed.toasts.some(t => /solo/i.test(t))) throw new Error('the warning does not mention solo (' + JSON.stringify(soloed.toasts) + ') — naming the cause is the whole point; "no sound" alone is what he already knew');
+    } finally {
+      FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

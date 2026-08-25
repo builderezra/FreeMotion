@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Queue 215 — does the exported file actually CONTAIN audio samples?</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" style="width:900px;height:760px;border:0;display:block"></iframe>
+<!-- ⚠️ The buster is on INDEX.HTML itself, not just its scripts. index.html carries the ?v= tags,
+     so a cached copy of it pins every module to the PREVIOUS version — the fix is on disk, the
+     page runs the old code, and the diagnostic reports "no change" with total confidence. That
+     happened on the first run of this file (25 Aug): identical output before and after a real
+     change, because the iframe was still on exporter.js?v=108. -->
+<script>document.getElementById("app").src = "../index.html?fresh=" + Date.now();</script>
+<pre id="out" style="position:fixed;left:910px;top:0;right:0;bottom:0;overflow:auto;color:#cfe;font:11px ui-monospace;background:#06121a;padding:9px;white-space:pre-wrap;z-index:9"></pre>
+<script>
+/* Queue 215 — "I exported and got no audio even tho the video had audio."
+ *
+ * 25 Aug, Ezra answered the question this entry had been stuck on for five rounds:
+ *   "I don't think I got a message saying no audio"
+ * NO TOAST. Which rules out all three reporting paths at once — the mixer naming a clip, the AAC
+ * probe, the soundtrack failing to encode — and the entry itself defines that combination, three
+ * separate times, as exactly one place: THE MUXER, the only region with no witness.
+ *
+ * What has never been measured is the thing the file itself can answer. `q215TrackScan` in the suite
+ * checks whether the moov DECLARES an audio track ('soun' / 'mp4a'). Declaring is not feeding. A file
+ * that declares a track and carries ZERO samples is silent, is not an error, and produces no toast —
+ * which is his report exactly.
+ *
+ * So this walks the box tree properly rather than scanning for a byte pattern: moov → trak → mdia →
+ * (hdlr, minf → stbl → stsz), and reports each track's handler and its REAL sample count.
+ *   stsz payload: version+flags(4) sample_size(4) sample_count(4)  → count at payload offset 8
+ *   hdlr payload: version+flags(4) pre_defined(4) handler_type(4)  → type  at payload offset 8
+ * A 'soun' track with sample_count 0 is the bug. A 'soun' track with samples means the loss is
+ * downstream of the muxer and this is the wrong tree. */
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.scene&&w.FM.exporter)return r(w.FM);if(n++>400)return j(new Error('no FM'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('out'), log=[];
+function say(s){log.push(s); out.textContent=log.join('\n');}
+
+/* ---- MP4 box walking -------------------------------------------------------------------------- */
+function boxes(buf, start, end){
+  var list=[], p=start;
+  while(p+8<=end){
+    var size=(buf[p]<<24|buf[p+1]<<16|buf[p+2]<<8|buf[p+3])>>>0;
+    var type=String.fromCharCode(buf[p+4],buf[p+5],buf[p+6],buf[p+7]);
+    var hdr=8;
+    if(size===1){ // 64-bit largesize
+      var hi=(buf[p+8]<<24|buf[p+9]<<16|buf[p+10]<<8|buf[p+11])>>>0;
+      var lo=(buf[p+12]<<24|buf[p+13]<<16|buf[p+14]<<8|buf[p+15])>>>0;
+      size=hi*4294967296+lo; hdr=16;
+    } else if(size===0) size=end-p;
+    if(size<hdr||p+size>end) break;
+    list.push({type:type, start:p, end:p+size, body:p+hdr});
+    p+=size;
+  }
+  return list;
+}
+function child(buf,box,type){ var c=boxes(buf,box.body,box.end); for(var i=0;i<c.length;i++) if(c[i].type===type) return c[i]; return null; }
+function u32(buf,p){ return (buf[p]<<24|buf[p+1]<<16|buf[p+2]<<8|buf[p+3])>>>0; }
+
+async function scan(blob){
+  var buf=new Uint8Array(await blob.arrayBuffer());
+  var top=boxes(buf,0,buf.length);
+  var moov=null; for(var i=0;i<top.length;i++) if(top[i].type==='moov') moov=top[i];
+  if(!moov) return {error:'no moov box — the file is not a readable MP4', top:top.map(function(b){return b.type;})};
+  var traks=boxes(buf,moov.body,moov.end).filter(function(b){return b.type==='trak';});
+  var tracks=traks.map(function(tr){
+    var mdia=child(buf,tr,'mdia'); if(!mdia) return {handler:'?',note:'no mdia'};
+    var hdlr=child(buf,mdia,'hdlr');
+    var handler=hdlr?String.fromCharCode(buf[hdlr.body+8],buf[hdlr.body+9],buf[hdlr.body+10],buf[hdlr.body+11]):'?';
+    var mdhd=child(buf,mdia,'mdhd');
+    var timescale=mdhd?u32(buf,mdhd.body+12):0, dur=mdhd?u32(buf,mdhd.body+16):0;
+    var minf=child(buf,mdia,'minf'); var stbl=minf?child(buf,minf,'stbl'):null;
+    var stsz=stbl?child(buf,stbl,'stsz'):null;
+    var sampleSize=stsz?u32(buf,stsz.body+4):-1, count=stsz?u32(buf,stsz.body+8):-1;
+    var stsd=stbl?child(buf,stbl,'stsd'):null;
+    var fmt='?';
+    if(stsd){ var e=boxes(buf,stsd.body+8,stsd.end); if(e.length) fmt=e[0].type; }
+    // total bytes of the sample table (fixed size, or the sum of the entries)
+    var bytes=0;
+    if(stsz){ if(sampleSize>0) bytes=sampleSize*count; else for(var k=0;k<count;k++) bytes+=u32(buf,stsz.body+12+k*4); }
+    return {handler:handler, format:fmt, samples:count, bytes:bytes,
+            seconds: timescale? +(dur/timescale).toFixed(3) : 0};
+  });
+  return {size:blob.size, tracks:tracks};
+}
+
+f.addEventListener('load',function(){
+ waitFM(f.contentWindow).then(async function(FM){
+  var W=f.contentWindow, d=f.contentDocument;
+  var sp=d.getElementById('splash'); if(sp) sp.remove(); d.documentElement.classList.remove('splash-on');
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close(); await sleep(700);
+
+  var P=FM.scene.project;
+  var toasts=[]; var realToast=FM.toast; FM.toast=function(m){ toasts.push(String(m)); };
+
+  async function runExport(seconds, rate, channels, tweak){
+    P.duration=seconds; P.width=64; P.height=64;
+    FM.scene.layers.length=0;
+    var box=FM.makeLayer('shape',{name:'box',shape:'rect',x:32,y:32,shapeW:20,shapeH:20,fill:'#3a7bd5'});
+    box.start=0; box.duration=seconds; FM.scene.layers.push(box);
+    var song=FM.makeLayer('video',{name:'song'});
+    song.start=0; song.duration=seconds; song.trimStart=0; song.trimEnd=seconds;
+    FM.scene.layers.push(song);
+    var ac=new (W.AudioContext||W.webkitAudioContext)();
+    var buf=ac.createBuffer(channels, Math.max(1,Math.floor(rate*seconds)), rate);
+    for(var c=0;c<channels;c++){ var dd=buf.getChannelData(c); for(var i=0;i<dd.length;i++) dd[i]=Math.sin(i/30)*0.4; }
+    FM.media.set(song.id,{file:new Blob(['a']),duration:seconds,audioBuffer:buf});
+    if (tweak) tweak(song, box, buf);
+    FM._audioTrackDropped=null; toasts.length=0;
+    var blob=null;
+    await FM.exporter.run({fps:10, scale:1, name:'q215', onReady:async function(r){ blob=r.blob; }});
+    return blob;
+  }
+
+  /* SAMPLES ARE NOT SOUND. A track can carry a full set of AAC frames that decode to pure silence —
+     the mix built, rendered, encoded and muxed perfectly, and every sample is zero. That file is
+     silent, throws nothing, flags nothing and toasts nothing, which is his report exactly, and NO
+     round of this entry has ever measured it. So decode what actually came out and take its peak. */
+  async function peakOf(blob){
+    try {
+      var b = await FM.decodeAudio(blob);
+      if (!b) return {err:'decode returned nothing'};
+      var pk = 0, n = 0;
+      for (var c = 0; c < b.numberOfChannels; c++){
+        var d = b.getChannelData(c);
+        for (var i = 0; i < d.length; i++){ var v = Math.abs(d[i]); if (v > pk) pk = v; n++; }
+      }
+      return {peak:+pk.toFixed(4), frames:n, seconds:+b.duration.toFixed(3)};
+    } catch(e){ return {err:String(e && e.message || e)}; }
+  }
+
+  async function report(label, seconds, rate, channels, tweak){
+    say('');
+    say('══ ' + label + '   (' + seconds + 's, ' + rate + 'Hz, ' + channels + 'ch)');
+    var blob=null, err=null;
+    try { blob=await runExport(seconds, rate, channels, tweak); } catch(e){ err=e; }
+    if(err){ say('  export THREW: '+err); return; }
+    if(!blob){ say('  no file produced at all'); return; }
+    var r=await scan(blob);
+    if(r.error){ say('  '+r.error+'  top-level: '+JSON.stringify(r.top)); return; }
+    say('  file '+r.size+' bytes   flagged: '+(FM._audioTrackDropped||'(nothing)')+'   toasts: '+(toasts.length?JSON.stringify(toasts):'NONE'));
+    r.tracks.forEach(function(t){
+      say('   · '+t.handler+'  '+t.format+'  samples='+t.samples+'  bytes='+t.bytes+'  '+t.seconds+'s');
+    });
+    var soun=r.tracks.filter(function(t){return t.handler==='soun';})[0];
+    if(!soun){ say('  → NO audio track declared (an honest silent file)'); return; }
+    if(!(soun.samples>0)){ say('  → ⚠️  AUDIO TRACK DECLARED WITH ZERO SAMPLES — silent, no error, no toast.'); return; }
+    var pk=await peakOf(blob);
+    if(pk.err){ say('  → '+soun.samples+' samples, but could not decode them back: '+pk.err); return; }
+    say('  → '+soun.samples+' samples, decoded peak '+pk.peak+' over '+pk.seconds+'s');
+    if(pk.peak<=0.0001) say('  → ⚠️  THE TRACK IS PURE SILENCE. Muxed perfectly, nothing failed, nothing said. THIS IS HIS REPORT.');
+  }
+
+  try{
+    say('Queue 215 — walking the exported MP4 for real audio samples.');
+    say('AudioEncoder present: '+(typeof W.AudioEncoder!=='undefined'));
+    await report('a normal export (control)', 0.4, 48000, 2);
+    await report('the layer is MUTED',        0.4, 48000, 2, function(song){ song.muted = true; });
+    await report('volume turned to 0',        0.4, 48000, 2, function(song){ song.volume = 0; });
+    await report('the layer is HIDDEN',       0.4, 48000, 2, function(song){ song.visible = false; });
+    await report('another layer is SOLOed',   0.4, 48000, 2, function(song, box){ box.solo = true; });
+    await report('the clip sits past the end',0.4, 48000, 2, function(song){ song.start = 9; });
+    say('');
+    say('done.');
+  } catch(e){ say('FAILED: '+(e&&e.stack||e)); }
+  finally { FM.toast=realToast; }
+ }).catch(function(e){ say('setup failed: '+e); });
+});
+</script>
+</body></html>

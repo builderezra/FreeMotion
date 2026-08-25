@@ -1,11 +1,11 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.51
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.52
 >
-> **State:** v12.51, **938 tests green**, tree clean.
+> **State:** v12.52, **940 tests green**, tree clean.
 >
-> **Nothing is waiting on you right now.** You answered the export-audio question, which was the only
-> blocker — thank you, it was the useful half.
+> **🟠 ONE SMALL THING: export something with sound again and tell me whether a message appears.**
+> That is the whole of what I need — why is two paragraphs down.
 >
 > **✅ v12.51 — you can drop a layer BELOW the add row (#521). You were right that it had never worked.**
 > You said *"I've asked a similar thing to this many times before, and I don't know if you've fixed it or
@@ -16,9 +16,18 @@
 > Measured at your PC width: the whole band from the line down through three quarters of the next row put
 > the layer above the marker. Fixed, and the guard now forces a PC width so it cannot hide there again.
 >
-> **✅ Your no-audio answer unblocked #215, and it ruled out half the search.** No toast means the mix did
-> not fail — so it is not the memory theory, and it is not any of the five things already fixed. It points
-> at the muxer, the one part of that path with no witness. That is next, and it is the oldest thing left.
+> **✅ v12.52 — I finally MEASURED your silent export, and it was somewhere nobody had looked.**
+> Your "no message" answer pointed at the muxer. So I built a harness that opens the exported file, counts
+> the audio it really contains, and then **listens to it**. The muxer is fine — a normal export carries
+> real sound. What no one had ever checked is whether that sound is loud enough to hear. **Three ways your
+> file can come out silent with nothing said:** a clip that is **muted**; a clip at **zero volume**; and
+> the nasty one — **soloing a shape**, which silences every sound in the project, because solo is
+> project-wide and a shape has no sound to solo. In all three you get a perfect audio track full of
+> nothing. All three now tell you, by name, before the render finishes.
+> **What I need from you:** export something with sound and see if a message appears. If one does, it names
+> the cause and this is done. **If you get silence and STILL no message, that is genuinely new** — it rules
+> out every known cause and sends me back to the muxer with real evidence.
+> I am not claiming this was your bug. I am claiming the next one answers itself.
 >
 > **✅ v12.49 — editing text no longer leaves the option cards live behind the editor (#519).** The phone
 > has hidden them for ages; the desktop layout never got the rule, so nine cards sat there tappable.
@@ -8916,6 +8925,12 @@ better still, keep working inside the turn rather than parking work for a later 
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       exported and got no audio even tho the video had audio."*
+      ⚠️ **DELIBERATELY NOT TICKED (v12.52).** Three real silent-export paths were measured and made to
+      speak, but none is PROVEN to be what happened on his phone — ticking it would claim something I
+      cannot support, which is the one thing this file exists to prevent.
+      **His question is now one line: export something with sound — does a message appear?** A message
+      names the cause and closes this. Silence with STILL no message is genuinely new evidence and sends
+      the next round back to the muxer with something to go on.
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the
       app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
       It is going to the bottom of the queue per the oldest-first rule, but **say the word and it jumps
@@ -9171,6 +9186,48 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **Reproduce at HIS settings, not at a convenient size** — every previous pass here measured on
       smaller exports and came back clean. 2160x3840 at 60fps is roughly 8x the pixels per second of a
       1080p/30 export.
+
+      🔬 **MEASURED AT LAST, 25 Aug — and the answer was not the muxer.** `tests/_q215mux.html` walks the
+      exported MP4's box tree (moov → trak → mdia → minf → stbl → stsz), reads each track's REAL sample
+      count, then decodes the audio back and takes its PEAK. That last step is the one no round of this
+      entry ever took, and it is the one that found it.
+      **The muxer is healthy.** A normal export writes 4 video samples and 22 audio samples that decode
+      to a peak of 0.4038. Mono, 44.1kHz and a 0.05s project all carry real sound too. So "neither toast
+      + silent file = the muxer", which this entry asserts three separate times, was **wrong** — a sound
+      inference from the evidence available, pointing at the one place that happened to be fine.
+      **What was actually wrong: SAMPLES ARE NOT SOUND.** Three paths produce a silent file with no toast
+      and no flag, and all three were measured:
+      · **A MUTED layer** — 22 audio samples, decoded peak **0.0000**. It passes every check in the
+        mixer: not hidden, file decodes, window overlaps. So `any` is true, a buffer renders, AAC encodes
+        it, the muxer writes a full track — of pure silence. Perfect file, nothing failed, nothing said.
+      · **Volume at 0** — byte-for-byte the same outcome.
+      · **SOLO, and this is the nasty one.** `soloActive` is true if ANY layer is soloed, **including a
+        shape**, which has no sound at all. Solo a shape to look at it on its own, forget, export → every
+        soundtrack in the project vanishes, silently. Nothing is hidden and nothing is muted; there is
+        simply no audio and no way to guess why.
+      **The entry pointed at the first one two rounds ago** — *"check `layer.muted`, since Extract Audio
+      deliberately mutes the original"* — and nothing ever measured it.
+
+      ✅ **v12.52 — all three now speak.** The mixer peak-scans the rendered buffer (one pass over audio
+      already in memory, a few ms against a render measured in minutes) and reports `mix-silent` with
+      *"Exporting with NO SOUND — every audio clip is muted or at zero volume"*. Layers killed by
+      hidden/solo are remembered and reported as `all-suppressed` — *"…is hidden or muted by solo"* —
+      but ONLY when the export ends up with no sound at all AND covers the whole project, so suppressing
+      a clip you can see suppressed stays quiet. Measured before and after; the healthy control still
+      toasts nothing, which is what stops this becoming the noise that killed the last diagnostic.
+      🐛 **A one-line ordering bug found on the way and nearly shipped:** the AAC probe's success branch
+      does `FM._audioTrackDropped = null`, and it runs AFTER `buildAudioMix` — so it cleared the
+      `mix-silent` flag one line before anything could read it, while the toast still fired. The screen
+      would have said one thing and the flag another.
+      ⚠️ **STILL NOT PROVEN TO BE HIS.** This is a real fix for a real silent-export path that matches his
+      words exactly, but I cannot show it is what happened on his phone. **What it changes is that the
+      next occurrence answers itself** — every way this app can produce a silent file now names its own
+      cause on screen. If he exports again and still gets silence with NO message, that is genuinely new
+      information and the muxer theory comes back with evidence behind it.
+      ⚠️ **A trap worth recording, because it wasted a cycle here:** the diagnostic reported IDENTICAL
+      output before and after a real fix. The iframe loads `../index.html`, and a CACHED index.html pins
+      every module to the previous `?v=` — the fix was on disk and the page ran the old code, with total
+      confidence. The harness busts its own iframe now.
 
       ✅ **ANSWERED, 25 Aug — and it is the first of the two branches.** His words, verbatim:
       > I don’t think I got a message saying no audio

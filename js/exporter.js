@@ -304,13 +304,31 @@ window.FM = window.FM || {};
      * kept apart from `dropped` ones, because a hidden layer being silent is correct and saying so
      * would be noise. */
     const dropped = [];
+    const suppressed = [];   // has audio, but hidden or solo-suppressed — see the skip below
     const nameOf = l => l.name || l.type || l.id;
     // Is this the whole project, or a sub-range the user deliberately chose? Decides whether a clip
     // outside the range is a surprise worth reporting or the user's own instruction. See below.
     const wholeProject = (from <= 0.001) && (to >= (P.duration || 0) - 0.001);
     for (const layer of scene.layers) {
       const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
-      if (hiddenOrSolo) continue;                        // correct and intentional — not reported
+      if (hiddenOrSolo) {
+        /* SUPPRESSED IS NOT THE SAME AS SILENT, and this `continue` was the last one in the mixer with
+         * no witness (queue 215, 25 Aug). Hiding a layer should silence it — that part is correct and
+         * saying so every time would be noise, which is why it was left bare. But SOLO is the trap:
+         * `soloActive` is true if ANY layer is soloed, including a SHAPE, which has no sound at all.
+         * Solo a shape to look at it on its own, forget, export — and every soundtrack in the project
+         * vanishes with nothing said anywhere. MEASURED (tests/_q215mux.html): soloing the shape next
+         * to a healthy audio clip produced a file with no audio track, no flag and no toast.
+         * So the audio-bearing ones are remembered, and reported ONLY if they turn out to be the reason
+         * the whole export is silent — see the report block below. A warning that fires while the file
+         * still has sound would be exactly the noise this was avoiding. */
+        const sm = FM.media.get(layer.id);
+        if (sm && (sm.file || sm.audioBuffer)) {
+          suppressed.push(nameOf(layer) + (layer.visible === false ? ' (hidden)'
+                          : (soloActive && !layer.solo) ? ' (another layer is soloed)' : ' (inside a hidden group)'));
+        }
+        continue;
+      }
       if (layer.type !== 'video') {
         // Imported audio rides the video path (an mp3 is a 'video' layer with a 0x0 picture), so a
         // NON-video layer here either genuinely has no sound, or is an audio layer built by some other
@@ -458,10 +476,51 @@ window.FM = window.FM || {};
           : 'Exporting with NO SOUND — ' + dropped.length + ' audio clip' + (dropped.length === 1 ? '' : 's') + ' could not be read (see the console)', 5200);
       }
     }
+    /* AND THE LAST SILENT REASON OF ALL: nothing was dropped, nothing was broken, and every clip that
+     * could contribute was hidden or solo-suppressed. Reported only when the export ends up with NO
+     * sound at all AND covers the whole project — the same rule the out-of-range report uses, and for
+     * the same reason: suppressing a clip you can see is suppressed is not a surprise, but a completely
+     * silent export whose only cause is a solo you forgot about very much is. */
+    if (!any && suppressed.length && wholeProject) {
+      console.warn('[export] the soundtrack is empty because these layers are hidden or solo-suppressed:\n  · ' + suppressed.join('\n  · '));
+      FM._audioTrackDropped = 'all-suppressed';
+      if (FM.toast) {
+        FM.toast('Exporting with NO SOUND — ' + suppressed.length + ' audio clip' + (suppressed.length === 1 ? ' is' : 's are') +
+                 ' hidden or muted by solo', 5600);
+      }
+    }
     FM._lastAudioDrops = dropped;   // the suite reads this rather than scraping toasts
+    FM._lastAudioSuppressed = suppressed;
     if (!any) return null;
     const rendered = await oac.startRendering();
     chains.forEach(c => { try { c.dispose(); } catch (e) {} });
+    /* ⚠️ SAMPLES ARE NOT SOUND — the fifth silent loss, and the only one that survives everything above
+     * (queue 215, 25 Aug). Every check in this file so far asks whether a clip reached the mix. None
+     * asks whether the mix makes a NOISE. A layer that is `muted`, or whose volume sits at 0, sails
+     * through all of them: it is not hidden, its file decodes, its window overlaps, so `any` is true, a
+     * real buffer renders, AAC encodes it, the muxer writes a full set of samples — and every one of
+     * them is zero. The file has a perfectly good audio track containing silence. Nothing fails,
+     * nothing is dropped, nothing is flagged, NOTHING IS SAID.
+     * That is his report word for word: "I exported and got no audio even tho the video had audio",
+     * with no toast. MEASURED (tests/_q215mux.html): muted → 22 samples, decoded peak 0.0000; volume 0
+     * → identical. The control at normal volume peaks 0.4038, so the probe can tell them apart.
+     * The entry itself pointed here two rounds ago — "check `layer.muted`, since Extract Audio
+     * deliberately mutes the original" — and nothing ever measured it.
+     * Peak-scan the rendered buffer. It is one pass over audio that is already in memory, costs a few
+     * ms against a render measured in minutes, and it is the difference between a mute report and an
+     * answer. The track is still written: a silent track is honest here, because the clips really are
+     * in the project and really are silent. What changes is that it SAYS SO. */
+    let peak = 0;
+    for (let c = 0; c < rendered.numberOfChannels; c++) {
+      const d = rendered.getChannelData(c);
+      for (let i = 0; i < d.length; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > peak) peak = v; }
+    }
+    FM._lastMixPeak = peak;
+    if (peak <= 0.0001) {
+      console.warn('[export] the mix rendered but is pure silence — every contributing clip is muted or at zero volume');
+      FM._audioTrackDropped = 'mix-silent';
+      if (FM.toast) FM.toast('Exporting with NO SOUND — every audio clip is muted or at zero volume', 5600);
+    }
     return { audioBuffer: rendered, sampleRate, channels };
   }
 
@@ -736,7 +795,12 @@ window.FM = window.FM || {};
           FM._audioTrackDropped = 'aac-unavailable';
           if (FM.toast) FM.toast('This browser cannot encode AAC — exporting WITHOUT SOUND', 6000);
           mix = null;
-        } else FM._audioTrackDropped = null;
+        /* ⚠️ …but do NOT wipe a loss the MIXER already reported. This line clears the flag on the happy
+           path, and it runs AFTER buildAudioMix — so a mix that rendered pure silence (`mix-silent`,
+           set at the end of buildAudioMix) had its flag cleared here one line before anyone could read
+           it. The toast still fired, which is what makes it nasty: the screen said one thing and the
+           flag the suite and the caller key off said another. */
+        } else if (FM._audioTrackDropped !== 'mix-silent') FM._audioTrackDropped = null;
       }
 
       /* CRASH-RESUME (#47, the second half). The codec has to be picked BEFORE the muxer now, because
