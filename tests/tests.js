@@ -3774,6 +3774,93 @@
     if (cols.length && cols.some(d => d.keyframable === false)) throw new Error('a colour param is still flagged keyframable:false, so the inspector will not draw its ◆');
   });
 
+  test('554: picking a filter previews it on the canvas, and leaves the project alone', { item: '554' }, async function () {
+    /* Queue 554. Ezra: "When selecting filters it doesn't actually preview what it will look like when
+       you add them."
+       ⚠️ MEASURED FIRST, because the entry named two possible faults needing different fixes: all 30
+       tiles DO render their own thumbnail, and picking one changed ZERO pixels on the main canvas. The
+       tiles were never the problem — the canvas was.
+       ⚠️ NO NEW MECHANISM: the effects browser has previewed picks through `FM._fxPreview = { id, list }`
+       since queue 277, and a filter is just a named list of ordinary effects, so it flattens into the
+       same list. The two must not drift apart.
+       ⚠️ AND THE PROJECT MUST NOT BE TOUCHED. A preview that writes to the layer would reach history,
+       autosave and the export — the third assertion is the one that matters most. */
+    if (!FM.filters || !FM.filters.all) throw new Error('the filters registry is not reachable');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    /* ⚠️ THE TILES ARE BUILT WITHOUT THEIR LIVE THUMBNAILS, and that is the fix for a leak that has now
+       bitten three separate tests (LOOP rule 17). Opening the Filters tab mounts 30 generating canvases,
+       and the next test that compares an effect tile against its subject then reads them mid-bake and
+       reports six effects as "indistinguishable" — with nothing wrong in the effects at all. Four
+       different cleanups in the `finally` all failed with byte-identical numbers; **neutering the body
+       proved it was this test in one run**, which is the rule I had already written down.
+       Suppressing `mountFilter` is the honest fix rather than more cleanup: this test is about the CLICK
+       → preview wiring, the tiles and their handlers are built exactly as shipped, and the only thing
+       withheld is a subsystem it does not measure. */
+    const realMountFilter = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMountFilter) FM.fxThumbs.mountFilter = function () {};
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.7, shapeH: P.height * 0.7, fill: '#c05030' });
+      L.start = 0; L.duration = 4; L.effects = []; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(400);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('Effects');
+      await sleep(350);
+      if (FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+      await sleep(500);
+
+      const panel = document.getElementById('inspector-panel');
+      const tiles = [].slice.call(panel.querySelectorAll('.flt-tile[data-fltid]'));
+      if (tiles.length < 3) throw new Error('only ' + tiles.length + ' filter tiles rendered, so there is nothing to pick');
+      /* Checked HERE, not at the top: the seam is assigned when the filters panel BUILDS, so asking for
+         it before opening the tab reports it missing on a perfectly good build. That is what happened. */
+      if (typeof FM._filterPreviewStack !== 'function') throw new Error('FM._filterPreviewStack is missing after the filters tab built — filter picks have nothing to preview through');
+      const cv = document.getElementById('preview');
+      if (!cv || !cv.width) throw new Error('no preview canvas to measure');
+      const grab = () => { const c = offscreen(cv.width, cv.height); c.getContext('2d').drawImage(cv, 0, 0); return c.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; };
+      const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) { if (Math.abs(a[i] - b[i]) > 6 || Math.abs(a[i + 1] - b[i + 1]) > 6 || Math.abs(a[i + 2] - b[i + 2]) > 6) n++; } return n; };
+
+      /* ⚠️ THE BASELINE IS TAKEN WITH THE PANEL ALREADY OPEN. Opening it docks the sheet and RESIZES the
+         canvas, so a baseline grabbed before that compares two different canvases and reports a huge
+         difference that has nothing to do with filters. That cost one wrong reading. */
+      await sleep(250);
+      const base = grab();
+
+      tiles[2].click();
+      await sleep(700);
+      const changed = diff(base, grab());
+      if (!(changed > 500)) throw new Error('picking a filter changed ' + changed + ' pixels on the canvas — that is queue 554, the tile previews but his own picture does not');
+      if (!FM._fxPreview || !FM._fxPreview.list || !FM._fxPreview.list.length) throw new Error('the canvas changed but FM._fxPreview is empty — something else moved the picture, so this is measuring the wrong thing');
+      // THE ONE THAT MATTERS: a preview must not reach the project
+      if ((L.effects || []).length !== 0) throw new Error('picking a filter wrote ' + L.effects.length + ' effect(s) onto the layer — a preview that touches the scene reaches history, autosave and the export');
+
+      // …and un-picking must put the picture back exactly
+      tiles[2].click();
+      await sleep(700);
+      const back = diff(base, grab());
+      if (back !== 0) throw new Error('after un-picking, ' + back + ' pixels still differ from the untouched picture — the preview outlived the pick');
+      if (FM._fxPreview) throw new Error('FM._fxPreview survived un-picking every filter — the canvas would keep showing something the project does not contain');
+    } finally {
+      FM._fxPreview = null;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      /* ⚠️ STOP THE THUMBNAIL MACHINERY THIS TEST STARTED — third time this shape has bitten (LOOP rule
+         17). Opening the Filters tab mounts 30 live tiles; leaving them generating means the NEXT test
+         that compares a tile against its subject reads half-baked frames and reports six effects as
+         "indistinguishable", with nothing wrong in the effects at all. stopAll() halts the queue, then
+         remountLive() rebuilds cleanly at whatever state we are leaving in. */
+      if (realMountFilter) FM.fxThumbs.mountFilter = realMountFilter;
+      await sleep(250);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

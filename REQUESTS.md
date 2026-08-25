@@ -1,12 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.67
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.68
 >
-> **State:** v12.67, **957 tests green**, tree clean.
+> **State:** v12.68, **958 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.68 — picking a filter now shows it on YOUR canvas (#554).** The little tiles always previewed;
+> your actual picture never did. Pick one and the whole composition updates live, pick a second and they
+> stack, un-pick and it goes back exactly. Nothing is written to the project until you press Add.
 >
 > **✅ v12.67 — effect colours keyframe now (#555).** Gradient Overlay's Start and End have a ◆ like
 > everything else, and so does every other effect's colour. The animation machinery was already there —
@@ -19068,8 +19072,7 @@ re-opened #480, which I had marked done and had not fixed.
       **The black bar is probably the same cause** — `#app` parked off-origin leaves its background
       showing below the two panels — but check it rather than assuming.
 
-- [ ] **554 — Picking a filter does not preview what it will actually look like.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **554 — Picking a filter does not preview what it will actually look like.** (25 Aug.) ✅ v12.68
       His words, verbatim:
       > When selecting filters it doesn’t actually preview what it will look like when you add them
       **What he expects:** highlighting/selecting a filter in the browser shows it applied to HIS canvas
@@ -19079,6 +19082,28 @@ re-opened #480, which I had marked done and had not fixed.
       question is whether FILTERS specifically miss that, or whether the tile previews exist but the
       CANVAS does not update on selection. Those are different fixes; measure which before building.
       ⚠️ Related: #454 (presets are for effects only) and the filter-container work around queue 301.
+
+      ✅ **DONE v12.68 — and measuring first answered the entry's own question.** It named two possible
+      faults needing different fixes. **Measured: all 30 filter tiles DO render their own thumbnail, and
+      picking one changed ZERO pixels on the main canvas.** So the tiles were never the problem — the
+      canvas was.
+      **NO NEW MECHANISM.** The effects browser has previewed picks live since queue 277 through
+      `FM._fxPreview = { id, list }`, which the compositor reads and which touches nothing in the scene.
+      A filter is just a named list of ordinary effects, so it flattens straight into the same list.
+      Building a second preview path beside that one is how two things drift apart.
+      **Measured after: picking a filter changes 432,964 px, the preview carries that filter's 3 effects,
+      a second pick stacks to 5, and un-picking returns the canvas to the baseline EXACTLY (0 px differ).
+      The layer never gains an effect** — a preview that wrote to the scene would reach history, autosave
+      and the export, and that is the assertion that matters most.
+      🐛 **One wrong reading of my own, worth recording:** the first measurement said the canvas did NOT
+      return on un-pick. The baseline had been grabbed BEFORE opening the panel, which docks the sheet and
+      **resizes the canvas** — so it was comparing two different canvases. Same class of mistake as #540's
+      control. Baseline taken with the panel already open, and the test says why.
+      ⚠️ **THE TEST SUPPRESSES `mountFilter` FOR ITS DURATION, and this is the third test to need it.**
+      Opening the Filters tab mounts 30 generating canvases, and the next test that compares an effect
+      tile against its subject then reads them mid-bake and fails with six "indistinguishable" effects.
+      **Four different cleanups in the `finally` all failed with byte-identical numbers; neutering the body
+      proved it in one run** — the rule I had already written down after queue 528 and 538. LOOP rule 17.
 
 - [x] **555 — Every effect's COLOURS should be keyframable, Gradient Overlay included.** (25 Aug, phone screenshot at v12.44.) ✅ v12.67
       His words, verbatim:

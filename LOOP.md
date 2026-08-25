@@ -141,7 +141,35 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.64, 954 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.67, 957 tests green, tree clean, `HEAD == ssh/main`.**
+
+**⚡ BATCHED SHIPPING (rule 15). Nine releases this stretch — v12.59 → v12.67 — closing #529, #530, #531,
+#533, #534, #536, #537, #538, #540, #549, #551, half of #550, #555, and a guard for #553.**
+
+⚠️ **THE RECURRING FAILURE THIS STRETCH, in four different disguises: I trusted a thing instead of
+checking it.** Worth reading before the next tick, because each one LOOKED finished:
+· **#540** — `layer.x` is not what moves a layer (`layer.transform.x` is). `evalProp` returns the right
+  numbers for `layer.x` and the picture never moves, so motion blur correctly read "no movement" and I
+  nearly concluded the algorithm had plateaued. **Four wrong measurements.** And my control compared the
+  smear WIDTH at two times, which is identical whether it moved or not — **a control that cannot fail is
+  not a control.**
+· **#538** — a listener held on `#preview`, then on `#canvas-wrap`, silently never fired. That area is
+  rebuilt, so a node captured at load is dead by the time the feature runs — **and that is the only state
+  it runs in.** Document-level capture is the answer.
+· **#549** — put the fix inside `renderScene`, which the EXPORTER draws through: a 2s clip came out 61
+  frames. **The suite caught it in one line.** The rule belongs on the preview call site.
+· **#555** — flipping `keyframable: false` → `true` made the ◆ appear and do NOTHING, because an animated
+  colour is an object and 39 kernels read colours as strings. **A ◆ that does nothing is queue 529's
+  complaint**, and it would have shipped looking finished. Measure PIXELS, not flags.
+· **#539** — concluded "complete no-op, two walls not involved" from a BOUNDING BOX. Instrumenting said
+  the opposite: it runs fully and cancels to identity. **A bbox cannot see a deformation that preserves
+  extents.**
+
+**📌 PARKED ON HIS PICK, NOT SKIPPED:** #524 (A/B/C), #564 (A/B/C), #215 (does a message appear?),
+renaming "Stroke Colour", **#539's corner** (should a corner squash the ball flatter, or hold it rigid?),
+and **#550 clause 2** (which line is "cut short where the arrows are" — the divider and the ≡ are at
+opposite ends of the row, so it cannot be guessed).
+**📌 #553's black bar** is untouched — never seen it, and the push guard is a containment, not a fix.
 
 **⚡ BATCHED SHIPPING IS ON (rule 15), on his instruction.** Six releases this stretch — v12.59 → v12.64 —
 closing **#529, #530, #531, #533, #534, #536, #537, #538, #540**. Nine items, ~20 clauses.
@@ -371,8 +399,7 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #539** (Squish — start from the measurements above), then #541 onward. **#524, #564, #215 and the
-"rename Stroke Colour?" question are parked on HIS pick, not skipped.**
+**NEXT: #554** (filters do not preview on the canvas), then #556 onward.
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or

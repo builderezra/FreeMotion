@@ -1539,6 +1539,40 @@ window.FM = window.FM || {};
       }
     };
 
+  /* ⚠️ PICKING A FILTER NOW SHOWS IT ON HIS CANVAS (queue 554). Ezra: *"When selecting filters it
+     doesn't actually preview what it will look like when you add them"*.
+     MEASURED FIRST, because the entry named two different possible faults and they need different fixes:
+     all 30 filter tiles DO render their own thumbnail (`mountFilter`), and picking one changed **0
+     pixels** on the main canvas. So the tiles were never the problem — the CANVAS was.
+     ⚠️ NO NEW MECHANISM. The effects browser has previewed picks live since queue 277 through
+     `FM._fxPreview = { id, list }`, which the compositor reads and which touches nothing in the scene —
+     no history, no autosave, no export. A filter is just a named list of ordinary effects, so it flattens
+     straight into the same list. Building a second preview path beside that one is exactly how two
+     things drift apart.
+     Cleared on commit and on leaving the tab, for the same reason the browser clears it: a preview that
+     outlives the picking is a canvas showing something the project does not contain. */
+  function filterPreviewStack() {
+    const out = [];
+    _fltPicks.forEach(id => {
+      const f = FM.filters && FM.filters.get ? FM.filters.get(id) : null;
+      (f && f.effects || []).forEach(c => {
+        if (!c || !c.type) return;
+        const inst = FM.fxRegistry.makeInstance(c.type);
+        if (!inst) return;
+        if (c.params) Object.assign(inst.params, c.params);
+        out.push(inst);
+      });
+    });
+    return out;
+  }
+  function restartFilterPreview() {
+    const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    if (!layer) { FM._fxPreview = null; if (FM.requestRender) FM.requestRender(); return; }
+    FM._fxPreview = _fltPicks.length ? { id: layer.id, list: filterPreviewStack() } : null;
+    if (FM.requestRender) FM.requestRender();
+  }
+  FM._filterPreviewStack = filterPreviewStack;   // suite seam
+
     const applyFilter = (id) => {
       const f = FM.filters.get(id);
       if (!f) return { ok: false, why: 'gone' };
@@ -1582,6 +1616,7 @@ window.FM = window.FM || {};
           const i = _fltPicks.indexOf(f.id);
           if (i >= 0) _fltPicks.splice(i, 1); else _fltPicks.push(f.id);
           paintFilterPicks();
+          restartFilterPreview();   // queue 554 — show it on HIS canvas, not just on the tile
         });
       /* THE STAR (clauses 3 and 4). On the tile rather than in a menu: it is a per-filter thing he can
          change while looking at the grid, and a menu would be two taps to express a preference.
@@ -1630,13 +1665,16 @@ window.FM = window.FM || {};
     const bar = el('div', 'fxb-commit flt-commit hidden');
     const clear = el('button', 'fxb-commit-clear', 'Clear');
     clear.type = 'button';
-    clear.addEventListener('click', () => { _fltPicks = []; paintFilterPicks(); });
+    clear.addEventListener('click', () => { _fltPicks = []; paintFilterPicks(); restartFilterPreview(); });
     const go = el('button', 'fxb-commit-go', 'Add 1 filter');
     go.type = 'button';
     go.addEventListener('click', () => {
       if (!_fltPicks.length) return;
       const picks = _fltPicks.slice();
       _fltPicks = [];
+      /* The previewed copies go BEFORE the real ones land, or the layer briefly carries both — the same
+         ordering the effects browser's commitPicks uses, and for the same reason. */
+      FM._fxPreview = null;
       let added = 0, dropped = 0; const failed = [];
       // IN THE ORDER HE PICKED THEM. The badges are numbered, so applying them in any other order would
       // make the numbers a lie — and filters stack, so the order changes the result.
