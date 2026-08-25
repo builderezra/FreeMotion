@@ -144,8 +144,15 @@ fi
 ALLDONE="$(python3 - "$F" <<'PYA'
 import sys, re, io
 lines = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
-out, cur, clauses = [], None, []
+out, cur, clauses, body = [], None, [], []
 def flush():
+    # AN ENTRY MAY SAY WHY IT IS STILL OPEN, and then it is not a miss — this banner asks for exactly
+    # that ("say in it what is left"), so it has to honour the answer or it argues with itself forever.
+    # #418 has both clauses built and stays open for one thing only: his eye on a reference image that
+    # never reached me. That is not work, and it is not something to tick away either.
+    txt = (cur[1] if cur else '') + chr(10) + chr(10).join(body)
+    if cur and re.search(r'REMAIN(?:S)? OPEN|\(partial\)|NOT STARTED', txt, re.I):
+        return
     if cur and clauses and all(clauses):
         out.append('%d:%s' % (cur[0], cur[1][:100]))
 for i, ln in enumerate(lines, 1):
@@ -153,9 +160,10 @@ for i, ln in enumerate(lines, 1):
     if m:
         flush()
         cur = (i, ln) if m.group(1) == ' ' else None
-        clauses = []
+        clauses = []; body = []
         continue
     if cur:
+        body.append(ln)
         c = re.match(r'^\s+\d+\. \[( |x)\] ', ln)
         if c: clauses.append(c.group(1) == 'x')
 flush()
@@ -180,6 +188,60 @@ fi
 # Measured before shipping: across the whole file this matches exactly ONE entry, so it does not need to
 # be clever to avoid crying wolf. If it ever starts matching many, that is the signal to add nuance,
 # not now.
+# ── DONE ENTRIES HIDING AN UNTICKED CLAUSE (rule 15's end-of-batch audit, made structural 26 Aug) ──
+# His sharpest line, and it is fair: "u constantly dont do stuff i ask or just fail at it and dont even
+# realise". The 25 Aug audit found #418 and #352 ticked DONE with unticked clauses inside — invisible to
+# the top-level checkbox this script reads, which is exactly how half a request goes missing. LOOP.md
+# rule 15 says to re-run that audit at the end of every batch; a thing to re-run by hand is a thing to
+# forget, so it runs here, every tick.
+# ⚠️ IT IGNORES CLAUSES THAT SAY WHY THEY ARE UNTICKED. #277's last clause is his own word
+# ("potentially"), and #426's is "unticked until he confirms" — both deliberate, both documented. A
+# banner that fires on those every single tick trains you to ignore the banner, which is worse than not
+# having one.
+HALFDONE="$(python3 - "$F" <<'PYH'
+import sys, re, io
+txt = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
+CLAUSE = re.compile(r'^\s*\d+[a-z]?\. \[ \]')
+# a clause that explains itself is not a miss — it is a decision
+HEDGE = re.compile(r'\(idea|potentially|long term|eventually|one day|until (he|you) confirm|'
+                   r'unticked until|his call|your call|held\b', re.I)
+out, cur, body = [], None, []
+def flush():
+    if not cur: return
+    # A CLAUSE IS A BLOCK, NOT A LINE. The reason a clause is deliberately unticked is almost always
+    # written on the wrapped lines under it — checking only the first line re-flagged #426 for a note
+    # sitting two lines below the checkbox.
+    live = []
+    for i, c in enumerate(body):
+        if not CLAUSE.match(c): continue
+        blk = [c]
+        for nxt in body[i + 1:]:
+            if CLAUSE.match(nxt) or not nxt.startswith('    '): break
+            blk.append(nxt)
+        if not HEDGE.search(' '.join(blk)):
+            live.append(c)
+    if live:
+        out.append('%d:%s' % (cur[0], cur[1][:96]))
+        for c in live[:3]:
+            out.append('      %s' % c.strip()[:110])
+for i, ln in enumerate(txt, 1):
+    if re.match(r'^- \[( |x)\] ', ln):
+        flush(); cur = (i, ln) if ln.startswith('- [x]') else None; body = []
+    elif cur is not None:
+        body.append(ln)
+flush()
+print('\n'.join(out))
+PYH
+)"
+if [ -n "$HALFDONE" ]; then
+  echo "######################################################################"
+  echo "## TICKED DONE, BUT A CLAUSE INSIDE IS STILL UNTICKED — half a request may be missing:"
+  echo "$HALFDONE"
+  echo "## Either tick the clause, or say in it why it is deliberately left (a reason is not a miss)."
+  echo "######################################################################"
+  echo
+fi
+
 CLAIMSFIXED="$(python3 - "$F" <<'PYF'
 import sys, re, io
 lines = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
@@ -192,6 +254,14 @@ def flush():
     # entry has to keep the old claim as history, so the honest signal is the RE-OPENED word.
     txt = (cur[1] if cur else '') + '\n' + '\n'.join(body)
     if cur and re.search(r'RE-?OPENED', txt, re.I):
+        return
+    # A PARTIAL IS NOT A MISS EITHER (26 Aug). A multi-clause entry can legitimately ship one clause and
+    # stay open for the rest — #539 shipped its corner fix at v12.72 with three clauses still to do, and
+    # the "DONE v12.72" inside it made this guard demand the whole entry be ticked. Its advice would have
+    # been to close a request that is three-quarters outstanding, which is the opposite of what this
+    # file is for. The entry has to SAY it, so the honest signal is the words already used for it.
+    # (No apostrophes in here: this heredoc sits inside a command substitution and one breaks the parse.)
+    if cur and re.search(r'REMAIN(?:S)? OPEN|\(partial\)|NOT STARTED', txt, re.I):
         return
     if cur and re.search(r'\u2705 \*\*(?:FIXED|DONE|BUILT|SHIPPED) v[0-9]', txt):
         out.append('%d:%s' % (cur[0], cur[1][:100]))

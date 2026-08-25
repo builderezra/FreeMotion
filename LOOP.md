@@ -20,8 +20,14 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
    touched (a missed buster reads as "the fix does not work" — it has), add a plain-language
    `POLISH-LOG.md` entry, tick the `REQUESTS.md` entry with its version, then
    `tools/ship.sh "message"`. Never commit around ship.sh.
-6. **Suite in the FOREGROUND with `timeout: 500000`** — and **`timeout: 900000` for `tools/ship.sh`**,
+6. **Suite in the FOREGROUND with `timeout: 500000`** — and **`timeout: 600000` for `tools/ship.sh`**,
    which runs the suite twice (desktop + 380px) on any shipped source change. Never background-and-poll.
+   ⚠️ **`900000` DOES NOT WORK and this rule used to say it did.** The Bash tool caps at 600000 and
+   silently clamps, so asking for 900s gets 600s — the rule was telling every session to use a number
+   that cannot happen. 600000 is the real maximum, and at 964 tests a double run plus the push still
+   sometimes exceeds it. **When ship.sh lands in the background, do NOT re-run it**: read its output
+   file and verify with `git rev-parse HEAD` against `ssh/main`. Re-running costs two more four-minute
+   suites for nothing. (CLAUDE.md has said this for days; this file contradicted it.)
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.
@@ -141,9 +147,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.72, 963 tests green, tree clean, `HEAD == ssh/main`, live at v12.72.**
+**v12.73, 964 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.72, closing #556, #557, #558, #524, #474 and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.73, closing #556, #557, #558, #524, #474, #548 and #539 clause 4.**
+
+⚠️ **CHECK RULE 11 BEFORE MEASURING ANYTHING THAT MOVES — I lost four rounds to it on #548.** Readings
+said every animation was frozen at its first frame and every card sat 6px out. **All of it was the pane,
+not the code:** `requestAnimationFrame` does not fire in a tab that is not fronted — a control loop
+returned **zero frames in 500ms and hung outright**. The tell was the settings cog's `cv-grow`, which
+predates the work entirely, also reporting `running` after 600ms: when something you did not touch
+measures broken, the instrument is broken. **Front the tab (`tabs_select`) and run the control first.**
+It did find a real bug, so the round was not wasted — a retry loop and a teardown watcher were both
+rAF-driven and would never have run in a background tab.
 
 🔒 **THE ONE THAT MATTERS FOR THE NEXT TICK: `ship.sh` NOW REFUSES TO WORK THE LIST OUT OF ORDER.**
 I broke the oldest-first rule twice in one day — v12.69 shipped #556/#557/#558 with six lower items

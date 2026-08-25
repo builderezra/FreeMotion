@@ -15107,7 +15107,12 @@ wait for them to report back."*
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ✅ **DONE v11.73.**
+      ✅ **BOTH CLAUSES BUILT (v11.73). The entry REMAINS OPEN for one reason only, stated plainly:
+      I have never seen the picture you were asking me to match.** Your images were not reaching the
+      inbox — a text file cannot carry one — so the icons were built from your written description, and
+      whether they actually look like your reference is the one thing I cannot check. **Paste the image
+      into the chat and I will compare it properly; or say "close it" and I will.** There is no
+      outstanding WORK here, only that check.
       ⚠️ **The STATUS line said "waiting on your answer" and that was STALE — the image arrived on 21 Aug**
       and is described in this entry in enough detail to build from. Fifth stale "needs you" this week.
       **Clause 1 built from that description:** a ~300° ring with a 60° gap at the top and a solid
@@ -15132,7 +15137,11 @@ wait for them to report back."*
       > I want you to try and make the undo and redo buttons look more like this
       > With the undo and redo buttons request I just did make the lines thinner tho so it matches everything else on that row
       **Clauses:**
-      1. [ ] Redraw undo/redo to match the reference.
+      1. [x] Redraw undo/redo to match the reference. **BUILT v11.73** — the ring-and-head pair described
+             above, verified numerically (both centre at 11.97/12.03 against a 12/12 target, span
+             15.7x15.7, inside the box). The box was left unticked for months while the work above it said
+             DONE, which is the exact shape the end-of-batch audit exists to catch — so it is ticked, and
+             what is actually outstanding is written below instead of being implied by an empty checkbox.
       2. [x] ✅ **ALREADY TRUE — checked 20 Aug, not fixed.** `#btn-undo` and `#btn-redo` are drawn at
              `stroke-width="1.8"` (index.html:429-430), which is exactly what `#btn-toend` and the rest of
              the transport row use. "Make the lines thinner so it matches everything else" is satisfied by
@@ -15404,7 +15413,9 @@ wait for them to report back."*
       **Clauses:**
       1. [ ] The dots stay inside the panel at every panel height. *(v10.65 makes it structurally impossible; unticked until he confirms.)*
       2. [ ] They do not move down as the panel grows — they are the panel's own footer, not the last thing
-             in a list that grows past it.
+             in a list that grows past it. *(Same reason as clause 1: unticked until he confirms. The
+             v10.65 fix covers both and was measured across three panel heights, but it was never
+             reproduced, so ticking would claim a proof that does not exist.)*
       🔗 **Exactly the fault v10.19 fixed for the shortcuts panel and queue 275 fixed for the phone sheet**,
       both times for the same reason: a footer that is a CHILD of the scroller can only ever approximate a
       pinned one, and a flex child with the default `min-height: auto` refuses to shrink below its content
