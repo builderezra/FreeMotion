@@ -9869,7 +9869,21 @@ better still, keep working inside the turn rather than parking work for a later 
       delay deliberately and this one is a complaint about a delay.
 
 
-- [x] **352 — ✅ **DONE v11.31.** Clean up this file: get rid of what is not needed.** (17 Aug.) His words, verbatim:
+- [ ] **352 — ✅ **DONE v11.31.** Clean up this file: get rid of what is not needed.** (17 Aug.) His words, verbatim:
+      **STATUS: 📌 NOTE — nothing to build**
+      ⚠️ **RE-OPENED 25 Aug BY AUDIT, and this is the bookkeeping failure the file exists to prevent.**
+      He asked me to *"look through everything ive said just to double check every request and not miss
+      anything"*. Six entries were marked **DONE while carrying an unticked clause** — invisible to
+      `next.sh`, which reads the top-level checkbox only. Checked all six by hand:
+      · **#501** — clauses read "it is accent-coloured now"; that is STALE text describing the state
+        BEFORE the fix. **Verified in the app: the switch is rgb(233,244,247), i.e. white.** Genuinely done.
+      · **#426** — explicitly *"unticked until he confirms"*. Correctly waiting on him.
+      · **#277** clause 10 — an idea he said *"potentially"* about. Optional, not missed.
+      · **#346** — the two unticked lines are the QUOTED TEXT of the blocks removed, not open work.
+      · **#418 and this one (#352)** — genuinely unfinished. Both re-opened.
+      **Clause 1 here is the real one: closed items were never moved to `REQUESTS-DONE.md`.** The file is
+      **551 entries, 490 of them closed** — so 89% of what anyone opens is history. Clauses 2 and 3 (a
+      STATUS line per entry, sorted oldest-first) ARE done and are ticked.
       *"Do you ever waste time going through the project file trying to find what you need? if so feel
       free to spend some time cleaning it up and getting rid of un needed stuff, before you do tho, ima
       compact the chat, so when you finish up with waht ur doing just lmk and then compact the chat and
@@ -14957,7 +14971,8 @@ wait for them to report back."*
       will be the text saying tap here to add layer"). The empty-state panel is likewise left alone: it is
       the big centred + from #354, which he asked for and likes.
 
-- [x] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+- [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **DONE v11.73.**
       ⚠️ **The STATUS line said "waiting on your answer" and that was STALE — the image arrived on 21 Aug**
       and is described in this entry in enough detail to build from. Fifth stale "needs you" this week.
@@ -18138,7 +18153,7 @@ re-opened #480, which I had marked done and had not fixed.
       phone width and asserts it is not in inspector mode.
 
 - [ ] **529 — Multi-selecting effects worked once and is broken again.** (24 Aug, phone screenshot at v12.25.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > You got the effects I have selected working at one point but now they aren't again :(
       **What the shot shows:** the Colouring category with eight effects carrying blue numbered badges —
@@ -18151,6 +18166,38 @@ re-opened #480, which I had marked done and had not fixed.
       order they were tapped in.
       ⚠️ Reproduce the whole gesture: tap several, then Done, and check that **every** one lands on the
       layer, in the order shown.
+
+      🔬 **VERIFIED END TO END AT v12.58 AND THE MECHANISM IS SOUND — recorded in full so nobody repeats
+      it.** Every path measured at 380px, on a shape layer AND on a real raster media layer:
+      | path | result |
+      |---|---|
+      | tap 5 tiles | badges 1–5, `FM._fxPicks()` in tap order, bar reads "Add 5 effects" |
+      | **live preview** while picking | canvas changes **37% of the frame**; `_fxPreview.list` grows 1→2→3 |
+      | commit bar "Add N effects" | all 5 land, **in tap order**, browser closes |
+      | inside a category → **Done** | all 4 land in order |
+      | inside a category → **‹ Back** | picks KEPT, commit bar still showing — nothing lost |
+      | **X** | commits (does not discard) |
+      | **switching to the Filters tab** | commits — all 3 landed |
+      | on a real image layer | each pick changes 50–61k px; all 3 land |
+      ⚠️ **His "8 Invert before 7 Glow" is NOT a bug.** The badge is TAP order, not grid order — he tapped
+      Glow before Invert. The grey star on Saturation is the favourite star, unrelated to picking.
+      ⚠️ **And the exits were already fixed BEFORE he reported this.** `exitBrowser` — every exit means
+      Done — landed at **v10.33 on 19 Aug**; his report is v12.25 on 24 Aug. So "it worked at one point
+      and now it doesn't" is not the exits regressing.
+      🎯 **THE ONE EXPLANATION THAT SURVIVES, and it is a real defect:** v10.32 measured every Colouring
+      effect and found **four that change ZERO pixels at their own defaults** — `darkglow`,
+      `replacecolor`, `hslbands`, `matchgrade` — because each needs an input the default does not supply
+      (a colour to replace, a grade to match, a band to move, a threshold to cross). The suite asserts
+      that list exactly (`KNOWN_NOOP`, tests/tests.js:1095). **Nothing in the browser marks them.** So
+      picking one lands it on the layer and changes nothing on screen, which is indistinguishable from
+      being ignored — *"the effects I have selected aren't working"*, exactly.
+      **NEXT MOVE: mark those four in the browser** so a pick that needs a setting says so. That is a
+      label, not new defaults — the "give filters better starting values" work is the HELD item he asked
+      me not to start, and this does not touch it.
+      ⚠️ **Design request → #545: he must see the marker before it ships.** Three honest options (a dot, a
+      short "needs a setting" line under the name, or a dimmed tile) drawn at 380px and sent for a pick.
+      **STAYS OPEN** — the mechanism is proven working, so closing it on "cannot reproduce" would be the
+      #528 mistake: that is a statement about the states I tried, not about his.
 
 - [ ] **530 — Make the third canvas background swatch a green-screen green.** (24 Aug, phone screenshot at v12.25, circled.)
       **STATUS: 🟢 READY — nothing is stopping this**
