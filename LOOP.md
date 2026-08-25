@@ -102,7 +102,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.42, 929 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.43, 930 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.43 fixed #514** (taken ahead of #513, same feature: #514 is an unusable-feature bug, #513 is a
+layout redesign needing drawn options). Strokes after the first called `refitPathLayer` — pure data
+mutation — plus a timeline rebuild, and **never asked the canvas to repaint**; the overlay is wiped on
+commit, so the stroke was on screen nowhere until Done. One line: `FM.requestRender()`.
+⚠️ **MY FIRST TEST WAS DEAD AND THE MUTATION CAUGHT IT.** I counted lit pixels via my own
+`FM.renderScene` call — which repaints regardless of what the app did, i.e. measuring the MODEL. **The
+data was always right here; that is why the bug survived.** Rewritten to watch the repaint REQUEST. Its
+control then caught a second flaw: `addPathLayer` calls the LOCAL `refreshAll()`, invisible to a spy on
+`FM.refreshAll`, so counting moved to the compositor.
+**📝 Logged this tick: 549** (layer invisible at its exact end — inclusive/exclusive boundary; CHECK THE
+EXPORTER AGREES), **550/551** (add-row outline should stop at the divider; row should end at project
+end), **552** (continue a drawing + progression slider + keyframes = write-on).
+**NEXT: #513** (sketching menu PC layout — design, needs options) or **#549**, which is a sharp bug.
+⚠️ #508 still needs a visible preview pane (rule 11).
 **#511 IS CLOSED (v12.38–v12.42).** "Inconsistent and random" was THREE bugs, all found by DRIVING the
 drag through orderings rather than reading it: two ceilings 82px apart (v12.38); a raised menu stuck
 floating with its handle hidden on selection (v12.39); and **either handle continuing to resize on stray

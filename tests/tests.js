@@ -28144,6 +28144,107 @@
     }
   });
 
+  test('the SECOND freehand stroke appears as soon as you lift the pen (queue 514)', { item: '514' }, async function () {
+    /* Ezra, twice: "when you draw a second stroke, it just doesn't show up until you actually finish the
+       drawing so you can't see what you're drawing, and it's just really bugging, broken, and bad."
+       The asymmetry was the bug. The FIRST stroke of a session goes through `FM.addPathLayer`, which ends
+       with `refreshAll()` and therefore repaints. Every stroke after it takes the refit branch, and
+       `refitPathLayer` is pure data mutation — it rewrites `layer.subs` and returns. The timeline was
+       told; the canvas never was. The overlay the live stroke was drawn on is then cleared, so on lifting
+       the pen the stroke vanished from the overlay without having been painted anywhere else.
+       ⚠️ **WHAT THIS ASSERTS IS THE REPAINT REQUEST, AND THE FIRST VERSION OF THIS TEST DID NOT — it was
+       DEAD and the mutation proved it.** I counted lit pixels by calling `FM.renderScene` into a canvas
+       of my own, which renders the scene fresh whatever the app did or did not ask for. So it measured
+       the MODEL wearing a picture's clothing, and passed happily with the fix deleted.
+       The data was always correct here — that is the whole reason this bug survived so long. The only
+       thing that was ever wrong is that nobody told the screen, so that is what has to be watched. */
+    if (!FM.startDraw || !FM.drawTool) throw new Error('the draw tool is not reachable from the suite');
+    const saved = FM.scene.layers.slice();
+    const savedT = { w: FM.scene.project.width, h: FM.scene.project.height };
+    let realRR = null, realRS = null;
+    try {
+      FM.scene.project.width = 320; FM.scene.project.height = 320;
+      FM.scene.layers.length = 0;
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(60);
+
+      /* ⚠️ COUNTED AT TWO POINTS, AND BOTH ARE NEEDED — the first attempt watched only `FM.refreshAll`
+         and its own control caught that:
+           · the FIRST stroke repaints through `addPathLayer`, which calls app.js's LOCAL `refreshAll()`.
+             `FM.refreshAll` is the same function, but calling it internally bypasses any spy on the
+             property — so that path is invisible from out here and has to be watched at the compositor;
+           · the SECOND stroke (the fix) calls `FM.requestRender`, which schedules through
+             requestAnimationFrame — and rAF does not fire when this suite runs with the page hidden, so
+             waiting for the paint itself would prove nothing either way. The CALL is the signal.
+         `counting` is gated so the test's own renderScene measurements are not mistaken for the app
+         repainting itself. */
+      realRR = FM.requestRender; realRS = FM.renderScene;
+      let repaints = 0, counting = false;
+      FM.requestRender = function () { if (counting) repaints++; return realRR && realRR.apply(this, arguments); };
+      FM.renderScene = function () { if (counting) repaints++; return realRS.apply(this, arguments); };
+
+      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 320;
+      const ctx = cv.getContext('2d');
+      const inkCount = () => {
+        ctx.clearRect(0, 0, 320, 320);
+        FM.renderScene(ctx, FM.scene, 0);
+        const d = ctx.getImageData(0, 0, 320, 320).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 250) n++;
+        return n;
+      };
+
+      /* Drive the tool's own commit path rather than synthesising pointer events over a canvas the
+         suite cannot see — the defect is in what commitStroke does after the points are in, and that is
+         reached identically either way. */
+      FM.startDraw('freehand');
+      const stroke = (x0, y0, x1, y1) => {
+        const pts = [];
+        for (let i = 0; i <= 10; i++) pts.push([x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10]);
+        FM.drawTool.points = pts;
+        FM.drawTool.color = '#ffffff';
+        FM.drawTool.stroke = 10;
+        return FM._drawCommitStroke ? FM._drawCommitStroke() : null;
+      };
+      if (!FM._drawCommitStroke) throw new Error('FM._drawCommitStroke is not exposed — the suite cannot reach the commit path this test is about');
+
+      counting = true; repaints = 0;
+      stroke(40, 40, 280, 40);
+      counting = false;
+      await sleep(50);
+      const paintedOne = repaints, afterOne = inkCount();
+      /* CONTROLS. The fixture has to be drawing at all, and the FIRST stroke has to repaint — that path
+         goes through addPathLayer/refreshAll and always did, so if it ever stops the comparison below is
+         measuring two broken things instead of one. */
+      if (afterOne < 200) throw new Error('the FIRST stroke drew only ' + afterOne + ' lit pixels — the fixture is not drawing at all, so nothing below means anything');
+      if (paintedOne < 1) throw new Error('the first stroke asked for no repaint either — the whole commit path is broken, not just the second stroke');
+
+      counting = true; repaints = 0;
+      stroke(40, 200, 280, 200);
+      counting = false;
+      await sleep(50);
+      const paintedTwo = repaints, afterTwo = inkCount();
+
+      /* THE ASSERTION. Committing a stroke wipes the overlay it was live-drawn on, so if nothing repaints
+         the canvas the stroke is on screen nowhere at all — which is exactly "you can't see what you're
+         drawing". */
+      if (paintedTwo < 1)
+        throw new Error('the SECOND stroke updated the drawing but never asked the canvas to repaint — the overlay it was drawn on is cleared on commit, so it is now visible nowhere until something else forces a render. That is "it doesn\u2019t show up until you actually finish".');
+      // …and the model must genuinely hold both strokes, or the repaint is repainting nothing new.
+      if (afterTwo < afterOne * 1.5)
+        throw new Error('the second stroke did not reach the drawing at all: ' + afterTwo + ' lit pixels against ' + afterOne + ' after the first');
+    } finally {
+      if (realRR) FM.requestRender = realRR;
+      if (realRS) FM.renderScene = realRS;
+      if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = savedT.w; FM.scene.project.height = savedT.h;
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('a resizer whose pointer is lost stops resizing (queue 511 clause 2)', { item: '511' }, async function () {
     /* Ezra asked for the drag to be swept for every way it can break, not spot-fixed. This came out of
        driving it rather than reading it, and it is the same shape as queue 541's frozen timeline: if the

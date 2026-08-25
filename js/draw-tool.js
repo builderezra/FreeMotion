@@ -296,6 +296,19 @@ window.FM = window.FM || {};
     } else if (FM.refitPathLayer) {
       FM.refitPathLayer(layer, sessionSubs);
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // the thumbnail has to follow the drawing
+      /* ⚠️ AND THE CANVAS. THIS LINE IS THE WHOLE OF QUEUE 514 (queue 514). Ezra, twice: "when you draw a
+         second stroke, it just doesn't show up until you actually finish the drawing so you can't see
+         what you're drawing, and it's just really bugging, broken, and bad".
+         The asymmetry is the bug. The FIRST stroke of a session goes through `FM.addPathLayer`, which
+         ends with `refreshAll()` and therefore repaints — so stroke one appears. Every stroke after it
+         takes this branch, and `refitPathLayer` is pure data mutation: it rewrites `layer.subs` and
+         returns. The timeline was told; the canvas never was. And the line below clears the overlay the
+         live stroke was being drawn on, so the moment you lift the pen the stroke vanishes from the
+         overlay and has not yet been painted anywhere else — invisible until something unrelated forced
+         a render, which is what "until you actually finish" was.
+         The undo path at the bottom of this file already did both (`refreshAll` + `requestRender`), which
+         is why undoing a stroke redrew correctly while drawing one did not. */
+      if (FM.requestRender) FM.requestRender();
     }
     t.points = [];
     // Committing a layer SELECTS it, and on a phone a selection opens the inspector sheet over the
@@ -750,6 +763,11 @@ window.FM = window.FM || {};
    * sketching menu when you load back in and if you load another project it's also doing the drawing
    * thing still". Both halves are that one cause. See home.js's openProject. */
   FM.drawTool._stop = stop;
+  /* Suite seam (queue 514). The defect lived in what commitStroke does AFTER the points are in — it
+     updated the model and the timeline and never repainted the canvas — so the test has to reach this
+     function directly. Synthesising pointer events over a canvas the suite cannot see would exercise
+     the input plumbing rather than the thing that was broken. */
+  FM._drawCommitStroke = commitStroke;
   FM.startDraw = function (mode, opts) {
     /* THE RESET IS GONE (v8.01, queue 165.3). Ezra: "another option that lets you grab the screen and
      * zoom in or out so you can do more detailed drawing."

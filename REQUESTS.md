@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.42
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.43
 >
-> **State:** v12.42, **929 tests green**, tree clean.
+> **State:** v12.43, **930 tests green**, tree clean.
+>
+> **✅ v12.43 — YOU CAN SEE WHAT YOU ARE DRAWING AGAIN (#514).** The second and every later stroke now
+> appears the moment you lift the pen. One missing line: strokes after the first updated the drawing and
+> the timeline thumbnail but never asked the canvas to repaint, and the overlay they were drawn on is
+> wiped on commit — so they were on screen nowhere until you pressed Done.
+>
+> **📝 Four new ones logged: 549** (a layer vanishes at its exact last frame — your two screenshots are
+> the proof), **550** and **551** (the add-layer row's outline and where it should end), **552** (continue
+> a drawing + a progression slider so it animates itself on).
 >
 > **✅ #511 IS FULLY DONE (v12.38–v12.42), and "inconsistent and random" was THREE separate bugs** — two
 > different drag ceilings 82px apart, a raised menu that got stuck with its handle hidden, and a handle
@@ -17456,8 +17465,23 @@ re-opened #480, which I had marked done and had not fixed.
       arrangement. Check whether the canvas is also mis-sized — the drawing surface looks like it may extend
       far below the visible image.
 
-- [ ] **514 — 🔴 Drawing: the SECOND stroke does not appear until you finish. You cannot see what you are drawing.** (24 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **514 — 🔴 Drawing: the SECOND stroke does not appear until you finish. You cannot see what you are drawing.** (24 Aug.)
+      ✅ **The asymmetry was the bug.** The FIRST stroke of a sketch goes through `addPathLayer`, which ends
+      with `refreshAll()` and therefore repaints — so stroke one appeared. Every stroke after it takes a
+      different branch, and `refitPathLayer` is pure data mutation: it rewrites the drawing and returns.
+      The timeline was told (the thumbnail updated); **the canvas never was.** And committing a stroke
+      wipes the overlay it was live-drawn on, so the moment you lifted the pen it vanished from the
+      overlay without having been painted anywhere else — invisible until something unrelated forced a
+      render, which is what "until you actually finish" was.
+      The undo path a few lines below already called both `refreshAll` and `requestRender`, which is why
+      UNDOING a stroke redrew correctly while DRAWING one did not.
+      ⚠️ **MY FIRST TEST FOR THIS WAS DEAD AND THE MUTATION CAUGHT IT.** I counted lit pixels by rendering
+      the scene into a canvas of my own — which repaints whatever the app did or did not do, so it was
+      measuring the MODEL wearing a picture's clothing, and passed happily with the fix deleted. **The data
+      was always correct here; that is the entire reason this bug lasted.** The test now watches for the
+      repaint request itself. Its own control then caught a second flaw: `addPathLayer` calls app.js's
+      LOCAL `refreshAll()`, so spying on `FM.refreshAll` never sees stroke one — the count had to move to
+      the compositor.
       His words, verbatim:
       > Also, the sketching menu is still broken on everything where... when you draw a second stroke, it just doesn't show up until you actually finish the drawing so you can't see what you're drawing, and it's just really bugging, broken, and bad, and just fix it, please.
       **"on everything" — every platform, not just PC.** This is the functional half of #513 and much worse
@@ -18045,3 +18069,52 @@ re-opened #480, which I had marked done and had not fixed.
       shipping any of it. The tail shape and the notepad animation are both taste calls.
       ⚠️ Check what each of the four currently does first — the cog is said to already pop from its button,
       so part of this may be extending one existing mechanism rather than building four.
+
+- [ ] **549 — 🔴 At the very END of a layer it disappears, even when it should still be on screen.** (25 Aug, two phone screenshots at v12.42.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > There's an issue where when you go to the end of a layer you can't see it anymore, like the layer ends even tho it should still be visible because it's the last thing in the project, even if it wasn't the last thing it should still be visible when you're at the end of it
+      **His two shots are the proof, one frame apart:** at **00:03:119** the cyan layer fills the canvas; at
+      **00:04:00** — the exact end of the clip, and the end of the project — the canvas is BLACK.
+      **This is an inclusive/exclusive boundary.** A layer is almost certainly drawn for
+      `start <= t < start + duration`, so the final instant falls outside it. At the end of the PROJECT
+      there is no next frame to move on to, so you are left staring at an empty canvas.
+      ⚠️ **He states the general rule too, and it is the one to implement:** *"even if it wasn't the last
+      thing it should still be visible when you're at the end of it"*. So the fix is the boundary itself,
+      not a special case for the last layer.
+      ⚠️ **Check the EXPORT uses the same rule** — if the preview and the exporter disagree about the final
+      frame, the file will differ from what he sees, which is far worse than the bug.
+
+- [ ] **550 — The add-layer row should stop at the header divider like every other row, and the line by the arrows is cut short.** (25 Aug, phone screenshot with red annotation.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > I also asked ages ago for the add layer that when it cross the line that every layer has that is there to cut it off from the layers and show the picture and eye icon, like that line should stop the blue dotted lines and blue background but keep the plus, and also for some reason where the arrows are the line is like cut short for no reason. Please fix this so it has more continuity
+      **Two things, tick separately:**
+      1. [ ] **The add row's dashed blue outline and blue tint run straight through the vertical divider**
+             that separates every other row's eye/thumbnail column from its clip lane. They should STOP at
+             that line — but the ＋ button itself stays where it is.
+      2. [ ] **The divider is cut short near the row's ≡ arrows**, for no visible reason. He wants the line
+             continuous. **Find why it stops** rather than just extending it.
+      ⚠️ *"I also asked ages ago"* — search the file for the earlier request before treating this as new.
+
+- [ ] **551 — The add-layer row should end where the PROJECT ends, not at the edge of the screen.** (25 Aug, phone screenshot with red annotation.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make the add layer also end at the end of the project and not the end of the screen, so you can see easier when the actual project has hit its end
+      **His reason is the useful part:** it would double as a visible marker of where the project ends.
+      Goes with #550 — same row, same screenshot.
+
+- [ ] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > A long time ago I asked for some changes to the sketching menu that never arrived - like being able to continue the drawing instead of the current edit points system, and having a slider for progression so you could change the start and end, combined with key frames allowing you to have an animation that looks like it's being drawn
+      **Clauses — tick separately:**
+      1. [ ] **Re-open a finished drawing and keep drawing on it**, instead of the edit-points system being
+             the only way back in.
+      2. [ ] **A progression slider with a START and an END** along the path.
+      3. [ ] **Keyframable**, so animating it draws the stroke on — the classic write-on effect, and the
+             reason he wants 1 and 2 at all.
+      ⚠️ *"A long time ago I asked… that never arrived"* — **find the original entry and link it** rather
+      than logging this as new; it belongs with #206/#361 (the edit-points thread).
+      ⚠️ Clause 3 is the valuable one and clause 2 is its mechanism: a `trimStart`/`trimEnd` pair on the
+      path, keyframed, with the renderer drawing only that span of the stroke.
