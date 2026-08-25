@@ -7471,11 +7471,19 @@ body.fm-pushing #toast { z-index: 213; }
        costing more height than the padding inside a tile. */
     --cat-gap: clamp(4px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
   }
+  /* ⚠️ THE CLIP MOVED OFF THE CARD AND ONTO THE LABEL (queue 517). Ezra: "all of the outlines look
+     really bad. Like, I think they're kinda glitching underneath the buttons."
+     `overflow: hidden` was here to stop a long label pushing the tile taller — a real job, kept below —
+     but it also clipped the card's OWN colour ring, because that ring is a `::before` at `inset: -1px`,
+     i.e. one pixel OUTSIDE the padding box, and a descendant is exactly what overflow clips. The ring is
+     also drawn at `border-radius: 11px` against a 10px clip, so the corners were cut square while the
+     edges survived — which is why it read as a rendering fault rather than as a missing glow.
+     Clipping the LABEL instead does the job it was added for and leaves the ring alone. */
   body #inspector-panel .cat-card {
     height: var(--cat-h); box-sizing: border-box;
     padding: var(--cat-pad) 8px; gap: var(--cat-inner-gap);
-    overflow: hidden;                 /* a long label must crop, never push the tile taller again */
   }
+  body #inspector-panel .cat-label { overflow: hidden; }   /* a long label crops; the card's ring does not */
   body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
   /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
      it — at three rows, 1.3 line-height is another 10px of nothing. */

@@ -28216,6 +28216,55 @@
     }
   });
 
+  test('an inspector card does not clip its own glow ring (queue 517)', { item: '517' }, async function () {
+    /* Ezra: "all of the outlines look really bad. Like, I think they're kinda glitching underneath the
+       buttons. So you need to fix that."
+       Measured: `.cat-card` carried `overflow: hidden` — added so a long label could not push the tile
+       taller — and the card's colour ring is a `::before` at `inset: -1px`, i.e. ONE PIXEL OUTSIDE the
+       padding box. A pseudo-element is a descendant, so the card was clipping its own ring. The ring is
+       also drawn at `border-radius: 11px` against a 10px clip, so the CORNERS were cut square while the
+       straight edges survived — which is exactly why it read as a rendering fault rather than as a
+       missing glow.
+       Both jobs are kept: the clip moved onto the label, so a long label still crops and the ring is
+       free. Both halves are asserted, because fixing one by breaking the other is the obvious wrong
+       answer here. */
+    if (window.innerWidth < 701) return;                       // the PC inspector's card grid
+    const saved = FM.scene.selectedId;
+    const made = !FM.scene.layers.length;
+    if (made) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.selectLayer(FM.scene.layers[0].id);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(90);
+      const card = document.querySelector('#inspector-panel .cat-card');
+      if (!card) return;                                       // this panel is not showing the card grid
+      const r = card.getBoundingClientRect();
+      /* CONTROL: a collapsed card has no overflow behaviour worth asserting. */
+      if (r.width < 30 || r.height < 20) throw new Error('the card measured ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — it is not laid out, so its clipping proves nothing');
+
+      const cs = getComputedStyle(card);
+      if (cs.overflowX === 'hidden' || cs.overflowY === 'hidden')
+        throw new Error('the card clips its own overflow again (' + cs.overflow + ') — its glow ring is a ::before at inset -1px, so the card cuts the ring off and squares its corners');
+
+      /* …AND THE LABEL MUST STILL CROP. The clip was there for a reason: a long label used to push the
+         tile taller. Freeing the ring by letting labels stretch the grid would be a worse bug. */
+      const lbl = card.querySelector('.cat-label');
+      if (!lbl) throw new Error('no .cat-label on the card — cannot check that long labels still crop');
+      const before = card.getBoundingClientRect().height;
+      const prev = lbl.textContent;
+      lbl.textContent = 'A very very long label indeed that would otherwise wrap onto several lines';
+      const after = card.getBoundingClientRect().height;
+      lbl.textContent = prev;
+      if (after > before + 2)
+        throw new Error('a long label stretched the tile from ' + Math.round(before) + 'px to ' + Math.round(after) + 'px — the crop that used to live on the card has to live on the label, not vanish');
+    } finally {
+      if (made) FM.scene.layers.length = 0;
+      FM.selectLayer(saved || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('the selection button group is an outlined container, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
     /* Ezra: "the bin icon doesn't look really good there … And then also the black bar in the background
        looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make

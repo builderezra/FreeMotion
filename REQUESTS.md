@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.46
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.47
 >
-> **State:** v12.46, **933 tests green**, tree clean.
+> **State:** v12.47, **934 tests green**, tree clean.
+>
+> **✅ v12.47 — the PC card outlines (#517), and "clipping" was literally right.** Each card was hiding
+> its own glow: the ring is drawn one pixel outside the card, and the card had been told to hide anything
+> overflowing it. The corners got sliced square because the ring's radius is bigger than the clip's.
+> ⚠️ One thing I could NOT check here: the blue cursor glow moving with the pointer — its fade is a CSS
+> transition and this preview pane does not run them. If the two glows still read badly together on your
+> screen, tell me and that half stays open.
 >
 > **✅ v12.46 — the bin and the slab behind it (#516).** The dark slab is an outlined container now, and
 > the bin is calm at rest and turns red the instant you hover or press it.
@@ -17597,8 +17604,23 @@ re-opened #480, which I had marked done and had not fixed.
       feel free to use a workflow for any other task that may need it."* That is a standing permission, not
       just for this item — it also covers #511's *"try and see every possible way it can break"*.
 
-- [ ] **517 — PC: the glow outlines on the inspector cards look glitched, like they are clipping under the buttons.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **517 — PC: the glow outlines on the inspector cards look glitched, like they are clipping under the buttons.** (24 Aug, PC screenshot at v12.20.)
+      ✅ **Each card was clipping its OWN ring.** `.cat-card` carried `overflow: hidden`, added so a long
+      label could not push the tile taller — and the colour ring is a `::before` at `inset: -1px`, i.e.
+      one pixel OUTSIDE the padding box. A pseudo-element is a descendant, so the card cut off its own
+      ring. The ring is also drawn at `border-radius: 11px` against a **10px** clip, so the CORNERS were
+      sliced square while the straight edges survived — which is exactly why it read as a rendering fault
+      rather than as a missing glow. Your word for it, "glitching", was the accurate one.
+      **The crop moved onto the label**, which is the job it was added for: long labels still crop
+      (measured — a 70-character label leaves the tile at 48px, unchanged), and the ring traces the whole
+      card. Mutation-checked by putting the clip back.
+      ⚠️ **On the two glows fighting — your diagnosis was half right, and the half that was wrong is worth
+      knowing.** The blue cursor ring and the colour ring are on DIFFERENT pseudo-elements (`::after` and
+      `::before`), so they were never overwriting each other; and the blue ring's gradient already fades
+      to transparent about 220px from the pointer, so distant cards keep their colour. What made it look
+      like a fight was the clipping. **I could not watch the blue ring move here** — its opacity is a CSS
+      transition and this preview pane does not advance transitions — so if the two still read badly
+      together on your screen, say so and that half stays open.
       His words, verbatim:
       > Un PC all of the outlines look really bad. Like, I think they're kinda glitching underneath the buttons. So you need to fix that. So the glow outlines of the animations and stuff actually look good on PC.
       ("Un PC" = **on PC**.)

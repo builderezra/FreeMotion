@@ -102,7 +102,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.46, 933 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.47, 934 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.47 fixed #517** — and "clipping" was literal. `.cat-card` had `overflow: hidden` (so long labels
+could not stretch the tile) while its colour ring is a `::before` at `inset: -1px` — a DESCENDANT one
+pixel outside the padding box, so the card clipped its own ring; radius 11px against a 10px clip sliced
+the CORNERS square while the edges survived, which is why it looked like a render fault. Crop moved to
+`.cat-label`; long labels still crop (70-char label → tile unchanged at 48px). Mutation-checked.
+⚠️ **His diagnosis was half right:** the two glows are on DIFFERENT pseudo-elements (`::after` = cursor
+ring, `::before` = colour ring), so they never overwrote each other, and the blue gradient already fades
+~220px from the pointer. The clipping was what made it look like a fight.
+⚠️ **Could NOT verify the blue ring moving** — its opacity is a CSS TRANSITION and the preview pane does
+not advance transitions (same limitation as the Director panel's slide). Said so in the entry; that half
+stays open if he still sees it.
+**NEXT: #518** (the menu shown when text is selected is bugged).
 **v12.46 did #516** — the selection group's black slab became a hairline outline over a 4% lift, and the
 bin is neutral at rest / red on hover+press. Both chosen by HIM from pictures rendered with the REAL
 buttons (#545 working exactly as intended — he also asked me to explain the slab question again, so the
