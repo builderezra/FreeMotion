@@ -930,6 +930,24 @@ body.text-editing .sb-wrap { display: none !important; }
 .te-extras { padding: 6px 12px; font-size: 15px; }
 .te-extras .te-caret { display: none; }
 .te-pop-extras { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* ⚠️ ON PC THE FONT LIST FILLS THE SPACE BELOW AND SCROLLS DOWNWARD (queue 520). Ezra: "Make it so that
+   all of the different font options actually use the space below it, and they, like, go down and you
+   swipe up and down, not left and right, only for PC because all that space down there could be where
+   all of the font show up. But currently, you don't use that space up."
+   Measured at 1280x820 with the picker open: the rail was 538px wide holding 987px of cards — 450px of
+   fonts hidden off the right — while 244px of the window sat empty underneath it.
+   PC ONLY, which is his own scoping: the phone keeps the horizontal strip, where a sideways swipe is the
+   natural gesture and there is no spare height to fill.
+   The popover's max-height is set in JS alongside the "Aa" sheet's — see the note there. It has to be,
+   because how much room is below the card depends on where the card ended up. */
+@media (min-width: 701px) {
+  .te-pop-font { overflow-y: auto; }
+  .te-pop-font .te-font-rail {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px; overflow-x: hidden; overflow-y: visible;
+  }
+  .te-pop-font .te-font-card { max-width: none; min-width: 0; }
+}
 .te-extras-inner .prop-row { margin: 6px 0; }
 .te-extras-empty { color: var(--text-dim); font-size: 13px; padding: 8px; }
 .te-open { width: 100%; margin-bottom: 6px; }

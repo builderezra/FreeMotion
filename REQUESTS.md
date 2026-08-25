@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.49
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.50
 >
-> **State:** v12.49, **936 tests green**, tree clean.
+> **State:** v12.50, **937 tests green**, tree clean.
+>
+> **✅ v12.50 — the PC font list (#520).** It was 538px wide holding 987px of fonts, so ~450px were hidden
+> off the right while 244px of window sat empty below. Eleven fonts over three rows now, scrolling down
+> instead of sideways. Your phone is untouched, as you asked.
 >
 > **🔴 THE EXPORT WITH NO AUDIO — I NEED ONE ANSWER FROM YOU, AND IT DECIDES THE WHOLE FIX.**
 > Your settings (MP4, 2160, 60fps, High, whole project, all layers, on your phone) are the best evidence
@@ -17719,15 +17723,24 @@ re-opened #480, which I had marked done and had not fixed.
       tap and, in his words, doing so bugs it out.
       **So: while the text editor is open, those cards should not be there at all** — not merely covered.
 
-- [ ] **520 — PC: the font list should fill the empty space below and scroll up/down, not sideways.** (24 Aug, PC screenshot at v12.20.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **520 — PC: the font list should fill the empty space below and scroll up/down, not sideways.** (24 Aug, PC screenshot at v12.20.)
       His words, verbatim:
       > Reminder to keep logging stuff and don't actually do a straight away. Just keep going from the list from olders and newest, but also now for the screenshot that I've just sent. Make it so that all of the different font options actually use the space below it, and they, like, go down and you swipe up and down, not left and right, only for PC because all that space down there could be where all of the font show up. But currently, you don't use that space up. So change that.
       **What the shot shows:** the font picker as a single horizontal strip — Inter, Helvetica, Georgia,
       Times N… — cut off at the panel edge, with a large empty column beneath it doing nothing.
       **Clauses:**
-      1. [ ] **PC only** — his words, *"only for PC"*. The phone strip stays as it is.
-      2. [ ] The fonts fill the space below and **scroll vertically**, not horizontally.
+      1. [x] ✅ **v12.50 — PC only, and the phone half is ASSERTED, not just skipped.** A fix that quietly
+             reflowed the phone too would be a regression he did not ask for, so the test checks the phone
+             strip is still one row. Verified at 380px: still `flex`, still one row, still swipes sideways.
+      2. [x] ✅ **v12.50 — measured before and after.** Before: the strip was **538px wide holding 987px of
+             cards** — about 450px of fonts hidden off the right — with **244px of window empty beneath**.
+             After: eleven fonts over **three rows**, no sideways scroll at all, the picker grown from
+             90px to 220px so only **12px** is left empty, and it scrolls vertically once there are more
+             fonts than fit.
+      ⚠️ The picker's height cap is set in JS beside the "Aa" sheet's, because how much room is below the
+      card depends on where the card ended up. That code carried a comment saying the Aa sheet was the
+      ONLY popover safe to cap — true while it was the only one that scrolled — so the comment was
+      updated rather than left to contradict the code.
 
 - [ ] **521 — 🚨 A layer dropped BELOW the add-layer row jumps back on top of it. He has asked repeatedly.** (24 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -160,7 +160,7 @@ window.FM = window.FM || {};
         pop.style.top = cardBottom + 'px';
         // Only the Aa sheet gets a cap — same reasoning as the fallback below: it is the one popover
         // with overflow-y:auto, so it is the one a max-height can rescue rather than clip.
-        if (popKind === 'extras') pop.style.maxHeight = Math.max(140, Math.round(cr.bottom - cardBottom - 8)) + 'px';
+        if (popKind === 'extras' || popKind === 'font') pop.style.maxHeight = Math.max(140, Math.round(cr.bottom - cardBottom - 8)) + 'px';
         return;
       }
       const r = panel.getBoundingClientRect();
@@ -186,15 +186,17 @@ window.FM = window.FM || {};
       if (clearAbove < MIN_POP && roomBelow > clearAbove) {
         pop.style.bottom = 'auto';
         pop.style.top = Math.round(r.bottom + CARD_GAP) + 'px';
-        if (popKind === 'extras') pop.style.maxHeight = Math.max(140, roomBelow) + 'px';
+        if (popKind === 'extras' || popKind === 'font') pop.style.maxHeight = Math.max(140, roomBelow) + 'px';
         return;
       }
       pop.style.top = 'auto';
       pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + 'px';
-      // The "Aa" sheet is the one popover that can be taller than the room above the card. It is the
-      // only one with overflow-y:auto, so it is the only one a max-height can rescue; the others are
-      // 50-89px tall and capping them would clip rather than scroll.
-      if (popKind === 'extras') pop.style.maxHeight = Math.max(140, clearAbove) + 'px';
+      /* The "Aa" sheet used to be the ONLY popover that could be taller than the room around the card,
+         because it was the only one with overflow-y:auto — capping any of the others would have clipped
+         them rather than scrolling them. The FONT list joins it from queue 520: on PC it wraps into a
+         grid that fills the space and scrolls vertically, so it can now both outgrow the room and
+         survive being capped. The others are still 50-89px tall and still must not be capped. */
+      if (popKind === 'extras' || popKind === 'font') pop.style.maxHeight = Math.max(140, clearAbove) + 'px';
       return;
     }
     if (!bar) return;

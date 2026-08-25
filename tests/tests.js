@@ -28216,6 +28216,64 @@
     }
   });
 
+  test('on PC the font list fills the space below and scrolls down, not sideways (queue 520)', { item: '520' }, async function () {
+    /* Ezra: "Make it so that all of the different font options actually use the space below it, and they,
+       like, go down and you swipe up and down, not left and right, only for PC because all that space
+       down there could be where all of the font show up."
+       Measured at 1280x820 with the picker open: the rail was 538px wide holding 987px of cards — 450px
+       of fonts hidden off the right — while 244px of window sat empty underneath it.
+       ⚠️ "ONLY FOR PC" IS HIS OWN SCOPING AND IS ASSERTED BOTH WAYS. On a phone a sideways swipe is the
+       natural gesture and there is no spare height to fill, so the strip must stay a strip — a fix that
+       quietly reflowed the phone too would be a regression he did not ask for. */
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable');
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId;
+    let made = null;
+    try {
+      let t = FM.scene.layers.find(l => l.type === 'text');
+      if (!t) { t = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' }); t.start = 0; t.duration = 4; FM.scene.layers.push(t); made = t; }
+      FM.selectLayer(t.id);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(80);
+      FM.textEdit.start(t.id);
+      await sleep(120);
+      const btn = document.querySelector('.te-font');
+      if (!btn) throw new Error('no font button in the text toolbar');
+      btn.click();
+      await sleep(140);
+      const rail = document.querySelector('.te-font-rail');
+      if (!rail) throw new Error('the font picker did not open');
+      const cards = [].slice.call(rail.querySelectorAll('.te-font-card'));
+      /* CONTROL: one or two fonts would fit on a single row whatever the layout, so the difference
+         between a strip and a grid would be invisible. */
+      if (cards.length < 6) throw new Error('only ' + cards.length + ' font cards — too few for a strip and a grid to look different, so this proves nothing');
+      const rows = [];
+      cards.forEach(c => { const y = Math.round(c.getBoundingClientRect().top); if (rows.indexOf(y) < 0) rows.push(y); });
+
+      if (window.innerWidth >= 701) {
+        if (rows.length < 2)
+          throw new Error('on PC the ' + cards.length + ' fonts are still on ONE row — they are meant to fill the space below and wrap');
+        if (rail.scrollWidth > rail.clientWidth + 1)
+          throw new Error('the font rail still scrolls sideways on PC (' + rail.scrollWidth + ' in ' + rail.clientWidth + ') — he asked for up and down, not left and right');
+        /* …and it must not fill the space by running off the bottom of the window instead. */
+        const pop = document.querySelector('.te-pop-font');
+        if (pop && pop.getBoundingClientRect().bottom > window.innerHeight + 2)
+          throw new Error('the font picker runs ' + Math.round(pop.getBoundingClientRect().bottom - window.innerHeight) + 'px past the bottom of the window');
+      } else {
+        /* THE PHONE HALF — "only for PC" was his instruction, so this is a real assertion, not a skip. */
+        if (rows.length !== 1)
+          throw new Error('the phone font strip has wrapped onto ' + rows.length + ' rows — he asked for this change on PC only');
+      }
+    } finally {
+      if (FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.stop) FM.textEdit.stop();
+      if (made) { const i = FM.scene.layers.indexOf(made); if (i >= 0) FM.scene.layers.splice(i, 1); }
+      FM.scene.layers.length = 0;
+      saved.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   test('editing text hides the option cards on PC, and gives them back after (queue 519)', { item: '519' }, async function () {
     /* Ezra: "When you are editing [text], it shouldn't show up with the other options below it, like the
        effects and stuff … because if you press it, it's just gonna bug it out and be weird."

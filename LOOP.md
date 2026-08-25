@@ -102,7 +102,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.49, 936 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.50, 937 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.50 did #520** — PC font list. Before: rail 538px wide holding **987px** of cards (~450px hidden off
+the right) with **244px of window empty below**. After: grid, 11 fonts over 3 rows, no sideways scroll,
+popover 90→220px so only 12px empty, scrolls vertically. **Phone asserted UNCHANGED** (still flex, one
+row) — "only for PC" is his scoping and a silent phone reflow would be a regression.
+⚠️ The height cap lives in JS beside the "Aa" sheet's, because the room below depends on where the card
+landed. That code's comment said Aa was the ONLY popover safe to cap — true until now — so the comment
+was updated rather than left contradicting the code.
+🔴 **STILL WAITING ON HIM: #215.** His 2160/60fps phone export came back silent. **Did he see the
+"exporting WITHOUT SOUND" toast?** No toast → audio lost on a path that reports success. Toast → the mix
+is OOMing. Opposite fixes; asked in the stamp; do not guess.
+**NEXT: #521** (a layer dropped BELOW the add-layer row jumps back on top — he has asked repeatedly).
 **v12.49 fixed #519.** `body.text-editing #inspector-panel { display:none }` existed ONLY in the phone
 media block; PC never had it, so 9 cards sat live behind the editor (measured at 1280x820). Now 0 while
 editing, restored after, inspector column collapsed so the timeline widens. **Checked FIRST that the
