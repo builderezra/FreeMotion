@@ -147,9 +147,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.75, 966 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.76, 967 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.75, closing #556, #557, #558, #524, #474, #548, #550, #559 and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.76, closing #556, #557, #558, #524, #474, #548, #550, #559, #560 (UI half) and #539 clause 4.**
+
+⚠️ **CHECK WHAT IS ALREADY TRUE BEFORE BUILDING — it is the other half of rule 3, and #560 is the case
+for it.** "Masks don't behave like effects" sounds like a migration. Opening the file first showed the
+chevron, grip, eye, bin, swipe-to-delete, hold-to-reorder and the shared add route were ALL already
+there from #360. What was actually left was a heading, a card style and a missing wrapper — an
+afternoon, not a rewrite. **An entry records what he asked for on the day; it does not know what has
+shipped since.**
+✅ **The end-of-batch audit in `next.sh` earned itself on its first run**, catching #550 clause 1 ticked
+DONE in the prose with an empty checkbox.
 
 ⚠️ **AN ENTRY'S DIAGNOSIS IS A HYPOTHESIS, NOT A FINDING — three in a row now.** Each of these was
 written down confidently by a past session and each was wrong, and one measurement settled every one:
