@@ -102,7 +102,38 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.57, 945 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.58, 946 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.58 did #528** — the effects sheet re-pins to the canvas bottom when the canvas moves.
+⚠️ **MEASURING FIRST IS WHAT STOPPED THIS BEING CLOSED AS "ALREADY FIXED".** At the moment of opening,
+the sheet already sat **0.17–0.35px** under the canvas — at 380px AND his own 440px, on 1:1, 9:16, 16:9
+and 4:5, both browsers. On that evidence "something fixed it in the last 32 releases" looked right and
+was **wrong**. The gap opens when the CANVAS MOVES while the sheet is up, because the pin was computed
+once and never again: 9:16 → 16:9 with the sheet open moved the canvas bottom 424.8 → 364.5 while the
+sheet stayed at 425 — **60.53px**. A window `resize` did not fix it either.
+**A "cannot reproduce" is a statement about the state you tried, not about the bug.**
+Fixed with a ResizeObserver on the canvas (not a resize listener — the canvas changes shape without the
+window doing anything, which is the 60.53px case) plus `FM.screen.watch`, torn down with the sheet, in
+`FM.fxSheet` so all three browsers get it. Pin also floors instead of rounding: rounding leaves a
+hairline half the time, flooring makes a gap **impossible** (seven shapes measured, −0.47 to −0.89).
+
+🐛 **A CROSS-TEST LEAK I CAUSED, AND THE ISOLATION IS THE LESSON.** My first version of the test opened
+the real browser inside a phone-width block — that starts the thumbnail machinery, and tiles baked at
+the phone tile scale outlived it, so the NEXT test comparing a tile to its subject reported six effects
+as "indistinguishable". Nothing was wrong in the effects. **Isolated by bisection rather than guessed:**
+green at clean HEAD → still red with the ResizeObserver disabled → green with only the test BODY
+neutered. That sequence pinned it on the test, not the fix; two earlier guesses (a stale thumbnail cache,
+then the observer) were both wrong and cost a run each.
+**When a new test turns an unrelated test red, neuter the test body before theorising.**
+⚠️ It drives `FM.fxSheet` directly now and asserts `--fxb-top`, so it touches only the code the fix lives
+in and drags no machinery with it.
+⚠️ **And a phantom:** the first draft measured against the canvas at the harness's DESKTOP default and
+reported a 21.13px "gap" — on PC the sheet pins to the INSPECTOR column (#397), so that compared two
+unrelated boxes. It runs at phone width and asserts it is not in inspector mode.
+
+**📥 #565 logged mid-tick** (25 Aug): *"Make it obvious that you can scroll on filter rows to show more,
+like do the little dots at the bottom or sum"*. Design request → #545 applies. **The add menu already
+pages sideways with dots (v2.39) — check that first and reuse it** rather than inventing a second
+vocabulary. Waits its turn.
 **v12.57 did #527** — removed *"No audio effects yet — add one to shape this clip's sound."*, which sat
 directly above a button reading **+ Add Audio Effect**. Two lines, one fact.
 ✅ **The entry's "ask him before removing all three" resolved itself by CHECKING.** The Visual section has
@@ -265,8 +296,8 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #528** (the effects menu should sit slightly higher — there is a gap above it) — #524 is parked
-on his pick, not skipped.
+**NEXT: #529** (multi-selecting effects worked once and is broken again) — #524 is parked on his pick,
+not skipped.
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
