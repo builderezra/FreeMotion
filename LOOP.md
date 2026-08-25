@@ -102,7 +102,28 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.51, 938 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.52, 940 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.52 worked #215** — the export that comes out silent. ⚠️ **AND IT CORRECTED THIS ENTRY'S OWN
+CONCLUSION.** His "no message" answer, plus reasoning stated three separate times in the entry, said
+*neither toast + silent file = THE MUXER*. Measured (`tests/_q215mux.html`, which walks the MP4 box tree
+and then DECODES the audio back): the muxer is healthy — a normal export writes 22 audio samples peaking
+at 0.4038. **The inference was sound and the conclusion was wrong.**
+**SAMPLES ARE NOT SOUND** was the missing question. Every check in the mixer asks whether a clip reached
+the mix; none asked whether the mix makes a NOISE. A `muted` layer, or one at volume 0, passes all of
+them — not hidden, decodes, overlaps — so AAC encodes a full track of which every sample is zero.
+Measured peak 0.0000 against the control's 0.4038. Worst of the three: **soloing a SHAPE** silences every
+soundtrack in the project, because solo is project-wide and a shape has no audio to solo.
+All three now name themselves; the healthy control still toasts nothing, which is what stops a diagnostic
+becoming the noise that gets ignored. Both new assertions mutation-proven (✅ CAUGHT ×2).
+🐛 **Nearly shipped a contradiction:** the AAC probe's success branch does `_audioTrackDropped = null` and
+runs AFTER `buildAudioMix`, clearing the new flag one line before anything could read it — while the toast
+still fired. Screen saying one thing, flag saying another.
+⚠️ **#215 is deliberately NOT ticked.** Three real paths fixed, none PROVEN to be his. Ticking it would
+claim something unsupported. It is back to NEEDS-YOU on one line: *export something with sound — does a
+message appear?* Silence with still no message is genuinely new evidence.
+⚠️ **A cache trap that cost a cycle:** the diagnostic reported IDENTICAL output before and after a real
+fix, because the iframe loads `../index.html` and a CACHED index.html pins every module to the previous
+`?v=`. The fix was on disk; the page ran the old code. Harnesses that load index.html must bust it.
 **v12.51 did #521** — dropping a layer BELOW the add row on PC. **The interesting part is why three
 earlier fixes missed it: #357, #443 and #480 were ALL measured at 380px**, the one width where the add
 row is a full-height track row and the drag's uniform-`slotH` arithmetic is correct. On PC it is a 7px
