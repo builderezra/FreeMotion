@@ -102,7 +102,22 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.53, 941 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.54, 942 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.54 did #523** — the text edit screen closes the moment its layer stops being selected. A LIFETIME
+bug, not a missing button: the editor binds to one layer and never noticed the selection move on, so it
+sat orphaned, still demanding the blue tick (*"and it's kinda glitchy"*). Commits rather than discards —
+tapping off already commits, and losing his typing would be a worse bug than the one being fixed; he
+asked for the SCREEN to go, not the text.
+⚠️ **THE LESSON IS THE SECOND HOOK.** `FM.selectLayer` is the named API and the obvious place — it is
+where the crop tool and Isolate already self-close for exactly this reason. But **every layer CREATOR**
+(`addAdjustmentLayer`, `addCamera`, a dozen more) writes `FM.scene.selectedId` DIRECTLY and then calls
+`refreshAll()`, never touching `selectLayer`. A fix hooked only to the obvious API passes every deselect
+case and still strands the editor the moment you add a layer while it is open. **When wiring a
+"self-close on X" behaviour, grep for the direct writes before trusting the named setter.** Both hooks
+mutation-proven, the second caught by exactly the creator case that argued for it.
+⚠️ Two CONTROLS carry that test and matter as much as the closes: re-selecting the SAME layer, and a
+plain `refreshAll()`, must both leave the editor open — otherwise a build that tore it down on every
+refresh passes, and that is unusable.
 **v12.53 did #522** — on a phone the ≡ reorder handle is no longer built while a layer is selected. His
 own reasoning was the implementation note: `soloLayerId()` already means "phone, exactly one layer
 selected", and in that state exactly ONE row is drawn, so the handle has nothing to reorder against.
@@ -188,7 +203,7 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #523** (the text edit screen should close the moment the layer is deselected).
+**NEXT: #524** (dragging a clip right stops dead at the project end instead of extending the project).
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
