@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.73
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.74
 >
-> **State:** v12.73, **964 tests green**, tree clean.
+> **State:** v12.74, **965 tests green**, tree clean.
+>
+> **✅ v12.74 — the line by the add-layer row is no longer cut short (#550).** You said *"where the arrows
+> are the line is like cut short for no reason"*, and I had parked it because a previous round could not
+> tell which line you meant. **I measured the phone screen instead of asking you again**, and there was
+> exactly one break in that line anywhere: on the add-layer row it was **21px tall in a 40px row**, a
+> pixel out sideways, with a 2px gap below it. Every other row had the full 41px. It now runs the whole
+> row at the same x as the rest, and meets the next row with no gap. The ＋ has not moved.
 >
 > **✅ v12.73 — the four menus at the right of the transport row now pop out of their buttons (#548).**
 > Shortcuts, Notes, Settings and Export. Each one hangs off the button you pressed with a comic tail
@@ -19222,16 +19229,15 @@ re-opened #480, which I had marked done and had not fixed.
       preview call site only: the file is untouched, and only the playhead you can park on an exact
       boundary gets the last instant. The new test asserts it has NOT leaked back into `renderScene`.
 
-- [ ] **550 — The add-layer row should stop at the header divider like every other row, and the line by the arrows is cut short.** (25 Aug, phone screenshot with red annotation.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **550 — The add-layer row should stop at the header divider like every other row, and the line by the arrows is cut short.** (25 Aug, phone screenshot with red annotation.) — **DONE: clause 1 v12.66, clause 2 v12.74.**
       His words, verbatim:
       > I also asked ages ago for the add layer that when it cross the line that every layer has that is there to cut it off from the layers and show the picture and eye icon, like that line should stop the blue dotted lines and blue background but keep the plus, and also for some reason where the arrows are the line is like cut short for no reason. Please fix this so it has more continuity
       **Two things, tick separately:**
       1. [ ] **The add row's dashed blue outline and blue tint run straight through the vertical divider**
              that separates every other row's eye/thumbnail column from its clip lane. They should STOP at
              that line — but the ＋ button itself stays where it is.
-      2. [ ] **The divider is cut short near the row's ≡ arrows**, for no visible reason. He wants the line
-             continuous. **Find why it stops** rather than just extending it.
+      2. [x] **The divider is cut short near the row's ≡ arrows**, for no visible reason. He wants the line
+             continuous. **Find why it stops** rather than just extending it. ✅ **DONE v12.74.**
       ⚠️ *"I also asked ages ago"* — search the file for the earlier request before treating this as new.
 
       ✅ **CLAUSE 1 DONE v12.66.** The dashed outline and the blue tint now start at the head divider
@@ -19242,10 +19248,40 @@ re-opened #480, which I had marked done and had not fixed.
       is bounded.
       ⚠️ **`--head-w` says 82px and the phone's real head is 66px**, so the bounds are read off the LIVE
       head. Deriving them from the variable would have put the line 16px wrong.
-      ⏳ **CLAUSE 2 (the divider "cut short where the arrows are") NOT DONE.** I could not identify from
-      his screenshot which line he means — the head divider runs the full height of every row here, and
-      the ≡ arrows sit at the far right, so the two are nowhere near each other. **Needs him to circle it
-      again, or a fresh screenshot.** Not guessed at.
+      ⏳ **CLAUSE 2 was parked as "needs him to circle it again" — that was wrong, and MEASURING THE
+      RENDERED PAGE answered it instead of another screenshot.** The note below is kept because the
+      reasoning in it is the mistake: it says "the head divider runs the full height of every row here",
+      which is exactly the thing that turned out to be false.
+      > I could not identify from his screenshot which line he means — the head divider runs the full
+      > height of every row here, and the ≡ arrows sit at the far right, so the two are nowhere near
+      > each other.
+
+      ✅ **CLAUSE 2 DONE v12.74 — and there is exactly ONE break in that divider anywhere in the timeline,
+      so there was nothing to guess at.** Measured at 380px with three layers:
+      | | divider | at x |
+      |---|---|---|
+      | every layer row | **41px, the full row** | 66 |
+      | **the add row** | **21px, in a 40px row** | **67** |
+      Half the height of its neighbours, a pixel out sideways, and a visible **2px gap** to the row below
+      it. That is the line being "cut short", and the ≡ he pointed at is on that row.
+      🔧 **TWO CAUSES, and the first one is a comment in this repo being wrong.** `.tl-addrow-head` carries
+      `align-self: stretch` and a comment saying that "makes the rule run the row's full height". It does
+      not — **stretch reaches only as far as its flex parent**, and that parent (`.tl-addrow-inner`) was
+      sized by its own content, 21px. Stretching the inner too took it to 38px.
+      The remaining 2px: **`.tl-addrow` has a 1px border on all four sides and a 1px margin top and
+      bottom** — both transparent, both there purely for spacing — which inset the rule at each end and
+      pushed it 1px right of every other row's. The head now compensates with negative margins so the line
+      spans the row's whole slot.
+      📐 **After: y443..485, 42px, x=66 — identical to every layer row, and the gap to the next row is
+      0.0px.** The ＋ has not moved (still x22..43, left of the line) and the dashed box still starts at
+      x=66, so clause 1 is untouched.
+      ⚠️ **Phone only, and verified rather than assumed:** on desktop the add row is the `--line` variant
+      and its head is `display: contents`, so it generates no box and none of this applies. Checked at
+      1440x900 — unchanged.
+      ⚠️ **What is NOT fixed, stated plainly:** there is still a **1px gap at every layer-row boundary**,
+      because each row draws a 1px bottom border that the divider stops at. That is pre-existing and
+      uniform down the whole stack — it reads as a continuous line with hairline crossings, not as a
+      break. The add row was the odd one out and now matches.
 
 - [x] **551 — The add-layer row should end where the PROJECT ends, not at the edge of the screen.** (25 Aug, phone screenshot with red annotation.) ✅ v12.66
       His words, verbatim:

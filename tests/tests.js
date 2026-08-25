@@ -3861,6 +3861,85 @@
     }
   });
 
+  test('550: the head divider runs the FULL add-layer row and meets the next row exactly', { item: '550' }, async function () {
+    /* Queue 550 clause 2. Ezra: "for some reason where the arrows are the line is like cut short for no
+       reason. Please fix this so it has more continuity."
+       ⚠️ A PREVIOUS ROUND PARKED THIS as "needs him to circle it again" — it could not tell which line he
+       meant. Measuring the rendered phone layout answered it instead, and there is exactly one break in
+       that divider anywhere in the timeline: the ADD ROW's segment ran **y445..483, 38px inside a 40px
+       row, at x=67**, against a full **41px at x=66** on every layer row — short at both ends, a pixel
+       out sideways, and separated from its neighbour by a visible 2px gap. Before the first fix it was
+       worse still: 21px, because `align-self: stretch` on the head reaches only as far as its flex
+       parent, and that parent was sized by its own content rather than by the row.
+       ⚠️ THE CAUSE IS THE ROW'S OWN BOX: `.tl-addrow` carries a 1px border on every side and a 1px
+       margin top and bottom — both transparent, both purely for spacing — and together they inset the
+       rule and shift it. The head compensates with negative margins so the line spans the row's whole
+       slot. Nothing else moves; that element only draws the line.
+       ⚠️ PHONE ONLY, and the test says so rather than assuming: on desktop the add row is the `--line`
+       variant and its head is `display: contents`, so it generates no box at all and none of this
+       applies. The suite runs at both widths. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const editing = document.body.classList.contains('m-editing');
+    const inspOpen = document.body.classList.contains('insp-open');
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(200);
+      FM.scene.layers.length = 0;
+      ['a', 'b', 'c'].forEach((n, i) => {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#4ad' });
+        L.start = i * 0.5; L.duration = 2; FM.scene.layers.push(L);
+      });
+      /* The mobile editor collapses the timeline to the layer being edited, so a multi-row timeline
+         needs nothing selected — otherwise this measures one row and proves nothing. */
+      FM.selectLayer(null);
+      document.body.classList.remove('m-editing', 'insp-open');
+      FM.refreshAll(); FM.timeline.rebuild();
+      await sleep(400);
+
+      const addHead = document.querySelector('.tl-addrow-head');
+      const addRow = document.querySelector('.tl-addrow');
+      if (!addHead || !addRow) throw new Error('the add-layer row is not on screen, so there is no divider to measure');
+      if (getComputedStyle(addHead).display === 'contents') return;   // desktop --line variant: no box, nothing to assert
+
+      const heads = [].slice.call(document.querySelectorAll('.track-head'));
+      if (heads.length < 2) throw new Error('only ' + heads.length + ' layer rows rendered — a continuity check needs neighbours');
+
+      const ar = addRow.getBoundingClientRect(), hr = addHead.getBoundingClientRect();
+      // CONTROL: the row must have real height, or "the divider covers the row" is true of nothing.
+      if (!(ar.height > 20)) throw new Error('the add row measured ' + Math.round(ar.height) + 'px tall — the fixture is wrong');
+
+      // 1. THE DIVIDER COVERS ITS WHOLE ROW. This is the clause: it was 21px, then 38px, in a 40px row.
+      if (hr.height < ar.height - 0.5) throw new Error('the add row is ' + Math.round(ar.height) + 'px tall but its divider is only ' + Math.round(hr.height) + 'px — that is the line he says is cut short');
+
+      // 2. EVERY DIVIDER ON THE SAME PIXEL. It sat at x=67 against x=66 on every other row.
+      const xs = [hr.right].concat(heads.map(e => e.getBoundingClientRect().right));
+      const spread = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+      if (spread > 0.6) throw new Error('the dividers sit at ' + xs.map(x => Math.round(x)).join(', ') + ' — the add row is offset from the rest, so the line steps sideways');
+
+      // 3. NO GAP WHERE THE ADD ROW MEETS THE FIRST LAYER ROW. It was 2px, which reads as a break.
+      const first = heads[0].getBoundingClientRect();
+      const gap = first.top - hr.bottom;
+      if (gap > 0.6) throw new Error('there is a ' + gap.toFixed(1) + 'px gap between the add row divider and the first layer row divider — the line is broken exactly where he pointed');
+      if (gap < -2.5) throw new Error('the add row divider overshoots the next row by ' + (-gap).toFixed(1) + 'px, which will paint over it');
+
+      /* 4. …AND THE ＋ IS STILL LEFT OF THE LINE. Clause 1 (v12.66) is that the decoration stops at the
+         divider "but keep the plus" — a fix that moved the ＋ across it would undo his own words. */
+      const plus = document.querySelector('.tl-addrow-plus');
+      if (!plus) throw new Error('the add row lost its + button');
+      if (!(plus.getBoundingClientRect().right <= hr.right + 0.5)) throw new Error('the + has ended up on the lane side of the divider — clause 1 says the line stops the decoration but keeps the plus');
+    } finally {
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (editing) document.body.classList.add('m-editing');
+      if (inspOpen) document.body.classList.add('insp-open');
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      await sleep(120);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('548: all four transport menus pop out of their own button, with a tail and an animation', { item: '548' }, async function () {
     /* Queue 548. Ezra, with the four right-hand transport buttons boxed in red:
        "i want their respective menus to pop out from the button like the settings cog one does but also

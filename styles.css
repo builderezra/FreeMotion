@@ -7313,9 +7313,17 @@ body.fm-pushing #toast { z-index: 213; }
   box-shadow: 0 0 14px rgba(90, 199, 237, .30);
   outline: none;
 }
+/* ⚠️ `align-self: stretch` ON THE HEAD REACHES ONLY AS FAR AS **THIS** BOX (queue 550 clause 2).
+   The head below says `align-self: stretch` and its comment claims that "makes the rule run the row's
+   full height". It does not — it stretches to its FLEX PARENT, which is this element, and this element
+   was sized by its own content. Measured at 380px: the add row is 40px tall and its divider ran
+   **y454..475, just 21px**, against a full **41px** on every layer row. That is the line he says is
+   "cut short for no reason", and it is the only break in it anywhere in the timeline.
+   So the inner stretches too, and the rule inherits the row's real height. */
 .tl-addrow-inner {
   position: sticky; left: 0;
   display: flex; align-items: center; gap: 0;
+  align-self: stretch;
   padding: 0; max-width: 100vw; box-sizing: border-box;
 }
 /* THE HEAD COLUMN OF THE ADD ROW (queue 417). `--head-w` is the same variable every `.track-head` uses,
@@ -7326,6 +7334,14 @@ body.fm-pushing #toast { z-index: 213; }
   width: var(--head-w); flex: 0 0 var(--head-w);
   display: flex; align-items: center; justify-content: center;
   align-self: stretch; border-right: 1px solid var(--line);
+  /* ⚠️ AND IT HAS TO BRIDGE THE ROW'S OWN BOX (queue 550 clause 2). `.tl-addrow` carries a 1px border
+     on every side and a 1px margin top and bottom — both transparent, both there for spacing, and
+     together they inset this rule by 1px at each end and push it 1px right of every other row's. The
+     result was a divider running y445..483 at x=67 against y485..526 at x=66 on the layer rows: short
+     at both ends, offset sideways, and separated from its neighbour by a visible 2px gap.
+     The negative margins eat the border and the margin so the rule spans the row's whole SLOT and meets
+     the next row's exactly. Nothing else moves: this element only draws the line. */
+  margin: -2px 0 -2px -1px;
 }
 .tl-addrow-label { padding-left: 12px; }
 /* The EMPTY-state panel is a different design and keeps it (queue 354 / v10.02): one big centred + above
