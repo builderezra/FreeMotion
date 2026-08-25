@@ -102,7 +102,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.56, 944 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.57, 945 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.57 did #527** — removed *"No audio effects yet — add one to shape this clip's sound."*, which sat
+directly above a button reading **+ Add Audio Effect**. Two lines, one fact.
+✅ **The entry's "ask him before removing all three" resolved itself by CHECKING.** The Visual section has
+no such line at all, and Behaviors carries a code note saying its own two explanation lines went for this
+same reason at queue 346/378. Audio was the odd one out — removing it makes the three AGREE rather than
+making it the exception, so there was nothing to ask.
+⚠️ **Two hints elsewhere deliberately KEPT, recorded so a later sweep does not bin them as "the same
+thing":** *"This filter is empty"* and *"Nothing on this cue yet"* say **where the effect will land** —
+into this filter, onto this one cue — which their buttons do not. They carry information; the audio one
+repeated its button. **Redundant ≠ short.**
+⚠️ **The control is the load-bearing half:** "the text is gone" is trivially true of a panel that failed
+to render, so the test proves the **+ Add Audio Effect** button is present in the same breath, and that
+the stack is genuinely empty (the only state the line ever appeared in). Mutation-proven by putting the
+line back.
 **v12.56 did #526** — the play pill's outline now sits on the same lines as the buttons beside it.
 MEASURED first: every `.tbtn` is a 34x34 box, 8px radius, border width **ZERO** — an invisible box —
 while the pill was **24.5px** with a VISIBLE 1px border, so the only outline you can see was inset
@@ -251,7 +265,8 @@ to 469 is BIG, NEEDS-YOU, a NOTE or HELD — **sixteen waiting on him**. #95 was
 the classifier was not over-blocking: it is genuinely blocked (it needs a perf number from HIS phone, and
 v11.83 made the app offer to produce one). #474 classifies as READY but is a standing STEER, not a build
 item. **So the first buildable numbered item was #522, and after it: 523, 524, 525, 526 …**
-**NEXT: #527** (remove the "No audio effects yet" line) — #524 is parked on his pick, not skipped.
+**NEXT: #528** (the effects menu should sit slightly higher — there is a gap above it) — #524 is parked
+on his pick, not skipped.
 
 **Previously — #215** — was the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
 everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
