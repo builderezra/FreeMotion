@@ -18507,3 +18507,41 @@ re-opened #480, which I had marked done and had not fixed.
       > Add a bell sound effect also
       One more entry in the generated sound-effects library. **Do it with #562**, since testing a new
       effect means playing it, and playing it is what #562 says is broken.
+
+- [ ] **564 — 🎨 The Outline & Shadows sub-panel works but looks bad. Make it actually look good.** (25 Aug, phone screenshot at v12.51.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > The function of this section is good it’s just the form I hate, make it actually look good
+      **He is explicit that this is FORM ONLY — the behaviour is right and must not change.** So this is
+      not a rework of what the rows do; it is what they look like.
+      What the screenshot shows (phone, v12.51, a shape layer selected → Outline & Shadows):
+      · A back link "‹ Outline & Shadows" in blue, then **five rows**: Outline, Trim path, Dashes,
+        Shadow, Repeater.
+      · Each row is a **bare unchecked square checkbox** on the left with a plain grey label beside it.
+        No icon, no divider, no card, no hint of what the effect does, no indication that a row opens
+        anything when ticked.
+      · They sit in the top third of the sheet with **a large empty area beneath**, so the panel reads as
+        unfinished rather than as a deliberate list.
+      **A checkbox is the wrong control for this.** Each of these is a feature you switch on and then
+      configure — the tick is a toggle, and the row is a way in. It looks like a form, which is exactly
+      the word he used.
+      ⚠️ **DESIGN REQUEST — his standing instruction #545 applies: draw real options, render them at the
+      size they ship at (this is a PHONE panel, so ~380px), send him the picture, and let him pick.
+      Nothing here ships without him having seen it.**
+
+      **OPTIONS DRAWN AND SENT, 25 Aug** — rendered at 380px, in the app's own palette, and shown next to
+      the current panel for comparison (`scratchpad/564-options.html`). **Waiting on his pick:**
+      · **A — cards, each saying what it does (my recommendation).** Row becomes a card: a glyph drawn
+        from the effect's real geometry, the name, a one-line plain-English hint, a `›` into its
+        settings, and a proper toggle on the right. Solves both halves of his complaint — it stops
+        looking like a form, and it answers "what is Trim path?" without him having to try it.
+      · **B — compact list, preview tile + switch.** Same idea, denser, no hint text, hairline dividers
+        instead of cards. Closest to the current layout; the smallest change.
+      · **C — two-column tiles.** Big glyph, name underneath, lit border and a dot when on. Fills the
+        dead space he is reacting to most directly, but has nowhere to put a hint.
+      ⚠️ **Scope note for whoever builds it:** these five rows come from the SHARED `checkRow()` helper in
+      js/inspector.js (15 call sites — masks, gradient fill, motion blur, fog, reverse…). He asked about
+      THIS section, so the new row type must be additive, not a rewrite of `checkRow`, or ten other
+      panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
+      ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
+      corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.

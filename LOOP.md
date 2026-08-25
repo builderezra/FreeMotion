@@ -140,9 +140,20 @@ was updated rather than left contradicting the code.
 **No toast.** That kills the memory theory (a mix that OOM'd would have thrown and spoken) and rules out
 all five previously-fixed causes. Neither toast + a silent file is defined three times in that entry as
 exactly one thing: **the MUXER**, the only part of the path with no witness.
-**NEXT: #215** — it is now the oldest ready item. First move is a NORMAL-sized export whose muxer output
-is inspected directly, **not** a reproduction at his heavy 2160/60 settings, which is what the entry used
-to say and is now known to be the wrong end.
+**NEXT: #215** — it is the oldest genuinely-ready item, CHECKED rather than assumed: `next.sh` lists
+everything ahead of it (47, 95, 96, 98, 125, 129, 148, 202, 206) but each is BIG, NEEDS-YOU, a NOTE or
+HELD. First move is a NORMAL-sized export whose muxer output is inspected directly, **not** a reproduction
+at his heavy 2160/60 settings, which is what the entry used to say and is now known to be the wrong end.
+
+**🎨 #564 LOGGED 25 Aug and OPTIONS ARE WITH HIM** — the Outline & Shadows sub-panel: *"The function of
+this section is good it's just the form I hate, make it actually look good"*. Five bare checkboxes with a
+big empty area under them. Three options drawn at 380px in the app's palette and sent
+(`scratchpad/564-options.html`): **A** cards with a glyph + plain-English hint + toggle (recommended),
+**B** compact list with a preview tile, **C** two-column tiles. **His pick is the blocker — nothing ships
+without it (#545).** The BUILD waits its turn; only the decision was pulled forward, because he was at the
+keyboard and #545 requires the pick to come from him.
+⚠️ **Scope trap noted in the entry:** those rows come from the SHARED `checkRow()` (15 call sites), so the
+new row type must be ADDITIVE or ten unrelated panels change without him asking.
 **v12.49 fixed #519.** `body.text-editing #inspector-panel { display:none }` existed ONLY in the phone
 media block; PC never had it, so 9 cards sat live behind the editor (measured at 1280x820). Now 0 while
 editing, restored after, inspector column collapsed so the timeline widens. **Checked FIRST that the
