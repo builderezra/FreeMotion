@@ -220,10 +220,17 @@ window.FM = window.FM || {};
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
     if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false });
-    if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: false });
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: false });
-    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: false });
-    if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Colour 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: false });
+    /* ⚠️ COLOURS KEYFRAME (queue 555). Ezra: "Colours for every effect like gradient overly should be
+       key frame able" — a screenshot of Gradient Overlay where Amount carries a ◆ and the two colour
+       stops carry nothing. These were `keyframable: false` while BOTH halves of the machinery already
+       existed: FM.evalProp has interpolated '#rrggbb' keyframes channel-wise for months, and the
+       inspector's `kfColorRow` (the colour row with a diamond) was already serving stroke and shadow.
+       Only effect colours were wired to a plain row and flagged off. ai-ops still gates itself on
+       `type === 'range'`, so the AI vocabulary is unaffected by this. */
+    if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true });
+    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true });
+    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: true });
+    if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Colour 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: true });
     return out;
   }
 

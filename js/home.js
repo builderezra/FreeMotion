@@ -112,6 +112,23 @@ window.FM = window.FM || {};
   //   release — a finger lifted off a card that then opened nothing (see releasePress)
   //   stuck   — an open that never settled at all (see holdPress and openAbandoned)
   const WAIT = { release: 600, stuck: 8000 };
+  /* ⚠️ A PUSH THAT NEVER FINISHES MUST NOT BE ABLE TO PERSIST (queue 553). Ezra sent a photograph of the
+     app half-drawn: the HOME screen filling the left ~78% and the EDITOR squeezed into a strip down the
+     right — both on screen at once, which is phase 1 done and phase 2 never arriving.
+     There WAS a stuck watchdog, and it is not enough. `waitTimer` is shared: `armPushIn` clears it on its
+     first line and then re-uses it for its own phase-1 wait, so between those two moments — and on any
+     path that clears it without re-arming — nothing is left guarding the parked state. `pushTimer` does
+     not help either: it is armed INSIDE armPushIn, so it only ever guards a phase 2 that has already
+     started. The one state with no guard is exactly the one he photographed.
+     ⚠️ COULD NOT REPRODUCE IT, and that is stated rather than glossed: 8 stress cycles of leave/re-open
+     at varied timings all completed cleanly at v12.66. His shot is v12.43. So this is not "the fix" —
+     it is the guarantee that the state cannot survive whatever caused it, which is the only honest thing
+     to build without a repro.
+     Its own timer, cleared ONLY by endPush, and it FINISHES the push rather than aborting it: the
+     project has almost certainly loaded by then, and showing him the editor is recoverable where leaving
+     both screens up is not. */
+  let strandedTimer = 0;
+  const STRANDED_MS = 9000;   // longer than WAIT.stuck, so the ordinary abort path still goes first
   let pushTimer = 0, pushLead = null, pressEl = null, pressTimer = 0, closing = false;
   // The waiting phase's own backstop (queue 128) — see startPush. It replaces the press backstop on
   // the split path: the press is handed to the push on the tap, so an open that never settles no
@@ -257,6 +274,7 @@ window.FM = window.FM || {};
   function endPush(hide) {
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = 0; }
     if (waitTimer) { clearTimeout(waitTimer); waitTimer = 0; }
+    if (strandedTimer) { clearTimeout(strandedTimer); strandedTimer = 0; }   // queue 553 — see armStrandedGuard
     splitRun = false;
     // A pop and a push are mutually exclusive, and fm-pop-out is `animation-fill-mode: both` — so if a
     // pop is still classed on when a push begins or ends, its FINAL frame stays applied to #app. Even
@@ -488,6 +506,17 @@ window.FM = window.FM || {};
     }
     if (pushTimer) endPush(false);           // a second push on top of a running one: restart it
     pushOutAt = Date.now();                  // phase 2 measures its wait from here (queue 459)
+    /* Armed HERE, at the moment the editor is parked, and cleared only by endPush — see STRANDED_MS.
+       Every other timer in this file is shared or conditional; this one exists so that no path, however
+       it fails, can leave both screens on screen. */
+    if (strandedTimer) clearTimeout(strandedTimer);
+    strandedTimer = setTimeout(() => {
+      strandedTimer = 0;
+      const a = document.getElementById('app');
+      if (!a || !(a.classList.contains('fm-push-wait') || a.classList.contains('fm-push-in'))) return;
+      try { console.warn('[home] the push never finished — finishing it (queue 553)'); } catch (e) {}
+      endPush(true);
+    }, STRANDED_MS);
     /* A pop still classed on #app would BEAT the park. fm-pop-out has animation-fill-mode:both, and a
      * running animation always wins over a plain declaration — so `fm-push-wait`'s static transform is
      * silently ignored and the editor sits wherever the pop's last frame left it, part-way on screen

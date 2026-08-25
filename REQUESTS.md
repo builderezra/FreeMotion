@@ -1,12 +1,22 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.66
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.67
 >
-> **State:** v12.66, **956 tests green**, tree clean.
+> **State:** v12.67, **957 tests green**, tree clean.
 >
 > **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
 > suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
 > quarter of the waiting. Nothing was dropped to get there.
+>
+> **✅ v12.67 — effect colours keyframe now (#555).** Gradient Overlay's Start and End have a ◆ like
+> everything else, and so does every other effect's colour. The animation machinery was already there —
+> what was missing is that the effects themselves ignored an animated colour and quietly used their own
+> default, so a ◆ would have looked like it worked and done nothing.
+>
+> **🛡️ v12.67 — the half-drawn app (#553).** I could not reproduce it in 8 stress cycles, so I have not
+> "fixed" it — but I found a real hole: the guard that rescues a stuck transition doesn't cover the exact
+> state you photographed. There's now one that does, so it can't stay stuck. **The black bar I have not
+> touched** — I've never seen it.
 >
 > **✅ v12.66 — the layer no longer vanishes at the end of itself (#549).** Your 00:04:00 screenshot. It
 > was the last instant falling just outside the clip. It now holds the picture **whenever nothing else is
@@ -19020,7 +19030,7 @@ re-opened #480, which I had marked done and had not fixed.
       path, keyframed, with the renderer drawing only that span of the stroke.
 
 - [ ] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Leaving and opening a project glitches the app out like this
       > Notice the black bar at the bottom also
@@ -19029,6 +19039,22 @@ re-opened #480, which I had marked done and had not fixed.
       transport row, the add-layer row and two layer rows — occupying a strip down the RIGHT. **Both
       screens are rendered at once**, the editor squeezed into what looks like the tail of a push
       transition that never finished. There is also a **black bar across the bottom** below both.
+      ✅ **GUARDED v12.67 — and I could NOT reproduce it, which is stated plainly rather than glossed.**
+      8 stress cycles of leave-and-re-open at varied timings, at 380px, all completed cleanly at v12.66;
+      his screenshot is v12.43. So this is **not "the fix"** — it is the guarantee that the state cannot
+      SURVIVE whatever causes it, which is the only honest thing to build without a repro.
+      🐛 **The gap is real and was found by reading:** there WAS a stuck watchdog and it does not cover
+      this. `waitTimer` is **shared** — `armPushIn` clears it on its first line and then re-uses it for
+      its own phase-1 wait — and `pushTimer` is armed INSIDE `armPushIn`, so it only ever guards a phase 2
+      that has already started. **The one state with no guard is exactly the one he photographed:** phase
+      1 finished, the editor parked off-screen, phase 2 never armed.
+      **Now there is a dedicated timer armed the moment the editor is parked and cleared ONLY by
+      `endPush`.** If it ever fires it FINISHES the push rather than aborting it — by then the project has
+      almost certainly loaded, and showing him the editor is recoverable where leaving both screens up is
+      not. 9s, deliberately longer than the existing 8s abort so the ordinary path still goes first.
+      ⏳ **The black bar at the bottom is NOT addressed** — it is probably a consequence of the same
+      stranded transform, but I have not seen it, so it stays open.
+
       ⚠️ **This is almost certainly the two-phase push (queue 128/459) failing to complete.** Phase 1
       slides home out and parks `#app` off the right edge (`fm-push-wait`); phase 2 runs `fm-push-in`
       when the project has loaded, and `endPush()` clears the classes on `animationend`. If phase 2
@@ -19054,8 +19080,7 @@ re-opened #480, which I had marked done and had not fixed.
       CANVAS does not update on selection. Those are different fixes; measure which before building.
       ⚠️ Related: #454 (presets are for effects only) and the filter-container work around queue 301.
 
-- [ ] **555 — Every effect's COLOURS should be keyframable, Gradient Overlay included.** (25 Aug, phone screenshot at v12.44.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **555 — Every effect's COLOURS should be keyframable, Gradient Overlay included.** (25 Aug, phone screenshot at v12.44.) ✅ v12.67
       His words, verbatim:
       > Colours for every effect like gradient overly should be key frame able
       **What the shot shows:** an Ellipse with Gradient Overlay open. **Amount has a ◆ and a curve icon**
@@ -19068,6 +19093,26 @@ re-opened #480, which I had marked done and had not fixed.
       before building a second mechanism beside it.
       ⚠️ Goes with **#537** (Gradient Overlay wants blend modes and "other stuff"), which is the same
       effect and should be looked at in the same pass.
+
+      ✅ **DONE v12.67 — and checking first, as the entry asked, saved building a whole mechanism.**
+      **Both halves already existed and were simply not wired together:** `FM.evalProp` has interpolated
+      `'#rrggbb'` keyframes channel-wise for months (`lerpHexKf`, js/scene.js), and **`kfColorRow`** — a
+      colour row WITH the ◆ — was already in the inspector, serving stroke and shadow. Effect colours
+      alone were built with a plain row and flagged **`keyframable: false`** in the registry.
+      🎯 **BUT FLIPPING THAT FLAG WAS NOT ENOUGH, AND THIS IS THE HALF THAT MATTERED.** An animated colour
+      is an **object**, and **39 kernels read colours as strings** through `hexToRGB` — which returns null
+      and lets each one quietly fall back to its own default. **MEASURED after the flag change alone: a
+      red→blue keyframed overlay rendered the SAME blue at t=0, 1, 2 and 3.** A ◆ that does nothing is
+      exactly the complaint behind #529, and it would have shipped looking finished.
+      **Resolved once at the two places every pixel effect's params arrive** (`applyPixelFx` and
+      `drawPixelEffect`) rather than in 39 kernels — 39 edits is 39 chances to miss one. A shallow copy,
+      so the stored keyframes are untouched, and the loop only runs when a colour key is actually
+      animated.
+      **Measured after: 255,0,0 → 191,0,64 → 128,0,128 → 64,0,191.** A clean ramp, and a static colour is
+      unchanged at every time. The test measures PIXELS rather than the flag, for the reason above.
+      *Two dispatch points, not one: the first fix only patched `applyPixelFx` and the render did not
+      move, because Gradient Overlay goes through `drawPixelEffect`. Found by measuring again rather than
+      assuming the first edit had landed.*
 
 - [ ] **556 — Deleting a layer should leave NOTHING selected, not fall back to the previously selected layer.** (25 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

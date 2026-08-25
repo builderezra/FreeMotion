@@ -2638,7 +2638,8 @@ window.FM = window.FM || {};
        * composite: it drops the one drawImage that puts this layer on screen. Measured before this
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
-      if (!bounded || bb) fn(img.data, W, H, fx.params || {}, t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
+      if (!bounded || bb) fn(img.data, W, H, resolveFxColors(fx.params || {}, t), t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -11838,8 +11839,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // draw, so nothing in the suite could reach them and neither had a test. Both now take controls that
   // feed a repaint cache, which is exactly the kind of thing that needs one.
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
+  /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
+     Ezra: "Colours for every effect like gradient overly should be key frame able".
+     `FM.evalProp` has interpolated '#rrggbb' keyframes channel-wise for months, and once the inspector
+     let him press ◆ on a colour the param became `{ kf: [...] }` — which every kernel then handed
+     straight to `hexToRGB`, got null from, and silently replaced with its own default. MEASURED: a
+     red→blue keyframed Gradient Overlay rendered the SAME blue at t=0, 2 and 3.99.
+     Resolving it in each kernel would be 39 edits and 39 chances to miss one. This is the single place
+     every pixel effect's params arrive, so it is resolved once here: any `color*` that is animated is
+     evaluated to its plain string for this frame, on a SHALLOW COPY so the stored keyframes are
+     untouched.
+     Costs nothing in the common case — the loop only runs when a colour key is actually animated, which
+     is a property read per effect per frame. */
+  function resolveFxColors(p, t) {
+    let out = null;
+    for (const k in p) {
+      if (k.charCodeAt(0) !== 99 || k.indexOf('color') !== 0) continue;   // 'color', 'color2', …
+      if (!FM.isAnimated(p[k])) continue;
+      if (!out) out = Object.assign({}, p);
+      out[k] = FM.evalProp(p[k], t);
+    }
+    return out || p;
+  }
+  FM._resolveFxColors = resolveFxColors;   // suite seam
+
   function applyPixelFx(d, fx, t, W, H) {
-    const p = fx.params || {};
+    const p = resolveFxColors(fx.params || {}, t);
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
     // everything below" — and its pixel pass is already byte-in/byte-out, so the adjustment path can
     // call it directly instead of carrying a second copy. (No overlap: none of the other PIXEL_ADJ

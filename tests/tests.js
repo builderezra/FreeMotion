@@ -3728,6 +3728,52 @@
     }
   });
 
+  test('555: an effect colour can be keyframed, and actually renders the interpolation', { item: '555' }, function () {
+    /* Queue 555. Ezra, with Gradient Overlay open: "Colours for every effect like gradient overly should
+       be key frame able" — Amount carried a ◆ and the two colour stops carried nothing.
+       ⚠️ BOTH HALVES ALREADY EXISTED and were not wired together: FM.evalProp has interpolated '#rrggbb'
+       keyframes channel-wise for months, and `kfColorRow` (the colour row WITH a diamond) was already
+       serving stroke and shadow. Effect colours alone used a plain row and were flagged
+       `keyframable: false`.
+       ⚠️ AND FLIPPING THAT FLAG WAS NOT ENOUGH — this is the half that matters. An animated colour is an
+       OBJECT, and 39 kernels read colours as strings via hexToRGB, which returns null and lets each one
+       fall back to its own default. MEASURED before the second fix: a red→blue keyframed overlay rendered
+       the SAME blue at t=0, 1, 2 and 3 — a ◆ that did nothing, which is exactly the complaint behind
+       queue 529. So the params are resolved once at the two places every pixel effect arrives through.
+       This test therefore measures PIXELS, not the flag. */
+    if (typeof FM._resolveFxColors !== 'function') throw new Error('FM._resolveFxColors is missing — animated colours never reach the kernels as strings');
+    const P = { width: 160, height: 100, duration: 4, fps: 30, background: '#000000' };
+    const centre = (params, t) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 50, shapeW: 140, shapeH: 80, fill: '#808080' });
+      L.start = 0; L.duration = 4;
+      const e = FM.fxRegistry.makeInstance('gradientoverlay');
+      Object.assign(e.params, params); L.effects = [e];
+      const c = offscreen(160, 100);
+      FM.renderScene(c.getContext('2d'), { project: P, layers: [L] }, t);
+      const d = c.getContext('2d').getImageData(80, 50, 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2] };
+    };
+    const kf = { kf: [{ t: 0, v: '#ff0000', ease: 'linear' }, { t: 4, v: '#0000ff', ease: 'linear' }] };
+
+    /* CONTROL: a STATIC colour must render, and must not move with time. Without this, "the colour
+       changed" could be satisfied by an effect that is simply broken and drifting. */
+    const s0 = centre({ amount: 1, color: '#ff0000', color2: '#ff0000' }, 0);
+    const s3 = centre({ amount: 1, color: '#ff0000', color2: '#ff0000' }, 3);
+    if (!(s0.r > 200 && s0.b < 60)) throw new Error('a static red overlay did not render red (' + s0.r + ',' + s0.g + ',' + s0.b + ') — the fixture is wrong, so nothing below means anything');
+    if (Math.abs(s0.r - s3.r) > 6 || Math.abs(s0.b - s3.b) > 6) throw new Error('a STATIC colour changed between t=0 and t=3 — resolving animated colours has leaked into the static path');
+
+    const a0 = centre({ amount: 1, color: kf, color2: kf }, 0);
+    const a2 = centre({ amount: 1, color: kf, color2: kf }, 2);
+    const a3 = centre({ amount: 1, color: kf, color2: kf }, 3);
+    if (!(a0.r > 200 && a0.b < 60)) throw new Error('at t=0 the keyframed colour is not its first stop (' + a0.r + ',' + a0.g + ',' + a0.b + ') — the kernel is falling back to its own default, which is a ◆ that does nothing');
+    if (!(a3.b > 150 && a3.r < 110)) throw new Error('at t=3 the keyframed colour has not travelled towards blue (' + a3.r + ',' + a3.g + ',' + a3.b + ')');
+    if (!(a2.r > 90 && a2.r < 170 && a2.b > 90 && a2.b < 170)) throw new Error('the midpoint is not between the two stops (' + a2.r + ',' + a2.g + ',' + a2.b + ') — it is snapping rather than interpolating');
+    // …and the registry must actually offer the diamond, or he can never make one of these
+    const defs = (FM.fxRegistry.params ? FM.fxRegistry.params('gradientoverlay') : []) || [];
+    const cols = defs.filter(d => d.type === 'color');
+    if (cols.length && cols.some(d => d.keyframable === false)) throw new Error('a colour param is still flagged keyframable:false, so the inspector will not draw its ◆');
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

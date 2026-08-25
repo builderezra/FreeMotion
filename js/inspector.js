@@ -1395,7 +1395,18 @@ window.FM = window.FM || {};
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
         else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
-        else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
+        /* ⚠️ EFFECT COLOURS KEYFRAME NOW (queue 555). Ezra, with a Gradient Overlay open: *"Colours for
+           every effect like gradient overly should be key frame able"* — his screenshot shows Amount
+           carrying a ◆ and a curve while Start and End have neither.
+           BOTH HALVES ALREADY EXISTED and were simply not wired together, which is why this is two
+           lines rather than a mechanism: `FM.evalProp` has lerped '#rrggbb' keyframes channel-wise for
+           months (see lerpHexKf in scene.js), and `kfColorRow` — the colour row WITH a diamond — was
+           already in this file, used by stroke and shadow. Effect colours alone were built with a plain
+           row and marked `keyframable: false` in the registry. Checked before building anything, as the
+           entry asked.
+           The row is asked for the value through evalProp and writes through setProp, so a static colour
+           stays a plain string and only becomes a keyframe object when he presses the ◆. */
+        else if (p.type === 'color') { body.appendChild(kfColorRow(fx.params, p.key, p.label, p.default)); }
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp
           const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label || 'Source'));
           const sel = document.createElement('select');
