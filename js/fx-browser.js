@@ -32,11 +32,24 @@ window.FM = window.FM || {};
    *
    * Returns whether the sheet is on, because both callers branch on it.
    */
-  FM.fxSheet = function (root, on) {
-    if (!root) return false;
-    const sheet = on !== false;
-    root.classList.toggle('fxb-sheet', sheet);
-    if (sheet) {
+  /* ⚠️ THE PIN HAS TO BE RE-MEASURED, NOT JUST SET ONCE (queue 528). Ezra: *"Effects menu could pop up
+     slightly higher to remove this slight gap"*.
+     `--fxb-top` is the canvas's measured bottom, so at the moment of opening it is exact — MEASURED at
+     380px and at his own 440px, on 1:1, 9:16, 16:9 and 4:5: the sheet sits 0.17-0.35px under the canvas,
+     which is rounding and nothing else. That is why the first pass at this could not reproduce his gap.
+     **It appears when the canvas MOVES after the sheet is already up**, because the pin was computed once
+     in this function and never again. MEASURED: open the sheet on a 9:16 project, change the project to
+     16:9, and the canvas bottom rises from 424.8 to 364.5 while the sheet stays at 425 — **a 60.5px gap**,
+     exactly the strip he circled. A plain window `resize` did not fix it either, so a rotate, the
+     keyboard appearing, or browser chrome collapsing all strand it the same way.
+     So the placement is a function that can be re-run, and it is re-run whenever the canvas box changes.
+     A ResizeObserver rather than a resize listener because the canvas also changes shape without the
+     window doing anything — a project-size change is the case that produced the 60.5px above.
+     No feedback loop: this writes the SHEET's top, never the canvas's box.
+     Applied in `FM.fxSheet`, which queue 300 made the one function every browser calls — so the visual
+     browser, the audio browser and #el-browser all get it and cannot drift apart. */
+  function placeSheet(root) {
+    if (!root) return;
       /* ON A DESKTOP IT LIVES IN THE INSPECTOR (queue 397). Ezra: "Make the effects browser on pc only show
          in the inspector." The phone keeps its full-bleed sheet — that is queue 277's design and his.
          The overlay is NOT reparented into the panel: it is `position: fixed`, so publishing the panel's
@@ -59,15 +72,48 @@ window.FM = window.FM || {};
         root.classList.remove('fxb-in-inspector');
         ['--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));
         const cv = document.getElementById('preview');
-        const top = cv ? Math.round(cv.getBoundingClientRect().bottom) : 0;
+        /* FLOOR, not round (queue 528). Rounding lands within half a pixel EITHER side of the canvas
+           bottom, so half the time it leaves a hairline of background showing — which is the very thing
+           he is complaining about, just smaller. Flooring can only ever put the sheet AT the canvas
+           bottom or up to 1px under it, so a gap is not a coin flip any more, it is impossible.
+           An overlap of up to 1px is invisible: the sheet is opaque and the canvas edge is straight. */
+        const top = cv ? Math.floor(cv.getBoundingClientRect().bottom) : 0;
         root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
       }
-    } else {
+  }
+
+  // one watcher per root, torn down with the sheet — see the note above placeSheet
+  function watchSheet(root) {
+    unwatchSheet(root);
+    const again = () => { if (root.classList.contains('fxb-sheet')) placeSheet(root); };
+    const cv = document.getElementById('preview');
+    if (cv && window.ResizeObserver) {
+      const ro = new ResizeObserver(again);
+      ro.observe(cv);
+      root._fxbRO = ro;
+    }
+    // …and the things a ResizeObserver on the canvas can miss: an orientation change or the visual
+    // viewport moving under us. FM.screen.watch hands back one unsubscribe that cannot be missed.
+    if (FM.screen && FM.screen.watch) root._fxbUnwatch = FM.screen.watch(again);
+  }
+  function unwatchSheet(root) {
+    if (root._fxbRO) { try { root._fxbRO.disconnect(); } catch (e) {} root._fxbRO = null; }
+    if (root._fxbUnwatch) { try { root._fxbUnwatch(); } catch (e) {} root._fxbUnwatch = null; }
+  }
+
+  FM.fxSheet = function (root, on) {
+    if (!root) return false;
+    const sheet = on !== false;
+    root.classList.toggle('fxb-sheet', sheet);
+    if (sheet) { placeSheet(root); watchSheet(root); }
+    else {
+      unwatchSheet(root);
       root.classList.remove('fxb-in-inspector');
       ['--fxb-top', '--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));
     }
     return sheet;
   };
+  FM._fxSheetPlace = placeSheet;   // suite seam: re-place without reopening
 
   const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8;   // PAGE_SIZE went with the sideways pager (queue 92); js/audio-fx-browser.js keeps its own
   // Two entries in this browser are NOT registry effects — Mask and Motion Blur (Object) are

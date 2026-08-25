@@ -3111,6 +3111,91 @@
     }
   });
 
+  test('528: the effects sheet re-pins to the canvas when the canvas moves', { item: '528' }, async function () {
+    /* Queue 528. Ezra: "Effects menu could pop up slightly higher to remove this slight gap."
+       ⚠️ THE FIRST PASS COULD NOT REPRODUCE IT, and that is the interesting part. `--fxb-top` is the
+       canvas's measured bottom, so AT THE MOMENT OF OPENING it is exact — measured at 380px and at his
+       own 440px, on 1:1, 9:16, 16:9 and 4:5, the sheet sat 0.17-0.35px under the canvas. Rounding, not a
+       gap. Calling it "already fixed" there would have been wrong.
+       It appears when the canvas MOVES while the sheet is already up, because the pin was computed once
+       and never again. MEASURED before the fix: open on a 9:16 project, switch it to 16:9, and the canvas
+       bottom rises from 424.8 to 364.5 while the sheet stays at 425 — a 60.5px gap. A window `resize` did
+       not fix it either, so a rotate or the keyboard appearing strands it the same way.
+       ⚠️ IT DRIVES `FM.fxSheet` DIRECTLY rather than opening the browser, and that is deliberate. Opening
+       it starts the thumbnail machinery, and an earlier version of this test did exactly that: tiles
+       generated inside its phone-width block outlived it and the NEXT test that compares a tile against
+       its subject reported six effects as "indistinguishable" — a failure with nothing wrong in the
+       effects at all. `FM.fxSheet` is the seam queue 300 created for precisely this ("the one function
+       every browser calls"), it is the only code this fix touches, and it drags nothing else in.
+       So the assertion is on `--fxb-top`, the value the fix writes, rather than on a painted rect — which
+       also means it does not depend on the sheet being visible. */
+    const root = document.getElementById('fx-browser');
+    if (!root) throw new Error('#fx-browser is not in the DOM, so there is no sheet root to place');
+    if (typeof FM.fxSheet !== 'function') throw new Error('FM.fxSheet is missing — that is the seam this fix lives in');
+    const P = FM.scene.project;
+    const saved = { w: P.width, h: P.height, wasSheet: root.classList.contains('fxb-sheet') };
+    const pinned = () => {
+      const v = root.style.getPropertyValue('--fxb-top');
+      return v ? parseFloat(v) : null;
+    };
+    const canvasBottom = () => {
+      const cv = document.getElementById('preview');
+      if (!cv) throw new Error('no #preview canvas to pin against');
+      return cv.getBoundingClientRect().bottom;
+    };
+    try {
+      return await atPhoneWidth(async function () {
+        P.width = 1080; P.height = 1920;
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(250);
+
+        FM.fxSheet(root, true);
+        await sleep(120);
+        /* CONTROL 1: the phone branch, not the desktop one. Queue 397 pins the sheet to the INSPECTOR
+           column on PC, where its top has nothing to do with the canvas — measuring that would compare
+           two unrelated boxes, which is exactly how the first draft of this test reported a phantom
+           21.13px "gap". */
+        if (root.classList.contains('fxb-in-inspector')) throw new Error('the sheet placed itself in INSPECTOR mode at phone width — its top is the inspector rect there, so the canvas comparison below would be meaningless');
+        const first = pinned(), firstBottom = canvasBottom();
+        // CONTROL 2: it placed at all.
+        if (first === null) throw new Error('--fxb-top was never set, so there is no pin to test');
+        if (first > firstBottom + 0.01) throw new Error('the sheet pinned to ' + first + ' with the canvas bottom at ' + firstBottom.toFixed(2) + ' — it already sits below the canvas the moment it is placed, which is queue 528 at rest');
+
+        // ---- MOVE THE CANVAS under the placed sheet. This is the whole bug.
+        P.width = 1920; P.height = 1080;
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(500);
+        const secondBottom = canvasBottom(), second = pinned();
+        /* CONTROL 3, and without it this test is worthless: the canvas has to have actually MOVED. If it
+           did not, "still pinned" is trivially true and would stay green with the re-measure deleted. */
+        if (Math.abs(secondBottom - firstBottom) < 8) throw new Error('the canvas bottom barely moved (' + firstBottom.toFixed(2) + ' → ' + secondBottom.toFixed(2) + '), so this fixture is not exercising the bug and the assertion below would pass for free');
+        if (second > secondBottom + 0.01) throw new Error('the canvas moved to ' + secondBottom.toFixed(2) + ' and the sheet stayed pinned at ' + second + ' — a ' + (second - secondBottom).toFixed(2) + 'px gap opened under the canvas. That is queue 528: the pin is set once and never re-measured.');
+
+        // …and it must survive a SECOND move, so the watcher is not a one-shot
+        P.width = 1080; P.height = 1350;
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(500);
+        const thirdBottom = canvasBottom(), third = pinned();
+        if (third > thirdBottom + 0.01) throw new Error('a SECOND canvas move left a ' + (third - thirdBottom).toFixed(2) + 'px gap — the re-measure only fires once');
+
+        // ---- the watcher must not outlive the sheet
+        FM.fxSheet(root, false);
+        await sleep(120);
+        if (root._fxbRO || root._fxbUnwatch) throw new Error('leaving sheet mode left the resize watcher attached — it would keep re-placing a sheet that is not on screen for the rest of the session');
+        if (root.style.getPropertyValue('--fxb-top')) throw new Error('--fxb-top survived leaving sheet mode');
+      }, 380);
+    } finally {
+      try { FM.fxSheet(root, saved.wasSheet); } catch (e) {}
+      P.width = saved.w; P.height = saved.h;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+    }
+  });
+
   test('444: a favourited filter rises to the top AND stays in its own category', { item: '444' }, function () {
     /* Queue 444. Ezra: "make it so you can fave them and they go to the top when you do, not the
        categories but each individual. And it doesn't take it away from its group when you do so."

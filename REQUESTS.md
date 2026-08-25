@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.57
+> ## 📌 WHAT I NEED FROM YOU — updated 25 Aug at v12.58
 >
-> **State:** v12.57, **945 tests green**, tree clean.
+> **State:** v12.58, **946 tests green**, tree clean.
 >
 > **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
 > why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
@@ -18,6 +18,12 @@
 >   you see the project extending under the clip rather than the clip freezing.
 > · **B** — no limit at all. Literally what you asked, and it brings back the stranded-clip problem.
 > · **C** — a bigger limit, roughly twice as far in one go, then it stops.
+>
+> **✅ v12.58 — the gap above the effects menu (#528).** It was not where it looked. When the menu opens
+> it is already flush with the canvas — I measured it on your 440px screen at four project shapes. The gap
+> only opens when the **canvas moves while the menu is up** — rotating, the keyboard appearing, changing
+> the project size — because it was measuring once and never again. It re-measures now, and it can no
+> longer land even a hairline low.
 >
 > **✅ v12.57 — that "No audio effects yet" line is gone (#527).** It sat right above a button saying
 > "+ Add Audio Effect", so it was telling you something the button already said. I checked the Visual and
@@ -18087,8 +18093,7 @@ re-opened #480, which I had marked done and had not fixed.
       *Verified on screen at 380px: ‹ Effects, the Visual/Filters/Audio tabs, the button, Copy/Paste — no
       stray sentence and no leftover gap where it used to be.*
 
-- [ ] **528 — The effects menu should sit slightly higher — there is a gap above it.** (24 Aug, phone screenshot at v12.25, circled.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **528 — The effects menu should sit slightly higher — there is a gap above it.** (24 Aug, phone screenshot at v12.25, circled.) ✅ v12.58
       His words, verbatim:
       > Effects menu could pop up slightly higher to remove this slight gap
       **What he circled:** the strip between the bottom of the canvas and the top of the effects sheet.
@@ -18096,6 +18101,41 @@ re-opened #480, which I had marked done and had not fixed.
       of background showing through, with the X and search buttons just under it.
       **Measure the gap before moving anything** — it may be the sheet's own top offset, or the canvas
       area's bottom padding, and nudging the wrong one will just move the seam somewhere else.
+
+      ✅ **DONE v12.58 — and measuring first is what saved this from being closed as "already fixed".**
+      `--fxb-top` is set to the canvas's measured bottom, so **at the moment of opening it is exact**.
+      Measured at 380px and at his own **440px**, on 1:1, 9:16, 16:9 and 4:5: the sheet sat **0.17–0.35px**
+      under the canvas — rounding, not a gap. Both the visual and audio browsers. On that evidence alone
+      the honest-looking conclusion was "this got fixed somewhere in the last 32 releases", and it would
+      have been **wrong**.
+      🔬 **The gap appears when the CANVAS MOVES while the sheet is already up**, because the pin was
+      computed once in `FM.fxSheet` and never again. **MEASURED:** open the sheet on a 9:16 project, switch
+      the project to 16:9, and the canvas bottom rises 424.8 → 364.5 while the sheet stays at 425 — **a
+      60.53px gap**, which is the strip he circled. A plain window `resize` did **not** fix it either, so a
+      rotate, the keyboard appearing, or browser chrome collapsing all strand it the same way.
+      **The fix:** the placement is a re-runnable function, re-run whenever the canvas box changes — a
+      ResizeObserver on `#preview` (not a resize listener: the canvas also changes shape without the
+      window doing anything, which is the case that produced the 60.53px) plus `FM.screen.watch` for
+      orientation and visual-viewport moves. Torn down with the sheet. Applied in `FM.fxSheet`, which
+      queue 300 made *"the one function every browser calls"*, so the visual browser, the audio browser
+      and `#el-browser` all get it and cannot drift apart.
+      **Also changed `Math.round` → `Math.floor` on the pin.** Rounding lands within half a pixel *either*
+      side, so half the time it leaves a hairline of background — the same complaint, smaller. Flooring can
+      only put the sheet at the canvas bottom or up to 1px under it, so **a gap is no longer a coin flip,
+      it is impossible.** Measured across seven project shapes with the sheet open: −0.47 to −0.89px, never
+      positive.
+      🐛 **AND A CROSS-TEST LEAK I CAUSED AND THEN HAD TO HUNT.** The first version of this test opened the
+      real browser inside a phone-width block. That starts the thumbnail machinery, and tiles baked at the
+      phone tile scale outlived the test — the next test that compares a tile against its subject reported
+      **six effects as "indistinguishable from their subject"**, a failure with nothing wrong in the
+      effects at all. Isolated properly rather than guessed: the suite was green at clean HEAD, still red
+      with the ResizeObserver disabled, and **green again with only the test body neutered** — which
+      pinned it on the test, not the fix. It drives `FM.fxSheet` directly now and asserts `--fxb-top`, so
+      it touches only the code the fix lives in. Mutation-proven.
+      ⚠️ **One more trap worth recording:** the first draft measured the sheet against the canvas at the
+      harness's default DESKTOP width and reported a phantom **21.13px gap**. On PC the sheet deliberately
+      pins to the INSPECTOR column (#397), so that was comparing two unrelated boxes. The test runs at
+      phone width and asserts it is not in inspector mode.
 
 - [ ] **529 — Multi-selecting effects worked once and is broken again.** (24 Aug, phone screenshot at v12.25.)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -18765,3 +18805,19 @@ re-opened #480, which I had marked done and had not fixed.
       panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
+
+- [ ] **565 — Make it obvious that a filter row scrolls sideways — page dots or similar.** (25 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make it obvious that you can scroll on filter rows to show more, like do the little dots at the bottom or sum
+      **The complaint is discoverability, not layout.** A filter row holds more than fits and scrolls
+      horizontally, but nothing on screen says so — so the ones off the right-hand edge may as well not
+      exist. His own suggestion is page dots underneath.
+      ⚠️ **DESIGN REQUEST — #545 applies: draw the options at the size they ship at (~380px), send him the
+      picture, let him pick.** Worth drawing more than dots, since dots are one of several honest answers
+      and he said *"or sum"*: page dots, a fading edge on the right, a peeking part-tile, or a count.
+      ⚠️ **The add menu already solved this once** — the shape grid "PAGES SIDEWAYS with page dots" (v2.39,
+      matching Alight Motion). **Check what that uses and reuse it** rather than inventing a second
+      vocabulary for the same idea; if the filter rows can adopt the same control, that is the answer.
+      ⚠️ Applies to more than filters if it lands — the effects browser's NEW and RECENTS rows scroll the
+      same way. Ask before spreading it, since he named filter rows.
