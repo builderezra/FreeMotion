@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.38
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.39
 >
-> **State:** v13.38, 990 tests green, tree clean.
+> **State:** v13.39, 990 tests green, tree clean.
+>
+> **✅ SHIPPED the preview change you saw the picture of — every effect is now ~1.5x faster.** Your preview
+> was being drawn 1.5x bigger than your screen can show; it is now 1.25x. **At the size you actually look
+> at it I could not tell the two apart** — you saw that comparison.
+> ⚠️ **One number I owe you a correction on: I said 1.76x. Measured properly through the real drawing
+> path it is 1.49x.** My first figure came from timing the maths alone rather than the whole job.
+> **Exports are untouched.** If the preview ever looks soft to you, say the word and this goes back in one
+> line — and there is already a "detail" playback-quality setting that restores full sharpness.
 >
 > **🎯 I found the biggest speed lever in the app and it is ONE NUMBER — but it is a look-vs-speed call,
 > so it is yours to make and I will show you a picture first.**

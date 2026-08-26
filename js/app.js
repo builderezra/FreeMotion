@@ -447,7 +447,22 @@ window.FM = window.FM || {};
    * text edges clean, and it never pushes past 1 (above that the canvas is already denser than the
    * screen, so extra pixels buy nothing and cost real time).
    * 'detail' playback quality keeps the old never-below-project floor for anyone who wants it. */
-  const PREVIEW_SS = 1.5;
+  /* 1.5 -> 1.25 (27 Aug). MEASURED, and shown to Ezra as a picture before it moved — the standing rule
+   * for a visual change. The margin costs the SQUARE of itself in pixels, so 1.5 was rendering 2.23x the
+   * pixels the screen can show and every one of the 198 effects paid for all of them. On the real
+   * phone-width layout (wrap 249 CSS px, dpr 2, a 1080x1350 project) one kaleidoscope pass measured:
+   *     1.5  -> 747x934  29.0 ms          1.25 -> 598x747  16.5 ms          1.0 -> 498x623  11.7 ms
+   * ⚠️ Those are KERNEL-ONLY figures and they overstate it. Through the REAL render path, interleaved and
+   * warmed, the canvas went 745x931 -> 626x783 (scale 0.69 -> 0.58) and kaleidoscope 57.6 -> 38.6 ms:
+   * **1.49x, not 1.76x.** It tracks the pixel ratio of 1.42 almost exactly, which is what makes it
+   * believable. Quote 1.49x. (Control drifted to 0.886 on that run — the win clears it comfortably, but
+   * it is not a clean 1.000.)
+   * 1.0 was rendered side by side at real size and at 2x and REJECTED — visibly rougher strokes with
+   * colour fringing on fine text. At 1.25 the difference is not findable at real viewing size.
+   * ⚠️ This is a QUALITY TRADE, not a free win: it is preview only (export is untouched), and anyone who
+   * wants the old never-below-project sharpness still has playbackQuality 'detail'. If a future report
+   * says the preview looks soft, THIS IS THE FIRST THING TO PUT BACK. */
+  const PREVIEW_SS = 1.25;
   const MIN_PREVIEW_SCALE = 0.34;
   function previewScale() {
     const P = FM.scene.project;
