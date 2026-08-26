@@ -20188,7 +20188,7 @@ re-opened #480, which I had marked done and had not fixed.
       distinction applies here.
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
       **THIS IS THE MOST SERIOUS THING IN THE QUEUE — "completely broke the app".** Three separate claims:
@@ -20209,6 +20209,56 @@ re-opened #480, which I had marked done and had not fixed.
       edge case to him.
       ⚠️ **Do not start by tuning.** Get the break reproduced and named first — a crash and a slow render
       need opposite fixes, and guessing between them wastes the tick.
+
+      **🔎 REPRODUCED AND NAMED at v12.97 — IT IS NOT A CRASH. Nothing throws.**
+      His exact stack, rendered at 1080×1080 with the console watched: **no exception, no error, no
+      warning.** It is a cost explosion, and on his phone that reads as the app dying.
+      | stack | time |
+      |---|---|
+      | nothing | 0.2 ms |
+      | Motion Blur (Object) alone | 0.7 ms |
+      | Shake alone | 6.2 ms |
+      | Tiles alone | 9.7 ms |
+      | Shake + Tiles | 10.6 ms |
+      | **his three together** | **78.7 ms** |
+      **78.7ms against 16.6ms for the same three added up — 4.7×, and it is not additive at all.**
+      **📐 THE MECHANISM, MEASURED: Motion Blur (Object) re-renders everything beneath it once per
+      sample.** Cost scales with the sample dial and with nothing else:
+      | samples | blur alone | blur + Shake + Tiles |
+      |---|---|---|
+      | 2 | 0.6 ms | 40.6 ms |
+      | 4 | 0.1 ms | 57.5 ms |
+      | 8 | 1.8 ms | **101.8 ms** |
+      | 16 | 0.1 ms | **169.4 ms** |
+      **🎯 AND THE EXACT LINE — js/compositor.js, the slice count:**
+      ```js
+      const N = _hasMoverFx ? Math.max(2, samples)
+                            : Math.max(2, Math.min(samples, Math.ceil(travelPx / 1.5)));
+      ```
+      **The normal path caps slices by how far the layer actually travelled. The MOVER path has no cost
+      bound at all** — it takes the user's full sample setting, and on that path each slice renders the
+      COMPLETE stack (`m = 0`, *"Each slice is rendered complete instead"*). Default 8 samples × a 9.6ms
+      Shake+Tiles stack ≈ the 78.7ms measured.
+      ⚠️ **THE UNCAPPED BRANCH IS DELIBERATE AND THE COMMENT SAYS WHY:** `travelPx` cannot see a mover, so
+      capping by travel would give a violent shake the 2-slice minimum. That reasoning is sound. **The gap
+      is that nothing replaced the cap** — the one path where each slice is most expensive is the one path
+      with no bound on how many there are.
+      ⚠️ **Motion Blur (FOOTAGE) + Shake + Tiles is 11.2ms — completely fine.** Only the OBJECT one
+      multiplies. Worth telling him: he has a cheap alternative today.
+      ❓ **THE FIX IS A TRADEOFF AND IT IS HIS CALL — with a recommendation:**
+      · **Cap the slices on the mover path (recommended).** Quality per slice falls off fast for a SHAKE,
+        because the displacement is random per frame rather than a smooth arc — 16 samples of noise do not
+        look 8× better than 4. A cap around 4–6 would take his stack from ~79ms to ~40ms with little
+        visible loss. **Costs some smoothness at high sample settings.**
+      · **Budget it by what is underneath** — keep the full dial when the stack is cheap, reduce it when
+        it is expensive. Better looking, more moving parts, and the sample dial stops meaning one thing.
+      · **Leave it and document it** — the dial already controls the cost honestly; he just needs to know
+        that on a mover stack it multiplies.
+      **⏳ Clause 2 ("tiles and shake together looked really bad") is untouched** — it is a look complaint
+      and needs his eye or a picture, not a timing.
+      **His priority statement stands and should be answered:** *"those effects NEED to all be added and
+      work because that's a main feature."* **They do all work — the combination is just slow, not
+      broken**, and nothing is lost or corrupted.
 
 - [ ] **583 — Rename the "Save effects only…" button to "Save as preset".** (26 Aug, annotated screenshot at v12.81.)
       **STATUS: 🟢 READY — nothing is stopping this**

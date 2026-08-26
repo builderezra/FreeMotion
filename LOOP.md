@@ -149,6 +149,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v12.97, 983 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **#582 IS REPRODUCED AND IT IS NOT A CRASH — nothing throws.** His three effects cost **78.7ms**
+against **16.6ms** for the same three added up. **Motion Blur (Object) re-renders everything beneath it
+once per sample** (2→16 samples takes it 40.6→169.4ms). The line is the slice count in js/compositor.js:
+the normal path caps N by actual travel, **the mover path takes the full sample dial with no bound**,
+and on that path each slice renders the COMPLETE stack. The uncapped branch is deliberate — travelPx
+cannot see a mover — **but nothing replaced the cap.** Motion Blur (FOOTAGE) + the same two is 11.2ms,
+so only the OBJECT one multiplies. **The fix is a quality tradeoff and is parked on his choice, in the
+entry, with a recommendation.**
+⚠️ **"IT BROKE THE APP" DID NOT MEAN AN EXCEPTION.** Console clean, nothing thrown, no corruption —
+just a frame time his phone cannot survive. **Time the render before hunting for a throw.**
+
 ⚠️ **`FM.isFxContainer(inst)` IS THE WRONG GUARD WHEN BUILDING an instance.** It asks whether an
 instance HAS an effects array, and a FRESH registry instance has no `effects` key — so the guard is
 false for every container and children are silently dropped. Measured on #581: captured 4, restored 0.
