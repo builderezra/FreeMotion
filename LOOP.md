@@ -149,6 +149,21 @@ as a shipped commit before being checked.
 out a 30s browser call**. Sweep a subset, shrink the canvas, or drive it through `tools/_phoneprobe.py`
 where there is a real timeout.
 
+⚡ **v13.29: twirl 1.89x via the rotation identity — AND THE SAME CHANGE WAS REVERTED ON CURL. Read why.**
+Twirl was the dearest warp (669 ms/frame). `a = atan2(dy,dx) + swirl` then rebuilding at radius r IS a
+rotation of (dx,dy) by `swirl` — atan2 + cos + sin + two multiplies by r becomes cos + sin, and r
+cancels. **17.8 -> 9.4 ms.** ❌ **On curl the identical change measured 1.11x** against a 3-4% noise
+floor, so it was thrown away and curl keeps `atan2`. 🚨 **The rule that came out of it: this trick is
+NOT free — the two routes differ by ~2e-13 px and `|0` truncation turns that into ~4% of samples
+reading a NEIGHBOURING source pixel** (55/1365 on twirl, 42/1365 on curl). **Worth it at 1.89x on the
+dearest effect; not worth it at 1.11x.** Weigh the pixel cost against the measured win EVERY time —
+and the per-kernel `moveCap` in the test is where that judgement is recorded.
+📋 **Still untouched and still dear** (half-res sweep): gridrepeat 38.4, kaleidoscope 35.8,
+rasterextrude 35.3, radialrepeat 27.2, bend 26.2, innerpinch 23.3, ripple 21.1. **kaleidoscope and
+radialrepeat are the next rotation-identity candidates** (both do atan2-then-rebuild). ⚠️ **rasterextrude
+is NOT a WARP_FX kernel at all** — different signature, and it loops up to 100 `drawImage` calls, so it
+needs its own approach rather than anything in this section.
+
 ⚡ **v13.28 TOOK THE FIRST ONE: fractalwarp 930.9 -> 83.2 ms (11x). AND IT CORRECTS THE PLAN BELOW.**
 The `prep` hoist alone is NOT the win. Measured against two untouched controls (twirl, ripple, which
 drift ~14% run to run): **curl and tunnel came in at ~1.2x, i.e. inside the noise — no claim made.**
