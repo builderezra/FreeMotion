@@ -147,9 +147,21 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.76, 967 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.77, 968 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.76, closing #556, #557, #558, #524, #474, #548, #550, #559, #560 (UI half) and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.77, closing #556, #557, #558, #524, #474, #548, #550, #559, #560 (UI half), #561 and #539 clause 4.**
+
+⚠️ **A BUG THAT TURNS UP A THIRD TIME IS A MISSING FUNCTION, NOT A THIRD FIX.** #561 was the on-canvas
+overlay double-scale — v8.00 had already fixed it once in the drawing overlay, and it was sitting in the
+point editor AND the mask editor with identical numbers (ratio 2.00 at 2x, offset 720,1200 at 4x). Three
+hand-written copies of one rule is how it comes back a fourth time, so it is `FM.placeOverlayOnCanvas`
+now and the test fails if any overlay module stops calling it.
+⚠️ **AND SWEEP WHEN HE SAYS "probably other stuff" — he is usually right.** That is the only reason the
+mask editor was found.
+⚠️ **CHECK YOUR INSTRUMENT BEFORE BELIEVING A SECOND BUG.** My first sweep said the selection box drifted
+too. It does not: I had mapped the project onto the canvas rect, and at high zoom the canvas is CLIPPED,
+not scaled. Measuring against the shape's own rendered pixels gave 0,0,1,1 agreement. Same shape as the
+rule-11 round on #548 — when a thing you did not touch measures broken, suspect the ruler.
 
 ⚠️ **CHECK WHAT IS ALREADY TRUE BEFORE BUILDING — it is the other half of rule 3, and #560 is the case
 for it.** "Masks don't behave like effects" sounds like a migration. Opening the file first showed the
