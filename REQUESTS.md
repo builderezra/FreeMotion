@@ -21229,8 +21229,19 @@ re-opened #480, which I had marked done and had not fixed.
       the kernel's fallback for an ABSENT mode key is **`1` = Grid** — and **only `mode === 1` runs the
       grid branch.** So the mode a fresh instance gets is NOT the grid one; mode 0 is a different branch
       entirely, which is very likely the vertical-strip look seen in panel 2.
-      ⚠️ **That means "Tiles alone looks wrong" may be "mode 0 is a strip mode and is the default", not a
-      plate bug** — a completely different fix (a default, versus a box calculation).
+      ❌ **AND THAT WORRY WAS A RED HERRING — mode 0 read in full, it is the INTENDED default.** Its own
+      comment says *"EXTEND (default for new adds)"*: the clip stays where it is at full size and copies
+      of **its rendered bounds** tile outward to fill the frame. Nothing wrong with it being the default.
+      ✅ **WHICH PUTS THE BOX BACK AS THE CULPRIT, and now with a precise target.** Extend tiles `bb` —
+      the layer's **alpha bounding box** — and `tiles` was deliberately REMOVED from `CFX_NO_BBOX` for
+      exactly this reason (*"Extend mode anchors on the clip's real alpha bounds"*, js/compositor.js:7513).
+      So the whole picture depends on `bb` being right. **For the text layer it is not:** tiling a wide
+      one-line text bbox outward should give stacked REPEATED LINES — which is precisely what the
+      `[shake, tiles]` panel shows — while `[tiles]` alone gives narrow vertical strips, i.e. it is
+      tiling a **tall thin box** instead of a wide short one.
+      ➡️ **So the bug is: the alpha bbox handed to Tiles is wrong for a text layer unless a preceding
+      effect forces the plate.** Look at `alphaBBoxExact` and how `bb` is derived for a TEXT layer with
+      no prior effect in the stack.
       ❓ **But it does NOT explain the order dependence**, which is the real puzzle: both panels used an
       identically-constructed instance, so both were mode 0, yet `[shake, tiles]` rendered a proper
       mirrored GRID and `[tiles]` rendered strips. **Same mode, same params, different picture.**
