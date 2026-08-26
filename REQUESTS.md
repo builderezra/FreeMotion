@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.23
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.24
 >
-> **State:** v13.23, 989 tests green, tree clean.
+> **State:** v13.24, 989 tests green, tree clean.
+>
+> **📹 #129 — your blank screen-recording clip. I checked the old explanation and it may be wrong.**
+> For months this entry has said the cause is H.265 video the browser cannot decode. **I finally asked a
+> browser directly: it says it CAN decode H.265 — but flatly refuses `.mov` files.** iPhone screen
+> recordings are `.mov`. So it may be the file WRAPPER rather than the video inside it, which needs a
+> completely different fix.
+> ❓ **That turns a hard question into an easy one: is the file `.mov` or `.mp4`?** Your camera roll
+> shows it. **`.mov` means one fix, `.mp4` means another** — and either answer beats the guess that has
+> been sitting in this entry since August.
 >
 > **🔴 I WAS WRONG THAT I HAD RUN OUT OF WORK — and the mistake is worth telling you about.**
 > I kept checking the three items the tool calls "ready" and never opened the **thirty-two it calls
@@ -1077,6 +1086,26 @@ better still, keep working inside the turn rather than parking work for a later 
       the new toast, the diagnosis is confirmed and the answer is transcoding. If you see NO toast and
       the clip is still blank, it is something else and I have been looking in the wrong place** —
       which is worth knowing just as much.
+
+      ⚠️ **MEASURED 27 Aug — AND IT PARTLY REFUTES THE H.265 DIAGNOSIS ABOVE. Read this before acting on
+      it.** The entry reasons that a browser *"will parse the container of H.265 and then refuse to
+      decode"*. **Asked directly, this browser says the opposite:**
+      | type | `canPlayType` | MSE |
+      |---|---|---|
+      | **H.265 `hvc1` / `hev1`** | **"probably"** | **true** |
+      | H.264 `avc1` | "probably" | true |
+      | `video/mp4` generic | "maybe" | false |
+      | **`video/quicktime` (.mov)** | **"" — NOT SUPPORTED** | false |
+      **So H.265 is claimed as decodable here, while the .mov CONTAINER is refused outright** — and an
+      iOS screen recording is a **.mov**. **The container may matter more than the codec**, which is a
+      different fix from transcoding and points somewhere else entirely.
+      ⚠️ **THIS DOES NOT SETTLE IT, and the reason is important:** codec support is per-BROWSER, and his
+      phone runs a Safari-based PWA while this probe is Chrome-based. **Safari decodes HEVC and handles
+      .mov; Chrome is the reverse.** So neither result transfers to his device — **what it establishes is
+      that the entry's confident diagnosis was never verified anywhere.**
+      ❓ **SO THE QUESTION TO HIM GETS SHARPER, and it is easier than the old one:** not *"do you see a
+      toast"* but **"what does the FILE say — .mov or .mp4?"** His camera roll shows it. **A .mov points
+      at the container, an .mp4 at the codec, and the two need different fixes.**
 
       **v11.86 — I FIXED THE HALF THAT WAS MINE TO FIX, and it was a bad one.** Re-reading this entry,
       v7.62 put the useful sentence — *re-export as H.264, or open it in Safari* — in `console.warn`.
