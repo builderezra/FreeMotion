@@ -5634,6 +5634,16 @@ better still, keep working inside the turn rather than parking work for a later 
         `sharp*(1-mix) + blurred*mix`. The plate machinery for that already exists.
         ⚠️ **Not started deliberately: it changes how a very widely used effect is DISPATCHED, so it
         wants a full verify cycle rather than the tail end of a long session.** Est. one focused tick.
+        📍 **THE SEAMS, so the next attempt is a build and not a third read-through:** the string is
+        assembled in `effectFilter()` at **js/compositor.js:1511** (blur's case is line 1533), and it is
+        applied to a context at exactly **two** draw sites — **line 11828** (`ctx.filter = effectFilter(...)`,
+        reset by `ctx.restore()`) and **line 12330** (which already computes a `hasCss` flag, so it is the
+        natural place to branch). Two further uses at 1647-48 are the effect-BROWSER's before/after
+        swatches, not the render path — leave them alone.
+        **Shape of the change:** when `mix < 1`, drop `blur(...)` out of the shared string entirely (so
+        the other eight filters are untouched) and draw the layer a second time at
+        `globalAlpha = mix` with `ctx.filter = 'blur(Npx)'` over the sharp draw. ⚠️ **Guard the alpha
+        against the layer's own opacity** — the second draw must multiply into it, not replace it.
       · ✅ **Word spacing and line height are DONE (v12.31)** — they were the last "still open" item in
         this entry that did not need a decision from you.
       All 105 proposed effect upgrades are built except Gaussian Blur (needs a compositing path, not a
@@ -21482,6 +21492,37 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] **"needs a lot of work"** — unscoped, and he has not said what is wrong beyond "buns".
              **Render it against real footage and look**, then come back with specifics rather than
              guessing. Do not start clause 2 by changing sliders.
+             ✅ **27 Aug — DONE, and it has specifics now. He is right, and it is worse than "buns".**
+             Rendered against REAL footage (a 45-frame clip made in-browser: a bright disc crossing a
+             static textured field at **12.7 px/frame**), stepping the video CONSECUTIVELY frame by frame
+             so the temporal history is genuinely built. Horizontal extent of the moving disc:
+             | style | disc width | vs none |
+             |---|---|---|
+             | no effect | 108 px | — |
+             | **Pixel** (the old default) | **65 px** | **0.60x** |
+             | **Smear** (the new default) | 106 px | **0.98x** |
+             | Echo | 108 px | 1.00x |
+             | Blend | 105 px | 0.97x |
+             🚨 **NOT ONE OF THE FOUR STYLES SMEARS THE OBJECT ALONG ITS MOTION.** At 12.7 px/frame a
+             108 px disc should come out visibly WIDER; every style leaves it the same width or narrower.
+             🚨 **Pixel does something worse than nothing: it makes the object 40% SMALLER**, eroding it
+             rather than streaking it (soft-edge pixels 4 → 27). **That is the "looks awful" he reported,
+             and it is a defect rather than a taste call.**
+             ⚠️ **And it means clause 1's fix was hiding the problem, not solving it.** Moving the default
+             from Pixel to Smear replaced a style that visibly damages the picture with one that is
+             **within 2% of doing nothing at all** — so the effect stopped looking bad by ceasing to have
+             any effect. Echo is a literal no-op at 1.00x.
+             📋 **So clause 2 is now scoped: the effect does not implement directional blur at all.** The
+             work is to smear along the measured motion vector, and the acceptance test is a NUMBER —
+             the disc must come out wider than 108 px, with a control that fails if the frame did not
+             advance. ⚠️ **Do not start by changing sliders** (the entry already said so, and the numbers
+             above are why: no slider turns a 0.98x into a smear).
+             *Method note, because it cost two wrong runs: the first attempt rendered all five styles
+             IDENTICALLY — `FM.seekVideosToTime` did not move the element, so every frame was frame 0.
+             The second still read frame 0. Driving `el.currentTime` directly and awaiting `seeked`
+             fixed it. **The disc's x position is carried as a control in every reading now** — 43 while
+             broken, 306 once real. A temporal effect measured on a frozen frame reports no effect and
+             looks exactly like a finding.*
       ⚠️ Distinct from **Motion Blur (Object)**, which is #540 and shipped at v12.64. This is the FOOTAGE
       one. Do not confuse them.
       **✅ CLAUSE 1 DONE v12.94 — `def: 0` → `def: 1` (Smear), with `legacy: 0`.**
