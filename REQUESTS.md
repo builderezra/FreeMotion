@@ -1,8 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.28
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.29
 >
-> **State:** v13.28, 990 tests green, tree clean.
+> **State:** v13.29, 990 tests green, tree clean.
+>
+> **⚡ TWIRL — the single most expensive effect in the app — is now 1.89x faster.** It was doing a piece
+> of trigonometry per pixel (`atan2`) that turns out not to be needed at all: it was measuring the
+> pixel's angle, adding a swirl, then rebuilding the point — which is just **rotating** the pixel around
+> the centre, and rotating needs no angle measurement.
+> ⚠️ **Small honest cost, and I want you to know rather than discover it:** the new maths reaches the
+> same place by a different route, so about **4 in 100 pixels read from the pixel next door**. Invisible
+> in practice on a warp, but it is a real change, not a free one.
+> ✅ **I tried the same trick on Curl and THREW IT AWAY** — only 1.11x there, which does not justify
+> moving any pixels. Kept only the free part.
 >
 > **⚡ FIRST REAL SPEED WIN ON THE MOBILE LAG: Fractal Warp is 11x faster.** 930.9 ms → 83.2 ms on a
 > frame at your 1080x1350. It was working out six settings — amount, evolve, scale, detail and the rest —

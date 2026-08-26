@@ -6788,7 +6788,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const off = amp * Math.sin(r / wl - ph);   // minus: rising phase sends the rings OUTWARD
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
-    twirl: function (x, y, W, H, cx, cy, maxR, p, t) {
+    /* PREPPED + ROTATION IDENTITY (v13.29) — see the note on curl. Same collapse: the swirl is added to
+     * the point's own angle, so it is a rotation of (dx,dy) and atan2 disappears. Centre, radius and
+     * angle are frame constants and were being resolved per pixel; 1/maxR is hoisted so the falloff is
+     * a multiply. This was the dearest warp measured (669 ms at 1080x1350). */
+    twirl: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+      const C = pre || WARP_FX.twirl.prep(W, H, cx, cy, maxR, p, t, ps);
+      const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy);
+      let f = 1 - r * C.imaxR; if (f < 0) f = 0;
+      const d = C.ang * f * f, cD = Math.cos(d), sD = Math.sin(d);
+      return [C.cx + dx * cD - dy * sD, C.cy + dy * cD + dx * sD];
+    },
+    _twirlLegacy: function (x, y, W, H, cx, cy, maxR, p, t) {
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy); maxR = wR(p, t, maxR);
       const ang = (FM.evalProp(p.amount, t) || 0) * Math.PI / 180, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
       const f = Math.max(0, 1 - r / maxR), a = Math.atan2(dy, dx) + ang * f * f;
@@ -6863,7 +6874,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* PREPPED (queue: "editing lags"). Centre, amount, wavelength and phase are frame constants, and
      * every one of them was being resolved 1.46 million times a frame at 1080x1350. Same arithmetic in
      * the same order once per frame instead — BYTE-IDENTICAL, like wave's prep, not an approximation. */
+    /* ROTATION IDENTITY (v13.29). `atan2` was the dearest call in this loop and it is not needed at all.
+     * The kernel takes the point's angle, ADDS a swirl to it, and rebuilds the point at the same radius
+     * — which is precisely a rotation of the offset vector (dx,dy) by the swirl. Since r*cos(atan2(dy,dx))
+     * IS dx and r*sin(atan2(dy,dx)) IS dy, the whole thing collapses to the standard rotation matrix and
+     * r cancels out of it entirely: atan2 + cos + sin + two multiplies by r becomes cos + sin.
+     * Not bit-identical — it is a different (exact) algebraic route, so float rounding differs. Applied
+     * to TWIRL only (1.89x, and it was the dearest warp at 669 ms/frame); tried on curl and reverted at
+     * 1.11x, see the note there. The cost is honest and measured: ~4% of sampled coordinates truncate to
+     * a neighbouring source pixel, because the two routes disagree by ~2e-13 px and `|0` amplifies that
+     * wherever a coordinate sits on an integer. The test pins BOTH the tolerance and that pixel count. */
+    /* ⚠️ CURL DELIBERATELY KEEPS `atan2` — the rotation identity was tried here and REVERTED, which is
+     * worth recording so nobody re-does it. It measured 1.11x (14.1 -> 12.7 ms) against a ~3-4% noise
+     * floor taken from two untouched controls, so the win was marginal; and because the two routes reach
+     * the same point by different float arithmetic, 42 of 1365 sampled coordinates truncated to a
+     * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
+     * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
     curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    _curlLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     /* PREPPED. Six parameter constants were resolved per pixel, and the octave DIVISORS with them —
      * so this also trades 6-12 divisions per pixel for multiplications by precomputed reciprocals.
@@ -7054,9 +7082,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * Anything in WARP_FX is treated as a shipping effect. Reference bodies are not effects, so they go
    * on their own object: still reachable for the equality test, invisible to anything enumerating the
    * real ones. */
-  const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy };
+  const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy,
+                     curl: WARP_FX._curlLegacy, twirl: WARP_FX._twirlLegacy };
   delete WARP_FX._fractalwarpLegacy;
   delete WARP_FX._tunnelLegacy;
+  delete WARP_FX._curlLegacy;
+  delete WARP_FX._twirlLegacy;
   FM._warpRef = WARP_REF;
 
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
@@ -7094,7 +7125,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.5; if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: ccx, cy: ccy, amt: amt, wl: wl, ph: ph };
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+  };
+
+  WARP_FX.twirl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var tcx = wCx(p, t, W, cx), tcy = wCy(p, t, H, cy), tR = wR(p, t, maxR);
+    var ang = (FM.evalProp(p.amount, t) || 0) * Math.PI / 180;
+    return { cx: tcx, cy: tcy, ang: ang, imaxR: 1 / tR };
   };
 
   WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
