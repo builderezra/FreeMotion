@@ -44590,6 +44590,51 @@
      Linear interpolation was tried first and measured at nearly TEN pixels of error at Amount 80 —
      the second-order noise varies about three times faster than its `scale` suggests. That is why the
      kernel is cubic, and it is why this bound is asserted rather than reasoned about. */
+  /* CURL / FRACTAL WARP / TUNNEL were the 4th, 5th and 11th dearest of 198 effects, and all three had
+     their frame constants resolved once PER PIXEL — 1.46 million times at 1080x1350. `prep` hoists
+     them, exactly as queue 474 did for wave and turbulentdisplace.
+     Two DIFFERENT guarantees are asserted here on purpose, because the two changes are not the same:
+      · tunnel is a pure hoist — same operands, same order — so it must be EXACT, bit for bit;
+      · fractalwarp also turns `x / d` into `x * (1/d)`, which rounds differently. Measured across
+        1170 points and 6 parameter sets: 94.02% agreed exactly, worst disagreement 5.7e-14 px. The
+        bound below is 1e-9, six orders of magnitude looser than the worst reading and still tight
+        enough to catch a real algebra error. It is asserted rather than called "identical" because
+        drawWarpEffect truncates with `|0`, so claiming a zero that is not there would be a lie about
+        the one case that could ever move a pixel. */
+  test('the hoisted curl / fractal-warp / tunnel kernels match their own reference bodies', { item: 'editing-lags' }, async function () {
+    const W_ = FM._warpFx;
+    if (!W_) throw new Error('FM._warpFx is not reachable — the suite seam is missing');
+    const pairs = [
+      { name: 'tunnel', fn: W_.tunnel, ref: (FM._warpRef || {}).tunnel, tol: 0, why: 'a pure hoist must be exact' },
+      { name: 'fractalwarp', fn: W_.fractalwarp, ref: (FM._warpRef || {}).fractalwarp, tol: 1e-9, why: 'reciprocal multiply rounds differently' },
+    ];
+    const W = 540, H = 675, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const cases = [{}, { amount: 0.8 }, { amount: -0.6, wavelength: 75, phase: 120 },
+                   { amount: 40, scale: 250, detail: 2, evolve: 1.5 }, { amount: 0.9, radius: 70 },
+                   { detail: 1, scale: 33 }];
+    for (const pr of pairs) {
+      if (typeof pr.fn !== 'function') throw new Error(pr.name + ': kernel is gone');
+      if (typeof pr.fn.prep !== 'function') throw new Error(pr.name + ': the per-frame precompute is gone, so the pixel loop is resolving params again');
+      if (typeof pr.ref !== 'function') throw new Error(pr.name + ': the reference body is gone from FM._warpRef, so nothing here is being verified');
+      if (FM._warpFx['_' + pr.name + 'Legacy']) throw new Error(pr.name + ': a reference body is back inside WARP_FX, where it reads as a shipping effect that moves nothing');
+      let worst = 0, moved = 0, n = 0;
+      for (const p of cases) {
+        const pre = pr.fn.prep(W, H, cx, cy, maxR, p, 0.37, 1);
+        for (let x = 0; x < W; x += 37) for (let y = 0; y < H; y += 53) {
+          const a = pr.fn(x, y, W, H, cx, cy, maxR, p, 0.37, 1, pre);
+          const b = pr.ref(x, y, W, H, cx, cy, maxR, p, 0.37, 1);
+          worst = Math.max(worst, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
+          // the sampler truncates, so this is the only difference that could ever show
+          if ((a[0] | 0) !== (b[0] | 0) || (a[1] | 0) !== (b[1] | 0)) moved++;
+          n++;
+        }
+      }
+      if (!(n > 500)) throw new Error(pr.name + ': only ' + n + ' points compared — the sweep collapsed');
+      if (worst > pr.tol) throw new Error(pr.name + ' drifted ' + worst.toExponential(2) + ' px from its reference (' + pr.why + ', bound ' + pr.tol + ')');
+      if (moved) throw new Error(pr.name + ': ' + moved + ' of ' + n + ' points landed on a DIFFERENT source pixel after truncation');
+    }
+  });
+
   test('the hoisted turbulent-displace noise matches its own reference kernel (queue 474)', { item: '474' }, async function () {
     const K = FM._warpFx && FM._warpFx.turbulentdisplace;
     if (!K) throw new Error('FM._warpFx.turbulentdisplace is not reachable — the suite seam is missing');

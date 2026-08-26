@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.27
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.28
 >
-> **State:** v13.27, 989 tests green, tree clean.
+> **State:** v13.28, 990 tests green, tree clean.
+>
+> **⚡ FIRST REAL SPEED WIN ON THE MOBILE LAG: Fractal Warp is 11x faster.** 930.9 ms → 83.2 ms on a
+> frame at your 1080x1350. It was working out six settings — amount, evolve, scale, detail and the rest —
+> **once for every pixel, 1.46 million times a frame**, when none of them can change within a frame.
+> Now it works them out once. Tunnel and Curl got the same treatment (both verified correct; their
+> speed-up is small enough that I will not claim it).
+> ⚠️ **Honest limit: this is one effect of the eleven expensive ones.** What made Fractal Warp win so
+> big was that it also did a dozen DIVISIONS per pixel. The others are dominated by trigonometry
+> instead, which needs a different trick — that is the next piece of work, and I know what it is.
 >
 > **🎯 THE MOBILE LAG NOW HAS A CULPRIT AND A FIX, AND IT IS ONE JOB DONE ELEVEN TIMES.** I ranked all
 > **198 effects** by what they actually cost. **37 of them are expensive**, and the eleven dearest are all

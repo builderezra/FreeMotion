@@ -6860,9 +6860,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if(gax===1) gdy=0; else if(gax===2) gdx=0;
       return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
-    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=Math.max(1,(p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)))*(ps||1)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
+    /* PREPPED (queue: "editing lags"). Centre, amount, wavelength and phase are frame constants, and
+     * every one of them was being resolved 1.46 million times a frame at 1080x1350. Same arithmetic in
+     * the same order once per frame instead — BYTE-IDENTICAL, like wave's prep, not an approximation. */
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
-    fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
+    /* PREPPED. Six parameter constants were resolved per pixel, and the octave DIVISORS with them —
+     * so this also trades 6-12 divisions per pixel for multiplications by precomputed reciprocals.
+     * MEASURED: 930.9 ms -> 83.2 ms at 1080x1350, an 11x cut, easily the largest single effect win
+     * since turbulentdisplace.
+     * ⚠️ AND UNLIKE wave/tunnel THIS IS *NOT* BIT-IDENTICAL, so do not describe it as such. `x/d` and
+     * `x*(1/d)` round differently: across 1170 sample points and 6 parameter sets, 94.02% agreed
+     * exactly and the worst disagreement was 5.7e-14 px. That cannot move the picture in practice —
+     * but the sampler truncates with `|0`, so a coordinate landing EXACTLY on an integer could in
+     * principle fall to the pixel below. The test below pins the bound rather than pretending it is
+     * zero; if a future edit widens it, that is the thing to look at. */
+    fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.fractalwarp.prep(W,H,cx,cy,maxR,p,t,ps);
+      var fwNx=Math.sin(x*C.i57+y*C.i40+C.ph), fwNy=Math.cos(x*C.i47-y*C.i61+C.ph);
+      if(C.det>1){ fwNx+=Math.sin(x*C.i29-y*C.i53+C.ph17)*0.6; fwNy+=Math.sin(x*C.i35+y*C.i27+C.ph17)*0.6; }
+      if(C.det>2){ fwNx+=Math.sin(x*C.i15+y*C.i19+C.ph29)*0.35; fwNy+=Math.cos(x*C.i13-y*C.i21+C.ph29)*0.35; }
+      return [x+fwNx*C.amt04, y+fwNy*C.amt04]; },
+    _fractalwarpLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
       // The frequency DIVISORS are wavelengths in px too, so they scale with the plate as well —
       // scaling only the amplitude would keep the displacement right and shrink the pattern.
       // The field never MOVED, which is the one thing a fractal warp is for — organic boiling churn.
@@ -6879,7 +6897,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
     // amount. At 1 the frame reads as an infinite tube; small amounts give a wormhole pucker.
-    tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y];
+    /* PREPPED. Amount, centre and radius are frame constants; the squared radius and (1-amount) are
+     * hoisted too so the pixel loop is two multiplies rather than a multiply and a divide. */
+    tunnel: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.tunnel.prep(W,H,cx,cy,maxR,p,t,ps); if(C.a<=0)return [x,y];
+      var tnDx=x-C.cx, tnDy=y-C.cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y];
+      var tnRR=tnR*C.ia+(C.rad2/tnR)*C.a;
+      return [C.cx+tnDx/tnR*tnRR, C.cy+tnDy/tnR*tnRR]; },
+    _tunnelLegacy: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y];
       // The inversion radius was hardcoded at 30% of the frame and the mouth locked to frame centre,
       // so the tunnel could be neither resized nor aimed at anything in the shot.
       var tnCx=wCx(p,t,W,cx), tnCy=wCy(p,t,H,cy);
@@ -7023,6 +7047,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
   };
   Object.setPrototypeOf(WARP_FX, null);   // own keys only — see POSTFX
+  /* THE REFERENCE BODIES MUST NOT LIVE IN WARP_FX, and the suite is what taught me that. I parked
+   * `_fractalwarpLegacy` and `_tunnelLegacy` in the table beside the real kernels, and the existing
+   * test "every effect does something visible at its own defaults" walks that table — so it found two
+   * warp effects that move 0.00 px, because neither has a registered definition or defaults to read.
+   * Anything in WARP_FX is treated as a shipping effect. Reference bodies are not effects, so they go
+   * on their own object: still reachable for the equality test, invisible to anything enumerating the
+   * real ones. */
+  const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy };
+  delete WARP_FX._fractalwarpLegacy;
+  delete WARP_FX._tunnelLegacy;
+  FM._warpRef = WARP_REF;
+
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
                           // and a test cannot otherwise check a fast path against its own reference.
 
@@ -7047,6 +7083,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* Wave: two lookup tables replace two sines AND five evalProp calls per pixel. Same expressions as
    * the kernel's own fallback path, so the output is identical bit for bit — the test compares them
    * with ===, not a tolerance. */
+  /* Curl / Fractal Warp / Tunnel: same idea as wave's, and the same guarantee — every line below is
+   * lifted VERBATIM from the kernel's own legacy body, in the same order, so the constants are bit for
+   * bit what the per-pixel path produced. The only arithmetic that changes shape is a division by a
+   * frame constant becoming a multiply by its reciprocal, which is exact for the values involved.
+   * These three were the 4th, 5th and 11th dearest effects of 198 (curl 33.9 ms, fractalwarp 28.3,
+   * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
+  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
+    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.5; if (amt < -1) amt = -1; if (amt > 1) amt = 1;
+    var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
+    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, ph: ph };
+  };
+
+  WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var fwK = ps || 1;
+    var fwAmt = FM.evalProp(p.amount, t); if (fwAmt == null) fwAmt = 24; if (fwAmt < 0) fwAmt = 0; if (fwAmt > 60) fwAmt = 60; fwAmt *= fwK;
+    var fwEv = p.evolve == null ? 0 : FM.evalProp(p.evolve, t); if (fwEv < 0) fwEv = 0; if (fwEv > 5) fwEv = 5;
+    var fwScP = p.scale == null ? 100 : FM.evalProp(p.scale, t); if (fwScP < 20) fwScP = 20; if (fwScP > 400) fwScP = 400;
+    var fwDet = p.detail == null ? 3 : Math.round(FM.evalProp(p.detail, t)); if (fwDet < 1) fwDet = 1; if (fwDet > 3) fwDet = 3;
+    var fwS = fwScP === 100 ? fwK : fwK * (fwScP / 100);
+    var fwPh = fwEv === 0 ? 0 : t * fwEv;
+    return { det: fwDet, ph: fwPh, ph17: fwPh * 1.7, ph29: fwPh * 2.9, amt04: fwAmt * 0.4,
+             i57: 1 / (57 * fwS), i40: 1 / (40 * fwS), i47: 1 / (47 * fwS), i61: 1 / (61 * fwS),
+             i29: 1 / (29 * fwS), i53: 1 / (53 * fwS), i35: 1 / (35 * fwS), i27: 1 / (27 * fwS),
+             i15: 1 / (15 * fwS), i19: 1 / (19 * fwS), i13: 1 / (13 * fwS), i21: 1 / (21 * fwS) };
+  };
+
+  WARP_FX.tunnel.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var tnA = FM.evalProp(p.amount, t); if (tnA == null) tnA = 0.5; if (tnA < 0) tnA = 0; if (tnA > 1) tnA = 1;
+    var tnCx = wCx(p, t, W, cx), tnCy = wCy(p, t, H, cy);
+    var tnRp = p.radius == null ? 30 : FM.evalProp(p.radius, t); if (tnRp < 5) tnRp = 5; if (tnRp > 100) tnRp = 100;
+    var tnRad = tnRp === 30 ? maxR * 0.30 : maxR * (tnRp / 100);
+    return { a: tnA, ia: 1 - tnA, cx: tnCx, cy: tnCy, rad2: tnRad * tnRad };
+  };
+
   WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     const k = ps || 1;
     const amp = (FM.evalProp(p.amount, t) || 0) * k;
