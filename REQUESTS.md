@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.99
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.00
 >
-> **State:** v12.99, tests green, tree clean.
+> **State:** v13.00, tests green, tree clean.
+>
+> **🎧 #585 — the four audio categories have icons now, and the picture is above.** EQ / Filter is
+> three faders, Space / Stereo is sound spreading outward, Dynamics is a signal squeezed between two
+> rails, Character is a clean wave going square. Drawn in the same hand as the effects menu's icons —
+> same weight, same box — and checked at **26px, the size they actually appear at**, not just blown up.
+> **Say the word on any of the four and I will redraw it.**
 >
 > **📐 #584 — the wasted band is gone.** ✕, the Visual/Filters/Audio tabs and the search button now
 > share one row, exactly as you drew it, and the effects start **40px higher**. Worth knowing: you had
@@ -20216,8 +20222,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ It also asserts **no stale strip is left in the scroller**: the header is not rebuilt by
       `rebuild()`, so a toggle built into both places would accumulate.
 
-- [ ] **585 — The audio-effect CATEGORY tiles need icons, like the effects menu has.** (26 Aug, screenshot at v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **585 — The audio-effect CATEGORY tiles need icons, like the effects menu has.** (26 Aug, screenshot at v12.81.) — ✅ **DONE v13.00**
       His words, verbatim:
       > Add icons for these buttons too like you did in the effects menu
       **The tiles are** EQ / Filter (7), Space / Stereo (6), Dynamics (4), Character (10) — big gradient
@@ -20227,6 +20232,25 @@ re-opened #480, which I had marked done and had not fixed.
       instruction #565 carried and the same reason.
       ⚠️ Design request → **#545**: draw them at the size they ship at and send him the picture. Four icons,
       and audio concepts are easy to draw badly (a "Character" icon especially).
+      **✅ DRAWN, RENDERED AT 26px — THE SIZE THEY ACTUALLY SHIP AT — AND AT 3×, AND SENT.** That is the
+      #432 trap avoided rather than navigated: an icon that only reads when enlarged is not an icon.
+      **What each one draws, and why not a reused glyph:**
+      · **EQ / Filter** — three faders at different heights. The one drawing everybody already reads as EQ.
+      · **Space / Stereo** — one source spreading outward on both sides: width and room.
+      · **Dynamics** — a signal squeezed between two rails, loud pushed down to meet quiet.
+      · **Character** — a clean wave going square: drive, warmth, damage. *(His hardest one, and the
+        sine→square is the honest picture of what those effects do.)*
+      ⚠️ **SAME HAND AS THE VISUAL MENU, DELIBERATELY** — 24×24 box, `fill: none`, `currentColor`,
+      **stroke-width 1.7**, round caps and joins, matching `CAT_ICON` in js/fx-browser.js exactly. He asked
+      for it to be *like* the effects menu, and **a second drawing style for the same idea in one app is
+      worse than no icons.** They use the same `.fxb-banner-ico` element and class too, so they inherit
+      that styling rather than needing a parallel rule that can drift.
+      ⚠️ **NOT reused FROM the visual set.** Nothing there means EQ or stereo, and borrowing `move` for
+      Dynamics would put one glyph on two unrelated categories in two browsers.
+      ⚠️ **The test checks the pairing in BOTH directions**, through a seam rather than by opening the
+      browser (LOOP rule 17 — queue 584's test leaked exactly that way one tick earlier). A category with
+      no icon silently inherits another's glyph; an orphan icon means a category was renamed and the
+      drawing was not.
 
 - [ ] **586 — Hovering a benchmark should turn the whole playhead yellow.** (26 Aug, screenshot at v12.81.)
       **STATUS: 🟢 READY — nothing is stopping this**

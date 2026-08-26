@@ -2403,6 +2403,26 @@
     }
   });
 
+  test('585: every audio category has its own icon, in the visual browser\'s hand', { item: '585' }, async function () {
+    /* Queue 585. Ezra: "Add icons for these buttons too like you did in the effects menu."
+     * ⚠️ ASSERTED THROUGH THE SEAM, NOT BY OPENING THE AUDIO BROWSER. It needs an audio-capable layer to
+     * open at all, and LOOP rule 17 is emphatic about what opening a browser inside a test costs — it
+     * leaked into the thumbnail tests one tick ago from queue 584's own test.
+     * ⚠️ THE PAIRING IS WHAT MATTERS. An icon table that has drifted from the category list fails two
+     * ways and both are silent: a category with no icon falls back to another category's glyph, and an
+     * orphan icon is a category that was renamed with nobody updating the drawing. Checked in BOTH
+     * directions rather than just "are there four". */
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.categories) throw new Error('the audio effect registry is missing');
+    if (typeof FM._audioCatIconKeys !== 'function') throw new Error('the audio browser exposes no category icons — the tiles are still bare (queue 585)');
+    const cats = FM.audioFxRegistry.categories().map(function (c) { return c.key; });
+    const icons = FM._audioCatIconKeys();
+    if (!cats.length) throw new Error('there are no audio categories at all, so this proves nothing');
+    const missing = cats.filter(function (k) { return icons.indexOf(k) < 0; });
+    if (missing.length) throw new Error('audio categories with no icon: ' + missing.join(', ') + ' — they fall back to another category\'s glyph, which is worse than none (queue 585)');
+    const orphan = icons.filter(function (k) { return cats.indexOf(k) < 0; });
+    if (orphan.length) throw new Error('icons for categories that no longer exist: ' + orphan.join(', ') + ' — a category was renamed and the drawing was not');
+  });
+
   test('584: the effects browser puts its tabs on the header row, not a row of their own', { item: '584' }, async function () {
     /* Queue 584. Ezra: "This space here is very wasted, my idea is to move the search and x out buttons
      * onto the same row as the filters / effects / audio rows and just make those buttons smaller to fit

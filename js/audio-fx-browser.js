@@ -180,6 +180,31 @@ window.FM = window.FM || {};
     return sec;
   }
 
+  /* ---- CATEGORY ICONS (queue 585) ---------------------------------------------------------------
+   * Ezra: *"Add icons for these buttons too like you did in the effects menu."*
+   * ⚠️ **THE SAME HAND, DELIBERATELY.** These mirror js/fx-browser.js's CAT_ICON exactly — 24×24 box,
+   * `fill: none`, `currentColor`, **stroke-width 1.7**, round caps and joins — because he asked for it
+   * to be *like* the effects menu, and a second drawing style for the same idea in the same app is worse
+   * than no icons at all. The visual set also comments what each glyph IS; that convention is kept, and
+   * it is not decoration — it is what stops the next person redrawing one into something that means
+   * something else.
+   * ⚠️ **NOT REUSED FROM THE VISUAL SET.** Nothing there means EQ or stereo, and borrowing (say) `move`
+   * for Dynamics would have two categories in two browsers wearing the same glyph for unrelated ideas.
+   * Each of these draws the thing the category actually does to a SOUND. */
+  const AUDIO_CAT_ICON = {
+    // three faders at different heights — the one drawing everybody already reads as EQ
+    eq: '<path d="M6.5 4.6v14.8M12 4.6v14.8M17.5 4.6v14.8"/><circle cx="6.5" cy="9.1" r="1.6"/><circle cx="12" cy="14.6" r="1.6"/><circle cx="17.5" cy="7.6" r="1.6"/>',
+    // one source, spreading outwards on both sides — width and room
+    space: '<circle cx="12" cy="12" r="1.7"/><path d="M8.2 8.9a4.9 4.9 0 0 0 0 6.2M15.8 8.9a4.9 4.9 0 0 1 0 6.2"/><path d="M5.2 6.2a9.2 9.2 0 0 0 0 11.6M18.8 6.2a9.2 9.2 0 0 1 0 11.6"/>',
+    // a signal squeezed between two rails — loud bits pushed down to meet the quiet ones
+    dyn: '<path d="M4 6.6h16M4 17.4h16"/><path d="M7.2 9.6v4.8M10.4 8.2v7.6M13.6 10.6v2.8M16.8 9.1v5.8"/>',
+    // a clean wave on the left going square on the right — drive, warmth, damage
+    char: '<path d="M3.6 15.4c1.7 0 2.1-6.8 4.2-6.8s2.5 6.8 4.2 6.8"/><path d="M12 15.4h1.5V9.2h4.1v6.2h1.4"/>',
+  };
+  const audioCatIcon = (key) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (AUDIO_CAT_ICON[key] || AUDIO_CAT_ICON.eq) + '</svg>';
+  FM._audioCatIconKeys = () => Object.keys(AUDIO_CAT_ICON);   // seam: the suite checks every category has one
+
   // Section C — category banners → per-category effect list (slide-in sub-screen).
   function buildCategories() {
     const sec = el('div', 'fxb-section');
@@ -187,6 +212,10 @@ window.FM = window.FM || {};
     const list = el('div', 'fxb-cats');
     FM.audioFxRegistry.categories().forEach(cat => {
       const b = el('button', 'fxb-banner afxb-banner'); b.dataset.cat = cat.key;
+      // queue 585 — same element and class the visual browser uses, so it inherits that styling rather
+      // than needing a parallel rule that can drift away from it.
+      const ico = el('span', 'fxb-banner-ico'); ico.innerHTML = audioCatIcon(cat.key);
+      b.appendChild(ico);
       b.appendChild(el('span', 'fxb-banner-label', cat.label));
       b.appendChild(el('span', 'fxb-banner-count', String(FM.audioFxRegistry.byCategory(cat.key).length)));
       b.addEventListener('click', () => openCategory(cat));

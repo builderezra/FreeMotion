@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.99, 985 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.00, 986 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **RULE 17 CAUGHT ME FOR REAL ON #584 — a test I wrote opened the effects browser and leaked twice.**
+It reported six effects as indistinguishable from their subject (the thumbnail queue) AND made the
+queue-477 dead-effect check fail on Channel Remap (a stale `FM._fxPreview`). **If a test must open a
+browser: stub `fxThumbs.mountFilter`/`mount`, call `stopAll()`, and null `FM._fxPreview` in the finally.**
+Better still, assert through a seam — #585 did, and stayed clean.
+⚠️ **A TEST CAN ENCODE AN INSTRUCTION HE LATER REPLACES.** #481's test asserted the phone KEEPS its own
+tab row, from his "on pc"; #584 asked for the opposite. **Invert such a test rather than deleting it**,
+so the underlying thing (the toggle must exist somewhere) is still guarded.
 
 ⚠️ **BEFORE BUILDING A LAYOUT HE ASKS FOR, GREP FOR IT — IT MAY ALREADY EXIST BEHIND A GATE.** #584 was
 already built for PC under #481 (the same request in his words) and gated on `fxb-in-inspector` because
