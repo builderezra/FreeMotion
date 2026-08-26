@@ -34,15 +34,24 @@ window.FM = window.FM || {};
 
   const SECTIONS = [
     { key: 'cinematic', label: 'Cinematic' },
+    /* ⚠️ TUFF IS SECOND — queue 594, and it is a direct reversal of the reasoning below.
+       Ezra: *"Also jump the tuff row to the second down below cinematic."*
+       It was placed LAST at queue 349 on the argument that it is "the newest and the most specific" while
+       the others are general grades. **That was my ordering logic, not his** — and he has now put it
+       where he wants it, which is what a section order is for. **The old note is kept underneath rather
+       than deleted**, because it explains what Tuff IS, and only its last sentence was overruled.
+       ⚠️ **THIS IS THE ONLY PLACE THE ORDER LIVES.** The filters themselves are declared far below and
+       grouped by `section`; moving those declarations around would change nothing here and would fight
+       the next edit. */
+    { key: 'tuff', label: 'Tuff' },
     { key: 'retro', label: 'Retro / Analogue' },
     { key: 'glow', label: 'Light / Glow' },
     { key: 'stylised', label: 'Stylised' },
     /* Queue 349. His words: "Make a filter section called 'tuff' and use the car images for the filters
        you make… These filters will be good for people who make edits on TikTok that are a tuff style
        where they use rage rap music etc, kinda dark, just reference TikTok styles on what people do".
-       Last, because it is the newest and the most specific — the other four are general grades and this
-       one is a scene. */
-    { key: 'tuff', label: 'Tuff' },
+       ⚠️ It sat LAST until queue 594 on the argument that it is the newest and most specific — see above;
+       he moved it to second and that sentence no longer applies. */
     /* MORE CATEGORIES (queue 444, clause 2). Ezra: "make more categories for filters". Two, chosen so
        they are not slices of the four above: MONO is the only family the list had no home for at all
        (Ash is near-monochrome but lives in Tuff because it is a scene, not a black-and-white treatment),

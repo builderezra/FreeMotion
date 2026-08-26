@@ -147,7 +147,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v13.01, 986 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.02, 988 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **WHEN HE REORDERS SOMETHING, TEST THAT NOTHING WAS LOST — not just the new order.** Reordering a
+literal array is exactly the edit that duplicates or drops an entry, and nothing announces it: six
+sections instead of seven looks as plausible as seven. #594 asserts count, uniqueness and non-emptiness
+alongside the position.
+⚠️ **A PLACEMENT I REASONED MYSELF IS NOT A DECISION HE MADE.** Tuff was last because queue 349 argued it
+was "newest and most specific". **Keep such notes when he overrules them** — the note still explained
+what the thing IS; only its conclusion died.
 
 🔴 **THREE OF HIS REPORTS IN A ROW DO NOT REPRODUCE IN THE PREVIEW — #587, #592, #593.** Each was
 measured carefully and each came back clean. **That pattern is now more informative than any one of

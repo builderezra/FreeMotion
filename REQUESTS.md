@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.01
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.02
 >
-> **State:** v13.01, tests green, tree clean.
+> **State:** v13.02, tests green, tree clean.
+>
+> **🔝 #594 — Tuff is the second filter row now, right under Cinematic.** It was last because of my
+> reasoning, not yours — I had put it there as "newest and most specific". Nothing else moved and no
+> section was lost.
 >
 > **👀 THREE OF YOUR REPORTS IN A ROW DO NOT REPRODUCE HERE — #587, #592, and #593 — and that
 > pattern is now the interesting thing.** Each one I have measured carefully and each comes back clean in
@@ -20090,8 +20094,7 @@ re-opened #480, which I had marked done and had not fixed.
       all along, which would make my "the filters are fine, Blackout just is not one of them" answer a
       correct measurement of the wrong thing.
 
-- [ ] **594 — Move the Tuff filter row up to second, below Cinematic.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **594 — Move the Tuff filter row up to second, below Cinematic.** (26 Aug.) — ✅ **DONE v13.02**
       His words, verbatim:
       > Also jump the tuff row to the second down below cinematic
       **A section reorder in the filter browser.** Current order is cinematic · retro · glow · stylised ·
@@ -20099,6 +20102,16 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The order lives in one place — find it rather than reordering the definitions.** Filters are
       declared in js/filters.js and grouped by `section`; the SECTION order is a separate list. Moving the
       declarations around would be the wrong fix and would fight the next edit.
+      **✅ One line in `SECTIONS` (js/filters.js) — the entry's warning was right that the order lives in
+      exactly one place**, and the filter declarations further down were not touched.
+      **Order now: Cinematic · Tuff · Retro / Analogue · Light / Glow · Stylised · Black / White · Punchy.**
+      ⚠️ **IT WAS LAST BECAUSE OF MY REASONING, NOT HIS.** Queue 349 put it there on the argument that it
+      is "the newest and the most specific" while the others are general grades. **That note is kept
+      rather than deleted** — it still explains what Tuff IS; only its last sentence was overruled.
+      ⚠️ **The test asserts nothing was LOST, which is the real risk.** Reordering a literal array is
+      exactly the edit that duplicates or drops an entry, and nothing would say so — the browser would
+      render six banners instead of seven, or one twice, and either looks plausible. Verified: 7 sections,
+      no duplicates, none empty (cinematic 4 · tuff 8 · retro 4 · glow 4 · stylised 4 · mono 6 · vivid 3).
       ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
@@ -20132,6 +20145,12 @@ re-opened #480, which I had marked done and had not fixed.
       figure inconsistent with its own edges, which produced a fake "124px overshoot". **The trustworthy
       numbers are the two direct edge comparisons above**, not anything derived. Recorded so the next
       session does not chase that 124.
+      **JUMPED: measured in two states and the overshoot is ZERO in both** (decoration right 441 vs clip
+      right 441; then 378 vs 378). **I cannot fix a few pixels I cannot see**, and the one state left to
+      try — a project longer than its content — the app would not let me stage, since setting a longer
+      duration came back clamped to the content. **It is parked on one question to him about zoom**
+      (#587 is parked on the same one), not skipped, and holding the rest of the queue behind a symptom
+      that will not appear is the list rotting at the top.
       ⚠️ **DO NOT undo #551 or #567 while fixing this.** #551 put the right edge at the project's end and
       he explicitly kept it (*"the right side being cut off is good"*); #567 restored the LEFT edge
       running over the divider. This is a small correction to the right edge's arithmetic, not a revisit.

@@ -2403,6 +2403,27 @@
     }
   });
 
+  test('594: Tuff is the second filter section, and none was lost moving it', { item: '594' }, async function () {
+    /* Queue 594. Ezra: "Also jump the tuff row to the second down below cinematic."
+     * It sat LAST since queue 349 on my reasoning that it is the newest and most specific while the
+     * others are general grades. He has now put it where he wants it, which is what a section order is for.
+     * ⚠️ THE SECOND HALF IS THE POINT. Reordering a literal array is exactly the edit where a section
+     * gets duplicated or dropped by a stray line, and NOTHING would say so — the browser would simply
+     * render six banners instead of seven, or the same one twice, and it looks plausible either way. */
+    const S = FM.filters.sections();
+    const keys = S.map(function (x) { return x.key; });
+    if (keys[0] !== 'cinematic') throw new Error('Cinematic is no longer first (' + keys.join(', ') + ') — he asked for Tuff BELOW it, not above');
+    if (keys[1] !== 'tuff') throw new Error('Tuff is at position ' + (keys.indexOf('tuff') + 1) + ', not second (' + keys.join(', ') + ') — queue 594');
+    const dupes = keys.filter(function (k, i) { return keys.indexOf(k) !== i; });
+    if (dupes.length) throw new Error('the section list has duplicates after the move: ' + dupes.join(', '));
+    ['cinematic', 'tuff', 'retro', 'glow', 'stylised', 'mono', 'vivid'].forEach(function (k) {
+      if (keys.indexOf(k) < 0) throw new Error('the "' + k + '" filter section vanished while Tuff was being moved (' + keys.join(', ') + ')');
+    });
+    keys.forEach(function (k) {
+      if (!FM.filters.bySection(k).length) throw new Error('the "' + k + '" section is empty — an empty banner is worse than no banner');
+    });
+  });
+
   test('589: every glint ring starts at a random point of its orbit', { item: '589' }, async function () {
     /* Queue 589. Ezra: "the shiny outline starts playing from the top left but I feel it add this vibe of
      * constantly resetting, coz it starts again at the top left each time - make it so it spawns at a
