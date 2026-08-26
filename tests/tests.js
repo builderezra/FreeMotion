@@ -5904,7 +5904,16 @@
       // CONTROL: the ◆ has always been there. If it is missing, this panel is not what we think it is.
       if (!r1.querySelector('.kf-btn, .kf-diamond, [class*="kf-"]')) throw new Error('the Opacity row has no keyframe control, so it is not the row this test means');
       if (FM.isAnimated(L.transform.opacity)) throw new Error('a fresh layer already reports an animated opacity — the gate below cannot be measured');
-      if (r1.querySelector('.kf-ease-btn')) throw new Error('a STATIC opacity offers an easing curve — it would open an editor with no transition in it (queue 557)');
+      /* ⚠️ STRENGTHENED, NOT WEAKENED — queue 601. This used to require the button to be ABSENT on a
+         static opacity, and queue 557's real guarantee is that it can never open an editor with nothing
+         in it. **Absent achieved that and cost him a duplicate report**: hidden and missing look
+         identical, so he asked for the feature a second time. It is now PRESENT but DISABLED, which
+         keeps 557's guarantee (a disabled button opens nothing) and adds the one it was missing (the
+         feature does not read as forgotten). Both halves are asserted, so neither can regress. */
+      const sb = r1.querySelector('.kf-ease-btn');
+      if (!sb) throw new Error('a static opacity shows NO easing curve at all — hidden and missing look the same, and that is why queue 601 was reported after 557 had already added it');
+      if (!sb.disabled) throw new Error('a STATIC opacity offers a LIVE easing curve — it would open an editor with no transition in it (queue 557)');
+      if (!/keyframe/i.test(sb.title || '')) throw new Error('the disabled curve button does not say what it needs: ' + JSON.stringify(sb.title));
 
       // now animate it, exactly as the ◆ does
       L.transform.opacity = { kf: [{ t: 0, v: 1, ease: 'linear' }, { t: 2, v: 0, ease: 'linear' }] };

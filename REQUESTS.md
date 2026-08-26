@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.15
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.16
 >
-> **State:** v13.15, 989 tests green, tree clean.
+> **State:** v13.16, 989 tests green, tree clean.
+>
+> **🔧 #600 fixed — the tap box now matches what is actually tappable.** It was the row's own focus
+> outline being drawn at the row's size while the tap area had grown past it. The box is drawn on the
+> bigger element now, so the two cannot drift apart again.
+>
+> **📉 #601 — the opacity curve was NOT missing, and that is my fault not yours.** You asked for it
+> once before and I added it — but only showing once you have keyframed the property, so it could never
+> open an empty editor. **Hidden and missing look exactly the same**, so you reported it again, fairly.
+> **It is now always there, greyed out until you add a keyframe, and it tells you that.**
+> 🐛 **And it turned up a real bug: the "greyed out" style did not exist.** Two other buttons — the crop
+> curve and the motion path — have been pretending to grey out since they were written and never did.
+> They looked normal and silently ignored taps. Fixed for all three.
 >
 > **⚡ #582 — your "I completely broke the app" stack is roughly TWICE as fast.** At the default setting
 > it went from **102ms a frame to 52ms**; at 16 samples, from 169ms to 48ms. Nothing was ever crashing —
@@ -20300,8 +20312,7 @@ re-opened #480, which I had marked done and had not fixed.
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
 
-- [ ] **601 — Opacity has a keyframe diamond but no easing curve.** (26 Aug, phone screenshot at v13.09.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **601 — Opacity has a keyframe diamond but no easing curve.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > You seemingly forgot to add graphing to the opacity setting
       **His shot is the Mixing panel:** Opacity 1, a slider, and **a keyframe diamond with no curve button
@@ -20311,6 +20322,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **`BE_PROP_LABEL` already lists opacity** alongside x, y, scale and rotation (js/inspector.js),
       and the transform panel's rail pairs a `◆` with an `.mt-ease` button — **so the pattern exists and
       Opacity simply did not get the second half.** Reuse that rail rather than inventing a control.
+      ❌ **IT WAS NOT MISSING — AND THE REASON HE REPORTED IT AGAIN IS THE REAL BUG.**
+      **Queue 557 already added it** (js/inspector.js:54, his words then: *"Opacity slider doesn't have
+      graphing options"*). The note there records the deliberate choice to show the curve **only once the
+      property is animated**, so it could never open an editor with nothing in it — queue 529's *"control
+      that does nothing"*.
+      **That decision was right and its DELIVERY was wrong: hidden and missing look identical.** His shot
+      is Opacity at 1, unkeyframed — so there was nothing there, and he reasonably read it as forgotten.
+      **He reported the same thing twice because the app hid the answer rather than showing it greyed.**
+      ✅ **NOW: present always, DISABLED until there is a keyframe, tooltip saying why** — *"add a
+      keyframe (◆) first, then this shapes how it moves between them"*. It cannot open an empty editor
+      (disabled) and it cannot read as forgotten (visible). Verified both states: dim at opacity **0.38**
+      and disabled when unkeyframed, fully live the moment a keyframe exists.
+      🐛 **AND A REAL BUG FOUND ON THE WAY: `.mt-dim` HAD NO CSS RULE AT ALL.** js/inspector.js writes it
+      on the **crop easing button** and the **motion-path button** too — both have been claiming to dim
+      since they were written and **never did**. They looked completely normal and silently ignored
+      clicks, which is worse than hiding them: **a control that looks live and does nothing reads as
+      broken.** Styled now, so all three behave.
+      ⚠️ **Fifth instance this session of the app knowing something and not saying it** (#572, #578, #595,
+      #598). **This one cost him a duplicate report**, which is the clearest evidence yet that hiding a
+      control is not the same as explaining it.
       ⚠️ **Check the GRAPH EDITOR too** (`MODE_PROPS` in js/graph-editor.js). Queue 419's note warns that
       it keeps its OWN copy of the property table and that the two silently disagreeing is what left 3D
       tilts un-eased. **If opacity is missing from that list as well, adding the button alone would open
@@ -20323,8 +20354,7 @@ re-opened #480, which I had marked done and had not fixed.
       when **#581 has a workable build using the default I had already recommended.** Self-created work
       does not get to jump his queue; if anything it should wait longer than his does.
 
-- [ ] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
       **THIS IS MY OWN #571 FIX SHOWING THROUGH, and he spotted it immediately.** Clause 2 of #571
@@ -20353,7 +20383,18 @@ re-opened #480, which I had marked done and had not fixed.
       `:active` rule for it in styles.css** — so the dashed box in his shot is a state I have not pinned
       down. **Most likely `:focus-visible`**, since tapping a clickable row focuses it. **Find it before
       changing anything**; changing the resting decoration would re-break queue 356.
-      ✅ **THE FIX, ONCE FOUND, IS ALMOST CERTAINLY TO MOVE THE VISUAL ONTO `#timeline`** — that element
+      ✅ **FOUND AND FIXED v13.16 — it was `.tl-addrow:hover, .tl-addrow:focus-visible`**, which turns the
+      row's normally-transparent border cyan. Tapping focuses the row, so the box was drawn at the ROW's
+      bounds. On the empty screen that rule is now suppressed and the same treatment is drawn on
+      `#timeline` instead, as an inset shadow.
+      **VERIFIED:** row border back to `rgba(0,0,0,0)`, `#timeline` carrying
+      `rgba(150,232,255,.8) 0 0 0 1px inset`, and the box now spanning **421–820** — the real tap area —
+      rather than the row's **444–744**.
+      ⚠️ **`:focus-within`, not `:focus-visible`** — the row inside is what takes focus, and
+      `:focus-visible` frequently does not fire for a TAP (it is aimed at keyboard navigation), which is
+      the one input that matters here.
+      ⚠️ **Scoped to `.tl-empty-start`**, so the ordinary slim row keeps its own focus box untouched.
+      ✅ **THE ORIGINAL PLAN, kept because it was right:** move the visual onto `#timeline` — that element
       IS the tap area, already carries the empty-state wash for exactly that reason, and runs to the
       panel's bottom. **Then the picture and the listener are the same box by construction** rather than
       by two numbers that have to be kept equal.
@@ -20417,6 +20458,11 @@ re-opened #480, which I had marked done and had not fixed.
       again, for a NEW reason worth knowing: **averaging a smooth linear ramp over a block returns that
       block's centre value**, so pixelation is nearly an identity on a gradient. A gradient tests TONAL
       effects well and STRUCTURAL ones badly.
+      **JUMPED: this is MY OWN item and #601 is HIS.** He ruled on exactly this case on 26 Aug —
+      *"also make sure ur doing stuff in order"* — after I spent four ticks on this entry while three of
+      his requests waited. **The rule that came out of it is in LOOP.md: work I invent waits LONGER than
+      his, not shorter.** By number 599 comes first; by his instruction it does not, and his instruction
+      wins. **It is recorded, not skipped**, and it is next once his list is clear.
       ✅ **WHAT THE FOURTH ATTEMPT NEEDS: high-frequency DETAIL as well as tonal range** — edges, texture,
       something with fine structure — so that block, tile, warp and sort effects have something to
       destroy. **`fx-thumbs`' photographs have exactly that**, which is what the original note said and
@@ -20832,6 +20878,10 @@ re-opened #480, which I had marked done and had not fixed.
       steppy to him. **The number is the only thing to move.**
       **⏳ CLAUSE 2 IS STILL OPEN** — *"the tiles and shake together looked really bad"*. That is a LOOK
       complaint and needs his eye or a picture, not a timing.
+      **JUMPED: clauses 1 and 3 shipped in v13.15 and clause 2 cannot be worked without him.** *"Looked
+      really bad"* is not something a measurement can settle — I could change the look and have no way to
+      know whether it got better, which is the guessing this file forbids. **It is recorded, not skipped**,
+      and holding the rest of the queue behind a judgement only he can make is the list rotting at the top.
       ❓ **The options as they were put to him, kept for the record:**
       · **Cap the slices on the mover path (recommended).** Quality per slice falls off fast for a SHAKE,
         because the displacement is random per frame rather than a smooth arc — 16 samples of noise do not

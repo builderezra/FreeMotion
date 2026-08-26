@@ -1243,6 +1243,19 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fill-media-rm { background: transparent; border: 1px solid var(--line); color: #d98d8d; }
 .fill-media-rm:hover { border-color: #d98d8d; background: rgba(217,141,141,.08); }
 .insp-hint { font-size: 11.5px; color: var(--text-faint); line-height: 1.45; margin-top: 4px; }
+/* ⚠️ `.mt-dim` HAD NO RULE AT ALL — found while doing queue 601, and it means three buttons have been
+   claiming to dim since they were written and never did. js/inspector.js writes it on the crop easing
+   button, the motion-path button and now the opacity curve, each meaning "this is here but not usable
+   yet". Without a rule the button looked completely normal and simply did nothing when pressed, which
+   is worse than hiding it: a control that looks live and ignores you reads as broken.
+   Not `display: none` — the whole point is that it stays VISIBLE so the feature does not read as
+   missing (which is exactly how queue 601 was reported a second time). `pointer-events: none` because a
+   `<button disabled>` already refuses clicks, and this must also stop the hover state pretending. */
+.mt-dim, button.mt-dim {
+  opacity: .38;
+  cursor: default;
+  pointer-events: none;
+}
 /* ⚠️ THE "this control cannot do anything here" VARIANT (queue 595). Amber, matching the effects
    stack's `.fx-dead-tag` and the browser's "does nothing here" (#572) — the app now says this in three
    places and one colour for one meaning is the whole point of reusing it. It is deliberately NOT red:
@@ -7490,6 +7503,28 @@ body.fm-pushing #toast { z-index: 213; }
   border-color: rgba(150, 232, 255, .8);
   box-shadow: 0 0 14px rgba(90, 199, 237, .30);
   outline: none;
+}
+/* ⚠️ ON THE EMPTY SCREEN THAT BOX IS DRAWN ON `#timeline`, NOT THE ROW — queue 600, and it is MY
+   regression. Ezra: *"This box that pops up when you tap on the add area is bad coz it only shows the
+   old tap region and not the new extended one."*
+   #571 clause 2 moved the LISTENER to `#timeline` — measured then, the row ended at y=744 while the
+   panel ran to 820, so **76px of what looks like timeline never received the tap.** The rule above kept
+   drawing the feedback at the ROW's bounds, so the app ended up with two different answers to "what can
+   I tap here", and he was looking at the smaller one.
+   **The box moves, not the tap area** — the extension is what he asked for in #571, so shrinking it back
+   would undo his own request.
+   `:focus-within` rather than a new class: the row inside is what actually takes focus, and #timeline
+   already runs to the panel's bottom (the empty-state wash is painted on it for that same reason). **So
+   the picture and the listener are now the same box by construction** rather than two numbers somebody
+   has to keep equal — which is exactly how this broke. */
+#timeline-panel.tl-empty-start .tl-addrow:hover,
+#timeline-panel.tl-empty-start .tl-addrow:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+#timeline-panel.tl-empty-start #timeline:focus-within,
+#timeline-panel.tl-empty-start #timeline:hover {
+  box-shadow: inset 0 0 0 1px rgba(150, 232, 255, .8), inset 0 0 14px rgba(90, 199, 237, .30);
 }
 /* ⚠️ `align-self: stretch` ON THE HEAD REACHES ONLY AS FAR AS **THIS** BOX (queue 550 clause 2).
    The head below says `align-self: stretch` and its comment claims that "makes the rule run the row's

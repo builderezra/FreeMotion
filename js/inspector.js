@@ -59,11 +59,26 @@ window.FM = window.FM || {};
        ⚠️ ONLY WHEN IT IS ANIMATED. A curve button on a property with no keyframes opens an editor with
        nothing to edit, which is the "control that does nothing" complaint from queue 529. It appears
        with the first keyframe, exactly like the timeline's own curve affordances. */
-    if (opts.ease && FM.buildEasingEditorFor && FM.isAnimated(p)) {
-      const eb = el('button', 'kf-btn kf-ease-btn');
+    /* ⚠️ DIMMED, NOT ABSENT — queue 601, and he reported this a SECOND time because of it.
+       Ezra, now: *"You seemingly forgot to add graphing to the opacity setting."* He had not: queue 557
+       added it, and the note above records the deliberate choice to show it **only once the property is
+       animated**, so it could never open an editor with nothing in it (queue 529's "control that does
+       nothing").
+       **That decision was right and its DELIVERY was wrong.** Hidden and missing look identical, so a
+       property he had not keyframed yet read as one that had been forgotten — and he reported it again.
+       ⚠️ **The app already had the idiom for exactly this, a few hundred lines away:** the crop rail
+       writes `'mt-ease' + (cropReady ? '' : ' mt-dim')` — the button stays, greyed, saying what it needs.
+       So: present always, DISABLED until there is a keyframe, and the tooltip says why. It cannot open an
+       empty editor (it is disabled) and it cannot read as forgotten (it is there).
+       **Fifth time this session the app knew something and did not say it** — #572, #578, #595, #598. */
+    if (opts.ease && FM.buildEasingEditorFor) {
+      const ready = FM.isAnimated(p);
+      const eb = el('button', 'kf-btn kf-ease-btn' + (ready ? '' : ' mt-dim'));
       eb.innerHTML = (typeof MT_ICONS !== 'undefined' && MT_ICONS.ease) ? MT_ICONS.ease : '∿';
-      eb.title = label + ' easing curve';
-      eb.addEventListener('click', () => { FM._opaEasing = { key: key, label: label }; FM.inspector.refresh(); });
+      eb.disabled = !ready;
+      eb.title = ready ? (label + ' easing curve')
+                       : (label + ' easing curve — add a keyframe (◆) first, then this shapes how it moves between them');
+      if (ready) eb.addEventListener('click', () => { FM._opaEasing = { key: key, label: label }; FM.inspector.refresh(); });
       row.appendChild(eb);
     }
     wrap.appendChild(row);
