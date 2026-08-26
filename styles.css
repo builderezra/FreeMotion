@@ -2118,7 +2118,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 360px) {
   #transport { padding-left: 6px; padding-right: 6px; }
   #transport .tbtn { min-width: 31px; width: 31px; }   /* min-width is what sizes .tbtn (styles.css:2130) — setting `width` alone never shrinks it */
-  #transport > #time-readout { padding: 0 9px; }   /* horizontal only — the height is fixed at 34px to match .tbtn (queue 526) */
+  #transport > #time-readout { padding: 0 9px; }   /* horizontal only — the height is fixed at 21px, the neighbours' GLYPH band (queue 526) */
   .t-left { padding-right: 4px; }
   .t-right { padding-left: 4px; }
 }
@@ -2128,7 +2128,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    be dropping a control, and that is his call, not mine. */
 @media (max-width: 340px) {
   #transport .tbtn { min-width: 28px; width: 28px; }
-  #transport > #time-readout { padding: 0 7px; font-size: 12px; }   /* horizontal only — see queue 526 */
+  #transport > #time-readout { padding: 0 7px; font-size: 12px; }   /* horizontal only — see queue 526 (height 21px) */
 }
 
 /* THE SWITCH (queue 373, clauses 3-7 and 9). A vertical track with a knob: "if the switch is facing up
@@ -2283,16 +2283,25 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      border of ZERO width — an invisible box — while this pill was **24.5px tall** with a VISIBLE 1px
      border and the same 8px radius. So the one outline you can actually see was inset 4.8px at the top
      and 4.7px at the bottom from the boxes either side of it. That is the disagreement in his shot.
-     The fix is the height, not the border: 34px makes the visible outline trace exactly where each
-     neighbour's box edge already is, so the row reads as one set of controls — and a hover background
-     on a neighbour now lands on the same rectangle the pill draws.
+     ⚠️ **THAT FIX WAS WRONG AND HE OVERRULED IT — 34px, then 21px (queue 526, re-opened 26 Aug).**
+     v12.56 set 34px so the visible outline traced the neighbours' invisible box edges. He answered with
+     a photo: *"I wanted you to change the borders so it was the same height as all the other buttons on
+     that row but you made it even bigger and now it looks shitty."* He is right that it got bigger —
+     24.5px → 34px — and the reason it looks wrong is the thing the note above already spotted: **those
+     34px boxes have a border of ZERO width.** Nothing on the row is 34px to the eye. What you actually
+     SEE beside the pill is each button's glyph, and **every one of those measures 21×21** (measured at
+     380px: btn-layermenu, btn-tostart, btn-toend, btn-undo all 21×21, ink 12–15px inside them).
+     So the pill matches the GLYPH band, not the invisible box: **21px**, which this entry offered him at
+     v12.56 ("say 'icons' and it is a one-number change") and which he has now effectively said.
+     Checked before setting it: at 21px the digits still fit with no clipping (scrollHeight 19 against
+     clientHeight 19; 24, 26 and 34 all fit too, so the choice is about matching, not about room).
      ⚠️ HEIGHT, NEVER WIDTH. The note below records that pinning a width here pushed the desktop play
      control 3px off screen centre and broke a v4.97 assertion. Height is free of that: the middle grid
      track is `auto`, so the box still shrink-wraps its digits horizontally.
      `display: flex` rather than leaving it blockified: at 34px a single 12.5px line needs centring
      vertically, and flex does it without a line-height that would have to be re-derived every time the
      font size changes in the two narrow-width blocks above. */
-  height: 34px; display: flex; align-items: center; justify-content: center;
+  height: 21px; display: flex; align-items: center; justify-content: center;   /* the glyph band — see above */
   padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
   /* NO PINNED WIDTH. Pinning an even 84px was an attempt to close the last pixel of clause 8 and it did
      two things, neither good: it did not close it (the grid's side tracks are already exactly equal at
@@ -6749,6 +6758,14 @@ body.fm-pushing #toast { z-index: 213; }
   padding-bottom: 2px;
 }
 .flt-grid::-webkit-scrollbar { display: none; }
+/* Page dots under a filter row (queue 565). The MARK is `.addmenu-dot`, shared with the add menu's
+   shape grid so there is one vocabulary for "this pages sideways" — only the container differs, because
+   `.addmenu-dots` is sticky for the add sheet and a row inside a panel wants none of that.
+   `margin-top: -8px` pulls them up against their own row: `.flt-grid` carries `margin-bottom: 14px`,
+   and without this the dots float midway between their row and the next heading, reading as a divider
+   rather than as that row's own readout. */
+.flt-dots { display: flex; justify-content: center; gap: 6px; margin: -8px 0 12px; }
+.flt-dots.hidden { display: none; }
 .flt-grid > .flt-tile { flex: 0 0 auto; width: calc((100% - 30px) / 4); scroll-snap-align: start; }
 /* A desktop pointer has no swipe, so the rail keeps a visible bar there — a scroller that cannot be
    scrolled with the device you are holding is worse than a grid. Touch keeps the clean edge. */

@@ -3007,7 +3007,12 @@
          buttons on it to be a meaningful target. */
       const sameLine = btns.filter(b => Math.abs(b.getBoundingClientRect().top - pb.top) < 20);
       if (sameLine.length < 3) throw new Error('only ' + sameLine.length + ' button(s) share the pill line (of ' + btns.length + ' in the row) — there is nothing beside it to align to');
-      const bb = sameLine[0].getBoundingClientRect();
+      /* ⚠️ MEASURE AGAINST THE GLYPH, NOT THE BUTTON BOX — he overruled that at v12.80. Those boxes are
+         34px with a border width of ZERO, so nothing on this row is 34px to look at; matching them made
+         the pill's VISIBLE outline 62% taller than the marks beside it. */
+      const glyph = sameLine.map(b => b.querySelector('svg')).filter(Boolean)[0];
+      if (!glyph) throw new Error('no glyph in the buttons beside the pill — nothing visible to align to');
+      const bb = glyph.getBoundingClientRect();
       const cs = getComputedStyle(pill);
       return { pb: pb, bb: bb, btns: sameLine, borderW: parseFloat(cs.borderTopWidth) || 0,
                radius: cs.borderTopLeftRadius, btnRadius: getComputedStyle(sameLine[0]).borderTopLeftRadius };
@@ -3020,9 +3025,12 @@
       // every button in the row shares one box — if they disagree, "the other buttons" is not one target
       const tops = m.btns.map(b => +b.getBoundingClientRect().top.toFixed(1));
       if (new Set(tops).size !== 1) throw new Error(label + ': the buttons on the pill own line do not share a top edge (' + tops.join(', ') + '), so there is no single line to align it to');
-      const dTop = Math.abs(m.pb.top - m.bb.top), dBot = Math.abs(m.pb.bottom - m.bb.bottom);
-      if (dTop > 0.5 || dBot > 0.5) throw new Error(label + ': the pill outline is inset from the buttons beside it — top by ' + dTop.toFixed(2) + 'px, bottom by ' + dBot.toFixed(2) + 'px (pill ' + m.pb.height.toFixed(1) + 'px tall vs the buttons\' ' + m.bb.height.toFixed(1) + 'px). That is queue 526 exactly.');
-      if (m.radius !== m.btnRadius) throw new Error(label + ': the pill\'s corner radius is ' + m.radius + ' against the buttons\' ' + m.btnRadius + ' — the edges line up but the corners do not, which is the same complaint one step in');
+      /* The pill's visible outline must be the same HEIGHT as the glyphs beside it and CENTRED on them.
+         Top/bottom equality was the OLD test, against the invisible 34px box he overruled at v12.80. */
+      const dH = Math.abs(m.pb.height - m.bb.height);
+      if (dH > 1.5) throw new Error(label + ': the pill is ' + m.pb.height.toFixed(1) + 'px tall against the ' + m.bb.height.toFixed(1) + 'px glyphs beside it — queue 526 was re-opened because matching the invisible 34px BOX made it look bigger than everything else on the row.');
+      const dMid = Math.abs((m.pb.top + m.pb.height / 2) - (m.bb.top + m.bb.height / 2));
+      if (dMid > 1) throw new Error(label + ': the pill sits ' + dMid.toFixed(2) + 'px off the glyph centre line.');
       return m;
     };
     const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -3677,7 +3685,16 @@
     if (look(solo, 4.0).lit !== 0) throw new Error('renderScene itself now paints past a clip\'s end — the export would gain a frame, which is the regression the suite caught once already');
   });
 
-  test('550/551: the add row is tinted only between the divider and the project end', { item: '551' }, async function () {
+  test('551/567: the add row is tinted from its own edge to the PROJECT end, not the screen edge', { item: '551' }, async function () {
+    /* ⚠️ QUEUE 567 REVOKED HALF OF WHAT THIS TEST WAS WRITTEN FOR. It began as one rectangle from one
+       annotated screenshot — queue 550 clause 1 ("that line should stop the blue dotted lines and blue
+       background but keep the plus") plus queue 551 (end at the project, not the screen). Having lived
+       with it he asked for the left half back: "I actually kinda preferred it how it was when it went
+       over the line of the left, the right side being cut off is good but can you undo what I said?"
+       So the LEFT bound is the row's own edge again and the decoration crosses the head divider; only the
+       RIGHT bound is still the project's end. Kept rather than deleted, because the right half is still
+       his — and because the assertion that used to sit here is exactly what a later session would
+       "restore" if only the REQUESTS entry recorded the change. */
     /* Queue 550 clause 1 and queue 551, from one annotated screenshot:
          "that line should stop the blue dotted lines and blue background but keep the plus"
          "Make the add layer also end at the end of the project and not the end of the screen, so you can
@@ -3712,7 +3729,10 @@
            "it stops short of the edge" is true of the broken build too. */
         const sr = scroller.getBoundingClientRect();
         if (!(cb.right < sr.right - 40)) throw new Error('the project already fills the timeline (clip ends ' + cb.right.toFixed(1) + ', scroller ' + sr.right.toFixed(1) + ') — shorten the fixture or this proves nothing');
-        if (Math.abs((rb.left + x0) - hb.right) > 2) throw new Error('the tint starts at ' + (rb.left + x0).toFixed(1) + ' but the head divider is at ' + hb.right.toFixed(1) + ' — queue 550: it should stop at that line');
+        /* THE LEFT BOUND IS THE ROW ITSELF (queue 567). It was the head divider between v12.66 and
+           v12.80; he asked for that back after living with it. Guarded so it cannot drift back by accident. */
+        if (Math.abs(x0) > 1) throw new Error('the tint starts ' + x0.toFixed(1) + 'px in from the row edge — queue 567 asked for it to run over the head divider again, from the edge');
+        if (!(rb.left + x0 < hb.right - 2)) throw new Error('the tint begins at or past the head divider — it should cross it, which is what he asked to have back');
         if (Math.abs((rb.left + x1) - cb.right) > 3) throw new Error('the tint ends at ' + (rb.left + x1).toFixed(1) + ' but the project ends at ' + cb.right.toFixed(1) + ' — queue 551');
         // …and the ＋ must NOT have moved out of the head column with it
         const plus = row.querySelector('.tl-addrow-plus');
@@ -3857,6 +3877,79 @@
          remountLive() rebuilds cleanly at whatever state we are leaving in. */
       if (realMountFilter) FM.fxThumbs.mountFilter = realMountFilter;
       await sleep(250);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('565: a filter row that scrolls says so, and one that fits says nothing', { item: '565' }, async function () {
+    /* Queue 565. Ezra: "Make it obvious that you can scroll on filter rows to show more, like do the
+       little dots at the bottom or sum."
+       ⚠️ SAME VOCABULARY AS THE ADD MENU, NOT A SECOND ONE — the entry asked for that explicitly. The
+       shape grid has paged sideways with dots since v2.39, so the MARK here is that mark: `.addmenu-dot`.
+       ⚠️ AND NOTHING IS DRAWN WHEN THE ROW FITS. Dots under a row with nothing hidden are a control
+       pointing at nothing, which this panel has had removed from it twice before. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    /* Thumbnails suppressed for the same reason queue 554's test does it (LOOP rule 17): opening the
+       Filters tab mounts 30 generating canvases, and the next test to compare a tile against its subject
+       then reads them half-baked. This test is about the dots, not the pictures. */
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(150);
+      const L = FM.makeLayer('shape', { name: 'f', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+      L.start = 0; L.duration = 4; L.effects = [];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(250);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await sleep(250);
+      if (FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+      await sleep(600);
+
+      const panel = document.getElementById('inspector-panel');
+      const grids = [].slice.call(panel.querySelectorAll('.flt-grid'));
+      if (grids.length < 2) throw new Error('only ' + grids.length + ' filter rows rendered — this test needs both a row that fits and one that does not');
+
+      let over = 0, fits = 0;
+      grids.forEach((g, i) => {
+        const dots = g.nextElementSibling;
+        if (!dots || !dots.classList.contains('flt-dots')) throw new Error('filter row ' + i + ' has no dot host beside it');
+        const overflows = g.scrollWidth > g.clientWidth + 4;
+        if (overflows) {
+          over++;
+          if (dots.classList.contains('hidden')) throw new Error('row ' + i + ' scrolls (' + Math.round(g.scrollWidth) + ' in ' + Math.round(g.clientWidth) + ') but shows no dots — nothing on screen says the tiles past the edge exist');
+          if (dots.children.length < 2) throw new Error('row ' + i + ' scrolls but drew ' + dots.children.length + ' dot(s) — a single dot says nothing about there being more');
+          if (!dots.firstElementChild.classList.contains('addmenu-dot')) throw new Error('the dot is not the add menu\'s `.addmenu-dot` — that is a second vocabulary for one idea, which the entry asked to avoid');
+          if (dots.firstElementChild.tagName !== 'SPAN') throw new Error('the dots are not spans — js/addmenu.js records why they must not be buttons: a 6px button is a 2px-reach target and puts one item per page into the tab order');
+        } else {
+          fits++;
+          if (!dots.classList.contains('hidden')) throw new Error('row ' + i + ' fits entirely (' + Math.round(g.scrollWidth) + ' in ' + Math.round(g.clientWidth) + ') but still draws dots — a control pointing at nothing');
+          if (dots.getBoundingClientRect().height > 1) throw new Error('a hidden dot host is still taking ' + dots.getBoundingClientRect().height.toFixed(1) + 'px of space under a row that fits');
+        }
+      });
+      /* CONTROL: both cases must actually occur, or the loop above proved only one of them — and the one
+         it skipped is exactly where the bug would be. */
+      if (!over) throw new Error('no filter row overflowed, so "a scrolling row shows dots" was never tested');
+      if (!fits) throw new Error('every filter row overflowed, so "a fitting row stays silent" was never tested');
+
+      // …and the active dot follows the scroll, or the dots are decoration that lies about where you are.
+      const g = grids.filter(x => x.scrollWidth > x.clientWidth + 4)[0];
+      const dots = g.nextElementSibling;
+      const active = () => [].slice.call(dots.children).findIndex(d => d.classList.contains('on'));
+      if (active() !== 0) throw new Error('at rest the active dot is ' + active() + ', not the first');
+      g.scrollLeft = g.scrollWidth; await sleep(200);
+      if (active() !== dots.children.length - 1) throw new Error('scrolled to the end, the active dot is ' + active() + ' of ' + dots.children.length + ' — it does not track the row');
+      g.scrollLeft = 0; await sleep(200);
+      if (active() !== 0) throw new Error('scrolled back, the active dot stayed at ' + active());
+    } finally {
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
       if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
     }
   });

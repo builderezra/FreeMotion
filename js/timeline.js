@@ -2224,7 +2224,9 @@ window.FM = window.FM || {};
           can see easier when the actual project has hit its end"*
        Both describe the same rectangle, so they are one measurement. The ROW keeps its full width — the
        ＋ lives in the head column and must not move — and the decoration moves onto a pseudo-element
-       spanning [divider, project end], which is what --ar-x0 / --ar-x1 carry.
+       spanning [row edge, project end], which is what --ar-x0 / --ar-x1 carry. (It spanned
+       [divider, project end] between v12.66 and v12.80; see the note on x0 below — he asked for the left
+       half back.)
        ⚠️ MEASURED at 380px rather than derived: the head is **66px** there while `--head-w` says 82px
        (the phone overrides it), so reading the variable would have put the line 16px wrong. Clips sit at
        `PAD + t * pxPerSec()` inside the lane, so the project's end is head + PAD + duration x pps.
@@ -2233,7 +2235,18 @@ window.FM = window.FM || {};
       const firstHead = tracksEl.querySelector('.track-head');
       const headW = firstHead ? firstHead.getBoundingClientRect().width : 0;
       const dur = Math.max(0, (FM.scene.project && FM.scene.project.duration) || 0);
-      const x0 = headW;
+      /* ⚠️ x0 IS 0, NOT THE DIVIDER — HE REVOKED THAT HALF (queue 567, 26 Aug). Queue 550 clause 1 asked
+         for the dashes and tint to STOP at the head divider, and that shipped at v12.66. Having lived
+         with it he asked for it back: *"I actually kinda preferred it how it was when it went over the
+         line of the left, the right side being cut off is good but can you undo what I said?"*
+         So the decoration runs from the row's own edge again, straight over the divider, and `headW` is
+         no longer read for the LEFT bound.
+         ⚠️ **`x1` IS UNCHANGED AND MUST STAY** — that is queue 551, the right-hand end at the project's
+         end, which he explicitly kept: "the right side being cut off is good". The two bounds came from
+         one measurement and it would be easy to revert both together; do not.
+         (The DIVIDER itself still runs the full height of this row — queue 550 clause 2, v12.74. That is
+         the line, not the decoration, and it is not what he is talking about here.) */
+      const x0 = 0;
       const x1 = headW + PAD + dur * pxPerSec();
       row.style.setProperty('--ar-x0', x0.toFixed(1) + 'px');
       // never shorter than a nub: a 0s project would otherwise draw a hairline with no bar beside the ＋

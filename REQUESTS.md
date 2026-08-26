@@ -1,8 +1,22 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.79
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.80
 >
-> **State:** v12.79, **970 tests green**, tree clean.
+> **State:** v12.80, **972 tests green**, tree clean.
+>
+> **✅ v12.80 — the three things you sent tonight that were my fault, fixed.**
+> · **The play pill (#526).** You were right and I had matched the wrong thing: the buttons either side
+>   are 34px boxes with **no border at all**, so nothing on that row is 34px to look at — what you SEE is
+>   their 21×21 glyphs. The pill is 21px now, dead level with them.
+> · **The add row (#567).** The dashes run over the left divider again. The right side still stops at the
+>   end of the project, as you asked.
+> · **Filter rows (#565).** Rows with more than fits now show little dots underneath — same dots the shape
+>   grid uses. Rows that fit show nothing.
+>
+> **📥 Everything else you sent is logged and waiting its turn:** **#568** (playhead circle — centre it,
+> blend it into the line, lose the old white arrow), **#569** (Paste look menu), **#570** (dragging a
+> layer not updating the switch live), **#571** (the empty-project screen: the odd blue line, the dead
+> strip at the bottom, and the colourful tap reaction). I have not started any of them.
 >
 > **✅ v12.79 — there is a Bell now (#563), in Audio ▸ Sound effects ▸ Interface.** I built it as a struck
 > bell rather than another chime, because there was already a "Ding" and the easy version would have been
@@ -18254,7 +18268,30 @@ re-opened #480, which I had marked done and had not fixed.
       *Measured in the real app: two seeded drafts render with the two different labels, both carry a ⋯,
       deleting the orphan takes it from the list and the screen, and the refusal toasts.*
 
-- [x] **526 — The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.) ✅ v12.56
+- [x] **526 — 🔁 RE-OPENED 26 Aug, ANSWERED v12.80 26 Aug — the play pill is now BIGGER than the other buttons, not matched.** The play pill's outline should line up with the outlines on the other buttons in that row.** (24 Aug, phone screenshot at v12.25.) ✅ v12.56
+      🔁 **HIS CORRECTION, verbatim (26 Aug, phone screenshot at v12.79):**
+      > And the play button I wanted you to change the borders so it was the same height as all the other buttons on that row but you made it even bigger and now it looks shitty
+      **THIS ENTRY OFFERED HIM EXACTLY THIS OVERRULE AND HE HAS NOW TAKEN IT.** v12.56 said in as many
+      words: *"'the lines on the other buttons' could mean their boxes (what I matched) or their icon
+      strokes, which are a smaller 21px band. I matched the boxes. Say 'icons' and it is a one-number
+      change."* He has effectively said icons — the pill went 24.5px → 34px, i.e. **taller than it
+      started**, and in his shot its outline dwarfs the ‹ and ▷ glyphs beside it.
+      **So: match the ICON band, not the button boxes.** Those 34px boxes are mostly padding; what reads as
+      "the lines on the other buttons" is the ~21px the glyphs actually occupy.
+      ⚠️ **Measure the glyphs, not the boxes**, and check it at 380px against the row he photographed.
+      ⚠️ **Second wrong guess at "the other buttons" — put the NUMBER in the entry this time**, so a
+      third reading is not needed.
+
+      ✅ **DONE v12.80 — THE NUMBER IS 21px, and here is why it is that and not 34 or 24.5.**
+      Measured at 380px: **every neighbouring glyph is 21×21** (btn-layermenu, btn-tostart, btn-toend,
+      btn-undo), each sitting inside a 34px button box whose border width is **ZERO**. So *nothing on that
+      row is 34px to the eye* — v12.56 matched an invisible box, which is why a visible outline at that
+      size dwarfed the icons beside it and read as "even bigger".
+      The pill is now **84×21**: same height as the glyph band, centred to **0px** against the glyph
+      centres, digits not clipped (scrollHeight 19 vs clientHeight 19 — 24, 26 and 34 all fit too, so this
+      was a choice about matching, not about room).
+      ⚠️ **Both readings this entry offered have now been tried and he has seen both.** If 21 is too tight,
+      the honest middle is 24–26; say a number and it is one line.
       His words, verbatim:
       > The lines around the middle play button should align with the lines on all the other buttons on the row - I think this would look good but make sure you're checking it's good as ur doing it and maybe adjust other variables to make it perfect
       **Follows straight on from #503**, which gave the pill a white outline. Now that it HAS an outline, it
@@ -19269,7 +19306,11 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > I also asked ages ago for the add layer that when it cross the line that every layer has that is there to cut it off from the layers and show the picture and eye icon, like that line should stop the blue dotted lines and blue background but keep the plus, and also for some reason where the arrows are the line is like cut short for no reason. Please fix this so it has more continuity
       **Two things, tick separately:**
-      1. [x] **The add row's dashed blue outline and blue tint run straight through the vertical divider**
+      1. [x] ⛔ **REVOKED BY HIM 26 Aug — see #567.** Shipped v12.66, undone v12.80: *"I actually kinda
+             preferred it how it was when it went over the line of the left."* The decoration runs over the
+             divider again. **Clause 2 below is NOT affected** — the divider itself still runs the row's
+             full height. Left ticked because it WAS built and delivered; the revocation is his, not a miss.
+             **The add row's dashed blue outline and blue tint run straight through the vertical divider**
              that separates every other row's eye/thumbnail column from its clip lane. They should STOP at
              that line — but the ＋ button itself stays where it is. ✅ **DONE v12.66** (see below) — the
              box was simply never ticked, which is what the new end-of-batch audit caught on its first run.
@@ -19759,10 +19800,110 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **571 — Empty-project screen: a glitched blue line, a dead strip at the bottom, and he wants a tap reaction.** (26 Aug, phone screenshot at v12.79, Project 44 with no layers.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Weird glitch here with the blue line also for this screen make it so when you tap anywhere on the timeline it works, currently the bottom of the screen has a cut off. And also do a nice little colourful reaction when you press on this screen, something that comes from where you tapped, like those keyboards that light but based on what button you press
+      **THREE separate things — tick separately:**
+      1. [ ] **The "weird glitch with the blue line."** In his shot the empty-state add row draws a TALL
+             dashed rectangle down the left (roughly x 8–332, y 1123–1712 in his 920-wide capture) instead
+             of a row-height outline — while the ＋ and "Tap here to start creating" sit centred to its
+             right, outside it. **Reproduce on an EMPTY project first**; this is the `.tl-addrow--empty`
+             variant, which is a different design from the normal row (`display: contents` on its head).
+      2. [ ] **The bottom of the timeline does not respond to taps** — *"make it so when you tap anywhere
+             on the timeline it works, currently the bottom of the screen has a cut off."* So the empty
+             state's tap target stops short of the visible area. **Measure where the target ends against
+             where the panel ends.**
+      3. [ ] **A colourful tap reaction that comes FROM the point you touched** — his analogy is the
+             keyboards that light up per key. An idea, not a bug; it is the one part of this that is
+             invention. **Design request → #545: draw it and show him.**
+      ⚠️ Clause 1 and clause 2 may be the same fault — a box that is the wrong size is also the wrong size
+      to tap. **Measure before assuming they are separate.**
+
+- [ ] **570 — Dragging a layer still does not update the toggle switch LIVE.** (26 Aug, phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Dragging layers still doesn’t update the switch live
+      **"still" → this is #416**, whose request was: *"when you're dragging a layer the toggle button will
+      change colour to the colour of that layer then when you press the toggle button while dragging a
+      layer it will jump that layer to the top or bottom."* `FM.dragLayerId` is published from
+      `buildDragHandle` in js/timeline.js for exactly this.
+      ⚠️ **The word doing the work is LIVE.** His shot shows the toggle already red/pink while a red/pink
+      layer is mid-drag, so the colour is arriving — **what to establish first is WHEN**: does it only
+      update on drop, or after a rebuild, or one layer late? **Measure the switch's colour at several
+      points DURING a drag** rather than before and after it.
+      ⚠️ `reorderActive` defers rebuilds for the length of a drag (a rebuild would destroy the captured
+      handle), so anything that repaints the switch through a rebuild cannot fire until the drop. That is
+      the first place to look.
+
+- [ ] **569 — The "Paste look" menu must always work, and only offer what can actually be pasted.** (26 Aug, phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make sure the past look menu is always working and always representative of what can actually be pasted
+      ("past look" = **Paste look**.)
+      **What his shot shows:** the Paste look dialog over an IMG_2949 layer, with **eight unlabelled icon
+      tiles** — one of them (a **T**) greyed out — above the inspector grid, which labels its own eight as
+      Colouring / Outline & Shadows / Mixing / Position / Scale / Speed / Customise Shape / Presets /
+      Effects. **The two sets do not match**, and the dialog's tiles carry no words at all.
+      **Two things in one sentence, tick separately:**
+      1. [ ] **"always working"** — find what makes it not work. Establish first whether he means it
+             sometimes pastes nothing, sometimes opens empty, or the greyed tile. **Reproduce before
+             designing.**
+      2. [ ] **"always representative of what can actually be pasted"** — the tiles should reflect what is
+             ON THE CLIPBOARD *and* what the TARGET layer can accept. A text tile over a video layer is
+             offering something that cannot happen; showing it greyed is better than nothing but it still
+             takes a slot and says nothing about why.
+      ⚠️ **The icons are unlabelled while the grid behind them is labelled.** Whatever else changes, that
+      mismatch is most of why it is hard to tell what it offers.
+      ⚠️ Design request → #545: draw it and show him before shipping the look.
+
+- [ ] **568 — The playhead's new circle needs centring, blending into the line, and the old white arrow removed.** (26 Aug, phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The new circle dot is a good idea for the playhead button but it needs to be centred and also designed so it kinda of connects and blends with the playhead line and also don't leave the played original white arrow there it looks messy
+      **He LIKES the idea — this is form, not function.** Three clauses, tick separately:
+      1. [ ] **Centre it** on the playhead line. His shot shows the yellow ring sitting off to one side of
+             the white line rather than on it.
+      2. [ ] **Make it connect and blend with the line** — right now the ring and the line read as two
+             separate objects that happen to overlap. It should look like one handle on one line.
+      3. [ ] **Remove the old white arrow/triangle left behind it** — *"it looks messy"*. In his shot a
+             white chevron is still poking out above the ring.
+      ⚠️ **#102 is the ancestor** — *"The playhead line is off-centre under its triangle"* (v6.71). Same
+      family, same trap: **measure the line's centre against the marker's centre, do not eyeball it.**
+      ⚠️ Design request → #545: draw the options at the size they ship at and send him the picture.
+
+- [x] **567 — Undo the LEFT half of #550: he preferred the add row's dashes running over the divider.** (26 Aug, phone screenshot at v12.79.) — **DONE v12.80.**
+      His words, verbatim:
+      > With the fix to the add layer I actually kinda preferred it how it was when it went over the line of the left, the right side being cut off is good but can you undo what I said?
+      **He is revoking #550 clause 1 and KEEPING #551.** Precisely:
+      · **UNDO** — the dashed outline and blue tint stopping at the head divider on the LEFT (#550 clause 1,
+        shipped v12.66). He wants them running over that line again, as they did before.
+      · **KEEP** — the row ending where the PROJECT ends on the right (#551, v12.66). *"the right side being
+        cut off is good"*.
+      · **KEEP** — the divider itself running the full height of the add row (#550 clause 2, v12.74). That
+        is the LINE, not the decoration, and he is not talking about it.
+      ⚠️ **This reverses his own earlier request, and that is fine — it is his to reverse.** The point of
+      logging it verbatim is that #550 clause 1's entry must say so rather than silently flipping, or a
+      later session re-reads the old request and "fixes" it back.
+
+      ✅ **DONE v12.80 — one number, `--ar-x0` from the head width to 0.** Measured at 380px after:
+      decoration starts at **0px** (the row's own edge) and crosses the divider at 66px; the right bound is
+      **315.6px against a project end of 316px**, unchanged; the ＋ has not moved (22..43).
+      ⚠️ **#550 clause 1 is marked REVOKED rather than un-ticked** — it was built and delivered; he changed
+      his mind, which is not a miss. **#550 clause 2 is untouched:** the divider itself still runs the row's
+      full height (42px), because that is the LINE, not the decoration.
+      ⚠️ **The test that pinned the old behaviour was rewritten, not deleted** — it now guards the left edge
+      in the OTHER direction, so a later session cannot "restore" the divider stop from reading #550 alone.
+
 - [ ] **566 — Two sound effects clip on the ▶ preview (found while doing #563).** (26 Aug, measured.)
       **STATUS: 🟢 READY — nothing is stopping this**
       **Not something he reported** — found by measuring every recipe while adding the bell, and logged
       rather than quietly fixed because it changes how two of his existing sounds play.
+      **JUMPED: v12.80 went ahead of this.** He sent five messages that evening, three of them corrections
+      to work I had just shipped — the play pill being bigger rather than matched (#526), the add row's
+      left edge (#567), and the filter-row dots he had asked for (#565). CLAUDE.md names exactly this as a
+      legitimate jump: *"what HE explicitly says to do now"*. **This entry is mine, not his** — nobody has
+      complained about it, and it waits its turn behind his own words. It is next.
       **`preview()` is the only path that is not normalised.** `renderBuffer` runs `normalise()`, so an
       ADDED clip is always safe; the ▶ plays the raw render through a fixed `MASTER = 0.82`. So a recipe
       that sums past ~1.22 clips on playback and nowhere else.
@@ -19785,8 +19926,7 @@ re-opened #480, which I had marked done and had not fixed.
          structural answer; it costs one offline render per preview, so **measure that latency before
          choosing it** — the ▶ should feel instant.
 
-- [ ] **565 — Make it obvious that a filter row scrolls sideways — page dots or similar.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **565 — Make it obvious that a filter row scrolls sideways — page dots or similar.** (25 Aug.) — **DONE v12.80.**
       His words, verbatim:
       > Make it obvious that you can scroll on filter rows to show more, like do the little dots at the bottom or sum
       **The complaint is discoverability, not layout.** A filter row holds more than fits and scrolls
@@ -19800,3 +19940,22 @@ re-opened #480, which I had marked done and had not fixed.
       vocabulary for the same idea; if the filter rows can adopt the same control, that is the answer.
       ⚠️ Applies to more than filters if it lands — the effects browser's NEW and RECENTS rows scroll the
       same way. Ask before spreading it, since he named filter rows.
+
+      ✅ **DONE v12.80 — page dots, his own suggestion, in the add menu's vocabulary.**
+      **The entry said to reuse rather than invent, and that is what happened:** the shape grid has paged
+      sideways with dots since v2.39, so the MARK is that mark — `.addmenu-dot`, the same 6px span with
+      `.on` for the current page. Only the container differs (`.addmenu-dots` is sticky for the add sheet).
+      ⚠️ **They are SPANS, not buttons, and that is a measured decision inherited from js/addmenu.js**, not
+      a style choice: a 6px dot made into a button is a 2px-reach click target and adds one tab stop per
+      page announcing itself as a button. The ROW is the affordance; the dots are the readout.
+      📐 **Measured at 380px:** the row of 8 tiles (722px in a 356px viewport) shows **2 dots**; the six
+      rows that fit show **none, at 0px height**. The active dot tracks the scroll 0 → 1 → 0.
+      🐛 **One bug found in my own first cut:** the page count starts at −1, not 0. `build()` bails when
+      the count is unchanged, so starting at 0 meant a row that FITS matched on the first pass and
+      returned *before* applying `hidden` — leaving an empty host still carrying its margins under every
+      short row. 4px of stray space per row, invisible unless measured.
+      ⚠️ **NOT spread to the effects browser's NEW/RECENTS rows** — he named filter rows and the entry says
+      to ask first. Say the word and it is the same call.
+      ⚠️ **#545:** he described the answer himself ("the little dots at the bottom"), so this shipped his
+      own suggestion rather than a menu of alternatives. **Picture sent.** The other honest options were a
+      fading right edge, a peeking part-tile, or a count — say the word.

@@ -1539,6 +1539,54 @@ window.FM = window.FM || {};
        the two menus look and count the same rather than becoming two dialects of one idea. The BAR needs
        its own positioning: `.fxb-commit` is `position:absolute` against the effects sheet, and there is
        no such sheet here — see `.flt-commit` in styles.css. */
+    /* ⚠️ PAGE DOTS UNDER A FILTER ROW (queue 565). Ezra: "Make it obvious that you can scroll on filter
+       rows to show more, like do the little dots at the bottom or sum."
+       A filter row holds more than fits and scrolls sideways, and nothing on screen said so — the tiles
+       past the right edge may as well not have existed.
+       ⚠️ SAME VOCABULARY AS THE ADD MENU, NOT A SECOND ONE. The shape grid has paged sideways with dots
+       since v2.39, so the MARK here is that mark: `.addmenu-dot`, the identical 6px span, with `.on` for
+       the current page. Only the container differs, because `.addmenu-dots` is `position: sticky` for the
+       add sheet and a filter row wants none of that.
+       ⚠️ AND THEY ARE SPANS, NOT BUTTONS — that is a measured decision recorded in js/addmenu.js, not a
+       style preference: a 6px dot made into a <button> is a 2px-reach click target, and it puts one extra
+       item per page into the tab order announcing itself as a button. The ROW is the affordance; the dots
+       are the readout.
+       ⚠️ NOTHING IS DRAWN WHEN THE ROW FITS. Dots under a row with nothing hidden are a control pointing
+       at nothing, which is the "clutter explaining itself" this panel has had removed from it twice. */
+    function rowDots(grid) {
+      const host = el('div', 'flt-dots');
+      /* -1, not 0: `build()` bails when the page count is unchanged, so starting at 0 meant a row that
+         FITS matched on the first pass and returned before applying `hidden` — leaving an empty host
+         still carrying its margins under every short row. Measured as 4px of stray space per row. */
+      let count = -1;
+      const pages = () => Math.max(1, Math.round(grid.scrollWidth / Math.max(1, grid.clientWidth)));
+      const build = () => {
+        const n = grid.scrollWidth > grid.clientWidth + 4 ? pages() : 0;
+        if (n === count) return;
+        count = n;
+        host.textContent = '';
+        host.classList.toggle('hidden', n === 0);
+        for (let i = 0; i < n; i++) host.appendChild(el('span', 'addmenu-dot' + (i === 0 ? ' on' : '')));
+      };
+      const mark = () => {
+        if (!count) return;
+        const max = Math.max(1, grid.scrollWidth - grid.clientWidth);
+        const i = Math.round((grid.scrollLeft / max) * (count - 1));
+        [].forEach.call(host.children, (d, k) => d.classList.toggle('on', k === i));
+      };
+      grid.addEventListener('scroll', mark, { passive: true });
+      /* Built on a ResizeObserver rather than once, because the row has NO WIDTH the moment it is
+         created — the panel is still laying out — so a single pass would count one page every time and
+         draw nothing. Same reason the effects sheet watches its canvas (queue 528). */
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => { build(); mark(); });
+        ro.observe(grid);
+      }
+      build();
+      setTimeout(() => { build(); mark(); }, 0);
+      return host;
+    }
+
     const paintFilterPicks = () => {
       const host = document.querySelector('.insp-body') || document;
       host.querySelectorAll('.flt-tile[data-fltid]').forEach(t => {
@@ -1668,6 +1716,7 @@ window.FM = window.FM || {};
       const fwrap = el('div', 'flt-grid');
       favs.forEach(f => fwrap.appendChild(mkTile(f)));
       s.appendChild(fwrap);
+      s.appendChild(rowDots(fwrap));
     }
     (FM.filters.sections() || []).forEach(sec => {
       const list = FM.filters.bySection(sec.key);
@@ -1676,6 +1725,7 @@ window.FM = window.FM || {};
       const wrap = el('div', 'flt-grid');
       list.forEach(f => wrap.appendChild(mkTile(f)));
       s.appendChild(wrap);
+      s.appendChild(rowDots(wrap));
     });
 
     /* The commit bar. Hidden until something is picked — an empty "Add 0 filters" sitting under the
