@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.77
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.78
 >
-> **State:** v12.77, **968 tests green**, tree clean.
+> **State:** v12.78, **969 tests green**, tree clean.
+>
+> **✅ v12.78 — the ▶ on sound effects works (#562).** It was not flaky: **all 29 of them were broken**,
+> every one throwing on its first line, and the error was being swallowed so nothing ever said so. The
+> preview was handing the recipes a fake audio context; the real one takes its output as an argument the
+> preview just was not passing. **All 29 now measure as audible.** Failures also get reported now instead
+> of failing silently — that silence is the only reason this lasted.
 >
 > **✅ v12.77 — zooming no longer breaks the edit points (#561), and you were right that it was not just
 > them.** At 4× the handle overlay was **four times too big and 720×1200 out of place**, so the points sat
@@ -19636,8 +19642,7 @@ re-opened #480, which I had marked done and had not fixed.
       2x and 4x, with the backing store growing 499 → 996 → 1032 so the handles stay sharp.**
 
 
-- [ ] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.) — **DONE v12.78.**
       His words, verbatim:
       > Previewing sound effects in the sound effect menu doesn’t work
       **The menu is the one behind Audio ▸ Sound effects** — a list of generated effects, each with a ▶
@@ -19647,6 +19652,36 @@ re-opened #480, which I had marked done and had not fixed.
       and a browser will not start one without a user gesture. If the context is created at load rather
       than on the tap, it starts suspended and every preview is silent with no error.
       ⚠️ Goes with the audio cluster (#96, #148, #215) — but this one is likely small and self-contained.
+
+      ✅ **DONE v12.78 — and it was 100% broken, not intermittent: every one of the 29 effects threw.**
+      ❌ **The suspicion above was wrong, and measuring is what showed it.** It guessed a suspended
+      AudioContext with no user gesture. **Measured: the context was `running`.**
+      🎯 **The real cause: `preview()` built `Object.create(liveCtx)`** and redefined `destination` on it,
+      so the recipes would connect to a trim gain instead of straight to the speakers. **A plain object
+      with the context as its PROTOTYPE has none of the context's internal slots, and native methods
+      check for those.** Measured through such an object:
+      | | |
+      |---|---|
+      | `createOscillator()` | **TypeError: Illegal invocation** |
+      | `createBuffer()` | **TypeError** |
+      | `currentTime` | **Illegal invocation** |
+      | `sampleRate` | **Illegal invocation** |
+      | `destination` | works — the one own property redefined on it |
+      So every recipe threw on its first line. **And the whole body sat inside `catch (e) {}`**, so nothing
+      was reported anywhere: silent, no error, indistinguishable from a muted phone. That silent catch is
+      why this survived, and it is the second half of the fix.
+      🔑 **THE PROXY WAS NEVER NEEDED.** `renderBuffer` — the ADD path, which works — already calls
+      `def.render(ctx, 0, dur, trim)`. **The destination is the FOURTH ARGUMENT**, and 36 recipe bodies
+      end in `connect(out)`. Preview simply was not passing it. The fix is that one argument.
+      📐 **Measured before and after, rendering every recipe offline through both call shapes:**
+      · **old shape — 29 of 29 threw `Illegal invocation`.**
+      · **new shape — 29 of 29 audible**, peaks 0.096 to 0.941, none silent.
+      ⚠️ **`resume()` is awaited now too.** It returns a promise, and the old code scheduled against
+      `currentTime` immediately after calling it — a suspended context's clock does not advance, so a
+      first tap could schedule into the past. **This was NOT the cause** (the context measured `running`)
+      and it is fixed because it is wrong, not because it explained anything.
+      🔒 **The test pins the trap as well as the fix:** it asserts the prototype-proxy still throws, so if
+      a future engine ever makes it work, the explanation here gets revisited rather than quietly rotting.
 
 - [ ] **563 — Add a bell sound effect.** (25 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

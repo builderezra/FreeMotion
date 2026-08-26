@@ -554,21 +554,46 @@ window.FM = window.FM || {};
 
   // ---- preview (live) ---------------------------------------------------------------------------
   let liveCtx = null, liveStop = null;
+  /* ⚠️ NO PROTOTYPE-PROXY. THAT IS WHAT MADE EVERY PREVIEW SILENT (queue 562).
+   * This used to build `Object.create(liveCtx)` and redefine `destination` on it, so the recipes would
+   * connect to the trim gain instead of the speakers. A plain object with the context as its PROTOTYPE
+   * has none of the context's internal slots, and native methods check for those — so the first line of
+   * any recipe threw. Measured: `createOscillator()`, `createBuffer()`, `currentTime` and `sampleRate`
+   * all throw **TypeError: Illegal invocation** through such an object; only `destination` worked,
+   * because it was the one own property redefined on it.
+   * And the whole body sat inside `catch (e) {}`, so the throw was swallowed and every ▶ did nothing
+   * with no error anywhere. That silent catch is why this survived — it now says so instead.
+   * ⚠️ THE PROXY WAS NEVER NEEDED. `renderBuffer` — the ADD path, which works — already calls
+   * `def.render(ctx, 0, dur, trim)`: every recipe takes its destination as a FOURTH ARGUMENT and 36 of
+   * them end in `connect(out)`. Preview simply was not passing it.
+   * ⚠️ AND `resume()` IS AWAITED. It returns a promise; the old code scheduled against `currentTime`
+   * immediately after calling it, and a suspended context's clock does not advance, so on a phone the
+   * first tap could schedule into the past. (Measured here the context was already `running`, so this
+   * was not the fault — it is fixed because it is wrong, not because it was the cause.) */
   function preview(def) {
     stopPreview();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return; }
     try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
       liveCtx = liveCtx && liveCtx.state !== 'closed' ? liveCtx : new AC();
-      if (liveCtx.state === 'suspended') liveCtx.resume();
-      const trim = liveCtx.createGain(); trim.gain.value = MASTER;
-      trim.connect(liveCtx.destination);
-      const proxy = Object.create(liveCtx);
-      Object.defineProperty(proxy, 'destination', { get() { return trim; } });
-      const t0 = liveCtx.currentTime + 0.01;
-      def.render(proxy, t0, def.dur);
-      liveStop = () => { try { trim.disconnect(); } catch (e) {} };
-    } catch (e) {}
+    } catch (e) {
+      if (FM.toast) FM.toast('Could not start audio — ' + (e && e.message ? e.message : 'unknown'));
+      return;
+    }
+    const go = () => {
+      try {
+        const trim = liveCtx.createGain(); trim.gain.value = MASTER;
+        trim.connect(liveCtx.destination);
+        const t0 = liveCtx.currentTime + 0.01;
+        def.render(liveCtx, t0, def.dur, trim);   // the real context, and the trim as the destination
+        liveStop = () => { try { trim.disconnect(); } catch (e) {} };
+      } catch (e) {
+        /* SAID, NOT SWALLOWED. A preview that fails silently is indistinguishable from one that works
+           on a muted phone, which is exactly how this lasted. */
+        if (FM.toast) FM.toast('Could not play ' + def.name + ' — ' + (e && e.message ? e.message : 'unknown'));
+      }
+    };
+    if (liveCtx.state === 'suspended') liveCtx.resume().then(go, go); else go();
   }
   function stopPreview() { if (liveStop) { liveStop(); liveStop = null; } }
 

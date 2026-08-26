@@ -3861,6 +3861,75 @@
     }
   });
 
+  test('562: every sound effect actually makes a sound when previewed', { item: '562' }, async function () {
+    /* Queue 562. Ezra: "Previewing sound effects in the sound effect menu doesn't work."
+       ⚠️ THE ENTRY'S SUSPECT WAS WRONG, and measuring is what showed it. It guessed a suspended
+       AudioContext (no user gesture). Measured: the context was `running`. The real fault was in
+       `preview()`, which built `Object.create(liveCtx)` and redefined `destination` on it so the recipes
+       would connect to a trim gain instead of the speakers.
+       A plain object with the context as its PROTOTYPE has none of the context's internal slots, and
+       native methods check for those — so `createOscillator()`, `createBuffer()`, `currentTime` and
+       `sampleRate` all throw **TypeError: Illegal invocation** through it. Only `destination` worked,
+       because it was the one own property redefined. Every recipe threw on its first line.
+       And the whole body sat in `catch (e) {}`, so nothing was ever reported: 100% of previews silent,
+       with no error. Measured before the fix — all 29 recipes threw.
+       ⚠️ THE PROXY WAS NEVER NEEDED: `renderBuffer` (the ADD path, which works) already calls
+       `def.render(ctx, 0, dur, trim)`. The destination is the FOURTH ARGUMENT and 36 recipe bodies end
+       in `connect(out)`. Preview simply was not passing it. */
+    if (!FM.sfx || typeof FM.sfx.list !== 'function') throw new Error('FM.sfx is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return;   // no offline rendering in this engine — nothing to measure
+    const defs = FM.sfx.list() || [];
+    if (defs.length < 5) throw new Error('only ' + defs.length + ' sound effects in the list — this test is aimed at nothing');
+
+    const peakOf = async (def, useProxy) => {
+      const ctx = new OAC(1, Math.max(1, Math.ceil((def.dur + 0.05) * 44100)), 44100);
+      const trim = ctx.createGain(); trim.gain.value = 0.8; trim.connect(ctx.destination);
+      try {
+        if (useProxy) {
+          const proxy = Object.create(ctx);
+          Object.defineProperty(proxy, 'destination', { get() { return trim; } });
+          def.render(proxy, 0.01, def.dur);          // the shape that was shipped
+        } else {
+          def.render(ctx, 0.01, def.dur, trim);      // the shape preview() uses now
+        }
+      } catch (e) { return { err: e.name + ': ' + e.message }; }
+      const buf = await ctx.startRendering();
+      const d = buf.getChannelData(0);
+      let pk = 0; for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > pk) pk = v; }
+      return { peak: pk };
+    };
+
+    // 1. EVERY recipe must be audible through the call shape preview() uses. A new recipe that is
+    //    silent, or that forgets its `out` parameter, fails here on the day it is added.
+    const silent = [];
+    for (const def of defs) {
+      const r = await peakOf(def, false);
+      if (r.err) silent.push(def.name + ' threw ' + r.err);
+      else if (!(r.peak > 0.01)) silent.push(def.name + ' peaked at ' + r.peak.toFixed(4));
+    }
+    if (silent.length) throw new Error(silent.length + ' of ' + defs.length + ' effects make no sound when previewed: ' + silent.slice(0, 6).join('; '));
+
+    /* 2. THE TRAP IS STILL A TRAP. This is the assertion that stops the proxy coming back: if a future
+       engine ever made `Object.create(ctx)` work, the note above would be misleading rather than wrong,
+       and we would want to know. It throwing is the whole reason preview() was silent. */
+    const viaProxy = await peakOf(defs[0], true);
+    if (!viaProxy.err) throw new Error('a prototype-proxy over an AudioContext no longer throws — the explanation in preview() and in queue 562 needs revisiting');
+    if (viaProxy.err.indexOf('TypeError') < 0) throw new Error('the prototype-proxy threw ' + viaProxy.err + ', not the TypeError this was diagnosed from');
+
+    /* 3. AND THE SOURCE MUST NOT GO BACK. Two things killed this: the proxy, and a bare `catch (e) {}`
+       that made a thrown preview indistinguishable from a working one on a muted phone. */
+    const src = await fetch('js/sfx.js', { cache: 'no-store' }).then(r => r.text());
+    const prev = src.slice(src.indexOf('function preview('), src.indexOf('function stopPreview('));
+    if (!prev) throw new Error('preview() is no longer findable in js/sfx.js');
+    if (/Object\.create\(\s*liveCtx\s*\)/.test(prev)) throw new Error('preview() builds a prototype-proxy over the AudioContext again — every recipe will throw Illegal invocation and be silent');
+    if (!/def\.render\([^)]*,[^)]*,[^)]*,[^)]*\)/.test(prev)) throw new Error('preview() calls def.render without a fourth argument — the recipes connect to `out`, so the sound goes nowhere');
+    /* The property that matters is that a FAILURE IS REPORTED, not that no empty catch exists anywhere:
+       `try { trim.disconnect(); } catch (e) {}` is a perfectly good one, and an earlier version of this
+       assertion failed on it. What killed queue 562 was the whole render being swallowed. */
+    if (prev.indexOf('FM.toast') < 0) throw new Error('preview() no longer reports a failure to the user — a silent failure here is indistinguishable from a working preview on a muted phone, which is exactly how this lasted');
+  });
+
   test('561: on-canvas overlays track the preview at every zoom, and only ONE place knows why', { item: '561' }, async function () {
     /* Queue 561. Ezra: "Zooming in the project bugs out the edit points and probably other stuff."
        Every on-canvas overlay is a CHILD of `#canvas-wrap`, which is the element the viewport transform
