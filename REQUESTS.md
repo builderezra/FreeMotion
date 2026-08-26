@@ -1,8 +1,23 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.37
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.38
 >
-> **State:** v13.37, 990 tests green, tree clean.
+> **State:** v13.38, 990 tests green, tree clean.
+>
+> **🎯 I found the biggest speed lever in the app and it is ONE NUMBER — but it is a look-vs-speed call,
+> so it is yours to make and I will show you a picture first.**
+> Your preview is drawn **1.5x bigger than your screen can actually show**, then shrunk down. That is on
+> purpose — it keeps edges crisp. **But it means every effect does 2.2x more work than the screen needs.**
+> | setting | speed |
+> |---|---|
+> | 1.5x — today | — |
+> | **1.25x** | **1.76x faster** (recommended) |
+> | 1.0x | 2.48x faster |
+> **That 1.76x applies to ALL 198 effects at once**, which is bigger than nearly everything I did today
+> one effect at a time. Your exported videos are not affected at all — this is preview only, and it
+> changes back in one word.
+> ❓ **Next tick I will send you the same frame at all three so you can see whether the difference is even
+> visible.**
 >
 > **🚨 I measured the real scale of the problem and it changes what is worth doing.** At YOUR project size
 > (1080x1350), a single warp effect costs **half a second to three-quarters of a second per frame** —

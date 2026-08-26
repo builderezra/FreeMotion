@@ -206,6 +206,24 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+🎯 **THE BIGGEST LEVER IN THE APP IS ONE CONSTANT: `PREVIEW_SS = 1.5` (js/app.js:450). MEASURED, NOT
+GUESSED — and it needs HIS EYES before it moves.**
+When the preview is downscaled (always, on a phone) the canvas is rendered **1.5x larger than the screen
+can show** and the browser downsamples it — deliberate, to keep edges clean (`s * PREVIEW_SS`, line 462).
+⚠️ **It is NOT a bug. I nearly reported it as one.** But it costs 2.23x the pixels of EVERY effect.
+Measured on his phone-width layout (wrap 249 CSS px, dpr 2, 1080x1350), one kaleidoscope pass:
+| PREVIEW_SS | canvas | kernel |
+|---|---|---|
+| 1.5 (today) | 747x934 | 29.0 ms |
+| **1.25** | 598x747 | **16.5 ms (1.76x)** |
+| 1.0 | 498x623 | 11.7 ms (2.48x) |
+✅ **1.76x across ALL 198 EFFECTS from one number — larger than every kernel win today except
+fractalwarp, and it is one line.** Export is untouched (full res), so the risk is preview softness only
+and it reverts in one word.
+🔴 **DO NOT SHIP IT BLIND — this is a VISUAL trade and #545 says he sees a picture first.** Next tick:
+render the same frame at 1.5 / 1.25 / 1.0 at 380px, send him the three, recommend **1.25**. If he is
+asleep, rule 16 applies: ship 1.25 AND send the picture with the alternatives named.
+
 🚨🚨 **THE SCALE IS THE STORY, AND KERNEL OPTIMISATION CANNOT REACH IT. Measured 27 Aug at his REAL
 1080x1350, interleaved, quality certified 1 -> 1, bare scene 1.6 ms:**
 | effect | cost per frame |
