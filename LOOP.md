@@ -223,7 +223,29 @@ I had not read them. Read now, by hand, one at a time:**
   to leave it.
 ➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
 concluded from the classifier — which is the distinction rule 8b insists on.
-⚡ **DONE v13.40 — Smear now REPLACES the moving object instead of veiling it. #578 STAYS OPEN.**
+🚨 **UNRESOLVED INSTRUMENT CONFLICT ON MOTIONFLOW — DO NOT MAKE ANY FURTHER CLAIM ABOUT SMEAR UNTIL THIS
+IS SETTLED. Two probes, opposite answers, same code.**
+| regime | Smear @ default | Echo |
+|---|---|---|
+| pre-fix code, clock UNSYNCED | 111 / core 43 | 111 |
+| pre-fix code, clock **SYNCED** | **110 / 42** (= no effect) | — |
+| post-fix code, clock UNSYNCED | **117 / 26** (works) | 111 |
+| post-fix code, clock **SYNCED** | **111 / 42** (no change) | **122** |
+✅ **WHAT IS SOLID.** (1) **Echo was never broken** — with `FM.setTime(t)` synced to each step its trail
+climbs **110 → 123 → 135 → 148 → 160 → 174 → 186 → 199 → 212 → 224 → 237 → 250 → 263** across 14
+frames, which is unambiguous. My earlier "Echo is a no-op" was my probe resetting the frame cache.
+(2) **Smear's original defect was REAL, not an artefact** — pre-fix code under the CORRECT synced probe
+reads 110/42, identical to the effect being off. So v13.40 fixed something that genuinely needed it.
+❓ **WHAT IS NOT SETTLED: whether v13.40's fix actually helps in the app.** It measures 117/26 unsynced
+and 111/42 synced. Syncing makes the app repaint the layer at the same `t`, which sends the kernel down
+the `repaint` path (`ref = rec.prev`) instead of `advance` (`ref = rec.cv`) — so the two regimes are
+exercising DIFFERENT code paths, and neither is obviously "the real one".
+📋 **NEXT: decide which path playback actually takes, then measure only that one.** Read how the live
+play loop drives `renderScene` (does it advance `FM.time` and repaint once per frame, or twice?).
+⚠️ **The fix is SHIPPED and is not harmful** — no holes, static frames untouched, suite green. But **the
+"110 → 117" improvement I told him about is currently supported by only one of two regimes.**
+
+⚡ **v13.40 — Smear now REPLACES the moving object instead of veiling it. #578 STAYS OPEN.**
 It drew the sharp frame at full opacity then laid ghosts at `min(0.5, 1.6/samples)` = 0.16 over the top,
 so at the default nothing read: **111 px wide vs 110 with the effect OFF.** The base is now erased in
 proportion to the smear's own mask (capped 0.9, so never a hole) and the ghost alpha is solved from the
