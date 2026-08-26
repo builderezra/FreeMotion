@@ -8588,8 +8588,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         vc.save(); vc.globalCompositeOperation = 'destination-in';
         vc.imageSmoothingEnabled = true; vc.filter = 'blur(' + Math.round(4 + soft * 10) + 'px)';
         vc.drawImage(_mfMask, 0, 0, W, H); vc.restore();
-        B.drawImage(A, 0, 0);   // sharp base, smear layered over it
-        B.save(); B.globalAlpha = Math.min(0.5, 1.6 / samples);
+        /* THE SHARP OBJECT IS PUNCHED OUT BEFORE THE SMEAR GOES DOWN — and that is the whole fix for
+         * queue 578 clause 2 ("the motion blur footage is kinda buns").
+         * It used to draw the sharp frame at FULL opacity and veil it with ghosts at
+         * `min(0.5, 1.6/samples)` = 0.16 at the default 10 samples. A real motion blur REPLACES a moving
+         * object with its own smeared average; veiling leaves it crisp under a faint haze, so nothing
+         * read until Amount was pushed to 3. MEASURED on real footage (a disc crossing at 12.7 px/frame):
+         * at the shipped default the object came out 111 px wide against 110 with the effect OFF — i.e.
+         * within one pixel of doing nothing — while Amount 3 / 24 samples gave a proper 123 px.
+         * The motion field was never at fault: it reports a global vector of [12, 0] px on that clip.
+         * So: erase the moving region from the base in proportion to the SAME mask the smear is cut
+         * from, then lay the ghosts in. Static parts of the frame are untouched (the mask is ~0 there),
+         * and because the erase is driven by the mask rather than a flat alpha, a weak or partial motion
+         * mask still leaves most of the sharp frame standing rather than punching a hole in it. */
+        B.drawImage(A, 0, 0);
+        B.save();
+        B.globalCompositeOperation = 'destination-out';
+        B.globalAlpha = Math.min(0.9, 0.55 + 0.35 * Math.min(1, amount));   // never a full hole
+        B.filter = 'blur(' + Math.round(4 + soft * 10) + 'px)';             // same softness as the cut
+        B.drawImage(_mfMask, 0, 0, W, H);
+        B.restore();
+        /* The ghosts must now ADD UP to opaque where they overlap, since there is no longer a solid
+         * frame beneath them. Stacked source-over, N draws at alpha a cover 1-(1-a)^N, so a is solved
+         * from the coverage wanted rather than left as a fixed fraction. */
+        B.save(); B.globalAlpha = Math.max(0.12, Math.min(0.6, 1 - Math.pow(0.06, 1 / samples)));
         for (let k = 0; k < samples; k++) { const f = k / (samples - 1) - 0.5; B.drawImage(_mfMov, gx * f, gy * f); }
         B.restore();
         done(); return;

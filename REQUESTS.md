@@ -1,8 +1,21 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.39
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.40
 >
-> **State:** v13.39, 990 tests green, tree clean.
+> **State:** v13.40, 990 tests green, tree clean.
+>
+> **🎬 MOTION BLUR (FOOTAGE) NOW ACTUALLY BLURS — your *"kinda buns"* report.** It was drawing your sharp
+> frame at full strength and laying a faint haze over it, so at the normal setting it did **nothing you
+> could see**: on test footage the moving object came out 111 px wide against 110 px with the effect
+> switched OFF. You had to shove Amount to 3 before it read at all.
+> **It now removes the moving object before laying its smear down** — which is what a motion blur is
+> supposed to do. Same footage, same default: 117 px, and the hard core of the object drops from 42 to
+> 26 while the soft band goes 7 → 59.
+> ⚠️ **Honest: I set myself a pass mark of 118 px and got 117.** It is a real, visible improvement and it
+> misses my own target by a pixel, so there is likely a bit more to get. Static parts of the picture are
+> untouched and it punches no holes — both checked.
+> ❓ **Worth a look when you can:** it should now read at the DEFAULT Amount. If it is too strong, that is
+> a one-number change.
 >
 > **✅ SHIPPED the preview change you saw the picture of — every effect is now ~1.5x faster.** Your preview
 > was being drawn 1.5x bigger than your screen can show; it is now 1.25x. **At the size you actually look
