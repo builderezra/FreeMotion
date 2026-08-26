@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.34
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.35
 >
-> **State:** v13.34, 990 tests green, tree clean.
+> **State:** v13.35, 990 tests green, tree clean.
+>
+> **⚡ Inner Pinch 1.96x and Ripple 1.83x, both pixel-for-pixel identical.** Six of your dearest effects
+> are now faster.
+> **And one that surprised me: the same change made BULGE SLOWER** — 0.74x — so I took it out. Bulge
+> skips most pixels early, and for it the tidying-up cost more than it saved. **I had written down that
+> this trick always pays. It does not, and that is now corrected rather than left as a rule that would
+> mislead the next go.**
 >
 > **⚡ Kaleidoscope 1.53x and Radial Repeat 1.82x, both pixel-for-pixel identical.** Same cause as Grid
 > Repeat: they were looking up their settings for every pixel instead of once a frame.

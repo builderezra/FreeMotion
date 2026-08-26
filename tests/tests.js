@@ -44637,6 +44637,21 @@
         cases: [{}, { segments: 2 }, { segments: 16 }, { segments: 6, phase: 90 },
                 { segments: 9, phase: -140 }, { segments: 3, centerX: 0 }, { segments: 5, centerY: 100 },
                 { segments: 8, centerX: 100, centerY: 0 }] },
+      /* INNERPINCH and RIPPLE: pure hoists, must be exact. 1.96x and 1.83x, both 0 drift / 0 moved over
+         38,688 points. ⚠️ BULGE IS ABSENT ON PURPOSE — prepping it was exact but measured 0.74x, i.e.
+         SLOWER, against a control at 1.008. Its `r >= 1` early-out retires most pixels before any real
+         work, so the extra object and property loads cost more than the evalProps they replace. If you
+         are adding a prep to a kernel with a cheap early-out, MEASURE IT; the pattern does not always
+         pay. */
+      { name: 'innerpinch', fn: W_.innerpinch, ref: (FM._warpRef || {}).innerpinch, tol: 0, moveCap: 0,
+        why: 'pure hoist of amount, centre and disc radius',
+        cases: [{}, { amount: 1 }, { amount: -1 }, { amount: 0.5, radius: 10 }, { amount: -0.7, radius: 150 },
+                { amount: 0.3, centerX: 0 }, { amount: 0.9, centerY: 100 }, { amount: 0 }] },
+      { name: 'ripple', fn: W_.ripple, ref: (FM._warpRef || {}).ripple, tol: 0, moveCap: 0,
+        why: 'pure hoist of centre, amplitude, wavelength and phase',
+        cases: [{}, { amount: 30 }, { amount: -20, wavelength: 60 }, { amount: 15, phase: 270 },
+                { amount: 50, wavelength: 5 }, { amount: 8, centerX: 10, centerY: 90 }, { amount: 0 },
+                { amount: 40, wavelength: 120, phase: 45 }] },
       { name: 'radialrepeat', fn: W_.radialrepeat, ref: (FM._warpRef || {}).radialrepeat, tol: 0, moveCap: 0,
         why: 'pure hoist of count, rotate, mirror and twist',
         cases: [{}, { count: 2 }, { count: 16 }, { count: 6, rotate: 45 }, { count: 8, mirror: 1 },

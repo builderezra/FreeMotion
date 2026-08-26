@@ -215,8 +215,12 @@ BEFORE STARTING ANY KERNEL.**
 | radialrepeat | 28.1 | 15.4 (1.82x) | hoist | **exact** |
 | twirl | 17.8 | 9.4 (1.89x) | rotation identity | ~4% px moved (capped) |
 | kaleidoscope | 29.9 | 19.6 (1.53x) | hoist | **exact** |
-**① HOIST the evalProps** — every kernel resolves its params 1.46M times a frame. Always exact, always
-worth doing, 1.5-2.7x on its own. **Start here, every time.**
+**① HOIST the evalProps** — every kernel resolves its params 1.46M times a frame. Always EXACT, and
+1.5-2.7x on the kernels it suits. ⚠️ **BUT IT IS NOT ALWAYS A WIN, and this line used to claim it was.**
+BULGE measured **0.74x — SLOWER** — prepped, byte-identical, control at 1.008, repeatable. Its
+`r >= 1` early-out retires most pixels before any real work, so the loop is dominated by cheap
+iterations where an extra object plus property loads cost more than the evalProps removed.
+🔒 **So: MEASURE EVERY KERNEL, and be suspicious of any with a cheap early-out.** Reverted on bulge.
 **② RECIPROCALS** for per-pixel divisions — paid 11x on fractalwarp. ⚠️ **Never on a kernel whose output
 lands on integers** (gridrepeat: 17.7% of pixels moved, and it was SLOWER than the plain hoist).
 **③ ROTATION IDENTITY** when the angle is only offset-and-rebuilt — 1.89x on twirl. ⚠️ **Not when the
