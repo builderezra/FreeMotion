@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.16
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.17
 >
-> **State:** v13.16, 989 tests green, tree clean.
+> **State:** v13.17, 989 tests green, tree clean.
+>
+> **📍 EVERYTHING I CAN BUILD WITHOUT YOU IS BUILT.** I went through the remaining items by hand
+> rather than trusting the counter, and all four it calls "ready" are actually waiting on you:
+> · **#578 and #582** — both are *"it looks bad"*, and I cannot tell whether a change improved a look.
+> · **#592** — measured twice, the edge lands exactly right here.
+> · **#599** — mine, and it needs a real video clip to judge, which I cannot make in a test.
+>
+> **The two fastest unblocks, if you get a minute:**
+> **1.** One screenshot with the timeline **zoomed all the way out** — that likely closes **#587 and
+> #592** together.
+> **2.** **#593** — open the filter menu, close it, open it again: do the black-and-white tiles come
+> good? That is the last real bug outstanding.
 >
 > **🔧 #600 fixed — the tap box now matches what is actually tappable.** It was the row's own focus
 > outline being drawn at the row's size while the tap area had grown past it. The box is drawn on the

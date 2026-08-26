@@ -154,7 +154,24 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v13.04, 989 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.16, 989 tests green, tree clean, `HEAD == ssh/main`.**
+
+🛑 **THE QUEUE IS OUT OF WORK I CAN DO ALONE — audited BY HAND on 26 Aug, not taken from the
+classifier (rule 8b).** It reports 4 actionable; opening each one shows all four are parked:
+· **#578** clause 2 (*"needs a lot of work"*) and **#582** clause 2 (*"looked really bad"*) are LOOK
+  judgements. I can change how they look and have no way to know whether it improved — that is the
+  guessing this file forbids. **His eye or a picture is the only unblock.**
+· **#592** does not reproduce: the decoration's right edge measures exactly on the clip's, twice.
+· **#599** is mine, and six of its eight candidates cannot be judged without a real VIDEO layer, which
+  this environment cannot stage. **The control refused to let me guess — three times now.**
+⚠️ **So "0 actionable" here is a HAND-CHECKED result, not the classifier's opinion.** Rule 8b is
+satisfied by that audit; **the cron keeps firing and nothing gets switched off.**
+💡 **THE HIGHEST-VALUE THING IS A MESSAGE, NOT A COMMIT:** one screenshot with the timeline zoomed
+out would likely close **#587 AND #592** together, and one word on #593 (do the tiles come good on
+reopening?) would close the last real bug outstanding.
+
+⚡ **THIS STRETCH — v13.05 → v13.16, closing #581, #582 (1+3), #584, #585, #586, #589, #590, #594, #595,
+#596, #597, #598, #600, #601.** Two of those (#597, #598) were FOUND by sweeping rather than reported.
 
 ⚠️ **A WARNING THAT IS ALWAYS ON IS FURNITURE — assert that it DISAPPEARS.** #595's camera note must
 vanish the moment a layer has depth, or it lies at precisely the moment he gets it right. The test
