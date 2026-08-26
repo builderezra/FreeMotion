@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.76
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.77
 >
-> **State:** v12.76, **967 tests green**, tree clean.
+> **State:** v12.77, **968 tests green**, tree clean.
+>
+> **✅ v12.77 — zooming no longer breaks the edit points (#561), and you were right that it was not just
+> them.** At 4× the handle overlay was **four times too big and 720×1200 out of place**, so the points sat
+> nowhere near your shape. **The mask editor had exactly the same fault**, which I only found because you
+> said "and probably other stuff" — so I swept the rest too. The selection box and the drawing overlay
+> were already fine. It is the third time this same bug has been written out by hand, so the rule now
+> lives in one place and a test refuses a fourth copy.
 >
 > **✅ v12.76 — masks are in the effects list now, not their own menu (#560).** A mask is a row like any
 > other: same card, same chevron in the same column, same eye and bin, and **+ Add Effect / Copy / Paste
@@ -19581,8 +19588,7 @@ re-opened #480, which I had marked done and had not fixed.
       **Say "migrate masks" and I will do it properly. If you never try to drag one past an effect, there
       is nothing else left here.**
 
-- [ ] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.) — **DONE v12.77.**
       His words, verbatim:
       > Zooming in the project bugs out the edit points and probably other stuff
       **A coordinate-space bug, and this app has had exactly this one before:** queue 165.3/v8.00 records
@@ -19594,6 +19600,40 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ *"and probably other stuff"* — he is right to suspect it. Once the cause is known, **sweep every
       other on-canvas overlay** (selection box, mask handles, the drawing overlay, the gizmo) at the same
       zoom levels rather than fixing only the one he happened to notice.
+
+      ✅ **DONE v12.77 — and this entry's guess was exactly right, which is rare enough to say.** It is
+      the queue 165.3 fault again, in a different file.
+      📐 **Measured, `#pe-overlay` against the preview canvas:**
+      | zoom | canvas | overlay | ratio | offset |
+      |---|---|---|---|---|
+      | 1x | 249×312 | 249×312 | 1.00 | 0,0 |
+      | 2x | 498×446 | **996×892** | **2.00** | 0,89 |
+      | 4x | 516×446 | **2065×1784** | **4.00** | **720,1200** |
+      Four times too big and 720×1200 out of place — the handles land nowhere near the shape.
+      **The cause:** every on-canvas overlay is a CHILD of `#canvas-wrap`, the element the viewport
+      transform scales. Its CSS box is therefore in the WRAPPER's coordinates, while
+      `getBoundingClientRect()` answers in SCREEN coordinates. Writing one into the other applies the zoom
+      twice.
+      🔎 **AND HE WAS RIGHT ABOUT "probably other stuff". The sweep found the MASK EDITOR broken the same
+      way, with identical numbers** (1.00 / 2.00 / 4.00, offset 0,89 and 720,1200). Also swept:
+      · **the selection box is FINE** — its ratio to the canvas holds across zooms, and `--vz` keeps its
+        handles 10px on screen at every zoom. *(My first check said it drifted; that was my instrument —
+        I mapped the project onto the canvas rect, and the canvas is CLIPPED at high zoom, not scaled.
+        Comparing against the shape's actual rendered pixels showed 0,0,1,1 agreement.)*
+      · **the drawing overlay was already fixed** at v8.00 and carries the original explanation.
+      · **crop-tool had the identical line** and is fixed by the same change — verified by source rather
+        than by a live session, because it will not open on a shape layer. Said plainly rather than
+        implied.
+      🔒 **THE STRUCTURAL PART: this was the THIRD time that rule had been written out by hand**, so it is
+      now one function — `FM.placeOverlayOnCanvas` in `js/canvas-edit.js` — and the test **refuses a
+      fourth copy**, failing if any overlay module stops calling it or writes a raw screen rect into its
+      box again.
+      ⚠️ **A first attempt of mine was wrong in an instructive way:** sizing the overlay from `offsetWidth`
+      positions it correctly and then rasterises the backing store in wrapper space, so at 4x the handles
+      would be drawn small and stretched up by the transform — right place, soft picture. The v8.00 fix
+      divides the *screen* rect by the wrapper's own render ratio, which keeps the box right AND the
+      backing store at screen resolution. **Measured after: ratio 0.999–1.000 and offset 0,0 at 0.5x, 1x,
+      2x and 4x, with the backing store growing 499 → 996 → 1032 so the handles stay sharp.**
 
 
 - [ ] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.)

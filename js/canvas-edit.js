@@ -69,6 +69,35 @@ window.FM = window.FM || {};
     isDefault() { return !this.x && !this.y && Math.abs(this.scale - 1) < 1e-3; },
   };
 
+  /* ⚠️ ONE PLACE THAT KNOWS AN OVERLAY LIVES INSIDE THE ZOOMED WRAP (queue 561).
+   * Every on-canvas overlay (#pe-overlay, #mask-overlay, #crop-overlay, #draw-overlay) is a CHILD of
+   * `#canvas-wrap`, which is the element `FM.viewport.apply()` transforms. So an overlay's CSS box is in
+   * the WRAPPER's coordinates while `getBoundingClientRect()` answers in SCREEN coordinates, and feeding
+   * one into the other applies the zoom a second time.
+   * THIS IS THE THIRD TIME THAT BUG HAS BEEN WRITTEN. v8.00 fixed it in the drawing overlay (queue
+   * 165.3, "measured at 2x: overlay 984x1501 against a 492x751 canvas, exactly double"), and queue 561
+   * found it again in the point editor AND the mask editor, with identical numbers:
+   *     1x  ratio 1.00  offset 0,0      2x  ratio 2.00  offset 0,89      4x  ratio 4.00  offset 720,1200
+   * Three copies of a rule is how it comes back a fourth time, so it lives here now.
+   * Returns the canvas's SCREEN rect, because that is what callers already use for the backing store and
+   * for `dispScale()` — the backing store stays at screen resolution (sharp when zoomed), and a CSS box
+   * of `r.width / k` renders back to exactly `r.width` on screen, so one unit inside the overlay is
+   * still one SCREEN css pixel. `k` is read off the WRAPPER's own rendered-vs-layout width rather than
+   * `FM.viewport.scale`, so it cannot drift from a second source of truth. */
+  FM.placeOverlayOnCanvas = function (overlay, cv) {
+    const r = cv.getBoundingClientRect();
+    const w = overlay.parentElement;
+    if (!w) return r;
+    const wr = w.getBoundingClientRect();
+    let k = (w.offsetWidth && wr.width) ? (wr.width / w.offsetWidth) : 1;
+    if (!(k > 0) || !isFinite(k)) k = 1;
+    overlay.style.left = ((r.left - wr.left) / k) + 'px';
+    overlay.style.top = ((r.top - wr.top) / k) + 'px';
+    overlay.style.width = (r.width / k) + 'px';
+    overlay.style.height = (r.height / k) + 'px';
+    return r;
+  };
+
   function eventToProject(e) {
     const r = canvas.getBoundingClientRect();
     const sc = canvas.__fmRS || 1;

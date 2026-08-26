@@ -3861,6 +3861,88 @@
     }
   });
 
+  test('561: on-canvas overlays track the preview at every zoom, and only ONE place knows why', { item: '561' }, async function () {
+    /* Queue 561. Ezra: "Zooming in the project bugs out the edit points and probably other stuff."
+       Every on-canvas overlay is a CHILD of `#canvas-wrap`, which is the element the viewport transform
+       scales. So an overlay's CSS box is in the WRAPPER's coordinates while `getBoundingClientRect()`
+       answers in SCREEN coordinates, and writing one into the other applies the zoom a second time.
+       MEASURED before fixing, overlay against preview canvas — identical numbers in two files:
+           1x  ratio 1.00  offset 0,0     2x  ratio 2.00  offset 0,89     4x  ratio 4.00  offset 720,1200
+       Four times too big and 720x1200 out of place: the handles land nowhere near the shape.
+       ⚠️ HE WAS RIGHT ABOUT "probably other stuff". Sweeping the rest found the MASK editor broken the
+       same way with the same numbers. The selection box is fine (its ratio to the canvas holds across
+       zooms, and `--vz` keeps its handles finger-sized), and the drawing overlay was fixed in v8.00 —
+       which is the point of the last assertion here: this is the THIRD time the bug has been written
+       out by hand, so the rule now lives in one function and this test refuses a fourth copy. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof FM.placeOverlayOnCanvas !== 'function') throw new Error('FM.placeOverlayOnCanvas is missing — the shared rule is gone and every overlay is placing itself again');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const zoom0 = (FM.viewport && FM.viewport.scale) || 1;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(200);
+      const L = FM.makeLayer('shape', { name: 'z', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#4ad' });
+      L.start = 0; L.duration = 4;
+      L.masks = [(FM.masks && FM.masks.make) ? FM.masks.make('add') : { id: 'm1', enabled: true, mode: 'add', points: [] }];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+
+      const cv = () => document.getElementById('preview');
+      async function sweep(name, open, close, id) {
+        open(); await sleep(400);
+        const seen = [];
+        for (const z of [1, 2, 4, 0.5]) {
+          FM.setCanvasZoom(z); await sleep(320);
+          const ov = document.getElementById(id);
+          if (!ov) throw new Error(name + ': #' + id + ' vanished at ' + z + 'x');
+          const o = ov.getBoundingClientRect(), c = cv().getBoundingClientRect();
+          if (!(c.width > 20)) throw new Error(name + ': the preview canvas measured ' + Math.round(c.width) + 'px at ' + z + 'x — nothing below can be measured against it');
+          const ratio = o.width / c.width;
+          seen.push({ z: z, w: c.width, ratio: ratio, dx: o.left - c.left, dy: o.top - c.top, backing: ov.width });
+          if (Math.abs(ratio - 1) > 0.04) throw new Error(name + ' at ' + z + 'x: the overlay is ' + ratio.toFixed(2) + 'x the canvas — the zoom is being applied twice (it read 2.00 at 2x and 4.00 at 4x before this was fixed)');
+          if (Math.abs(o.left - c.left) > 6 || Math.abs(o.top - c.top) > 6) throw new Error(name + ' at ' + z + 'x: the overlay is offset ' + Math.round(o.left - c.left) + ',' + Math.round(o.top - c.top) + ' from the canvas — it read 720,1200 at 4x before this was fixed');
+        }
+        /* CONTROL: the zooms must actually have changed the canvas, or "the overlay matched it every
+           time" is true of a viewport that never moved. */
+        const widths = seen.map(s => Math.round(s.w));
+        if (new Set(widths).size < 2) throw new Error(name + ': the canvas measured ' + widths.join(',') + ' at every zoom — the viewport is not zooming, so this proved nothing');
+        /* …and the backing store must GROW with the zoom. A first attempt sized the overlay from
+           `offsetWidth`, which positions correctly and then rasterises in wrapper space, so the handles
+           were drawn small and stretched up by the transform — right place, soft picture. */
+        const at1 = seen.find(s => s.z === 1), at2 = seen.find(s => s.z === 2);
+        if (at1 && at2 && !(at2.backing > at1.backing * 1.5)) throw new Error(name + ': the backing store went ' + at1.backing + ' -> ' + at2.backing + ' from 1x to 2x — it is not re-rasterising at screen resolution, so the overlay is upscaled and soft when zoomed');
+        FM.setCanvasZoom(1); await sleep(250);
+        close(); await sleep(250);
+      }
+
+      await sweep('point editor', () => FM.pointEdit.start(L.id), () => FM.pointEdit.stop(), 'pe-overlay');
+      if (FM.maskTool && FM.maskTool.open) {
+        await sweep('mask editor', () => FM.maskTool.open(L.id, L.masks[0].id), () => FM.maskTool.stop(), 'mask-overlay');
+      }
+
+      /* THE GUARD AGAINST A FOURTH COPY. Every module that owns an on-canvas overlay must go through the
+         shared helper; writing the placement out by hand is how this bug came back twice. The drawing
+         overlay is the exception and is named as one: it was fixed in v8.00 and carries the original
+         explanation, and rewriting working, tested code to tidy it is the trade this project does not make. */
+      const files = ['js/point-edit.js', 'js/mask-tool.js', 'js/crop-tool.js'];
+      for (const f of files) {
+        const src = await fetch(f, { cache: 'no-store' }).then(r => r.text());
+        if (src.indexOf('FM.placeOverlayOnCanvas') < 0) throw new Error(f + ' no longer calls FM.placeOverlayOnCanvas — it is placing its overlay by hand, which is how this bug returned twice');
+        if (/overlay\.style\.width\s*=\s*r\.width\s*\+/.test(src)) throw new Error(f + ' writes a raw screen rect into its overlay box again — that is the double-scale, verbatim');
+      }
+    } finally {
+      try { if (FM.pointEdit && FM.pointEdit.stop) FM.pointEdit.stop(); } catch (e) {}
+      try { if (FM.maskTool && FM.maskTool.stop) FM.maskTool.stop(); } catch (e) {}
+      FM.setCanvasZoom(zoom0);
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('560: a mask is a row in the effects list, not a section of its own', { item: '560' }, async function () {
     /* Queue 560. Ezra: "Masks still don't work like effects and have their own menu fix this."
        His screenshot: the effect list, then + Add Effect, then Copy / Paste / Save — and BELOW all of

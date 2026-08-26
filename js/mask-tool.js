@@ -102,9 +102,10 @@ window.FM = window.FM || {};
     const l = layer(), m = mask(), cv = preview();
     if (!l || !m || !cv || !overlay) { FM.maskTool.stop(); return; }
     if (m !== seedOf) reseed(m);   // the scene was replaced under us (undo/redo, project load)
-    const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
-    overlay.style.left = (r.left - wr.left) + 'px'; overlay.style.top = (r.top - wr.top) + 'px';
-    overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
+    /* Placed through the shared helper (queue 561) — this overlay is a child of the zoomed wrap, and
+       writing a SCREEN measurement into its CSS box applied the zoom twice. Measured here before the
+       fix: ratio 1.00 / 2.00 / 4.00 with offsets 0,0 / 0,89 / 720,1200. See FM.placeOverlayOnCanvas. */
+    const r = FM.placeOverlayOnCanvas(overlay, cv);
     const dpr = window.devicePixelRatio || 1, W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
     if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
     const g = overlay.getContext('2d');

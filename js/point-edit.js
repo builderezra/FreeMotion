@@ -60,7 +60,14 @@ window.FM = window.FM || {};
   function toCanvas(l, u, v) { return FM.layerUVToCanvas(l, u, v, l.shapeW || 400, l.shapeH || 300); }
   function toLocal(l, cx, cy) { return FM.layerCanvasToUV(l, cx, cy, l.shapeW || 400, l.shapeH || 300); }
   // preview-canvas px ↔ overlay display px
-  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
+  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // SCREEN CSS px per PROJECT px
+  /* ⚠️ The overlay is a CHILD of the zoomed `#canvas-wrap`, so its CSS box is in the wrapper's own
+     coordinates while `getBoundingClientRect()` answers in SCREEN coordinates — writing one into the
+     other applies the zoom twice. Measured here before the fix: ratio 1.00 / 2.00 / 4.00 at 1x / 2x / 4x,
+     with the box 720x1200 out of place at 4x, so the handles landed nowhere near the shape.
+     `FM.placeOverlayOnCanvas` (js/canvas-edit.js) owns that rule for every overlay — this was the third
+     time it had been written out by hand. */
+
   function evtToCanvas(e) {
     return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
@@ -107,19 +114,19 @@ window.FM = window.FM || {};
     const l = layer(), cv = preview();
     if (!l) { FM.pointEdit.stop(); return; }   // layer deleted / project switched mid-edit → clean exit
     if (!overlay || !cv) return;
-    const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
-    overlay.style.left = (r.left - wr.left) + 'px';
-    overlay.style.top = (r.top - wr.top) + 'px';
-    overlay.style.width = r.width + 'px';
-    overlay.style.height = r.height + 'px';
+    const r = FM.placeOverlayOnCanvas(overlay, cv);   // wrapper-space box, screen-space rect back
     const dpr = window.devicePixelRatio || 1;
     const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
     if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
     const g = overlay.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, r.width, r.height);
-    const k = dispScale();
-    const map = p => { const q = toCanvas(l, p[0], p[1]); return [q.x * k, q.y * k]; };
+    /* Unchanged, and that is the point of doing it this way: the backing store is still `r.width * dpr`
+       (SCREEN resolution) and a CSS box of `r.width / k` renders back to exactly `r.width` on screen, so
+       one unit under the dpr transform is still one SCREEN css pixel — the unit `dispScale()` and every
+       hit test in this file already work in. */
+    const ds = dispScale();
+    const map = p => { const q = toCanvas(l, p[0], p[1]); return [q.x * ds, q.y * ds]; };
     const subs = subsOf(l);
     g.lineWidth = 1.25; g.strokeStyle = 'rgba(41,217,187,.9)';
     subs.forEach((pts, si) => {
