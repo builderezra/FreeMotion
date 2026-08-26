@@ -248,8 +248,13 @@ frame, t advancing** — that is `advance`, `ref = rec.cv`.
 one renderScene per advancing t, matching playback. **My "sync" fix made it WORSE, not better** — calling
 `FM.setTime(t)` triggers `requestRender()`, adding a SECOND render at the same t, which sends the kernel
 down `repaint` (`ref = rec.prev`) — a path playback never takes with one render per frame.
-✅ **Which means v13.40's 110 → 117 IS the representative number after all**, and the pre-fix 110/42
-(measured synced) needs re-taking unsynced before it is quoted as the before-figure.
+✅ **AND THE CLEAN A/B WAS ALREADY IN THE TABLE ABOVE — no re-run needed.** Rows 1 and 3 are BOTH
+unsynced, i.e. both taken in the regime that matches playback:
+**pre-fix 111 px / core 43  →  post-fix 117 px / core 26.** So v13.40 is validated on a like-for-like
+comparison in the representative path, and the "110 → 117" figure quoted to him stands (110 is the
+effect-OFF baseline, 111 the pre-fix effect-ON reading — within a pixel of each other, which was the
+whole point).
+⚠️ The 110/42 pre-fix reading was taken SYNCED and should not be quoted; it measures the repaint path.
 ⚠️ **STILL NOT UNDERSTOOD: Echo only built its trail under the SYNCED probe** (110→263) and stayed flat
 unsynced. That is backwards from the above and is the one loose thread left. **Do not touch the Echo
 branch until it is explained** — on this entry alone, three claims have already been withdrawn for
