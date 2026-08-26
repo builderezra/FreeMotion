@@ -3273,6 +3273,31 @@
       S.fill = '#c05030';
       FM.selectLayer(S.id); FM.refreshAll();
       await sleep(220);
+      /* ⚠️ THE MOTION FAMILY — queue 598, found by sweeping rather than reported. `fxDeadOnLayer` proves
+         an effect dead by pushing one PIXEL through the filter string, so it can only reason about
+         COLOUR; the two motion blurs are dead for a different reason — nothing is moving — and it has no
+         way to see that. MEASURED: both change 0 pixels on a still shape while the browser said nothing.
+         ⚠️ THE SECOND HALF IS THE CONTROL AND IT CAUGHT A REAL BUG. Animating the layer changes the
+         answer but changes neither the layer id nor its effect count, so the memo key had to learn about
+         motion — without that, a cached "it never moves" survived him keyframing the thing. */
+      const stillLayer = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+      if (stillLayer) {
+        stillLayer.effects = [];
+        FM.selectLayer(stillLayer.id); FM.refreshAll();
+        await sleep(320);
+        ['objectblur', 'motionflow'].forEach(function (id) {
+          if (!FM._fxDeadHereWhy(id)) throw new Error('"' + id + '" is offered with no warning on a layer that cannot move — it changes 0 pixels there, and its own description already says it does nothing on a layer that is not moving (queue 598)');
+        });
+        if (FM._fxDeadHereWhy('blur')) throw new Error('CONTROL FAILED — an ordinary colour effect was marked dead by the motion check');
+        stillLayer.transform.x = { kf: [{ t: 0, v: 400 }, { t: 2, v: 900 }] };
+        FM.refreshAll();
+        await sleep(320);
+        ['objectblur', 'motionflow'].forEach(function (id) {
+          if (FM._fxDeadHereWhy(id)) throw new Error('CONTROL FAILED — "' + id + '" still says the layer never moves after it was keyframed. The memo key must include whether the layer can move, or a cached answer outlives the fact (queue 598)');
+        });
+        stillLayer.transform.x = 400;
+      }
+
       const stillDead = CANNOT_MOVE_WHITE.concat(CAN).filter(function (id) { return !!FM._fxDeadHereWhy(id); });
       if (stillDead.length) {
         throw new Error('CONTROL FAILED — on a plain #c05030 shape the browser marks [' + stillDead.join(', ') + '] as doing nothing, but each of them changes 9,600 pixels on it. The warning is not measuring the layer, it is just always on (queue 572)');

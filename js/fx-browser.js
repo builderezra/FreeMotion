@@ -754,6 +754,34 @@ window.FM = window.FM || {};
    * ⚠️ **Cached per layer AND per stack depth.** This runs once per tile and the browser draws a lot of
    * them; the key changes the moment the layer or its effect count does, so the label cannot go stale
    * behind an add or a delete. */
+  /* ---- THE MOTION FAMILY (queue 598) — the gap FM.fxDeadOnLayer cannot see -----------------------
+   * `fxDeadOnLayer` proves an effect dead by pushing one PIXEL through the filter string, so it can only
+   * ever reason about COLOUR. The two motion blurs are dead for a different reason — nothing is moving —
+   * and it has no way to know. MEASURED at v13.05: on a still shape both change **0 pixels**, and the
+   * browser said nothing about either.
+   * ⚠️ **THE APP ALREADY KNEW AND SAID IT IN THE WRONG PLACE.** `objectblur`'s own registry description
+   * ends *"It does nothing on a layer that is not moving."* That is the fact, sitting in a paragraph he
+   * reads AFTER picking. This is the fourth time the same shape has come up (#572, #578, #595, #597).
+   * ⚠️ **CLAIMED ONLY WHEN PROVABLE, matching the standard next door.** A video layer's picture moves by
+   * itself, and an effect can move a layer without touching its transform — so this only speaks up for a
+   * layer that CANNOT move: a shape or text, no animated transform channel, and nothing else in the
+   * stack. Anything less certain stays silent, exactly like the colour check. */
+  const MOTION_FX = {
+    objectblur: 'This layer never moves, so there is no movement to smear. Animate its position, scale or rotation first.',
+    motionflow: 'Nothing moves inside this layer, so there is nothing to blur. It reads the picture frame to frame.',
+  };
+  function cannotMove(layer) {
+    if (!layer || (layer.type !== 'shape' && layer.type !== 'text')) return false;   // video moves by itself
+    if ((layer.effects || []).length) return false;                                   // an effect can move it
+    const tr = layer.transform || {};
+    const anim = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'rotationX', 'rotationY', 'skewX', 'skewY']
+      .some(k => FM.isAnimated && FM.isAnimated(tr[k]));
+    if (anim) return false;
+    if (layer.behaviors && layer.behaviors.length) return false;                      // wiggle et al move it
+    if (layer.wiggle && layer.wiggle.enabled) return false;
+    return true;
+  }
+
   let _deadCache = new Map();
   function deadHereWhy(id) {
     if (NEEDS_INPUT[id]) return null;                 // that tile already carries the other marker
@@ -762,8 +790,15 @@ window.FM = window.FM || {};
     if (!layer) return null;
     // A layer this effect cannot go on at all is a DIFFERENT message, already given at add time.
     if (FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(id, layer)) return null;
-    const key = layer.id + '|' + ((layer.effects || []).length) + '|' + id;
+    /* ⚠️ THE KEY CARRIES "CAN THIS LAYER MOVE", AND LEAVING IT OUT WAS A REAL BUG — caught by the
+       control while adding the motion family. Animating a layer changes the ANSWER for the two motion
+       blurs and changes neither the layer id nor its effect count, so a cached "it never moves" would
+       have survived him keyframing the thing and gone on lying. Any input to the answer belongs in the
+       key; this one is a boolean, so it costs nothing. */
+    const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M') + '|' + id;
     if (_deadCache.has(key)) return _deadCache.get(key);
+    // The motion family first — it is a cheaper question than pushing a pixel through a filter.
+    if (MOTION_FX[id] && cannotMove(layer)) { _deadCache.set(key, MOTION_FX[id]); return MOTION_FX[id]; }
     let why = null;
     try {
       const inst = FM.fxRegistry.makeInstance(id);

@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.05
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.06
 >
-> **State:** v13.05, tests green, tree clean.
+> **State:** v13.06, tests green, tree clean.
+>
+> **🔎 Swept again, found another.** **Both Motion Blurs do nothing on a layer that never moves** —
+> 0 pixels — and the effects browser said nothing when you picked them. It says so now. The app already
+> knew: Motion Blur (Object)'s own description ends *"It does nothing on a layer that is not moving"* —
+> it was just written where you only read it AFTER choosing. **Two found by looking, in two ticks.**
 >
 > **🔎 I went looking for the NEXT one instead of waiting for you to find it — and there was one.**
 > **Focus blur was dead on a flat scene too**, exactly like Field of view, one tab across in the same
@@ -20227,6 +20232,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
+
+- [x] **598 — Both motion blurs are dead on a layer that cannot move, and said nothing.** (26 Aug, FOUND by me.) — ✅ **DONE v13.06**
+      **Second one found by sweeping in as many ticks.** 📐 **MEASURED at v13.05:** on a still shape,
+      **Motion Blur (Object)** and **Motion Blur (Footage)** each change **0 pixels**, and the browser
+      said nothing about either.
+      **Why #572's warning could not catch it:** `fxDeadOnLayer` proves an effect dead by pushing one
+      PIXEL through the shipped filter string — **so it can only ever reason about COLOUR.** These two are
+      dead for a different reason entirely, and it has no way to see it.
+      ⚠️ **THE APP ALREADY KNEW AND SAID IT IN THE WRONG PLACE.** `objectblur`'s own registry description
+      ends *"It does nothing on a layer that is not moving."* **That is the fact, sitting in a paragraph
+      he reads AFTER picking.** Fourth instance of the same shape (#572, #578, #595, #597).
+      ⚠️ **Claimed only when PROVABLE**, matching the colour check next to it: a shape or text layer, no
+      animated transform channel, no other effects, no behaviours or wiggle. A video's picture moves by
+      itself and an effect can move a layer without touching its transform — **anything less certain stays
+      silent.**
+      🐛 **THE CONTROL FOUND A REAL BUG IN MY OWN CODE.** The memo key was `layer + effect-count + id`, and
+      animating a layer **changes the answer while changing neither** — so a cached *"it never moves"*
+      would have survived him keyframing the thing and gone on lying. The key carries the motion state now.
+      **Verified all four ways:** both warn on a still layer, an ordinary blur is unaffected, and **both go
+      silent the moment the layer is keyframed.**
 
 - [x] **597 — Focus blur is dead on a flat scene too, and said nothing.** (26 Aug, FOUND by me, not reported.) — ✅ **DONE v13.05**
       **Not his report — found by sweeping for #595's shape** rather than waiting for him to hit it a
