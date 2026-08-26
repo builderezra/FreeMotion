@@ -19955,6 +19955,28 @@ re-opened #480, which I had marked done and had not fixed.
       effects still look right. **That would explain the whole shape of this.**
       ⚠️ **DO NOT re-tune the filters** — measured, they desaturate correctly when applied. The pictures
       are the bug.
+      **🔎 DIAGNOSIS STARTED — here is exactly where it goes wrong, for whoever picks this up.**
+      **`generateFilter(id)` in js/fx-thumbs.js:1453** builds the tile:
+      ```js
+      const box = FM.filters.makeInstance(id);
+      const pk  = FILTER_SUBJECT[id];
+      const scene = sceneFor(box.effects[0].type, box, 0, pk ? 'photo:' + pk : null);
+      renderFrame(scene, 0.001);
+      ```
+      **It keys the scene on `box.effects[0].type` — the filter's FIRST effect.** And **every single mono
+      filter begins with `e('grayscale', { amount: 1 })`** (silver, noir, newsprint, platinum, ink, fog —
+      check js/filters.js, they all do). **Blackout, which he says looks right, begins with `brightness`.**
+      **That correlation is exact and it is the strongest lead:** the filters whose tiles are wrong are
+      precisely the ones whose first effect is `grayscale`. **Start by reading what `sceneFor` does with a
+      `grayscale` first-type** — if it takes a branch that builds a subject scene WITHOUT applying the
+      filter's own effects (a plain "show the photo" path, reasonable for demonstrating a colour effect on
+      its own), that is the whole bug and it would hit every mono filter and nothing else.
+      ⚠️ **NOT YET CONFIRMED — this is a correlation plus a code path, not a measurement.** Driving
+      `FM.fxThumbs.mountFilter` headlessly produced empty canvases (the queue is lazy and did not paint in
+      that context), so **the tile pixels have NOT been measured.** Confirm before fixing: mount a mono
+      tile and a Blackout tile where they really paint, and compare their colour spread.
+      ⚠️ **`FM.fxThumbs.effectDoesNothing` and `_override` exist in that file too** — check whether either
+      short-circuits a tile before blaming `sceneFor`.
       🔗 **#579 must be re-read once this is fixed** — his original complaint was almost certainly THIS
       all along, which would make my "the filters are fine, Blackout just is not one of them" answer a
       correct measurement of the wrong thing.

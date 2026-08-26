@@ -149,6 +149,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v12.96, 982 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **NEXT UP AND IT IS THE IMPORTANT ONE — #593.** He says *"Not a single black and white filter
+actually make anything black and white"* and his screenshot proves it: the BLACK/WHITE tiles show full
+colour photos. **I measured the RENDER in #579, said they were fine, and was measuring the wrong
+surface — he judges by the TILES.** Same lesson as #572. The entry carries a strong lead: every mono
+filter starts with `grayscale`, Blackout (which looks right) does not, and `generateFilter` keys its
+scene on `box.effects[0].type`. **Not confirmed — the tile pixels have not been measured.** Do that
+first.
+⚠️ **#581 IS THE NEXT ITEM BY ORDER and it is a real build** — custom filters have no library id, so
+favouriting one needs durable storage. Read #444 first; favourites are a second PLACE, not a move.
+
 ⚠️ **"MAKE IT THE SIZE OF X" ALMOST ALWAYS MEANS THE SHAPE OF X.** #580: a 1080x1920 project and a
 1920x1080 clip share no dimension, so copying width and height literally is meaningless. The largest
 rect with the target's ASPECT, centred, is what the request means.
