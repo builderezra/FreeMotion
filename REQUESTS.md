@@ -21563,11 +21563,22 @@ re-opened #480, which I had marked done and had not fixed.
              | **Blend** | **122** | 24 | 56 |
              ✅ **Pixel did NOT need the fix and my worry that it would was unfounded** — it has its own
              per-pixel path and reads 119 px, which clears the >118 acceptance mark that Smear misses.
-             🚨 **ECHO IS THE ONE REAL NO-OP LEFT: 111 px against 110 with the effect OFF, hard core
-             unchanged at 42.** Its branch is the accumulator (`style === 2`) — it never touches the
-             motion field at all, it just merges the previous frame with `lighten`, so on footage where
-             the moving object is BRIGHTER than what it passes over, the trail is immediately overwritten
-             by the new frame. **That is the next piece of work on this entry.**
+             ⚠️ **ECHO: NOT PROVEN BROKEN — and the `lighten` explanation I first wrote here is WITHDRAWN
+             before it could send anyone rewriting working code.** Watching the width across 14
+             CONSECUTIVE frames, a real echo should climb steadily. It reads **110, 110, 110, 110, 110,
+             110, 110, 111, 110, 110, 111, 110, 110, 110** — dead flat, with a single one-frame spike to
+             **122** at amount 3. **That is an accumulator being RESET almost every frame, not one that
+             never builds** — and reset-every-frame has a much more likely cause than a blend mode.
+             🚨 **THE SUSPECT IS MY OWN PROBE.** The temporal cache is keyed by layer id and guarded by
+             `advance` (`t > rec.t` and within 0.35 s). The app's own render loop is live while I measure,
+             so any repaint of that same layer at a DIFFERENT time between my offscreen steps corrupts
+             `rec.t` and forces the reset. **This would break Echo specifically and leave Smear working —
+             which is exactly the pattern observed** — because Smear needs only ONE previous frame while
+             Echo needs an unbroken chain.
+             📋 **So the next step is to rule out the instrument BEFORE touching the effect:** suspend the
+             app's render loop (or measure on a layer nothing else paints) and re-run the 14-frame walk.
+             **If the width climbs, Echo was never broken and the finding is that the cache is fragile to
+             interleaved renders. If it stays flat, then look at the branch.**
              ⚠️ **Do not conclude "switch the default back to Pixel" from the width column.** Pixel scores
              highest here and is exactly what he called awful — width measures spread, not whether the
              optical-flow estimate tears the picture into blocks. Those are different questions.
