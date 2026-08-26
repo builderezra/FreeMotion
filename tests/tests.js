@@ -2403,6 +2403,50 @@
     }
   });
 
+  test('581: saving a FILTER as a preset keeps the effects inside it', { item: '581' }, async function () {
+    /* Queue 581, the blocker underneath it. Favouriting a custom filter needs the filter stored
+     * somewhere durable, and FM.effectPresets already is that store — but `capture` walked the
+     * registry's params only, which is right for an ordinary effect and SILENTLY WRONG for a container.
+     * A filter IS its children. MEASURED at v12.96: capturing a Noir box returned a preset with
+     * `hasEffects: false` and threw nothing.
+     * ⚠️ THAT FAILURE SHAPE IS THE WORST ONE THERE IS: the preset saves, loads, faves and lists with the
+     * right name, and the picture is simply gone — found much later with no error to connect it to. So
+     * this asserts the CHILDREN survive, not that the save succeeded.
+     * ⚠️ AND THE CONTROL MATTERS AS MUCH: an ordinary effect must not gain children or lose its params.
+     * The whole store is shared with every preset he has already saved. */
+    const P = FM.effectPresets;
+    if (!P || !P.capture || !P.makeInstance) throw new Error('FM.effectPresets is missing');
+    const box = FM.filters.makeInstance('noir');
+    if (!box || !Array.isArray(box.effects) || box.effects.length < 2) throw new Error('the Noir filter has no children to test with');
+    const src = box.effects.map(function (e) { return e.type; });
+
+    const cap = P.capture(box, 'test custom look');
+    if (!cap) throw new Error('capturing a filter returned nothing');
+    if (!Array.isArray(cap.effects) || cap.effects.length !== src.length) {
+      throw new Error('capturing a filter kept ' + ((cap.effects || []).length) + ' of its ' + src.length + ' effects — a filter IS its children, so this saves an empty shell and says nothing (queue 581)');
+    }
+    const round = P.makeInstance(cap, 0);
+    const rt = (round && round.effects) ? round.effects.map(function (e) { return e.type; }) : [];
+    if (rt.join() !== src.join()) {
+      throw new Error('a saved filter came back as [' + rt.join(', ') + '] instead of [' + src.join(', ') + ']. ⚠️ Do NOT guard the restore on FM.isFxContainer(inst) — it asks whether an instance HAS an effects array, and a FRESH registry instance has no effects key at all, so that guard is false for every container (queue 581)');
+    }
+    // …and it must survive the trip through localStorage, which is JSON, not object identity.
+    const viaJson = P.makeInstance(JSON.parse(JSON.stringify(cap)), 0);
+    const rt2 = (viaJson && viaJson.effects) ? viaJson.effects.map(function (e) { return e.type; }) : [];
+    if (rt2.join() !== src.join()) throw new Error('the filter survived in memory but not through a JSON round-trip, which is how it is actually stored');
+
+    // --- CONTROL: an ordinary effect is untouched. ---
+    const plain = FM.fxRegistry.makeInstance('blur');
+    const k = Object.keys(plain.params || {})[0];
+    if (!k) throw new Error('blur has no params, so the control cannot tell anything');
+    const want = (typeof plain.params[k] === 'number') ? plain.params[k] + 5 : plain.params[k];
+    plain.params[k] = want;
+    const cp = P.capture(plain, 'plain');
+    const pr = cp ? P.makeInstance(cp, 0) : null;
+    if (!pr || pr.params[k] !== want) throw new Error('CONTROL FAILED — an ordinary effect no longer round-trips its own parameters (' + k + ': ' + (pr && pr.params[k]) + ' vs ' + want + '). Every preset he has already saved goes through this.');
+    if (Array.isArray(cp.effects) && cp.effects.length) throw new Error('CONTROL FAILED — an ordinary effect was given children it does not have');
+  });
+
   test('580: Crop to canvas fills the project shape without inventing picture', { item: '580' }, async function () {
     /* Queue 580. Ezra: "Add an option to the customise shape menu similar to the free crop button but an
      * option to crop to canvas size."

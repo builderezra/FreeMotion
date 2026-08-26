@@ -147,7 +147,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.96, 982 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.97, 983 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **`FM.isFxContainer(inst)` IS THE WRONG GUARD WHEN BUILDING an instance.** It asks whether an
+instance HAS an effects array, and a FRESH registry instance has no `effects` key — so the guard is
+false for every container and children are silently dropped. Measured on #581: captured 4, restored 0.
+**Let the sanitiser decide what a type may hold.**
+⚠️ **"IT ACCEPTS X WITHOUT COMPLAINING" IS NOT "IT HANDLES X".** `capture()` took a filter container,
+returned a valid-looking preset and threw nothing — while dropping everything inside it. **Check what
+comes OUT, not whether the call succeeded.**
 
 ⚠️ **#593: TWO LEADS DISPROVEN BY MEASUREMENT — the tiles render CORRECTLY greyscale here** (noir
 spread 0.06, platinum 0.05). It is NOT the `effects[0].type` keying and NOT `remountLive` losing the

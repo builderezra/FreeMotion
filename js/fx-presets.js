@@ -91,6 +91,19 @@ window.FM = window.FM || {};
     out.sort((a, b) => a.t - b.t);
     return out;
   }
+  /* A container preset's children, put through the SAME validator a project load uses (queue 581).
+     Nothing arbitrary from localStorage may reach the compositor, and this file's whole job is that
+     rule — so the children get the same treatment the params already get, rather than being trusted
+     because they arrived inside something that was checked. Returns undefined for a non-container so
+     the key never appears on an ordinary preset. */
+  function saneKids(raw) {
+    if (!Array.isArray(raw) || !raw.length) return undefined;
+    if (!FM._sanitizeFxList) return undefined;      // fail closed, like sanitizeFxList itself
+    let out;
+    try { out = FM._sanitizeFxList(raw.slice(0, 40)); } catch (e) { return undefined; }
+    return (Array.isArray(out) && out.length) ? out : undefined;
+  }
+
   function sanePreset(raw) {
     _why = '';
     if (!raw || typeof raw !== 'object') { _why = 'it isn’t a preset'; return null; }
@@ -131,6 +144,9 @@ window.FM = window.FM || {};
       desc: String(raw.desc || '').slice(0, 90),
       dur: Number.isFinite(raw.dur) ? Math.min(60, Math.max(0, raw.dur)) : 0,
       params: params,
+      // queue 581 — a filter's children, validated. `undefined` on an ordinary effect, so the key
+      // simply is not there and nothing downstream has to know about containers.
+      effects: saneKids(raw.effects),
     };
   }
 
@@ -174,7 +190,22 @@ window.FM = window.FM || {};
         params[p.key] = c; any = true;
         if (c && typeof c === 'object' && Array.isArray(c.kf)) c.kf.forEach(k => { if (Number.isFinite(k.t)) { minT = Math.min(minT, k.t); maxT = Math.max(maxT, k.t); } });
       });
-      if (!any) return null;
+      /* ⚠️ A FILTER IS ITS CHILDREN, AND THIS USED TO THROW THEM AWAY — queue 581.
+         `capture` walks `reg.params` and stores those, which is right for an ordinary effect and
+         **silently wrong for a container**: a filter's whole identity is the list of effects inside it.
+         MEASURED at v12.96 — handed `FM.filters.makeInstance('noir')` this returned a preset with
+         `hasEffects: false` and threw nothing. **Saving a custom filter that way stored an empty
+         shell**, and the failure is the worst shape there is: it saves, it loads, it faves, it lists
+         with the right name, and the picture is simply gone — noticed much later, with no error to
+         connect it to.
+         The children are copied raw here and VALIDATED on the way back out (see makeInstance, which
+         hands the rebuilt instance to FM._sanitizeFxList — the same sanitiser a project load uses).
+         Capped: a preset is user data on its way to localStorage, and an unbounded nested list is not. */
+      const kids = (FM.isFxContainer && FM.isFxContainer(fx) && Array.isArray(fx.effects))
+        ? JSON.parse(JSON.stringify(fx.effects.slice(0, 40)))
+        : null;
+      // …and a container with no own params is still worth saving, which the guard below would refuse.
+      if (!any && !(kids && kids.length)) return null;
       if (!Number.isFinite(minT)) minT = 0;   // no animated params → static preset
       const r4 = v => Math.round(v * 10000) / 10000;   // 8.5−8.2 leaves float dirt (0.2999…) in every rebased time
       Object.keys(params).forEach(key => {
@@ -187,6 +218,7 @@ window.FM = window.FM || {};
         fx: fx.type, name: name, desc: 'Your preset',
         dur: r4(Math.max(0, maxT - minT)),
         params: params,
+        effects: kids || undefined,
       });
       // A trim that happened HERE is invisible to save() — by then the keyframes are already gone.
       // Hand it over by id (each capture mints a fresh one) so the save that follows can say so, and
@@ -232,6 +264,20 @@ window.FM = window.FM || {};
         if (v && typeof v === 'object' && Array.isArray(v.kf)) v.kf.forEach(k => { k.t = (k.t || 0) + t0; });
         inst.params[key] = v;
       });
+      /* …and a container's CHILDREN come back too (queue 581). Without this the preset restores an
+         empty filter — it lands, it is named correctly, and it does nothing to the picture.
+         Assigned BEFORE the sanitiser below rather than after, deliberately: that call validates the
+         whole instance including everything nested in it, so the children are checked by the same pass
+         that checks the parent instead of arriving behind its back. */
+      /* ⚠️ DO NOT GUARD THIS ON `FM.isFxContainer(inst)` — it looks like the obviously right check and
+         it is exactly wrong here. `isFxContainer` asks whether an instance HAS an effects array, and a
+         FRESH instance from the registry has no `effects` key at all — so the guard was false for every
+         container and the children were silently never restored. Measured: captured 4, restored 0.
+         The sanitiser below is the authority on whether this type may hold children; if it may not, it
+         drops them. Asking it is correct, and asking a not-yet-populated instance is circular. */
+      if (Array.isArray(preset.effects) && preset.effects.length) {
+        inst.effects = JSON.parse(JSON.stringify(preset.effects));
+      }
       // Value-checked, not just name-checked (queue 218). Returns null rather than an effect the
       // sanitiser threw out — landing a half-rebuilt one would be worse than not landing it.
       if (FM._sanitizeFxList) { const out = FM._sanitizeFxList([inst]); return out.length ? out[0] : null; }

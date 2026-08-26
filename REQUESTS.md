@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.96
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.97
 >
-> **State:** v12.96, tests green, tree clean.
+> **State:** v12.97, tests green, tree clean.
+>
+> **🛡️ Found and fixed silent data loss while starting #581.** Saving a FILTER with "Save this effect
+> as preset…" stored an **empty shell** — the preset saved, loaded and listed with the right name, and
+> the effects inside it were simply gone. No error. You would only have found out much later, when the
+> preset did nothing. Filters now save with their contents intact. **#581 itself is not finished** — the
+> favourites row still has nowhere to show a custom filter — but the thing that would have made it
+> lose your work is gone.
 >
 > **🖼️ #580 — there is a "Crop to canvas" button beside Free crop now.** It crops the clip to your
 > project's shape, centred, so it fills the canvas with no bars — and it only ever removes picture,
@@ -20240,7 +20247,20 @@ re-opened #480, which I had marked done and had not fixed.
         stores a single effect's `params` — there is no `effects` key in what comes back. **Saving a
         custom filter through it today would store an empty shell**, and it would do so SILENTLY, which is
         the worst version: the fave appears, the filter is gone.
-      **So the one piece of work is making `capture` preserve a container's children** (`FM.isFxContainer`
+      **✅ THAT BLOCKER IS FIXED IN v12.97 — but #581 ITSELF IS STILL OPEN.** What shipped is the
+      STORAGE half: `capture` now keeps a container's children, `sanePreset` carries them through the same
+      validator a project load uses, and `makeInstance` puts them back. Verified: a Noir box round-trips
+      all four of its effects, in memory **and** through a JSON cycle, while an ordinary effect keeps its
+      own params and gains no children.
+      ⚠️ **A TRAP WORTH KEEPING — do NOT guard the restore on `FM.isFxContainer(inst)`.** It looks like
+      the obviously right check and it is exactly wrong: `isFxContainer` asks whether an instance HAS an
+      effects array, and a **fresh** registry instance has no `effects` key at all, so the guard is false
+      for every container. Measured: captured 4, restored 0. The sanitiser is the authority on whether a
+      type may hold children. **The test's failure message says this outright.**
+      **⏳ WHAT IS LEFT FOR #581:** the favourites ROW still keys off library ids, so a custom filter
+      still has nowhere to appear. Now that the filter can be stored, the fave needs to point at a preset
+      id and the row needs to render those alongside library entries — plus the naming question below.
+      **The original note stood: making `capture` preserve a container's children** (`FM.isFxContainer`
       already answers true for a filter box), after which the fave can point at a preset id and the
       existing favourites row does the rest.
       ⚠️ **Whatever is built, test that a saved custom filter still RENDERS** — an empty shell saves,
