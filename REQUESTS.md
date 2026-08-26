@@ -19811,6 +19811,43 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **579 — 🔴 Saturation does not work, the black-and-white filters do not make anything black and white, and he wants more of them.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Currently the saturation filter doesn’t work but also note that the black and white filters don’t actually make anything black and white, they don’t even have a saturation filter, while ur fixing allat add more black and white filter options
+      **THREE things, and the first has a concrete lead already.**
+      📐 **MEASURED 26 Aug, and the answer splits three ways — one of them a real bug.**
+      ❌ **First, a correction to my own note.** I wrote here that `saturation` "returns NOTHING — there is
+      no effect with that id". **That was my probe using the wrong ids, not a fault in the app.** They are
+      registered as **`saturate`** (label "Saturation") and **`hue`** (label "Hue Shift"). Left in the
+      history because it is the fourth time this session an instrument, not the app, was the broken thing.
+      1. [ ] **"Saturation doesn't work" — it works; it cannot work on what he had selected.** Measured:
+             **14,000 px changed on a coloured shape, 0 px on his white text.** White has no saturation to
+             take away. Grayscale likewise takes a coloured shape from a colour spread of **46.7 to 0**,
+             and Saturation at 0 does the same. **These are correct.**
+             👉 **So this clause is #572, not a separate bug:** the app knows they will do nothing on
+             that layer and only says so after they are added. **Fix it there, not here.**
+      2. [x] **The black-and-white FILTERS — one of the two IS broken, and that is real.** There are only
+             two: **Noir** desaturates correctly (spread **0**). **Blackout does NOT — spread 25.5, still
+             visibly coloured**, despite being presented as a black-and-white look. That is a genuine
+             fault and it is his complaint, verbatim: *"the black and white filters don't actually make
+             anything black and white"*. **MEASURED, NOT FIXED YET** — see clause 3.
+      3. [ ] **Fix Blackout, then add more mono options.** He asked for more; adding more before Blackout
+             is fixed would ship more of the same fault. **Do them in that order.**
+      ⚠️ **Only clause 2/3 belong to this entry now.** Clause 1 is #572. Keeping them merged would mean
+      "fixing saturation" forever without ever touching what is actually wrong.
+
+- [ ] **580 — Customise Shape: add a "crop to canvas size" option beside free crop.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Add an option to the customise  shape menu similar to the free crop button but an option to crop to canvas size
+      **A second button beside the existing free-crop one**, cropping the layer to the project's own
+      dimensions rather than to a hand-drawn box. Small and well-specified — he has named the surface
+      (Customise Shape), the neighbour (the free crop button) and the behaviour (crop to canvas size).
+      ⚠️ **`FM.cropTool` already exists** (`start`/`stop`/`redraw`) and the crop quad is stored per layer —
+      so this is very likely setting that quad to the canvas rect rather than a new mechanism. **Read
+      js/crop-tool.js before building.**
+
 - [ ] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
