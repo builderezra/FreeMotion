@@ -327,13 +327,25 @@ window.FM = window.FM || {};
    * project would carry one person's favourites into any project they shared or re-imported and
    * silently make someone else's list wrong. Same reasoning as the other preferences.
    * Ids are filtered against the live FILTERS on read, so a filter removed by a later build cannot
-   * leave a dead entry drawing an empty tile forever. */
+   * leave a dead entry drawing an empty tile forever.
+   * ⚠️ **AND SINCE queue 581 THAT FILTER ASKS `get()`, NOT `FILTERS` — this line was the whole feature.**
+   * Checking `FILTERS.some(...)` meant a favourited CUSTOM filter was **stripped every time the list was
+   * read**: he would star it, watch it appear, and find it gone on the next load with nothing to explain
+   * why. Asking `get()` keeps the original guarantee — a dead id still cannot survive — while letting a
+   * saved filter through, because `get()` is now the one place that knows about both kinds. */
   const FAVE_KEY = 'fm.filterFaves';
   function readFaves() {
     try {
       const raw = JSON.parse(localStorage.getItem(FAVE_KEY) || '[]');
       if (!Array.isArray(raw)) return [];
-      return raw.filter(function (id) { return typeof id === 'string' && FILTERS.some(function (f) { return f.id === id; }); });
+      // queue 581 — ask FM.filters.get(), which knows about library AND saved filters. Checking
+      // FILTERS alone silently stripped every custom fave on read. Guarded because this runs before
+      // FM.filters is assigned on the very first call in some load orders.
+      return raw.filter(function (id) {
+        if (typeof id !== 'string') return false;
+        if (FILTERS.some(function (f) { return f.id === id; })) return true;
+        return !!(FM.filters && FM.filters.get && FM.filters.get(id));
+      });
     } catch (e) { return []; }
   }
   function writeFaves(ids) { try { localStorage.setItem(FAVE_KEY, JSON.stringify(ids)); } catch (e) {} }
@@ -358,7 +370,30 @@ window.FM = window.FM || {};
     faves: function () { return readFaves().map(id => this.get(id)).filter(Boolean); },
     all: function () { return FILTERS.slice(); },
     bySection: function (key) { return FILTERS.filter(f => f.section === key); },
-    get: function (id) { return FILTERS.filter(f => f.id === id)[0] || null; },
+    /* ⚠️ A CUSTOM FILTER RESOLVES HERE TOO — queue 581, and this ONE function is why the rest of the
+       feature needs no code of its own. Ezra: *"When you fave a custom filter you made from pressing
+       empty filter or if you added a filter and changed it up then fave it it should go to the top of
+       the filter section as a fave."*
+       Everything downstream asks `get()` and nothing else: the favourites row builds tiles from the
+       DEFINITIONS `faves()` returns, `mkTile` needs only `id`/`name`/`effects`, the thumbnail comes from
+       `mountFilter(cv, f.id)`, picking uses `f.id`, and `toggleFave` refuses any id this cannot resolve.
+       **So teaching this one lookup about saved filters makes the tile render, the thumbnail generate,
+       the star work and the pick apply — with no parallel favourites system**, which is exactly what
+       queue 444's note asked for ("a favourite is a second PLACE, not a move").
+       ⚠️ **Only containers.** `effectPresets` also stores single-effect presets, and one of those is not
+       a filter — it would draw a tile that applies one effect under a filter's name. `effects` being a
+       non-empty array is what distinguishes them.
+       ⚠️ Named after the preset name he typed at save time — he has already supplied it, so no new UI. */
+    get: function (id) {
+      const lib = FILTERS.filter(f => f.id === id)[0];
+      if (lib) return lib;
+      if (!id || !FM.effectPresets || !FM.effectPresets.custom) return null;
+      let saved = null;
+      try { saved = (FM.effectPresets.custom() || []).filter(p => p && p.id === id)[0]; } catch (e) { return null; }
+      if (!saved || !Array.isArray(saved.effects) || !saved.effects.length) return null;
+      return { id: saved.id, name: saved.name || 'My filter', desc: 'Your filter',
+               section: 'custom', custom: true, effects: saved.effects };
+    },
     /* The one creation path: a definition in, a real filter container out — the same shape "+ Add
      * Filter" produces, so everything downstream (render, inspector row, save/load, copy, presets)
      * treats it as an ordinary filter, because it is one. */

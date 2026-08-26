@@ -2703,6 +2703,35 @@
     const pr = cp ? P.makeInstance(cp, 0) : null;
     if (!pr || pr.params[k] !== want) throw new Error('CONTROL FAILED — an ordinary effect no longer round-trips its own parameters (' + k + ': ' + (pr && pr.params[k]) + ' vs ' + want + '). Every preset he has already saved goes through this.');
     if (Array.isArray(cp.effects) && cp.effects.length) throw new Error('CONTROL FAILED — an ordinary effect was given children it does not have');
+
+    /* ---- queue 581 proper: a saved filter can be FAVOURITED and survives being read back ----------
+     * Ezra: "When you fave a custom filter you made ... it should go to the top of the filter section
+     * as a fave."
+     * ⚠️ THE SURVIVAL CHECK IS THE POINT. `readFaves()` used to filter stored ids down to the LIBRARY
+     * list, so a custom fave was stripped every time the list was read — he would star it, watch it
+     * appear, and find it gone on the next load with nothing to explain why. Asserting it appears once
+     * would have passed against that bug; asserting it comes back from a fresh read is what catches it. */
+    const fbox = FM.filters.makeInstance('noir');
+    const fcap = P.capture(fbox, 'test custom filter');
+    if (!fcap) throw new Error('could not capture a filter to favourite');
+    P.save(fcap);
+    const resolved = FM.filters.get(fcap.id);
+    if (!resolved) throw new Error('FM.filters.get() cannot resolve a saved custom filter — the favourites row, the thumbnail, the star and the pick all go through it, so none of them can work (queue 581)');
+    if (!Array.isArray(resolved.effects) || !resolved.effects.length) throw new Error('a saved custom filter resolved with no effects — it would draw a tile that does nothing');
+    if (!FM.filters.toggleFave(fcap.id)) throw new Error('toggleFave refused a saved custom filter — it rejects any id get() cannot resolve');
+    try {
+      if (!FM.filters.faves().some(function (f) { return f.id === fcap.id; })) {
+        throw new Error('a favourited custom filter is not in faves() — readFaves() is stripping ids it does not find in the LIBRARY list, so it vanishes on the next read (queue 581)');
+      }
+      // …and a SINGLE-effect preset must not masquerade as a filter.
+      const sp = P.capture(FM.fxRegistry.makeInstance('blur'), 'not a filter');
+      P.save(sp);
+      if (FM.filters.get(sp.id)) throw new Error('CONTROL FAILED — a single-effect preset resolves as a FILTER, so it would draw a tile applying one effect under a filter\'s name');
+      if (sp && P.remove) P.remove(sp.id);
+    } finally {
+      FM.filters.toggleFave(fcap.id);        // unstar
+      if (P.remove) P.remove(fcap.id);
+    }
   });
 
   test('580: Crop to canvas fills the project shape without inventing picture', { item: '580' }, async function () {

@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.13
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.14
 >
-> **State:** v13.13, 989 tests green, tree clean.
+> **State:** v13.14, 990 tests green, tree clean.
+>
+> **⭐ #581 DONE — fave a custom filter and it goes to the top, like the built-in ones.** Save a filter
+> you have changed, star it, and it appears in Favourites under **the name you typed**. The part that
+> mattered: the code that reads your saved favourites used to throw away anything it did not recognise,
+> so a custom one would have **appeared and then vanished on reload**. Fixed, and the test checks it
+> comes back after a fresh read rather than just that it shows up once.
 >
 > **🔎 #581 is now fully designed and starts as a build next tick.** Reading it end to end found
 > the thing that would have quietly broken it: **the code that reads your saved favourites throws away
@@ -20841,8 +20847,7 @@ re-opened #480, which I had marked done and had not fixed.
       📐 **Measured at 380px** — see the figures above; nothing clipped, nothing off screen. **A rename is exactly the change that quietly pushes a sibling off the edge**,
       so the test measures the row rather than only the words.
 
-- [ ] **581 — Favouriting a CUSTOM filter should put it at the top of the Filters section.** (26 Aug, phone screenshot at v12.79.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **581 — Favouriting a CUSTOM filter should put it at the top of the Filters section.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v13.14**
       His words, verbatim:
       > When you fave a custom filter you made from pressing empty filter or if you added a filter and changed it up then fave it it should go to the top of the filter section as a fave
       **Two ways to make one, and he named both:** an **Empty filter** he then fills, or a library filter he
@@ -20895,8 +20900,21 @@ re-opened #480, which I had marked done and had not fixed.
       reason this is not a five-line change.
       ⚠️ **Name it after the preset name he typed** — my recommendation, and it needs no new UI since he
       has already supplied it at save time. The `desc` can say "Your filter".
-      **⏳ WHAT IS LEFT FOR #581:** the favourites ROW still keys off library ids, so a custom filter
-      still has nowhere to appear. Now that the filter can be stored, the fave needs to point at a preset
+      **✅ BUILT v13.14, exactly as designed — TWO changes, and the second one was the feature.**
+      1. **`FM.filters.get()` resolves a saved filter** into a filter-shaped definition, so the tile, the
+         thumbnail, the star and the pick all work with **no parallel favourites system** — queue 444's
+         *"a favourite is a second PLACE, not a move"* respected rather than re-implemented.
+      2. 🚨 **`readFaves()` no longer strips it.** It filtered stored ids down to the LIBRARY list, so a
+         custom fave was **thrown away on every read** — star it, watch it appear, find it gone on the
+         next load, nothing to explain why. **That one line was the whole feature.**
+      **VERIFIED end to end:** saved a modified Noir as *"My Look"* → resolves with **all 4 effects** →
+      `toggleFave` accepts it → stored in localStorage → **survives a fresh read** → appears in the
+      favourites row named *"My Look"*.
+      ⚠️ **CONTROL: a single-effect preset must NOT resolve as a filter** — `effectPresets` stores those
+      too, and one would draw a tile applying one effect under a filter's name. A non-empty `effects`
+      array is what tells them apart, and the test asserts it.
+      ⚠️ **The test asserts SURVIVAL, not appearance.** Checking it shows up once would have passed
+      against the very bug this fixes; only reading it back catches it. Now that the filter can be stored, the fave needs to point at a preset
       id and the row needs to render those alongside library entries — plus the naming question below.
       **The original note stood: making `capture` preserve a container's children** (`FM.isFxContainer`
       already answers true for a filter box), after which the fave can point at a preset id and the
