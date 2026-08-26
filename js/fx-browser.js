@@ -1383,18 +1383,27 @@ window.FM = window.FM || {};
        phone — so a full-width row of its own costs 52px of a 500px-tall panel for three buttons. In the
        header it costs nothing: the row is already there for the X and the search button, and the
        "Add Effect" title beside them is saying what the panel obviously is.
-       ONLY when actually docked (`fxb-in-inspector`). He said "on pc" twice, and the phone's full-bleed
-       sheet keeps the toggle where queue 45 put it. The header is NOT rebuilt by rebuild(), so a stale
-       toggle would accumulate there on every re-render — hence the unconditional remove first, which
-       also cleans up if the window is resized from docked to sheet between rebuilds. */
+       ⚠️ **NOW ON THE PHONE TOO — queue 584, and it is the same request a second time.** This used to be
+       gated on `fxb-in-inspector` because he had said "on pc" twice, so the phone kept the toggle where
+       queue 45 put it. He has now asked for the phone: *"This space here is very wasted, my idea is to
+       move the search and x out buttons onto the same row as the filters / effects / audio rows and just
+       make those buttons smaller to fit them on either side."* **The gate was my inference from "on pc",
+       not an instruction to leave the phone alone** — so it goes.
+       MEASURED at 380px before: `.fxb-top` is **53px tall and holds two 38px buttons** with an empty
+       title between them, and `.fxmode` is a further 40px below it. That is his "very wasted" band.
+       The docked layout has run this arrangement at **346px** since queue 481 — near enough a phone that
+       the sizing carries across rather than needing a second set of rules.
+       The header is NOT rebuilt by rebuild(), so a stale toggle would accumulate there on every
+       re-render — hence the unconditional remove first, which also cleans up if the window is resized
+       between rebuilds. */
     const tg = modeToggle();
     const topRow = root.querySelector('.fxb-top');
     const stale = topRow && topRow.querySelector('.fxmode'); if (stale) stale.remove();
     if (tg) {
-      if (topRow && root.classList.contains('fxb-in-inspector')) {
+      if (topRow) {
         topRow.insertBefore(tg, topRow.querySelector('.fxb-search-btn'));
       } else {
-        scrollEl.appendChild(tg);                 // above everything, search results included
+        scrollEl.appendChild(tg);                 // no header to put it in — keep it above everything
       }
     }
     const q = (searchInput.value || '').trim();

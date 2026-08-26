@@ -147,7 +147,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.98, 984 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.99, 985 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **BEFORE BUILDING A LAYOUT HE ASKS FOR, GREP FOR IT — IT MAY ALREADY EXIST BEHIND A GATE.** #584 was
+already built for PC under #481 (the same request in his words) and gated on `fxb-in-inspector` because
+he had said "on pc". **That gate was an inference from his phrasing, not an instruction**, and it cost a
+second request. **When scoping a request to one surface because of how he worded it, say in the comment
+that it is an inference** — so the next session knows it is removable rather than load-bearing.
+⚠️ **WHEN CONTROLS SHARE A ROW, ASSERT OVERLAP, NOT POSITION.** Three tabs between two fixed buttons
+collide silently at a narrow width — the tabs simply sit under the ✕ with nothing to say so.
 
 ⚠️ **A RENAME IS A LAYOUT CHANGE — measure the row, not just the words.** #583's label sits beside two
 siblings at 380px; nothing in the code would have said if it pushed one off the edge. The test asserts

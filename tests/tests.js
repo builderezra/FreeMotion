@@ -2403,6 +2403,75 @@
     }
   });
 
+  test('584: the effects browser puts its tabs on the header row, not a row of their own', { item: '584' }, async function () {
+    /* Queue 584. Ezra: "This space here is very wasted, my idea is to move the search and x out buttons
+     * onto the same row as the filters / effects / audio rows and just make those buttons smaller to fit
+     * them on either side."
+     * MEASURED at 380px before: `.fxb-top` was 53px holding two 38px buttons with an empty title between
+     * them, and `.fxmode` was a further 40px below it.
+     * ⚠️ THIS ALREADY EXISTED FOR PC (queue 481, the same request in his words: "visual filter and audio
+     * buttons are at the top along side the search and X button to save space") and was gated on
+     * `fxb-in-inspector` because he had said "on pc". That gate was an inference, not an instruction.
+     * ⚠️ OVERLAP IS THE ASSERTION, NOT POSITION. Three tabs squeezed between two fixed buttons is exactly
+     * the arrangement that collides at a narrow width, and it collides SILENTLY — the tabs just sit under
+     * the ✕. Checked by geometry against the buttons, not by eye. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.addShapeLayer('rect');
+        const L = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+        FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(280);
+        /* ⚠️ STUB THE THUMBNAIL MOUNT FOR THE DURATION — LOOP rule 17, and I walked straight into it.
+           Opening the real browser starts the thumbnail generation queue, and the next test that compares
+           an effect tile against its subject then reports six effects as indistinguishable with nothing
+           wrong in them. It has cost two items before this one. The thing under test here IS the browser's
+           header, so the browser has to open — but nothing here looks at a thumbnail, so the mount is a
+           no-op for the duration and is restored in the finally below. */
+        const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+        const realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
+        if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }
+        FM.fxBrowser.open('color');
+        await sleep(850);
+        try {
+          const top = document.querySelector('.fxb-top');
+          if (!top) throw new Error('the effects browser has no header row');
+          const mode = top.querySelector('.fxmode');
+          if (!mode) throw new Error('the Visual/Filters/Audio tabs are not on the header row — they still cost a row of their own (queue 584)');
+          if (document.querySelector('.fxb-scroll > .fxmode')) throw new Error('a stale tab strip is ALSO still in the scroller — the toggle is being built twice');
+          const close = document.querySelector('.fxb-close'), srch = document.querySelector('.fxb-search-btn');
+          if (!close || !srch) throw new Error('the ✕ or search button is missing from the header');
+          const tabs = [].slice.call(mode.querySelectorAll('button'));
+          if (tabs.length < 3) throw new Error('expected three tabs on the header row, saw ' + tabs.length);
+          const cr = close.getBoundingClientRect(), sr = srch.getBoundingClientRect();
+          tabs.forEach(function (b) {
+            const r = b.getBoundingClientRect();
+            if (r.left < cr.right - 0.5) throw new Error('the "' + b.textContent.trim() + '" tab starts at ' + Math.round(r.left) + ', under the ✕ which ends at ' + Math.round(cr.right) + ' — they overlap silently at this width (queue 584)');
+            if (r.right > sr.left + 0.5) throw new Error('the "' + b.textContent.trim() + '" tab ends at ' + Math.round(r.right) + ', under the search button which starts at ' + Math.round(sr.left));
+            if (b.scrollWidth > b.clientWidth + 1) throw new Error('the "' + b.textContent.trim() + '" tab is clipping its own label at ' + Math.round(r.width) + 'px');
+          });
+          // …and the whole point: the header must not have grown by more than the row it replaced.
+          if (top.getBoundingClientRect().height > 100) throw new Error('the header is now ' + Math.round(top.getBoundingClientRect().height) + 'px — it was meant to RECLAIM space, not spend more (queue 584)');
+        } finally {
+          if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+          if (FM.fxThumbs) { if (realMount) FM.fxThumbs.mountFilter = realMount; if (realMountFx) FM.fxThumbs.mount = realMountFx; }
+          if (FM.fxThumbs && FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();   // drain anything queued before it leaks
+          /* ⚠️ AND CLEAR THE LIVE PICK PREVIEW. Opening the browser can leave `FM._fxPreview` set
+             (queue 554 previews a pick on the canvas without touching the scene). Left behind, the very
+             next test's probe renders EXTRA effects and the queue-477 dead-effect check reports a change
+             where there is none — it went red on Channel Remap with nothing wrong in it. Same class of
+             leak as the thumbnail queue above: state that outlives the test that started it. */
+          FM._fxPreview = null;
+        }
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('583: the effects-stack save button carries his wording and still fits its row', { item: '583' }, async function () {
     /* Queue 583. Ezra circled the button and said: "Make this button say save as preset."
      * ⚠️ THE ⋯ MENU'S "Save this effect as preset…" IS DELIBERATELY STILL DIFFERENT. The entry asked for
@@ -45927,7 +45996,14 @@
       FM.fxBrowser.open(L);
       await settle(); await settle();
       if (root.classList.contains('fxb-in-inspector')) throw new Error('the browser is still marked as docked at a phone width, so the PC rules are leaking onto the phone');
-      if (!root.querySelector('.fxb-scroll .fxmode')) throw new Error('the phone lost its Visual/Filters/Audio row — he asked for the PC layout to change, twice saying "on pc"');
+      /* ⚠️ THIS USED TO ASSERT THE PHONE KEPT ITS OWN Visual/Filters/Audio ROW — queue 481, because he
+         said "on pc" twice. **He has since asked for the phone to match (queue 584):** "move the search
+         and x out buttons onto the same row as the filters / effects / audio rows". So the phone now puts
+         the toggle in the HEADER as well, and the old assertion was pinning an instruction he replaced.
+         Inverted rather than deleted: the toggle must still exist and must be in the header on BOTH
+         layouts, so losing it entirely still fails. */
+      if (!root.querySelector('.fxb-top .fxmode')) throw new Error('the Visual/Filters/Audio toggle is not in the header — queue 584 put it there on the phone as well as the PC');
+      if (root.querySelector('.fxb-scroll > .fxmode')) throw new Error('the toggle is ALSO still in the scroller — it is being built into both places and will accumulate');
       const pcnt = root.querySelector('.fxb-banner-count');
       if (pcnt && getComputedStyle(pcnt).display === 'none') throw new Error('the effect counts vanished on the PHONE too; he asked for that on PC');
       const pcard = root.querySelector('.fxb-card');

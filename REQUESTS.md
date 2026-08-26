@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.98
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.99
 >
-> **State:** v12.98, tests green, tree clean.
+> **State:** v12.99, tests green, tree clean.
+>
+> **📐 #584 — the wasted band is gone.** ✕, the Visual/Filters/Audio tabs and the search button now
+> share one row, exactly as you drew it, and the effects start **40px higher**. Worth knowing: you had
+> asked for this once before *for PC*, it was built then, and I had gated it to PC only because you said
+> "on pc" — the phone was never told. Nothing new was invented here; the gate just came off.
 >
 > **🏷️ #583 — the button says "Save effects only as preset" now, and I owe you the reason it is not
 > exactly your words.** Your button has a twin, *"Save look + animations…"*, and you asked once before
@@ -19942,6 +19947,43 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Field of view and distance sliders don't work in camera
+      **HIS TWO SHOTS ARE THE PROOF AND THEY ARE A CONTROLLED PAIR** — same project, same frame
+      (00:05:04), same layer, only the two values differ:
+      | | shot 1 | shot 2 |
+      |---|---|---|
+      | Field of view | **5.0** | **159.0** |
+      | Distance | **-2000** | **4000** |
+      | the canvas | *identical* | *identical* |
+      **A 5° lens and a 159° lens cannot produce the same picture** — that is the difference between a
+      long telephoto and a fisheye. **The sliders move, the numbers change, the render does not.**
+      ⚠️ **Both controls are on the CAMERA layer, and the panel's own help text describes exactly what
+      should happen** — *"Wide (90°+) throws depth hard… Narrow (20°) flattens the scene almost to 2D.
+      Distance dollies the camera along Z"*. So the app documents a behaviour it is not performing.
+      ⚠️ **FIRST ESTABLISH WHETHER THE SCENE CAN SHOW IT AT ALL.** Both settings act on DEPTH — layers at
+      different Z. **A scene where every layer sits at z = 0 is flat, and no lens or dolly can change a
+      flat scene**, which would make this the #572 shape again: correct behaviour, no way for him to know.
+      **His shot shows ONE image layer.** So check that first — it is cheap, and it decides whether this
+      is a render bug or a "nothing to see here, and the app should say so" bug.
+      ⚠️ **Do not assume it is the slider.** The value clearly reaches the model (the readout changes).
+      Measure whether the RENDER changes between the two values, on a scene with layers at different Z.
+
+- [ ] **596 — What do the Controller and Adjustment layers actually do?** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > What do the controllers and adjustments even do? What is their function?
+      **He is asking what two of his own layer types are FOR.** That is worth taking seriously rather than
+      just answering: **if he cannot tell what they do, the app is not saying.** Both appear in the add
+      menu with names and no explanation.
+      **Answer him first** — plainly, in the reply, with what each is for and one example of when he would
+      reach for it. **Then decide whether the app should say it too**: the effects have descriptions
+      (`desc` on every registry entry) and these layer types do not, which is an inconsistency he has now
+      run into.
+      🔗 Same family as **#572** — the app knowing something and not telling him at the moment he needs it.
+
 - [ ] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
@@ -20144,8 +20186,7 @@ re-opened #480, which I had marked done and had not fixed.
       The two narrow tiers came down with it (9→6 at ≤360, 7→5 at ≤340); those exist to claw back row
       width, so they must never end up looser than the base.
 
-- [ ] **584 — The effects browser wastes a whole row on the ✕ and search buttons.** (26 Aug, annotated screenshot at v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **584 — The effects browser wastes a whole row on the ✕ and search buttons.** (26 Aug, annotated screenshot at v12.81.) — ✅ **DONE v12.99**
       His words, verbatim:
       > This space here is very wasted, my idea is to move the search and x out buttons onto the same row as the filters / effects / audio effects rows and just make those buttons smaller to fit them on either side.
       **He has ringed the empty band** between the canvas and the Visual / Filters / Audio tabs: a full-width
@@ -20154,6 +20195,26 @@ re-opened #480, which I had marked done and had not fixed.
       tabs, one either side, shrinking them to fit. That reclaims the whole band.
       ⚠️ **The tabs are already a three-across row at 380px** — check what shrinking them by two buttons
       does to their labels ("Audio" is the longest) before committing, and keep the tap targets usable.
+      **🔎 THIS WAS ALREADY BUILT — FOR PC — AND HE HAD ASKED FOR IT BEFORE.** Queue 481, his words
+      then: *"visual filter and audio buttons are at the top along side the search and X button to save
+      space."* **It was gated on `fxb-in-inspector`** with a comment saying he had said "on pc" twice so
+      the phone would keep the old arrangement. **That gate was my inference, not an instruction** — and
+      he has now asked for the phone explicitly. So the gate is gone; no new layout was invented.
+      **The docked layout has run this at 346px since queue 481**, near enough a phone that the sizing
+      carried across with no second set of rules.
+      📐 **MEASURED at 380px, before and after:**
+      | | before | after |
+      |---|---|---|
+      | header `.fxb-top` | 53px (two 38px buttons, empty title) | 67px, tabs included |
+      | separate `.fxmode` row | 40px + 14px gap | **gone** |
+      | content starts at | y 479 | **y 439 — 40px reclaimed** |
+      Tabs are **55px each** (were 113), none clipped, ✕ ends at 48 and the first tab starts at 101, the
+      last ends at 279 and search starts at 332 — **no overlap either side.**
+      ⚠️ **The test asserts OVERLAP, not position.** Three tabs squeezed between two fixed buttons is
+      exactly the arrangement that collides at a narrow width, and it collides **silently** — the tabs
+      just sit under the ✕ with nothing to say so.
+      ⚠️ It also asserts **no stale strip is left in the scroller**: the header is not rebuilt by
+      `rebuild()`, so a toggle built into both places would accumulate.
 
 - [ ] **585 — The audio-effect CATEGORY tiles need icons, like the effects menu has.** (26 Aug, screenshot at v12.81.)
       **STATUS: 🟢 READY — nothing is stopping this**
