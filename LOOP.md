@@ -223,7 +223,23 @@ I had not read them. Read now, by hand, one at a time:**
   to leave it.
 ➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
 concluded from the classifier — which is the distinction rule 8b insists on.
-🎯 **THE NEXT ACTUAL BUILD IS GAUSSIAN BLUR'S MIX CONTROL** (scoped in the effects-plan entry, one
+🎯 **NEXT BUILD: #578 CLAUSE 2 — MOTION BLUR (FOOTAGE) DOES NOT ACTUALLY SMEAR. Measured 27 Aug, spec
+and acceptance test both ready, so this is a build not an investigation.**
+On real footage moving **12.7 px/frame**, the moving disc's width: none 108 px, **Pixel 65 (0.60x —
+it ERODES the object)**, **Smear 106 (0.98x)**, Echo 108 (**1.00x, a literal no-op**), Blend 105.
+**Nothing smears along the motion vector.** ⚠️ **And it means v12.94's default change hid the problem** —
+it swapped a style that damages the picture for one within 2% of doing nothing.
+📍 **Where:** `motionflow` at **js/compositor.js:8501**. The two-slot frame cache and its `advance`
+guard (line ~8518) are FINE — a forward step of 1/30 s satisfies them, so the styles do receive a valid
+previous frame and still produce no streak. **The fault is in what the style branches do with it**, below
+that point. Read those before touching anything.
+✅ **ACCEPTANCE TEST IS A NUMBER, not a look:** the disc must render **wider than 108 px**, and the probe
+must carry the disc's x position as a control (**43 = frozen frame, 306 = real**).
+⚠️ **`FM.seekVideosToTime` DOES NOT MOVE THE ELEMENT** — it cost two runs that reported "no effect" for
+every style, which looks exactly like a finding. Drive `el.currentTime` and await `seeked`, and step
+CONSECUTIVELY (a temporal effect measured on a frozen frame always reports nothing).
+
+🎯 **AFTER THAT: GAUSSIAN BLUR'S MIX CONTROL** (scoped in the effects-plan entry, one
 focused tick). After that the effects-plan entry names the route itself: **the BUG-HUNT backlog, then
 his own list from #296 onward.**
 ⚠️ **Do NOT read "all blocked" as "nothing to do" — there is a scoped build waiting and a whole backlog
