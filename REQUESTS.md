@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.84
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.85
 >
-> **State:** v12.84, tests green, tree clean.
+> **State:** v12.85, tests green, tree clean.
+>
+> **❓ #570 NEEDS A TASTE CALL FROM YOU — it is not broken the way I expected.** I measured a full drag:
+> the colour works perfectly, and the position DOES update — but **only once in 200px of dragging**. It
+> sits still for the first half, then jumps one notch. It is accurate (it matches where the layer
+> actually lands) — it just does not feel live. **Should the switch slide smoothly with your finger
+> (my recommendation), or keep stepping one layer at a time?** Also: **does it move at all for you, or
+> not at all?** My test was synthetic, so it cannot rule out that a real finger does something mine did not.
 >
 > **✅ #590 ANSWERED — thanks.** *"The whole thing goes I don't want to name benchmarks."* The popup
 > and renaming both go; removing a marker stays on the playhead head. Queued with **#586** and **#587**
@@ -20184,7 +20191,7 @@ re-opened #480, which I had marked done and had not fixed.
       to tap. **Measure before assuming they are separate.**
 
 - [ ] **570 — Dragging a layer still does not update the toggle switch LIVE.** (26 Aug, phone screenshot at v12.79.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Dragging layers still doesn’t update the switch live
       **"still" → this is #416**, whose request was: *"when you're dragging a layer the toggle button will
@@ -20198,6 +20205,40 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ `reorderActive` defers rebuilds for the length of a drag (a rebuild would destroy the captured
       handle), so anything that repaints the switch through a rebuild cannot fire until the drop. That is
       the first place to look.
+
+      **📏 MEASURED AT v12.84 — and the answer is NOT "it never updates". It updates ONCE.**
+      A synthetic 200px reorder drag on a six-layer stack at 380px, sampled at 14 points:
+      · **The colour is fine.** `--sw-colour` becomes the dragged layer's `#e0245e` on `pointerdown` and
+        holds it for the whole gesture, clearing on drop. `sw-dragging` tracks it exactly. **Clause-wise
+        this half of #416 works** — which matches his own screenshot showing the toggle already pink.
+      · **The position moved exactly once in 200px.** `--sw` sat on **0.500 from pointerdown through
+        dy=100** — seven samples, half the gesture, nothing — then stepped to **0.333 at dy=117** and sat
+        there for the remaining six. `FM.dragAddAt` went `null → 3 → 2` and no further.
+      · **It is not LATE and it does not LIE.** `addAt` after the drop was 2, exactly what the live value
+        had been showing. The queue-521 disagreement is genuinely fixed.
+      · **⚠️ AND THE ADD ROW ITSELF NEVER MOVES.** `.tl-addrow`'s `top` was **570 at every one of the 14
+        samples**. That contradicts the comment in js/timeline.js at the queue-438 fix, which justifies
+        the whole mechanism by saying the add row "is one of the `statics` above and is visibly sliding".
+        In a layer reorder it does not slide at all. **So there is nothing continuous for the switch to
+        track** — `--sw` is `index / n`, quantised to 1/6 here, and it can only ever step.
+      **WHAT THAT MEANS: the mechanism works as designed, and the design is what reads as broken.** A
+      control that is motionless for the first half of a gesture and then jumps one notch is, from where
+      he sits, not live. That is a DESIGN call, not a bug fix, so it is his — see the question below.
+      ⚠️ **NOT REPRODUCED: any case where the switch fails to update at all.** The probe was synthetic
+      (dispatched PointerEvents on `.row-drag`), so it cannot rule out something a real finger does — a
+      press-hold that starts the reorder differently, or a drag that never crosses a gap boundary at all,
+      which would show NO movement whatsoever and would look exactly like his report. **Ask him whether
+      the switch moves at all for him, or just not smoothly.**
+
+      ❓ **QUESTION FOR HIM, WITH A RECOMMENDATION (#570 is parked on this, nothing else blocks it):**
+      **Should the switch slide SMOOTHLY with your finger, or keep stepping one layer at a time?**
+      · **Smooth (recommended).** The switch tracks the dragged block's real position, so it moves the
+        whole time your finger does. It is what "live" sounds like, and it is what he asked for twice.
+        The cost is that the switch stops reporting a slot exactly and starts reporting a position —
+        between two layers it would sit between two notches.
+      · **Stepped, but finer.** Keep the integer meaning and just make sure it never sits still for half
+        a drag. Honest to what the control does; still reads as laggy on a short list.
+      · **Leave it.** It is accurate and it agrees with the drop; only the feel is at issue.
 
 - [x] **569 — The "Paste look" menu must always work, and only offer what can actually be pasted.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v12.84, both clauses**
       His words, verbatim:

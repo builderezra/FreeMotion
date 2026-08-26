@@ -147,7 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.84, 971 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.85, 971 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **"STILL DOESN'T WORK" CAN MEAN "WORKS, BUT NOT THE WAY IT FEELS LIKE IT SHOULD" — measure before
+building.** #570 read as a dead feature. Sampled at 14 points through a 200px drag, the colour was
+perfect and the position was neither late nor wrong — it just **moved once in the whole gesture**,
+sitting still for the first 100px. **And the add row it reports on never moved at all**, which
+contradicts the comment in js/timeline.js that justifies the mechanism on the row "visibly sliding".
+There was nothing continuous to track, so the control could only ever step. That turns a bug ticket
+into a taste call, which is HIS, so it was asked with a recommendation rather than guessed.
+⚠️ **A SYNTHETIC DRAG CANNOT CLEAR A GESTURE BUG.** Dispatched PointerEvents on `.row-drag` do not rule
+out what a real finger does. Say that in the entry rather than writing "not reproduced" and moving on.
 
 **⚡ THIS STRETCH — v12.80 → v12.84, closing #526 (re-opened), #567, #566, #568, #588 and #569.**
 **Logged and NOT started: #570–#587, #589, #590.** #582 ("I completely broke the app" — Motion Blur +
