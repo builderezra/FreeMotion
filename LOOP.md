@@ -206,6 +206,28 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+⚡ **THE FOUR DEAREST EFFECTS ARE ALL CUT (v13.28-v13.34). THREE SHAPES ARE NOW NAMED — CHECK FOR THEM
+BEFORE STARTING ANY KERNEL.**
+| effect | was | now | how | exact? |
+|---|---|---|---|---|
+| fractalwarp | 930.9 ms | 83.2 ms (11x) | hoist + reciprocals | ~1e-13, 0 px moved |
+| gridrepeat | 15.3 | 5.6 (2.73x) | hoist ONLY | **exact** |
+| radialrepeat | 28.1 | 15.4 (1.82x) | hoist | **exact** |
+| twirl | 17.8 | 9.4 (1.89x) | rotation identity | ~4% px moved (capped) |
+| kaleidoscope | 29.9 | 19.6 (1.53x) | hoist | **exact** |
+**① HOIST the evalProps** — every kernel resolves its params 1.46M times a frame. Always exact, always
+worth doing, 1.5-2.7x on its own. **Start here, every time.**
+**② RECIPROCALS** for per-pixel divisions — paid 11x on fractalwarp. ⚠️ **Never on a kernel whose output
+lands on integers** (gridrepeat: 17.7% of pixels moved, and it was SLOWER than the plain hoist).
+**③ ROTATION IDENTITY** when the angle is only offset-and-rebuilt — 1.89x on twirl. ⚠️ **Not when the
+angle is FOLDED** (kaleidoscope, radialrepeat, polarcoords) — you cannot fold what you have not measured.
+📋 **NEXT: bend 26.1, innerpinch 25.4, ripple 21.1, bulge 18.7, lensblur 19.8, zoomstreaks 20.3,
+spinstreaks 17.4, stretchseg 17.3** — all still resolve params per pixel, so shape ① applies to every
+one. **Batch 3-5 of them per ship (rule 15).** Then RE-RUN `--sweep` to confirm the ranking moved.
+⚠️ **Method that works and should not be re-derived:** interleave the two arms, warm both first, carry
+an untouched kernel as a control and require its ratio near 1.000, and compare kernel-to-kernel against
+a `FM._warpRef` legacy body — never rendered-picture hashes, never across page reloads.
+
 ✅ **THE FIRST TRUSTWORTHY RANKING — re-run 27 Aug with the quality gate reporting `factor 1 -> 1,
 degraded: false`. USE THIS LIST, not v13.27's.** 38 of 198 over 8 ms. Dearest first:
 gridrepeat 36.5, kaleidoscope 36.0, rasterextrude 34.2, radialrepeat 27.7, bend 26.1, innerpinch 25.4,
