@@ -858,6 +858,76 @@
       if (Math.abs(live.transform.x - 210) > 0.5 || Math.abs(live.transform.y - 320) > 0.5) {
         throw new Error('the tick says "Position / Scale" but position did not paste — the target sits at ' + Math.round(live.transform.x) + ',' + Math.round(live.transform.y) + ' and the source was at 210,320');
       }
+      document.querySelectorAll('.ps-overlay').forEach(function (o) { o.remove(); });
+
+      /* ---- queue 569: the dialog must only offer what can actually be pasted ---------------------
+       * Ezra: "Make sure the past look menu is always working and always representative of what can
+       * actually be pasted". MEASURED at v12.83, both halves were one fault: only `textOnly` was ever
+       * checked, so **Effects was offered enabled AND pre-ticked with ZERO effects on the clipboard**,
+       * and pasting it ran `target.effects = []` and DELETED the target's. Silent data loss, on by
+       * default, under a toast that said "Pasted style".
+       * ⚠️ The destructive direction is asserted FIRST and the working direction SECOND as a control —
+       * a fix that simply disabled every tile would pass the first and fail the second. */
+      const srcNoFx = JSON.parse(JSON.stringify(A)); srcNoFx.effects = [];
+      const tgt = FM.layerById(FM.scene, B.id);
+      tgt.effects = [{ type: 'blur', amount: 5 }, { type: 'glow', amount: 3 }];
+      FM.clipboard = [{ snapshot: srcNoFx }];
+      FM.openPasteStyle(tgt);
+      await sleep(120);
+      const fxTile = [].slice.call(document.querySelectorAll('.ps-cat')).find(function (b2) { return b2.title.indexOf('Effects') === 0; });
+      if (!fxTile) throw new Error('the Effects tile is missing from Paste look');
+      if (!fxTile.classList.contains('dis')) {
+        throw new Error('the clipboard holds NO effects, but the Effects tile is offered as pasteable — ticking it wipes the target\'s effects and the toast still says it pasted (queue 569)');
+      }
+      fxTile.click();                                    // a dead tile must not arm itself
+      document.querySelector('.ps-paste').click();
+      await sleep(150);
+      const kept = (FM.layerById(FM.scene, B.id).effects || []).map(function (f) { return f.type; });
+      if (kept.length !== 2) {
+        throw new Error('pasting a look from a layer with no effects DELETED the target\'s effects — had blur+glow, now [' + kept.join(', ') + ']. That is queue 569 and it is data loss, not a cosmetic bug.');
+      }
+      document.querySelectorAll('.ps-overlay').forEach(function (o) { o.remove(); });
+
+      // THE CONTROL. Same dialog, same target, but the source now HAS an effect: the tile must come
+      // back to life and the paste must land. Without this, "disable everything" passes the test above.
+      const srcFx = JSON.parse(JSON.stringify(A)); srcFx.effects = [{ type: 'blur', amount: 9 }];
+      FM.layerById(FM.scene, B.id).effects = [];
+      FM.clipboard = [{ snapshot: srcFx }];
+      FM.openPasteStyle(FM.layerById(FM.scene, B.id));
+      await sleep(120);
+      const fxTile2 = [].slice.call(document.querySelectorAll('.ps-cat')).find(function (b2) { return b2.title.indexOf('Effects') === 0; });
+      if (fxTile2.classList.contains('dis')) {
+        throw new Error('CONTROL FAILED — the clipboard holds a blur and the Effects tile is STILL disabled, so queue 569 has been "fixed" by switching the dialog off rather than by asking the right question');
+      }
+      [].slice.call(document.querySelectorAll('.ps-cat.on')).forEach(function (b2) { if (b2.title.indexOf('Effects') !== 0) b2.click(); });
+      document.querySelector('.ps-paste').click();
+      await sleep(150);
+      const landed = (FM.layerById(FM.scene, B.id).effects || []).map(function (f) { return f.type; });
+      if (landed.length !== 1 || landed[0] !== 'blur') {
+        throw new Error('CONTROL FAILED — a real effect did not paste; the target holds [' + landed.join(', ') + ']');
+      }
+      document.querySelectorAll('.ps-overlay').forEach(function (o) { o.remove(); });
+
+      /* queue 569, the other half: the tiles were UNLABELLED while the inspector grid they mirror is
+       * labelled — he photographed the two together and the entry is blunt that the mismatch "is most
+       * of why it is hard to tell what it offers". Every tile carries its category's own words. */
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(A)) }];
+      FM.openPasteStyle(FM.layerById(FM.scene, B.id));
+      await sleep(120);
+      const caps = [].slice.call(document.querySelectorAll('.ps-cat')).map(function (b2) {
+        const c = b2.querySelector('.ps-cat-cap'); return c ? c.textContent.trim() : '';
+      });
+      const missing = FM._styleCats.filter(function (c, i) { return caps[i] !== c.label; });
+      if (missing.length) {
+        throw new Error('Paste look tiles are not labelled with their own category names — saw [' + caps.join(' | ') + '], expected [' + FM._styleCats.map(function (c) { return c.label; }).join(' | ') + '] (queue 569)');
+      }
+      // …and a blocked tile has to say WHY, not just go grey. The entry: greying it "still takes a slot
+      // and says nothing about why".
+      const dead = [].slice.call(document.querySelectorAll('.ps-cat.dis'));
+      dead.forEach(function (b2) {
+        if (b2.title.indexOf(' — ') < 0) throw new Error('the disabled tile "' + b2.title + '" does not say why it is disabled (queue 569)');
+      });
+      document.querySelectorAll('.ps-overlay').forEach(function (o) { o.remove(); });
     } finally {
       document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
       FM.clipboard = clip0;

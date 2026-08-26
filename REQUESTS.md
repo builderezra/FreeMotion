@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.83
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.84
 >
-> **State:** v12.83, **971 tests green**, tree clean.
+> **State:** v12.84, tests green, tree clean.
+>
+> **❓ ONE WORD FROM YOU UNBLOCKS #590.** You said *"Get rid of the pop up menu when holding on a
+> benchmark to rename or delete"* — do you want **the popup** gone, or **renaming and removing** gone?
+> If it is the popup, rename still needs somewhere to live (removing already works: tap the playhead
+> head while parked on a marker). If it is the whole feature, markers just stop having names.
+>
+> **🔴 #569 was hiding DATA LOSS.** You said Paste look does not always work. It was worse than that:
+> the **Effects** tile was ticked ON by default even when the layer you copied had **no effects**, and
+> pasting it **deleted the effects on the layer you pasted onto** — while the toast said "Pasted style".
+> Fixed, and the tiles now only offer what can really be pasted, with labels and a reason when one is
+> greyed out.
 >
 > **✅ #568 IS DONE — all three clauses, and all three were real.** The circle was 1px off the line
 > (three pixels on your screen), the ring was a DARK blue-grey against a white line which is why it
@@ -19851,6 +19862,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **590 — Get rid of the hold-a-benchmark popup (Rename / Remove marker).** (26 Aug, phone screenshot at v12.83.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > Get rid of the pop up menu when holding on a benchmark to rename or delete
+      **His shot shows it:** a dark card over the timeline with **"Rename marker…"** and a red **"Remove
+      marker"**, thrown by holding a marker.
+      ⚠️ **THE ONE AMBIGUITY, AND IT CHANGES WHAT GETS BUILT: does he want the POPUP gone, or RENAMING
+      AND REMOVING gone?** "Get rid of the pop up menu … to rename or delete" reads both ways.
+      · If it is the POPUP: renaming and removing still need a route. Tapping the head when parked on a
+        marker already REMOVES it (that is what the filled yellow disc means — queue 536), so removal is
+        covered and only rename would need a home.
+      · If it is the FEATURE: simpler, but it deletes the only way to name a marker.
+      **Ask him; it is one word.** Meanwhile the popup's own faults are worth noting either way — it is
+      thrown by a HOLD, which on a phone is the same gesture as the scrub, and it lands over the layer
+      rows it is not about.
+      🔗 **Same object as #586 and #587**, both also about markers, both still open. **Do all three
+      together** — three separate passes over the marker code is how they end up disagreeing.
+
 - [ ] **589 — The selected category's shiny outline always restarts at the top-left; start it at a random point of the cycle.** (26 Aug, annotated screenshot at v12.82.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
@@ -20155,8 +20184,7 @@ re-opened #480, which I had marked done and had not fixed.
       handle), so anything that repaints the switch through a rebuild cannot fire until the drop. That is
       the first place to look.
 
-- [ ] **569 — The "Paste look" menu must always work, and only offer what can actually be pasted.** (26 Aug, phone screenshot at v12.79.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **569 — The "Paste look" menu must always work, and only offer what can actually be pasted.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v12.84, both clauses**
       His words, verbatim:
       > Make sure the past look menu is always working and always representative of what can actually be pasted
       ("past look" = **Paste look**.)
@@ -20165,16 +20193,36 @@ re-opened #480, which I had marked done and had not fixed.
       Colouring / Outline & Shadows / Mixing / Position / Scale / Speed / Customise Shape / Presets /
       Effects. **The two sets do not match**, and the dialog's tiles carry no words at all.
       **Two things in one sentence, tick separately:**
-      1. [ ] **"always working"** — find what makes it not work. Establish first whether he means it
+      1. [x] **"always working"** — find what makes it not work. Establish first whether he means it
              sometimes pastes nothing, sometimes opens empty, or the greyed tile. **Reproduce before
              designing.**
-      2. [ ] **"always representative of what can actually be pasted"** — the tiles should reflect what is
+      2. [x] **"always representative of what can actually be pasted"** — the tiles should reflect what is
              ON THE CLIPBOARD *and* what the TARGET layer can accept. A text tile over a video layer is
              offering something that cannot happen; showing it greyed is better than nothing but it still
              takes a slot and says nothing about why.
       ⚠️ **The icons are unlabelled while the grid behind them is labelled.** Whatever else changes, that
       mismatch is most of why it is hard to tell what it offers.
       ⚠️ Design request → #545: draw it and show him before shipping the look.
+      **BOTH CLAUSES WERE ONE FAULT, AND IT WAS DATA LOSS — measured at v12.83, not guessed.**
+      Only `textOnly` was ever checked, so **seven of the eight tiles claimed to be pasteable
+      unconditionally.** Copying a text layer onto a shape:
+      · **Effects was offered ENABLED AND PRE-TICKED with ZERO effects on the clipboard.** Pasting it ran
+        `target.effects = []` and **deleted the target's blur and glow** — on by default, under a toast
+        reading "Pasted style". **That is clause 1.** He said the menu does not always work; it was
+        destroying work.
+      · **Volume was offered on two layers with no audio at all.** `'volume' in layer` is true for a
+        rectangle — every layer carries a default. The honest question is `FM.hasAudioTrack`, and its
+        **null means "not probed yet", which the app reads as YES**, so null stays enabled or a video
+        whose track has not been sniffed would grey out for no visible reason.
+      **Now:** `styleBlockedReason(cat, src, target)` asks whether the SOURCE carries the aspect and the
+      TARGET can take it, returns a REASON when not, and the tile is disabled with that reason on its
+      tooltip — the entry called out that greying "still takes a slot and says nothing about why".
+      **Tiles are LABELLED now** (clause 2's other half — his shot put eight unnamed icons above the
+      inspector's eight named cards). Measured at 380px: 93×93 tiles, no caption overflows, card fits.
+      **Two more lies fixed in passing:** Paste with nothing ticked said "Pasted style" and did nothing —
+      it now says so; and the toast names what actually moved instead of always saying the same words.
+      ⚠️ **The test asserts the destructive direction FIRST and a working paste SECOND as a control** —
+      a "fix" that just disabled every tile passes the first and fails the second.
 
 - [x] **568 — The playhead's new circle needs centring, blending into the line, and the old white arrow removed.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v12.83, all three clauses**
       His words, verbatim:

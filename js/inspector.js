@@ -2587,6 +2587,67 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ---- WHAT CAN ACTUALLY BE PASTED (queue 569) --------------------------------------------------
+   * Ezra: *"Make sure the past look menu is always working and always representative of what can
+   * actually be pasted"*. Both halves of that sentence turned out to be ONE fault, and it was not
+   * cosmetic — MEASURED at v12.83 on a text layer copied onto a shape:
+   *   · **Effects was offered as enabled AND pre-ticked while the clipboard held ZERO effects.**
+   *     Pasting it ran `target.effects = []` and **silently deleted the target's blur and glow.**
+   *     That is the "not always working" half: the default state of the dialog destroyed work, and
+   *     the toast said "Pasted style" over the top of it.
+   *   · **Volume was offered on two layers that have no audio at all.** Nothing to give, nothing to
+   *     take, a slot spent saying so.
+   * Only `textOnly` was ever checked, so seven of the eight tiles claimed to be pasteable
+   * unconditionally. This asks the honest question instead: does the SOURCE carry this aspect, and can
+   * the TARGET take it? A tile that answers no is disabled and SAYS WHY on its tooltip — the entry
+   * called out that greying a tile "still takes a slot and says nothing about why".
+   * ⚠️ Returns a REASON string when unavailable and `null` when fine, so the caller cannot accidentally
+   * treat "no reason" as "not allowed" — a plain boolean here inverts silently. */
+  function styleBlockedReason(cat, src, target) {
+    const has = k => src && src[k] != null;
+    switch (cat.key) {
+      case 'text':
+        // The original rule, kept: text properties are meaningless off a text layer, either end.
+        if (src.type !== 'text') return 'The copied layer is not a text layer';
+        if (target.type !== 'text') return 'This layer is not a text layer';
+        return null;
+      case 'color':
+        if (!(has('color') || has('fill') || 'fillMode' in src || src.fillImage || src.fillGradient || src.colorGrade)) return 'The copied layer has no colouring to paste';
+        return null;
+      case 'border':
+        if (!(src.stroke || src.shadow)) return 'The copied layer has no outline or shadow';
+        return null;
+      case 'transform':
+        if (!src.transform) return 'The copied layer has no position or scale to paste';
+        return null;
+      case 'speed':
+        if (!('speed' in src || 'frameBlend' in src)) return 'The copied layer has no speed setting';
+        return null;
+      case 'volume': {
+        /* ⚠️ `'volume' in layer` IS NOT THE QUESTION and answering it that way is why this tile was
+           always on — every layer carries a default volume, including a rectangle. The question is
+           whether there is a SOUND, and FM.hasAudioTrack is the thing that knows. It answers
+           true/false/null, and **null means "not probed yet", which the app elsewhere reads as YES** —
+           so null must stay enabled here too, or a video whose track has not been sniffed yet would
+           have its volume tile greyed out for no reason the user can see. */
+        const aud = l => (FM.hasAudioTrack ? FM.hasAudioTrack(l) : (!!l && l.type === 'video'));
+        if (aud(src) === false) return 'The copied layer has no sound';
+        if (aud(target) === false) return 'This layer has no sound';
+        return null;
+      }
+      case 'effects': {
+        const fx = (src.effects || []);
+        if (!fx.length) return 'The copied layer has no effects — pasting this would only delete the ones here';
+        if (FM.fxRegistry && FM.fxRegistry.supportsLayer && !fx.some(f => FM.fxRegistry.supportsLayer(f.type, target))) {
+          return 'None of the copied effects work on this kind of layer';
+        }
+        return null;
+      }
+      default: return null;
+    }
+  }
+  FM._styleBlockedReason = styleBlockedReason;   // the suite drives this directly
+
   // The AM-style picker popup: toggle which style aspects to paste, then Paste.
   FM.openPasteStyle = function (target) {
     document.querySelectorAll('.ps-overlay').forEach(o => o.remove());   // never stack overlays (#10)
@@ -2601,29 +2662,52 @@ window.FM = window.FM || {};
     card.appendChild(el('div', 'ps-title', 'Paste look'));
     const grid = el('div', 'ps-grid');
     const sel = {};
+    let live = 0;
     STYLE_CATS.forEach(c => {
-      const disabled = c.textOnly && !(target.type === 'text' && src.type === 'text');
+      const reason = styleBlockedReason(c, src, target);
+      const disabled = !!reason;
       sel[c.key] = !disabled;
+      if (!disabled) live++;
       const b = el('button', 'ps-cat' + (disabled ? ' dis' : ' on'));
-      b.title = c.label;
+      /* The tooltip is the only place the dialog can explain ITSELF. When the tile is live it names
+         the aspect; when it is dead it says why, which is what the entry asked for. */
+      b.title = disabled ? (c.label + ' — ' + reason) : c.label;
+      b.disabled = disabled;
       // Volume is the one glyph that depends on the layer, and the honest layer to ask is the one
       // being pasted ONTO — the tile describes what this paste will do to the target.
       b.innerHTML = icoMulti(catIco(c.key, target) || '<circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>');
+      /* ⚠️ LABELLED, because the grid it mirrors is labelled (queue 569). His shot put eight UNNAMED
+         icon tiles directly above the inspector's eight NAMED cards, and the entry is blunt that the
+         mismatch "is most of why it is hard to tell what it offers". textContent, never innerHTML —
+         these strings are ours today, but this is the layer-styling path and it must stay safe if a
+         category label ever comes from a preset name. */
+      const cap = el('span', 'ps-cat-cap');
+      cap.textContent = c.label;
+      b.appendChild(cap);
       if (!disabled) b.addEventListener('click', () => { sel[c.key] = !sel[c.key]; b.classList.toggle('on', sel[c.key]); });
       grid.appendChild(b);
     });
     card.appendChild(grid);
+    /* An all-dead grid is a dialog that cannot do anything, and eight grey squares do not say so.
+       This is the honest end of "always representative": if there is nothing to paste, say it. */
+    if (!live) card.appendChild(el('div', 'ps-none', 'Nothing on this layer can take anything from the one you copied.'));
     const foot = el('div', 'ps-foot');
     const cancel = el('button', 'ps-cancel', 'Cancel');
     const paste = el('button', 'ps-paste', 'Paste');
     const close = () => overlay.remove();
     cancel.addEventListener('click', close);
     paste.addEventListener('click', () => {
-      const live = FM.layerById(FM.scene, target.id) || target;
-      applyStyle(live, src, sel);
+      /* ⚠️ NOT NAMED `live` — that is the tile counter above, and shadowing it here is how a rename
+         turns into a silent bug. This is the layer, re-fetched because the dialog can outlive it. */
+      const lay = FM.layerById(FM.scene, target.id) || target;
+      const chosen = Object.keys(sel).filter(k => sel[k]);
+      if (!chosen.length) { close(); if (FM.toast) FM.toast('Nothing was ticked, so nothing was pasted'); return; }
+      applyStyle(lay, src, sel);
       close();
       FM.requestRender(); FM.inspector.refresh(); if (FM.timeline) FM.timeline.rebuild(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.history) FM.history.commit();
-      if (FM.toast) FM.toast('Pasted style');
+      /* "Pasted style" fired even when every box was unticked and nothing had happened — the same
+         shape of lie as the effects wipe, in the other direction. Name what actually moved. */
+      if (FM.toast) FM.toast(chosen.length === 1 ? ('Pasted ' + (STYLE_CATS.find(c => c.key === chosen[0]) || {}).label) : ('Pasted ' + chosen.length + ' style settings'));
     });
     foot.append(cancel, paste);
     card.appendChild(foot);
