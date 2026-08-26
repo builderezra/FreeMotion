@@ -150,11 +150,104 @@ MEASURE = r"""
 """
 
 
+SWEEP = r"""
+(async function () {
+  const s = ms => new Promise(r => setTimeout(r, ms));
+  if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+  await s(150);
+  FM.scene.w = 1080; FM.scene.h = 1350; FM.scene.layers.length = 0;
+  FM.addShapeLayer && FM.addShapeLayer('rect');
+  const L = FM.scene.layers[0];
+  const cv = document.createElement('canvas'); cv.width = 540; cv.height = 675;
+  const ctx = cv.getContext('2d');
+  const med = a => { a = a.slice().sort((x, y) => x - y); return a[a.length >> 1]; };
+  // ⚠️ THE WHOLE POINT: measure each effect BOTH ways.  Without the readback the CPU-side cost is
+  // all you see; with it, the queued GPU work is drained inside the timer too.  The DIFFERENCE is
+  // the cost that every per-effect number in this repo has been blind to.
+  const flush = () => ctx.getImageData(0, 0, 1, 1).data[0];
+  async function cost(ids, doFlush) {
+    L.effects = ids.map(i => { try { return FM.fxRegistry.makeInstance(i); } catch (e) { return null; } })
+                   .filter(Boolean);
+    FM.renderScene(ctx, FM.scene, 0.1); flush(); await s(12);
+    const t = [];
+    for (let i = 0; i < 7; i++) {
+      const a = performance.now();
+      FM.renderScene(ctx, FM.scene, (i % 6) / 6);
+      if (doFlush) flush();
+      t.push(performance.now() - a);
+    }
+    if (!doFlush) flush();
+    return med(t);
+  }
+  const bareF = await cost([], true), bareN = await cost([], false);
+  const ids = FM.fxRegistry.all().map(f => f.id);
+  const rows = [];
+  for (const id of ids) {
+    let cf, cn;
+    try { cf = await cost([id], true); cn = await cost([id], false); }
+    catch (e) { continue; }
+    rows.push({ id: id, cpu: +(cn - bareN).toFixed(2), total: +(cf - bareF).toFixed(2) });
+  }
+  rows.forEach(r => { r.gpu = +(r.total - r.cpu).toFixed(2); });
+  rows.sort((a, b) => b.total - a.total);
+  // Does a stack cost the sum of its parts, or more?
+  const top5 = rows.slice(0, 5).map(r => r.id);
+  const stacked = +(await cost(top5, true) - bareF).toFixed(2);
+  const sum = +rows.slice(0, 5).reduce((a, r) => a + r.total, 0).toFixed(2);
+  return JSON.stringify({ bareFlushed: +bareF.toFixed(2), counted: rows.length,
+    top: rows.slice(0, 15), over8: rows.filter(r => r.total > 8).length,
+    hiddenGpu: rows.filter(r => r.gpu > r.cpu * 2 && r.gpu > 2).slice(0, 12),
+    stack: { ids: top5, measured: stacked, sumOfParts: sum,
+             ratio: +(stacked / (sum || 1)).toFixed(2) } });
+})()
+"""
+
+
+def sweep(port):
+    dbg = _cdp.free_port()
+    profile = tempfile.mkdtemp(prefix="fm-sweep-")
+    proc = _cdp.launch(dbg, 380, 780, profile)
+    cdp = None
+    try:
+        cdp = _cdp.CDP(_cdp.ws_url(dbg))
+        cdp.send("Page.enable"); cdp.send("Runtime.enable")
+        cdp.send("Page.navigate", url="http://localhost:%d/index.html" % port)
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            try:
+                if cdp.eval("!!(window.FM && FM.fxRegistry && FM.renderScene)"):
+                    break
+            except Exception:
+                pass
+            time.sleep(0.4)
+        d = json.loads(cdp.eval(SWEEP, await_promise=True))
+    finally:
+        if cdp: cdp.close()
+        proc.terminate()
+    print("bare scene: %s ms   effects measured: %d   over 8 ms: %d"
+          % (d["bareFlushed"], d["counted"], d["over8"]))
+    print("\n| effect | total | CPU | GPU |")
+    print("|---|---|---|---|")
+    for r in d["top"]:
+        print("| %s | %s ms | %s | %s |" % (r["id"], r["total"], r["cpu"], r["gpu"]))
+    print("\nCOST THAT CPU-ONLY TIMING MISSED (gpu > 2x cpu):")
+    for r in d["hiddenGpu"]:
+        print("  %-18s total %-7s cpu %-7s gpu %s" % (r["id"], r["total"], r["cpu"], r["gpu"]))
+    st = d["stack"]
+    print("\nstack of the 5 dearest %s\n  measured %s ms vs sum-of-parts %s ms  => %sx"
+          % (st["ids"], st["measured"], st["sumOfParts"], st["ratio"]))
+    print(json.dumps(d)[:400])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8777)
+    ap.add_argument("--sweep", action="store_true",
+                    help="rank every effect by TRUE cost, CPU vs GPU, with a readback")
     ap.add_argument("--rates", default="1,4,6")
     a = ap.parse_args()
+    if a.sweep:
+        return sweep(a.port)
     url = f"http://localhost:{a.port}/index.html"
     rates = [int(x) for x in a.rates.split(",")]
 

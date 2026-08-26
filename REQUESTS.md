@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.26
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.27
 >
-> **State:** v13.26, 989 tests green, tree clean.
+> **State:** v13.27, 989 tests green, tree clean.
+>
+> **🎯 THE MOBILE LAG NOW HAS A CULPRIT AND A FIX, AND IT IS ONE JOB DONE ELEVEN TIMES.** I ranked all
+> **198 effects** by what they actually cost. **37 of them are expensive**, and the eleven dearest are all
+> the same KIND of thing — the warping ones (Grid Repeat, Kaleidoscope, Curl, Twirl, Bend, Ripple, Tunnel
+> and friends). Each bends the picture pixel by pixel.
+> **We already solved exactly this once:** Turbulent Displace used to be the worst effect in the app and
+> v12.30 made it **4.2x faster** by working the warp out on a coarse grid and smoothly filling in between.
+> **The same trick should work on all eleven** — so this is one proven technique ported, not eleven
+> investigations.
+> ✅ **Also ruled out: stacking is not the problem.** Five effects together cost slightly LESS than the
+> five measured separately, so there is no hidden penalty for piling them up — the individual warps are
+> just heavy.
 >
 > **🔒 One thing I got wrong today, and it is now locked shut.** I told you that measurement table
 > was in the entry. It was not — one of my edits failed silently and everything after it carried on as

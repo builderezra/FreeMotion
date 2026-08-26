@@ -138,16 +138,30 @@ Timing around `renderScene` with `performance.now()` reported **0.00 ms for EIGH
 1080x1350 layer. Canvas work is QUEUED: `ctx.filter = 'blur(...)'` costs almost nothing on the CPU and
 the real work lands on the GPU after the timer stops. Force a drain — `ctx.getImageData(0,0,1,1)` — or
 the reading is of the queue, not the work.
-🚨 **This splits the effect list in two and the split was never accounted for:** pixel-loop effects
-(glow, vignette, turbulentdisplace) burn CPU and show up honestly, while filter-string effects (blur and
-relatives) are nearly free on CPU and expensive on GPU. **The v11.72-v12.30 per-effect timings were
-CPU-side**, so they describe the first group well and may have systematically under-reported the second.
-⚠️ **Re-measure with a flush before trusting any effect-cost ranking, including this repo's own.**
+❌ **AND THE CONCLUSION I DREW FROM THAT WAS WRONG — measured and withdrawn the same day.** I guessed the
+split was CPU pixel-loops vs GPU filter-strings, and that v11.72-v12.30 had under-reported the GPU half.
+**`--sweep` measured all 198 effects both ways and the GPU column is ~0 for every one of them** (only
+`glow` shows any, 2.4 ms; several read slightly negative, i.e. noise). **The cost is CPU, essentially all
+of it.** The flush still matters — without it blur reads 0.00 ms — but it did not uncover hidden work.
+**The old per-effect numbers stand.** A plausible mechanism is not a measurement, and this one got as far
+as a shipped commit before being checked.
 📋 Scoping note for whoever picks this up: 198 effects x 10 renders at 1080x1350 with a flush **times
 out a 30s browser call**. Sweep a subset, shrink the canvas, or drive it through `tools/_phoneprobe.py`
 where there is a real timeout.
 
-🎯 **NEXT TICK: STACKED-EFFECT COMPOSITOR COST, MEASURED WITH `tools/_phoneprobe.py` AT 4-6x.**
+🎯 **THE REAL ANSWER, AND IT IS ONE TECHNIQUE APPLIED ELEVEN TIMES. `--sweep`, 198 effects ranked.**
+**37 of 198 cost over 8 ms at HALF resolution** (540x675), so roughly 4x that at his 1080x1350. And the
+dear ones are not a scattering — **the top eleven are all GEOMETRIC WARPS**: gridrepeat 38.4, kaleidoscope
+35.8, rasterextrude 35.3, curl 33.9, fractalwarp 28.3, radialrepeat 27.2, twirl 26.7, bend 26.2,
+innerpinch 23.3, ripple 21.1, tunnel 21.0. Every one is per-pixel coordinate math over a SMOOTH field —
+**exactly what turbulentdisplace was before v12.30 cut it 4.2x** with a coarse grid plus curved
+interpolation. ✅ **So the fix is not eleven investigations, it is one proven technique ported eleven
+times**, and v12.30 already paid for the hard part: it learned that straight-line interpolation between
+grid points is out by ~10 px and a curve brings it to 0.07.
+⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
+than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
+
+🎯 **SUPERSEDED — NEXT TICK: STACKED-EFFECT COMPOSITOR COST, MEASURED WITH `tools/_phoneprobe.py` AT 4-6x.**
 This is not invented work — it is where his own steer (*"working on the lag being fixed for mobile would
 also be good"*, below) and his OLDEST item now meet, with a number attached. v13.25 measured the app at
 phone speed for the first time: the editing path is fine at 6x (tap 22 ms, scrub 3.8 ms, timeline 5.3 ms,
