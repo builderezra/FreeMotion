@@ -147,7 +147,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.86, 972 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.87, 973 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **WHEN HE REPORTS THE SAME THING A FOURTH TIME, THE ANSWER IS NOT THE FEATURE — IT IS THE SILENCE.**
+#572 had been "answered" three times with "they work, your subject cannot show them". True, and useless:
+the app already KNEW, and only said so after he had spent the pick. The fix moved the existing proof
+earlier. **Ask where the app tells him, not just whether it is right.**
+⚠️ **MY INSTRUMENT WAS WRONG AGAIN — fifth time.** The control first reported every effect dead on a
+coloured shape. `FM.addShapeLayer` inserts at index 0, so `layers[length-1]` was the TEXT layer and the
+fill went on the wrong object. **When a control fails, suspect the probe before the code.**
 
 🛑 **HE HAS ASKED THE LOOP TO STOP LEADING WITH QUESTIONS (#591, 26 Aug):** *"I'm not in a rush to
 answer every question coz you still have hours of work in the things that you can do."* Ask ONCE, in the

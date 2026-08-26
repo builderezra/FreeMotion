@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.86
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.87
 >
-> **State:** v12.86, tests green, tree clean.
+> **State:** v12.87, tests green, tree clean.
+>
+> **🔴 #572 IS DONE — and the answer is not the one you have been given three times.** Your effects
+> are not broken. On PURE WHITE, Brightness, Contrast, Grayscale, Saturation and Hue Shift **cannot do
+> anything** — brightness ×1.3 of 255 is still 255. Sepia, Invert and Glow do work on it, and all eight
+> work fine the moment the layer has a colour. **The real bug was that the app already knew and only told
+> you AFTER you had added them.** Now the browser tile says **"does nothing here"** before you spend the
+> pick, with the reason on it. Nothing about the effects themselves was changed — there was nothing
+> wrong with them.
 >
 > **✅ Got your two answers — #570 "stepped" and #590 "the whole thing goes". Both logged, neither
 > re-asked.** And noted, verbatim: *"I'm not in a rush to answer every question coz you still have hours
@@ -20109,8 +20117,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Distinct from **Motion Blur (Object)**, which is #540 and shipped at v12.64. This is the FOOTAGE
       one. Do not confuse them.
 
-- [ ] **572 — 🔴 "These effects still don't work" — the BROWSER lets him pick effects the app already knows will do nothing.** (26 Aug, phone screenshot at v12.79, Colouring browser over a white text layer.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **572 — 🔴 "These effects still don't work" — the BROWSER lets him pick effects the app already knows will do nothing.** (26 Aug, phone screenshot at v12.79, Colouring browser over a white text layer.) — ✅ **DONE v12.87**
       His words, verbatim:
       > These effects still don’t work, you’ve tried to fix it so many times, what’s going on?
       **HE IS RIGHT TO BE ANNOYED, AND THE PREVIOUS ANSWER WAS THE WRONG ONE.** #460/#477 concluded "they
@@ -20140,6 +20147,27 @@ re-opened #480, which I had marked done and had not fixed.
       been spent proving that. The fault is that the app stays quiet until it is too late to matter.
       ⚠️ Ties to **#529**, which already marked four effects *"Needs a setting"* in the browser — same
       surface, same idea, so **reuse that marker rather than inventing a second one.**
+      **✅ BUILT v12.87 — and it reuses #529's slot exactly as the entry asked.**
+      `FM._fxDeadHereWhy(id)` builds the instance a tap would actually add and asks **the same
+      `FM.fxDeadOnLayer` the stack's tag already uses** — one proof, not a second copy, so the browser
+      and the stack can never disagree about the same effect on the same layer.
+      **VERIFIED on his exact case (white text "0.00"):** Brightness, Contrast, Grayscale, Saturation and
+      Hue Shift all now carry **"does nothing here"** on the tile with the real reason on the tooltip
+      (*"Brightness is turned UP and this layer is already pure white — drag it below 1 to see
+      anything."*). **Sepia, Invert and Glow correctly stay silent.**
+      **CONTROL — the important half:** on a plain `#c05030` shape, **all eight go live again.** Marking
+      everything dead would have "passed" the first check and libelled every working effect; the test
+      fails on that.
+      **Colour carries the difference in meaning.** "Needs a setting" stays yellow — it is a to-do, give
+      it a value and it works. "does nothing here" takes the amber the effects STACK already uses for
+      this exact sentence, because it is NOT a to-do: nothing he types will make Brightness move pure
+      white. One marker per tile, never two.
+      The New carousel gets it too — a dead pick is just as silent from the first row on the screen.
+      ⚠️ **Proven, never guessed:** `fxDeadOnLayer` pushes one pixel of the layer's flat colour through
+      the shipped filter string and only answers when nothing moved. Anything it cannot prove stays quiet.
+      ⚠️ **The test drives the seam, not the browser** — LOOP rule 17: opening the real browser in a test
+      starts the thumbnail machinery and makes an unrelated test report six effects as broken. It has
+      cost two items already.
 
 - [ ] **573 — Add more text effects.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -20232,6 +20260,12 @@ re-opened #480, which I had marked done and had not fixed.
       the test if broken.
       **⏳ CLAUSE 3 IS STILL OPEN** — the colourful tap reaction. It is the invention half and wants a
       picture before it ships (#545), so it did not ride along with two measured fixes.
+      **JUMPED: two of three clauses shipped in v12.86; the only thing still open here is the colourful
+      tap reaction, which is an INVENTION that wants a drawing in front of him first (#545).** Holding
+      #572 and everything behind it behind one design sketch would be the queue rotting at the top
+      instead of the bottom, which is the same fault the ordering rule exists to prevent. The measured
+      work in this entry is done and shipped; what is left is a picture to draw, and it is the next
+      thing on the list rather than a thing being skipped.
 
 - [ ] **570 — Dragging a layer still does not update the toggle switch LIVE.** (26 Aug, phone screenshot at v12.79.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**

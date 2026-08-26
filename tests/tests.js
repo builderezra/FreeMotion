@@ -2403,6 +2403,78 @@
     }
   });
 
+  test('572: the effects BROWSER warns before you spend the pick, not after', { item: '572' }, async function () {
+    /* Queue 572. Ezra, for the FOURTH time: "These effects still don't work, you've tried to fix it so
+     * many times, what's going on?" — with a screenshot of the Colouring browser and eight effects
+     * picked on white text.
+     * The effects are not broken, and four attempts were spent proving that. MEASURED on his exact case
+     * (white text "0.00"): Brightness 1.3, Contrast 1.3 and Grayscale change ZERO pixels, while Sepia
+     * changes 2,257, Invert 2,454 and Glow 12,346. A white SHAPE behaves identically, so it is nothing
+     * to do with text — those three cannot move pure white. Brightness 1.3 on 255 is 255.
+     * The bug is WHEN the app says so: the effects STACK already tags them "does nothing here", but the
+     * BROWSER — where he picks — said nothing at all. Pick eight, press Add, go back, and only then find
+     * out three were never going to do anything.
+     * ⚠️ DRIVEN THROUGH FM._fxDeadHereWhy, NOT by opening the browser — LOOP rule 17: a test that opens
+     * the real browser starts the thumbnail machinery and the next effect-vs-subject test then reports
+     * six effects as indistinguishable from their subject, with nothing wrong. It cost two items.
+     * ⚠️ THE CONTROL IS THE WHOLE TEST. "Mark everything dead" passes the first half and fails the
+     * second — and that would be worse than silence, because it would libel every working effect. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const sel0 = FM.scene.selectedId;
+    try {
+      if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is missing — the browser has no way to ask whether a pick would do anything (queue 572)');
+      const CANNOT_MOVE_WHITE = ['brightness', 'contrast', 'grayscale', 'saturate', 'hue'];
+      const CAN = ['sepia', 'invert', 'glow'];
+
+      FM.scene.layers.length = 0;
+      FM.addTextLayer();
+      const T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+      if (!T) throw new Error('could not make a text layer to test against');
+      T.color = '#ffffff'; T.text = '0.00';
+      FM.selectLayer(T.id); FM.refreshAll();
+      await sleep(220);
+
+      const deadOnWhite = CANNOT_MOVE_WHITE.filter(function (id) { return !!FM._fxDeadHereWhy(id); });
+      if (deadOnWhite.length !== CANNOT_MOVE_WHITE.length) {
+        const missed = CANNOT_MOVE_WHITE.filter(function (id) { return !FM._fxDeadHereWhy(id); });
+        throw new Error('on PURE WHITE text the browser still offers [' + missed.join(', ') + '] with no warning — those cannot change white at all, and he only finds out after adding them (queue 572)');
+      }
+      const wronglyDead = CAN.filter(function (id) { return !!FM._fxDeadHereWhy(id); });
+      if (wronglyDead.length) {
+        throw new Error('[' + wronglyDead.join(', ') + '] were marked "does nothing here" on white text, but they measurably DO — sepia 2,257px, invert 2,454px, glow 12,346px. Labelling a working effect dead is worse than saying nothing.');
+      }
+
+      // --- THE CONTROL: give the layer a colour and every one of them must come back to life ---
+      FM.addShapeLayer('rect');
+      const S = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+      if (!S) throw new Error('could not make a shape layer for the control');
+      S.fill = '#c05030';
+      FM.selectLayer(S.id); FM.refreshAll();
+      await sleep(220);
+      const stillDead = CANNOT_MOVE_WHITE.concat(CAN).filter(function (id) { return !!FM._fxDeadHereWhy(id); });
+      if (stillDead.length) {
+        throw new Error('CONTROL FAILED — on a plain #c05030 shape the browser marks [' + stillDead.join(', ') + '] as doing nothing, but each of them changes 9,600 pixels on it. The warning is not measuring the layer, it is just always on (queue 572)');
+      }
+
+      /* …and it must be the SAME proof the effects stack uses, not a second copy of the rule. Two
+         lists that mean the same thing is how the browser and the stack start disagreeing about the
+         same effect on the same layer — which is the confusion this entry exists to end. */
+      FM.selectLayer(T.id); FM.refreshAll();
+      await sleep(200);
+      const viaStack = FM.fxDeadOnLayer(FM.fxRegistry.makeInstance('brightness'), T, FM.time);
+      const viaBrowser = FM._fxDeadHereWhy('brightness');
+      if (!viaStack || !viaBrowser || viaStack !== viaBrowser) {
+        throw new Error('the browser and the effects stack give different answers for Brightness on the same layer (browser: ' + viaBrowser + ' / stack: ' + viaStack + ') — they must be one proof, not two copies');
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      if (sel0) FM.selectLayer(sel0);
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('571: the empty timeline draws no stray dashed bar, and a tap anywhere in it works', { item: '571' }, async function () {
     /* Queue 571, clauses 1 and 2, from one phone screenshot of an empty project.
      * CLAUSE 1 — "Weird glitch here with the blue line". MEASURED at 380px: a dashed, tinted box

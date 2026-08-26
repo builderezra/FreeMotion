@@ -8151,6 +8151,12 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   color: var(--kf); opacity: .85; letter-spacing: .01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
+/* ⚠️ SAME SLOT, DIFFERENT COLOUR — queue 572, and the colour carries the difference in MEANING.
+   "Needs a setting" is yellow because it is a to-do: give it a value and it works. "does nothing here"
+   is not a to-do — nothing you type will make Brightness move pure white — so it takes the amber the
+   effects STACK already uses for exactly this sentence (`.fx-dead-tag`, #d9a05b). Two words in one slot
+   that mean opposite things would be worse than no label. */
+.fxb-needs.fxb-dead { color: #d9a05b; opacity: .9; }
 
 /* THE PAUSE BLOOM (queue 538). Ezra: "make it so if you tap the canvas when in the effects menu it
    pauses the playback, make it have a nice pause animation and a little pause button appears briefly

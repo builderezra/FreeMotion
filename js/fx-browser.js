@@ -729,12 +729,67 @@ window.FM = window.FM || {};
   FM._fxNeedsInputList = function () { return Object.keys(NEEDS_INPUT).sort(); };
   function needsInputHint(id) { return NEEDS_INPUT[id] ? el('span', 'fxb-needs', 'Needs a setting') : null; }
 
+  /* ---- SAY IT BEFORE HE SPENDS THE PICK (queue 572) ---------------------------------------------
+   * Ezra, for the fourth time: *"These effects still don't work, you've tried to fix it so many times,
+   * what's going on?"* — with a screenshot of THIS browser and eight effects selected on white text.
+   * **The effects are not broken and four attempts have now been spent proving that.** MEASURED on his
+   * exact case (white text "0.00", 240x180, default instances): Brightness 1.3, Contrast 1.3 and
+   * Grayscale change **0 pixels**, while Sepia changes 2,257, Invert 2,454 and Glow 12,346. A white
+   * SHAPE behaves identically, so it is nothing to do with text — **those three cannot move pure
+   * white.** Brightness 1.3 on 255 is 255.
+   * **The bug is WHEN the app says so.** It already knows: put those three on the layer and the effects
+   * STACK tags all three "does nothing here" (js/inspector.js, via FM.fxDeadOnLayer). But that is the
+   * stack — his screenshot is the BROWSER, where he picks. So the flow was: choose eight, press Add, go
+   * back, and only then discover three were never going to do anything. Silence until it is too late to
+   * matter reads exactly like being ignored.
+   * So the same proof is asked at PICK time and shown on the tile, in the marker slot queue 529 already
+   * built for "Needs a setting" — the entry is explicit that this reuses that surface rather than
+   * inventing a second one.
+   * ⚠️ **It is PROVEN, never guessed.** FM.fxDeadOnLayer pushes one pixel of the layer's flat colour
+   * through the shipped filter string and only answers when nothing moved, so a tile can never be
+   * labelled dead on a hunch. Anything it cannot prove stays silent.
+   * ⚠️ **A default instance, tested ON TOP of the layer's current stack.** makeInstance gives what a tap
+   * would actually add, and fxDeadOnLayer treats an instance that is not in the list as appended — so
+   * the answer accounts for what is already on the layer, which is the honest question.
+   * ⚠️ **Cached per layer AND per stack depth.** This runs once per tile and the browser draws a lot of
+   * them; the key changes the moment the layer or its effect count does, so the label cannot go stale
+   * behind an add or a delete. */
+  let _deadCache = new Map();
+  function deadHereWhy(id) {
+    if (NEEDS_INPUT[id]) return null;                 // that tile already carries the other marker
+    if (!FM.fxDeadOnLayer || !FM.fxRegistry || !FM.fxRegistry.makeInstance) return null;
+    const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    if (!layer) return null;
+    // A layer this effect cannot go on at all is a DIFFERENT message, already given at add time.
+    if (FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(id, layer)) return null;
+    const key = layer.id + '|' + ((layer.effects || []).length) + '|' + id;
+    if (_deadCache.has(key)) return _deadCache.get(key);
+    let why = null;
+    try {
+      const inst = FM.fxRegistry.makeInstance(id);
+      if (inst) why = FM.fxDeadOnLayer(inst, layer, FM.time);
+    } catch (e) { why = null; }                       // never break the browser over a hint
+    if (_deadCache.size > 400) _deadCache = new Map();
+    _deadCache.set(key, why);
+    return why;
+  }
+  FM._fxDeadHereWhy = deadHereWhy;                    // seam: the suite asks the real thing, not a copy
+  function deadHereHint(id) {
+    const why = deadHereWhy(id);
+    if (!why) return null;
+    const s = el('span', 'fxb-needs fxb-dead', 'does nothing here');
+    s.title = why;
+    return s;
+  }
+
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
     if (NEEDS_INPUT[reg.id]) wrap.title = reg.label + ' — does nothing until you give it a setting';
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
-    { const h = needsInputHint(reg.id); if (h) wrap.appendChild(h); }
+    // queue 572: the "Needs a setting" marker, or — when the app can PROVE it — "does nothing here",
+    // said before the pick rather than after it. One marker, never two: they cannot both apply.
+    { const h = needsInputHint(reg.id) || deadHereHint(reg.id); if (h) { wrap.appendChild(h); if (h.title) wrap.title = reg.label + ' — ' + h.title; } }
     wrap.appendChild(starFor(reg.id, onStarChange));
     wrap.addEventListener('click', guardedAdd(wrap, reg.id));
     attachLongPress(wrap, reg);   // hold (or right-click) → preset sheet
@@ -758,6 +813,9 @@ window.FM = window.FM || {};
       .filter(reg => !(FM.filters && FM.filters.get && FM.filters.get(reg.id)))
       .forEach(reg => {
       const card = el('button', 'fxb-card'); card.title = reg.label;
+      // …and the New carousel gets it too (queue 572). A dead pick is just as silent from up here, and
+      // this row is the first thing on the screen.
+      { const h = needsInputHint(reg.id) || deadHereHint(reg.id); if (h) { card.appendChild(h); if (h.title) card.title = reg.label + ' — ' + h.title; } }
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
       { const h = needsInputHint(reg.id); if (h) card.appendChild(h); }   // queue 529 — see NEEDS_INPUT
