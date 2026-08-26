@@ -223,7 +223,22 @@ I had not read them. Read now, by hand, one at a time:**
   to leave it.
 ➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
 concluded from the classifier — which is the distinction rule 8b insists on.
-🎯 **NEXT BUILD: #578 CLAUSE 2 — MOTION BLUR (FOOTAGE) DOES NOT ACTUALLY SMEAR. Measured 27 Aug, spec
+⚡ **DONE v13.40 — Smear now REPLACES the moving object instead of veiling it. #578 STAYS OPEN.**
+It drew the sharp frame at full opacity then laid ghosts at `min(0.5, 1.6/samples)` = 0.16 over the top,
+so at the default nothing read: **111 px wide vs 110 with the effect OFF.** The base is now erased in
+proportion to the smear's own mask (capped 0.9, so never a hole) and the ghost alpha is solved from the
+coverage wanted. **Default now: 110 → 117 px, hard core 42 → 26, soft band 7 → 59.**
+⚠️ **MY ACCEPTANCE TEST WAS >118 px AND THIS IS 117 — a genuine miss, recorded rather than re-scored.**
+There is more available. **Next on this: Pixel (style 0) has NOT been re-measured since the fix** — it
+has its own compositing path (the per-pixel branch below the smear one) and was equally invisible at
+default, so it likely needs the same treatment.
+📋 **Two corrections this entry cost, both mine, both the same root:** "no style smears at all" and
+"Pixel shrinks the object 40%" were BOTH artefacts of a single over-strict brightness predicate.
+🔒 **RULE: measure a visual change as a PROFILE ACROSS BANDS (strong / mid / faint), never one
+threshold.** A faint result and no result look identical under one cut-off — and the wrong one of those
+sends you rewriting working code.
+
+🗒️ **(done, kept for the method) #578 CLAUSE 2 — MOTION BLUR (FOOTAGE) DOES NOT ACTUALLY SMEAR.** Measured 27 Aug, spec
 and acceptance test both ready, so this is a build not an investigation.**
 On real footage moving **12.7 px/frame**, the moving disc's width: none 108 px, **Pixel 65 (0.60x —
 it ERODES the object)**, **Smear 106 (0.98x)**, Echo 108 (**1.00x, a literal no-op**), Blend 105.
