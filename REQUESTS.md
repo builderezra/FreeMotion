@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.06
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.07
 >
-> **State:** v13.06, tests green, tree clean.
+> **State:** v13.07, tests green, tree clean.
+>
+> **🛑 I nearly told you 20 effects were broken. They are not — my test was.** I swept all 198
+> effects looking for more silent ones, on a plain coloured square, and 20 came back doing nothing.
+> Checked before believing it: **Posterize turning one colour into one colour IS nothing. Mirror on a
+> centred square IS nothing. Vignette darkens corners my square did not reach.** The effects are fine;
+> the subject was wrong. **A proper sweep needs a photograph**, and the app already has the right ones —
+> logged as #599 with the method written down so the next pass does it correctly.
 >
 > **🔎 Swept again, found another.** **Both Motion Blurs do nothing on a layer that never moves** —
 > 0 pixels — and the effects browser said nothing when you picked them. It says so now. The app already
@@ -20232,6 +20239,28 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
+
+- [ ] **599 — Sweep for silently-dead effects PROPERLY, on a photograph.** (26 Aug, mine, method recorded after a failed attempt.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **The idea is sound and the first attempt's METHOD was not.** Two real finds came from sweeping
+      (#597 Focus, #598 the motion blurs), so a third pass is worth doing — but done right.
+      ❌ **WHAT WENT WRONG, recorded so it is not repeated.** Swept all 198 effects on a plain `#c05030`
+      square: **20 changed 0 pixels at every sampled time with the browser silent.** Nearly all of them
+      are the SUBJECT, not the app:
+      · **Posterize** quantises one colour to one colour — **0 is correct** on a flat fill.
+      · **Mirror** on a symmetric, centred rect changes nothing.
+      · **Vignette** darkens the CORNERS, which are empty when the shape sits in the middle.
+      · **Soft Glow / Light Glow** carry brightness thresholds (35, 60) a mid-tone fill never crosses.
+      **Their defaults are not zero either** (vignette 0.6, posterize 5 levels), so "ships switched off"
+      was wrong too. **Reporting those 20 would have been 20 false accusations against working effects.**
+      ✅ **HOW TO DO IT: use `fx-thumbs`' sample PHOTOGRAPHS as the subject.** They have tonal range,
+      off-centre detail and real highlights — `FM.fxThumbs` already owns exactly that set, so nothing new
+      is needed. Sample several times, and keep the existing re-test at other times.
+      ✅ **THAT TIME CHECK ALREADY EARNED ITSELF:** `blink`, `pulseopacity`, `glowscan`, `swing` and
+      `pulse` looked dead at t=2.0 and are merely time-varying — caught by re-testing at 0.35 / 1.1 / 3.7.
+      ⚠️ **THE STANDARD IS UNCHANGED: only claim an effect dead when it is PROVABLE**, the same bar the
+      colour and motion checks already meet. A false "does nothing here" on a working effect is worse
+      than silence — it is the app lying about its own features.
 
 - [x] **598 — Both motion blurs are dead on a layer that cannot move, and said nothing.** (26 Aug, FOUND by me.) — ✅ **DONE v13.06**
       **Second one found by sweeping in as many ticks.** 📐 **MEASURED at v13.05:** on a still shape,

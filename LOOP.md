@@ -159,6 +159,19 @@ nothing to act on, or a feature never explained. **Amber `.fx-dead-tag` colour i
 vocabulary for "this cannot do anything here" in three places.** Worth a deliberate sweep rather than
 case-by-case.
 
+🚨 **THE "SILENTLY DEAD EFFECT" SWEEP NEEDS A PHOTOGRAPH, NOT A FLAT SHAPE — and I nearly reported
+20 false positives.** Swept all 198 effects on a plain `#c05030` square and 20 changed **0 pixels at
+every sampled time** with the browser silent. **They are almost all my SUBJECT, not the app:**
+· **Posterize** quantises one colour to one colour — 0 is CORRECT on a flat fill.
+· **Mirror** on a symmetric, centred rect changes nothing.
+· **Vignette** darkens the CORNERS, which are empty when the shape sits in the middle.
+· **Soft Glow / Light Glow** have brightness thresholds (35, 60) a mid-tone fill never crosses.
+Their defaults are not zero — vignette 0.6, posterize 5 levels — so "ships switched off" is also wrong.
+✅ **TO DO IT PROPERLY: use `fx-thumbs`' sample PHOTOGRAPHS** (tonal range, off-centre detail, real
+highlights) and sample several times. **`FM.fxThumbs` already owns exactly that subject set.**
+✅ **AND THE TIME CHECK EARNED ITSELF:** `blink`, `pulseopacity`, `glowscan`, `swing` and `pulse` looked
+dead at t=2.0 and are simply time-varying — caught by re-testing at 0.35 / 1.1 / 3.7 (LOOP rule 10).
+
 🔴 **#595 — I GAVE HIM A WRONG DIAGNOSIS AND HE DECIDED ON IT. Corrected at v13.03.** I said no layer
 could have depth and a Z control needed building. **Both false:** `MT_PROPS.move = ['x','y','z']`, the
 Move panel renders `400.0X 540.0Y 0.0Z`, and with a layer at z=900 an FOV change moves **77,759 px**.
