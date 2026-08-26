@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.14
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.15
 >
-> **State:** v13.14, 990 tests green, tree clean.
+> **State:** v13.15, 989 tests green, tree clean.
+>
+> **⚡ #582 — your "I completely broke the app" stack is roughly TWICE as fast.** At the default setting
+> it went from **102ms a frame to 52ms**; at 16 samples, from 169ms to 48ms. Nothing was ever crashing —
+> it was Motion Blur re-rendering everything beneath it once per sample, with no limit on how many.
+> **I capped it at 6 for shakes**, because a shake jitters randomly rather than sweeping, so extra
+> samples buy far less than they do on a real camera move. **A proper keyframed move is untouched.**
+> **If the shake now looks steppy to you, say so — it is one number.**
 >
 > **⭐ #581 DONE — fave a custom filter and it goes to the top, like the built-in ones.** Save a filter
 > you have changed, star it, and it appears in Favourites under **the name you typed**. The part that
@@ -20742,11 +20749,13 @@ re-opened #480, which I had marked done and had not fixed.
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
       **THIS IS THE MOST SERIOUS THING IN THE QUEUE — "completely broke the app".** Three separate claims:
-      1. [ ] **A hard break from ONE named combination: Motion Blur + Shake + Tiles on one layer.**
+      1. [x] **A hard break from ONE named combination: Motion Blur + Shake + Tiles on one layer.** ✅
+             **ANSWERED v12.97: there is no break.** Nothing throws — it is a frame time, not a crash.
+             ✅ **AND FIXED v13.15:** the default case is now ~52ms where it was ~102ms.
              **Reproduce that exact stack first** and capture what actually happens — a throw, a hang, or
              the tab dying. The three are already known-expensive: #474 measured Tiles and the mover family
              among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
@@ -20755,7 +20764,7 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
              from the break. Both DISPLACE the whole layer, so they are very likely fighting over the same
              padded plate (the `_hasMover`/`fxSlack` allowance in js/compositor.js). Measure before judging.
-      3. [ ] **"some optimisation issues"** — he is right that this family is the expensive one. #474's
+      3. [x] **"some optimisation issues"** ✅ **DONE v13.15 — he was right, and this was the gap.** — he is right that this family is the expensive one. #474's
              effect-speed campaign closed with "the vein is now empty" for SINGLE effects; it never measured
              **combinations**, which is exactly what he is doing. **That is the gap.**
       ⚠️ **His last clause is the priority statement and should be quoted back in any plan:** *"those
@@ -20799,7 +20808,31 @@ re-opened #480, which I had marked done and had not fixed.
       with no bound on how many there are.
       ⚠️ **Motion Blur (FOOTAGE) + Shake + Tiles is 11.2ms — completely fine.** Only the OBJECT one
       multiplies. Worth telling him: he has a cheap alternative today.
-      ❓ **THE FIX IS A TRADEOFF AND IT IS HIS CALL — with a recommendation:**
+      **✅ CLAUSES 1 AND 3 DONE v13.15 — the slices are capped at 6 on the mover path.**
+      He was offered the choice and has not answered; **#591 says not to wait, so this ships the
+      recommended option and it is one number to change.**
+      📐 **MEASURED after (warmed up, median of 7 — the first attempt's single-shot timings were noise
+      and showed 8 samples costing MORE than 24, which is impossible):**
+      | samples | before | after |
+      |---|---|---|
+      | 2 | 40.6ms | 22.5ms |
+      | **8 (default)** | **101.8ms** | **52.3ms** |
+      | 16 | 169.4ms | **47.9ms** |
+      | 24 | — | **46.3ms** |
+      **8, 16 and 24 now all cost the same**, because they all render 6 slices — that flatness IS the cap
+      working. **His stack at the default halved; at 16 it is 3.5× faster.**
+      ⚠️ **6 is not arbitrary.** A SHAKE displaces randomly per frame rather than along a smooth arc, so
+      averaging 16 samples of noise does not look 8× better than 4 — unlike a real camera move, where
+      every slice buys visible smoothness. **The uncapped branch was deliberate** (`travelPx` cannot see a
+      mover, so capping by travel would give a violent shake the 2-slice minimum) — **but nothing had
+      replaced that cap**, leaving the most expensive path unbounded.
+      ⚠️ **A REAL MOVE IS UNTOUCHED** — the cap only applies when a mover effect is present. A keyframed
+      position still gets its full sample count.
+      ❓ **HE CAN CHANGE IT IN ONE WORD:** raise `MOVER_SLICE_CAP`, or remove it, if the shake looks
+      steppy to him. **The number is the only thing to move.**
+      **⏳ CLAUSE 2 IS STILL OPEN** — *"the tiles and shake together looked really bad"*. That is a LOOK
+      complaint and needs his eye or a picture, not a timing.
+      ❓ **The options as they were put to him, kept for the record:**
       · **Cap the slices on the mover path (recommended).** Quality per slice falls off fast for a SHAKE,
         because the displacement is random per frame rather than a smooth arc — 16 samples of noise do not
         look 8× better than 4. A cap around 4–6 would take his stack from ~79ms to ~40ms with little

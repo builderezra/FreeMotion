@@ -2263,7 +2263,23 @@ window.FM = window.FM || {};
     /* Same blind spot: travelPx cannot see a mover either, so scaling the slice count by it would give
      * a violent shake the 2-slice minimum. With a mover present the user's own sample setting is used —
      * predictable, and it is the dial they reached for when they wanted more quality. */
-    const N = _hasMoverFx ? Math.max(2, samples)
+    /* ⚠️ THE MOVER PATH IS CAPPED — queue 582. Ezra: *"I completely broke the app by adding motion blur
+       a shake and tiles to an effect ... I think there's some optimisation issues"*.
+       **He was right and nothing was crashing.** MEASURED at v12.97: his three effects together took
+       **78.7ms a frame against 16.6ms for the same three added up** — because on this path each slice
+       renders the COMPLETE stack (`m = 0` below, "Each slice is rendered complete instead"), so cost is
+       samples × everything-underneath. It scaled exactly with the dial: 2 → 40.6ms, 4 → 57.5ms,
+       8 → 101.8ms, 16 → **169.4ms**. On his phone that is the app dying.
+       **The branch above has no travel-based cap for a good reason** — `travelPx` cannot see a mover, so
+       capping by it would give a violent shake the 2-slice minimum. **But nothing replaced that cap**,
+       leaving the one path where each slice is most expensive as the one path with no bound at all.
+       **MOVER_SLICE_CAP is that replacement.** 6 rather than the full dial, because a SHAKE displaces
+       randomly per frame rather than along a smooth arc — averaging 16 samples of noise does not look
+       8× better than 4, unlike a real camera move where every slice buys visible smoothness.
+       ⚠️ **THIS IS A QUALITY-FOR-SPEED TRADE AND IT IS ONE NUMBER.** He was offered the choice and has
+       not answered; the entry records that he can raise it or drop the cap entirely in one word. */
+    const MOVER_SLICE_CAP = 6;
+    const N = _hasMoverFx ? Math.max(2, Math.min(samples, MOVER_SLICE_CAP))
                           : Math.max(2, Math.min(samples, Math.ceil(travelPx / 1.5)));
 
     // The plate has to hold the layer where it sits at t PLUS room for where the slices push it, or
