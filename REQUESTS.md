@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.89
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.90
 >
-> **State:** v12.89, tests green, tree clean.
+> **State:** v12.90, tests green, tree clean.
+>
+> **💬 #574 — stacked captions now BOTH show.** The cause was one line: the app kept only the
+> latest-starting caption and threw the other away before it ever reached the screen, which is why the
+> editor let you stack them and nothing appeared. They now stack as lines, so they keep your font,
+> alignment and animation. A normal one-at-a-time caption track is completely unchanged.
 >
 > **✨ #573 — your text animations went from FIVE to ELEVEN.** New: **Drop in, Spin in, Zoom in from
 > big, Stretch**, and two that are a different kind of thing entirely — **Wave** and **Jitter**, which
@@ -20219,13 +20224,31 @@ re-opened #480, which I had marked done and had not fixed.
       an option with no branch is a menu entry that does nothing, which is exactly #572's complaint. The
       test asserts every option renders differently from None, so adding one in only one place fails.
 
-- [ ] **574 — Captions: two stacked captions never show at the same time.** (26 Aug, phone screenshot at v12.79.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **574 — Captions: two stacked captions never show at the same time.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v12.90**
       His words, verbatim:
       > The captions currently let you put one on top of the other but it doesn’t actually show both at the same time, make it so you can show both at the same time
       **The UI allows an overlap the renderer will not honour** — so it lets him build something it then
       refuses to draw, which is the worst of both. Either both render, or the overlap should not be
       offered; he has said which he wants.
+      **FOUND IT IN ONE PLACE: `FM.activeCaption` (js/scene.js) kept exactly ONE cue.**
+      `(!hit || c.start > hit.start)` picks the latest-starting overlap and **silently discards the
+      rest** — so the drop happened before the renderer ever saw it. No error, no warning, just a
+      caption that never appears.
+      **Now every cue live at that instant is returned, joined by a newline**, which is what "one on top
+      of the other" means once it reaches the text renderer: it already splits on newlines, so stacked
+      captions inherit alignment, line height, animation and stagger for free instead of needing a
+      second layout path.
+      **📐 MEASURED at 1080×1080 — the ink sums exactly:** first caption alone **7,848 px**, second alone
+      **12,412 px**, the overlapping frame **20,260 px**. That is both, not one drawn twice.
+      ⚠️ **Order is `start`, then ORIGINAL INDEX.** Sorting on start alone leaves two cues beginning at
+      the same instant in whatever order the array happens to hold, so the same project could render
+      them one way today and the other after an unrelated edit — and **the export would stop matching
+      the preview.** Asserted.
+      ⚠️ **Empty cues are skipped**, or an empty overlapping cue would add a blank line and shove the
+      visible caption off its position for no reason he could see.
+      ⚠️ **The single-caption case is byte-identical** — one live cue joins to exactly its own text — and
+      the test asserts that as the control, because this must not disturb an ordinary caption track.
+      🔗 **#575 is the other half of captions and is next** — worth reading together.
 
 - [ ] **575 — Captions: the texts inside a caption cannot be extended.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -911,12 +911,34 @@ window.FM = window.FM || {};
 
   /* Caption tracks: text of the segment active at the playhead (or null between segments).
    * Segment times are LOCAL to the clip, so captions move/trim/split with their layer. */
+  /* ⚠️ OVERLAPPING CAPTIONS ALL SHOW, STACKED — queue 574. Ezra: *"The captions currently let you put
+     one on top of the other but it doesn't actually show both at the same time, make it so you can show
+     both at the same time."*
+     This used to keep exactly ONE cue — `(!hit || c.start > hit.start)` picks the latest-starting
+     overlap and silently drops the rest — so the editor happily let him stack two and the renderer then
+     threw one away. **The UI offered something the renderer refused to draw**, which is the worst of
+     both: no error, no warning, just a caption that does not appear.
+     Now every cue live at `t` is returned, joined by a newline, which is what "one on top of the other"
+     means once it reaches the text renderer — it already splits on newlines and lays out lines, so
+     stacked captions inherit alignment, line height, animation and stagger for free rather than needing
+     a second layout path.
+     ⚠️ **ORDER IS `start`, THEN ORIGINAL INDEX.** Sorting on start alone leaves two cues that begin at
+     the same instant in whatever order the array happens to hold, so the same project could render them
+     one way today and the other way after an edit reordered the list. The index tiebreak makes it
+     stable and repeatable — and therefore makes the EXPORT match the preview.
+     ⚠️ **EMPTY CUES ARE SKIPPED.** An empty cue overlapping a real one would otherwise contribute a
+     blank line and shove the visible caption off its position for no reason he could see.
+     ⚠️ **THE SINGLE-CAPTION CASE IS BYTE-IDENTICAL** — one live cue joins to exactly its own text — so
+     this cannot disturb the ordinary caption track, and the test asserts that as the control. */
   FM.activeCaption = function (layer, t) {
     if (!layer.captions) return null;
     const lt = t - (layer.start || 0);
-    let hit = null;
-    for (const c of layer.captions) { if (lt >= c.start && lt < c.end && (!hit || c.start > hit.start)) hit = c; }
-    return hit ? hit.text : null;
+    const live = [];
+    layer.captions.forEach(function (c, i) { if (c && lt >= c.start && lt < c.end) live.push({ c: c, i: i }); });
+    if (!live.length) return null;
+    live.sort(function (a2, b2) { return (a2.c.start - b2.c.start) || (a2.i - b2.i); });
+    const parts = live.map(function (o) { return o.c.text || ''; }).filter(function (s2) { return s2 !== ''; });
+    return parts.length ? parts.join('\n') : null;
   };
 
   /* ---------- resizing a project without wrecking what is in it ---------- */

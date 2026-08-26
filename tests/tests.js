@@ -2403,6 +2403,79 @@
     }
   });
 
+  test('574: two overlapping captions BOTH show, stacked', { item: '574' }, async function () {
+    /* Queue 574. Ezra: "The captions currently let you put one on top of the other but it doesn't
+     * actually show both at the same time, make it so you can show both at the same time."
+     * FM.activeCaption kept exactly ONE cue — the latest-starting overlap — and silently dropped the
+     * rest. So the editor let him stack two and the renderer threw one away: no error, no warning, just
+     * a caption that never appeared. The UI offered something the renderer refused to draw.
+     * MEASURED at v12.90 on 1080x1080: with two cues overlapping, the frame draws 20,260 ink pixels,
+     * which is 7,848 + 12,412 — each caption's own ink, exactly summed. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addTextLayer();
+      const T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+      if (!T) throw new Error('could not make a text layer');
+      T.text = ''; T.color = '#ffffff'; T.start = 0; T.duration = 6; T.fontSize = 80; T.textAnim = { preset: 'none' };
+
+      T.captions = [{ start: 0.0, end: 2.0, text: 'TOP LINE' }, { start: 1.0, end: 3.0, text: 'BOTTOM LINE' }];
+      const both = FM.activeCaption(T, 1.5) || '';
+      if (both.indexOf('TOP LINE') < 0 || both.indexOf('BOTTOM LINE') < 0) {
+        throw new Error('two captions overlap at 1.5s but only "' + both + '" is showing — the editor lets him stack them and the renderer drops one (queue 574)');
+      }
+
+      /* …and it must really reach the canvas, not just the string.
+         ⚠️ INK IS MEASURED AS THE DIFFERENCE FROM A CAPTION-FREE FRAME, NOT AS "alpha > 8". Counting
+         opaque pixels looked right locally on a transparent project and reported 2,073,600 — the WHOLE
+         canvas — the moment the suite ran it against a project with a solid background. Every frame
+         then scored identically and the test failed a fix that worked. Diffing against the same scene
+         at a time when no cue is live isolates the captions' own pixels whatever is behind them. */
+      const P = FM.scene.project;
+      const frame = function (t) {
+        const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+        FM.renderScene(c.getContext('2d'), FM.scene, t);
+        return c.getContext('2d').getImageData(0, 0, P.width, P.height).data;
+      };
+      const base = frame(5.0);                    // past every cue: the scene with no caption at all
+      const ink = function (t) {
+        const d = frame(t); let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (Math.abs(d[i] - base[i]) > 8 || Math.abs(d[i + 1] - base[i + 1]) > 8 || Math.abs(d[i + 2] - base[i + 2]) > 8 || Math.abs(d[i + 3] - base[i + 3]) > 8) n++;
+        }
+        return n;
+      };
+      const first = ink(0.5), overlap = ink(1.5), second = ink(2.5);
+      if (!first || !second) throw new Error('a single caption drew nothing at all (' + first + ' / ' + second + ' px against the caption-free frame) — the fixture is not rendering captions, so this proves nothing');
+      if (!(overlap > first * 1.4 && overlap > second * 1.4)) {
+        throw new Error('the overlapping frame draws ' + overlap + ' ink pixels but the single captions draw ' + first + ' and ' + second + ' — the second caption is not reaching the canvas (queue 574)');
+      }
+
+      // Stable order: two cues starting at the SAME instant follow array order, so the same project
+      // renders the same way every time and the EXPORT matches the preview.
+      T.captions = [{ start: 1.0, end: 3.0, text: 'SECOND' }, { start: 1.0, end: 3.0, text: 'FIRST' }];
+      if (FM.activeCaption(T, 1.5) !== 'SECOND\nFIRST') {
+        throw new Error('captions starting at the same time did not keep their list order — the render order is unstable, so an edit elsewhere can silently swap them (queue 574)');
+      }
+
+      // An empty cue must not contribute a blank line and shove the real caption off its spot.
+      T.captions = [{ start: 0, end: 3, text: 'REAL' }, { start: 0, end: 3, text: '' }];
+      if (FM.activeCaption(T, 1.5) !== 'REAL') {
+        throw new Error('an EMPTY overlapping cue added a blank line, moving the visible caption for no reason he could see');
+      }
+
+      // --- CONTROL: the ordinary, non-overlapping caption track must be completely unchanged. ---
+      T.captions = [{ start: 0.0, end: 1.0, text: 'TOP LINE' }, { start: 1.0, end: 2.0, text: 'BOTTOM LINE' }];
+      if (FM.activeCaption(T, 0.5) !== 'TOP LINE' || FM.activeCaption(T, 1.5) !== 'BOTTOM LINE' || FM.activeCaption(T, 5.0) !== null) {
+        throw new Error('CONTROL FAILED — a normal caption track no longer shows one cue at a time (' + FM.activeCaption(T, 0.5) + ' / ' + FM.activeCaption(T, 1.5) + ' / ' + FM.activeCaption(T, 5.0) + '). Queue 574 is about OVERLAPS only.');
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('573: every text animation renders, and none of them is another one wearing a new name', { item: '573' }, async function () {
     /* Queue 573. Ezra: "Add more text effects", right after finding the text options thin.
      * There were FIVE and, measured against each other, they were all one idea: an ENTRANCE built from

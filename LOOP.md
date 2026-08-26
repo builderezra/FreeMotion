@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.89, 975 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.90, 976 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **WHEN THE UI OFFERS SOMETHING THE RENDERER REFUSES, LOOK FOR A SILENT DISCARD — not a draw bug.**
+#574 read like a rendering problem; it was `FM.activeCaption` keeping one cue and dropping the others
+before the renderer was ever involved. **The data was thrown away upstream of the thing being blamed.**
+⚠️ **ANY "pick the matching one" LOOP IS A CANDIDATE FOR THE SAME BUG.** `(!hit || c.start > hit.start)`
+looks like a tiebreak and is actually a filter.
+⚠️ **PROBE EVALUATION ORDER — my fourth instrument error today.** I built the result object AFTER
+reassigning the fixture, so it reported the control's captions as the overlap result and I nearly
+"fixed" a working change. Read fixtures into locals BEFORE mutating them.
 
 ⚠️ **"ADD MORE X" — MEASURE EACH NEW ONE AGAINST ITS NEAREST EXISTING NEIGHBOUR, not against nothing.**
 #573 again, after #563's Bell that was the Ding. Asserting the new thing "does something" passes for a
