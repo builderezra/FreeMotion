@@ -155,6 +155,14 @@ SWEEP = r"""
   const s = ms => new Promise(r => setTimeout(r, ms));
   if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
   await s(150);
+  /* ⚠️ SET scene.project, NOT JUST scene.w/h — and set it to HIS size. The warp plate is sized from
+   * `scene.project`, so leaving whatever project was last open (a 480x480 element, in the run that
+   * produced the first ranking) silently measures everything at that size instead. That is not a
+   * cosmetic difference: the ranking CHANGES. Pixel kernels are CPU loops that grow with AREA, while
+   * rasterextrude is a fixed number of GPU blits that barely grows — so at 480x480 rasterextrude looked
+   * like the 3rd dearest effect (35.3 ms) and at a real 1080x1350 it is 16.2 ms while ripple is 565.
+   * Rank at the size he actually edits at, or the ranking is about the fixture rather than the app. */
+  FM.scene.project = { name: 'Sweep', width: 1080, height: 1350, fps: 30, duration: 5, background: null, markers: [] };
   FM.scene.w = 1080; FM.scene.h = 1350; FM.scene.layers.length = 0;
   FM.addShapeLayer && FM.addShapeLayer('rect');
   const L = FM.scene.layers[0];

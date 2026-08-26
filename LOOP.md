@@ -206,7 +206,23 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
-🎯 **NEXT TICK: prep-hoist kaleidoscope + radialrepeat (exact, expect ~1.1x each), then RASTEREXTRUDE —
+🚨 **THE v13.27 EFFECT RANKING IS ABOUT THE FIXTURE, NOT THE APP — RE-RUN `--sweep` BEFORE USING IT.**
+That sweep measured with `scene.project` left at whatever was last open (a **480x480** element), because
+the plate is sized from `scene.project` and setting `scene.w/h` alone does nothing. At his real
+1080x1350 the order is not the same order: **rasterextrude 35.3 ms ("3rd dearest") is 16.2 ms, while
+ripple is 565 ms and bulge 514 ms.** ✅ **The reason is structural and worth keeping:** pixel kernels are
+CPU loops that grow with AREA, rasterextrude is a fixed count of GPU blits that barely grows. So the
+bigger the project, the more completely the CPU kernels dominate — and he edits at 1080x1350.
+The probe now sets `scene.project` itself so this cannot recur.
+❌ **And rasterextrude needs NO work: 16.2 ms at his size.** I guarded its per-frame canvas realloc
+(`_reC.width = W` reallocates 5.8 MB every frame) expecting a win and measured **16.2 -> 18.8 ms against
+a 6% noise floor — no improvement, possibly worse. Reverted.** Do not retry it.
+
+🎯 **NEXT TICK: prep-hoist kaleidoscope + radialrepeat (exact, expect ~1.1x each). The genuinely dear
+effects at his real size are the CPU pixel kernels — ripple ~565 ms, bulge ~514 ms — so re-rank with the
+fixed sweep FIRST and work from that list, not the v13.27 one.**
+
+🗒️ **(superseded) NEXT TICK: prep-hoist kaleidoscope + radialrepeat, then RASTEREXTRUDE —
 the only top-5 effect still not understood.** It is not a WARP_FX kernel at all: different signature,
 and it loops up to **100 `drawImage` calls** (one per unit of Depth). Nobody has measured where its
 35 ms goes, and a loop bounded by a user-facing slider is a different kind of problem from a pixel

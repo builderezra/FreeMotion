@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.29
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.30
 >
-> **State:** v13.29, 990 tests green, tree clean.
+> **State:** v13.30, 990 tests green, tree clean.
+>
+> **⚠️ I have to take back part of what I told you about which effects are slow.** The ranking of all
+> 198 was measured at the wrong size — it used a leftover **480x480** project instead of your
+> **1080x1350**. At your real size the order changes a lot: the effect I called 3rd worst (Raster
+> Extrude) is actually cheap, while **Ripple and Bulge are the real monsters at ~565 ms and ~514 ms a
+> frame.**
+> **Why it flips:** some effects do their work pixel by pixel, so they get four times more expensive when
+> the picture is four times bigger. Others hand the work to the graphics chip and barely notice. **The
+> bigger your project, the more the first kind dominates — and yours is big.**
+> ✅ **Fractal Warp (11x) and Twirl (1.89x) are still real wins.** The measuring tool now sets the size
+> itself so this cannot happen again.
 >
 > **⚡ TWIRL — the single most expensive effect in the app — is now 1.89x faster.** It was doing a piece
 > of trigonometry per pixel (`atan2`) that turns out not to be needed at all: it was measuring the
