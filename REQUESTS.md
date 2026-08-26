@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.33
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.34
 >
-> **State:** v13.33, 990 tests green, tree clean.
+> **State:** v13.34, 990 tests green, tree clean.
+>
+> **⚡ Kaleidoscope 1.53x and Radial Repeat 1.82x, both pixel-for-pixel identical.** Same cause as Grid
+> Repeat: they were looking up their settings for every pixel instead of once a frame.
+> **That is now the four most expensive effects in your app all sped up** — Grid Repeat 2.73x,
+> Kaleidoscope 1.53x, Radial Repeat 1.82x, and Fractal Warp 11x — **with the picture unchanged in every
+> case except Twirl**, where I told you about the one-pixel trade.
 >
 > **⚡ GRID REPEAT — the most expensive effect in the app — is 2.73x faster, and the picture is EXACTLY
 > the same. 15.3 ms → 5.6 ms.** It was looking up its four settings for every single pixel.

@@ -44627,6 +44627,21 @@
                 { count: 5, mirror: 1 }, { count: 5, mirror: 2 }, { count: 5, mirror: 3 },
                 { count: 6, stagger: 0.5 }, { count: 3, rows: 9, stagger: 1, mirror: 3 },
                 { count: 9, rows: 2, stagger: 0.37, mirror: 2 }] },
+      /* KALEIDOSCOPE and RADIALREPEAT are pure hoists and must be EXACT — both measured 0 drift and 0
+         moved pixels over 38,688 points. Neither can take the rotation identity that paid on twirl:
+         both FOLD the angle (`% slice` then `abs(a - half)`; `floor(base/seg)` then a mirrored wedge)
+         rather than merely offsetting it, and an angle cannot be folded without being known. Their win
+         is the gridrepeat one — parameters resolved once a frame instead of 1.46 million times. */
+      { name: 'kaleidoscope', fn: W_.kaleidoscope, ref: (FM._warpRef || {}).kaleidoscope, tol: 0, moveCap: 0,
+        why: 'pure hoist of centre, slice and phase',
+        cases: [{}, { segments: 2 }, { segments: 16 }, { segments: 6, phase: 90 },
+                { segments: 9, phase: -140 }, { segments: 3, centerX: 0 }, { segments: 5, centerY: 100 },
+                { segments: 8, centerX: 100, centerY: 0 }] },
+      { name: 'radialrepeat', fn: W_.radialrepeat, ref: (FM._warpRef || {}).radialrepeat, tol: 0, moveCap: 0,
+        why: 'pure hoist of count, rotate, mirror and twist',
+        cases: [{}, { count: 2 }, { count: 16 }, { count: 6, rotate: 45 }, { count: 8, mirror: 1 },
+                { count: 5, twist: 90 }, { count: 12, rotate: -30, mirror: 1, twist: -45 },
+                { count: 3, mirror: 1, twist: 180 }] },
       /* TWIRL is the one place the rotation identity was kept (1.89x on the dearest warp). It reaches the
          same point by different float arithmetic, so `|0` truncation can pick a neighbouring source pixel
          where a coordinate sits on an integer. Measured 55 of 1365; the cap is 8% of points, which leaves

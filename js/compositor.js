@@ -6819,7 +6819,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const f = (r * (1 - k * (1 - r * r))) / r;   // barrel (k>0) / pincushion (k<0)
       return [cx + dx * f * maxR, cy + dy * f * maxR];
     },
-    kaleidoscope: function (x, y, W, H, cx, cy, maxR, p, t) {
+    /* PREPPED. Centre, segment count, slice width, half-slice and phase are all frame constants and were
+     * resolved once PER PIXEL. Same shape that paid 2.73x on gridrepeat, and like that one it is a pure
+     * hoist: every expression below is lifted verbatim in the same order, so it must be EXACT.
+     * ⚠️ atan2 STAYS. This kernel FOLDS the angle (`% slice`, then `abs(a - slice/2)`) rather than merely
+     * offsetting it, and you cannot fold an angle without knowing it — the rotation identity that took
+     * twirl 1.89x does not apply here. Same for radialrepeat below. */
+    kaleidoscope: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+      const C = pre || WARP_FX.kaleidoscope.prep(W, H, cx, cy, maxR, p, t, ps);
+      const cx_ = C.cx, cy_ = C.cy, slice = C.slice;
+      const dx = x - cx_, dy = y - cy_, r = Math.hypot(dx, dy);
+      let a = (Math.atan2(dy, dx) + C.ph) % slice; if (a < 0) a += slice;
+      a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope
+      return [reflectInto(cx_ + Math.cos(a) * r, W), reflectInto(cy_ + Math.sin(a) * r, H)];
+    },
+    _kaleidoscopeLegacy: function (x, y, W, H, cx, cy, maxR, p, t) {
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
       const seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6)), dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
       const slice = Math.PI * 2 / seg;
@@ -6986,7 +7000,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        whole picture crushed into 1/count of the frame — Ezra's "it just squishes horizontally".
        A repeat draws copies at their own size, which a coordinate remap cannot do, so it lives
        in CANVAS_FX now. */
-    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16;
+    /* PREPPED — see the note on kaleidoscope; atan2 stays here too, this one folds as well. Four
+     * evalProps plus the segment division were per-pixel. Pure hoist, must be exact. */
+    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.radialrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
+      var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy);
+      var rr_seg=C.seg, rr_a=Math.atan2(rr_dy,rr_dx), rr_rr=C.rr;
+      var rr_base=rr_rr===0?rr_a:rr_a-rr_rr;
+      var rr_k=Math.floor(rr_base/rr_seg);
+      var rr_a2=rr_base-rr_k*rr_seg;
+      if(C.mir&&(rr_k&1)) rr_a2=rr_seg-rr_a2;
+      if(C.tw!==0&&maxR>0) rr_a2+=C.twRad*(rr_r/maxR);
+      if(rr_rr!==0) rr_a2+=rr_rr;
+      return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
+    _radialrepeatLegacy: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16;
       // The fan's seam was nailed to 0 degrees with no way to turn or animate it, and the wedges
       // BUTT-JOINED — so every segment boundary showed a hard seam, which is the one thing a
       // kaleidoscope is not supposed to have. MIRROR reflects alternate wedges so they meet cleanly.
@@ -7105,12 +7131,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * real ones. */
   const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy,
                      curl: WARP_FX._curlLegacy, twirl: WARP_FX._twirlLegacy,
-                     gridrepeat: WARP_FX._gridrepeatLegacy };
+                     gridrepeat: WARP_FX._gridrepeatLegacy,
+                     kaleidoscope: WARP_FX._kaleidoscopeLegacy,
+                     radialrepeat: WARP_FX._radialrepeatLegacy };
   delete WARP_FX._fractalwarpLegacy;
   delete WARP_FX._tunnelLegacy;
   delete WARP_FX._curlLegacy;
   delete WARP_FX._twirlLegacy;
   delete WARP_FX._gridrepeatLegacy;
+  delete WARP_FX._kaleidoscopeLegacy;
+  delete WARP_FX._radialrepeatLegacy;
   FM._warpRef = WARP_REF;
 
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
@@ -7149,6 +7179,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
     return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+  };
+
+  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var kcx = wCx(p, t, W, cx), kcy = wCy(p, t, H, cy);
+    var seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6));
+    var slice = Math.PI * 2 / seg;
+    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph };
+  };
+
+  WARP_FX.radialrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var rr_count = Math.round(FM.evalProp(p.count, t) || 6); if (rr_count < 2) rr_count = 2; if (rr_count > 16) rr_count = 16;
+    var rr_rot = p.rotate == null ? 0 : FM.evalProp(p.rotate, t);
+    var rr_mir = (p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0)) === 1;
+    var rr_tw = p.twist == null ? 0 : FM.evalProp(p.twist, t);
+    return { seg: Math.PI * 2 / rr_count, rr: rr_rot === 0 ? 0 : rr_rot * Math.PI / 180,
+             mir: rr_mir, tw: rr_tw, twRad: rr_tw * Math.PI / 180 };
   };
 
   WARP_FX.gridrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
