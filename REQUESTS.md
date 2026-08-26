@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.07
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.08
 >
-> **State:** v13.07, tests green, tree clean.
+> **State:** v13.08, 989 tests green, tree clean.
+>
+> **🛑 SECOND SWEEP ALSO WRONG — caught it again, and I have stopped trying tonight.** This one
+> called **brightness, saturate, grayscale and sepia** dead, which is nonsense, so it refuted itself. Two
+> mistakes of mine: the effect landed on the near-black background instead of the subject (my helper kept
+> grabbing the newest layer, since new ones go in at the front), and my threshold was bigger than the
+> change I was looking for. **The real lesson is written down: a check that can accuse working code needs
+> a CONTROL inside it** — effects known to work, asserted alive — so a broken sweep fails loudly instead
+> of producing a believable list. Neither attempt had one. Third try will.
+> **Scoreline so far: two real finds (#597, #598), two false alarms caught before they reached you.**
 >
 > **🛑 I nearly told you 20 effects were broken. They are not — my test was.** I swept all 198
 > effects looking for more silent ones, on a plain coloured square, and 20 came back doing nothing.
@@ -20261,6 +20270,27 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **THE STANDARD IS UNCHANGED: only claim an effect dead when it is PROVABLE**, the same bar the
       colour and motion checks already meet. A false "does nothing here" on a working effect is worse
       than silence — it is the app lying about its own features.
+
+      ❌ **SECOND ATTEMPT ALSO FAILED, v13.07 — and it failed LOUDER, which is why it was caught.**
+      Built a subject with range (near-white highlight, mid tone, dark block, full-frame ground) and got
+      **32 "dead" including `brightness`, `saturate`, `grayscale` and `sepia`.** Those unquestionably
+      work, so the result refuted itself. **Two flaws, both mine:**
+      1. **The effect landed on the WRONG LAYER.** My `add()` helper returned
+         `layers.filter(...)[0]` — which is the layer added MOST RECENTLY, since new layers go in at
+         index 0. So every effect was applied to the near-black full-frame ground, not to the subject
+         with range. **A helper that returns "the first" when new things arrive at the front returns the
+         newest, not the oldest.**
+      2. **The threshold hid the answer.** Brightness ×1.3 on `#101014` (16,16,20) gives (21,21,26) — a
+         real change of ~5 levels — and the diff only counted differences **> 6**. On a dark subject the
+         true signal is smaller than the noise gate.
+      ✅ **WHAT THE THIRD ATTEMPT MUST DO:** apply the effect to the layer that HAS range (the highlight
+      or mid-tone), keep the dark ground purely as a backdrop for vignette/corner effects, and **drop the
+      threshold to >2** — then sanity-check the result against a handful of effects known to work before
+      believing any of it.
+      ⚠️ **THE REAL LESSON, AND IT IS WHY THIS ENTRY IS STILL OPEN:** both attempts produced a confident
+      list of "broken" effects and both lists were wrong. **A sweep that can accuse working code needs a
+      CONTROL built in** — a set of effects known to work, asserted to come back alive. If the control
+      fails, the sweep is wrong, and neither attempt had one.
 
 - [x] **598 — Both motion blurs are dead on a layer that cannot move, and said nothing.** (26 Aug, FOUND by me.) — ✅ **DONE v13.06**
       **Second one found by sweeping in as many ticks.** 📐 **MEASURED at v13.05:** on a still shape,

@@ -159,6 +159,13 @@ nothing to act on, or a feature never explained. **Amber `.fx-dead-tag` colour i
 vocabulary for "this cannot do anything here" in three places.** Worth a deliberate sweep rather than
 case-by-case.
 
+🚨 **A SWEEP THAT CAN ACCUSE WORKING CODE MUST CARRY A CONTROL — two attempts, two wrong lists.**
+#599's second try returned 32 "dead" including `brightness`, `saturate`, `grayscale`, `sepia`. Flaws:
+the effect landed on the wrong layer (**`layers.filter(...)[0]` is the NEWEST layer — new ones arrive at
+index 0**), and a `> 6` diff threshold hid a real ~5-level change on a near-black subject.
+**Build in a set of effects KNOWN to work and assert they come back alive. If the control fails, the
+sweep is wrong.** Neither attempt had one, and both produced confident nonsense.
+
 🚨 **THE "SILENTLY DEAD EFFECT" SWEEP NEEDS A PHOTOGRAPH, NOT A FLAT SHAPE — and I nearly reported
 20 false positives.** Swept all 198 effects on a plain `#c05030` square and 20 changed **0 pixels at
 every sampled time** with the browser silent. **They are almost all my SUBJECT, not the app:**
