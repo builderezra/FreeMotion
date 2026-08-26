@@ -46,6 +46,16 @@ if [ "$FROM_FILE" = "0" ]; then
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
 
+# An edit that did not apply must not be able to ship. tools/apply.py leaves this marker when an
+# anchor fails to match, because edits chained with `;` fail INVISIBLY — v13.25 announced a
+# measurement table in the summary, in the commit and to Ezra, and it was never in the tree.
+if [ -f .edit-failed ]; then
+  echo "❌ an edit FAILED TO APPLY and was never resolved — refusing to ship a release that claims it:"
+  sed "s/^/   /" .edit-failed
+  echo "   → fix the edit (or rm .edit-failed if it is genuinely stale), then ship again"
+  exit 1
+fi
+
 # Anchored to the LABEL element, not the first version-shaped string in the file — a bare grep
 # matched "v5.49" in a comment on line 5 and would have blocked every release.
 VER="$(grep -o 'class="ver"[^>]*>v[0-9]\+\.[0-9]\+' index.html | grep -o 'v[0-9]\+\.[0-9]\+' | head -1)"

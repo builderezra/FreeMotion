@@ -182,6 +182,14 @@ background) and the scene had one, so those prove nothing. `temporaldenoise`/`fr
 should act on a single moving clip and did not. **Only those three are candidates, and still not a bug
 list.**
 
+🔒 **A FAILED EDIT MUST NOT BE ABLE TO SHIP — `tools/apply.py`, and ship.sh refuses on `.edit-failed`.**
+A release is several edits then ship.sh, chained on one line. **Chained with `;`, a failed edit is
+INVISIBLE**: the traceback scrolls past, later steps run, the suite is green because the code was never
+the problem, and the commit describes a change that is not in the tree. That happened at v13.25 — a
+measurement table announced in the summary, in the commit and to his face, never reached the entry,
+because one anchor had a line break in a different place. **Use `python3 tools/apply.py FILE <<'JSON'`
+for multi-edit releases**: every anchor must match exactly once, nothing is written unless all do, and
+a failure writes `.edit-failed` which **ship.sh trips over**. Being careful with `&&` is remembering.
 ✅ **"I CAN ONLY MEASURE THIS ON A DESKTOP" IS USUALLY FALSE — THROTTLE THE CPU. `tools/_phoneprobe.py`.**
 Several entries park on "whether it feels right on your phone is the half I cannot take from you". The
 FEEL is his; **the SPEED is measurable** — `Emulation.setCPUThrottlingRate` at 4-6x is roughly a phone

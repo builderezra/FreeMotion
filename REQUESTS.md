@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.25
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.26
 >
-> **State:** v13.25, 989 tests green, tree clean.
+> **State:** v13.26, 989 tests green, tree clean.
+>
+> **🔒 One thing I got wrong today, and it is now locked shut.** I told you that measurement table
+> was in the entry. It was not — one of my edits failed silently and everything after it carried on as
+> if it had worked, so the release, the commit and my message to you all described something that was
+> not in the file. **Fixed, and the door is bolted: a failed edit now leaves a marker and `ship.sh`
+> refuses to release until it is dealt with.**
 >
 > **⚡ "Editing lags" — your oldest item. I found a way to measure your PHONE, and it moves the blame.**
 > That entry has said for months that I can only measure on a desktop. Turns out Chrome will run the app
@@ -4105,6 +4111,42 @@ better still, keep working inside the turn rather than parking work for a later 
       where a sample lands exactly on the boundary between two source pixels.
       ⚠️ Still 🟠 NEEDS YOU for the same reason as before: I can only measure this on a desktop
       browser. Whether it FEELS better on your phone is the half I cannot take from you.
+      ✅ **27 Aug — I CAN MEASURE PHONE SPEED AFTER ALL, and it changes the answer. `tools/_phoneprobe.py`.**
+      Every number above says "desktop only, cannot speak for your phone" — and that was half true. I
+      cannot measure how it FEELS, but Chrome will run the whole app at a fraction of its clock
+      (`Emulation.setCPUThrottlingRate`), and 4-6x slower than this Mac is roughly where a phone sits.
+      Six layers at your 1080x1350 with just **five effects** — not video, not your 24-effect case:
+      | CPU | renderScene | tap→inspector | timeline | scrub | fps | worst frame | app quality tier |
+      |---|---|---|---|---|---|---|---|
+      | 1x (this Mac) | 35.2 ms | 3.5 ms | 1.0 ms | 0.6 ms | **45** | 30.6 ms | tier 0, full |
+      | 4x (a phone) | 111.5 ms | 13.3 ms | 3.3 ms | 2.3 ms | **27.7** | 44.9 ms | tier 2, **0.62** |
+      | 6x | 172.2 ms | 22.1 ms | 5.3 ms | 3.8 ms | **17.3** | 80.4 ms | tier 2, dropping at 48 ms |
+
+      **Three things come out of it, and the good news is real.**
+      1️⃣ **Nothing scales WORSE than the CPU does** — every path lands between 0.79x and 1.06x of
+      linear. **So there is no cliff**: no timeout, no thrashing, nothing that falls apart specifically
+      on a slow device. The editing work (tap, timeline, scrub) stays cheap even at 6x — **scrub is
+      3.8 ms and a tap is 22 ms**, which is one frame, not a stall. **Everything measured in this entry
+      over the last three months still holds at phone speed.**
+      2️⃣ **🚨 But the compositor is the whole problem, and it is worse than this entry assumed.**
+      **Five effects on six SHAPES — the cheapest possible content — already gives 45 fps on a fast
+      desktop and 17 fps at 6x.** The per-effect work of v11.72-v12.30 was real, but it was measured one
+      effect at a time; stacked and thrown at a phone's CPU, five of them miss the frame budget. **That
+      is your lag, and it is not the editing path — it is drawing the picture.**
+      3️⃣ **✅ The app's own adaptive quality is WORKING, which nothing had ever confirmed.** At 1x it
+      sits at tier 0 / full quality; at 4x and 6x it drops itself to **tier 2, factor 0.62** without
+      being asked, and at 6x starts shedding frames from 48 ms. So the safety net you never see does
+      fire on a slow device — that is why the phone stays usable rather than freezing.
+      ⚠️ **The instrumentation lesson, because it nearly produced the opposite conclusion.** The first
+      run of this probe reported **renderScene at 0.00 ms at every throttle** — i.e. "the compositor is
+      free on a phone". It was building effects as `{id: 'blur', params: {...}}`; a real instance is
+      `{type, enabled, params}`, so **every effect was silently ignored and it was timing an empty
+      scene.** The probe now builds them with `FM.fxRegistry.makeInstance()` and refuses to run if none
+      were made. **A probe that reports zero is a broken probe, not a fast app.**
+      ✅ **So what is left for you shrinks to one question, and it is no longer "does it feel better".**
+      The editing path is proven fine at phone speed. **The question is whether STACKING effects is what
+      makes it lag for you** — if a project with one or two effects feels fine and a heavier one crawls,
+      that matches this exactly and the next work is cutting stacked-effect cost, not editing.
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**
