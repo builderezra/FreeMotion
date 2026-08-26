@@ -147,7 +147,14 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.97, 983 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.98, 984 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **A RENAME IS A LAYOUT CHANGE — measure the row, not just the words.** #583's label sits beside two
+siblings at 380px; nothing in the code would have said if it pushed one off the edge. The test asserts
+both.
+⚠️ **"MAKE THESE TWO AGREE" DOES NOT ALWAYS MEAN "MAKE THEM IDENTICAL".** #583's button saves the whole
+STACK and the ⋯ entry saves ONE effect. They now share the word "preset" and keep the words that
+separate their scope — collapsing them would have put two different actions under one name in one panel.
 
 🔴 **#582 IS REPRODUCED AND IT IS NOT A CRASH — nothing throws.** His three effects cost **78.7ms**
 against **16.6ms** for the same three added up. **Motion Blur (Object) re-renders everything beneath it

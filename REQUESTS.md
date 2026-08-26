@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.97
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.98
 >
-> **State:** v12.97, tests green, tree clean.
+> **State:** v12.98, tests green, tree clean.
+>
+> **🏷️ #583 — the button says "Save effects only as preset" now, and I owe you the reason it is not
+> exactly your words.** Your button has a twin, *"Save look + animations…"*, and you asked once before
+> for the two to say what each one keeps — because an older pair both read as "save a preset" and you
+> could not tell which kept the layer's motion. The bare "Save as preset" loses that, and the tests
+> caught it. **Say the word and you can have the short label**, at the cost of that contrast.
 >
 > **🛡️ Found and fixed silent data loss while starting #581.** Saving a FILTER with "Save this effect
 > as preset…" stored an **empty shell** — the preset saved, loaded and listed with the right name, and
@@ -20260,8 +20266,7 @@ re-opened #480, which I had marked done and had not fixed.
       work because that's a main feature."* **They do all work — the combination is just slow, not
       broken**, and nothing is lost or corrupted.
 
-- [ ] **583 — Rename the "Save effects only…" button to "Save as preset".** (26 Aug, annotated screenshot at v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **583 — Rename the "Save effects only…" button to "Save as preset".** (26 Aug, annotated screenshot at v12.81.) — ✅ **DONE v12.98**
       His words, verbatim:
       > Make this button say save as preset.
       **He has circled it:** the button under the effects stack currently reading **"Save effects only…"**,
@@ -20270,9 +20275,32 @@ re-opened #480, which I had marked done and had not fixed.
       this there are two phrasings for one idea in one panel. **Make them agree.**
       ⚠️ Trivial to do, but it is a LABEL: grep for the string rather than assuming one occurrence, and
       check nothing (a test, a tooltip) asserts the old words.
+      **⚠️ IT SHIPPED AS "Save effects only as preset", NOT the bare wording he asked for — TWO OF HIS
+      OWN REQUESTS COLLIDE HERE and he should know.**
+      **Queue 329 made this button and its sibling say WHAT EACH ONE KEEPS.** The other reads *"Save look
+      + animations…"*, and an earlier pair (*"Save this layer as preset"* / *"Save current effects"*) both
+      read as "save a preset" so nobody could tell which one kept the layer's motion. **The suite asserts
+      one of the two still says it keeps ONLY the effects** — and the bare "Save as preset" says neither.
+      **It went red on exactly that**, which is the guard doing its job rather than an obstacle.
+      **So the label keeps his phrase — "as preset" — AND the word carrying the distinction.** Measured at
+      380px: Copy 46 · Paste 48 · **Save effects only as preset 152** — fits, nothing clipped.
+      ❓ **He can have the bare "Save as preset" if he prefers it** — it costs the contrast with "Save look
+      + animations…", which is the confusion queue 329 existed to end. **Said to him rather than silently
+      delivering different words than he asked for.**
+      **✅ The warning earned itself: there were TWO occurrences**, not one — js/inspector.js builds this
+      row in two places. Both renamed; nothing asserted the old words.
+      ⚠️ **THE ⋯ MENU IS DELIBERATELY STILL DIFFERENT, and that is a change to what the entry asked for.**
+      It said to make the two agree. They now agree on the **vocabulary** — both say "preset" — while
+      keeping the words that separate their **scope**: this button saves the whole STACK, the menu entry
+      saves THIS effect. **Making them identical would put two different actions under one name in one
+      panel**, which is worse than the mismatch it was meant to fix.
+      The ellipsis went with the rename: *"Save effects only…"* promised a dialog for choosing what to
+      save, and there is only a name prompt. A tooltip now says what it takes.
+      📐 **Measured at 380px** — see the figures above; nothing clipped, nothing off screen. **A rename is exactly the change that quietly pushes a sibling off the edge**,
+      so the test measures the row rather than only the words.
 
 - [ ] **581 — Favouriting a CUSTOM filter should put it at the top of the Filters section.** (26 Aug, phone screenshot at v12.79.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > When you fave a custom filter you made from pressing empty filter or if you added a filter and changed it up then fave it it should go to the top of the filter section as a fave
       **Two ways to make one, and he named both:** an **Empty filter** he then fills, or a library filter he
@@ -20317,6 +20345,13 @@ re-opened #480, which I had marked done and had not fixed.
       loads, faves and appears in the row perfectly. Only the picture would be missing, and only later.
       ⚠️ **Naming:** a library fave shows its own name; a custom one is called "Filter". He will need to
       tell them apart — worth asking him, or defaulting to the name he gave the preset.
+      **JUMPED: the storage blocker under this shipped in v12.97; what is left is a favourites-row build
+      that cannot be finished without deciding the naming above.** Every custom filter is called
+      "Filter", so a row of faves would read "Filter, Filter, Filter" — **building that and shipping it
+      would be worse than not building it**, and the answer is his taste, not a measurement.
+      **Recommended default if he does not answer: use the name he typed when saving the preset**, which
+      he has already provided by then and which needs no new UI. Say the word and it is built.
+      It is recorded, not skipped — and the half that was silently losing his work is already fixed.
 
 - [x] **579 — 🔴 Saturation does not work, the black-and-white filters do not make anything black and white, and he wants more of them.** (26 Aug.) — ✅ **DONE v12.95**
       His words, verbatim:

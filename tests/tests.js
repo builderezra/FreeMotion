@@ -2403,6 +2403,56 @@
     }
   });
 
+  test('583: the effects-stack save button carries his wording and still fits its row', { item: '583' }, async function () {
+    /* Queue 583. Ezra circled the button and said: "Make this button say save as preset."
+     * ⚠️ THE ⋯ MENU'S "Save this effect as preset…" IS DELIBERATELY STILL DIFFERENT. The entry asked for
+     * the two to agree; they now agree on the VOCABULARY — both say "preset" — while keeping the words
+     * that separate their scope: this button saves the whole STACK, that one saves THIS effect.
+     * Collapsing them to one string would make two different actions read as the same action in the same
+     * panel, which is worse than the mismatch it fixed. So this test pins BOTH: the new label, and the
+     * fact that the menu entry stays distinct.
+     * ⚠️ It also measures that the row still fits at 380px — a rename is exactly the change that quietly
+     * pushes a sibling off the edge, and nothing about the code would say so. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.addShapeLayer('rect');
+        const L = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+        if (!L) throw new Error('could not make a layer');
+        L.effects = [FM.fxRegistry.makeInstance('blur')];
+        FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(260);
+        if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('effects');
+        await sleep(520);
+        const btns = [].slice.call(document.querySelectorAll('.fx-act'));
+        if (!btns.length) throw new Error('the effects stack has no action buttons on screen');
+        const texts = btns.map(function (b) { return b.textContent.trim(); });
+        /* ⚠️ It must contain his phrase, not equal it. Queue 329 requires one of the two save buttons to
+           say it keeps ONLY the effects — the bare label he asked for says neither, and the suite went
+           red on exactly that. So the shipped label keeps his words AND the distinguishing one. */
+        if (!texts.some(function (t) { return /as preset/i.test(t); })) {
+          throw new Error('the save button reads [' + texts.join(' | ') + '] — he asked for it to say "as preset" (queue 583)');
+        }
+        /* ⚠️ The OLD label was "Save effects only…" WITH the ellipsis, and the new one legitimately
+           contains the words "Save effects only" — so this must match the ellipsis, not the substring.
+           Written loosely first, it fired on the correct new label. */
+        if (texts.some(function (t) { return /Save effects only\s*(…|\.\.\.)/.test(t); })) {
+          throw new Error('the old "Save effects only…" wording is still on screen (queue 583)');
+        }
+        btns.forEach(function (b) {
+          const r = b.getBoundingClientRect();
+          if (b.scrollWidth > b.clientWidth + 1) throw new Error('the button "' + b.textContent.trim() + '" is clipping its own label after the rename');
+          if (r.right > window.innerWidth + 1 || r.left < -1) throw new Error('the button "' + b.textContent.trim() + '" is off the side of a ' + window.innerWidth + 'px screen after the rename');
+        });
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('581: saving a FILTER as a preset keeps the effects inside it', { item: '581' }, async function () {
     /* Queue 581, the blocker underneath it. Favouriting a custom filter needs the filter stored
      * somewhere durable, and FM.effectPresets already is that store — but `capture` walked the

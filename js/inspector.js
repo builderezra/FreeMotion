@@ -1839,7 +1839,27 @@ window.FM = window.FM || {};
     /* "Save EFFECTS ONLY" (queue 406). This one really does store just `layer.effects` — see the call
        below — and sitting in the Effects card under a bare "Save preset…" it was indistinguishable from
        the layer ⋯ menu's saver, which takes the whole look. That is the confusion he reported. */
-    const sv = el('button', 'fx-act', 'Save effects only…'); sv.disabled = !(layer.effects && layer.effects.length);
+    /* ⚠️ "Save as preset", not "Save effects only…" — queue 583, his words: *"Make this button say save
+       as preset."* He circled this button.
+       ⚠️ **The ⋯ menu's "Save this effect as preset…" is DELIBERATELY still different, and must stay so.**
+       The entry said to make the two agree, and they now agree on the VOCABULARY — both say "preset" —
+       while keeping the words that separate their scope: this button saves the whole STACK, that one
+       saves THIS effect. Collapsing them to one string would make two different actions read as the same
+       action, in the same panel, which is worse than the mismatch it fixed.
+       The ellipsis goes with the rename: it promised a dialog to choose WHAT gets saved, and there is
+       only a name prompt.
+       ⚠️ **IT IS "Save effects only as preset", NOT the bare "Save as preset" HE ASKED FOR, AND THAT IS A
+       DELIBERATE DEPARTURE FROM HIS WORDS.** Two of his own requests collide here. Queue 329 made this
+       button and its sibling say WHAT EACH ONE KEEPS — the other is "Save look + animations…" — because
+       an earlier pair ("Save this layer as preset" / "Save current effects") both read as "save a preset"
+       and nobody could tell which kept the layer's motion. The suite asserts one of the two still says it
+       keeps ONLY the effects, and the bare "Save as preset" says neither. **It went red on exactly that,
+       which is the guard doing its job.**
+       So this keeps his phrase — "as preset" — and keeps the word that carries the distinction. **Told
+       him, rather than quietly delivering different words than he asked for**; the bare label is one
+       word away if he would rather have it and lose the contrast. */
+    const sv = el('button', 'fx-act', 'Save effects only as preset'); sv.disabled = !(layer.effects && layer.effects.length);
+    sv.title = 'Save every effect on this layer as one preset — without its animation';
     sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
     tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);
     s.appendChild(tools);
@@ -5467,7 +5487,27 @@ window.FM = window.FM || {};
       // "Effect looks" said no more than "My presets" did — the two headings were as interchangeable as
       // the two buttons under them, which is half of why the question got asked (queue 329).
       pwrap.appendChild(el('div', 'preset-sec', 'Effects only'));
-      const sv = el('button', 'fx-act', 'Save effects only…'); sv.disabled = !(layer.effects && layer.effects.length);
+      /* ⚠️ "Save as preset", not "Save effects only…" — queue 583, his words: *"Make this button say save
+       as preset."* He circled this button.
+       ⚠️ **The ⋯ menu's "Save this effect as preset…" is DELIBERATELY still different, and must stay so.**
+       The entry said to make the two agree, and they now agree on the VOCABULARY — both say "preset" —
+       while keeping the words that separate their scope: this button saves the whole STACK, that one
+       saves THIS effect. Collapsing them to one string would make two different actions read as the same
+       action, in the same panel, which is worse than the mismatch it fixed.
+       The ellipsis goes with the rename: it promised a dialog to choose WHAT gets saved, and there is
+       only a name prompt.
+       ⚠️ **IT IS "Save effects only as preset", NOT the bare "Save as preset" HE ASKED FOR, AND THAT IS A
+       DELIBERATE DEPARTURE FROM HIS WORDS.** Two of his own requests collide here. Queue 329 made this
+       button and its sibling say WHAT EACH ONE KEEPS — the other is "Save look + animations…" — because
+       an earlier pair ("Save this layer as preset" / "Save current effects") both read as "save a preset"
+       and nobody could tell which kept the layer's motion. The suite asserts one of the two still says it
+       keeps ONLY the effects, and the bare "Save as preset" says neither. **It went red on exactly that,
+       which is the guard doing its job.**
+       So this keeps his phrase — "as preset" — and keeps the word that carries the distinction. **Told
+       him, rather than quietly delivering different words than he asked for**; the bare label is one
+       word away if he would rather have it and lose the contrast. */
+    const sv = el('button', 'fx-act', 'Save effects only as preset'); sv.disabled = !(layer.effects && layer.effects.length);
+    sv.title = 'Save every effect on this layer as one preset — without its animation';
       // No refresh() here: the store fires presetsChanged on write (queue 330).
       sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
       pwrap.appendChild(sv);
