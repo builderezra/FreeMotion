@@ -4,10 +4,9 @@
 >
 > **State:** v12.84, tests green, tree clean.
 >
-> **❓ ONE WORD FROM YOU UNBLOCKS #590.** You said *"Get rid of the pop up menu when holding on a
-> benchmark to rename or delete"* — do you want **the popup** gone, or **renaming and removing** gone?
-> If it is the popup, rename still needs somewhere to live (removing already works: tap the playhead
-> head while parked on a marker). If it is the whole feature, markers just stop having names.
+> **✅ #590 ANSWERED — thanks.** *"The whole thing goes I don't want to name benchmarks."* The popup
+> and renaming both go; removing a marker stays on the playhead head. Queued with **#586** and **#587**
+> so all three marker jobs happen in one pass rather than three that disagree.
 >
 > **🔴 #569 was hiding DATA LOSS.** You said Paste look does not always work. It was worse than that:
 > the **Effects** tile was ticked ON by default even when the layer you copied had **no effects**, and
@@ -19866,10 +19865,26 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Get rid of the pop up menu when holding on a benchmark to rename or delete
+      **Asked him which he meant — the popup or the feature — and he answered, verbatim:**
+      > The whole thing goes I don't want to name benchmarks
+      **So: the popup goes AND renaming goes.** Not a judgement call any more. Four clauses:
+      1. [ ] **The hold gesture stops throwing a menu.** He is explicit, and the gesture was a poor one
+             anyway — a hold on a phone is the same gesture as a scrub.
+      2. [ ] **Rename is removed outright**, including any other route that reaches it. **Sweep for those
+             before calling it done** — a menu entry left pointing at a deleted function is a crash, not
+             a tidy-up.
+      3. [ ] **Removal must survive**, because he ruled out NAMING, not deleting. Tapping the playhead
+             head while parked on a marker already removes it (queue 536, the filled yellow disc).
+             ⚠️ **VERIFY THAT ACTUALLY WORKS BEFORE DELETING THE POPUP'S REMOVE ITEM** — it is about to
+             be the only way, and "it already works" is a claim with a date on it (LOOP rule 11).
+      4. [ ] **Existing projects may hold markers that already carry names.** Leaving the stored field
+             unread is safer than stripping it on load, and a name may still be drawn somewhere.
+             **Check before deleting anything from saved data** — that is not reversible for him.
       **His shot shows it:** a dark card over the timeline with **"Rename marker…"** and a red **"Remove
       marker"**, thrown by holding a marker.
-      ⚠️ **THE ONE AMBIGUITY, AND IT CHANGES WHAT GETS BUILT: does he want the POPUP gone, or RENAMING
-      AND REMOVING gone?** "Get rid of the pop up menu … to rename or delete" reads both ways.
+      ⚠️ **The ambiguity that was here is RESOLVED — he picked the FEATURE, not just the popup.** The
+      old note is kept below only because it explains why clause 3 exists: removal was never the part he
+      objected to, so it must not be lost along with the menu that offered it.
       · If it is the POPUP: renaming and removing still need a route. Tapping the head when parked on a
         marker already REMOVES it (that is what the filled yellow disc means — queue 536), so removal is
         covered and only rename would need a home.
