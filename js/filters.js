@@ -217,6 +217,38 @@ window.FM = window.FM || {};
       effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.42 }),
                 e('highlightsshadows', { highlights: 12, shadows: -40 }),
                 e('vignette', { amount: 0.5, size: 30 })] },
+    /* ---- THREE MORE MONO LOOKS (queue 579 clause 3) ------------------------------------------------
+     * Ezra: *"add more black and white filter options"*. There were THREE — Silver, Noir, Newsprint —
+     * and measured on a #c05030 test frame they all desaturate correctly (spread 0, 0 and 2.98 against a
+     * baseline of 144), so the complaint was the SIZE of the set, not a fault in it.
+     * ⚠️ EVERY MONO FILTER MEASURES A COLOUR SPREAD OF ZERO, so "does it do something" cannot tell these
+     * apart — the queue-563 trap (the Bell that was the Ding) with the one obvious metric removed. What
+     * separates a black-and-white look is TONE: where the midpoint sits and how far the tones spread.
+     * So these three are placed deliberately along that axis, away from the three that exist:
+     *   Platinum — HIGH-KEY: bright, lifted shadows, low contrast. Nothing else here is airy.
+     *   Ink      — near-graphic: contrast far past Noir's 1.42, blacks crushed, whites blown.
+     *   Fog      — FLAT: low contrast and lifted blacks, the opposite of Noir. A misty, greyed scan.
+     * The test asserts mean brightness AND spread differ from every existing mono filter, not merely
+     * that each one desaturates. */
+    { id: 'platinum', name: 'Platinum', section: 'mono',
+      desc: 'Bright, airy black and white — open shadows and gentle contrast, like a platinum print.',
+      effects: [e('grayscale', { amount: 1 }), e('brightness', { amount: 1.22 }), e('contrast', { amount: 0.95 }),
+                e('highlightsshadows', { highlights: -6, shadows: 42 })] },
+    { id: 'ink', name: 'Ink', section: 'mono',
+      desc: 'Almost pure black and white — blacks crushed, highlights blown, barely any grey left.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.85 }),
+                e('highlightsshadows', { highlights: 28, shadows: -52 })] },
+    { id: 'fog', name: 'Fog', section: 'mono',
+      desc: 'Flat, misty grey — lifted blacks and soft contrast, like an old scan left in the light.',
+      /* ⚠️ FOG SITS AT MID-GREY, PLATINUM SITS HIGH — and that separation is measured, not assumed.
+         Authored first as "bright and flat", Fog landed at mean 121 against Platinum's 125: FOUR levels
+         apart, two near-identical light looks under different names. That is the queue-563 Bell/Ding
+         trap with its usual metric removed, because every mono filter measures a colour spread of ZERO
+         and so "does it do something" cannot separate them at all.
+         Fog's idea is HAZE — everything crushed toward middle grey — not brightness, so contrast drops
+         hard and the lift is smaller. Platinum's idea is a high-key PRINT, so it goes brighter. */
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 0.66 }), e('brightness', { amount: 0.99 }),
+                e('highlightsshadows', { highlights: -26, shadows: 26 })] },
     { id: 'newsprint', name: 'Newsprint', section: 'mono',
       desc: 'Grey, grainy and slightly soft — a photograph that has been through a printing press.',
       effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.14 }),

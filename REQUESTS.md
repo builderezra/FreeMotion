@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.94
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.95
 >
-> **State:** v12.94, tests green, tree clean.
+> **State:** v12.95, tests green, tree clean.
+>
+> **🖤 #579 — you now have SIX black-and-white filters instead of three:** Platinum (bright and
+> airy), Ink (almost pure black and white), Fog (flat grey haze), alongside Silver, Noir and Newsprint.
+> **But I owe you a correction:** I told you earlier that the "Blackout" filter was broken because it
+> did not go black and white. **It is not a black-and-white filter** — it lives in the Tuff section and
+> only pulls colour back on purpose. Silver, Noir and Newsprint all desaturate perfectly; I measured
+> them. **What is fair is that "Blackout" SOUNDS like a black-and-white filter.** Want it renamed?
 >
 > **🌫️ #578 — Motion Blur (Footage) no longer starts on the pixelated mode.** New ones start on
 > **Smear**, which softens rather than breaking into blocks. **Clips you have already made are
@@ -20128,8 +20135,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Naming:** a library fave shows its own name; a custom one is called "Filter". He will need to
       tell them apart — worth asking him, or defaulting to the name he gave the preset.
 
-- [ ] **579 — 🔴 Saturation does not work, the black-and-white filters do not make anything black and white, and he wants more of them.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **579 — 🔴 Saturation does not work, the black-and-white filters do not make anything black and white, and he wants more of them.** (26 Aug.) — ✅ **DONE v12.95**
       His words, verbatim:
       > Currently the saturation filter doesn’t work but also note that the black and white filters don’t actually make anything black and white, they don’t even have a saturation filter, while ur fixing allat add more black and white filter options
       **THREE things, and the first has a concrete lead already.**
@@ -20149,8 +20155,31 @@ re-opened #480, which I had marked done and had not fixed.
              visibly coloured**, despite being presented as a black-and-white look. That is a genuine
              fault and it is his complaint, verbatim: *"the black and white filters don't actually make
              anything black and white"*. **MEASURED, NOT FIXED YET** — see clause 3.
-      3. [ ] **Fix Blackout, then add more mono options.** He asked for more; adding more before Blackout
-             is fixed would ship more of the same fault. **Do them in that order.**
+      3. [x] **Fix Blackout, then add more mono options.** ✅ **DONE v12.95 — and clause 2's diagnosis
+             above was WRONG, which changed what clause 3 had to do.**
+             ❌ **CORRECTION, and it is mine to own: Blackout is NOT a broken black-and-white filter.**
+             It sits in the **`tuff`** section, not `mono`, on `saturate: 0.7` — *"colour pulled back"*, by
+             design. Measuring it as a failed mono filter was reading its NAME, not its definition.
+             📐 **The mono filters were fine all along.** On a `#c05030` frame with a baseline colour
+             spread of **144**: **Silver 0, Noir 0, Newsprint 2.98.** They desaturate correctly.
+             **What is probably true is that "Blackout" READS as a black-and-white filter** and is not
+             one — worth a rename, but that is his call, not a bug to fix quietly.
+             **So the real work was clause 3, and there were only THREE.** Now **six** — Platinum (bright,
+             airy), Ink (near-graphic, blacks crushed), Fog (flat mid-grey haze).
+             ⚠️ **EVERY MONO FILTER MEASURES ZERO COLOUR SPREAD, so "does it do something" cannot tell
+             them apart** — the queue-563 Bell/Ding trap with its usual metric removed. TONE is what
+             separates them, and **the check earned itself immediately: Platinum and Fog first landed 4
+             levels apart** (125 vs 121), two near-identical light looks under two names. Re-authored so
+             Fog is haze at mid-grey and Platinum is a high-key print.
+             **After — six looks spread across the range, no pair closer than 8:**
+             | filter | mean |
+             |---|---|
+             | Ink | 54 |
+             | Noir | 71 |
+             | Newsprint | 94 |
+             | Silver | 104 |
+             | Fog | 113 |
+             | Platinum | 136 |
       ⚠️ **Only clause 2/3 belong to this entry now.** Clause 1 is #572. Keeping them merged would mean
       "fixing saturation" forever without ever touching what is actually wrong.
 
@@ -20197,6 +20226,9 @@ re-opened #480, which I had marked done and had not fixed.
       footage loaded to judge it against. **Changing shutter/quality/threshold numbers by feel would be
       exactly the guessing the entry forbids**, and it would also be un-reviewable, because nobody could
       say whether it got better.
+      **JUMPED: clause 1 shipped v12.94; clause 2 needs a clip or a sentence from HIM and cannot be
+      measured without one.** Holding the rest of the queue behind information only he can supply is the
+      list rotting at the top. It is recorded, not skipped.
       ❓ **What would unblock it:** a clip he thinks looks bad, or one sentence on what "buns" means —
       too soft, too blocky, ghosting, or too slow. **Not urgent** (#591 — he is not in a rush to answer),
       but this clause cannot be measured without one of those.

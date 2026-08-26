@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.94, 980 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.95, 981 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **A PAST TICK'S MEASUREMENT CAN BE WRONG TOO — RE-READ THE DEFINITION, NOT THE NAME.** #579 carried
+"Blackout is a broken black-and-white filter, spread 25.5" from an earlier tick. **It is in the `tuff`
+section on `saturate: 0.7`** — partial desaturation by design. The measurement was real; the CATEGORY
+was assumed from the word "Black". **Open the definition before calling something broken.**
+⚠️ **WHEN THE OBVIOUS METRIC IS CONSTANT ACROSS A FAMILY, FIND THE ONE THAT VARIES.** Every mono filter
+measures zero colour spread, so "does it do something" cannot tell six of them apart — the queue-563
+Bell/Ding trap with its usual check removed. TONE separates them, and that check caught Platinum and Fog
+landing 4 levels apart on the first authoring: two identical light looks under two names.
 
 ⚠️ **CHANGING A DEFAULT SILENTLY REWRITES EXISTING WORK UNLESS `legacy` IS SET.** #578: `def` applies to
 NEW instances; `legacy` is what an ABSENT key reads as. Every effect he had already placed was saved

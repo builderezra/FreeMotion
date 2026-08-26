@@ -464,6 +464,16 @@ window.FM = window.FM || {};
        · a black-and-white treatment needs COLOUR to remove, and a range of tones to redistribute;
        · a punchy grade needs mid-saturation to push — a photo that is already vivid shows nothing. */
     silver:     'pair',    noir:   'figures',  newsprint: 'dog',
+    /* THE THREE ADDED FOR queue 579, under the same two rules as the line above: no cars outside the
+       tuff group (his v9.82 correction), and a black-and-white grade needs COLOUR to remove plus a range
+       of tones to redistribute. Each is picked for what that particular look needs to bite on, and the
+       section now reads pair · figures · shore · towers · bay · dog — no subject repeated, at four
+       columns or at two.
+       · platinum is HIGH-KEY, so it wants a bright, open scene rather than a dark one — 'shore'.
+       · ink is nearly graphic, so it wants hard shapes that survive being crushed to black and white
+         — 'towers'.
+       · fog is haze, so it wants depth for the flattening to act on — 'bay'. */
+    platinum:   'shore',   ink:    'towers',   fog:       'bay',
     poppy:      'bay',     candy:  'shore',    sunbaked:  'city',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit

@@ -2403,6 +2403,71 @@
     }
   });
 
+  test('579: the mono filters all desaturate, and no two of them are the same look', { item: '579' }, async function () {
+    /* Queue 579. Ezra: "the black and white filters don't actually make anything black and white ...
+     * add more black and white filter options."
+     * MEASURED and the first half is NOT true, which corrects a wrong diagnosis this entry used to
+     * carry: on a #c05030 frame (baseline colour spread 144) Silver and Noir come back at 0 and
+     * Newsprint at 2.98. They work. What he was most likely looking at is BLACKOUT, whose name reads
+     * black-and-white but which lives in the `tuff` section on saturate 0.7 — spread 95.88, correctly
+     * NOT a mono filter. The real request was the size of the set: there were three.
+     * ⚠️ EVERY MONO FILTER MEASURES ZERO COLOUR SPREAD, so the usual "does it do something" check cannot
+     * tell them apart — the queue-563 Bell/Ding trap with its metric removed. What separates a black and
+     * white look is TONE, so the second assertion compares mean luminance. It has already earned itself:
+     * Platinum and Fog first landed 4 levels apart, two near-identical light looks under two names. */
+    const layers0 = FM.scene.layers.slice();
+    const P0 = FM.scene.project, P = P0;
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      /* ⚠️ FIND THE SHAPE BY TYPE, NOT BY INDEX. addShapeLayer inserts at index 0 in some states and not
+         others, and setting the fill on the wrong object gives a washed-out subject whose colour spread
+         is too low to tell desaturation from a no-op — which is exactly how this test first failed. */
+      const L = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+      if (!L) throw new Error('could not make a shape to filter');
+      L.fill = '#c05030'; L.start = 0; L.duration = 3;
+      L.shapeW = P0.width; L.shapeH = P0.height;
+      if (L.transform) { L.transform.x = P0.width / 2; L.transform.y = P0.height / 2; L.transform.scale = 1; }
+      const stats = function (fx) {
+        L.effects = fx ? JSON.parse(JSON.stringify(fx)) : [];
+        const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+        FM.renderScene(c.getContext('2d'), FM.scene, 1);
+        const d = c.getContext('2d').getImageData(0, 0, P.width, P.height).data;
+        let n = 0, sp = 0, lu = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 8) continue;
+          sp += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+          lu += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          n++;
+        }
+        return n ? { spread: sp / n, mean: lu / n } : null;
+      };
+      const base = stats(null);
+      if (!base || base.spread < 40) throw new Error('the test subject is not colourful enough to tell desaturation from a no-op (spread ' + (base && base.spread) + ')');
+
+      const mono = FM.filters.all().filter(function (f) { return f.section === 'mono'; });
+      if (mono.length < 5) throw new Error('there are only ' + mono.length + ' black-and-white filters — he asked for more (queue 579 clause 3)');
+      const out = {};
+      mono.forEach(function (f) { out[f.id] = stats(f.effects); });
+      mono.forEach(function (f) {
+        if (out[f.id].spread > 4) throw new Error('the mono filter "' + f.id + '" leaves a colour spread of ' + out[f.id].spread.toFixed(1) + ' on a ' + base.spread.toFixed(0) + '-spread frame — it does not actually make anything black and white (queue 579)');
+      });
+      // …and none of them may be another one under a different name.
+      for (let i = 0; i < mono.length; i++) {
+        for (let j = i + 1; j < mono.length; j++) {
+          const a = mono[i].id, b = mono[j].id;
+          if (Math.abs(out[a].mean - out[b].mean) < 8) {
+            throw new Error('"' + a + '" and "' + b + '" render at mean ' + out[a].mean.toFixed(0) + ' and ' + out[b].mean.toFixed(0) + ' — the same look under two names. Every mono filter has zero colour spread, so TONE is the only thing that separates them (queue 579, and queue 563 is why this is checked)');
+          }
+        }
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('578: Motion Blur (Footage) starts on Smear, and old clips still read Pixel', { item: '578' }, async function () {
     /* Queue 578 clause 1. Ezra: "don't default it to the pixelated blur, it looks awful."
      * Pixel Motion is an optical-flow estimate; where the estimate is poor it tears the picture into
