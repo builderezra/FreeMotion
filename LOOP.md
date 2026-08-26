@@ -133,6 +133,13 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+🔴 **SELF-CREATED WORK DOES NOT JUMP HIS QUEUE — he caught this on 26 Aug and was right.** #599 was
+MY OWN item and took four ticks while #581, #583 and #585 — his requests, all older — waited. *"Blocked
+on his answer"* is not an excuse when the item has a workable half: **#581 had a build available using
+the default I had already recommended to him.** ⚠️ **An item I invented should wait LONGER than his, not
+shorter.** When his queue looks blocked, re-read it for a workable half before inventing work.
+
+
 ### 🎯 22 Aug — HIS STEER, AND IT CHANGES WHAT THIS LOOP SHOULD SPEND TICKS ON
 *"make sure youre doing either work i ask for or good important work. i dont know what ur doing as i just
 leave u on all day coz im busy and i just hope u make the project better for me, working on the lag being
