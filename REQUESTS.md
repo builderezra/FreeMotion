@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.12
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.13
 >
-> **State:** v13.12, 989 tests green, tree clean.
+> **State:** v13.13, 989 tests green, tree clean.
+>
+> **🔎 #581 is now fully designed and starts as a build next tick.** Reading it end to end found
+> the thing that would have quietly broken it: **the code that reads your saved favourites throws away
+> any id it does not recognise** — so a favourited custom filter would appear when you starred it and be
+> **gone on reload**, with nothing to explain why. That is the real work, and it is now written down
+> along with the one function that makes the rest of it fall out for free.
 >
 > **🔴 YOU WERE RIGHT ABOUT THE ORDER AND I HAVE WRITTEN IT DOWN.** #599 was **my own idea**, not
 > your request, and I spent four ticks on it while **#581, #583 and #585 — yours, and older — waited.**
@@ -20871,6 +20877,24 @@ re-opened #480, which I had marked done and had not fixed.
       effects array, and a **fresh** registry instance has no `effects` key at all, so the guard is false
       for every container. Measured: captured 4, restored 0. The sanitiser is the authority on whether a
       type may hold children. **The test's failure message says this outright.**
+      **🔎 THE DESIGN IS WORKED OUT — v13.12, read the code end to end. It is ONE insertion point,
+      plus one guard that would silently eat the data.**
+      **How the row actually works:** `FM.filters.faves()` returns filter DEFINITIONS in fave order;
+      `mkTile(f)` needs only `f.id`, `f.name`, `f.effects` (and optional `f.desc`); the thumbnail comes
+      from `FM.fxThumbs.mountFilter(cv, f.id)`; picking uses `f.id`; and `toggleFave(id)` refuses anything
+      `FM.filters.get(id)` cannot resolve.
+      ✅ **SO THE INSERTION POINT IS `FM.filters.get()`.** Teach it to resolve a custom preset id (the
+      `u…` ids `effectPresets.capture` mints) into a filter-shaped definition —
+      `{ id, name, desc, section: 'custom', effects }` — and **everything downstream works unchanged**:
+      the tile renders, the thumbnail generates, `toggleFave` accepts it, picking applies it. **One
+      function, not a parallel favourites system**, which is what #444's note asked for.
+      🚨 **AND THE GUARD THAT WOULD HAVE EATEN IT SILENTLY:** `readFaves()` filters stored ids down to
+      `FILTERS.some(f => f.id === id)` — **so a custom fave would be stripped every time the list is
+      read.** He would star it, see it appear, and find it gone on reload with nothing to explain why.
+      **That filter has to accept preset ids too, or the feature cannot work at all.** It is the whole
+      reason this is not a five-line change.
+      ⚠️ **Name it after the preset name he typed** — my recommendation, and it needs no new UI since he
+      has already supplied it at save time. The `desc` can say "Your filter".
       **⏳ WHAT IS LEFT FOR #581:** the favourites ROW still keys off library ids, so a custom filter
       still has nowhere to appear. Now that the filter can be stored, the fave needs to point at a preset
       id and the row needs to render those alongside library entries — plus the naming question below.
