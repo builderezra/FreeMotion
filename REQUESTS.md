@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.91
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.92
 >
-> **State:** v12.91, tests green, tree clean.
+> **State:** v12.92, tests green, tree clean.
+>
+> **📝 #576 — the text options are no longer buried.** It was a stacking collision, not a layout
+> slip: the panel opened at y63 while the box showing your words covers y57–145 and sits on a higher
+> layer, so the options were not just hidden, they were **unclickable** — a tap landed on the text box.
+> They now open below it, which was your second suggestion. I did not simply raise them above it,
+> because that hides your own words behind the options — the same problem the other way round.
 >
 > **↔ #575 — you can now DRAG a caption longer.** Each cue row has a grip: drag right to extend, left to
 > shorten, about a second per 50px. Nothing was ever refusing to extend them — there was just no handle,
@@ -20279,8 +20285,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ It stops at the layer's end — a caption cannot outlive the layer carrying it — and cannot be
       collapsed to nothing. **One undo step per drag**, not one per pixel.
 
-- [ ] **576 — The text editor's options are hidden behind the box that shows what you typed.** (26 Aug, annotated phone screenshot at v12.79.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **576 — The text editor's options are hidden behind the box that shows what you typed.** (26 Aug, annotated phone screenshot at v12.79.) — ✅ **DONE v12.92**
       His words, verbatim:
       > All of the text edit options now get blocked by the part that shows you what you typed, fix this so they push it down or go below it, whatever’s best
       **His annotation is explicit:** he has ringed the toolbar row (colour, align, Inter, 320pt, Aa, ✓) and
@@ -20288,6 +20293,20 @@ re-opened #480, which I had marked done and had not fixed.
       **He has already given the two acceptable answers** — *"push it down or go below it, whatever's
       best"* — so this is a layout call, not a design question.
       ⚠️ **"now"** — this is a regression. **Find what changed** before rearranging anything.
+      **📐 MEASURED at 380px, and it is a Z-INDEX collision, not a layout mistake.**
+      The options panel opens at **y 63** (`bar.bottom + 6`, js/text-edit.js). `.te-dock` — the box
+      showing his own words — occupies **y 57–145**. The dock is **z-index 80**, the panel **79**, so the
+      dock paints straight over the options. A hit-test inside the overlap returned the dock's
+      **TEXTAREA**: the options were not merely hidden, they were **unclickable**.
+      **Fixed by opening the panel below the dock** — the second of the two answers he offered.
+      ⚠️ **RAISING THE PANEL'S Z-INDEX WOULD HAVE BEEN THE WRONG FIX.** It puts the options over the words
+      he is typing — the same complaint with the halves swapped. Below keeps both readable at once.
+      ⚠️ **The dock's bottom is MEASURED, not hard-coded to 145** — the dock grows with the text he types,
+      so a constant would be wrong the moment he reaches a second line.
+      **After: panel at y 151, clears the dock's 145, a hit-test at its top returns the PANEL**, and it
+      still fits the screen (bottom 528 of 820).
+      ⚠️ **The test asserts CLICKABILITY, not position.** A geometry-only check passes for a panel that is
+      placed correctly and still buried under a higher z-index — which is precisely this bug.
 
 - [ ] **577 — The hold time before a clip can be extended is too long.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

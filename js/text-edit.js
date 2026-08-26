@@ -200,8 +200,26 @@ window.FM = window.FM || {};
       return;
     }
     if (!bar) return;
+    /* ⚠️ BELOW THE DOCK, NOT BELOW THE BAR — queue 576. Ezra: *"All of the text edit options now get
+       blocked by the part that shows you what you typed, fix this so they push it down or go below it,
+       whatever's best."* He gave two acceptable answers; this is the second.
+       MEASURED at 380px: the options panel opened at **y 63** — `bar.bottom + 6` — while `.te-dock`,
+       the box showing what you typed, occupies **y 57 to 145**. The dock is **z-index 80** and the panel
+       is **79**, so the dock painted straight over the options, and a hit-test inside the overlap
+       returned the dock's TEXTAREA rather than anything in the panel. Not merely hidden: unclickable.
+       Raising the panel's z-index would be the wrong fix — it would put the options OVER the words he is
+       typing, which is the same complaint with the two halves swapped. Opening below the dock is what he
+       asked for and keeps both readable at once.
+       ⚠️ Measured live rather than hard-coded to 145: the dock GROWS with the text he types (it is the
+       preview of his own words), so a constant would be wrong the moment he reaches a second line. */
     const r = bar.getBoundingClientRect();
-    pop.style.top = (r.bottom + 6) + 'px';
+    let below = r.bottom;
+    const dockEl = document.querySelector('.te-dock');
+    if (dockEl) {
+      const dr = dockEl.getBoundingClientRect();
+      if (dr.height > 0 && dr.bottom > below) below = dr.bottom;
+    }
+    pop.style.top = (below + 6) + 'px';
   }
   function openPop(kind, build, btn) {
     if (popKind === kind) { closePop(); return; }

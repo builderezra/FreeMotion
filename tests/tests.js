@@ -2403,6 +2403,58 @@
     }
   });
 
+  test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
+    /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
+     * typed, fix this so they push it down or go below it, whatever's best."
+     * MEASURED at 380px: the options panel opened at y 63 (`bar.bottom + 6`) while `.te-dock` — the box
+     * showing his own words — occupies y 57-145. The dock is z-index 80, the panel 79, so the dock
+     * painted over the options and a hit-test inside the overlap returned the dock's TEXTAREA. Not just
+     * hidden: unclickable.
+     * ⚠️ THE ASSERTION IS "CAN YOU CLICK IT", NOT "WHERE IS IT". A geometry-only check passes for a
+     * panel that is positioned correctly and still buried under something with a higher z-index, which
+     * is exactly the bug. elementFromPoint answers the question he actually asked. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.addTextLayer();
+        const T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+        if (!T) throw new Error('could not make a text layer');
+        T.text = 'Hello world';
+        FM.selectLayer(T.id); FM.refreshAll();
+        await sleep(200);
+        if (!FM.textEdit || !FM.textEdit.start) throw new Error('the text editor is missing');
+        FM.textEdit.start(T.id, { selectAll: true });
+        await sleep(420);
+        const dock = document.querySelector('.te-dock');
+        const btn = document.querySelector('.te-extras');
+        if (!dock || !btn) throw new Error('the text editor did not open (dock ' + !!dock + ', extras button ' + !!btn + ')');
+        btn.click();
+        await sleep(300);
+        const pop = document.querySelector('.te-pop-extras');
+        if (!pop) throw new Error('the extras options panel did not open');
+        const dr = dock.getBoundingClientRect(), pr = pop.getBoundingClientRect();
+        if (pr.top < dr.bottom - 0.5) {
+          throw new Error('the options panel opens at y ' + Math.round(pr.top) + ' but the box showing what you typed runs to y ' + Math.round(dr.bottom) + ' — the options are underneath it (queue 576)');
+        }
+        // …and it must actually be reachable, not merely positioned.
+        const hit = document.elementFromPoint(Math.round(pr.left + pr.width / 2), Math.round(pr.top + 8));
+        if (!hit || !pop.contains(hit)) {
+          throw new Error('the top of the options panel is covered by ' + (hit ? (hit.className || hit.tagName) : 'nothing') + ' — it is positioned right and still not clickable (queue 576)');
+        }
+        if (pr.bottom > window.innerHeight + 1) {
+          throw new Error('pushing the options below the typed-text box ran them off the bottom of the screen (' + Math.round(pr.bottom) + ' > ' + window.innerHeight + ')');
+        }
+        FM.textEdit.stop && FM.textEdit.stop();
+      });
+    } finally {
+      try { FM.textEdit && FM.textEdit.stop && FM.textEdit.stop(); } catch (e) {}
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('575: a caption cue can be DRAGGED longer', { item: '575' }, async function () {
     /* Queue 575. Ezra: "In captions I can't extend the texts inside each caption."
      * MEASURED at v12.90: nothing was refusing to extend a cue — `normalize` accepts a longer end, and

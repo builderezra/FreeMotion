@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.91, 977 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.92, 978 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **"BLOCKED BY" USUALLY MEANS Z-INDEX, AND THE TEST MUST ASSERT CLICKABILITY, NOT POSITION.** #576's
+options panel was placed correctly and still unusable: dock z80 over panel z79, so `elementFromPoint`
+inside the overlap returned the dock's TEXTAREA. **A geometry-only assertion passes for exactly this
+bug.** Use `elementFromPoint` and `contains()` whenever he says something is covered.
+⚠️ **AND THE OBVIOUS FIX WAS THE WRONG ONE.** Raising the panel above the dock hides the words he is
+typing behind the options — the same complaint with the halves swapped. **When two things fight for one
+strip, moving one out beats restacking them.**
+⚠️ Measure a neighbour's edge live rather than hard-coding it: `.te-dock` GROWS with the typed text.
 
 🚨 **SOMETHING ABOVE THE INSPECTOR/CAPTIONS PANEL SWALLOWS `pointerdown` IN THE CAPTURE PHASE.**
 Measured on #575: a drag dispatched at a control inside it fired `pointermove` and `pointerup` and
