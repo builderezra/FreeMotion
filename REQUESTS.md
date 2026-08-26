@@ -21203,6 +21203,17 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
+      📌 **WHAT IS STILL LEFT (27 Aug), because `next.sh` keeps flagging this entry as "fixed but open":**
+      **only CLAUSE 2 — "tiles and shake together looked really bad".** Clause 1 (the "break") was
+      answered at v12.97 — nothing throws, it is a cost explosion — and cut from ~102 ms to ~52 ms at
+      v13.15, which also closed clause 3. **The tool is right that two thirds of this shipped and wrong
+      that the entry is done; the rendering-quality half has never been looked at.**
+      ➡️ **Next action, and it is a measurement not a fix:** render Tiles and Shake TOGETHER against a
+      real layer and look, the same way #578 clause 2 was finally handled. Both displace the whole layer,
+      so the live suspicion is that they fight over the same padded plate (`_hasMover` / `fxSlack` in
+      js/compositor.js). ⚠️ **Do not start by tuning** — and per the #578 lesson, **measure as a profile
+      across bands with a control, never one threshold, and check the frame actually advanced.**
+
       **THIS IS THE MOST SERIOUS THING IN THE QUEUE — "completely broke the app".** Three separate claims:
       1. [x] **A hard break from ONE named combination: Motion Blur + Shake + Tiles on one layer.** ✅
              **ANSWERED v12.97: there is no break.** Nothing throws — it is a frame time, not a crash.
