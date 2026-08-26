@@ -133,6 +133,20 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+⚠️ **CANVAS TIMING WITHOUT A READBACK MEASURES NOTHING — and it may undercut the v11.72-v12.30 numbers.**
+Timing around `renderScene` with `performance.now()` reported **0.00 ms for EIGHT stacked blurs** on a
+1080x1350 layer. Canvas work is QUEUED: `ctx.filter = 'blur(...)'` costs almost nothing on the CPU and
+the real work lands on the GPU after the timer stops. Force a drain — `ctx.getImageData(0,0,1,1)` — or
+the reading is of the queue, not the work.
+🚨 **This splits the effect list in two and the split was never accounted for:** pixel-loop effects
+(glow, vignette, turbulentdisplace) burn CPU and show up honestly, while filter-string effects (blur and
+relatives) are nearly free on CPU and expensive on GPU. **The v11.72-v12.30 per-effect timings were
+CPU-side**, so they describe the first group well and may have systematically under-reported the second.
+⚠️ **Re-measure with a flush before trusting any effect-cost ranking, including this repo's own.**
+📋 Scoping note for whoever picks this up: 198 effects x 10 renders at 1080x1350 with a flush **times
+out a 30s browser call**. Sweep a subset, shrink the canvas, or drive it through `tools/_phoneprobe.py`
+where there is a real timeout.
+
 🎯 **NEXT TICK: STACKED-EFFECT COMPOSITOR COST, MEASURED WITH `tools/_phoneprobe.py` AT 4-6x.**
 This is not invented work — it is where his own steer (*"working on the lag being fixed for mobile would
 also be good"*, below) and his OLDEST item now meet, with a number attached. v13.25 measured the app at
