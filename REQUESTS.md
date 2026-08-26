@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.35
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.36
 >
-> **State:** v13.35, 990 tests green, tree clean.
+> **State:** v13.36, 990 tests green, tree clean.
+>
+> **✅ Re-measured everything from scratch and the wins are confirmed.** Grid Repeat — which was the most
+> expensive effect in your app — has dropped out of the fifteen dearest entirely, and so have Ripple and
+> Inner Pinch. Twirl went from 27 ms to 16.
+> ⚠️ **One honest caveat:** that whole-list scan is good for telling me WHICH effects are dear, but it is
+> too rough to measure how much a change helped — two of its numbers disagree with the careful
+> measurements. **So the wins I have quoted you come from the careful method, not that scan.**
 >
 > **⚡ Inner Pinch 1.96x and Ripple 1.83x, both pixel-for-pixel identical.** Six of your dearest effects
 > are now faster.

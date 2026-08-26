@@ -206,6 +206,23 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+✅ **SWEEP RE-RUN AFTER THE BATCH (certified factor 1 -> 1). IT CONFIRMS THE WINS — AND EXPOSES THE
+SWEEP'S OWN PRECISION LIMIT. Read both halves.**
+**Confirmed:** gridrepeat (was #1 at 36.5), ripple (21.1) and innerpinch (25.4) have all **fallen OUT of
+the top 15**; twirl is 15.6 (was 26.7) and fractalwarp 19.4 (was 28.3).
+⚠️ **BUT two readings do not square, so do NOT quote per-effect numbers from a sweep:**
+· **radialrepeat reads 40.6 ms, HIGHER than its 27.7 before**, despite a rigorously measured 1.82x at
+  kernel level (interleaved, warmed, control 1.058). It also reports CPU 19.1 / "GPU" 21.5 — and that
+  CPU figure is exactly the improvement expected, so the extra 21.5 is a bad sample, not GPU work.
+· **`glass` appears at #1 with 42.4 ms having been nowhere in the previous top 15.**
+🔒 **THE RULE: the sweep is a COARSE RANKING — good for "which effects are dear", useless for "how much
+did this change help".** It takes one median-of-7 per effect with no interleaving, no warmup and no
+control. **For any before/after claim use the kernel-level method** (interleave, warm both, control
+kernel near 1.000, compare against a `FM._warpRef` body).
+📋 **`glass` (liquidglass) is the new #1 candidate at ~42 ms** — it stacks four operations (frost blur,
+sharp bleed-through, specular sheen, two-sided bevel) and is NOT a WARP_FX kernel, so none of the three
+shapes apply directly. Measure it properly before assuming anything.
+
 ⚡ **THE FOUR DEAREST EFFECTS ARE ALL CUT (v13.28-v13.34). THREE SHAPES ARE NOW NAMED — CHECK FOR THEM
 BEFORE STARTING ANY KERNEL.**
 | effect | was | now | how | exact? |
