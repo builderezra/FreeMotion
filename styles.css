@@ -2118,7 +2118,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 360px) {
   #transport { padding-left: 6px; padding-right: 6px; }
   #transport .tbtn { min-width: 31px; width: 31px; }   /* min-width is what sizes .tbtn (styles.css:2130) — setting `width` alone never shrinks it */
-  #transport > #time-readout { padding: 0 9px; }   /* horizontal only — the height is fixed at 21px, the neighbours' GLYPH band (queue 526) */
+  #transport > #time-readout { padding: 0 6px; }   /* horizontal only — the height is fixed at 21px, the neighbours' GLYPH band (queue 526). 9px → 6px with the base 14 → 8 (queue 588) — these tiers exist to claw back row width, so they may not be LOOSER than the base. */
   .t-left { padding-right: 4px; }
   .t-right { padding-left: 4px; }
 }
@@ -2128,7 +2128,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    be dropping a control, and that is his call, not mine. */
 @media (max-width: 340px) {
   #transport .tbtn { min-width: 28px; width: 28px; }
-  #transport > #time-readout { padding: 0 7px; font-size: 12px; }   /* horizontal only — see queue 526 (height 21px) */
+  #transport > #time-readout { padding: 0 5px; font-size: 12px; }   /* horizontal only — see queue 526 (height 21px), 7px → 5px with queue 588 */
 }
 
 /* THE SWITCH (queue 373, clauses 3-7 and 9). A vertical track with a knob: "if the switch is facing up
@@ -2302,7 +2302,15 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      vertically, and flex does it without a line-height that would have to be re-derived every time the
      font size changes in the two narrow-width blocks above. */
   height: 21px; display: flex; align-items: center; justify-content: center;   /* the glyph band — see above */
-  padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
+  /* ⚠️ HORIZONTAL PADDING IS 8px, NOT 14px — queue 588, 26 Aug. He sent a close-up with a red arrow
+     pushing IN from each end of the pill: "I think the corners are too long out for the play button,
+     make them tighter in." MEASURED at 380px before the change: the box was 84.4px wide around 54.4px
+     of digits, i.e. **14px of empty space on each side** — the pill was 55% wider than the thing in it,
+     which is what reads as the corners standing off from the numbers.
+     8px is the tight LIMIT, not an arbitrary smaller number: the radius is 8px, so the corner arc eats
+     exactly 8px horizontally, and the straight part of the side wall is only 21-16 = 5px tall — shorter
+     than the digits. Below 8px the numbers start sitting against the curve rather than beside it. */
+  padding: 0 8px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
   /* NO PINNED WIDTH. Pinning an even 84px was an attempt to close the last pixel of clause 8 and it did
      two things, neither good: it did not close it (the grid's side tracks are already exactly equal at
      135/86/135 and the pill still landed 1.00px right, identically at 320, 380 and 1280), and it made the
@@ -2779,11 +2787,16 @@ body.white-chrome #time-readout:active {
    the line is a 2px LEFT BORDER on a zero-width box, so an absolutely-positioned ::before is offset
    from the PADDING box, which begins after that border — the arithmetic written up below is why this is
    -(half-width + 1) and not -half-width. */
-#tl-centerline::before {
-  content: ""; position: absolute; top: 0; left: -8px;
-  border-left: 7px solid transparent; border-right: 7px solid transparent;
-  border-top: 11px solid #eaf0f8;
-}
+/* ⚠️ THE TRIANGLE IS GONE — queue 568 clause 3, 26 Aug. Ezra: *"don't leave the played original
+   white arrow there it looks messy"*. The disc button below replaced it as the head's marker at v12.79
+   and the triangle was simply left behind, so a white chevron poked out from under the ring. The rule is
+   kept, emptied, rather than deleted: the whole derivation above (-6 → -8, and WHY it is
+   -(half-width + 1)) is the queue-102 arithmetic, and it is the thing anyone re-adding a marker here
+   needs to read first. `content: none` removes the box entirely rather than drawing a 0px one.
+   The `.on-mark::before` / `.mark-hover::before` colour rules further down are now inert; the yellow
+   they used to carry lives on the disc (`#tl-centerline.on-mark #tl-headtap::after`) and on the line
+   itself (`.mark-hover`), so no state lost its signal. */
+#tl-centerline::before { content: none; }
 /* The tap target, which is deliberately bigger than the triangle it sits on — 11px of ink is still a
    small thing to hit with a thumb, and this is the only route to a bookmark on a phone now. Transparent
    and pointer-events:auto inside a pointer-events:none parent, so it takes its own taps and nothing
@@ -2796,22 +2809,44 @@ body.white-chrome #time-readout:active {
    A small filled disc, sized to the tap target that was already there. Deliberately NOT marker-yellow at
    rest: yellow is what the head turns when you are PARKED on a bookmark, and that state means "a tap
    removes this one" — colouring the button the same would collapse two meanings into one. */
+/* ⚠️ left IS -18px, NOT -17px — queue 568 clause 1, and it is queue 102 repeating exactly.
+   Ezra: *"it needs to be centred"*. MEASURED live at 380px before the change: the line's centre sat on
+   191.0 and the disc's on 192.0 — **1px right**, which is THREE device pixels on his phone at DPR 3,
+   and plainly visible in the shot he sent.
+   The cause is the same one written up above the triangle: the line is a 2px LEFT BORDER on a zero-width
+   box, so an absolutely-positioned child is offset from the PADDING box, which begins AFTER that border.
+   The line's centre is therefore at -1, not 0. A 34px-wide box centred on -1 starts at -18.
+   ⚠️ Re-derive this if the width ever changes: it is -(width/2 + 1), never -(width/2). */
 #tl-headtap {
-  position: absolute; top: -3px; left: -17px; width: 34px; height: 26px;
+  position: absolute; top: -3px; left: -18px; width: 34px; height: 26px;
   padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   display: grid; place-items: center;
 }
+/* ⚠️ THE OUTER RING IS THE LINE'S OWN COLOUR AND THE LINE'S OWN WIDTH — queue 568 clause 2.
+   Ezra: *"designed so it kinda of connects and blends with the playhead line"*, because the ring and the
+   line *"read as two separate objects that happen to overlap"*.
+   MEASURED why: the ring's border was `rgb(29, 55, 66)` — a dark blue-grey — sitting on a line that is
+   `rgb(234, 240, 248)`. Two different materials, so the eye separates them however well they line up.
+   Now the ring is 2px of #eaf0f8: **the same colour AND the same width as the line**, so the line reads
+   as running up and looping into the circle rather than disappearing behind a foreign disc.
+   It is a box-shadow ring rather than a `border` on purpose — a 2px border would eat 2px of the 18px box
+   and shrink the dark centre the yellow sits in; a shadow ring is drawn OUTSIDE the box, so the disc
+   keeps its size and only gains a collar. Order matters: the white ring is listed before the drop shadow
+   so the shadow falls outside it, not between it and the disc. */
 #tl-headtap::after {
   content: ""; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--panel-2, #1e2533); border: 1px solid var(--line, #2b3547);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 0 3px rgba(255, 206, 74, .9);
+  background: var(--panel-2, #1e2533); border: 0;
+  box-shadow: 0 0 0 2px #eaf0f8, 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 0 3px rgba(255, 206, 74, .9);
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
 }
-#tl-headtap:hover::after { border-color: var(--kf, #ffce4a); box-shadow: 0 0 8px rgba(255, 206, 74, .5), inset 0 0 0 3px rgba(255, 206, 74, 1); }
+/* ⚠️ EVERY box-shadow BELOW MUST RE-STATE THE WHITE COLLAR. `box-shadow` replaces the whole list,
+   it does not add to it — so a hover rule that forgets the `0 0 0 2px #eaf0f8` makes the ring pop off
+   the line on hover, which is the exact fault queue 568 clause 2 is fixing, only intermittent. */
+#tl-headtap:hover::after { box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(255, 206, 74, .5), inset 0 0 0 3px rgba(255, 206, 74, 1); }
 #tl-headtap:active { transform: scale(.9); }
 /* Parked ON a bookmark: the disc fills, because now the tap REMOVES rather than adds. */
-#tl-centerline.on-mark #tl-headtap::after { background: var(--kf, #ffce4a); box-shadow: 0 0 9px rgba(255, 206, 74, .6); }
+#tl-centerline.on-mark #tl-headtap::after { background: var(--kf, #ffce4a); box-shadow: 0 0 0 2px #eaf0f8, 0 0 9px rgba(255, 206, 74, .6); }   /* collar re-stated — see the warning above */
 /* Parked on a bookmark → the head goes marker-yellow, which is also the affordance saying the tap will
    REMOVE rather than add. */
 /* Parked on a bookmark, OR hovering one (queue 364 clause 2) → the head goes marker-yellow. Parked is

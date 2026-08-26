@@ -1650,8 +1650,42 @@
     if (getComputedStyle(head).pointerEvents !== 'auto') {
       throw new Error('#tl-headtap is pointer-events:' + getComputedStyle(head).pointerEvents + ' — its parent is pointer-events:none, so it must opt back in or the tap never lands');
     }
-    const thick = parseFloat(getComputedStyle(line, '::before').borderTopWidth) || 0;
-    if (!(thick >= 10)) throw new Error('the playhead head is ' + thick + 'px tall — he asked for it thicker so it is easier to tap');
+    // ⚠️ RETARGETED AT v12.83 (queue 568 clause 3). This measured the ::before TRIANGLE's height, and
+    // the triangle is gone — he called it messy and asked for it removed. Measuring a deleted element
+    // gave 0 and failed a request that is still honoured, just by a different element: the head is now
+    // the disc plus its tap target, both BIGGER than the 11px triangle ever was. So assert the thing
+    // he actually asked for — that the head is thick and tappable — against whatever is drawing it.
+    const headBox = head.getBoundingClientRect();
+    const discPx = parseFloat(getComputedStyle(head, '::after').height) || 0;
+    if (!(discPx >= 10)) throw new Error('the playhead head is ' + discPx + 'px tall — he asked for it thicker so it is easier to tap (queue 364 clause 4)');
+    if (!(headBox.height >= 24 && headBox.width >= 24)) throw new Error('the playhead head tap target is ' + headBox.width + 'x' + headBox.height + ' — too small for a thumb, and it is the only route to a bookmark on a phone');
+
+    // queue 568 clause 3 — the old white arrow must STAY gone. "don't leave the played original white
+    // arrow there it looks messy". `content: none` means the box is not generated at all.
+    if (getComputedStyle(line, '::before').content !== 'none') {
+      throw new Error('the playhead triangle is back (::before content is ' + getComputedStyle(line, '::before').content + ') — he asked for it removed, it looked messy under the disc');
+    }
+
+    // queue 568 clause 1 — the head is CENTRED ON THE LINE. This is queue 102's fault repeating: the
+    // line is a 2px LEFT BORDER on a zero-width box, so a child is offset from the PADDING box and the
+    // line's centre is at -1, not 0. It shipped 1px out, which is three device pixels at DPR 3 and he
+    // saw it. Half a pixel of tolerance, because a fractional layout is legitimate and 1px is not.
+    const lineBox = line.getBoundingClientRect();
+    const lineMid = lineBox.left + (parseFloat(getComputedStyle(line).borderLeftWidth) || 0) / 2;
+    const headMid = headBox.left + headBox.width / 2;
+    if (Math.abs(headMid - lineMid) > 0.5) {
+      throw new Error('the playhead head is ' + (headMid - lineMid).toFixed(2) + 'px off the line it sits on — remember the line is a LEFT BORDER, so its centre is -1 and a 34px box starts at -18, not -17 (queue 568 clause 1, queue 102)');
+    }
+
+    // queue 568 clause 2 — it has to READ as one object with the line, and what broke that was COLOUR:
+    // a dark blue-grey ring on a near-white line. The collar must be the line's own colour, and it must
+    // survive hover, because box-shadow REPLACES the list rather than adding to it — a hover rule that
+    // forgets the collar makes the ring pop off the line, which is the same fault intermittently.
+    const lineColour = getComputedStyle(line).borderLeftColor;
+    const collar = getComputedStyle(head, '::after').boxShadow || '';
+    if (collar.indexOf(lineColour) < 0) {
+      throw new Error('the playhead disc is ringed in ' + collar.split(')')[0] + ') but the line is ' + lineColour + ' — he asked for it to "connect and blend with the playhead line", and two different colours is exactly why it read as two objects (queue 568 clause 2)');
+    }
 
     // …and the tap really toggles a bookmark, both ways.
     const P = FM.scene.project;
