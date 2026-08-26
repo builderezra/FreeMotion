@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.31
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.32
 >
-> **State:** v13.31, 990 tests green, tree clean.
+> **State:** v13.32, 990 tests green, tree clean.
+>
+> **✅ Re-measured properly, and the good news is that both speed wins are REAL — confirmed by a clean
+> run that the tool certified as untainted.** Twirl has dropped out of the fifteen most expensive
+> effects entirely, and Fractal Warp fell from 28 ms to 20 ms.
+> **So where your lag actually lives, in order:** Grid Repeat, Kaleidoscope, Raster Extrude, Radial
+> Repeat, Bend, Inner Pinch. That is the list I will work down, and this time it is measured at the
+> right size with the quality drift ruled out.
 >
 > **⚠️ Second correction in a row, and this one is on my measuring, not the app.** Your app protects
 > itself by quietly lowering render quality when it is working hard — which is good, and it is why the

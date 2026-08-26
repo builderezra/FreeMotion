@@ -206,6 +206,19 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+✅ **THE FIRST TRUSTWORTHY RANKING — re-run 27 Aug with the quality gate reporting `factor 1 -> 1,
+degraded: false`. USE THIS LIST, not v13.27's.** 38 of 198 over 8 ms. Dearest first:
+gridrepeat 36.5, kaleidoscope 36.0, rasterextrude 34.2, radialrepeat 27.7, bend 26.1, innerpinch 25.4,
+ripple 21.1, curl 20.3, zoomstreaks 20.3, fractalwarp 20.2, lensblur 19.8, bulge 18.7,
+turbulentdisplace 18.3, spinstreaks 17.4, stretchseg 17.3.
+✅ **It independently confirms both wins**: **twirl has fallen OUT of the top 15** (26.7 in the first
+sweep) and fractalwarp is 20.2 (28.3 before). Neither was measured through the corrupted path.
+✅ **Stacking re-confirmed as a non-issue**: 5-deep stack = 0.84x the sum of its parts.
+📋 **Next targets are gridrepeat / kaleidoscope / radialrepeat / bend / innerpinch.** ⚠️ Remember the
+two shapes that actually pay (v13.28-29): a removable `atan2`, or per-pixel DIVISIONS. gridrepeat and
+radialrepeat do integer tiling and folding — look for divisions by frame constants there, not for an
+atan2 to delete, and expect ~1.1x unless one of those two shapes is present.
+
 🚨🚨 **THE APP'S ADAPTIVE QUALITY SILENTLY RESCALES MID-BENCHMARK — ANY renderScene TIMING TAKEN OVER A
 LONG SESSION IS SUSPECT, INCLUDING SEVERAL OF MINE.** Measured 27 Aug: **ripple came in at 565 ms and
 649 ms on fresh page loads and 75.5 ms later in the same session** — same code, same 1080x1350, no edit
