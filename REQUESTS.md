@@ -19918,6 +19918,25 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **592 — The add-layer row's edge overshoots the end of the timeline slightly.** (26 Aug, annotated phone close-up at v12.93.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The edge of the add layer slightly goes to far past the end of the timeline
+      **His arrow points at the dashed row's RIGHT edge**, which finishes a few pixels beyond where the
+      green clip below it ends and past the playhead sitting on the project's end.
+      **This is #551 again, and the suspect is already known.** `--ar-x1` is
+      **`headW + PAD + dur * pxPerSec()`** (js/timeline.js, buildAddRow). Everything else on the lane is
+      laid out from `headW + dur * pxPerSec()`; **the `PAD` term is an extra offset this one line adds**,
+      so the decoration would finish exactly `PAD` px past the project's end. **MEASURE IT before
+      removing it** — it may be deliberate (a nub so the bar is visible on a 0s project, which the
+      `Math.max(x0 + 24, x1)` beside it also guards).
+      ⚠️ **The word is "slightly" — this is a few pixels, so eyeballing will not settle it.** Compare the
+      decoration's right edge against the last clip's right edge and the playhead's x at the project end,
+      all three measured, before and after.
+      ⚠️ **DO NOT undo #551 or #567 while fixing this.** #551 put the right edge at the project's end and
+      he explicitly kept it (*"the right side being cut off is good"*); #567 restored the LEFT edge
+      running over the divider. This is a small correction to the right edge's arithmetic, not a revisit.
+
 - [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
