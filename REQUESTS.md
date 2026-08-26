@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.10
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.11
 >
-> **State:** v13.10, 989 tests green, tree clean.
+> **State:** v13.11, 989 tests green, tree clean.
+>
+> **🔴 You caught a regression of MINE and you are right — #600.** When I made the whole bottom of
+> the timeline tappable for you, I moved the *listener* and left the *dashed box* marking the old,
+> smaller area. Measured: the box stops at 744, the tappable area runs to 820 — **76px that works but is
+> not drawn**, which is the very gap you asked me to close in the first place. **The box is what moves,
+> not the tap area** — shrinking it back would undo your own request. I have not yet found which state
+> draws that box, so I stopped rather than guess.
 >
 > **✅ THE CHECK FINALLY RAN PROPERLY — fourth try, and the safety net passed for the first time.** Using
 > a page of text as the test picture (letter edges give the fine detail my earlier flat shapes lacked),
@@ -20263,6 +20270,45 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
+
+- [ ] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
+      **THIS IS MY OWN #571 FIX SHOWING THROUGH, and he spotted it immediately.** Clause 2 of #571
+      extended the TAP TARGET to the whole of `#timeline` — measured then: the row ended at y=744 while
+      the panel ran to 820, so **76px of what looks like timeline never received the tap.** The listener
+      moved; **the dashed box that draws the region did not.**
+      **So the app now has two different answers to "what can I tap here":** the real area (the whole
+      panel) and the picture of it (the old row). **He is looking at the picture.**
+      ⚠️ **THE PICTURE IS THE THING TO MOVE, NOT THE TAP AREA.** The extension was measured and is what he
+      asked for in #571 — *"make it so when you tap anywhere on the timeline it works, currently the
+      bottom of the screen has a cut off"*. **Shrinking the tap area back to match the box would undo his
+      own request.**
+      ⚠️ **His shot shows the box stopping well above the bottom of the panel**, which is exactly the 76px
+      gap #571 measured — so the two are the same number, and fixing this is making the box span what the
+      listener already covers.
+      **🔎 MEASURED at v13.10 — the gap is exactly the one #571 created:**
+      | | |
+      |---|---|
+      | the box (`.tl-addrow--empty`) | y **444 → 744** |
+      | the real tap area (`#timeline`) | y **421 → 820** |
+      | **unmarked but tappable** | **76px below the box** |
+      **That 76px is the same number #571 clause 2 measured and fixed.** The listener covers it; the
+      picture does not.
+      ⚠️ **NOT YET FOUND: what actually draws the box on tap.** At rest the row's border-colour measures
+      `rgba(0,0,0,0)` and its `::before` is `content: none` (queue 356 + #571 clause 1), and **there is no
+      `:active` rule for it in styles.css** — so the dashed box in his shot is a state I have not pinned
+      down. **Most likely `:focus-visible`**, since tapping a clickable row focuses it. **Find it before
+      changing anything**; changing the resting decoration would re-break queue 356.
+      ✅ **THE FIX, ONCE FOUND, IS ALMOST CERTAINLY TO MOVE THE VISUAL ONTO `#timeline`** — that element
+      IS the tap area, already carries the empty-state wash for exactly that reason, and runs to the
+      panel's bottom. **Then the picture and the listener are the same box by construction** rather than
+      by two numbers that have to be kept equal.
+      🔗 **#571 clause 1 hid the empty state's dashed decoration** (`content: none`, per queue 356's *"get
+      rid of the lines around it"*). **Check which box this is before changing either** — the one in his
+      shot appears on TAP, so it is a pressed/active state rather than the resting decoration, and queue
+      356 was about the resting one.
 
 - [ ] **599 — Sweep for silently-dead effects PROPERLY, on a photograph.** (26 Aug, mine, method recorded after a failed attempt.)
       **STATUS: 🟢 READY — nothing is stopping this**
