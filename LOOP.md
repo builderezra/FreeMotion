@@ -154,7 +154,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v13.16, 989 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.21, 989 tests green, tree clean, `HEAD == ssh/main`.**
+
+✅ **#599 IS CLOSED — all eight suspects accounted for, and the honest tally is worth keeping:**
+**2 real gaps fixed** (#597 Focus on a flat scene, #598 both motion blurs on a still layer) · **5
+effects given a "Needs a setting" marker they lacked**, by a rule DERIVED from the registry rather than
+a hand list (it caught 3 nobody had measured) · **4 were my probe, not the app** · **~25 false
+accusations caught before any reached him**, across three discarded methods.
+✅ **AND THE LAST LEAD CLOSED CLEAN:** squish's `walls` is a segment (All / Floor / Sides / Floor+
+ceiling), and "Floor" at the DEFAULT amount changes 0 px — but 330 at amount 2 and 2,220 with inset.
+**Too subtle at defaults, not inert.** No claim made; the entry says so.
 
 🚨 **A TEMPORAL EFFECT CANNOT BE MEASURED BY SAMPLING SCATTERED TIMES INTO FRESH CANVASES.** They
 keep a previous-frame cache and js/compositor.js states plainly that *"a backwards seek or a >0.35s jump

@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.21
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.22
 >
-> **State:** v13.21, 989 tests green, tree clean.
+> **State:** v13.22, 989 tests green, tree clean.
+>
+> **📍 I have run out of work that does not need you — checked by hand, twice.** The last loose
+> thread (a Squish setting that looked dead) turned out to be fine: "Floor" is just too gentle at the
+> default strength, and moves plenty once you turn it up. No bug, and it is written down so nobody
+> re-investigates it later.
+> **The loop keeps running. But from here I would be inventing work rather than doing yours.**
 >
 > **✅ THE "ARE ANY EFFECTS SILENTLY BROKEN" HUNT IS FINISHED — and the answer is reassuring.** Of the
 > eight suspects: **five had a real gap and now say what they need**, two were already labelled, and the
@@ -20580,9 +20586,13 @@ re-opened #480, which I had marked done and had not fixed.
       | my probe, not the app | `temporaldenoise`, `framestutter`, `squish`, `lightwrap` |
       **Two genuine gaps found and fixed (#597, #598), five effects given a marker they lacked, and
       roughly twenty-five false accusations caught before any reached him.**
-      🔎 **ONE ODDITY LOGGED, NOT CLAIMED:** with `walls = 1` squish changes **0 px** where every other
-      setting moves hundreds. That may be correct (walls likely need a container to push against) and it
-      is **not** worth a claim on its own — **noted here for #539, which is his and already about squish.**
+      🔎 **THE `walls` ODDITY — CHECKED AND CLOSED, NO BUG.** `walls` is a segment: **All / Floor /
+      Sides / Floor + ceiling**. At the DEFAULT amount, "Floor" changes **0 px** while "All" moves 770 and
+      "Sides" 480 — but the same "Floor" moves **330 px at amount 2** and **2,220 px with inset 50**.
+      **So it is too subtle at defaults on a plain square, not inert**, and there is nothing to report.
+      ⚠️ **Recorded rather than dropped**, because a 0 reading on one setting of one effect is exactly the
+      shape that gets re-investigated from scratch in six months. **It has been investigated; the answer
+      is no.**
       🔗 **It is very likely part of #539, which is HIS and still open** — *"Squish must work with EVERY
       effect (shakes especially)"*. **Do not open a second front on squish; fold this measurement into
       #539** rather than treating it as a separate finding.
