@@ -165,7 +165,14 @@ surface — he judges by the TILES.** Same lesson as #572. The entry carries a s
 filter starts with `grayscale`, Blackout (which looks right) does not, and `generateFilter` keys its
 scene on `box.effects[0].type`. **Not confirmed — the tile pixels have not been measured.** Do that
 first.
-⚠️ **#581 IS THE NEXT ITEM BY ORDER and it is a real build** — custom filters have no library id, so
+🔎 **#581 IS SCOPED NOW — one missing piece, not a build from nothing.** `FM.effectPresets` already
+does durable storage (`capture/save/custom/makeInstance`), and `capture()` accepts a filter container
+without complaining — **but it DROPS the children** (`hasEffects: false`), storing a single effect's
+params. **A custom filter saved through it today would be an empty shell, silently.** Make `capture`
+preserve a container's `effects`, then a fave can point at a preset id and the existing row does the
+rest. **Test that a saved custom filter still RENDERS** — an empty shell saves, loads and faves
+perfectly, and only the picture is missing.
+⚠️ **#581 was previously called "a real build"** — custom filters have no library id, so
 favouriting one needs durable storage. Read #444 first; favourites are a second PLACE, not a move.
 
 ⚠️ **"MAKE IT THE SIZE OF X" ALMOST ALWAYS MEANS THE SHAPE OF X.** #580: a 1080x1920 project and a

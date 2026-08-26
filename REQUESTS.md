@@ -19983,6 +19983,11 @@ re-opened #480, which I had marked done and had not fixed.
       · **DISPROVEN — "`remountLive` repaints without the filter".** It re-mounts via
         `meta.get(cv._fxType)`, and `mountKey` does `if (m) meta.set(key, m)` on the FIRST mount, so the
         `{filter: id}` meta survives the repaint and `pump()` still takes the `(m && m.filter)` branch.
+      · **DISPROVEN — "the Filters tab uses a different renderer".** js/inspector.js:1669 mounts each
+        `.flt-thumb-cv` through **the same `FM.fxThumbs.mountFilter`** I measured as correct.
+      · **AND HIS SUBJECTS ARE THE RIGHT PHOTOS** — Platinum on a shore, Ink on towers, Fog on a bay,
+        Newsprint on the dog, exactly as `FILTER_SUBJECT` assigns. **So the correct photo reaches the tile
+        and only the GRADE is missing**, which rules out "wrong art" as well.
       **SO THE FAULT IS ON HIS DEVICE OR IN TIMING, NOT IN THE BRANCH LOGIC.** That is a much better
       starting point than it sounds, and it narrows to a short list:
       1. **The provisional-frame path.** `pump()` marks a frame `provisional` when a photograph was still
@@ -20225,6 +20230,21 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **A custom filter has no library id**, which is what the favourites row keys off. So this needs the
       filter itself stored somewhere durable — check whether "Save this effect as preset…" (in the same ⋯
       menu) already does that, and whether a fave can simply point at it, before inventing storage.
+      **🔎 THAT CHECK IS DONE — and the answer is "almost, but one thing is missing."** Measured at
+      v12.96:
+      · **Durable storage already exists.** `FM.effectPresets` has `capture / save / custom / makeInstance
+        / remove / exportCode`, so **nothing new needs inventing** — that half of the entry's worry is off.
+      · **`capture()` accepts a filter container without complaining** — handed `FM.filters.makeInstance(
+        'noir')` it returns `{id, fx, name, desc, dur, params}` and throws nothing.
+      · ⚠️ **BUT IT DROPS THE CONTENTS. `hasEffects: false`.** A filter IS its child effects, and capture
+        stores a single effect's `params` — there is no `effects` key in what comes back. **Saving a
+        custom filter through it today would store an empty shell**, and it would do so SILENTLY, which is
+        the worst version: the fave appears, the filter is gone.
+      **So the one piece of work is making `capture` preserve a container's children** (`FM.isFxContainer`
+      already answers true for a filter box), after which the fave can point at a preset id and the
+      existing favourites row does the rest.
+      ⚠️ **Whatever is built, test that a saved custom filter still RENDERS** — an empty shell saves,
+      loads, faves and appears in the row perfectly. Only the picture would be missing, and only later.
       ⚠️ **Naming:** a library fave shows its own name; a custom one is called "Filter". He will need to
       tell them apart — worth asking him, or defaulting to the name he gave the preset.
 
