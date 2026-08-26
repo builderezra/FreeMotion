@@ -147,7 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.92, 978 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.93, 979 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **BEFORE DEFENDING A GUARD'S SIZE, FIND OUT WHAT ACTUALLY DOES THE GUARDING.** #577's 550ms hold
+looked like the thing stopping a scroll from trimming. It was not — **an 8px move calls `disarm()`**, so
+the timer's length was never the protection. Shortening it to 300ms cost nothing. **A number that feels
+load-bearing often is not; check what else is holding the door.**
+⚠️ **EXPOSE THE CONSTANT AND HAVE THE TEST READ IT** (`FM._trimArmMs`). A copied literal keeps passing
+after the real value changes — that silent-pass is a failure shape this repo already knows.
+⚠️ **CONSISTENCY LOSES TO A COMPLAINT.** 550 matched the Add menu and Presets hold, which was the right
+call while nobody minded. He minded. Those two are untouched and the entry says so, rather than quietly
+changing three gestures because one was mentioned.
 
 ⚠️ **"BLOCKED BY" USUALLY MEANS Z-INDEX, AND THE TEST MUST ASSERT CLICKABILITY, NOT POSITION.** #576's
 options panel was placed correctly and still unusable: dock z80 over panel z79, so `elementFromPoint`

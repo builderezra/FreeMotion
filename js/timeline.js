@@ -1727,12 +1727,22 @@ window.FM = window.FM || {};
          TOUCH ONLY. A mouse-down on a 13px target is already deliberate — it cannot happen while
          scrolling — so forcing a desktop user to wait half a second would be an annoyance protecting
          against nothing. The guard exists for fingers, so it applies to fingers.
-         550ms is not a new number: it is what the Add menu's long-press and the Presets card's hold
-         already use, and a second feel for the same gesture is worse than a slightly wrong one.
          The pointer is captured only ON ARMING. Capturing at pointerdown would swallow the swipe that a
          graze actually is, so brushing a grip mid-scroll would stop the scroll dead — trading a wrong
-         trim for a stuck timeline. */
-      const ARM_MS = 550;
+         trim for a stuck timeline.
+         ⚠️ **300ms, NOT 550 — queue 577.** Ezra: *"The time to hold to extend a clip is too long, shorten
+         it."* It was 550 to match the Add menu's long-press and the Presets card's hold, and matching
+         them was the right instinct for a gesture nobody had complained about; he has now complained, so
+         the feel he is actually holding wins over the consistency argument.
+         **The hold is NOT what protects against a mis-trim — the MOVE is.** Any pointermove past the
+         slop threshold calls `disarm()` and kills the timer outright, so a scroll cannot arm a trim at
+         300ms any more than at 550: the finger is moving, and moving cancels. Shortening the timer
+         trades none of that safety away, which is why this is one number and not a redesign.
+         300ms is still comfortably longer than a tap (~80-120ms), so a quick touch cannot arm it either.
+         ⚠️ **ONE PLACE.** The tests that wait "past the hold" are written against this value; if it
+         changes again, change them with it. */
+      const ARM_MS = 300;
+      FM._trimArmMs = ARM_MS;   // seam: the suite reads the real number rather than hard-coding a copy
       let armTimer = null, armAt = null;
       const disarm = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } armAt = null; grip.classList.remove('armed'); };
       const beginTrim = (e) => {

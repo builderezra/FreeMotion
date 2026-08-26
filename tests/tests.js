@@ -1601,7 +1601,7 @@
       const before = cam().visible;
       const down = (t) => btn.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 4, isPrimary: true, pointerType: 'touch', clientX: 5, clientY: 5, buttons: t === 'pointerup' ? 0 : 1 }));
       down('pointerdown');
-      await sleep(700);                                  // past the 550ms hold
+      await sleep(700);                                  // past the 300ms hold (queue 577)
       down('pointerup');
       /* ⚠️ THIS SUB-ASSERTION IS NOT MUTATION-PROVEN, and saying so is better than implying it is.
          Removing the `camLpFired` guard in app.js does NOT make it fail, and I could not establish why
@@ -2400,6 +2400,59 @@
       FM.scene.layers = layers0;
       if (FM.selectLayer) FM.selectLayer(null);
       if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('577: the hold before a trim arms is short, and a scroll still cannot arm it', { item: '577' }, async function () {
+    /* Queue 577. Ezra: "The time to hold to extend a clip is too long, shorten it." 550ms -> 300ms.
+     * ⚠️ THE HOLD IS NOT WHAT PROTECTS AGAINST A MIS-TRIM — THE MOVE IS. Any pointermove past 8px calls
+     * disarm() and kills the timer, so a scroll cannot arm a trim at 300ms any more than at 550. That is
+     * why shortening it costs nothing, and it is the property this test pins: shorten the number again
+     * and the first check still passes, but delete the move-cancels-arm guard and the second one fails.
+     * ⚠️ THE NUMBER IS READ FROM FM._trimArmMs, NOT COPIED. A hard-coded 300 here would keep passing
+     * after someone changed the real constant, which is the failure this repo has been bitten by before. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        const ARM = FM._trimArmMs;
+        if (typeof ARM !== 'number') throw new Error('FM._trimArmMs is not exposed, so this test cannot read the real hold time');
+        if (ARM > 350) throw new Error('the hold before a clip can be trimmed is ' + ARM + 'ms — he asked for it shortened (queue 577)');
+        if (ARM < 180) throw new Error('the hold is down to ' + ARM + 'ms, which is inside tap range (~80-120ms) — a graze would start trimming');
+
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.scene.project.duration = 6;
+        FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(300);
+        const grip = document.querySelector('#tl-tracks .clip-grip');
+        if (!grip) throw new Error('no trim grip on the clip to hold');
+        const r = grip.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const pe = function (t, x, y, b) { grip.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 5, pointerType: 'touch', isPrimary: true, button: 0, buttons: b })); };
+
+        // A — a still hold just past the threshold must arm.
+        pe('pointerdown', cx, cy, 1); await sleep(ARM + 60);
+        const armed = grip.classList.contains('armed');
+        pe('pointerup', cx, cy, 0); await sleep(80);
+        if (!armed) throw new Error('holding the grip for ' + (ARM + 60) + 'ms did not arm the trim — the hold is longer than FM._trimArmMs claims (queue 577)');
+
+        // B — the SAFETY property. Scrolling during the hold must never arm it.
+        pe('pointerdown', cx, cy, 1); await sleep(Math.min(90, ARM / 3));
+        pe('pointermove', cx, cy + 20, 1); await sleep(ARM + 60);
+        const armedScrolling = grip.classList.contains('armed');
+        pe('pointerup', cx, cy + 20, 0); await sleep(80);
+        if (armedScrolling) throw new Error('a 20px scroll during the hold ARMED the trim — that is the fault the hold exists to prevent, and shortening it must not trade it away (queue 577, queue 336)');
+
+        // C — and a quick tap must still do nothing.
+        pe('pointerdown', cx, cy, 1); await sleep(100);
+        const armedTap = grip.classList.contains('armed');
+        pe('pointerup', cx, cy, 0);
+        if (armedTap) throw new Error('a 100ms tap armed the trim — that is inside ordinary tap range, so a graze would start trimming');
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
     }
   });
 
@@ -3935,7 +3988,7 @@
       const r = el.getBoundingClientRect();
       const pe = (t) => new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'touch', isPrimary: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, buttons: t === 'pointerup' ? 0 : 1 });
       el.dispatchEvent(pe('pointerdown'));
-      await sleep(750);                       // past the 550ms hold
+      await sleep(750);                       // past the 300ms hold (queue 577)
       el.dispatchEvent(pe('pointerup'));
       el.click();                             // the real trailing click a finger produces
       await sleep(300);

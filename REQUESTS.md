@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.92
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.93
 >
-> **State:** v12.92, tests green, tree clean.
+> **State:** v12.93, tests green, tree clean.
+>
+> **⏱️ #577 — the hold before a clip can be trimmed is 550ms → 300ms.** Checked that a scroll still
+> cannot start a trim by accident: it never depended on the wait anyway — moving your finger 8px cancels
+> it outright, so the shorter hold gives up nothing. A quick tap still does nothing either.
+> **The Add menu's long-press and the Presets card use the same 550ms and I have NOT changed those** —
+> say the word if they should follow.
 >
 > **📝 #576 — the text options are no longer buried.** It was a stacking collision, not a layout
 > slip: the panel opened at y63 while the box showing your words covers y57–145 and sits on a higher
@@ -20308,8 +20314,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The test asserts CLICKABILITY, not position.** A geometry-only check passes for a panel that is
       placed correctly and still buried under a higher z-index — which is precisely this bug.
 
-- [ ] **577 — The hold time before a clip can be extended is too long.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **577 — The hold time before a clip can be extended is too long.** (26 Aug.) — ✅ **DONE v12.93: 550ms → 300ms**
       His words, verbatim:
       > The time to hold to extend a clip is too long, shorten it
       **The number is 550ms**, in the trim grips (queue 336 added the deliberate hold so a scroll is not
@@ -20317,6 +20322,25 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Whatever it becomes, change it in ONE place and update those test waits with it.**
       ⚠️ It was made deliberate for a reason — too short and a vertical scroll starts trimming. **Try ~300ms
       and check a scroll still does not arm it**, rather than removing the hold.
+      **✅ 300ms, and the scroll check was done — it still cannot arm.**
+      **THE HOLD WAS NEVER WHAT PROTECTED AGAINST A MIS-TRIM: THE MOVE IS.** js/timeline.js:1770 —
+      **any pointermove past 8px calls `disarm()`** and kills the timer outright. So a scroll cannot arm
+      a trim at 300ms any more than it could at 550: the finger is moving, and moving cancels.
+      **Shortening the timer trades away none of that safety**, which is why this was one number rather
+      than a redesign.
+      **VERIFIED at 380px, all three directions:**
+      | check | result |
+      |---|---|
+      | a still 340ms hold | **arms** ✓ |
+      | a 20px scroll during the hold | **does NOT arm** ✓ |
+      | a 100ms tap | **does NOT arm** ✓ |
+      ⚠️ **550 was chosen to match the Add menu's long-press and the Presets card's hold**, and matching
+      them was right for a gesture nobody had complained about. He has now complained, so the feel he is
+      actually holding wins over the consistency argument. **Those two are untouched** — say the word if
+      they should follow.
+      ⚠️ **300ms is still well clear of tap range (~80–120ms)**, so a graze cannot trim.
+      ⚠️ **The number is exposed as `FM._trimArmMs` and the test READS it** rather than hard-coding 300 —
+      a copied constant keeps passing after the real one changes, which this repo has been bitten by.
 
 - [x] **571 — Empty-project screen: a glitched blue line, a dead strip at the bottom, and he wants a tap reaction.** (26 Aug, phone screenshot at v12.79, Project 44 with no layers.)
       His words, verbatim:
