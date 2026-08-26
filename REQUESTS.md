@@ -21208,7 +21208,27 @@ re-opened #480, which I had marked done and had not fixed.
       answered at v12.97 — nothing throws, it is a cost explosion — and cut from ~102 ms to ~52 ms at
       v13.15, which also closed clause 3. **The tool is right that two thirds of this shipped and wrong
       that the entry is done; the rendering-quality half has never been looked at.**
-      ➡️ **Next action, and it is a measurement not a fix:** render Tiles and Shake TOGETHER against a
+      🔎 **DONE 27 Aug — RENDERED AND LOOKED, and clause 2 is REAL with a specific cause. He is right.**
+      Text layer at 720x900, rendered consecutively, control on (baseline has content — the first attempt
+      returned an empty frame because `addTextLayer` starts a layer AT THE PLAYHEAD, which was 0.733,
+      past my render time; caught by the control, not by luck).
+      🚨 **TILES ALONE IS ALREADY WRONG.** With its own defaults (mode 0, count 3, mirror 1) it does not
+      produce a 3-across grid — it slices the layer into **~10 narrow vertical strips** and the text is
+      completely unreadable. Stacking Shake on top of that just skews the same mess, which is the
+      *"tiles and shake together looked really bad"* he reported.
+      🚨 **AND THE ORDER CHANGES EVERYTHING — this is the lead.** `[tiles, shake]` gives the strip mess;
+      **`[shake, tiles]` renders a CORRECT tiled grid** — "TILES + SHAKE" repeated cleanly, alternate
+      rows mirrored, exactly what Tiles is supposed to look like. **Same two effects, same defaults, only
+      the order differs.**
+      ✅ **So Tiles is not broken in itself: it is broken by the PLATE it is handed.** Shake runs first,
+      forces the padded/expanded plate (the `_hasMover` / `fxSlack` allowance this entry already
+      suspected), and Tiles then has a sane box to divide. Without it, Tiles appears to be dividing a
+      degenerate or unpadded box — hence strips instead of tiles.
+      ➡️ **Next action: find what box Tiles divides** (its `source` param defaults to 1, and it is in
+      `CFX_NO_BBOX`'s neighbourhood — check whether it is getting the alpha bbox or the full plate), then
+      make it independent of what ran before it. **Acceptance: `[tiles]` alone must match `[shake, tiles]`
+      structurally — a readable grid, not strips.**
+      🗒️ *(superseded) Next action, and it is a measurement not a fix:* render Tiles and Shake TOGETHER against a
       real layer and look, the same way #578 clause 2 was finally handled. Both displace the whole layer,
       so the live suspicion is that they fight over the same padded plate (`_hasMover` / `fxSlack` in
       js/compositor.js). ⚠️ **Do not start by tuning** — and per the #578 lesson, **measure as a profile
