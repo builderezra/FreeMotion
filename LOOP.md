@@ -159,8 +159,17 @@ reading a NEIGHBOURING source pixel** (55/1365 on twirl, 42/1365 on curl). **Wor
 dearest effect; not worth it at 1.11x.** Weigh the pixel cost against the measured win EVERY time —
 and the per-kernel `moveCap` in the test is where that judgement is recorded.
 📋 **Still untouched and still dear** (half-res sweep): gridrepeat 38.4, kaleidoscope 35.8,
-rasterextrude 35.3, radialrepeat 27.2, bend 26.2, innerpinch 23.3, ripple 21.1. **kaleidoscope and
-radialrepeat are the next rotation-identity candidates** (both do atan2-then-rebuild). ⚠️ **rasterextrude
+rasterextrude 35.3, radialrepeat 27.2, bend 26.2, innerpinch 23.3, ripple 21.1. ❌ **kaleidoscope and radialrepeat are NOT rotation-identity candidates — I wrote that here and it is
+WRONG, checked by reading them.** The identity only collapses `atan2` when the angle is used for
+nothing but *adding an offset and rebuilding*. Both of these **FOLD** the angle instead — `% slice`,
+`Math.abs(a - slice/2)`, mirrored alternate wedges — and **you cannot fold an angle without knowing
+it**, so atan2 is genuinely required. Same for polarcoords, which maps angle to an x coordinate.
+✅ **What they CAN have is the plain `prep` hoist** (kaleidoscope resolves wCx/wCy + 2 evalProps per
+pixel; radialrepeat 4). ⚠️ **Expect ~1.1x from that, not 1.9x** — curl's prep-only change measured
+1.11x — so it is exact and free but small. **Do not promise a big win from it.**
+📋 The honest shape of this work now: **fractalwarp won on DIVISIONS (11x), twirl on a removable atan2
+(1.89x), and everything else so far is ~1.1x.** Before optimising the next kernel, look for those two
+specific shapes rather than assuming the class is uniformly fixable. ⚠️ **rasterextrude
 is NOT a WARP_FX kernel at all** — different signature, and it loops up to 100 `drawImage` calls, so it
 needs its own approach rather than anything in this section.
 
@@ -196,6 +205,12 @@ times**, and v12.30 already paid for the hard part: it learned that straight-lin
 grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
+
+🎯 **NEXT TICK: prep-hoist kaleidoscope + radialrepeat (exact, expect ~1.1x each), then RASTEREXTRUDE —
+the only top-5 effect still not understood.** It is not a WARP_FX kernel at all: different signature,
+and it loops up to **100 `drawImage` calls** (one per unit of Depth). Nobody has measured where its
+35 ms goes, and a loop bounded by a user-facing slider is a different kind of problem from a pixel
+kernel — likely the biggest remaining win, and the least explored.
 
 🎯 **SUPERSEDED — NEXT TICK: STACKED-EFFECT COMPOSITOR COST, MEASURED WITH `tools/_phoneprobe.py` AT 4-6x.**
 This is not invented work — it is where his own steer (*"working on the lag being fixed for mobile would
