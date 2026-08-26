@@ -381,7 +381,8 @@ window.FM = window.FM || {};
         const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
         const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
         const ng = ctx.createGain();
-        env(ng.gain, t0, [[0, 0], [0.004, 0.9], [0.09, 0.06], [d, 0]]);
+        // 0.84, not 0.9 — same reason as Reverse swell above: 1.233 raw = 1.011 in preview (queue 566).
+        env(ng.gain, t0, [[0, 0], [0.004, 0.84], [0.09, 0.06], [d, 0]]);
         n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
         [[0.06, 5200], [0.11, 3900], [0.17, 6400], [0.24, 4600], [0.33, 7100], [0.45, 5000]].forEach(function (p) {
           const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = p[1];
@@ -401,7 +402,11 @@ window.FM = window.FM || {};
         const hp = ctx.createBiquadFilter(); hp.type = 'highpass';
         env(hp.frequency, t0, [[0, 900], [d, 5200]]);
         const g = ctx.createGain();
-        env(g.gain, t0, [[0, 0], [d * 0.92, 0.85], [d, 0]]);   // all swell, cut at the top
+        /* 0.72, not 0.85 (queue 566). `renderBuffer` normalises, so an ADDED clip is unaffected by this
+           number — but `preview()` plays the raw render through a fixed 0.82 gain and does NOT normalise,
+           so a loud recipe clips on the ▶ and nowhere else. Measured: this peaked 1.367 raw = **1.121 in
+           preview**, the loudest of all 30. */
+        env(g.gain, t0, [[0, 0], [d * 0.92, 0.72], [d, 0]]);   // all swell, cut at the top
         n.connect(hp); hp.connect(g); g.connect(out);
         n.start(t0); n.stop(t0 + d);
       },

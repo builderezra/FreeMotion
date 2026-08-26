@@ -4054,6 +4054,20 @@
     }
     if (silent.length) throw new Error(silent.length + ' of ' + defs.length + ' effects make no sound when previewed: ' + silent.slice(0, 6).join('; '));
 
+    /* 1b. AND NO RECIPE MAY CLIP ON THE ▶ (queue 566). This is the structural half: scaling the two that
+       clipped is a fix for those two, and the next loud recipe someone writes brings it straight back.
+       `renderBuffer` normalises so an ADDED clip is always safe whatever a recipe does — `preview()`
+       plays the raw render through a fixed MASTER gain and does not — so this is the ONE path where a
+       recipe's absolute level matters. Measured before the fix: Reverse swell 1.121 and Glass break
+       1.011; after, the loudest of all 30 is 0.986. */
+    const MASTER = 0.82;
+    const loud = [];
+    for (const def of defs) {
+      const r = await peakOf(def, false);
+      if (!r.err && r.peak * MASTER > 1) loud.push(def.name + ' ' + (r.peak * MASTER).toFixed(3));
+    }
+    if (loud.length) throw new Error(loud.length + ' effect(s) clip on the ▶, where nothing is normalised: ' + loud.join(', ') + '. Scale the recipe down — it does not change how it sounds once ADDED, because renderBuffer normalises to its own target.');
+
     /* 2. THE TRAP IS STILL A TRAP. This is the assertion that stops the proxy coming back: if a future
        engine ever made `Object.create(ctx)` work, the note above would be misleading rather than wrong,
        and we would want to know. It throwing is the whole reason preview() was silent. */

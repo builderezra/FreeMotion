@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.80
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.81
 >
-> **State:** v12.80, **972 tests green**, tree clean.
+> **State:** v12.81, **972 tests green**, tree clean.
+>
+> **🔎 v12.81 — I have an ANSWER on the effects, and it is not the one I gave you before (#572).**
+> I measured your exact case — white text, the eight you picked. **Brightness, Contrast and Grayscale
+> change literally zero pixels on it. Sepia, Invert and Glow change thousands.** A white SHAPE behaves
+> identically, so it is nothing to do with text: **those three cannot move pure white.** Brightness ×1.3
+> on 255 is still 255.
+> **So the effects are fine — and that is not good enough as an answer, because here is the actual bug:
+> the app already knows, and only tells you AFTER you have added them.** Put those three on that layer
+> and the effects LIST says "does nothing here" on all three. Your screenshot is the BROWSER, where you
+> picked eight and nothing warned you at all. **That is what I am fixing — the warning moves to the tile,
+> before you spend the pick.** Logged as #572, and I have not touched the effects themselves.
 >
 > **✅ v12.80 — the three things you sent tonight that were my fault, fixed.**
 > · **The play pill (#526).** You were right and I had matched the wrong thing: the buttons either side
@@ -19800,6 +19811,98 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The motion blur footage is kinda buns at the moment, needs a lot of work and also don’t default it to the pixelated blur, it looks awful
+      **Two things, and the second is the quick one:**
+      1. [ ] **Change the default mode** away from the pixelated one. The Style param (Pixel / Smear /
+             Echo / Blend, from v2.49) currently starts on Pixel. ⚠️ **Changing a default does NOT change
+             existing instances** — the renderer falls back to `legacy` for an absent key, so check which
+             of those a saved project reads before touching it, or every clip he already made re-renders.
+      2. [ ] **"needs a lot of work"** — unscoped, and he has not said what is wrong beyond "buns".
+             **Render it against real footage and look**, then come back with specifics rather than
+             guessing. Do not start clause 2 by changing sliders.
+      ⚠️ Distinct from **Motion Blur (Object)**, which is #540 and shipped at v12.64. This is the FOOTAGE
+      one. Do not confuse them.
+
+- [ ] **572 — 🔴 "These effects still don't work" — the BROWSER lets him pick effects the app already knows will do nothing.** (26 Aug, phone screenshot at v12.79, Colouring browser over a white text layer.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > These effects still don’t work, you’ve tried to fix it so many times, what’s going on?
+      **HE IS RIGHT TO BE ANNOYED, AND THE PREVIOUS ANSWER WAS THE WRONG ONE.** #460/#477 concluded "they
+      work; his SUBJECT cannot show them" and added a *"does nothing here"* tag. That is true and it is
+      not an answer — it reads as blaming the user, and it is shown in the WRONG PLACE.
+      📐 **MEASURED 26 Aug on his exact situation** (white text "0.00", 240x180, default instances):
+      | effect | on his white text | on a #c05030 shape |
+      |---|---|---|
+      | Brightness (1.3) | **0 px** | 9,600 px |
+      | Contrast (1.3) | **0 px** | 9,600 px |
+      | Grayscale (1) | **0 px** | 9,600 px |
+      | Sepia | 2,257 px | 9,600 px |
+      | Invert | 2,454 px | 9,600 px |
+      | Glow | 12,346 px | 12,976 px |
+      **And a white SHAPE behaves identically to white text** (0 px for all three), so it is not about text
+      layers — **it is that those three cannot move pure white.** Brightness 1.3 on 255 is 255. Contrast
+      1.3 on 255 is 255. Grayscale of white is white. The effects are working exactly as asked.
+      🎯 **THE ACTUAL BUG: the app knows this and only tells him AFTER he has added them.** Measured:
+      with all three on that layer the effects STACK correctly shows *"does nothing here"* on all three
+      rows. **His screenshot is the BROWSER** — the Colouring picker — where he selected eight effects and
+      **nothing warns him at all.** So the flow is: pick eight, press Add, go back, and only then find out
+      three of them were never going to do anything.
+      **What to build:** surface the same knowledge on the browser TILE, at pick time, using the check that
+      already exists behind the stack's tag. A tile that cannot change THIS layer should say so before he
+      spends a pick on it.
+      ⚠️ **Do not "fix" the effects — there is nothing wrong with them.** Four separate attempts have now
+      been spent proving that. The fault is that the app stays quiet until it is too late to matter.
+      ⚠️ Ties to **#529**, which already marked four effects *"Needs a setting"* in the browser — same
+      surface, same idea, so **reuse that marker rather than inventing a second one.**
+
+- [ ] **573 — Add more text effects.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Add more text effects
+      Sent immediately after #572, so **read them together**: he was looking at Colouring over a text layer
+      and finding it thin. Text-specific effects (per-character animation, write-on, jitter, wave) are a
+      different family from the pixel effects in that browser.
+      ⚠️ **Establish what "text effects" already exist first** — `textAnim` and the Customise Text panel —
+      before adding a parallel set.
+
+- [ ] **574 — Captions: two stacked captions never show at the same time.** (26 Aug, phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The captions currently let you put one on top of the other but it doesn’t actually show both at the same time, make it so you can show both at the same time
+      **The UI allows an overlap the renderer will not honour** — so it lets him build something it then
+      refuses to draw, which is the worst of both. Either both render, or the overlap should not be
+      offered; he has said which he wants.
+
+- [ ] **575 — Captions: the texts inside a caption cannot be extended.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > In captions I can’t extend the texts inside each caption
+      Goes with **#574** — same screen, same session. A caption holds cues; he cannot drag a cue's end to
+      lengthen it.
+
+- [ ] **576 — The text editor's options are hidden behind the box that shows what you typed.** (26 Aug, annotated phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > All of the text edit options now get blocked by the part that shows you what you typed, fix this so they push it down or go below it, whatever’s best
+      **His annotation is explicit:** he has ringed the toolbar row (colour, align, Inter, 320pt, Aa, ✓) and
+      struck through the preview box below it. The preview box covers the controls.
+      **He has already given the two acceptable answers** — *"push it down or go below it, whatever's
+      best"* — so this is a layout call, not a design question.
+      ⚠️ **"now"** — this is a regression. **Find what changed** before rearranging anything.
+
+- [ ] **577 — The hold time before a clip can be extended is too long.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > The time to hold to extend a clip is too long, shorten it
+      **The number is 550ms**, in the trim grips (queue 336 added the deliberate hold so a scroll is not
+      mistaken for a trim; `tests/tests.js` waits "past the 550ms hold" in two places).
+      ⚠️ **Whatever it becomes, change it in ONE place and update those test waits with it.**
+      ⚠️ It was made deliberate for a reason — too short and a vertical scroll starts trimming. **Try ~300ms
+      and check a scroll still does not arm it**, rather than removing the hold.
+
 - [ ] **571 — Empty-project screen: a glitched blue line, a dead strip at the bottom, and he wants a tap reaction.** (26 Aug, phone screenshot at v12.79, Project 44 with no layers.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
@@ -19895,11 +19998,13 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The test that pinned the old behaviour was rewritten, not deleted** — it now guards the left edge
       in the OTHER direction, so a later session cannot "restore" the divider stop from reading #550 alone.
 
-- [ ] **566 — Two sound effects clip on the ▶ preview (found while doing #563).** (26 Aug, measured.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **566 — Two sound effects clip on the ▶ preview (found while doing #563).** (26 Aug, measured.) — **DONE v12.81.**
       **Not something he reported** — found by measuring every recipe while adding the bell, and logged
       rather than quietly fixed because it changes how two of his existing sounds play.
-      **JUMPED: v12.80 went ahead of this.** He sent five messages that evening, three of them corrections
+      ⏭️ **Was jumped once, and that is spent.** v12.80 went ahead of this because he sent five messages
+      that evening, three of them corrections to work just shipped — CLAUDE.md names that as a legitimate
+      jump ("what HE explicitly says to do now"). **This entry is mine, not his**, so it waited behind his
+      words. It is back in the queue now. He sent five messages that evening, three of them corrections
       to work I had just shipped — the play pill being bigger rather than matched (#526), the add row's
       left edge (#567), and the filter-row dots he had asked for (#565). CLAUDE.md names exactly this as a
       legitimate jump: *"what HE explicitly says to do now"*. **This entry is mine, not his** — nobody has
@@ -19925,6 +20030,16 @@ re-opened #480, which I had marked done and had not fixed.
       2. **Normalise the preview too**, so no recipe can ever clip on the ▶ whatever it does. That is the
          structural answer; it costs one offline render per preview, so **measure that latency before
          choosing it** — the ▶ should feel instant.
+
+      ✅ **DONE v12.81 — option 1 for the levels, and option 2's GUARANTEE bought with a test instead.**
+      Reverse swell 0.85 → **0.72**, Glass break 0.9 → **0.84**. Measured after: **nothing clips; the
+      loudest of all 30 is Reverse swell at 0.986**, and all 30 still render audible.
+      🔒 **The structural half is a test, not an offline render.** Option 2 would have made the ▶ do a full
+      offline pass before every preview just to learn its peak — real latency on a control that should
+      feel instant, for a problem better caught at build time. **The suite now fails if ANY recipe would
+      clip in preview**, so the next loud recipe is caught the day it is written, and the ▶ stays free.
+      ⚠️ **Scaling a recipe does not change how it sounds once ADDED** — `renderBuffer` normalises to its
+      own target relative to the recipe's own peak — so this only ever touched the preview.
 
 - [x] **565 — Make it obvious that a filter row scrolls sideways — page dots or similar.** (25 Aug.) — **DONE v12.80.**
       His words, verbatim:
