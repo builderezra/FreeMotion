@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.08
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.09
 >
-> **State:** v13.08, 989 tests green, tree clean.
+> **State:** v13.09, 989 tests green, tree clean.
+>
+> **✅ THIRD TRY: the safety check worked and stopped me before I could get it wrong again.** I added a
+> control — ten effects I KNOW work, which must come back alive or the whole check is void. Nine did,
+> strongly, including the exact ones my earlier attempts wrongly called broken. **One did not, so the
+> sweep was declared invalid and never ran.** That is the first honest result this has produced, and it
+> cost nothing. The remaining problem is known and written down: my test picture needs fine DETAIL as
+> well as light and dark.
 >
 > **🛑 SECOND SWEEP ALSO WRONG — caught it again, and I have stopped trying tonight.** This one
 > called **brightness, saturate, grayscale and sepia** dead, which is nonsense, so it refuted itself. Two
@@ -20291,6 +20298,25 @@ re-opened #480, which I had marked done and had not fixed.
       list of "broken" effects and both lists were wrong. **A sweep that can accuse working code needs a
       CONTROL built in** — a set of effects known to work, asserted to come back alive. If the control
       fails, the sweep is wrong, and neither attempt had one.
+
+      ✅ **THIRD ATTEMPT, v13.08 — THE CONTROL WORKED, AND IT STOPPED THE SWEEP BEFORE IT RAN. That is the
+      first honest result this entry has produced.**
+      Subject: one full-frame layer with an angled gradient from `#0d0d12` to `#f6f2e6` — **29 distinct
+      luminance buckets** against the flat square's 1. Threshold dropped to >2, effect applied to the
+      layer that actually has the range.
+      **Nine of ten controls came back strongly alive** — and they are precisely the ones the earlier
+      attempts libelled: brightness **218,700**, contrast 191,733, sepia 218,700, invert 214,737,
+      **vignette 155,147**, **posterize 201,882**, grayscale 51,711, saturate 28,326, blur 10,407.
+      ❌ **`pixelate` came back 0, so the sweep was declared INVALID and not run.** And it is the subject
+      again, for a NEW reason worth knowing: **averaging a smooth linear ramp over a block returns that
+      block's centre value**, so pixelation is nearly an identity on a gradient. A gradient tests TONAL
+      effects well and STRUCTURAL ones badly.
+      ✅ **WHAT THE FOURTH ATTEMPT NEEDS: high-frequency DETAIL as well as tonal range** — edges, texture,
+      something with fine structure — so that block, tile, warp and sort effects have something to
+      destroy. **`fx-thumbs`' photographs have exactly that**, which is what the original note said and
+      what two hand-built subjects have now failed to imitate. **Use the photographs.**
+      ⚠️ **The control must keep `pixelate` in it** — it is the cheapest possible detector of a subject
+      with no fine structure, and it caught this on the first run.
 
 - [x] **598 — Both motion blurs are dead on a layer that cannot move, and said nothing.** (26 Aug, FOUND by me.) — ✅ **DONE v13.06**
       **Second one found by sweeping in as many ticks.** 📐 **MEASURED at v13.05:** on a still shape,

@@ -159,6 +159,15 @@ nothing to act on, or a feature never explained. **Amber `.fx-dead-tag` colour i
 vocabulary for "this cannot do anything here" in three places.** Worth a deliberate sweep rather than
 case-by-case.
 
+✅ **THE CONTROL EARNED ITSELF ON ITS FIRST RUN (#599, v13.08).** Nine of ten known-good effects came
+back alive on a gradient subject — including the very ones the earlier flat-square sweeps libelled
+(brightness 218,700, vignette 155,147, posterize 201,882). **`pixelate` came back 0, so the sweep was
+declared invalid and never ran.** Averaging a smooth ramp over a block returns the block's centre value,
+so pixelation is near-identity on a gradient: **a gradient tests TONAL effects well and STRUCTURAL ones
+badly.** The subject still needs high-frequency DETAIL — which is what `fx-thumbs`' photographs have and
+what two hand-built subjects failed to imitate. **Keep `pixelate` in the control: it is the cheapest
+detector of a subject with no fine structure.**
+
 🚨 **A SWEEP THAT CAN ACCUSE WORKING CODE MUST CARRY A CONTROL — two attempts, two wrong lists.**
 #599's second try returned 32 "dead" including `brightness`, `saturate`, `grayscale`, `sepia`. Flaws:
 the effect landed on the wrong layer (**`layers.filter(...)[0]` is the NEWEST layer — new ones arrive at
