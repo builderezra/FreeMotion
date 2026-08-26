@@ -147,7 +147,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.90, 976 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.91, 977 tests green, tree clean, `HEAD == ssh/main`.**
+
+🚨 **SOMETHING ABOVE THE INSPECTOR/CAPTIONS PANEL SWALLOWS `pointerdown` IN THE CAPTURE PHASE.**
+Measured on #575: a drag dispatched at a control inside it fired `pointermove` and `pointerup` and
+**never fired `pointerdown` at all**. **Any drag control added anywhere in that panel is dead on
+arrival** — and it fails looking exactly like the bug it was meant to fix, which cost most of that tick.
+**Bind the down on `document` in the CAPTURE phase** and filter by `closest()`; nothing can intercept
+that. Also `touch-action: none` on the handle, or the browser claims the horizontal drag for scrolling.
+⚠️ **"I CAN'T DO X" OFTEN MEANS THERE IS NO AFFORDANCE, NOT THAT X IS BLOCKED.** #575 read as a clamp;
+the data model accepted every extension asked of it. There was simply no handle to drag. **Check whether
+the operation is refused before hunting for what refuses it.**
+⚠️ **A FIX CAN UNLOCK THE NEXT ITEM.** #574 made overlapping cues render; that is the only reason #575's
+drag is allowed to cross a neighbour. Read consecutive entries together — they were sent together.
 
 ⚠️ **WHEN THE UI OFFERS SOMETHING THE RENDERER REFUSES, LOOK FOR A SILENT DISCARD — not a draw bug.**
 #574 read like a rendering problem; it was `FM.activeCaption` keeping one cue and dropping the others

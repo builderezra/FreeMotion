@@ -2403,6 +2403,67 @@
     }
   });
 
+  test('575: a caption cue can be DRAGGED longer', { item: '575' }, async function () {
+    /* Queue 575. Ezra: "In captions I can't extend the texts inside each caption."
+     * MEASURED at v12.90: nothing was refusing to extend a cue — `normalize` accepts a longer end, and
+     * even one that runs past the next cue. The row simply had a text button, two number spinners and a
+     * delete, and ZERO drag handles. "Extend" is a drag verb — the same word he uses for stretching a
+     * clip — and a 0.1-step spinner on a phone is not that.
+     * ⚠️ AND THE FIRST BUILD DID NOTHING, for a reason worth keeping: with the listener attached to the
+     * grip, a dispatched drag fired pointermove and pointerup and NEVER FIRED pointerdown. Something
+     * above this panel swallows pointerdown in the CAPTURE phase, so any drag control added in here is
+     * dead on arrival and looks exactly like the bug it was meant to fix. The down is bound on document
+     * in the capture phase, which nothing can intercept. THAT is what this test protects. */
+    const layers0 = FM.scene.layers.slice();
+    const box = document.createElement('div');
+    try {
+      FM.scene.layers.length = 0;
+      FM.addTextLayer();
+      const T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+      if (!T) throw new Error('could not make a text layer');
+      T.text = ''; T.start = 0; T.duration = 5; T.textAnim = { preset: 'none' };
+      T.captions = [{ start: 0, end: 1, text: 'A' }, { start: 2, end: 3, text: 'B' }];
+      FM.selectLayer(T.id);
+      document.body.appendChild(box);
+      if (!FM.captionsEditor || !FM.captionsEditor.mount) throw new Error('the captions editor is missing');
+      FM.captionsEditor.mount(box, T);
+      await sleep(180);
+
+      const grip = box.querySelector('.cap-grip');
+      if (!grip) throw new Error('a caption cue row has no drag handle — he cannot extend a cue without typing numbers into a spinner (queue 575)');
+      const cueA = function () { return T.captions.filter(function (c) { return c.text === 'A'; })[0]; };
+      const drag = async function (px) {
+        const g = box.querySelector('.cap-grip');
+        const r = g.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const f = function (t, x, b) { g.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: cy, pointerId: 7, pointerType: 'mouse', isPrimary: true, button: 0, buttons: b })); };
+        f('pointerdown', cx, 1); await sleep(20); f('pointermove', cx + px, 1); await sleep(20); f('pointerup', cx + px, 0); await sleep(180);
+      };
+
+      const before = cueA().end;
+      await drag(60);
+      const after = cueA().end;
+      if (!(after > before + 0.3)) {
+        throw new Error('dragging the cue handle 60px moved its end from ' + before + ' to ' + after + ' — the drag is not reaching the handler. Check that pointerdown is bound on document in the CAPTURE phase: bound on the grip it never arrives at all (queue 575)');
+      }
+
+      // It must stop at the layer's end — a caption cannot outlive the layer carrying it…
+      await drag(400);
+      const capped = cueA().end;
+      if (Math.abs(capped - T.duration) > 0.05) throw new Error('dragging far right took the cue to ' + capped + ' on a ' + T.duration + 's layer — a caption must not outlive its layer');
+
+      // …but it MAY overlap the next cue, and must not damage it. That is only safe since queue 574
+      // made overlapping cues both render; before that, this drag would have silently blanked B.
+      const B = T.captions.filter(function (c) { return c.text === 'B'; })[0];
+      if (!B || B.start !== 2 || B.end !== 3) throw new Error('extending cue A over cue B changed or destroyed B (' + JSON.stringify(B) + ') — the drag must not edit its neighbour');
+      if (!(capped > B.start)) throw new Error('the cue could not be extended past the next one, but overlapping captions render together since queue 574 — there is no longer a reason to stop there');
+    } finally {
+      if (box.parentNode) box.remove();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('574: two overlapping captions BOTH show, stacked', { item: '574' }, async function () {
     /* Queue 574. Ezra: "The captions currently let you put one on top of the other but it doesn't
      * actually show both at the same time, make it so you can show both at the same time."

@@ -2685,7 +2685,21 @@ body.white-chrome #time-readout:active {
   display: block; text-align: left; cursor: pointer; min-height: 34px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cap-text:hover, .cap-text:focus-visible { border-color: var(--accent, #6ea8fe); }
 .cap-text.cap-empty { color: var(--text-faint); font-style: italic; }
-.cap-times { display: flex; gap: 4px; flex: 0 0 auto; }
+.cap-times { display: flex; gap: 4px; flex: 0 0 auto; align-items: center; }
+/* ⚠️ THE DRAG-TO-EXTEND GRIP (queue 575). 34px tall to match the time fields it sits beside, and 26px
+   wide — narrow, because it is the third control on a row that already carries a text button and two
+   number fields at 380px, and the row must not start wrapping. `touch-action: none` is NOT optional:
+   without it the browser claims the horizontal drag for scrolling and the pointermove handler simply
+   never fires, which would look exactly like the bug this is fixing. */
+.cap-grip {
+  width: 26px; height: 34px; flex: 0 0 auto; box-sizing: border-box;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim);
+  border-radius: 6px; padding: 0; font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: ew-resize; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.cap-grip:hover { color: var(--text); border-color: var(--accent); }
+.cap-grip:active { background: rgba(41, 217, 187, .14); border-color: var(--accent); color: var(--accent); }
 .cap-time { width: 46px; height: 34px; box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 6px 4px; font-size: 11px; text-align: center; }
 /* 34px, matching the cue button and the time fields: the row used to be three different heights and
    the ✕ was the smallest thumb target on the sheet. */

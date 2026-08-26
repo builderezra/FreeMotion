@@ -276,10 +276,71 @@ window.FM = window.FM || {};
           C.normalize(layer); refreshAll(container, layer); commitH();
         });
 
+        /* ⚠️ DRAG TO EXTEND A CUE — queue 575. Ezra: *"In captions I can't extend the texts inside each
+           caption."* MEASURED at v12.90: the row held a text button, TWO `<input type=number>` and a
+           delete, and **zero drag handles**. Nothing was refusing to extend a cue — `normalize` happily
+           accepts a longer end, including one that runs past the next cue — **there was simply no way to
+           DRAG one.** "Extend" is a drag verb; it is the same word he uses for stretching a clip (#577),
+           and on a phone a 0.1-step number spinner is not that.
+           So: a grip that lengthens or shortens the cue by dragging, with the typed fields left exactly
+           as they were for anyone who wants to be precise.
+           ⚠️ **IT MOVES THE END, NEVER THE START.** Dragging one handle that silently repositions the
+           cue would lose the timing he has already set; he asked to EXTEND, which is one edge.
+           ⚠️ **OVERLAPPING THE NEXT CUE IS ALLOWED, AND THAT IS ONLY TRUE SINCE v12.90.** Before queue
+           574 two overlapping cues resolved to one and the other's words vanished, so letting him drag
+           into the next one would have silently blanked it. Now both render stacked, so the drag has no
+           reason to stop at a neighbour — and the old anti-overlap reasoning in `addCue` above is a
+           comment about a limitation that no longer exists.
+           ⚠️ **ONE history entry per DRAG, not per pixel.** commitH on every move would bury undo under
+           hundreds of steps and make one drag impossible to take back. */
+        const grip = el('button', 'cap-grip'); grip.type = 'button';
+        grip.title = 'Drag to make this caption longer or shorter';
+        grip.setAttribute('aria-label', 'Drag to change how long this caption lasts');
+        grip.textContent = '↔';
+        (function () {
+          let id = null, x0 = 0, end0 = 0;
+          const SEC_PER_PX = 0.02;          // 50px of drag ≈ 1s: fine enough to land on a word, coarse enough to be quick
+          /* ⚠️ THE `pointerdown` IS BOUND ON `document` IN THE CAPTURE PHASE, NOT ON THE GRIP — and that
+             is not defensiveness, it is the measured reason the first build did nothing. MEASURED at
+             v12.91: with listeners attached directly to the grip, a dispatched drag fired `pointermove`
+             and `pointerup` and **never fired `pointerdown` at all**. Something above the caption editor
+             swallows pointerdown in the CAPTURE phase, so it never reaches the target — which means any
+             drag control added anywhere in this panel is dead on arrival, and looks exactly like the bug
+             it was meant to fix.
+             Capture on `document` runs before every ancestor, so it cannot be intercepted. The move/up
+             handlers stay on the grip because those DO arrive. */
+          document.addEventListener('pointerdown', (ev) => {
+            if (!ev.target || !ev.target.closest || !ev.target.closest('.cap-grip')) return;
+            if (ev.target.closest('.cap-grip') !== grip) return;      // this row's grip, not a sibling's
+            id = ev.pointerId; x0 = ev.clientX; end0 = c.end;
+            try { grip.setPointerCapture(id); } catch (_) {}
+            ev.preventDefault(); ev.stopPropagation();
+          }, true);
+          grip.addEventListener('pointermove', (ev) => {
+            if (id === null || ev.pointerId !== id) return;
+            const dur = layer.duration > 0 ? layer.duration : Infinity;
+            let v = end0 + (ev.clientX - x0) * SEC_PER_PX;
+            if (isFinite(dur)) v = Math.min(v, dur);        // a caption cannot outlive the layer it is on
+            v = Math.max(v, c.start + 0.1);                 // …and cannot collapse past nothing
+            c.end = +v.toFixed(3);
+            e.value = c.end;                                // the typed field is the same number, live
+            FM.requestRender();
+            ev.preventDefault();
+          });
+          const done = (ev) => {
+            if (id === null || (ev && ev.pointerId !== id)) return;
+            try { grip.releasePointerCapture(id); } catch (_) {}
+            id = null;
+            C.normalize(layer); refreshAll(container, layer); commitH();   // ONE undo step for the whole drag
+          };
+          grip.addEventListener('pointerup', done);
+          grip.addEventListener('pointercancel', done);
+        })();
+
         const del = el('button', 'cap-del', '✕'); del.title = 'Remove cue';
         del.addEventListener('click', () => { layer.captions.splice(i, 1); refreshAll(container, layer); commitH(); });
 
-        const times = el('div', 'cap-times'); times.append(s, e);
+        const times = el('div', 'cap-times'); times.append(s, e, grip);
         row.append(t, times, del);
         container.appendChild(row);
       });

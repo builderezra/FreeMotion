@@ -1,8 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.90
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.91
 >
-> **State:** v12.90, tests green, tree clean.
+> **State:** v12.91, tests green, tree clean.
+>
+> **↔ #575 — you can now DRAG a caption longer.** Each cue row has a grip: drag right to extend, left to
+> shorten, about a second per 50px. Nothing was ever refusing to extend them — there was just no handle,
+> only two little number boxes. It can now run over the next caption too, and both show, because that
+> was fixed last tick.
 >
 > **💬 #574 — stacked captions now BOTH show.** The cause was one line: the app kept only the
 > latest-starting caption and threw the other away before it ever reached the screen, which is why the
@@ -20250,12 +20255,29 @@ re-opened #480, which I had marked done and had not fixed.
       the test asserts that as the control, because this must not disturb an ordinary caption track.
       🔗 **#575 is the other half of captions and is next** — worth reading together.
 
-- [ ] **575 — Captions: the texts inside a caption cannot be extended.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **575 — Captions: the texts inside a caption cannot be extended.** (26 Aug.) — ✅ **DONE v12.91**
       His words, verbatim:
       > In captions I can’t extend the texts inside each caption
       Goes with **#574** — same screen, same session. A caption holds cues; he cannot drag a cue's end to
       lengthen it.
+      **MEASURED FIRST, AND NOTHING WAS REFUSING TO EXTEND.** `normalize` accepts a longer end, including
+      one running past the next cue. The row held a text button, **two `<input type=number>` spinners**
+      and a delete — and **zero drag handles.** "Extend" is a drag verb, the same word he uses for
+      stretching a clip (#577); a 0.1-step spinner on a phone is not that.
+      **Now each cue row has a ↔ grip: drag right to lengthen, left to shorten.** 50px ≈ 1s. The typed
+      fields stay for anyone who wants to be exact, and the number updates live as you drag.
+      ⚠️ **THE FIRST BUILD DID NOTHING, AND THE REASON IS WORTH KEEPING.** With the listener on the grip,
+      a dispatched drag fired `pointermove` and `pointerup` and **never fired `pointerdown` at all** —
+      something above this panel swallows pointerdown in the **CAPTURE phase**, so it never reaches the
+      target. **Any drag control added anywhere in this panel is dead on arrival**, and it fails looking
+      exactly like the bug it was meant to fix. The down is bound on `document` in the capture phase now,
+      which nothing can intercept. The test's failure message says so, because the next person will hit it.
+      ⚠️ `touch-action: none` on the grip is not optional either — without it the browser claims the
+      horizontal drag for scrolling and pointermove never fires.
+      ⚠️ **It may overlap the next cue, and leaves it untouched** — verified. That is only safe because
+      **#574 shipped last tick**; before it, dragging over a neighbour would have silently blanked it.
+      ⚠️ It stops at the layer's end — a caption cannot outlive the layer carrying it — and cannot be
+      collapsed to nothing. **One undo step per drag**, not one per pixel.
 
 - [ ] **576 — The text editor's options are hidden behind the box that shows what you typed.** (26 Aug, annotated phone screenshot at v12.79.)
       **STATUS: 🟢 READY — nothing is stopping this**
