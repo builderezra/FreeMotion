@@ -182,6 +182,20 @@ background) and the scene had one, so those prove nothing. `temporaldenoise`/`fr
 should act on a single moving clip and did not. **Only those three are candidates, and still not a bug
 list.**
 
+✅ **"I CAN ONLY MEASURE THIS ON A DESKTOP" IS USUALLY FALSE — THROTTLE THE CPU. `tools/_phoneprobe.py`.**
+Several entries park on "whether it feels right on your phone is the half I cannot take from you". The
+FEEL is his; **the SPEED is measurable** — `Emulation.setCPUThrottlingRate` at 4-6x is roughly a phone
+against this Mac. First use found the editing path fine at 6x but the COMPOSITOR at 17 fps with five
+effects. **Prove the throttle applies with a control** (a path that should scale linearly — tap→inspector
+went 3.5→22.1 at 6x) before believing anything else in the table.
+
+⚠️ **A PROBE THAT REPORTS ZERO IS A BROKEN PROBE, NOT A FAST APP.** The same run first reported
+`renderScene` at **0.00 ms at every throttle**. It was building effects as `{id, params}` when a real
+instance is `{type, enabled, params}` — **silently ignored, timing an empty scene**, and the conclusion
+would have been the exact opposite of the truth. **Build fixtures with the app's own constructor**
+(`FM.fxRegistry.makeInstance`) and **make the probe THROW when it builds nothing**, rather than trusting
+a hand-written literal to match a shape you did not check.
+
 ⚠️ **AN ENTRY'S CONFIDENT DIAGNOSIS CAN SIT UNVERIFIED FOR MONTHS — #129, checked 27 Aug.** It reasons
 that a browser parses H.265 then refuses to decode. **Asked directly, this browser reports H.265 as
 "probably" playable and MSE-supported, while refusing `video/quicktime` (.mov) outright** — and an iOS

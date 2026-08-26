@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.24
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.25
 >
-> **State:** v13.24, 989 tests green, tree clean.
+> **State:** v13.25, 989 tests green, tree clean.
+>
+> **⚡ "Editing lags" — your oldest item. I found a way to measure your PHONE, and it moves the blame.**
+> That entry has said for months that I can only measure on a desktop. Turns out Chrome will run the app
+> at a phone's speed on purpose, so now I have real numbers.
+> **The editing itself is fine on a phone** — tapping a layer, scrubbing, the timeline all stay quick
+> even at 6x slower. **What is slow is DRAWING the picture when effects stack up**: five effects on six
+> layers gives 45 fps here and **17 fps at phone speed**. Your app also quietly drops its own quality to
+> cope, which is working as intended and is why it stays usable.
+> ❓ **So the question for you got much more specific:** does a project with **one or two effects feel
+> fine, while a heavy one crawls?** If yes, that matches the measurement exactly and I know where to dig
+> next — stacked effect cost, not the editor.
 >
 > **📹 #129 — your blank screen-recording clip. I checked the old explanation and it may be wrong.**
 > For months this entry has said the cause is H.265 video the browser cannot decode. **I finally asked a
