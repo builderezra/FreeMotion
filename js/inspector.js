@@ -2517,6 +2517,22 @@ window.FM = window.FM || {};
     { key: 'volume',    label: 'Volume' },
     { key: 'effects',   label: 'Effects' },
   ];
+  /* The arithmetic behind the "Crop to canvas" button (queue 580), lifted out so the suite drives the
+     REAL function rather than a copy of the formula — a copied formula keeps passing after the shipped
+     one changes, which is a failure shape this repo already knows.
+     Returns the LARGEST rect with the project's aspect ratio that fits inside the source, centred. It
+     can only ever remove picture: whichever way round the two shapes are, one dimension is taken whole
+     and the other is reduced, so nothing is stretched or invented. */
+  FM.cropToCanvasRect = function (mw, mh, pw, ph) {
+    const MW = (mw > 0) ? mw : 1, MH = (mh > 0) ? mh : 1;
+    const ar = (pw > 0 && ph > 0) ? (pw / ph) : (MW / MH);
+    let w = MW, h = MW / ar;
+    if (h > MH) { h = MH; w = MH * ar; }
+    w = Math.min(MW, Math.max(1, w));
+    h = Math.min(MH, Math.max(1, h));
+    return { x: (MW - w) / 2, y: (MH - h) / 2, w: w, h: h };
+  };
+
   FM._styleCats = STYLE_CATS;   // read by the suite, which checks every key still resolves to an icon
 
   // Apply the chosen style categories from a copied layer snapshot `src` onto `target`.
@@ -3990,6 +4006,30 @@ window.FM = window.FM || {};
     freeBtn.title = 'Drag a crop box directly on the video';
     freeBtn.addEventListener('click', () => { if (FM.cropTool) FM.cropTool.start(layer.id); });
     tools.appendChild(freeBtn);
+    /* ⚠️ CROP TO CANVAS (queue 580). Ezra: *"Add an option to the customise shape menu similar to the
+       free crop button but an option to crop to canvas size."* He named the surface, the neighbour and
+       the behaviour, so this sits beside Free crop and does the one thing.
+       **"Canvas size" is the project's SHAPE, not its pixel count.** A 1080x1920 project and a 1920x1080
+       clip do not share a single dimension, so copying width and height literally would be meaningless —
+       what he wants is the clip cropped so it fills the canvas without bars. So: the LARGEST rect with
+       the project's aspect ratio that still fits inside the source, centred.
+       ⚠️ **It writes the same `layer.crop` source-pixel rect the free tool writes** — one representation,
+       so Reset, the scrubbers and the crop overlay all keep working with no second code path.
+       ⚠️ **Centred, and it never invents pixels:** the rect is clamped inside the source either way round
+       (portrait-in-landscape takes the full height, landscape-in-portrait the full width), so it can only
+       ever remove picture, never stretch it. */
+    const canvasBtn = el('button', 'btn es-cropcanvas');
+    canvasBtn.innerHTML = ES_ICONS.crop + '<span>Crop to canvas</span>';
+    canvasBtn.title = 'Crop to the project’s shape, centred — so the layer fills the canvas with no bars';
+    canvasBtn.addEventListener('click', () => {
+      const P = FM.scene && FM.scene.project;
+      layer.crop = FM.cropToCanvasRect(MW, MH, P && P.width, P && P.height);
+      FM.requestRender();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+      FM.inspector.refresh();
+      commitH();
+    });
+    tools.appendChild(canvasBtn);
     const cr0 = cur();
     if (!(cr0.w >= MW - 0.5 && cr0.h >= MH - 0.5)) {   // show Reset only when actually cropped
       const resetBtn = el('button', 'btn es-cropreset', 'Reset');

@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.95, 981 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.96, 982 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **"MAKE IT THE SIZE OF X" ALMOST ALWAYS MEANS THE SHAPE OF X.** #580: a 1080x1920 project and a
+1920x1080 clip share no dimension, so copying width and height literally is meaningless. The largest
+rect with the target's ASPECT, centred, is what the request means.
+⚠️ **FOR A CROP, ASSERT "ONE DIMENSION IS TAKEN WHOLE" AND "NEVER EXCEEDS THE SOURCE."** Neither is
+obvious and both fail SILENTLY — the picture just looks subtly wrong, so the eye will not catch it.
+⚠️ **Write the SAME representation the existing tool writes.** Reusing `layer.crop` meant Reset, the
+scrubbers and the overlay all kept working for free; a parallel field would have needed each of them
+taught about it.
 
 ⚠️ **A PAST TICK'S MEASUREMENT CAN BE WRONG TOO — RE-READ THE DEFINITION, NOT THE NAME.** #579 carried
 "Blackout is a broken black-and-white filter, spread 25.5" from an earlier tick. **It is in the `tuff`

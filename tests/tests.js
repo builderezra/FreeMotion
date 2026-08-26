@@ -2403,6 +2403,46 @@
     }
   });
 
+  test('580: Crop to canvas fills the project shape without inventing picture', { item: '580' }, async function () {
+    /* Queue 580. Ezra: "Add an option to the customise shape menu similar to the free crop button but an
+     * option to crop to canvas size."
+     * "Canvas size" is the project's SHAPE, not its pixel count — a 1080x1920 project and a 1920x1080
+     * clip share no dimension, so copying width and height literally would be meaningless. What he wants
+     * is the clip cropped so it fills the canvas with no bars: the LARGEST rect with the project's
+     * aspect that fits inside the source, centred.
+     * ⚠️ THE LAST ASSERTION IS THE ONE THAT MATTERS. A crop must only ever REMOVE picture. If neither
+     * dimension is taken whole the rect is smaller than it needs to be; if either exceeds the source the
+     * layer is being asked to show pixels that do not exist. Both are silent on screen — the picture just
+     * looks subtly wrong — so they are checked here rather than left to the eye. */
+    if (typeof FM.cropToCanvasRect !== 'function') throw new Error('FM.cropToCanvasRect is missing — there is no "crop to canvas size" behaviour to test (queue 580)');
+    const CASES = [
+      { name: 'landscape clip in a portrait project', MW: 1920, MH: 1080, PW: 1080, PH: 1920 },
+      { name: 'portrait clip in a landscape project', MW: 1080, MH: 1920, PW: 1920, PH: 1080 },
+      { name: 'square clip in a square project',      MW: 1000, MH: 1000, PW: 1080, PH: 1080 },
+      { name: 'clip already the project shape',       MW: 1920, MH: 1080, PW: 1280, PH: 720 }
+    ];
+    CASES.forEach(function (c) {
+      const r = FM.cropToCanvasRect(c.MW, c.MH, c.PW, c.PH);
+      if (!r) throw new Error(c.name + ': no rect returned');
+      const want = c.PW / c.PH;
+      if (Math.abs((r.w / r.h) - want) > 0.001) throw new Error(c.name + ': the crop is ' + (r.w / r.h).toFixed(3) + ':1 but the canvas is ' + want.toFixed(3) + ':1 — it would still show bars (queue 580)');
+      if (r.x < -0.01 || r.y < -0.01 || r.x + r.w > c.MW + 0.01 || r.y + r.h > c.MH + 0.01) {
+        throw new Error(c.name + ': the crop runs outside the source (' + [r.x, r.y, r.w, r.h].map(Math.round).join(',') + ' in ' + c.MW + 'x' + c.MH + ') — it is asking for pixels that do not exist');
+      }
+      if (Math.abs(r.x - (c.MW - r.w) / 2) > 0.01 || Math.abs(r.y - (c.MH - r.h) / 2) > 0.01) {
+        throw new Error(c.name + ': the crop is not centred, so it silently picks a corner of his shot');
+      }
+      if (!(Math.abs(r.w - c.MW) < 0.5 || Math.abs(r.h - c.MH) < 0.5)) {
+        throw new Error(c.name + ': neither dimension is taken whole (' + Math.round(r.w) + 'x' + Math.round(r.h) + ' of ' + c.MW + 'x' + c.MH + ') — the crop is smaller than it needs to be and throws away picture for nothing');
+      }
+    });
+    // A project with no usable size must not produce a NaN rect that silently blanks the layer.
+    const safe = FM.cropToCanvasRect(1920, 1080, 0, 0);
+    if (!safe || !isFinite(safe.w) || !isFinite(safe.h) || safe.w <= 0 || safe.h <= 0) {
+      throw new Error('a project with no width/height produced ' + JSON.stringify(safe) + ' — a NaN crop blanks the layer with no error');
+    }
+  });
+
   test('579: the mono filters all desaturate, and no two of them are the same look', { item: '579' }, async function () {
     /* Queue 579. Ezra: "the black and white filters don't actually make anything black and white ...
      * add more black and white filter options."

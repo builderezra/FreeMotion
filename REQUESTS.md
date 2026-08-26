@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.95
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.96
 >
-> **State:** v12.95, tests green, tree clean.
+> **State:** v12.96, tests green, tree clean.
+>
+> **🖼️ #580 — there is a "Crop to canvas" button beside Free crop now.** It crops the clip to your
+> project's shape, centred, so it fills the canvas with no bars — and it only ever removes picture,
+> never stretches it. Reset still works on it like any other crop.
 >
 > **🖤 #579 — you now have SIX black-and-white filters instead of three:** Platinum (bright and
 > airy), Ink (almost pure black and white), Fog (flat grey haze), alongside Silver, Noir and Newsprint.
@@ -20183,8 +20187,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Only clause 2/3 belong to this entry now.** Clause 1 is #572. Keeping them merged would mean
       "fixing saturation" forever without ever touching what is actually wrong.
 
-- [ ] **580 — Customise Shape: add a "crop to canvas size" option beside free crop.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **580 — Customise Shape: add a "crop to canvas size" option beside free crop.** (26 Aug.) — ✅ **DONE v12.96**
       His words, verbatim:
       > Add an option to the customise  shape menu similar to the free crop button but an option to crop to canvas size
       **A second button beside the existing free-crop one**, cropping the layer to the project's own
@@ -20193,6 +20196,22 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **`FM.cropTool` already exists** (`start`/`stop`/`redraw`) and the crop quad is stored per layer —
       so this is very likely setting that quad to the canvas rect rather than a new mechanism. **Read
       js/crop-tool.js before building.**
+      **✅ The entry's guess was right — it is arithmetic, not a mechanism.** A **Crop to canvas** button
+      now sits beside Free crop and writes the SAME `layer.crop` source-pixel rect the free tool writes,
+      so Reset, the width/height scrubbers and the crop overlay all keep working with no second path.
+      ⚠️ **"Canvas size" is the project's SHAPE, not its pixel count**, and that distinction is the whole
+      design. A 1080×1920 project and a 1920×1080 clip share **no** dimension, so copying width and height
+      literally would be meaningless. What he wants is the clip filling the canvas with no bars: **the
+      largest rect with the project's aspect that fits inside the source, centred.**
+      **VERIFIED on four shapes** — landscape-in-portrait, portrait-in-landscape, square, and a clip that
+      already matches. Each comes back with the right aspect, inside the source, centred, and **one
+      dimension taken whole**.
+      ⚠️ **That last check is the one that matters and it is not obvious.** If neither dimension is whole,
+      the crop is smaller than it needs to be and throws away picture for nothing; if either exceeds the
+      source, the layer is being asked to show pixels that do not exist. **Both are silent on screen** —
+      the picture just looks subtly wrong — so the test asserts them rather than leaving it to the eye.
+      ⚠️ The maths is exposed as `FM.cropToCanvasRect` and **the test drives the real function**, not a
+      copy of the formula; a copy keeps passing after the shipped one changes.
 
 - [ ] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
