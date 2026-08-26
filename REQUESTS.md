@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.19
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.20
 >
-> **State:** v13.19, 989 tests green, tree clean.
+> **State:** v13.20, 989 tests green, tree clean.
+>
+> **🧹 The list of "effects that might be silently broken" is down from eight to ONE.** Two more
+> turned out to be my testing rather than your app: effects that compare one frame to the last cannot be
+> measured by jumping around the timeline, which is what I was doing. Rendered properly they both work
+> fine. **Only Squish is still unexplained**, and it is probably part of the Squish item you already
+> raised — so it goes there rather than becoming a separate thing.
 >
 > **🎯 The effect-sweep finally produced a real fix.** Two effects (Luma Matte and Compound Blur)
 > do nothing until you point them at another layer — and neither said so. They now carry the same
@@ -20540,7 +20546,27 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **CONTROL: it claims nothing else.** Every claim is verified to genuinely take a layer parameter,
       and ordinary effects (blur, brightness, vignette, squish) are asserted unmarked — **a rule that
       libels working effects is worse than no rule**, which is the lesson two failed sweeps taught.
-      **⏳ STILL OPEN: `temporaldenoise`, `framestutter`, `squish`** — 0 pixels on a real moving clip with
+      ✅ **TWO OF THE THREE CLEARED — v13.19, and they were MY PROBE, not the app.**
+      **Temporal effects keep a previous-frame cache** and deliberately show the frame unprocessed after
+      a seek — js/compositor.js says it outright: *"a backwards seek or a >0.35s jump just shows the
+      frame unblurred."* **I was sampling 0.5s apart, into a FRESH canvas each time**, so there was never
+      any history for them to work from.
+      **Re-run at consecutive frames (1/30s) on ONE canvas, control passing (brightness 199,742):**
+      | effect | 0.5s apart | consecutive |
+      |---|---|---|
+      | `temporaldenoise` | 0 | **39,916** ✅ |
+      | `framestutter` | 0 | **30,605** ✅ |
+      | `squish` | 0 | **0** ❌ |
+      **So both are fine and the app owes him nothing there.** ⚠️ **AND THE RULE THIS PROVES:** *a
+      temporal effect cannot be measured by sampling scattered times into fresh canvases.* Any future
+      check of one has to render consecutively.
+      **⏳ ONE LEFT: `squish`** — 0 pixels on a real moving video, with a valid control, at consecutive
+      frames, with no empty parameter to explain it. **That is now the whole of what is unexplained**,
+      down from eight.
+      🔗 **It is very likely part of #539, which is HIS and still open** — *"Squish must work with EVERY
+      effect (shakes especially)"*. **Do not open a second front on squish; fold this measurement into
+      #539** rather than treating it as a separate finding.
+      **⏳ WAS: `temporaldenoise`, `framestutter`, `squish`** — 0 pixels on a real moving clip with
       a passing control, and no empty parameter to explain it. **Those three are the genuine mystery**,
       and `lightwrap` needs re-testing with a background layer present.
       ⚠️ **STILL NOT A BUG LIST.** Each of the three needs its own answer to *"what would this need, and

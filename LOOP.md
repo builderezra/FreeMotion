@@ -156,6 +156,12 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.16, 989 tests green, tree clean, `HEAD == ssh/main`.**
 
+🚨 **A TEMPORAL EFFECT CANNOT BE MEASURED BY SAMPLING SCATTERED TIMES INTO FRESH CANVASES.** They
+keep a previous-frame cache and js/compositor.js states plainly that *"a backwards seek or a >0.35s jump
+just shows the frame unblurred"*. Sampling 0.5s apart made `temporaldenoise` and `framestutter` read
+**0** and look broken; rendered at consecutive 1/30s frames onto ONE canvas they measure **39,916** and
+**30,605**. **Render consecutively or do not measure them at all.**
+
 🔓 **A REAL VIDEO LAYER CAN BE MADE IN A TEST — v13.17, and this unblocks more than #599.**
 `canvas.captureStream()` → `MediaRecorder` → Blob → `File` → `FM.loadVideoFile()` → `FM.addMediaLayer()`
 yields a genuine `type: 'video'` layer (measured: 159KB webm/vp9, 480×480, 1.78s, moving detailed
