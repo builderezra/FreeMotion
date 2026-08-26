@@ -215,8 +215,20 @@ than linear. There is no per-effect overhead to remove. Individual warps are sim
 | **#47** | crash-resume DONE v7.53-55; half (b) off-main-thread = **his decision**, days of work |
 | **#95** | audio half fixed v7.33; timeline stand-in run at 6x today → **needs HIS device** |
 | **#96** | three causes fixed (latest v12.36 matches his symptom exactly) → **needs his file** |
-➡️ **NEXT UNBLOCKED WORK: #98 (Add Text could be better), then #125, #129, #148, #202.** The one
-buildable thing above them is **Gaussian Blur's mix control** — scoped in its entry, one focused tick.
+❌ **CORRECTION — I wrote "next unblocked work: #98, then #125, #129, #148, #202" and that was WRONG.
+I had not read them. Read now, by hand, one at a time:**
+· **#98** — (d) shipped v8.53, (c) settled by measurement, **(a)+(b) need ONE PHOTO from him** (an extra
+  ✓ row flush on the keyboard is iOS Safari's own accessory bar, which no browser here can render).
+· **#125** 🟠 needs him · **#148** 🟠 needs him · **#202** 📌 nothing to build · **#206** ⏸️ he asked me
+  to leave it.
+➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
+concluded from the classifier — which is the distinction rule 8b insists on.
+🎯 **THE NEXT ACTUAL BUILD IS GAUSSIAN BLUR'S MIX CONTROL** (scoped in the effects-plan entry, one
+focused tick). After that the effects-plan entry names the route itself: **the BUG-HUNT backlog, then
+his own list from #296 onward.**
+⚠️ **Do NOT read "all blocked" as "nothing to do" — there is a scoped build waiting and a whole backlog
+behind it.** And do not manufacture kernel micro-optimisations to look busy; that was already the
+temptation once today.
 ⚠️ **The pattern is worth naming: his oldest reports are nearly all one answer away.** That is not a
 reason to invent work — it is a reason to keep the questions short and in front of him. Four are live:
 Corner Pin/LUT/Curves-or-none, .mov-or-.mp4 (#129), heavy-vs-light project (editing lags), B&W tiles
