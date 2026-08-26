@@ -206,6 +206,14 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+🔵 **"EDITING LAGS" IS NOW BLOCKED ON HIM, NOT ON WORK — its measurable half is finished (summary written
+into the entry 27 Aug).** Editing proven fine at 6x throttle; seven effects optimised plus ~1.49x across
+all 198 from PREVIEW_SS; the remaining cost is structural (a per-pixel JS loop at 1080x1350 needs ~50x,
+the best single win was 11x) and the reduced raster + adaptive ladder are what carry it.
+⚠️ **Per rule 4, blocked is not done — so the next tick moves DOWN the queue** to the next unnumbered
+item (EFFECTS-PLAN build rounds), then #47. **Do not keep grinding kernels here for 1.1x while his
+older untouched reports wait.**
+
 ✅ **DONE v13.39 — `PREVIEW_SS` IS NOW 1.25 AND EVERY EFFECT IS ~1.49x FASTER IN THE PREVIEW.**
 Canvas 745x931 -> 626x783 (raster 0.69 -> 0.58), kaleidoscope 57.6 -> 38.6 ms through the REAL render
 path, tracking the 1.42 pixel ratio. ⚠️ **The 1.76x quoted below is KERNEL-ONLY and overstates it —

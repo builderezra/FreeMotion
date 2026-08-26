@@ -4231,6 +4231,32 @@ better still, keep working inside the turn rather than parking work for a later 
       where a sample lands exactly on the boundary between two source pixels.
       ⚠️ Still 🟠 NEEDS YOU for the same reason as before: I can only measure this on a desktop
       browser. Whether it FEELS better on your phone is the half I cannot take from you.
+
+      ═══ ✅ **27 AUG — THE WHOLE MEASURABLE HALF OF THIS ENTRY IS NOW DONE. Here is the summary.** ═══
+      **1. Editing is NOT the problem, and that is now proven at PHONE SPEED, not guessed.** Under 6x CPU
+      throttling (`tools/_phoneprobe.py`) a tap costs 22 ms, a scrub 3.8 ms, a timeline rebuild 5.3 ms,
+      and **nothing scales worse than the CPU does** — no cliff, no thrashing on slow hardware.
+      **2. The cost was always DRAWING, and eight things were done about it:**
+      | | was | now |
+      |---|---|---|
+      | Fractal Warp | 930.9 ms | **83.2 ms (11x)** |
+      | Grid Repeat | 15.3 | **5.6 (2.73x)** |
+      | Inner Pinch | 11.0 | **5.6 (1.96x)** |
+      | Twirl | 17.8 | **9.4 (1.89x)** |
+      | Ripple | 16.8 | **9.2 (1.83x)** |
+      | Radial Repeat | 28.1 | **15.4 (1.82x)** |
+      | Kaleidoscope | 29.9 | **19.6 (1.53x)** |
+      | **EVERY effect** (preview supersample) | — | **~1.49x** |
+      All exact/pixel-identical except Twirl, whose ~4% one-pixel resample is documented and capped by a
+      test. Bulge was tried and REVERTED for measuring slower.
+      **3. ⚠️ THE HONEST LIMIT, and it matters more than the wins.** At your 1080x1350 a single warp still
+      costs **hundreds of ms a frame** — Kaleidoscope was 762 ms before this work. The gap needs ~50x and
+      the best single win was 11x. **A per-pixel JavaScript loop cannot close it.** What actually keeps
+      the app usable is the reduced raster and the adaptive quality ladder, both of which already exist
+      and both of which were verified working. Further kernel tuning is small change from here.
+      ❓ **SO THE ONLY THING LEFT IN THIS ENTRY IS YOUR VERDICT**, and it is now a sharper question than
+      "does it feel better": **does a project with one or two effects feel fine while a heavy one crawls?**
+      If yes, that matches every measurement and the remaining work is architectural, not arithmetic.
       ✅ **27 Aug — I CAN MEASURE PHONE SPEED AFTER ALL, and it changes the answer. `tools/_phoneprobe.py`.**
       Every number above says "desktop only, cannot speak for your phone" — and that was half true. I
       cannot measure how it FEELS, but Chrome will run the whole app at a fraction of its clock
