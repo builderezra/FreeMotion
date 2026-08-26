@@ -149,6 +149,12 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.01, 986 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **`elementFromPoint` CANNOT SEE A PSEUDO-ELEMENT — never use it to ask "is this visible".**
+#587's line is a `::after`, which receives no pointer events, so hit-testing reported the head on top at
+every sample and proved nothing either way. **Screenshot for visibility; hit-test only for reachability.**
+⚠️ **#587 NOW HAS TWO NEGATIVE REPRODUCTIONS** — default AND scrolled (marker staged at x41 inside the
+head's 0–66, photographed, clean). **Parked on one question to him: was the timeline zoomed out?** Three
+theories eliminated; a fourth would be invention.
 ⚠️ **#587 DID NOT REPRODUCE and the next step is written into the entry** — a marker at t=0.2 sits at
 x198 while `.track-head` is 0–66 at z-index 8 with an opaque background over the marker's z-index 3, so
 the head DOES cover it. His shot must be SCROLLED, and the element to check is the RULER's head cell,

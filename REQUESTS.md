@@ -4,6 +4,12 @@
 >
 > **State:** v13.01, tests green, tree clean.
 >
+> **❓ #587 — I still cannot make the benchmark lines appear in the sidebar.** I staged the scrolled case
+> this time: a benchmark sitting right inside the sidebar's column, screenshotted — **nothing there.**
+> **One line from you would settle it: was the timeline zoomed out when you saw it, or was that a
+> project with several layers?** That is the one variable I cannot guess at, and I would rather ask than
+> invent a fourth theory.
+>
 > **🟡 #586 + #590 — the whole playhead lights up on a benchmark now, and the hold-menu is gone.**
 > The line was already going yellow; the round head was not, which is the bit you were looking at.
 > And both "Rename marker" and "Remove marker" are gone, as you said. **Removing still works** — park on
@@ -20295,7 +20301,7 @@ re-opened #480, which I had marked done and had not fixed.
       **check them together** rather than styling the playhead twice.
 
 - [ ] **587 — Benchmark lines still draw through the layer sidebar.** (26 Aug, annotated close-up at v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Benchmarks still show in this side bar
       **His arrows point at the head column** — the eye/thumbnail strip on the left — where the benchmark's
@@ -20318,6 +20324,20 @@ re-opened #480, which I had marked done and had not fixed.
       2. ⚠️ **Check the RULER's head cell, not `.track-head`.** The marker and its line live in the RULER
          row; the corner above the track heads is a DIFFERENT element, and it is the one his arrows point
          at. `.track-head`'s z-index says nothing about it.
+      **🔎 STILL DOES NOT REPRODUCE — the scrolled state was staged at v13.01 and it is clean.**
+      Three markers, timeline scrolled to `scrollLeft 270` so one sits at **x 41, inside the head's
+      0–66**. Screenshot taken in that exact state: **no tan line in the sidebar.** So the two steps this
+      entry named are now both done, and both came back negative.
+      ⚠️ **AND ONE OF MY OWN PROBES WAS USELESS — worth recording so it is not repeated.**
+      `elementFromPoint` reported the head on top at every sample, and that proves NOTHING here: the
+      marker's line is a **`::after` pseudo-element**, which never receives pointer events, so hit-testing
+      **can never** report it whether it is painted or not. **Only a screenshot answers "is it visible".**
+      ❓ **What would settle it, and it is one line from him:** his shot has lines at roughly x 14 and
+      x 50 (380px-equivalent) — **was the timeline ZOOMED OUT, or was that a project with many layers?**
+      A different zoom changes which times land under the head, and it is the one variable I cannot guess.
+      **Not urgent** (#591), but this cannot go further without it — three theories are now eliminated and
+      a fourth would be invention.
+
       **JUMPED: #586 and #590 are the same object and were done together; this one did not reproduce in
       the state I could measure**, and guessing at a z-index for a symptom I cannot see would be exactly
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
