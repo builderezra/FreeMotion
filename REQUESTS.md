@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.18
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.19
 >
-> **State:** v13.18, 989 tests green, tree clean.
+> **State:** v13.19, 989 tests green, tree clean.
+>
+> **🎯 The effect-sweep finally produced a real fix.** Two effects (Luma Matte and Compound Blur)
+> do nothing until you point them at another layer — and neither said so. They now carry the same
+> **"Needs a setting"** label the others do.
+> **The good part: I did not hard-code their names.** The app now works it out by asking each effect
+> whether it needs a source and hasn't got one — which immediately caught **three more** I had not
+> found by testing, and will catch any future one for free.
 >
 > **🔓 I got unstuck on my own item by building a video from scratch.** #599 had been parked on "I
 > cannot test this without real footage" — turns out the browser can RECORD one, so the app now gets a
@@ -20520,6 +20527,22 @@ re-opened #480, which I had marked done and had not fixed.
         **Re-test with two layers before saying a word about these.**
       · **`temporaldenoise`, `framestutter`, `squish` should act on a single moving clip** — and did not.
         **Those three are now genuine candidates**, for the first time on evidence rather than assumption.
+      ✅ **AND THE FIRST REAL FIX OUT OF THIS ENTRY — v13.19.** Two of the six were not mysterious at
+      all: **`lumamatte` and `compoundblur` each take a `source: layer` parameter defaulting to an EMPTY
+      string.** They cannot do anything until you point them at a layer, and **neither carried the "Needs
+      a setting" marker** #529 built for exactly this.
+      ✅ **DERIVED FROM THE REGISTRY, NOT ADDED TO THE LIST — and it immediately paid for itself.** Asking
+      *"does this take a layer parameter, and is it empty?"* claims **FIVE** effects: `displacemap`,
+      `polardisplace`, `lumamatte`, `compoundblur`, `matchgrade`. **Two of those no sweep had flagged at
+      all.** A hand-kept list would have carried the two I happened to measure and silently missed the
+      rest — the exact rot the preload array in js/fx-thumbs.js suffered (#359, *"had fallen four
+      behind"*). **Any future source-taking effect is now covered the day it is written.**
+      ⚠️ **CONTROL: it claims nothing else.** Every claim is verified to genuinely take a layer parameter,
+      and ordinary effects (blur, brightness, vignette, squish) are asserted unmarked — **a rule that
+      libels working effects is worse than no rule**, which is the lesson two failed sweeps taught.
+      **⏳ STILL OPEN: `temporaldenoise`, `framestutter`, `squish`** — 0 pixels on a real moving clip with
+      a passing control, and no empty parameter to explain it. **Those three are the genuine mystery**,
+      and `lightwrap` needs re-testing with a background layer present.
       ⚠️ **STILL NOT A BUG LIST.** Each of the three needs its own answer to *"what would this need, and
       can the app PROVE it is absent?"* before anything is shown to him — the bar the colour and motion
       checks already meet, and the bar two earlier attempts failed.

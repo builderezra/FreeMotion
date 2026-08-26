@@ -727,7 +727,32 @@ window.FM = window.FM || {};
   const NEEDS_INPUT = { darkglow: 1, replacecolor: 1, hslbands: 1, matchgrade: 1 };
   FM._fxNeedsInput = function (id) { return !!NEEDS_INPUT[id]; };
   FM._fxNeedsInputList = function () { return Object.keys(NEEDS_INPUT).sort(); };
-  function needsInputHint(id) { return NEEDS_INPUT[id] ? el('span', 'fxb-needs', 'Needs a setting') : null; }
+  /* ⚠️ AND AN EFFECT WHOSE SOURCE LAYER IS EMPTY NEEDS ONE TOO — queue 599, DERIVED rather than listed.
+     Found by sweeping: `lumamatte` and `compoundblur` change **0 pixels** on a real moving video clip
+     with a passing control, and the reason is not subtle — each takes a **`source: layer` parameter that
+     defaults to an empty string.** They cannot do anything until you point them at a layer, and **neither
+     was marked.**
+     ⚠️ **DERIVED, NOT ADDED TO THE LIST.** Putting two more names in NEEDS_INPUT would fix today and fall
+     behind the next effect that takes a source — the same rot the preload list in js/fx-thumbs.js
+     suffered (queue 359: "a literal array ... had fallen four behind"). **Asking the registry means any
+     future source-taking effect is covered the day it is written.**
+     ⚠️ **A `layer` param is the ONLY kind that can be proven empty this way** — a range or a segment
+     always has a usable value, so this cannot misfire on an ordinary parameter. */
+  function needsSourceLayer(id) {
+    let ps = null;
+    try { ps = FM.fxRegistry.paramsOf(id); } catch (e) { return false; }
+    if (!Array.isArray(ps)) return false;
+    const src = ps.filter(function (p) { return p && p.type === 'layer'; });
+    if (!src.length) return false;
+    let inst = null;
+    try { inst = FM.fxRegistry.makeInstance(id); } catch (e) { return false; }
+    if (!inst || !inst.params) return false;
+    return src.every(function (p) { const v = inst.params[p.key]; return v === '' || v == null; });
+  }
+  FM._fxNeedsSource = needsSourceLayer;   // seam: the suite asks the real rule
+  function needsInputHint(id) {
+    return (NEEDS_INPUT[id] || needsSourceLayer(id)) ? el('span', 'fxb-needs', 'Needs a setting') : null;
+  }
 
   /* ---- SAY IT BEFORE HE SPENDS THE PICK (queue 572) ---------------------------------------------
    * Ezra, for the fourth time: *"These effects still don't work, you've tried to fix it so many times,
@@ -784,7 +809,7 @@ window.FM = window.FM || {};
 
   let _deadCache = new Map();
   function deadHereWhy(id) {
-    if (NEEDS_INPUT[id]) return null;                 // that tile already carries the other marker
+    if (NEEDS_INPUT[id] || needsSourceLayer(id)) return null;   // that tile already carries the other marker
     if (!FM.fxDeadOnLayer || !FM.fxRegistry || !FM.fxRegistry.makeInstance) return null;
     const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (!layer) return null;
@@ -819,7 +844,7 @@ window.FM = window.FM || {};
 
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
-    if (NEEDS_INPUT[reg.id]) wrap.title = reg.label + ' — does nothing until you give it a setting';
+    if (NEEDS_INPUT[reg.id] || needsSourceLayer(reg.id)) wrap.title = reg.label + ' — does nothing until you give it a setting';
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
     // queue 572: the "Needs a setting" marker, or — when the app can PROVE it — "does nothing here",

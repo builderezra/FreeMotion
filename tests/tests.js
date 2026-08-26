@@ -2531,6 +2531,32 @@
      * ways and both are silent: a category with no icon falls back to another category's glyph, and an
      * orphan icon is a category that was renamed with nobody updating the drawing. Checked in BOTH
      * directions rather than just "are there four". */
+    /* ---- queue 599: "Needs a setting" is DERIVED for source-taking effects, not listed ------------
+     * Found by sweeping on a real video clip: `lumamatte` and `compoundblur` change 0 pixels, because
+     * each takes a `source: layer` parameter defaulting to an EMPTY string — they cannot do anything
+     * until you point them at a layer, and neither was marked.
+     * ⚠️ DERIVED RATHER THAN LISTED, and it immediately paid: asking the registry claims FIVE effects,
+     * two of which (`displacemap`, `polardisplace`) no sweep had flagged at all. A hand-kept list would
+     * have carried the two I happened to measure and missed the rest — the same rot the preload array in
+     * js/fx-thumbs.js suffered (queue 359, "had fallen four behind").
+     * ⚠️ THE CONTROL IS THAT IT CLAIMS NOTHING ELSE. A rule that marks working effects is worse than no
+     * rule, so every claim is checked to actually take a layer parameter. */
+    if (typeof FM._fxNeedsSource === 'function') {
+      ['lumamatte', 'compoundblur'].forEach(function (id) {
+        if (!FM._fxNeedsSource(id)) throw new Error('"' + id + '" takes an empty source layer and is not marked "Needs a setting" — it changes 0 pixels until one is picked (queue 599)');
+      });
+      ['blur', 'brightness', 'vignette', 'squish'].forEach(function (id) {
+        if (FM._fxNeedsSource(id)) throw new Error('CONTROL FAILED — the ordinary effect "' + id + '" was marked as needing a source layer; a rule that libels working effects is worse than no rule');
+      });
+      FM.fxRegistry.all().map(function (r) { return r.id; }).forEach(function (id) {
+        if (!FM._fxNeedsSource(id)) return;
+        const ps = FM.fxRegistry.paramsOf(id) || [];
+        if (!ps.some(function (p) { return p && p.type === 'layer'; })) {
+          throw new Error('"' + id + '" is claimed to need a source layer but has no layer parameter at all — the rule is misfiring');
+        }
+      });
+    }
+
     if (!FM.audioFxRegistry || !FM.audioFxRegistry.categories) throw new Error('the audio effect registry is missing');
     if (typeof FM._audioCatIconKeys !== 'function') throw new Error('the audio browser exposes no category icons — the tiles are still bare (queue 585)');
     const cats = FM.audioFxRegistry.categories().map(function (c) { return c.key; });
