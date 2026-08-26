@@ -21224,7 +21224,21 @@ re-opened #480, which I had marked done and had not fixed.
       forces the padded/expanded plate (the `_hasMover` / `fxSlack` allowance this entry already
       suspected), and Tiles then has a sane box to divide. Without it, Tiles appears to be dividing a
       degenerate or unpadded box — hence strips instead of tiles.
-      ➡️ **Next action: find what box Tiles divides** (its `source` param defaults to 1, and it is in
+      📍 **27 Aug, READ — and it complicates the plate theory, so do not act on that theory yet.**
+      `js/compositor.js:8990`. **A NEW Tiles instance is created with `mode: 0`** (registry default), but
+      the kernel's fallback for an ABSENT mode key is **`1` = Grid** — and **only `mode === 1` runs the
+      grid branch.** So the mode a fresh instance gets is NOT the grid one; mode 0 is a different branch
+      entirely, which is very likely the vertical-strip look seen in panel 2.
+      ⚠️ **That means "Tiles alone looks wrong" may be "mode 0 is a strip mode and is the default", not a
+      plate bug** — a completely different fix (a default, versus a box calculation).
+      ❓ **But it does NOT explain the order dependence**, which is the real puzzle: both panels used an
+      identically-constructed instance, so both were mode 0, yet `[shake, tiles]` rendered a proper
+      mirrored GRID and `[tiles]` rendered strips. **Same mode, same params, different picture.**
+      ➡️ **Next action, in this order: (1) read what mode 0 actually does; (2) confirm both panels really
+      were mode 0 by logging the resolved value at render time rather than trusting the constructor;
+      (3) only then look at the plate.** ⚠️ Step 2 matters — on #578 three claims died from trusting what
+      I thought the probe had set up.
+      🗒️ *(superseded) Next action: find what box Tiles divides* (its `source` param defaults to 1, and it is in
       `CFX_NO_BBOX`'s neighbourhood — check whether it is getting the alpha bbox or the full plate), then
       make it independent of what ran before it. **Acceptance: `[tiles]` alone must match `[shake, tiles]`
       structurally — a readable grid, not strips.**
