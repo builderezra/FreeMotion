@@ -149,6 +149,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.01, 986 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **THREE OF HIS REPORTS IN A ROW DO NOT REPRODUCE IN THE PREVIEW — #587, #592, #593.** Each was
+measured carefully and each came back clean. **That pattern is now more informative than any one of
+them:** his phone differs systematically — most likely TIMELINE ZOOM (both #587 and #592 are about where
+things land horizontally) or losing timing races the preview never loses (#593's provisional tile).
+**Stop generating a fourth theory per item and ask him for the zoom / one zoomed-out screenshot.**
+⚠️ **DERIVED NUMBERS LIE WHEN YOU ARE TIRED — PREFER DIRECT EDGE COMPARISONS.** On #592 I derived
+px/sec from a clip width, got a figure inconsistent with that clip's own edges, and produced a fake
+"124px overshoot". The two direct comparisons (decoration right vs clip right) were unambiguous: 0.
+
 🔴 **`elementFromPoint` CANNOT SEE A PSEUDO-ELEMENT — never use it to ask "is this visible".**
 #587's line is a `::after`, which receives no pointer events, so hit-testing reported the head on top at
 every sample and proved nothing either way. **Screenshot for visibility; hit-test only for reachability.**

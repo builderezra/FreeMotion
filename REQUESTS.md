@@ -4,6 +4,13 @@
 >
 > **State:** v13.01, tests green, tree clean.
 >
+> **👀 THREE OF YOUR REPORTS IN A ROW DO NOT REPRODUCE HERE — #587, #592, and #593 — and that
+> pattern is now the interesting thing.** Each one I have measured carefully and each comes back clean in
+> my preview while your phone plainly shows otherwise. **The likeliest single explanation is that your
+> timeline is at a different ZOOM, or your phone loses timing races mine never does.** Rather than guess
+> at a fourth theory each time: **if you can tell me the zoom level, or send one screenshot with the
+> timeline zoomed all the way out, it would probably settle two of the three at once.**
+>
 > **❓ #587 — I still cannot make the benchmark lines appear in the sidebar.** I staged the scrolled case
 > this time: a benchmark sitting right inside the sidebar's column, screenshotted — **nothing there.**
 > **One line from you would settle it: was the timeline zoomed out when you saw it, or was that a
@@ -20111,6 +20118,20 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The word is "slightly" — this is a few pixels, so eyeballing will not settle it.** Compare the
       decoration's right edge against the last clip's right edge and the playhead's x at the project end,
       all three measured, before and after.
+      **🔎 MEASURED at v13.01 — NO OVERSHOOT IN EITHER STATE I COULD STAGE.**
+      | state | decoration right | clip right | overshoot |
+      |---|---|---|---|
+      | 4s clip in a 4s project | 441 | 441 | **0** |
+      | 3s clip, project clamped to 3s | 378 | 378 | **0** |
+      **The decoration's right edge lands exactly on the content's right edge**, so the `PAD` term this
+      entry suspected is evidently 0 in these states rather than the few pixels he is seeing.
+      ⚠️ **I could not stage a project LONGER than its content** — setting `project.duration = 5` with a
+      3s clip came back clamped to 3, so "the row runs past the end of the timeline" in the sense of past
+      the PROJECT end is the case still untested. That is the one worth trying next.
+      ⚠️ **AND MY OWN ARITHMETIC WAS WRONG ONCE HERE** — I derived px/sec from the clip's width and got a
+      figure inconsistent with its own edges, which produced a fake "124px overshoot". **The trustworthy
+      numbers are the two direct edge comparisons above**, not anything derived. Recorded so the next
+      session does not chase that 124.
       ⚠️ **DO NOT undo #551 or #567 while fixing this.** #551 put the right edge at the project's end and
       he explicitly kept it (*"the right side being cut off is good"*); #567 restored the LEFT edge
       running over the divider. This is a small correction to the right edge's arithmetic, not a revisit.
