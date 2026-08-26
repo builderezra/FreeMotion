@@ -4974,6 +4974,21 @@ window.FM = window.FM || {};
       body.appendChild(el('div', 'insp-hint', 'Smears the whole scene when the CAMERA moves — a pan, a dolly or a spin. It costs nothing while the camera is still, and nothing at all when it has not moved far enough to see, so it is safe to leave on. Shutter is how long the shutter stays open: 0.5 is the 180° shutter film uses. Samples is how many slices are averaged — more is smoother and slower. This does not smear movement INSIDE the picture: a layer\u2019s own keyframes are Motion Blur (Object), and movement made by an effect is Motion Blur (Footage).'));
       return;
     }
+    /* ⚠️ ONE ANSWER TO "IS THIS SCENE FLAT", SHARED BY EVERY CAMERA CONTROL THAT NEEDS DEPTH
+       (queue 595 + the sweep that followed it). Field of view, Distance and Focus blur all act on the
+       gap between layers in Z, and all three are dead without one. **Two copies of this test would drift
+       — one tab would start warning while the other stayed quiet about the same scene.**
+       Returns null when there IS depth, so the caller adds nothing and the warning cannot become
+       furniture. `layer` is the camera itself and is excluded: its own Z is the dolly, not the scene's. */
+    function flatSceneWarning(cam, whatIsDead) {
+      const hasDepth = (FM.scene && FM.scene.layers || []).some(l => l && l !== cam && l.transform &&
+        l.transform.z != null && Math.abs(FM.evalProp(l.transform.z, FM.time) || 0) > 0.5);
+      if (hasDepth) return null;
+      const w = el('div', 'insp-hint insp-hint-warn');
+      w.textContent = 'Nothing in this scene has depth yet, so ' + whatIsDead + ' — every layer sits at the same Z. Give a layer some depth first: select it, open Move & Transform, and change Z beside X and Y.';
+      return w;
+    }
+
     if (tab === 'view') {
       body.appendChild(rangeRow('Field of view', () => (layer.fov != null ? FM.evalProp(layer.fov, FM.time) : camLegacyFov(P)),
         v => { layer.fov = Math.max(5, Math.min(160, v)); FM.requestRender(); }, 5, 160, 0.5));
@@ -4994,18 +5009,24 @@ window.FM = window.FM || {};
          ⚠️ **It names the CONTROL that fixes it.** "Nothing has depth" is a diagnosis; "set Z in Move" is
          an instruction, and Z is already there beside X and Y. Telling him the problem without the cure
          is what made this a bug report in the first place. */
-      const flat = !(FM.scene && FM.scene.layers || []).some(l => l && l !== layer && l.transform &&
-        l.transform.z != null && Math.abs(FM.evalProp(l.transform.z, FM.time) || 0) > 0.5);
-      if (flat) {
-        const w = el('div', 'insp-hint insp-hint-warn');
-        w.textContent = 'Nothing in this scene has depth yet, so these two do nothing — every layer sits at the same Z. Give a layer some depth first: select it, open Move & Transform, and change Z beside X and Y.';
-        body.appendChild(w);
-      }
+      const w = flatSceneWarning(layer, 'these two do nothing');
+      if (w) body.appendChild(w);
       body.appendChild(el('div', 'insp-hint', 'Field of view is the lens. Wide (90°+) throws depth hard — layers at different Z separate and the camera’s pan gains real parallax. Narrow (20°) flattens the scene almost to 2D. Distance dollies the camera along Z; it is the same value as the camera’s own Z, so keyframing either animates the move.'));
       return;
     }
     if (tab === 'focus') {
       if (!layer.focus) layer.focus = { enabled: false, distance: 0, dof: 200, blur: 0.5 };
+      /* ⚠️ FOCUS NEEDS DEPTH TOO — found by sweeping for the queue-595 shape rather than waiting for him
+         to report it a second time. MEASURED at v13.04: with Focus blur ON and every layer at the same Z,
+         turning it on changes **0 pixels**; give one layer `z = 900` and the same switch changes
+         **39,542**. It is the identical fault to Field of view, one tab across in the same panel.
+         Focus separates NEAR from FAR — `off = |zz - distance| - dof` — so with no depth there is nothing
+         to separate, and the blur it can produce is a uniform wash over everything, which is not what
+         anyone reaches for a focus control to do.
+         **Same helper, same words, same colour as the View tab** — one truth about what "flat" means,
+         rather than a second copy that can drift from it. */
+      const fw = flatSceneWarning(layer, 'Focus blur has nothing to separate');
+      if (fw) body.appendChild(fw);
       const f = layer.focus;
       body.appendChild(checkRow('Focus blur', !!f.enabled, v => { f.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
       if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Position / Scale → Move) and everything off the focus plane softens.')); return; }

@@ -2434,6 +2434,17 @@
 
       const warn = document.querySelector('.insp-hint-warn');
       if (!warn) throw new Error('on a scene where every layer sits at the same Z, the camera says nothing about Field of view and Distance doing nothing — that silence IS queue 595');
+      /* ⚠️ AND FOCUS TOO — queue 597, found by sweeping for this same shape rather than waiting for him
+         to report it twice. MEASURED: with every layer at one Z, switching Focus blur on changes 0
+         pixels; with one layer at z=900 the same switch changes 39,542. Both tabs share ONE flat-scene
+         test, so a second copy cannot drift and leave one tab warning while the other stays quiet. */
+      FM._camTab = 'focus';
+      if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('cameraopts');
+      await sleep(650);
+      if (!document.querySelector('.insp-hint-warn')) throw new Error('the Focus tab says nothing on a flat scene, but Focus blur separates NEAR from FAR and there is no depth to separate — same gap as Field of view (queue 597)');
+      FM._camTab = 'view';
+      if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('cameraopts');
+      await sleep(650);
       if (!/depth/i.test(warn.textContent)) throw new Error('the camera warning does not mention depth: ' + JSON.stringify(warn.textContent.slice(0, 60)));
       if (!/\bZ\b/.test(warn.textContent)) throw new Error('the warning names the problem but not the CONTROL that fixes it — Z sits beside X and Y in Move & Transform, and saying so is the difference between a diagnosis and an instruction');
 

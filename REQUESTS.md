@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.04
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.05
 >
-> **State:** v13.04, tests green, tree clean.
+> **State:** v13.05, tests green, tree clean.
+>
+> **🔎 I went looking for the NEXT one instead of waiting for you to find it — and there was one.**
+> **Focus blur was dead on a flat scene too**, exactly like Field of view, one tab across in the same
+> panel: 0 pixels with everything at one depth, 39,542 once a layer has some. It says so now, in the same
+> words and colour. **You have reported this family three times; that is the fourth, caught before you
+> hit it.**
 >
 > **📷 #595 — the camera now tells you when it cannot do anything.** If every layer sits at the same
 > depth it says so, and tells you where Z is. It disappears as soon as one layer has depth. **Your
@@ -20221,6 +20227,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
       about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
       where the row sits, but read it before assuming.
+
+- [x] **597 — Focus blur is dead on a flat scene too, and said nothing.** (26 Aug, FOUND by me, not reported.) — ✅ **DONE v13.05**
+      **Not his report — found by sweeping for #595's shape** rather than waiting for him to hit it a
+      second time. He has now reported this family three times (#572, #578, #595); looking for the fourth
+      before he does is the cheapest version of that.
+      📐 **MEASURED at v13.04:** with every layer at the same Z, switching **Focus blur** on changes
+      **0 pixels**. Give one layer `z = 900` and the same switch changes **39,542**.
+      **It is the identical fault to Field of view, one tab across in the same panel.** Focus separates
+      NEAR from FAR — `off = |zz − distance| − dof` — so with no depth there is nothing to separate, and
+      the only blur it can make is a uniform wash over everything, which is not what anyone reaches for a
+      focus control to do.
+      ✅ **Fixed with the SAME helper, words and colour as the View tab.** `flatSceneWarning(cam, what)`
+      is now the one answer to "is this scene flat", shared by both.
+      ⚠️ **TWO COPIES OF THAT TEST WOULD HAVE DRIFTED** — one tab warning while the other stayed silent
+      about the same scene is a worse bug than either, and it is exactly the shape #572 warned about
+      (the browser and the stack disagreeing about the same effect on the same layer).
+      ⚠️ Verified both directions on both tabs: **both warn when flat, both go silent the instant a layer
+      has depth.**
 
 - [ ] **592 — The add-layer row's edge overshoots the end of the timeline slightly.** (26 Aug, annotated phone close-up at v12.93.)
       **STATUS: 🟢 READY — nothing is stopping this**
