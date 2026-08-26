@@ -149,6 +149,27 @@ as a shipped commit before being checked.
 out a 30s browser call**. Sweep a subset, shrink the canvas, or drive it through `tools/_phoneprobe.py`
 where there is a real timeout.
 
+⚡ **v13.28 TOOK THE FIRST ONE: fractalwarp 930.9 -> 83.2 ms (11x). AND IT CORRECTS THE PLAN BELOW.**
+The `prep` hoist alone is NOT the win. Measured against two untouched controls (twirl, ripple, which
+drift ~14% run to run): **curl and tunnel came in at ~1.2x, i.e. inside the noise — no claim made.**
+fractalwarp won because it also did **a dozen DIVISIONS per pixel**, traded for multiplies by
+precomputed reciprocals. 🚨 **So the remaining ten are dominated by TRIGONOMETRY, not by parameter
+resolution, and need a different move: the ROTATION IDENTITY.** curl/twirl/kaleidoscope all compute
+`a = atan2(dy,dx) + delta; return [cx + cos(a)*r, cy + sin(a)*r]` — which is just rotating (dx,dy) by
+`delta`: `[cx + dx*cosD - dy*sinD, cy + dx*sinD + dy*cosD]`. **That deletes atan2 entirely** (the
+dearest call in the loop) and `r` cancels out of the rotation. `delta` still varies per pixel, so one
+sin/cos pair remains — but atan2 plus a cos plus a sin becomes a sin plus a cos.
+⚠️ **It will NOT be bit-identical** — assert a tolerance and check truncation-to-integer, exactly as the
+fractalwarp test does.
+📋 Two method rules this earned, both the hard way:
+· **Carry untouched effects as CONTROLS in any perf run.** They set the noise floor (14% here) and they
+  are what stopped two ~1.2x readings being reported as wins.
+· **Never compare rendered-picture hashes across page reloads** — the shape fixture is not
+  deterministic, and the controls changed hash despite being untouched. Compare kernel to kernel.
+🔒 **And a trap worth not repeating: a reference copy of a kernel must NOT live in `WARP_FX`.** Anything
+in that table is treated as a shipping effect, so the "every effect does something at its defaults" test
+found two that move 0.00 px. They live on `FM._warpRef` now, and the test refuses if one comes back.
+
 🎯 **THE REAL ANSWER, AND IT IS ONE TECHNIQUE APPLIED ELEVEN TIMES. `--sweep`, 198 effects ranked.**
 **37 of 198 cost over 8 ms at HALF resolution** (540x675), so roughly 4x that at his 1080x1350. And the
 dear ones are not a scattering — **the top eleven are all GEOMETRIC WARPS**: gridrepeat 38.4, kaleidoscope
