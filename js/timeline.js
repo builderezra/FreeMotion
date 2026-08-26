@@ -3534,15 +3534,32 @@ window.FM = window.FM || {};
         // card thumbnail freezes forever (auto-regen is gated on !thumbPinned).
         const unpinIf = (was) => { if (was) { P.thumbPinned = false; if (FM.projects && FM.projects.touchCurrent) FM.projects.touchCurrent(true); } };
         const items = [];
-        if (near) {
-          items.push({ label: 'Rename marker…', action: () => { const n = prompt('Marker name:', near.label || 'Marker'); if (n != null && n.trim()) { near.label = n.trim(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } } });
-          items.push({ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
+        /* ⚠️ NO "Rename marker…" AND NO "Remove marker" — queue 590. Ezra: *"Get rid of the pop up menu
+           when holding on a benchmark to rename or delete"*, and asked which he meant, he answered:
+           *"The whole thing goes I don't want to name benchmarks."* So both went, not just the menu.
+           **Renaming is gone outright** — he does not want named benchmarks, so nothing replaces it.
+           ⚠️ **REMOVING IS NOT LOST, AND THAT WAS VERIFIED BEFORE DELETING THIS RATHER THAN ASSUMED.**
+           Parking on a marker and tapping the playhead's head removes it (queue 536 — the filled yellow
+           disc means "a tap takes this one away"). MEASURED at v13.00: one marker, playhead parked on it,
+           head tapped → markers went 1 → 0. **He ruled out NAMING, not deleting**, so it mattered that
+           the other route was real before this one was taken away.
+           ⚠️ **THE THUMBNAIL PIN KEEPS ITS ENTRY, AND FOR A CHECKED REASON.** I first wrote here that the
+           head tap also unpins. **It does not — and it does not need to:** `FM.toggleMarkerAtPlayhead`
+           finds with `!m.thumb`, so **the head tap can never remove a thumbnail-frame marker at all.**
+           That leaves this menu item as the ONLY route to unpinning one, which is why it survives while
+           the other two go — and why removing it would strand `P.thumbPinned` true and freeze the
+           project card's thumbnail forever (auto-regen is gated on `!thumbPinned`).
+           It is also not what he objected to: it unpins a project-card frame, not a benchmark. */
+        if (near && near.thumb) {
+          // The one exception, and it is not a marker action: this unpins the project-card frame, which
+          // the playhead head cannot express and which is not what he was objecting to.
+          items.push({ label: 'Remove thumbnail pin', danger: true, action: () => { P.markers = P.markers.filter(m => m !== near); unpinIf(true); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         }
         /* NO "ADD MARKER HERE" (queue 337). Ezra: *"Get rid of the feature where holding down somewhere on
            the timeline gives you the option to add a benchmark"*.
-           Only the ADD is gone. Rename, remove and clear stay, because they act on a marker you are already
-           pointing at and taking the whole gesture away would remove those with it — the entry warned about
-           exactly that, and it is why this is a one-item deletion rather than dropping the handler.
+           ⚠️ **SUPERSEDED BY queue 590 — nothing is left in this menu now.** Add went here, Clear went at
+           queue 499, and Rename/Remove went at 590 when he answered *"The whole thing goes I don't want to
+           name benchmarks."* The reasoning below was right at the time and he has since overruled it.
            A benchmark can still be added two other ways, checked before removing this one: tapping the
            timecode chip (js/app.js:3795) and M on a keyboard (js/app.js:4995). Worth knowing for later:
            queue 364 moves that first route onto the playhead's top, so the two changes agree rather than
@@ -3552,11 +3569,14 @@ window.FM = window.FM || {};
            337 above, one item later. Wiping every marker in the project is not something a long-press on
            empty ruler should offer: it is the one action here that destroys work you cannot see from
            where you are pressing, and there is no confirmation step in front of it.
-           Rename and Remove stay. They act on a marker you are already pointing at, he did not ask for
-           them, and 337's note warned specifically against taking the whole gesture away with the item.
-           Markers are still removable one at a time, which is the only route he has asked to keep.
-           With this gone, a long-press on a stretch of ruler with no marker under it now produces NO
-           menu at all — both callers below already refuse to open an empty one, and skip the buzz too. */
+           ⚠️ **AND SINCE queue 590, RENAME AND REMOVE ARE GONE TOO, so this menu is now ALWAYS empty**
+           except for the thumbnail-pin case above. He was asked whether he meant the popup or the feature
+           and answered *"The whole thing goes I don't want to name benchmarks."*
+           **Removing a benchmark survives on the playhead's head** — park on one and tap it — and that
+           was MEASURED doing so (markers 1 → 0) before this was taken away, because he ruled out NAMING
+           rather than deleting.
+           Both callers below already refuse to open an empty menu and skip the buzz with it, so the hold
+           gesture now does nothing on a benchmark, which is what he asked for. */
         return items;
       };
       rulerEl.addEventListener('contextmenu', (e) => {

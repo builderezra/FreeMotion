@@ -2882,6 +2882,19 @@ body.white-chrome #time-readout:active {
 /* The whole line picks it up on hover too — a 11px triangle is a small thing to notice at the top of a
    400px line, and hovering a marker is a deliberate question about where that marker IS. */
 #tl-centerline.mark-hover { border-left-color: #ffd75e; box-shadow: 0 0 6px rgba(255, 215, 94, .5); }
+/* ⚠️ …AND THE HEAD GOES WITH IT — queue 586. Ezra: *"When hovering over a benchmark make the whole play
+   head go yellow."* MEASURED at v13.00: the LINE already turned yellow (rgb(234,240,248) → rgb(255,215,94))
+   and **the disc did not change at all** — same dark fill, same white collar. So "the whole play head"
+   was half of it, and the half he was looking at stayed white.
+   The collar is the line's own colour by design (queue 568 clause 2 — it is what makes them read as ONE
+   object rather than a ring overlapping a line). **So when the line changes colour the collar has to
+   change with it, or the fix that joined them is exactly what pulls them apart again.**
+   ⚠️ The full box-shadow list is re-stated, including the collar — `box-shadow` REPLACES rather than
+   adds, which is the trap written up at the disc's own rule and the reason this is a whole list and not
+   one value. */
+#tl-centerline.mark-hover #tl-headtap::after {
+  box-shadow: 0 0 0 2px #ffd75e, 0 0 9px rgba(255, 215, 94, .45), inset 0 0 0 3px rgba(255, 206, 74, 1);
+}
 /* NOT WHILE THE BIG + IS UP (queue 354). Ezra, with a screenshot of the white line running down
    through the + and through "Tap here to start creating": "Hide the player head while the add button
    is big". An empty project has nothing to scrub, so the line is a ruler over a blank page — and it

@@ -2403,6 +2403,45 @@
     }
   });
 
+  test('589: every glint ring starts at a random point of its orbit', { item: '589' }, async function () {
+    /* Queue 589. Ezra: "the shiny outline starts playing from the top left but I feel it add this vibe of
+     * constantly resetting, coz it starts again at the top left each time - make it so it spawns at a
+     * random paint of the spin cycle."
+     * ⚠️ NEGATIVE, NOT POSITIVE. A negative animation-delay starts the animation already part-way
+     * through; a positive one makes it WAIT, which is the opposite of what he asked for and would read as
+     * the ring being broken for its first second. Sign is asserted, not just difference.
+     * ⚠️ AND THE DURATION MUST BE READ, NOT HARD-CODED. It is 3.8s in four separate rules today; a
+     * literal in the JS is a second copy that must agree forever, and it would silently stop randomising
+     * the moment anyone changed one of them. So the phase is asserted to lie inside ONE cycle of whatever
+     * the element actually reports. */
+    if (typeof FM.glintRing !== 'function') throw new Error('FM.glintRing is missing — nothing builds the glint rings any more');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-600px;top:0;width:120px;height:80px';
+    document.body.appendChild(host);
+    try {
+      const delays = [], durs = [];
+      for (let i = 0; i < 6; i++) {
+        const box = document.createElement('div');
+        box.style.cssText = 'width:120px;height:80px;position:relative';
+        host.appendChild(box);
+        const g = FM.glintRing(box, 'hm-glint');
+        const spin = g && g.firstChild;
+        if (!spin) throw new Error('the glint ring has no animated child to phase');
+        delays.push(parseFloat(spin.style.animationDelay));
+        durs.push(parseFloat(getComputedStyle(spin).animationDuration) || 0);
+      }
+      if (delays.some(function (v) { return isNaN(v); })) throw new Error('a glint ring was built with no animation-delay — it starts at the top-left like every other one (queue 589)');
+      if (!delays.every(function (v) { return v <= 0; })) throw new Error('a glint ring has a POSITIVE delay (' + delays.join(', ') + ') — that makes it wait before starting, which is the opposite of what he asked for');
+      const distinct = delays.filter(function (v, i, a) { return a.indexOf(v) === i; });
+      if (distinct.length < 4) throw new Error('six rings produced only ' + distinct.length + ' distinct phases — they are not being randomised, so they still all start together (queue 589)');
+      const dur = durs[0];
+      if (!(dur > 0)) throw new Error('the ring reports no animation duration, so the phase cannot be bounded to one cycle');
+      if (!delays.every(function (v) { return Math.abs(v) <= dur + 0.001; })) {
+        throw new Error('a phase (' + delays.join(', ') + ') is outside one ' + dur + 's cycle — the duration is probably hard-coded in the JS and has drifted from the CSS (queue 589)');
+      }
+    } finally { host.remove(); }
+  });
+
   test('585: every audio category has its own icon, in the visual browser\'s hand', { item: '585' }, async function () {
     /* Queue 585. Ezra: "Add icons for these buttons too like you did in the effects menu."
      * ⚠️ ASSERTED THROUGH THE SEAM, NOT BY OPENING THE AUDIO BROWSER. It needs an audio-capable layer to
@@ -41327,7 +41366,13 @@
       var mx = Math.round(pr.left + pr.width / 2);
       ruler.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: mx, clientY: Math.round(pr.top + pr.height / 2) }));
       await sleep(120);
-      if (!/rename|remove|clear/i.test(txt())) throw new Error('the marker actions went with the add option: ' + JSON.stringify(txt().slice(0, 60)));
+      /* ⚠️ THIS USED TO REQUIRE Rename/Remove/Clear TO SURVIVE — queue 337's point was that only the ADD
+         should go. **He has since overruled it (queue 590):** asked whether he meant the popup or the
+         feature, he answered "The whole thing goes I don't want to name benchmarks." Clear went at 499,
+         Rename and Remove at 590, so the menu is now empty by design.
+         Inverted rather than deleted, so the ORIGINAL guarantee is still guarded: whatever this menu
+         offers, it must never offer to ADD a benchmark. */
+      if (/add/i.test(txt())) throw new Error('the long-press is offering to ADD a benchmark again — queue 337 removed that: ' + JSON.stringify(txt().slice(0, 60)));
       FM.contextMenu.hide();
 
       // …and adding one is still possible, or the feature is gone rather than the gesture.
@@ -47231,8 +47276,18 @@
         const got = press(f);
         if (got && got.some(i => /rename/i.test(i.label || ''))) onMarker = got;
       }
-      if (!onMarker) throw new Error('no press anywhere along the ruler produced a marker menu, so this test cannot tell whether the Clear item is gone or the whole menu is');
-      if (!onMarker.some(i => /remove/i.test(i.label || ''))) throw new Error('the marker menu no longer offers Remove — taking Clear away has taken more with it than he asked for: ' + onMarker.map(i => i.label).join(' / '));
+      /* ⚠️ THESE TWO ASSERTIONS ARE SUPERSEDED BY queue 590 and are inverted rather than deleted.
+         They required a marker press to STILL produce a menu, and that menu to still offer Remove —
+         queue 499's worry was overshooting "remove the item" into "remove the menu". **He has since asked
+         for exactly that overshoot:** offered the choice between the popup and the feature, he answered
+         "The whole thing goes I don't want to name benchmarks."
+         So the menu on a benchmark is now empty BY DESIGN, and what still has to be guarded is the thing
+         499 actually cared about — that Clear never comes back (asserted below) — plus the promise that
+         removing a benchmark did not vanish with it. That route is the playhead's head, and it has its
+         own coverage; asserting it here would only duplicate it. */
+      if (onMarker && onMarker.some(i => /rename/i.test(i.label || ''))) {
+        throw new Error('holding a benchmark offers "Rename" again — queue 590: "The whole thing goes I don\'t want to name benchmarks"');
+      }
 
       /* ── and nowhere on the ruler may offer to wipe them all. */
       const offenders = [];

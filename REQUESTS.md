@@ -1,8 +1,14 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.00
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.01
 >
-> **State:** v13.00, tests green, tree clean.
+> **State:** v13.01, tests green, tree clean.
+>
+> **🟡 #586 + #590 — the whole playhead lights up on a benchmark now, and the hold-menu is gone.**
+> The line was already going yellow; the round head was not, which is the bit you were looking at.
+> And both "Rename marker" and "Remove marker" are gone, as you said. **Removing still works** — park on
+> a benchmark and tap the playhead's head — and I checked that actually works before deleting the menu,
+> rather than trusting the note that said it did.
 >
 > **🎧 #585 — the four audio categories have icons now, and the picture is above.** EQ / Filter is
 > three faders, Space / Stereo is sound spreading outward, Dynamics is a signal squeezed between two
@@ -20121,23 +20127,33 @@ re-opened #480, which I had marked done and had not fixed.
       🔗 This sharpens LOOP rule 8 (surface every open question) rather than cancelling it: the
       questions still get recorded, they just stop being the headline.
 
-- [ ] **590 — Get rid of the hold-a-benchmark popup (Rename / Remove marker).** (26 Aug, phone screenshot at v12.83.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **590 — Get rid of the hold-a-benchmark popup (Rename / Remove marker).** (26 Aug, phone screenshot at v12.83.) — ✅ **DONE v13.01, all four clauses**
       His words, verbatim:
       > Get rid of the pop up menu when holding on a benchmark to rename or delete
       **Asked him which he meant — the popup or the feature — and he answered, verbatim:**
       > The whole thing goes I don't want to name benchmarks
       **So: the popup goes AND renaming goes.** Not a judgement call any more. Four clauses:
-      1. [ ] **The hold gesture stops throwing a menu.** He is explicit, and the gesture was a poor one
+      **✅ CLAUSES 1–3 DONE v13.01.** Both items removed, not just the popup. **Removal was VERIFIED
+      surviving before the item was deleted** — marker present, playhead parked on it, head tapped,
+      markers 1 → 0 — because he ruled out NAMING, not deleting.
+      ⚠️ **A comment I wrote during this was WRONG and was corrected before shipping:** I claimed the head
+      tap also unpins a thumbnail-frame marker. It does not, and does not need to — `toggleMarkerAtPlayhead`
+      finds with `!m.thumb`, so **the head tap can never remove one.** That makes "Remove thumbnail pin"
+      the ONLY route to unpinning, which is why it survives while the other two go; deleting it would
+      strand `P.thumbPinned` and freeze the project card's thumbnail forever.
+      1. [x] **The hold gesture stops throwing a menu.** He is explicit, and the gesture was a poor one
              anyway — a hold on a phone is the same gesture as a scrub.
-      2. [ ] **Rename is removed outright**, including any other route that reaches it. **Sweep for those
+      2. [x] **Rename is removed outright**, including any other route that reaches it. **Sweep for those
              before calling it done** — a menu entry left pointing at a deleted function is a crash, not
              a tidy-up.
-      3. [ ] **Removal must survive**, because he ruled out NAMING, not deleting. Tapping the playhead
+      3. [x] **Removal must survive**, because he ruled out NAMING, not deleting. Tapping the playhead
              head while parked on a marker already removes it (queue 536, the filled yellow disc).
              ⚠️ **VERIFY THAT ACTUALLY WORKS BEFORE DELETING THE POPUP'S REMOVE ITEM** — it is about to
              be the only way, and "it already works" is a claim with a date on it (LOOP rule 11).
-      4. [ ] **Existing projects may hold markers that already carry names.** Leaving the stored field
+      4. [x] **Existing projects may hold markers that already carry names.** ✅ **Satisfied by doing
+             nothing, which was the safe option:** nothing strips `label` on load, so a saved marker keeps
+             whatever it has and it is simply never read or shown. **Deleting it from his stored data is
+             the one move that would not be reversible**, and there is no reason to make it. Leaving the stored field
              unread is safer than stripping it on load, and a name may still be drawn somewhere.
              **Check before deleting anything from saved data** — that is not reversible for him.
       **His shot shows it:** a dark card over the timeline with **"Rename marker…"** and a red **"Remove
@@ -20155,8 +20171,18 @@ re-opened #480, which I had marked done and had not fixed.
       🔗 **Same object as #586 and #587**, both also about markers, both still open. **Do all three
       together** — three separate passes over the marker code is how they end up disagreeing.
 
-- [ ] **589 — The selected category's shiny outline always restarts at the top-left; start it at a random point of the cycle.** (26 Aug, annotated screenshot at v12.82.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **589 — The selected category's shiny outline always restarts at the top-left; start it at a random point of the cycle.** (26 Aug, annotated screenshot at v12.82.) — ✅ **DONE v13.01**
+      **✅ Fixed in `FM.glintRing` — the ONE place every glint ring in the app is built** (centralised by
+      queue 304), so the home cards, the add menu, the sound-effects and the video rows all got it, not
+      just the one he pointed at.
+      ⚠️ **NEGATIVE delay, not positive.** Negative starts the animation already part-way through;
+      positive would make it WAIT, which is the opposite of his ask and would read as the ring being
+      broken for its first second. **The sign is asserted, not just the difference.**
+      ⚠️ **The duration is READ off the element, never hard-coded** — it is 3.8s in four separate rules,
+      and a literal in the JS would be a second copy that must agree forever and would silently stop
+      randomising the moment anyone changed one of them.
+      **Verified:** duration read as **3.8s**, six rings → **six distinct negative phases**, all inside
+      one cycle (−0.316s, −2.057s, −2.486s, −2.883s …).
       His words, verbatim:
       > When you tap on one of these categories the shiny outline starts playing from the top left but I feel it add this vibe of constantly resetting, coz it starts again at the top left each time - make it so it spawns at a random paint of the spin cycle, this will make it feel less janky
       **He has arrowed the selected "Audio" card** on the home screen's category row.
@@ -20252,8 +20278,12 @@ re-opened #480, which I had marked done and had not fixed.
       no icon silently inherits another's glyph; an orphan icon means a category was renamed and the
       drawing was not.
 
-- [ ] **586 — Hovering a benchmark should turn the whole playhead yellow.** (26 Aug, screenshot at v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **586 — Hovering a benchmark should turn the whole playhead yellow.** (26 Aug, screenshot at v12.81.) — ✅ **DONE v13.01**
+      **MEASURED at v13.00: the LINE already went yellow** (`rgb(234,240,248)` → `rgb(255,215,94)`) **and
+      the disc did not change at all.** So "the WHOLE play head" was half done, and the half he was
+      looking at stayed white. The collar is the line's own colour by design (#568 clause 2 — it is what
+      makes them read as one object), so **when the line changes colour the collar has to follow, or the
+      fix that joined them is what pulls them apart again.**
       His words, verbatim:
       > When hovering over a benchmark make the whole play head go yellow
       **Small and well-specified.** A benchmark already draws a yellow marker and a tan line; hovering one
@@ -20277,6 +20307,20 @@ re-opened #480, which I had marked done and had not fixed.
       divider's x is already measured off the live head there.
       ⚠️ He was clear on the add row that the ＋ stays and only the DECORATION is bounded; the same
       distinction applies here.
+      **🔎 DID NOT REPRODUCE AT DEFAULT SCROLL — measured at v13.01, and the z-order is already right.**
+      A marker at t=0.2 sits at **x 198**; `.track-head` spans **0–66** at **z-index 8** with an OPAQUE
+      background, against the marker's **z-index 3**. **So the head does cover the line where they meet**,
+      and `LINE_CROSSES_HEAD` was false — there was nothing to see.
+      **His shot has lines at roughly x 14 and x 50 of a 380px-equivalent width, both INSIDE the head.**
+      For a marker to land there the timeline must be **SCROLLED**, so the next step is precise:
+      1. **Scroll the timeline right until a marker's x falls under the head, then re-measure.** That is
+         the state his screenshot is in and the one this probe was not.
+      2. ⚠️ **Check the RULER's head cell, not `.track-head`.** The marker and its line live in the RULER
+         row; the corner above the track heads is a DIFFERENT element, and it is the one his arrows point
+         at. `.track-head`'s z-index says nothing about it.
+      **JUMPED: #586 and #590 are the same object and were done together; this one did not reproduce in
+      the state I could measure**, and guessing at a z-index for a symptom I cannot see would be exactly
+      the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**

@@ -52,6 +52,26 @@ window.FM = window.FM || {};
       if (d > 0) g.style.setProperty('--glint-d', d + 'px');
     };
     fit();
+    /* ⚠️ EVERY RING STARTS AT A RANDOM POINT OF ITS ORBIT — queue 589. Ezra: *"the shiny outline starts
+       playing from the top left but I feel it add this vibe of constantly resetting, coz it starts again
+       at the top left each time - make it so it spawns at a random paint of the spin cycle, this will
+       make it feel less janky."*
+       A freshly-created element starts its animation at t=0, so the comet was at the same place on every
+       single tap — which is exactly the "constantly resetting" he is describing.
+       ⚠️ **A NEGATIVE delay, not a positive one.** Negative starts the animation already part-way
+       through; positive would make it WAIT, which is the opposite of what he asked for and would read as
+       the ring being broken for the first second.
+       ⚠️ **THE DURATION IS READ OFF THE ELEMENT, NEVER HARD-CODED.** It is 3.8s today in four different
+       rules (hm/am/sfx/vr-glint); a literal here would be a second copy of a number that must agree
+       forever, and it would silently stop randomising the moment anyone changed the speed of one of them.
+       ⚠️ **This is the one place every glint ring in the app is built**, so all four get it — the same
+       reason it was centralised in queue 304. */
+    const spin = g.firstChild;
+    if (spin) {
+      const cs = getComputedStyle(spin);
+      const dur = parseFloat(cs.animationDuration) || 0;
+      if (dur > 0) spin.style.animationDelay = (-(Math.random() * dur)).toFixed(3) + 's';
+    }
     if (window.ResizeObserver) {
       const ro = new ResizeObserver(fit);
       ro.observe(host);

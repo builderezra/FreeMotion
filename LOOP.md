@@ -147,7 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v13.00, 986 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.01, 986 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **#587 DID NOT REPRODUCE and the next step is written into the entry** — a marker at t=0.2 sits at
+x198 while `.track-head` is 0–66 at z-index 8 with an opaque background over the marker's z-index 3, so
+the head DOES cover it. His shot must be SCROLLED, and the element to check is the RULER's head cell,
+not `.track-head`.
+⚠️ **VERIFY THE REPLACEMENT ROUTE BEFORE DELETING THE ONLY OTHER ONE.** #590 removed "Remove marker"
+from a menu; the head-tap route was measured removing a marker (1 → 0) first. **And a comment I wrote
+claiming the head tap also unpins a thumbnail marker was WRONG** — `toggleMarkerAtPlayhead` finds with
+`!m.thumb`, so it can never touch one. Corrected before shipping. **Check the claim you are about to
+write into a comment, not just the code you are about to change.**
 
 ⚠️ **RULE 17 CAUGHT ME FOR REAL ON #584 — a test I wrote opened the effects browser and leaked twice.**
 It reported six effects as indistinguishable from their subject (the thumbnail queue) AND made the
