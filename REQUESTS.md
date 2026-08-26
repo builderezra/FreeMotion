@@ -2873,6 +2873,23 @@ better still, keep working inside the turn rather than parking work for a later 
       Deleted rather than shipped; the instrument (`tests/_tlcost.html`) is committed.*
       **What this half needs is still a number from HIS phone, not another pass here.**
 
+      ✅ **27 Aug — THE THROTTLED-CPU STAND-IN THIS ENTRY ASKED FOR AT THE TOP HAS NOW BEEN RUN, at 6x
+      (harsher than the 4x above). `tools/_phoneprobe.py`. The timeline holds up.**
+      | | 1x | 4x | 6x |
+      |---|---|---|---|
+      | timeline rebuild | 1.0 ms | 3.3 | **5.3** |
+      | tap → inspector | 3.6 | 13.3 | **22.1** |
+      | scrub | 0.6 | 2.3 | **3.8** |
+      **Every one scales at or BELOW linear with the CPU (0.63x-1.06x of it), so there is no cliff** —
+      nothing here falls apart specifically because a device is slow, which is the shape a real phone-only
+      bug would have. Scrubbing at 3.8 ms and a tap at 22 ms are a frame, not a stall.
+      **The entry's opening line said this needed *"profiling on HIS phone, or a throttled-CPU profile as
+      the nearest stand-in, before touching anything"*. The stand-in is now done and it says the timeline
+      is not the problem** — which matches the two re-measurements above rather than contradicting them.
+      ⚠️ **What that does NOT settle:** a throttled desktop is not his phone. It rules out algorithmic
+      blow-up; it cannot rule out something specific to iOS Safari. **So this stays open on the same
+      question — but the in-app prompt (v11.83, below) is now the only thing that can close it.**
+
       **v11.83 — SO THE APP NOW ASKS YOU FOR THAT NUMBER, instead of waiting for it.**
       Four entries — this one, 125, 202 and the original unnumbered "editing lags" — have all ended on
       the same sentence for weeks: *needs a number from HIS phone.* The tool that produces it has
