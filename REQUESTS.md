@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.20
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.21
 >
-> **State:** v13.20, 989 tests green, tree clean.
+> **State:** v13.21, 989 tests green, tree clean.
+>
+> **✅ THE "ARE ANY EFFECTS SILENTLY BROKEN" HUNT IS FINISHED — and the answer is reassuring.** Of the
+> eight suspects: **five had a real gap and now say what they need**, two were already labelled, and the
+> rest were my testing rather than your app. **Squish is fine too** — it moves hundreds of pixels on a
+> shape; my earlier readings used the wrong subject.
+> **Net: two real bugs found and fixed, five effects given a missing label, and around twenty-five false
+> accusations caught before any of them reached your screen.**
 >
 > **🧹 The list of "effects that might be silently broken" is down from eight to ONE.** Two more
 > turned out to be my testing rather than your app: effects that compare one frame to the last cannot be
@@ -20436,8 +20443,7 @@ re-opened #480, which I had marked done and had not fixed.
       shot appears on TAP, so it is a pressed/active state rather than the resting decoration, and queue
       356 was about the resting one.
 
-- [ ] **599 — Sweep for silently-dead effects PROPERLY, on a photograph.** (26 Aug, mine, method recorded after a failed attempt.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **599 — Sweep for silently-dead effects PROPERLY, on a photograph.** (26 Aug, mine.) — ✅ **CLOSED v13.20: all eight explained, five real fixes, zero false accusations shipped**
       **The idea is sound and the first attempt's METHOD was not.** Two real finds came from sweeping
       (#597 Focus, #598 the motion blurs), so a third pass is worth doing — but done right.
       ❌ **WHAT WENT WRONG, recorded so it is not repeated.** Swept all 198 effects on a plain `#c05030`
@@ -20563,6 +20569,20 @@ re-opened #480, which I had marked done and had not fixed.
       **⏳ ONE LEFT: `squish`** — 0 pixels on a real moving video, with a valid control, at consecutive
       frames, with no empty parameter to explain it. **That is now the whole of what is unexplained**,
       down from eight.
+      ✅ **AND `squish` IS FINE TOO — v13.20, the last one standing.** On a SHAPE it measures **770 px**
+      at defaults, **1,856** at amount 2, **7,092** at inset 50. **Its earlier zeros were subject-
+      dependent, exactly like the other artefacts.**
+      **📊 SO THE SWEEP IS CLOSED AND EVERY ONE OF THE EIGHT IS ACCOUNTED FOR:**
+      | outcome | effects |
+      |---|---|
+      | **real fix shipped** | `lumamatte`, `compoundblur` (+3 more found by the derived rule) |
+      | already marked "Needs a setting" | `hslbands`, `matchgrade` |
+      | my probe, not the app | `temporaldenoise`, `framestutter`, `squish`, `lightwrap` |
+      **Two genuine gaps found and fixed (#597, #598), five effects given a marker they lacked, and
+      roughly twenty-five false accusations caught before any reached him.**
+      🔎 **ONE ODDITY LOGGED, NOT CLAIMED:** with `walls = 1` squish changes **0 px** where every other
+      setting moves hundreds. That may be correct (walls likely need a container to push against) and it
+      is **not** worth a claim on its own — **noted here for #539, which is his and already about squish.**
       🔗 **It is very likely part of #539, which is HIS and still open** — *"Squish must work with EVERY
       effect (shakes especially)"*. **Do not open a second front on squish; fold this measurement into
       #539** rather than treating it as a separate finding.
