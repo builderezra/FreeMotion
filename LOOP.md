@@ -206,6 +206,16 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+🔵 **EFFECTS-PLAN (2nd unnumbered) IS ALSO BLOCKED ON HIM — checked 27 Aug, not assumed.** Its three
+remaining features (**Corner Pin**, **LUT import**, **Curves**) each need a NEW KIND of control — canvas
+drag handles, a file picker, a curve editor — and a day-plus each, so guessing wrong is expensive.
+**A name, or "none", unblocks it.** ⚠️ Its one workable half is **Gaussian Blur**, now fully scoped in
+the entry (add a `mix` param; when mix < 1 stop using the filter-string path and draw the plate twice —
+sharp, then blurred at `globalAlpha = mix`). **Left unstarted on purpose: it changes DISPATCH for a very
+widely used effect and deserves a whole tick, not the tail of one.** That is the next build if he does
+not pick a feature.
+📋 So the queue below both of these is **#47 (export must survive a crash, get off the main thread)**.
+
 🔵 **"EDITING LAGS" IS NOW BLOCKED ON HIM, NOT ON WORK — its measurable half is finished (summary written
 into the entry 27 Aug).** Editing proven fine at 6x throttle; seven effects optimised plus ~1.49x across
 all 198 from PREVIEW_SS; the remaining cost is structural (a per-pixel JS loop at 1080x1350 needs ~50x,

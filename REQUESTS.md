@@ -5608,6 +5608,15 @@ better still, keep working inside the turn rather than parking work for a later 
       · **Gaussian Blur** is the one effect from the table still unimproved. It is a CSS filter, so
         mixing softness over a sharp image needs a compositing path rather than a slider. Buildable
         without you; it is simply the least valuable thing left here.
+        📋 **27 Aug — read and scoped, so it is a straight build next time rather than another look.**
+        `blur` lives in the FILTER-STRING set (`js/compositor.js:1459`) and is defined at line 51 with a
+        single `radius` param, so today it can only replace the image, never blend with it.
+        **What a Mix control takes:** a second param, and when `mix < 1` the layer must stop going down
+        the filter-string path and instead draw TWICE onto the plate — sharp at full alpha, then the
+        blurred copy over it at `globalAlpha = mix`, which is exactly the linear blend
+        `sharp*(1-mix) + blurred*mix`. The plate machinery for that already exists.
+        ⚠️ **Not started deliberately: it changes how a very widely used effect is DISPATCHED, so it
+        wants a full verify cycle rather than the tail end of a long session.** Est. one focused tick.
       · ✅ **Word spacing and line height are DONE (v12.31)** — they were the last "still open" item in
         this entry that did not need a decision from you.
       All 105 proposed effect upgrades are built except Gaussian Blur (needs a compositing path, not a
