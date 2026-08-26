@@ -240,8 +240,20 @@ reads 110/42, identical to the effect being off. So v13.40 fixed something that 
 and 111/42 synced. Syncing makes the app repaint the layer at the same `t`, which sends the kernel down
 the `repaint` path (`ref = rec.prev`) instead of `advance` (`ref = rec.cv`) — so the two regimes are
 exercising DIFFERENT code paths, and neither is obviously "the real one".
-📋 **NEXT: decide which path playback actually takes, then measure only that one.** Read how the live
-play loop drives `renderScene` (does it advance `FM.time` and repaint once per frame, or twice?).
+✅ **SETTLED BY READING THE CODE (not by another measurement): playback takes the ADVANCE path.**
+`tick()` (js/app.js:~1728) reads the clock into `FM.time` and calls `render()` **once per rAF frame**,
+and `render()` (js/app.js:92) calls `renderScene(ctx, scene, FM.time)` exactly once. **One render per
+frame, t advancing** — that is `advance`, `ref = rec.cv`.
+🔄 **SO THE CONCLUSION INVERTS: the UNSYNCED probe is the representative one**, because it does exactly
+one renderScene per advancing t, matching playback. **My "sync" fix made it WORSE, not better** — calling
+`FM.setTime(t)` triggers `requestRender()`, adding a SECOND render at the same t, which sends the kernel
+down `repaint` (`ref = rec.prev`) — a path playback never takes with one render per frame.
+✅ **Which means v13.40's 110 → 117 IS the representative number after all**, and the pre-fix 110/42
+(measured synced) needs re-taking unsynced before it is quoted as the before-figure.
+⚠️ **STILL NOT UNDERSTOOD: Echo only built its trail under the SYNCED probe** (110→263) and stayed flat
+unsynced. That is backwards from the above and is the one loose thread left. **Do not touch the Echo
+branch until it is explained** — on this entry alone, three claims have already been withdrawn for
+blaming code that turned out to be fine.
 ⚠️ **The fix is SHIPPED and is not harmful** — no holes, static frames untouched, suite green. But **the
 "110 → 117" improvement I told him about is currently supported by only one of two regimes.**
 
