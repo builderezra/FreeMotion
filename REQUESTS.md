@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.93
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.94
 >
-> **State:** v12.93, tests green, tree clean.
+> **State:** v12.94, tests green, tree clean.
+>
+> **🌫️ #578 — Motion Blur (Footage) no longer starts on the pixelated mode.** New ones start on
+> **Smear**, which softens rather than breaking into blocks. **Clips you have already made are
+> untouched** — that was the risky part, and they keep rendering exactly as before.
+> **The second half of that request is still open on purpose.** You said it "needs a lot of work" and
+> I would only be guessing at slider values. **If you send me a clip that looks bad, or just say which
+> way it is wrong — too soft, too blocky, ghosting, too slow — I can measure it.** No rush.
 >
 > **⏱️ #577 — the hold before a clip can be trimmed is 550ms → 300ms.** Checked that a scroll still
 > cannot start a trim by accident: it never depended on the wait anyway — moving your finger 8px cancels
@@ -20144,7 +20151,7 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > The motion blur footage is kinda buns at the moment, needs a lot of work and also don’t default it to the pixelated blur, it looks awful
       **Two things, and the second is the quick one:**
-      1. [ ] **Change the default mode** away from the pixelated one. The Style param (Pixel / Smear /
+      1. [x] **Change the default mode** away from the pixelated one. ✅ **DONE v12.94 — now Smear.** The Style param (Pixel / Smear /
              Echo / Blend, from v2.49) currently starts on Pixel. ⚠️ **Changing a default does NOT change
              existing instances** — the renderer falls back to `legacy` for an absent key, so check which
              of those a saved project reads before touching it, or every clip he already made re-renders.
@@ -20153,6 +20160,29 @@ re-opened #480, which I had marked done and had not fixed.
              guessing. Do not start clause 2 by changing sliders.
       ⚠️ Distinct from **Motion Blur (Object)**, which is #540 and shipped at v12.64. This is the FOOTAGE
       one. Do not confuse them.
+      **✅ CLAUSE 1 DONE v12.94 — `def: 0` → `def: 1` (Smear), with `legacy: 0`.**
+      **Why Smear and not Echo or Blend:** Pixel Motion is an optical-flow ESTIMATE, and where the
+      estimate is poor it tears the picture into blocks — that is the "pixelated" he is describing. Smear
+      is a directional blur along the global motion vector, so it degrades to a soft streak rather than
+      to blocks. Echo (a trail) and Blend (frame smoothing) are stylistic, not general-purpose defaults.
+      **The entry's warning was the real work here, and the mechanism already existed.** `def` applies to
+      a NEW instance; **`legacy` is what an ABSENT key reads as.** Every motionflow he has already placed
+      was saved with no `style` key, so without `legacy: 0` **every one of those clips would silently
+      re-render as Smear** the next time he opened the project. The renderer agrees independently —
+      `fparam(p, 'style', 0, t)` also falls back to 0 — so both paths say Pixel for old work.
+      **Verified:** a new instance is `{style: 1, …}`; the spec reports `default 1, legacy 0`; an absent
+      key resolves to **0**. Motion Blur (Object) untouched.
+      **⏳ CLAUSE 2 IS STILL OPEN and deliberately not started.** The entry says *"Render it against real
+      footage and look, then come back with specifics rather than guessing. Do not start clause 2 by
+      changing sliders"* — and that is right: *"needs a lot of work"* is not a spec, and I have no real
+      footage loaded to judge it against. **Changing shutter/quality/threshold numbers by feel would be
+      exactly the guessing the entry forbids**, and it would also be un-reviewable, because nobody could
+      say whether it got better.
+      ❓ **What would unblock it:** a clip he thinks looks bad, or one sentence on what "buns" means —
+      too soft, too blocky, ghosting, or too slow. **Not urgent** (#591 — he is not in a rush to answer),
+      but this clause cannot be measured without one of those.
+      🔗 **Read with #582** ("I completely broke the app" — Motion Blur + Shake + Tiles together). Same
+      effect family, and #582 is the higher-severity one.
 
 - [x] **572 — 🔴 "These effects still don't work" — the BROWSER lets him pick effects the app already knows will do nothing.** (26 Aug, phone screenshot at v12.79, Colouring browser over a white text layer.) — ✅ **DONE v12.87**
       His words, verbatim:

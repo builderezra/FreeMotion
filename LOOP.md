@@ -147,7 +147,16 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.93, 979 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.94, 980 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **CHANGING A DEFAULT SILENTLY REWRITES EXISTING WORK UNLESS `legacy` IS SET.** #578: `def` applies to
+NEW instances; `legacy` is what an ABSENT key reads as. Every effect he had already placed was saved
+without that key, so `def: 0 → 1` alone would have re-rendered all of them on next open. **Any "change
+the default" request needs the legacy pin and a test for it** — the failure is invisible until he opens
+an old project.
+⚠️ **AN UNSCOPED CLAUSE IS NOT A LICENCE TO GUESS.** #578 clause 2 is *"needs a lot of work"*. Changing
+sliders by feel is unmeasurable and un-reviewable — nobody could say whether it improved. **Ship the
+specified half, leave the other open with the one question that would unblock it**, and say so plainly.
 
 ⚠️ **BEFORE DEFENDING A GUARD'S SIZE, FIND OUT WHAT ACTUALLY DOES THE GUARDING.** #577's 550ms hold
 looked like the thing stopping a scroll from trimming. It was not — **an 8px move calls `disarm()`**, so

@@ -2403,6 +2403,24 @@
     }
   });
 
+  test('578: Motion Blur (Footage) starts on Smear, and old clips still read Pixel', { item: '578' }, async function () {
+    /* Queue 578 clause 1. Ezra: "don't default it to the pixelated blur, it looks awful."
+     * Pixel Motion is an optical-flow estimate; where the estimate is poor it tears the picture into
+     * blocks, which is the "pixelated" he means. Smear degrades to a soft streak instead.
+     * ⚠️ THE SECOND ASSERTION IS THE ONE THAT MATTERS. `def` applies to NEW instances; `legacy` is what
+     * an ABSENT key reads as. Every motionflow he has already placed was saved with no `style` key, so
+     * without legacy:0 every one of those clips would silently re-render as Smear the next time he
+     * opened the project. Changing a default must never change existing work. */
+    const spec = (FM.fxRegistry.paramsOf('motionflow') || []).filter(function (p2) { return p2.key === 'style'; })[0];
+    if (!spec) throw new Error('Motion Blur (Footage) has no Style parameter any more');
+    if (spec.default === 0) throw new Error('Motion Blur (Footage) still defaults to Pixel — he asked for it not to (queue 578 clause 1)');
+    const inst = FM.fxRegistry.makeInstance('motionflow');
+    if (!inst || !inst.params || inst.params.style === 0) throw new Error('a NEW Motion Blur (Footage) still lands on Pixel (' + JSON.stringify(inst && inst.params) + ')');
+    if (spec.legacy !== 0) throw new Error('the Style param has legacy=' + spec.legacy + ' — a saved clip with no style key would re-render as something other than Pixel, silently changing footage he already made (queue 578)');
+    // and the OTHER motion blur is a different effect; the entry is explicit about not confusing them
+    if (!FM.fxRegistry.get('objectblur')) throw new Error('Motion Blur (Object) went missing — it is a separate effect (queue 540), not this one');
+  });
+
   test('577: the hold before a trim arms is short, and a scroll still cannot arm it', { item: '577' }, async function () {
     /* Queue 577. Ezra: "The time to hold to extend a clip is too long, shorten it." 550ms -> 300ms.
      * ⚠️ THE HOLD IS NOT WHAT PROTECTS AGAINST A MIS-TRIM — THE MOVE IS. Any pointermove past 8px calls

@@ -866,7 +866,19 @@ window.FM = window.FM || {};
     // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
     { type: 'motionflow', label: 'Motion Blur (Footage)', desc: 'Blurs whatever MOVES on screen — including movement an effect makes, like Orbit or Spin, which Motion Blur (Object) cannot see. It reads the picture frame to frame, so very fast movement outruns it. Moving, scaling or rotating the clip itself never smears it — for that, use Motion Blur (Object).',
       params: [
-      { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 0 },
+      /* ⚠️ DEFAULT IS SMEAR (1), NOT PIXEL (0) — queue 577's neighbour, queue 578 clause 1. Ezra:
+         *"don't default it to the pixelated blur, it looks awful."* Pixel Motion is an optical-flow
+         estimate; where the estimate is poor it tears the picture into blocks, which is the "pixelated"
+         he is describing. Smear is a directional blur along the global motion vector — it degrades to a
+         soft streak rather than to blocks, so it is the safe thing to meet first. Echo and Blend are
+         stylistic (a trail, and frame smoothing), not general-purpose defaults.
+         ⚠️ **`legacy: 0` IS WHAT KEEPS HIS EXISTING CLIPS UNCHANGED, and it is the whole risk here.**
+         `def` applies when a NEW instance is made; `legacy` is what an ABSENT key reads as. Every
+         motionflow he has already placed was saved without a `style` key, so without this they would all
+         silently re-render as Smear the next time he opened those projects. The renderer agrees
+         independently — `fparam(p, 'style', 0, t)` falls back to 0 — so both paths say Pixel for old
+         work and Smear for new. */
+      { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 1, legacy: 0 },
       { key: 'amount', label: 'Shutter', min: 0, max: 2, step: 0.05, def: 1 },
       { key: 'samples', label: 'Quality', min: 4, max: 24, step: 1, def: 10 },
       { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
