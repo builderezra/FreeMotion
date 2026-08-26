@@ -19930,7 +19930,7 @@ re-opened #480, which I had marked done and had not fixed.
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
 - [ ] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Not a single black and white filter actually make anything black and white
       **HIS SCREENSHOT SETTLES IT AND I WAS WRONG.** The BLACK / WHITE row shows **Platinum on a pink and
@@ -19971,6 +19971,30 @@ re-opened #480, which I had marked done and had not fixed.
       `grayscale` first-type** — if it takes a branch that builds a subject scene WITHOUT applying the
       filter's own effects (a plain "show the photo" path, reasonable for demonstrating a colour effect on
       its own), that is the whole bug and it would hit every mono filter and nothing else.
+      ❌❌ **BOTH OF THE LEADS BELOW ARE NOW DISPROVEN BY MEASUREMENT. Do not re-walk them.**
+      **The tiles render CORRECTLY greyscale in the preview environment.** Mounted for real (⚠️
+      `FM.fxThumbs.mountFilter(cv, id)` takes a **CANVAS**, not a container — passing a div silently
+      paints nothing, which cost two probes): **noir tile colour spread 0.06, platinum 0.05.** Fully
+      desaturated. So the tile pipeline is not unconditionally broken.
+      · **DISPROVEN — "the scene is keyed on `effects[0].type` being grayscale".** `sceneFor` does
+        `target.effects = [made]`, attaching the whole filter as ONE container; the `type` argument only
+        picks a fallback subject, and `FILTER_SUBJECT` overrides it anyway. The correlation was real and
+        the mechanism was not.
+      · **DISPROVEN — "`remountLive` repaints without the filter".** It re-mounts via
+        `meta.get(cv._fxType)`, and `mountKey` does `if (m) meta.set(key, m)` on the FIRST mount, so the
+        `{filter: id}` meta survives the repaint and `pump()` still takes the `(m && m.filter)` branch.
+      **SO THE FAULT IS ON HIS DEVICE OR IN TIMING, NOT IN THE BRANCH LOGIC.** That is a much better
+      starting point than it sounds, and it narrows to a short list:
+      1. **The provisional-frame path.** `pump()` marks a frame `provisional` when a photograph was still
+         decoding, PAINTS it anyway and does not cache it. **Find out what a provisional filter frame
+         actually contains** — if art fell back to a raw photo rather than to the drawn stand-in, that is
+         a colour tile, and it would appear only on a device slow enough to lose the race. **His phone
+         loses races this preview never does.**
+      2. **`pump()` is driven by `requestAnimationFrame`.** Anything that stalls rAF mid-queue leaves
+         tiles holding whatever was painted last.
+      3. **Ask him whether they go black and white if he reopens the filter menu** — if a second visit
+         fixes them, it is the decode race (1) and nothing else.
+      ⚠️ **The ORIGINAL note below is kept only as a record of what was tried.**
       ⚠️ **NOT YET CONFIRMED — this is a correlation plus a code path, not a measurement.** Driving
       `FM.fxThumbs.mountFilter` headlessly produced empty canvases (the queue is lazy and did not paint in
       that context), so **the tile pixels have NOT been measured.** Confirm before fixing: mount a mono

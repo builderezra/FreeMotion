@@ -149,6 +149,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v12.96, 982 tests green, tree clean, `HEAD == ssh/main`.**
 
+⚠️ **#593: TWO LEADS DISPROVEN BY MEASUREMENT — the tiles render CORRECTLY greyscale here** (noir
+spread 0.06, platinum 0.05). It is NOT the `effects[0].type` keying and NOT `remountLive` losing the
+meta; both were checked and both are sound. **The fault is device or timing, not branch logic** — most
+likely the `provisional` frame `pump()` paints while a photograph is still decoding, which only shows on
+a device slow enough to lose that race. **Ask him whether reopening the filter menu fixes them:** if yes
+it is the decode race and nothing else.
+⚠️ **`FM.fxThumbs.mountFilter(cv, id)` TAKES A CANVAS, NOT A CONTAINER.** Passing a div paints nothing
+and reports nothing — it cost two probes.
+
 🔴 **NEXT UP AND IT IS THE IMPORTANT ONE — #593.** He says *"Not a single black and white filter
 actually make anything black and white"* and his screenshot proves it: the BLACK/WHITE tiles show full
 colour photos. **I measured the RENDER in #579, said they were fine, and was measuring the wrong
