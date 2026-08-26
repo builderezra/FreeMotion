@@ -206,6 +206,22 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+📍 **QUEUE WALK, 27 Aug — five items read in order, and FOUR are blocked on him. Do not re-derive this.**
+| item | state |
+|---|---|
+| *editing lags* (1st unnumbered) | measurable half DONE, summary in entry → **his verdict** |
+| *effects-plan* (2nd unnumbered) | 3 features need a name from him; Gaussian Blur scoped & buildable |
+| *visual identity* (3rd unnumbered) | BEFORE-PUBLISHING — deliberately not started |
+| **#47** | crash-resume DONE v7.53-55; half (b) off-main-thread = **his decision**, days of work |
+| **#95** | audio half fixed v7.33; timeline stand-in run at 6x today → **needs HIS device** |
+| **#96** | three causes fixed (latest v12.36 matches his symptom exactly) → **needs his file** |
+➡️ **NEXT UNBLOCKED WORK: #98 (Add Text could be better), then #125, #129, #148, #202.** The one
+buildable thing above them is **Gaussian Blur's mix control** — scoped in its entry, one focused tick.
+⚠️ **The pattern is worth naming: his oldest reports are nearly all one answer away.** That is not a
+reason to invent work — it is a reason to keep the questions short and in front of him. Four are live:
+Corner Pin/LUT/Curves-or-none, .mov-or-.mp4 (#129), heavy-vs-light project (editing lags), B&W tiles
+on reopen (#593).
+
 🔵 **EFFECTS-PLAN (2nd unnumbered) IS ALSO BLOCKED ON HIM — checked 27 Aug, not assumed.** Its three
 remaining features (**Corner Pin**, **LUT import**, **Curves**) each need a NEW KIND of control — canvas
 drag handles, a file picker, a curve editor — and a day-plus each, so guessing wrong is expensive.
