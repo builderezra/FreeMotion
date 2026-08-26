@@ -1,8 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.36
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.37
 >
-> **State:** v13.36, 990 tests green, tree clean.
+> **State:** v13.37, 990 tests green, tree clean.
+>
+> **🚨 I measured the real scale of the problem and it changes what is worth doing.** At YOUR project size
+> (1080x1350), a single warp effect costs **half a second to three-quarters of a second per frame** —
+> Kaleidoscope 762 ms, Glass 481 ms. An empty scene is 1.6 ms.
+> **Today's best speed-up was 2.73x. That gap needs something like 50x.** So the seven effects I sped up
+> are real, but **tuning the maths cannot fix this on its own** and I do not want to keep implying it can.
+> ✅ **The thing that actually saves you already exists in your app:** it draws effects at a smaller size
+> and scales them up, and drops quality automatically when it is struggling. **That is why it works at
+> all on your phone.** So the valuable work now is making sure that kicks in when it should and looks
+> right when it does — not shaving more off the maths.
 >
 > **✅ Re-measured everything from scratch and the wins are confirmed.** Grid Repeat — which was the most
 > expensive effect in your app — has dropped out of the fifteen dearest entirely, and so have Ripple and

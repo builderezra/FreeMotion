@@ -206,6 +206,26 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+🚨🚨 **THE SCALE IS THE STORY, AND KERNEL OPTIMISATION CANNOT REACH IT. Measured 27 Aug at his REAL
+1080x1350, interleaved, quality certified 1 -> 1, bare scene 1.6 ms:**
+| effect | cost per frame |
+|---|---|
+| kaleidoscope | **762 ms** |
+| glass | **481 ms** (range 474.8-502.9) |
+| rasterextrude | 21 ms |
+**The sweep called these 31.2 and 42.4** — it runs at a fraction of the plate, so its numbers are ~20x
+too small in absolute terms. The RANKING it gives is still useful; the SCALE is not.
+🚨 **So a single warp effect is 0.5-0.8 SECONDS a frame at his project size — and the best kernel win all
+day was 2.73x.** Seven optimisations shaved a real but small slice off a number that needs ~50x. **The
+per-pixel JS loop cannot get there**, and no amount of hoisting will change that.
+✅ **WHICH MEANS THE THING THAT ACTUALLY SAVES HIM ALREADY EXISTS: the reduced raster.** `plateScale` /
+`rasterFor` render the warp plate smaller and scale up, and the adaptive ladder drops to factor 0.62
+under load — that is why the app stays usable at all. **The highest-value work is no longer optimising
+kernels: it is checking that the reduced-raster path engages when it should, and how it looks when it
+does.** ⚠️ Note the tension with LOOP rule 14: a reduced raster makes its own boundary differences, so
+quality-vs-speed there is a real trade to measure, not a free win.
+📋 Kernel work is still worth finishing where it is cheap and exact, but **stop treating it as the fix**.
+
 ✅ **SWEEP RE-RUN AFTER THE BATCH (certified factor 1 -> 1). IT CONFIRMS THE WINS — AND EXPOSES THE
 SWEEP'S OWN PRECISION LIMIT. Read both halves.**
 **Confirmed:** gridrepeat (was #1 at 36.5), ripple (21.1) and innerpinch (25.4) have all **fallen OUT of
