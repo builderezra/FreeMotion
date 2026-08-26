@@ -3861,6 +3861,57 @@
     }
   });
 
+  test('563: there is a Bell, it rings, and it is not the Ding under another name', { item: '563' }, async function () {
+    /* Queue 563. Ezra: "Add a bell sound effect also".
+       ⚠️ THE RISK HERE WAS NOT SILENCE, IT WAS DUPLICATION. `ding` sits directly above the new recipe and
+       its own comment already claims to be "a bell rather than a beep" — two sine partials a fifth
+       apart. Adding a third sine would have handed him the same sound under a second name, and no
+       "does it make a noise" assertion would have noticed. So this measures the things that make a
+       struck bell different from a chime, against the Ding itself. */
+    if (!FM.sfx || typeof FM.sfx.list !== 'function') throw new Error('FM.sfx is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return;
+    const defs = FM.sfx.list() || [];
+    const bell = defs.filter(d => d.id === 'bell')[0];
+    const ding = defs.filter(d => d.id === 'ding')[0];
+    if (!bell) throw new Error('there is no `bell` in the sound-effect list');
+    if (!ding) throw new Error('the `ding` is gone, so the comparison this test is built on cannot run');
+
+    const raw = async def => {
+      const ctx = new OAC(1, Math.ceil((def.dur + 0.05) * 44100), 44100);
+      const g = ctx.createGain(); g.gain.value = 1; g.connect(ctx.destination);
+      def.render(ctx, 0.01, def.dur, g);
+      return (await ctx.startRendering()).getChannelData(0);
+    };
+    const peak = d => { let p = 0; for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; } return p; };
+    const rms = (d, s, w) => { const a = Math.floor(s * 44100), b = Math.min(d.length, a + Math.floor(w * 44100)); let q = 0, n = 0; for (let i = a; i < b; i++) { q += d[i] * d[i]; n++; } return n ? Math.sqrt(q / n) : 0; };
+    /* A crude brightness proxy: the first difference emphasises high frequencies, so its energy
+       relative to the signal's own falls as the top partials die. Enough to tell "darkens" from
+       "decays evenly" without pulling in an FFT. */
+    const bright = (d, f, t) => { const a = Math.floor(f * 44100), b = Math.min(d.length, Math.floor(t * 44100)); let hi = 0, tot = 0; for (let i = a + 1; i < b; i++) { const df = d[i] - d[i - 1]; hi += df * df; tot += d[i] * d[i]; } return tot ? Math.sqrt(hi / tot) : 0; };
+
+    const b = await raw(bell), g = await raw(ding);
+    // CONTROL: both must actually render, or every comparison below is between two silences.
+    if (!(peak(b) > 0.05)) throw new Error('the bell peaked at ' + peak(b).toFixed(3) + ' — it is not making a sound');
+    if (!(peak(g) > 0.05)) throw new Error('the ding peaked at ' + peak(g).toFixed(3) + ' — the reference is broken');
+
+    /* 1. IT MUST NOT CLIP ON THE ▶. `renderBuffer` normalises, so an ADDED clip is always safe whatever
+       the recipe does — but `preview()` plays the raw render through a fixed gain, so a recipe that sums
+       too high clips on playback and nowhere else. The first version of this bell did exactly that:
+       1.244 raw = 1.02 in preview. */
+    const MASTER = 0.82;
+    if (peak(b) * MASTER > 1) throw new Error('the bell peaks at ' + (peak(b) * MASTER).toFixed(3) + ' in preview — it clips on the ▶, which is the one path that is never normalised');
+
+    // 2. IT RINGS. A bell that has decayed to nothing by 1s is a chime.
+    if (!(rms(b, 1.0, 0.1) > rms(g, 1.0, 0.1) * 3)) throw new Error('at 1s the bell is ' + rms(b, 1.0, 0.1).toFixed(4) + ' against the ding\'s ' + rms(g, 1.0, 0.1).toFixed(4) + ' — it does not ring appreciably longer, so it is a second ding');
+
+    // 3. IT DARKENS AS IT RINGS — the high partials die first, which is what stops it sounding synthetic.
+    if (!(bright(b, 1.6, 2.2) < bright(b, 0.02, 0.25) * 0.95)) throw new Error('the bell is as bright at the end as at the start (' + bright(b, 0.02, 0.25).toFixed(3) + ' -> ' + bright(b, 1.6, 2.2).toFixed(3) + ') — its partials decay evenly, which reads as a synth tone');
+
+    // 4. IT IS STRUCK. Without the clapper transient it fades in like a pad however fast the envelope is.
+    if (!(rms(b, 0.01, 0.02) > rms(b, 0.2, 0.02) * 1.5)) throw new Error('the bell has no strike: its first 20ms (' + rms(b, 0.01, 0.02).toFixed(3) + ') is not louder than 200ms in (' + rms(b, 0.2, 0.02).toFixed(3) + ')');
+  });
+
   test('562: every sound effect actually makes a sound when previewed', { item: '562' }, async function () {
     /* Queue 562. Ezra: "Previewing sound effects in the sound effect menu doesn't work."
        ⚠️ THE ENTRY'S SUSPECT WAS WRONG, and measuring is what showed it. It guessed a suspended

@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.78
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.79
 >
-> **State:** v12.78, **969 tests green**, tree clean.
+> **State:** v12.79, **970 tests green**, tree clean.
+>
+> **✅ v12.79 — there is a Bell now (#563), in Audio ▸ Sound effects ▸ Interface.** I built it as a struck
+> bell rather than another chime, because there was already a "Ding" and the easy version would have been
+> the same sound twice — this one has a clapper strike, inharmonic partials, and it darkens as it rings
+> out (still ringing at 1 second, where the Ding has gone).
+> **🔎 Found while doing it:** **Reverse swell and Glass break clip when you press ▶.** Only on the
+> preview — added to a project they are fine, because that path gets normalised and the ▶ does not. It is
+> logged as **#566** rather than quietly changed, since it alters how two of your existing sounds play.
 >
 > **✅ v12.78 — the ▶ on sound effects works (#562).** It was not flaky: **all 29 of them were broken**,
 > every one throwing on its first line, and the error was being swallowed so nothing ever said so. The
@@ -19683,12 +19691,35 @@ re-opened #480, which I had marked done and had not fixed.
       🔒 **The test pins the trap as well as the fix:** it asserts the prototype-proxy still throws, so if
       a future engine ever makes it work, the explanation here gets revisited rather than quietly rotting.
 
-- [ ] **563 — Add a bell sound effect.** (25 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **563 — Add a bell sound effect.** (25 Aug.) — **DONE v12.79.**
       His words, verbatim:
       > Add a bell sound effect also
       One more entry in the generated sound-effects library. **Do it with #562**, since testing a new
       effect means playing it, and playing it is what #562 says is broken.
+
+      ✅ **DONE v12.79 — Interface ▸ Bell, 2.6s.** (#562 shipped first, so it could actually be heard.)
+      ⚠️ **The real risk was DUPLICATION, not silence.** `ding` sits directly above it and its own comment
+      already claims to be *"a bell rather than a beep"* — two sine partials a fifth apart. A third sine
+      would have been the same sound under a second name, and no "does it make a noise" test would have
+      caught that. So it is built the way a struck bell behaves:
+      · **Inharmonic partials** — the classic hum / prime / **tierce** / quint / nominal set. The tierce
+        at 1.2× is a MINOR third, and that interval is what makes a bell sound like a bell.
+      · **The high partials die first** (decay 1.00 → 0.16 as the ratio rises), so the tone darkens as it
+        rings. Even decay reads as a synth.
+      · **A strike** — 18ms of band-passed noise, the clapper on metal. Without it the note fades in like
+        a pad however fast the envelope is.
+      · **A 7-cent detune** on the prime so the two closest partials beat slowly.
+      📐 **Measured against the Ding rather than asserted:**
+      | | bell | ding |
+      |---|---|---|
+      | still ringing at 1.0s | **0.0112** | 0.0010 |
+      | brightness, start → end | **0.088 → 0.066** (darkens) | — |
+      | strike: first 20ms vs 200ms in | **0.432 vs 0.151** | — |
+      🐛 **My first version CLIPPED, and it is worth recording why that is easy to miss.** `renderBuffer`
+      normalises, so an **added** clip is always safe whatever a recipe does — but `preview()` plays the
+      raw render through a fixed 0.82 gain, so a loud recipe clips **on the ▶ and nowhere else**. Measured
+      at 1.244 raw = **1.02 in preview**; rescaled to 1.059 raw = **0.869**, just under Punch (0.946). The
+      test now asserts that specifically.
 
 - [ ] **564 — 🎨 The Outline & Shadows sub-panel works but looks bad. Make it actually look good.** (25 Aug, phone screenshot at v12.51.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -19727,6 +19758,32 @@ re-opened #480, which I had marked done and had not fixed.
       panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
+
+- [ ] **566 — Two sound effects clip on the ▶ preview (found while doing #563).** (26 Aug, measured.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **Not something he reported** — found by measuring every recipe while adding the bell, and logged
+      rather than quietly fixed because it changes how two of his existing sounds play.
+      **`preview()` is the only path that is not normalised.** `renderBuffer` runs `normalise()`, so an
+      ADDED clip is always safe; the ▶ plays the raw render through a fixed `MASTER = 0.82`. So a recipe
+      that sums past ~1.22 clips on playback and nowhere else.
+      **Measured, raw peak → preview peak:**
+      | effect | raw | preview |
+      |---|---|---|
+      | **Reverse swell** | 1.367 | **1.121** ✗ |
+      | **Glass break** | 1.233 | **1.011** ✗ |
+      | Punch | 1.153 | 0.946 |
+      | Impact | 1.150 | 0.943 |
+      | Bell (after #563) | 1.059 | 0.869 |
+      | *median of all 30* | — | *0.504* |
+      ⚠️ **Scaling those two recipes down is SAFE, and it is worth being clear why:** `normalise()` scales
+      an added clip to a target peak relative to its own, so lowering a recipe's internal amplitudes does
+      **not** change how it sounds once added — it only changes the preview. So the two are independent.
+      **Two ways to fix it:**
+      1. Scale Reverse swell and Glass break, the way the bell was scaled. Cheap, but the next loud
+         recipe someone writes reintroduces it.
+      2. **Normalise the preview too**, so no recipe can ever clip on the ▶ whatever it does. That is the
+         structural answer; it costs one offline render per preview, so **measure that latency before
+         choosing it** — the ▶ should feel instant.
 
 - [ ] **565 — Make it obvious that a filter row scrolls sideways — page dots or similar.** (25 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -205,6 +205,54 @@ window.FM = window.FM || {};
         });
       },
     },
+    /* BELL (queue 563). Ezra: "Add a bell sound effect also".
+     * ⚠️ THE HARD PART WAS NOT MAKING A SOUND, IT WAS NOT DUPLICATING `ding` — which sits directly above
+     * this and whose own comment already claims to be "a bell rather than a beep". Two sine partials a
+     * fifth apart is a chime; adding a third would have given him the same sound under a second name.
+     * So this is built the way a struck bell actually behaves, and the differences are audible:
+     *  · INHARMONIC partials. A bell's overtones are not integer multiples — the ratios below are the
+     *    classic hum / prime / TIERCE / quint / nominal set, and the tierce at 1.2x is a MINOR third,
+     *    which is the interval that makes a bell sound like a bell rather than like an organ.
+     *  · THE HIGH PARTIALS DIE FIRST (decay falls 1.0 -> 0.16 as the ratio rises), so the tone darkens
+     *    as it rings out. A bell that decays evenly sounds synthetic.
+     *  · A STRIKE. 18ms of band-passed noise at the attack is the clapper hitting metal; without it the
+     *    note fades in like a synth pad no matter how fast the envelope is.
+     *  · A SMALL DETUNE on the prime, so the two closest partials beat slowly against each other. That
+     *    shimmer is what stops it sounding like a sampled loop.
+     * Measured against `ding` rather than assumed: see queue 563 in REQUESTS.md. */
+    {
+      id: 'bell', name: 'Bell', cat: 'Interface', dur: 2.6,
+      render(ctx, t0, d, out) {
+        const F = 523.25;   // C5 — bright enough to cut through, low enough not to be shrill
+        // [ratio, amplitude, decay as a fraction of d, detune cents]
+        /* ⚠️ THESE AMPLITUDES ARE SET FOR THE **PREVIEW**, WHICH IS NOT NORMALISED. `renderBuffer`
+           runs `normalise()` so an ADDED clip is always safe whatever these say — but `preview()`
+           plays the raw render through a fixed 0.82 gain, so a recipe that sums past ~1.2 clips on
+           the ▶ and nowhere else. Measured: at the first values I wrote, eight partials plus the
+           strike peaked at 1.244 raw = **1.02 in preview**, i.e. clipping. Scaled to 1.03 raw =
+           0.85 in preview, which sits just under Punch (0.946) and beside Heartbeat (0.818). */
+        [[0.5, 0.13, 1.00, 0], [1.0, 0.42, 0.92, 0], [1.0, 0.13, 0.88, 7],
+         [1.2, 0.25, 0.62, 0], [1.5, 0.14, 0.48, 0], [2.0, 0.17, 0.40, 0],
+         [2.66, 0.09, 0.26, 0], [4.2, 0.06, 0.16, 0]].forEach(([r, a, dec, cents]) => {
+          const o = ctx.createOscillator(); o.type = 'sine';
+          o.frequency.value = F * r;
+          if (cents) o.detune.value = cents;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(a, t0 + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + d * dec);
+          o.connect(g); g.connect(out);
+          o.start(t0); o.stop(t0 + d);
+        });
+        // the clapper: a short bright scrape, gone before the tone establishes itself
+        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(ctx, 0.05, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3800; bp.Q.value = 0.9;
+        const sg = ctx.createGain();
+        env(sg.gain, t0, [[0, 0.28], [0.018, 0.05], [0.05, 0]]);
+        src.connect(bp); bp.connect(sg); sg.connect(out);
+        src.start(t0); src.stop(t0 + 0.05);
+      },
+    },
     {
       id: 'typewriter', level: 0.6, name: 'Typewriter key', cat: 'Interface', dur: 0.14,
       render(ctx, t0, d, out) {
