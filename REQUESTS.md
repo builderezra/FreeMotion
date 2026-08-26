@@ -19929,6 +19929,49 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Not a single black and white filter actually make anything black and white
+      **HIS SCREENSHOT SETTLES IT AND I WAS WRONG.** The BLACK / WHITE row shows **Platinum on a pink and
+      purple sunset, Ink on a full-colour cityscape, Fog on an orange sunset, Newsprint on a colour dog on
+      a beach.** Four tiles in the black-and-white section, all in colour.
+      ❌ **What I got wrong, twice, and it is the same mistake both times.** In #579 I measured the
+      **RENDER** — applying each mono filter to a coloured frame — and got a colour spread of 0 and
+      declared them fine. **He is not looking at the render. He is looking at the TILES**, and the tiles
+      are what tell him what a filter does before he picks it. **Measure the surface he is looking at**
+      (CLAUDE.md: *"measure the layout you ship to, not the one you have open"*), and note that #572 was
+      this same lesson — the browser is where he decides.
+      **So the fault is in the THUMBNAIL path, not the filter definitions.** `FILTER_SUBJECT` in
+      js/fx-thumbs.js names a photo per filter; the tile is meant to be that photo WITH the filter applied.
+      **Newsprint is an OLD filter and its tile is also in colour**, so this is not something my three new
+      ones introduced — it is the mono row generally, and possibly every row.
+      ⚠️ **FIRST ESTABLISH THE SCOPE: is it only the mono section, or is no tile filtered at all?** The
+      Tuff row above it (Blackout, Cold Steel, Bloodline, Static) looks plausibly graded in his shot, which
+      would mean SOME tiles filter and the mono ones do not — a much stranger fault than "thumbnails are
+      broken", and worth knowing before touching anything.
+      ⚠️ **Suspect `grayscale` specifically.** If the thumbnail path renders through something that drops
+      CSS-filter effects, every mono filter would come out unfiltered while grades built from other
+      effects still look right. **That would explain the whole shape of this.**
+      ⚠️ **DO NOT re-tune the filters** — measured, they desaturate correctly when applied. The pictures
+      are the bug.
+      🔗 **#579 must be re-read once this is fixed** — his original complaint was almost certainly THIS
+      all along, which would make my "the filters are fine, Blackout just is not one of them" answer a
+      correct measurement of the wrong thing.
+
+- [ ] **594 — Move the Tuff filter row up to second, below Cinematic.** (26 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Also jump the tuff row to the second down below cinematic
+      **A section reorder in the filter browser.** Current order is cinematic · retro · glow · stylised ·
+      tuff · mono · vivid; he wants **tuff second**, directly under cinematic.
+      ⚠️ **The order lives in one place — find it rather than reordering the definitions.** Filters are
+      declared in js/filters.js and grouped by `section`; the SECTION order is a separate list. Moving the
+      declarations around would be the wrong fix and would fight the next edit.
+      ⚠️ Check nothing else keys off section order — the thumbnail subject notes in js/fx-thumbs.js reason
+      about *"no two cars touching at four columns or at two"* WITHIN the tuff row, which is unaffected by
+      where the row sits, but read it before assuming.
+
 - [ ] **592 — The add-layer row's edge overshoots the end of the timeline slightly.** (26 Aug, annotated phone close-up at v12.93.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
