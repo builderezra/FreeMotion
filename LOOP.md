@@ -206,6 +206,21 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
+🚨🚨 **THE APP'S ADAPTIVE QUALITY SILENTLY RESCALES MID-BENCHMARK — ANY renderScene TIMING TAKEN OVER A
+LONG SESSION IS SUSPECT, INCLUDING SEVERAL OF MINE.** Measured 27 Aug: **ripple came in at 565 ms and
+649 ms on fresh page loads and 75.5 ms later in the same session** — same code, same 1080x1350, no edit
+between. The cause is the ladder in `playbackQualityInfo`: under sustained load it drops itself to tier 2
+/ factor 0.62, which **shrinks the warp plate**, so later frames are measured at a smaller size and look
+dramatically faster. **It degrades in ONE direction, so a benchmark run after heavy work always flatters
+the change you just made.**
+✅ **What is safe:** KERNEL-LEVEL microbenchmarks that call the map function directly in a loop and never
+touch renderScene. twirl's 1.89x and the hypot-vs-sqrt reading were measured that way.
+⚠️ **What is suspect:** anything timed through `renderScene` across a session — the raw effect numbers in
+the v13.27 sweep, and fractalwarp's 930.9 -> 83.2 (the 11x is far too large to be quality drift alone,
+and the kernel test confirms the algebra, but the exact figure should be re-taken).
+🔒 **THE RULE: reload the page before each timing sample, or read `FM.playbackQualityInfo().factor` and
+REJECT the sample unless it is 1.** Prefer kernel-level timing whenever the question is about a kernel.
+
 🚨 **THE v13.27 EFFECT RANKING IS ABOUT THE FIXTURE, NOT THE APP — RE-RUN `--sweep` BEFORE USING IT.**
 That sweep measured with `scene.project` left at whatever was last open (a **480x480** element), because
 the plate is sized from `scene.project` and setting `scene.w/h` alone does nothing. At his real

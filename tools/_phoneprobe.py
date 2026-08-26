@@ -187,6 +187,13 @@ SWEEP = r"""
     if (!doFlush) flush();
     return med(t);
   }
+  /* ⚠️ REFUSE TO RANK WHILE THE APP HAS DEGRADED ITSELF. The adaptive ladder drops to tier 2 / factor
+   * 0.62 under sustained load, which shrinks the warp plate — so effects measured late in a run look
+   * faster than the ones measured first, purely by position in the list. That is not noise, it is a
+   * one-directional bias, and it is how ripple read 565 ms on a fresh load and 75.5 ms later the same
+   * session. Sample the factor at both ends and say so rather than publishing a corrupted ranking. */
+  const qf = () => { try { const q = FM.playbackQualityInfo && FM.playbackQualityInfo(); return q ? q.factor : 1; } catch (e) { return 1; } };
+  const qStart = qf();
   const bareF = await cost([], true), bareN = await cost([], false);
   const ids = FM.fxRegistry.all().map(f => f.id);
   const rows = [];
@@ -202,7 +209,10 @@ SWEEP = r"""
   const top5 = rows.slice(0, 5).map(r => r.id);
   const stacked = +(await cost(top5, true) - bareF).toFixed(2);
   const sum = +rows.slice(0, 5).reduce((a, r) => a + r.total, 0).toFixed(2);
-  return JSON.stringify({ bareFlushed: +bareF.toFixed(2), counted: rows.length,
+  const qEnd = qf();
+  return JSON.stringify({ qualityFactorStart: qStart, qualityFactorEnd: qEnd,
+    qualityDegradedMidRun: qEnd !== qStart || qEnd !== 1,
+    bareFlushed: +bareF.toFixed(2), counted: rows.length,
     top: rows.slice(0, 15), over8: rows.filter(r => r.total > 8).length,
     hiddenGpu: rows.filter(r => r.gpu > r.cpu * 2 && r.gpu > 2).slice(0, 12),
     stack: { ids: top5, measured: stacked, sumOfParts: sum,
@@ -232,6 +242,11 @@ def sweep(port):
     finally:
         if cdp: cdp.close()
         proc.terminate()
+    if d.get("qualityDegradedMidRun"):
+        print("\n\u26a0\ufe0f  RANKING IS NOT TRUSTWORTHY: the app's adaptive quality moved during the run"
+              " (factor %s -> %s). Effects measured later were rendered at a SMALLER plate, so this"
+              " ordering is biased toward whatever ran last. Reload and re-run.\n"
+              % (d.get("qualityFactorStart"), d.get("qualityFactorEnd")))
     print("bare scene: %s ms   effects measured: %d   over 8 ms: %d"
           % (d["bareFlushed"], d["counted"], d["over8"]))
     print("\n| effect | total | CPU | GPU |")

@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.30
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.31
 >
-> **State:** v13.30, 990 tests green, tree clean.
+> **State:** v13.31, 990 tests green, tree clean.
+>
+> **⚠️ Second correction in a row, and this one is on my measuring, not the app.** Your app protects
+> itself by quietly lowering render quality when it is working hard — which is good, and it is why the
+> phone stays usable. **But it means my speed tests got faster the longer I ran them**, because the app
+> had shrunk the picture underneath me. Same effect measured **565 ms early and 75 ms later, with no code
+> change at all.**
+> ✅ **The two real wins still stand** — Twirl's 1.89x was measured a way this cannot affect, and Fractal
+> Warp's 11x is far too big to be explained by it. **But the exact effect timings I have quoted you are
+> not reliable, and I would rather say so than keep quoting them.**
+> 🔒 The tool now checks the quality setting at both ends of a run and **refuses to publish a ranking if
+> it moved.**
 >
 > **⚠️ I have to take back part of what I told you about which effects are slow.** The ranking of all
 > 198 was measured at the wrong size — it used a leftover **480x480** project instead of your
