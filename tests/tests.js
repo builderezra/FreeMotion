@@ -2403,6 +2403,54 @@
     }
   });
 
+  test('595: the camera says when Field of view and Distance cannot do anything', { item: '595' }, async function () {
+    /* Queue 595. Ezra: "Field of view and distance sliders don't work in camera", with two screenshots
+     * proving it — FOV 5 → 159, Distance −2000 → 4000, identical picture.
+     * He was right and nothing was broken. MEASURED: on a FLAT scene those change 0 pixels; give one
+     * layer z=900 and the same FOV change moves 77,759. Both act on DEPTH, and a scene whose layers share
+     * a Z has none.
+     * ⚠️ THE CONTROL IS THE SECOND HALF AND IT IS THE ONE THAT MATTERS. A warning that is always on is
+     * not a warning — it is furniture, and it would sit there lying at exactly the moment he finally
+     * gives a layer depth. So this asserts it APPEARS on a flat scene and VANISHES the moment one layer
+     * has depth. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect'); FM.addShapeLayer('ellipse');
+      const L = FM.scene.layers.filter(function (l) { return l.type === 'shape'; });
+      L.forEach(function (l) { l.start = 0; l.duration = 5; });
+      FM.scene.project.duration = 5;
+      if (!FM.addCameraLayer) throw new Error('there is no camera layer to test');
+      FM.addCameraLayer();
+      await sleep(320);
+      const cam = FM.scene.layers.filter(function (l) { return l.type === 'camera'; })[0];
+      if (!cam) throw new Error('the camera layer was not created');
+      cam.start = 0; cam.duration = 5;
+      FM.selectLayer(cam.id); FM.refreshAll();
+      await sleep(320);
+      FM._camTab = 'view';
+      if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('cameraopts');
+      await sleep(700);
+
+      const warn = document.querySelector('.insp-hint-warn');
+      if (!warn) throw new Error('on a scene where every layer sits at the same Z, the camera says nothing about Field of view and Distance doing nothing — that silence IS queue 595');
+      if (!/depth/i.test(warn.textContent)) throw new Error('the camera warning does not mention depth: ' + JSON.stringify(warn.textContent.slice(0, 60)));
+      if (!/\bZ\b/.test(warn.textContent)) throw new Error('the warning names the problem but not the CONTROL that fixes it — Z sits beside X and Y in Move & Transform, and saying so is the difference between a diagnosis and an instruction');
+
+      // --- CONTROL: one layer with depth, and it must stop warning. ---
+      L[1].transform.z = 900;
+      FM.inspector.refresh();
+      await sleep(600);
+      if (document.querySelector('.insp-hint-warn')) {
+        throw new Error('a layer now has depth and the camera STILL says nothing can happen — an always-on warning is furniture, and it lies at exactly the moment he gets it right (queue 595)');
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('594: Tuff is the second filter section, and none was lost moving it', { item: '594' }, async function () {
     /* Queue 594. Ezra: "Also jump the tuff row to the second down below cinematic."
      * It sat LAST since queue 349 on my reasoning that it is the newest and most specific while the

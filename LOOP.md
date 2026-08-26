@@ -147,7 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v13.02, 988 tests green, tree clean, `HEAD == ssh/main`.**
+**v13.04, 989 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **A WARNING THAT IS ALWAYS ON IS FURNITURE — assert that it DISAPPEARS.** #595's camera note must
+vanish the moment a layer has depth, or it lies at precisely the moment he gets it right. The test
+checks both directions.
+⚠️ **NAME THE CONTROL, NOT JUST THE PROBLEM.** "Nothing has depth" is a diagnosis; "set Z beside X and Y
+in Move & Transform" is an instruction. **The gap between those two is what made #595 a bug report.**
+💡 **FOUR ITEMS THIS SESSION WERE ONE HABIT** — #572, #578, #595, #596: a control that works with
+nothing to act on, or a feature never explained. **Amber `.fx-dead-tag` colour is now the shared
+vocabulary for "this cannot do anything here" in three places.** Worth a deliberate sweep rather than
+case-by-case.
 
 🔴 **#595 — I GAVE HIM A WRONG DIAGNOSIS AND HE DECIDED ON IT. Corrected at v13.03.** I said no layer
 could have depth and a Z control needed building. **Both false:** `MT_PROPS.move = ['x','y','z']`, the

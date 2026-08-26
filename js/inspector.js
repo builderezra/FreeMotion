@@ -4981,6 +4981,26 @@ window.FM = window.FM || {};
       // parallax maths. Giving it a second home here rather than a second field keeps one truth.
       body.appendChild(rangeRow('Distance', () => -(layer.transform.z != null ? FM.evalProp(layer.transform.z, FM.time) : 0),
         v => { FM.setTransform(layer, 'z', -Math.round(v), FM.time); FM.requestRender(); }, -2000, 4000, 5));
+      /* ⚠️ SAY WHEN THESE CONTROLS CANNOT DO ANYTHING — queue 595. Ezra: *"Field of view and distance
+         sliders don't work in camera"*, with two screenshots proving it: FOV 5 → 159 and Distance
+         −2000 → 4000, and an identical picture.
+         **He was right, and nothing here was broken.** MEASURED: on a FLAT scene those two change **0
+         pixels**; give one layer `z = 900` and the same FOV change moves **77,759**. Both controls act on
+         DEPTH, and a scene whose layers all sit at the same Z has none — so the lens correctly has
+         nothing to work with, and the hint below cheerfully promised parallax it could not deliver.
+         ⚠️ **This is the third time the app has known something and not said it** (#572's effects browser,
+         #578's motion blur). The fix is the same each time: say it where he is looking, at the moment it
+         matters — not in a manual.
+         ⚠️ **It names the CONTROL that fixes it.** "Nothing has depth" is a diagnosis; "set Z in Move" is
+         an instruction, and Z is already there beside X and Y. Telling him the problem without the cure
+         is what made this a bug report in the first place. */
+      const flat = !(FM.scene && FM.scene.layers || []).some(l => l && l !== layer && l.transform &&
+        l.transform.z != null && Math.abs(FM.evalProp(l.transform.z, FM.time) || 0) > 0.5);
+      if (flat) {
+        const w = el('div', 'insp-hint insp-hint-warn');
+        w.textContent = 'Nothing in this scene has depth yet, so these two do nothing — every layer sits at the same Z. Give a layer some depth first: select it, open Move & Transform, and change Z beside X and Y.';
+        body.appendChild(w);
+      }
       body.appendChild(el('div', 'insp-hint', 'Field of view is the lens. Wide (90°+) throws depth hard — layers at different Z separate and the camera’s pan gains real parallax. Narrow (20°) flattens the scene almost to 2D. Distance dollies the camera along Z; it is the same value as the camera’s own Z, so keyframing either animates the move.'));
       return;
     }

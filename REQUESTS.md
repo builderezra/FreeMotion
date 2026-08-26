@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.03
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.04
 >
-> **State:** v13.03, tests green, tree clean.
+> **State:** v13.04, tests green, tree clean.
+>
+> **📷 #595 — the camera now tells you when it cannot do anything.** If every layer sits at the same
+> depth it says so, and tells you where Z is. It disappears as soon as one layer has depth. **Your
+> sliders were never broken** — I was wrong about that and the correction is in the entry.
 >
 > **💡 #596 — the app now tells you what those two layers are for, at the moment you add one.**
 > Controller: an invisible handle — parent layers to it and move them all together. Adjustment: its
@@ -20000,8 +20004,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
-- [ ] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.) — ✅ **DONE v13.04 — the camera now SAYS when it cannot act**
       His words, verbatim:
       > Field of view and distance sliders don't work in camera
       **HIS TWO SHOTS ARE THE PROOF AND THEY ARE A CONTROLLED PAIR** — same project, same frame
@@ -20057,9 +20060,17 @@ re-opened #480, which I had marked done and had not fixed.
       **🎯 SO THE REAL BUG IS THE ONE THIS ENTRY ORIGINALLY PREDICTED, AND ONLY THAT:** his scene was flat
       — one image layer — so Field of view and Distance genuinely could do nothing, **and nothing told
       him.** It is the #572 shape exactly, for the third time.
-      **WHAT IS ACTUALLY LEFT TO BUILD:** the camera panel should say that these controls need layers at
-      different depths, and point at the Z control that already exists. **Small, and it is the thing that
-      would have saved him the report.**
+      **✅ BUILT v13.04.** The camera's View tab now shows an amber note when every layer shares a Z:
+      *"Nothing in this scene has depth yet, so these two do nothing — every layer sits at the same Z.
+      Give a layer some depth first: select it, open Move & Transform, and change Z beside X and Y."*
+      ⚠️ **IT NAMES THE CONTROL, NOT JUST THE PROBLEM.** "Nothing has depth" is a diagnosis; "set Z in
+      Move" is an instruction. **Telling him the problem without the cure is what made this a bug report**,
+      and the test asserts the word Z is in there for exactly that reason.
+      ⚠️ **AND IT DISAPPEARS THE MOMENT ONE LAYER HAS DEPTH — asserted, and it is the half that matters.**
+      A warning that is always on is furniture, and it would sit there lying at precisely the moment he
+      finally gets it right.
+      ⚠️ **Amber, matching `.fx-dead-tag` and #572's "does nothing here"** — the app says this in three
+      places now and one colour for one meaning is the point. **Deliberately not red:** nothing is broken.
       ⚠️ **HIS DECISION BELOW WAS MADE ON THE WRONG INFORMATION** — he chose "build the depth control"
       over "just warn". **The depth control needs no building, so the warning is what is left.** Told him
       rather than quietly building something else.
