@@ -10,12 +10,14 @@
 > three "NEED to all be added and work because that's a main feature", and that is quoted in the entry so
 > it does not get treated as an edge case.
 >
-> **📥 You sent 15 things tonight. All logged verbatim, none forgotten:** #568 playhead circle · #569
+> **📥 You sent 19 things tonight. All logged verbatim, none forgotten:** #568 playhead circle · #569
 > Paste look · #570 drag not updating the switch · #571 empty-project screen · #572 the effects answer
 > (measured — see below) · #573 more text effects · #574 two captions at once · #575 extending caption
 > texts · #576 text options hidden behind the preview box · #577 the 550ms hold · #578 Motion Blur
 > (Footage) · #579 saturation / black-and-white filters · #580 crop to canvas size · #581 favouriting a
-> custom filter · #582 the break · #583 "Save as preset".
+> custom filter · #582 the break · #583 "Save as preset" · #584 the wasted row in the effects browser · #585 icons on the
+> audio category tiles · #586 hovering a benchmark turning the playhead yellow · #587 benchmark lines
+> still drawing through the layer sidebar.
 >
 > **🔎 One real bug found while checking #579: the "Blackout" filter does not actually desaturate** —
 > measured, it leaves a colour spread of 25.5 where "Noir" gets to 0. Your words were right. Saturation
@@ -19828,6 +19830,55 @@ re-opened #480, which I had marked done and had not fixed.
       panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
+
+- [ ] **584 — The effects browser wastes a whole row on the ✕ and search buttons.** (26 Aug, annotated screenshot at v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > This space here is very wasted, my idea is to move the search and x out buttons onto the same row as the filters / effects / audio effects rows and just make those buttons smaller to fit them on either side.
+      **He has ringed the empty band** between the canvas and the Visual / Filters / Audio tabs: a full-width
+      row holding only a ✕ at the far left and a 🔍 at the far right, with nothing between them.
+      **He has designed the fix himself and it is specific:** put ✕ and 🔍 on the SAME row as the three
+      tabs, one either side, shrinking them to fit. That reclaims the whole band.
+      ⚠️ **The tabs are already a three-across row at 380px** — check what shrinking them by two buttons
+      does to their labels ("Audio" is the longest) before committing, and keep the tap targets usable.
+
+- [ ] **585 — The audio-effect CATEGORY tiles need icons, like the effects menu has.** (26 Aug, screenshot at v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Add icons for these buttons too like you did in the effects menu
+      **The tiles are** EQ / Filter (7), Space / Stereo (6), Dynamics (4), Character (10) — big gradient
+      cards with a name and a count and **no icon**, where the visual effects menu's category cards carry
+      one.
+      ⚠️ **Reuse the visual menu's icon vocabulary** rather than inventing a second set — that is the same
+      instruction #565 carried and the same reason.
+      ⚠️ Design request → **#545**: draw them at the size they ship at and send him the picture. Four icons,
+      and audio concepts are easy to draw badly (a "Character" icon especially).
+
+- [ ] **586 — Hovering a benchmark should turn the whole playhead yellow.** (26 Aug, screenshot at v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When hovering over a benchmark make the whole play head go yellow
+      **Small and well-specified.** A benchmark already draws a yellow marker and a tan line; hovering one
+      should turn the PLAYHEAD (currently white) yellow for the duration of the hover, so the two read as
+      connected.
+      ⚠️ **"hovering" on a phone is a hold, not a pointer** — decide what triggers it there, or it is a
+      desktop-only nicety. Worth asking him if it is not obvious.
+      🔗 Related to **#568** (the playhead's circle needing to blend with its line) — same object, so
+      **check them together** rather than styling the playhead twice.
+
+- [ ] **587 — Benchmark lines still draw through the layer sidebar.** (26 Aug, annotated close-up at v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Benchmarks still show in this side bar
+      **His arrows point at the head column** — the eye/thumbnail strip on the left — where the benchmark's
+      tan vertical line runs straight through, and at the add row above it.
+      **"still"** → this has been reported before. **Find the earlier entry and link it.**
+      🔗 **This is the same family as #550/#567:** that column is separated from the lane by the head
+      divider, and things belonging to the LANE should stop at it. The benchmark line is lane content
+      drawn over the head. **The `--ar-x0`/`--ar-x1` bounding used by the add row is the precedent** — the
+      divider's x is already measured off the live head there.
+      ⚠️ He was clear on the add row that the ＋ stays and only the DECORATION is bounded; the same
+      distinction applies here.
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
       **STATUS: 🟢 READY — nothing is stopping this**
