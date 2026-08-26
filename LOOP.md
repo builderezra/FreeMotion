@@ -133,6 +133,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+🎯 **NEXT TICK: STACKED-EFFECT COMPOSITOR COST, MEASURED WITH `tools/_phoneprobe.py` AT 4-6x.**
+This is not invented work — it is where his own steer (*"working on the lag being fixed for mobile would
+also be good"*, below) and his OLDEST item now meet, with a number attached. v13.25 measured the app at
+phone speed for the first time: the editing path is fine at 6x (tap 22 ms, scrub 3.8 ms, timeline 5.3 ms,
+nothing scaling worse than linear) but **five effects on six SHAPES gives 45 fps on this Mac and 17 fps
+at 6x**. The per-effect work of v11.72-v12.30 was measured one effect at a time and does not describe a
+stack. ⚠️ **Measure the STACK, not the effect** — and re-run the probe after each change rather than
+trusting a desktop reading, because 1x hides it almost entirely.
+📋 Also open from the same run: the app's adaptive quality drops to tier 2 / factor 0.62 on its own at
+4x. That is working as designed, but it means **a desktop measurement is taken at full quality and a
+phone one is not** — compare like with like before claiming a win.
+
 🔴 **SELF-CREATED WORK DOES NOT JUMP HIS QUEUE — he caught this on 26 Aug and was right.** #599 was
 MY OWN item and took four ticks while #581, #583 and #585 — his requests, all older — waited. *"Blocked
 on his answer"* is not an excuse when the item has a workable half: **#581 had a build available using
