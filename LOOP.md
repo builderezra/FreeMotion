@@ -206,8 +206,19 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
-🎯 **THE BIGGEST LEVER IN THE APP IS ONE CONSTANT: `PREVIEW_SS = 1.5` (js/app.js:450). MEASURED, NOT
-GUESSED — and it needs HIS EYES before it moves.**
+✅ **DONE v13.39 — `PREVIEW_SS` IS NOW 1.25 AND EVERY EFFECT IS ~1.49x FASTER IN THE PREVIEW.**
+Canvas 745x931 -> 626x783 (raster 0.69 -> 0.58), kaleidoscope 57.6 -> 38.6 ms through the REAL render
+path, tracking the 1.42 pixel ratio. ⚠️ **The 1.76x quoted below is KERNEL-ONLY and overstates it —
+1.49x is the honest figure and he has been told.** 1.0 was built, viewed at 2x on fine text and rejected
+(rough strokes, colour fringing). Revert is one line, documented at the constant.
+
+⚠️ **NEVER FLUSH WITH `getImageData` ON THE ON-SCREEN PREVIEW CANVAS — it costs ~7x and measures YOUR
+PROBE, not the app.** Same effect, same size: 272.7 ms flushed on `#preview` vs **38.6 ms** on an
+offscreen canvas. A readback on a canvas the compositor is also displaying forces a GPU->CPU sync that
+the app never pays — **`getImageData` appears nowhere in app.js's render path** (checked). Always time
+against an offscreen canvas of the same size.
+
+🗒️ **(done, kept for the numbers) THE BIGGEST LEVER IN THE APP IS ONE CONSTANT: `PREVIEW_SS` (js/app.js:450).**
 When the preview is downscaled (always, on a phone) the canvas is rendered **1.5x larger than the screen
 can show** and the browser downsamples it — deliberate, to keep edges clean (`s * PREVIEW_SS`, line 462).
 ⚠️ **It is NOT a bug. I nearly reported it as one.** But it costs 2.23x the pixels of EVERY effect.
