@@ -1,15 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.85
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.86
 >
-> **State:** v12.85, tests green, tree clean.
+> **State:** v12.86, tests green, tree clean.
 >
-> **❓ #570 NEEDS A TASTE CALL FROM YOU — it is not broken the way I expected.** I measured a full drag:
-> the colour works perfectly, and the position DOES update — but **only once in 200px of dragging**. It
-> sits still for the first half, then jumps one notch. It is accurate (it matches where the layer
-> actually lands) — it just does not feel live. **Should the switch slide smoothly with your finger
-> (my recommendation), or keep stepping one layer at a time?** Also: **does it move at all for you, or
-> not at all?** My test was synthetic, so it cannot rule out that a real finger does something mine did not.
+> **✅ Got your two answers — #570 "stepped" and #590 "the whole thing goes". Both logged, neither
+> re-asked.** And noted, verbatim: *"I'm not in a rush to answer every question coz you still have hours
+> of work in the things that you can do."* Fair. Questions go in the entries from now on, not at the top
+> of every reply — logged as **#591** so it sticks.
 >
 > **✅ #590 ANSWERED — thanks.** *"The whole thing goes I don't want to name benchmarks."* The popup
 > and renaming both go; removing a marker stays on the playhead head. Queued with **#586** and **#587**
@@ -19868,6 +19866,24 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > I’m not in a rush to answer every question coz you still have hours of work in the things that you can do
+      **Read as a correction, because it is one.** The last several replies have LED with questions — the
+      #570 taste call, the #590 ambiguity, and a repeated offer to bundle the 28 blocked items. He has
+      now said outright that answering is not his bottleneck and building is.
+      **So, concretely:**
+      1. **Ask once, in the entry, and move on.** A question belongs in REQUESTS.md where he can find it
+         when he wants it — not at the top of every reply.
+      2. **Never park an item that has ANY workable part.** Do the parts that do not depend on the answer,
+         state the assumption for the rest, and keep going. That is already the house rule; this makes it
+         explicit for questions as well as blockers.
+      3. **Stop re-offering the 28-item bundle.** It has been offered twice. It stays available; it is
+         not raised again unless he asks.
+      🔗 This sharpens LOOP rule 8 (surface every open question) rather than cancelling it: the
+      questions still get recorded, they just stop being the headline.
+
 - [ ] **590 — Get rid of the hold-a-benchmark popup (Rename / Remove marker).** (26 Aug, phone screenshot at v12.83.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
@@ -20175,12 +20191,12 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > Weird glitch here with the blue line also for this screen make it so when you tap anywhere on the timeline it works, currently the bottom of the screen has a cut off. And also do a nice little colourful reaction when you press on this screen, something that comes from where you tapped, like those keyboards that light but based on what button you press
       **THREE separate things — tick separately:**
-      1. [ ] **The "weird glitch with the blue line."** In his shot the empty-state add row draws a TALL
+      1. [x] **The "weird glitch with the blue line."** ✅ **DONE v12.86** In his shot the empty-state add row draws a TALL
              dashed rectangle down the left (roughly x 8–332, y 1123–1712 in his 920-wide capture) instead
              of a row-height outline — while the ＋ and "Tap here to start creating" sit centred to its
              right, outside it. **Reproduce on an EMPTY project first**; this is the `.tl-addrow--empty`
              variant, which is a different design from the normal row (`display: contents` on its head).
-      2. [ ] **The bottom of the timeline does not respond to taps** — *"make it so when you tap anywhere
+      2. [x] **The bottom of the timeline does not respond to taps** ✅ **DONE v12.86** — *"make it so when you tap anywhere
              on the timeline it works, currently the bottom of the screen has a cut off."* So the empty
              state's tap target stops short of the visible area. **Measure where the target ends against
              where the panel ends.**
@@ -20189,11 +20205,48 @@ re-opened #480, which I had marked done and had not fixed.
              invention. **Design request → #545: draw it and show him.**
       ⚠️ Clause 1 and clause 2 may be the same fault — a box that is the wrong size is also the wrong size
       to tap. **Measure before assuming they are separate.**
+      **THEY WERE SEPARATE. Measured at 380px on an empty project, v12.85:**
+      · **Clause 1 — the stray bar is 124px wide on a 380px row**, with the ＋ (x158) and the caption
+        (x104) centred OUTSIDE it. `--ar-x1` is `headW + PAD + duration × pxPerSec()` — **the project's
+        END**, which queue 551 put there and which he explicitly kept. **An empty project has duration 0**,
+        so that end collapses onto the head column and the bar shrinks to the head's own width.
+        **Why it was visible at all is the real story:** queue 356 had ALREADY removed the outline in this
+        state — *"when the add button is big and there's nothing on the project get rid of the lines
+        around it"* — by zeroing the ROW's `border-color`. Queue 550/551 then MOVED the outline and the
+        tint off the row onto `::before`, and **nobody carried queue 356 across.** The row obeyed him; the
+        pseudo-element that inherited its job never heard the instruction. So the fix is `content: none`
+        in the empty state — queue 356 applied where the lines actually live now. **Widening the bar to
+        full width would have been the wrong fix**: it puts back the very outline he asked to lose.
+      · **Clause 2 — 76px of dead strip, and it is TWO gaps not one.** The row ends at y=744,
+        `#tl-tracks` at 797, the panel at 820. `#tl-tracks` carries `padding-bottom: 52px + safe-area`
+        (room for the last lane to clear the bottom controls — which an empty project has no use for),
+        and the tracks box then stops 23px short of the panel.
+        **Fixed by moving the listener, not the geometry.** `#timeline` already runs to the panel's
+        bottom — the empty-state wash is painted on it for that exact reason — so the tap lives there.
+        Stretching the row would work today, break the next time either padding changes, and re-grow the
+        box queue 356 wanted gone. Bound ONCE for the app's lifetime, because `applyEmptyStart` runs on
+        every rebuild and an unguarded listener there stacks one per rebuild.
+      ⚠️ **Two controls guard the obvious wrong fixes:** clause 1 could be "fixed" by deleting the
+      decoration everywhere (the slim row must keep it — queue 550/551 are still his), and clause 2 by
+      opening the add sheet on every tap in the app (it must stay inert once a layer exists). Both fail
+      the test if broken.
+      **⏳ CLAUSE 3 IS STILL OPEN** — the colourful tap reaction. It is the invention half and wants a
+      picture before it ships (#545), so it did not ride along with two measured fixes.
 
 - [ ] **570 — Dragging a layer still does not update the toggle switch LIVE.** (26 Aug, phone screenshot at v12.79.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Dragging layers still doesn’t update the switch live
+      **Asked whether it should slide smoothly or keep stepping a layer at a time. He answered, verbatim:**
+      > 570 stepped
+      **So: KEEP THE INTEGER MEANING — he picked the option where the switch still reports a real slot.**
+      **That rules out the smooth rewrite; do not build it.** The measurement below is the brief: `--sw`
+      held 0.500 for the first 100px of a 200px drag — seven samples — then stepped once. Stepping is
+      right; sitting still for half a gesture is the complaint. So the job is to make the step land when
+      the insertion point actually changes.
+      ⚠️ **STILL UNANSWERED and it matters: does the switch move AT ALL for him?** The probe was
+      synthetic. If his real drag never moves it, that is a different fault and this fix misses it.
+      **Do not block on that** — he has said plainly he is not in a rush to answer (see #591).
       **"still" → this is #416**, whose request was: *"when you're dragging a layer the toggle button will
       change colour to the colour of that layer then when you press the toggle button while dragging a
       layer it will jump that layer to the top or bottom."* `FM.dragLayerId` is published from

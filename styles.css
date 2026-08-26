@@ -7305,6 +7305,22 @@ body.fm-pushing #toast { z-index: 213; }
   box-shadow: 0 0 9px rgba(90, 199, 237, .16);
   pointer-events: none;   /* decoration only — the ROW keeps every gesture it had */
 }
+/* ⚠️ AND THE DECORATION OBEYS queue 356 TOO — queue 571 clause 1, and this is the "weird glitch with
+   the blue line" he photographed. MEASURED at 380px on an empty project: a dashed, tinted box **124px
+   wide** drawn down the LEFT of a 380px row, with the ＋ (x158) and "Tap here to start creating" (x104)
+   sitting centred OUTSIDE it.
+   **Why 124:** `--ar-x1` is `headW + PAD + duration * pxPerSec()` — the project's END (queue 551, "the
+   right side being cut off is good"). **An empty project has duration 0**, so "the end of the project"
+   collapses onto the head column and the bar shrinks to the head's own width.
+   **Why it shows at all:** queue 356 already removed the outline in this state — *"when the add button
+   is big and there's nothing on the project get rid of the lines around it"* — by setting the ROW's
+   `border-color: transparent`. Then queue 550/551 MOVED the dashed outline and the tint off the row and
+   onto `::before`, and nobody carried queue 356 across. The row obeys him; the pseudo-element that took
+   over its job never heard the instruction.
+   So it is hidden here, which is queue 356 applied to where the lines actually live now. Bounding it to
+   the full width instead would be the wrong fix — it would put back the very outline he asked to lose. */
+#timeline-panel.tl-empty-start .tl-addrow--empty::before { content: none; }
+
 /* EMPTY PROJECT (queue 326): the row becomes the whole timeline, with a big + in the MIDDLE, so the
    first thing a beginner sees is where to start. Reverts to the slim row the moment a clip exists. */
 .tl-addrow--empty {

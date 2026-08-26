@@ -147,7 +147,18 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.85, 971 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.86, 972 tests green, tree clean, `HEAD == ssh/main`.**
+
+🛑 **HE HAS ASKED THE LOOP TO STOP LEADING WITH QUESTIONS (#591, 26 Aug):** *"I'm not in a rush to
+answer every question coz you still have hours of work in the things that you can do."* Ask ONCE, in the
+entry, and get on with it. Never park an item that has any workable part. Stop re-offering the
+28-blocked-item bundle — offered twice, stays available, not raised again unless he asks.
+
+⚠️ **WHEN AN INSTRUCTION IS OBEYED BY A PROPERTY AND THE PROPERTY LATER MOVES, THE INSTRUCTION IS
+LOST.** #571 clause 1 is the clean case: queue 356 removed the empty state's outline by zeroing the ROW's
+`border-color`; queue 550/551 then moved the outline onto `::before` and nobody carried 356 across, so a
+stray 124px dashed bar came back months later. **When you relocate a painted thing, grep for every rule
+that was suppressing it.**
 
 ⚠️ **"STILL DOESN'T WORK" CAN MEAN "WORKS, BUT NOT THE WAY IT FEELS LIKE IT SHOULD" — measure before
 building.** #570 read as a dead feature. Sampled at 14 points through a 200px drag, the colour was

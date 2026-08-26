@@ -2128,6 +2128,33 @@ window.FM = window.FM || {};
   function applyEmptyStart() {
     const tlPanel = document.getElementById('timeline-panel');
     if (tlPanel) tlPanel.classList.toggle('tl-empty-start', isEmptyStart());
+    bindEmptyTap(tlPanel);
+  }
+  /* ⚠️ A TAP ANYWHERE IN THE EMPTY TIMELINE OPENS THE ADD SHEET — queue 571 clause 2. Ezra: *"make it
+     so when you tap anywhere on the timeline it works, currently the bottom of the screen has a cut
+     off."* He is describing a real strip, and it is not one gap but two, MEASURED at 380px:
+     **the add row ends at y=744, `#tl-tracks` at 797, and the panel at 820.** `#tl-tracks` carries
+     `padding-bottom: 52px + safe-area` (room for the last lane to scroll clear of the bottom controls,
+     which an empty project has no need of), and the tracks box itself then stops 23px short of the
+     panel. **76px of what looks like timeline is not the row and never receives its click.**
+     The fix is the listener, NOT the geometry. Stretching the row to fill would work today and break the
+     next time either of those two paddings changes, and it would also enlarge the very box queue 356
+     asked to disappear. `#timeline` already runs to the bottom of the panel — the empty-state wash is
+     painted on it for exactly that reason (styles.css, `.tl-empty-start #timeline`) — so the tap belongs
+     there.
+     ⚠️ **BOUND ONCE FOR THE APP'S LIFETIME, not per rebuild.** applyEmptyStart runs on EVERY rebuild;
+     adding a listener here without the flag would stack one per rebuild and open the sheet N times. */
+  function bindEmptyTap(tlPanel) {
+    const tl = document.getElementById('timeline');
+    if (!tl || !tlPanel || tl._emptyTapBound) return;
+    tl._emptyTapBound = true;
+    tl.addEventListener('click', (e) => {
+      if (!tlPanel.classList.contains('tl-empty-start')) return;
+      /* The add row has its OWN click handler — letting this one fire too would open the sheet twice.
+         Everything else here is a control that means something on its own. */
+      if (e.target.closest && e.target.closest('.tl-addrow, button, input, select, textarea, a, [role="button"], #tl-ruler, .tl-ruler')) return;
+      if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
+    });
   }
   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
 
