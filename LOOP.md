@@ -182,6 +182,21 @@ background) and the scene had one, so those prove nothing. `temporaldenoise`/`fr
 should act on a single moving clip and did not. **Only those three are candidates, and still not a bug
 list.**
 
+🚨 **"BLOCKED ON EZRA" IS HIDING HIS OLDEST BUG REPORTS — audited 26 Aug and this is the real find.**
+I had audited the 3 ACTIONABLE twice and never opened the **32 blocked**. They are not all questions:
+· **#129** — *"a 2-second screen recording adds a clip with NO VIDEO"*
+· **#202** — *"one simple video layer lags badly, and the video does not load properly"*
+· **#96** — *"adding a SONG is really buggy and sometimes will not play at all"*
+· **#95 / #125** — phone timeline lag, *"barely any layers"*
+**These are BUGS, not decisions**, and several sat "blocked" because nobody could stage the media.
+🔓 **THAT EXCUSE DIED at v13.17: a real video layer can be MADE** (canvas → MediaRecorder → File →
+`FM.loadVideoFile` → `FM.addMediaLayer`). **#129 and #202 are directly about video and are now
+testable.** ⚠️ **Work these before inventing anything** — they are the oldest things in the list and
+they are HIS.
+⚠️ **AND THE CLASSIFIER LESSON:** "blocked on Ezra" means *a session decided it was blocked*, not that
+he was asked. **Re-open that pile whenever a capability changes** — a new way to test can unblock years
+of it at once.
+
 🛑 **THE QUEUE IS OUT OF WORK I CAN DO ALONE — audited BY HAND on 26 Aug, not taken from the
 classifier (rule 8b).** It reports 4 actionable; opening each one shows all four are parked:
 · **#578** clause 2 (*"needs a lot of work"*) and **#582** clause 2 (*"looked really bad"*) are LOOK

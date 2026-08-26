@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.22
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.23
 >
-> **State:** v13.22, 989 tests green, tree clean.
+> **State:** v13.23, 989 tests green, tree clean.
+>
+> **🔴 I WAS WRONG THAT I HAD RUN OUT OF WORK — and the mistake is worth telling you about.**
+> I kept checking the three items the tool calls "ready" and never opened the **thirty-two it calls
+> blocked**. They are not all waiting on you. Several are **your oldest bug reports**, filed months ago
+> and quietly parked:
+> · **#129** — a 2-second screen recording adds a clip with **no video**
+> · **#202** — one simple video layer **lags badly and does not load properly**
+> · **#96** — adding a song is buggy and sometimes **will not play at all**
+> · **#95 / #125** — the timeline lagging on your phone with barely any layers
+> **Some of those were parked because nobody could load a video in a test. I worked out how to do that
+> tonight**, so #129 and #202 are testable for the first time. **That is what I am doing next — your
+> oldest reports, not anything I invented.**
 >
 > **📍 I have run out of work that does not need you — checked by hand, twice.** The last loose
 > thread (a Squish setting that looked dead) turned out to be fine: "Floor" is just too gentle at the
