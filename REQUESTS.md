@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.09
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.10
 >
-> **State:** v13.09, 989 tests green, tree clean.
+> **State:** v13.10, 989 tests green, tree clean.
+>
+> **✅ THE CHECK FINALLY RAN PROPERLY — fourth try, and the safety net passed for the first time.** Using
+> a page of text as the test picture (letter edges give the fine detail my earlier flat shapes lacked),
+> all twelve known-good effects came back alive. **Of 198 effects, eight do nothing on a single still
+> layer.** I am NOT calling those broken — most need something one layer cannot give: another layer to
+> read, or video frames to compare. **Two of them do look like real gaps** (the ones needing frame-to-
+> frame change), and each survivor gets judged on its own rather than batched, because batching is
+> exactly the mistake this took three tries to stop making.
 >
 > **✅ THIRD TRY: the safety check worked and stopped me before I could get it wrong again.** I added a
 > control — ten effects I KNOW work, which must come back alive or the whole check is void. Nine did,
@@ -20317,6 +20325,26 @@ re-opened #480, which I had marked done and had not fixed.
       what two hand-built subjects have now failed to imitate. **Use the photographs.**
       ⚠️ **The control must keep `pixelate` in it** — it is the cheapest possible detector of a subject
       with no fine structure, and it caught this on the first run.
+
+      ✅ **FOURTH ATTEMPT, v13.09 — THE SWEEP RAN, WITH THE CONTROL PASSING FOR THE FIRST TIME.**
+      **Subject: a dense TEXT layer, gradient-filled, full frame** — 1,521 edge pixels AND 28 luminance
+      buckets. Glyph edges are the high-frequency detail two hand-built shape subjects could not provide.
+      **All 12 controls came back alive**, including the three that broke every earlier attempt:
+      `pixelate` **15,123**, `mirror` **13,149**, `mosaic` **42,708**.
+      📐 **RESULT: of 198 effects, EIGHT changed 0 pixels at every sampled time** — squish, framestutter,
+      hslbands, lightwrap, temporaldenoise, lumamatte, compoundblur, matchgrade. `blink` was caught as
+      merely time-varying by re-testing at nine times instead of three.
+      🛑 **THAT IS A CANDIDATE LIST, NOT A BUG LIST, AND THE DIFFERENCE IS THE WHOLE LESSON OF THIS ENTRY.**
+      Reading them honestly:
+      · **`hslbands` and `matchgrade` already carry "Needs a setting"** (#529's marker) — covered, not gaps.
+      · **`lumamatte` and `compoundblur` take ANOTHER LAYER as their source.** One layer alone cannot
+        demonstrate them; that is not the same as doing nothing.
+      · **`temporaldenoise` and `framestutter` need frame-to-frame CHANGE** — a static text layer has none.
+        **This is #598's shape again** and is the most likely genuine gap of the eight.
+      · **`lightwrap` needs a background to wrap against**; **`squish`** deforms and warrants its own look.
+      ⚠️ **NEXT STEP IS PER-EFFECT, NOT A BATCH.** Each survivor needs the question "what would this need,
+      and can the app prove it is absent?" answered separately — the same bar the colour and motion checks
+      meet. **Shipping a warning on all eight would repeat the mistake this entry has already made twice.**
 
 - [x] **598 — Both motion blurs are dead on a layer that cannot move, and said nothing.** (26 Aug, FOUND by me.) — ✅ **DONE v13.06**
       **Second one found by sweeping in as many ticks.** 📐 **MEASURED at v13.05:** on a still shape,
