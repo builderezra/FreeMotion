@@ -149,6 +149,14 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.02, 988 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **#595 — I GAVE HIM A WRONG DIAGNOSIS AND HE DECIDED ON IT. Corrected at v13.03.** I said no layer
+could have depth and a Z control needed building. **Both false:** `MT_PROPS.move = ['x','y','z']`, the
+Move panel renders `400.0X 540.0Y 0.0Z`, and with a layer at z=900 an FOV change moves **77,759 px**.
+**HOW: I read a fresh transform's keys, saw no `z`, grepped TWO files for `transform.z =`, found none,
+and concluded the feature was absent.** `z` is absent until set, and the setter is a scrubber no `.z =`
+grep can match. ⚠️ **ABSENCE OF A GREP HIT IS NOT ABSENCE OF A FEATURE — drive the UI before concluding
+something does not exist.** One probe settled it.
+
 🔴 **#595 SOLVED AND PARKED ON HIS CHOICE — the camera is fine, the SCENE has no depth.** FOV 5→159
 and Distance −2000→4000 change 0 pixels (control: moving a layer changes 70,687). `FM.cameraLens`
 computes F correctly and the projection reads `tr.z`… **but a transform has no `z` key and nothing sets

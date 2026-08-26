@@ -9,8 +9,14 @@
 > effects apply to everything BELOW it, so one grade covers the whole video. **You should not have had to
 > ask** — every effect in the app carries a description and those two carried nothing.
 >
-> **🎥 #595 — got your answer, and the depth control is next.** It is a proper feature rather than a
-> patch, so it starts fresh with its scope written down instead of being half-built at the end of a tick.
+> **🔴 #595 — I WAS WRONG, and you decided based on it. The depth control already exists.**
+> Z is the third number in the Move panel, right beside X and Y — measured, it reads `400.0X 540.0Y
+> 0.0Z`. And it works: **put one layer at Z 900 and your Field of view changes 77,759 pixels.** The
+> camera was never broken and neither was the renderer.
+> **What was true is the smaller half:** your scene was one image layer, so everything sat at the same
+> depth and the lens genuinely had nothing to work with — **and nothing told you that.**
+> **So there is nothing to build for depth; give a layer a Z and the camera comes alive.** What is left
+> is making the camera panel SAY so when your scene is flat. Sorry for the wrong steer.
 >
 > **🎥 #595 — you are right, and I found exactly why.** Field of view and Distance change **zero
 > pixels** (I checked with your two values; moving a layer for comparison changed 70,687). **But the
@@ -20036,6 +20042,28 @@ re-opened #480, which I had marked done and had not fixed.
       know.** The panel's own help text promises *"layers at different Z separate and the camera's pan
       gains real parallax"* — **a behaviour the app cannot currently perform**, because nothing can be at
       a different Z.
+      **❌❌ MY DIAGNOSIS WAS WRONG, AND HE MADE A DECISION ON IT. CORRECTED AT v13.03.**
+      I told him no layer could be at a different depth and that a depth control needed building.
+      **BOTH HALVES ARE FALSE. THE DEPTH CONTROL ALREADY EXISTS AND DEPTH ALREADY WORKS.**
+      · **`MT_PROPS.move = ['x', 'y', 'z']`** — Z is the third channel of Move mode, and the panel renders
+        it: measured, the Move panel reads **`400.0X 540.0Y 0.0Z`**. It is on screen today.
+      · **MEASURED: with one layer at `z = 900`, FOV 5 → 159 changes 77,759 pixels.** On the flat scene it
+        changes 0. **So the camera was correct all along and so was the renderer.**
+      **HOW I GOT IT WRONG, because the method is the lesson:** I read a fresh layer's `transform` keys,
+      saw no `z`, grepped **two files** for a `transform.z =` setter, found none, and concluded the feature
+      did not exist. **`z` is simply absent until set** (`tr.z != null ? … : 0`), and the setter is a
+      scrubber that never matches a `.z =` grep. **Absence of a grep hit is not absence of a feature** —
+      and I should have driven the UI, which took one probe and settled it.
+      **🎯 SO THE REAL BUG IS THE ONE THIS ENTRY ORIGINALLY PREDICTED, AND ONLY THAT:** his scene was flat
+      — one image layer — so Field of view and Distance genuinely could do nothing, **and nothing told
+      him.** It is the #572 shape exactly, for the third time.
+      **WHAT IS ACTUALLY LEFT TO BUILD:** the camera panel should say that these controls need layers at
+      different depths, and point at the Z control that already exists. **Small, and it is the thing that
+      would have saved him the report.**
+      ⚠️ **HIS DECISION BELOW WAS MADE ON THE WRONG INFORMATION** — he chose "build the depth control"
+      over "just warn". **The depth control needs no building, so the warning is what is left.** Told him
+      rather than quietly building something else.
+
       **✅ ANSWERED BY EZRA, 26 Aug — HE PICKED THE FEATURE, verbatim:**
       > do this one Add a real depth control to layers — the renderer is already written for it, so it's a UI and a data field rather than a rewrite. But that's a feature, not a fix, and deserves its own decision rather than being slipped in under a bug report.
       **So: build the Z control. Not the warning.** He read both options and took the larger one.
