@@ -19811,6 +19811,25 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
+- [ ] **581 — Favouriting a CUSTOM filter should put it at the top of the Filters section.** (26 Aug, phone screenshot at v12.79.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > When you fave a custom filter you made from pressing empty filter or if you added a filter and changed it up then fave it it should go to the top of the filter section as a fave
+      **Two ways to make one, and he named both:** an **Empty filter** he then fills, or a library filter he
+      **changed after adding**. Either way it is no longer any library entry, so favouriting it has nowhere
+      to appear.
+      **What his shot shows:** the ⋯ menu on a Filter row in the stack, offering **"Remove from
+      favourites"** — so the fave is being RECORDED. The gap is the other end: the Filters browser's
+      favourites row is built from the library, so a custom one never shows up there.
+      🔗 **#444 is the ancestor and the pattern to follow:** *"make it so you can fave them and they go to
+      the top when you do… And it doesn't take it away from its group when you do so."* Favourites are a
+      SECOND PLACE a filter appears, not a move. **Reuse that**, do not build a parallel list.
+      ⚠️ **A custom filter has no library id**, which is what the favourites row keys off. So this needs the
+      filter itself stored somewhere durable — check whether "Save this effect as preset…" (in the same ⋯
+      menu) already does that, and whether a fave can simply point at it, before inventing storage.
+      ⚠️ **Naming:** a library fave shows its own name; a custom one is called "Filter". He will need to
+      tell them apart — worth asking him, or defaulting to the name he gave the preset.
+
 - [ ] **579 — 🔴 Saturation does not work, the black-and-white filters do not make anything black and white, and he wants more of them.** (26 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
