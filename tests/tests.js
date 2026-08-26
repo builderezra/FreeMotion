@@ -44608,6 +44608,25 @@
       { name: 'tunnel', fn: W_.tunnel, ref: (FM._warpRef || {}).tunnel, tol: 0, moveCap: 0, why: 'a pure hoist must be exact' },
       { name: 'fractalwarp', fn: W_.fractalwarp, ref: (FM._warpRef || {}).fractalwarp, tol: 1e-9, moveCap: 0, why: 'reciprocal multiply rounds differently' },
       { name: 'curl', fn: W_.curl, ref: (FM._warpRef || {}).curl, tol: 0, moveCap: 0, why: 'curl keeps atan2 on purpose — the rotation identity was reverted here' },
+      /* GRIDREPEAT must be EXACT, and the zero here is load-bearing. Reciprocal substitution was tried
+         and measured 1.74x while moving 9,420 of 53,196 sampled points onto a different pixel — 17.7%.
+         A tiling warp cannot take reciprocals ANYWHERE, fractions included: with W=540 over 6 columns
+         the cell is 90 px, so the fraction is exactly k/90 and `* W` makes it exactly k*6, a whole
+         number. Every sample sits on the truncation boundary, so a 1e-16 difference flips it down.
+         Hoisting the evalProps alone gave 2.73x (15.3 -> 5.6 ms, interleaved against a control that
+         held at ratio 1.000) with zero points moved — strictly better AND exact. If this ever fails,
+         someone has reintroduced a reciprocal. */
+      { name: 'gridrepeat', fn: W_.gridrepeat, ref: (FM._warpRef || {}).gridrepeat, tol: 0, moveCap: 0,
+        why: 'a tiling warp lands on integers, so any rounding change flips whole tiles',
+        /* ⚠️ ITS OWN CASES, and that is not tidiness. These were briefly appended to the SHARED list and
+           it turned the suite red on TWIRL: tile/mirror/stagger settings mean nothing to twirl, but they
+           carry no `amount`, so twirl ran extra samples at its default angle where more coordinates sit
+           on truncation boundaries — its measured drift went 4% -> 11.8% and blew a cap that was
+           correct. A shared fixture silently redefines what every other row is measuring. */
+        cases: [{ count: 1 }, { count: 10 }, { count: 7, rows: 3 }, { count: 4, rows: 0 },
+                { count: 5, mirror: 1 }, { count: 5, mirror: 2 }, { count: 5, mirror: 3 },
+                { count: 6, stagger: 0.5 }, { count: 3, rows: 9, stagger: 1, mirror: 3 },
+                { count: 9, rows: 2, stagger: 0.37, mirror: 2 }] },
       /* TWIRL is the one place the rotation identity was kept (1.89x on the dearest warp). It reaches the
          same point by different float arithmetic, so `|0` truncation can pick a neighbouring source pixel
          where a coordinate sits on an integer. Measured 55 of 1365; the cap is 8% of points, which leaves
@@ -44625,7 +44644,7 @@
       if (typeof pr.ref !== 'function') throw new Error(pr.name + ': the reference body is gone from FM._warpRef, so nothing here is being verified');
       if (FM._warpFx['_' + pr.name + 'Legacy']) throw new Error(pr.name + ': a reference body is back inside WARP_FX, where it reads as a shipping effect that moves nothing');
       let worst = 0, moved = 0, n = 0;
-      for (const p of cases) {
+      for (const p of (pr.cases || cases)) {
         const pre = pr.fn.prep(W, H, cx, cy, maxR, p, 0.37, 1);
         for (let x = 0; x < W; x += 37) for (let y = 0; y < H; y += 53) {
           const a = pr.fn(x, y, W, H, cx, cy, maxR, p, 0.37, 1, pre);

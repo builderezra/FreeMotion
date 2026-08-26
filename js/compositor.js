@@ -6941,7 +6941,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var tnInv=tnRad*tnRad/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA;
       return [tnCx+tnDx/tnR*tnRR, tnCy+tnDy/tnR*tnRR]; },
     // ---- batch 15 (repeat / tiling) ----
-    gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10;
+    /* PREPPED + RECIPROCALS (queue: "editing lags"). Dearest effect in the clean ranking at 36.5 ms, and
+     * it had BOTH shapes that have actually paid: four evalProps per pixel, and up to five divisions by
+     * frame constants (`y/cellH` twice, `grX/cellW`, and the two fraction terms).
+     * ⚠️ ONLY THE evalProps ARE HOISTED. EVERY DIVISION STAYS A DIVISION, and that is a measured decision,
+     * not caution: reciprocals were tried here and gave 1.74x (15 -> 8.6 ms) while moving **9,420 of
+     * 53,196 sampled points onto a different pixel — 17.7%**, so they were taken out again.
+     * The reason is structural and specific to a tiling effect, and it defeats the usual
+     * "only the floor divisions are risky" fallback. With W = 540 and 6 columns the cell is 90 px, so
+     * the fraction `(grX - grIx*cellW)/cellW` is exactly k/90, and `* W` makes it exactly `k*6` — a WHOLE
+     * NUMBER by construction. Every sample sits precisely on the truncation boundary, so a 1e-16
+     * rounding difference flips it down by one every time. A warp whose output lands on integers cannot
+     * take reciprocal substitution ANYWHERE, fractions included. Verified movedPixels === 0 as it now
+     * stands, against the reference body below. */
+    gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.gridrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
+      var grX=x;
+      if(C.stag>0){ var grRow0=Math.floor(y/C.cellH); if(grRow0&1) grX=x+C.stagCell; }
+      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(y/C.cellH);
+      var grGx=(grX-grIx*C.cellW)/C.cellW; var grGy=(y-grIy*C.cellH)/C.cellH;
+      if(C.mir===1||C.mir===3){ if(grIx&1) grGx=1-grGx; }
+      if(C.mir===2||C.mir===3){ if(grIy&1) grGy=1-grGy; }
+      return [grGx*W, grGy*H]; },
+    _gridrepeatLegacy: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10;
       // Rows were welded to columns and every tile was a byte-identical copy butt-joined to the next,
       // so the effect could make exactly one thing: a square wall of clones. ROWS frees the second axis
       // (0 keeps it square, which is what every existing instance is). MIRROR flips alternate tiles so
@@ -7083,11 +7104,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * on their own object: still reachable for the equality test, invisible to anything enumerating the
    * real ones. */
   const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy,
-                     curl: WARP_FX._curlLegacy, twirl: WARP_FX._twirlLegacy };
+                     curl: WARP_FX._curlLegacy, twirl: WARP_FX._twirlLegacy,
+                     gridrepeat: WARP_FX._gridrepeatLegacy };
   delete WARP_FX._fractalwarpLegacy;
   delete WARP_FX._tunnelLegacy;
   delete WARP_FX._curlLegacy;
   delete WARP_FX._twirlLegacy;
+  delete WARP_FX._gridrepeatLegacy;
   FM._warpRef = WARP_REF;
 
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
@@ -7126,6 +7149,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
     return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+  };
+
+  WARP_FX.gridrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var grCount = Math.round(FM.evalProp(p.count, t) || 3); if (grCount < 1) grCount = 1; if (grCount > 10) grCount = 10;
+    var grRowsP = p.rows == null ? 0 : Math.round(FM.evalProp(p.rows, t)); if (grRowsP < 0) grRowsP = 0; if (grRowsP > 10) grRowsP = 10;
+    var grRows = grRowsP === 0 ? grCount : grRowsP;
+    var grMir = p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0);
+    var grStag = p.stagger == null ? 0 : FM.evalProp(p.stagger, t); if (grStag < 0) grStag = 0; if (grStag > 1) grStag = 1;
+    var cellW = W / grCount, cellH = H / grRows;
+    return { mir: grMir, stag: grStag, cellW: cellW, cellH: cellH,
+             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW };
   };
 
   WARP_FX.twirl.prep = function (W, H, cx, cy, maxR, p, t, ps) {

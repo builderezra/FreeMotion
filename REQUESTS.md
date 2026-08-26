@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.32
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.33
 >
-> **State:** v13.32, 990 tests green, tree clean.
+> **State:** v13.33, 991 tests green, tree clean.
+>
+> **⚡ GRID REPEAT — the most expensive effect in the app — is 2.73x faster, and the picture is EXACTLY
+> the same. 15.3 ms → 5.6 ms.** It was looking up its four settings for every single pixel.
+> **The interesting part is what I did NOT do.** A second trick would have made it faster still, but it
+> shifted **18 in every 100 pixels** by one. On a tiling effect that means whole tiles jumping, so I
+> threw it away — and the plain version turned out to be **faster anyway** (2.73x vs 1.74x) as well as
+> perfect. **Nothing about your grids will look different, they will just draw quicker.**
 >
 > **✅ Re-measured properly, and the good news is that both speed wins are REAL — confirmed by a clean
 > run that the tool certified as untainted.** Twirl has dropped out of the fifteen most expensive
