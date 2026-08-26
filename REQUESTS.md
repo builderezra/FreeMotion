@@ -21553,6 +21553,24 @@ re-opened #480, which I had marked done and had not fixed.
              *(The earlier "Pixel shrinks it 40%" reading came from that same over-strict predicate and
              should not be trusted either — under the profile test Pixel reads 111/43, i.e. also a no-op
              at default. One threshold is not a measurement; a profile across bands is.)*
+             ✅ **27 Aug, AFTER the v13.40 fix — all four styles re-measured together, one run, control on.**
+             | style | disc width | hard core | soft band |
+             |---|---|---|---|
+             | no effect | 110 px | 42 | 7 |
+             | **Pixel** | **119** | 22 | 78 |
+             | **Smear** (default) | **117** | 26 | 59 |
+             | **Echo** | **111** | **42** | **9** |
+             | **Blend** | **122** | 24 | 56 |
+             ✅ **Pixel did NOT need the fix and my worry that it would was unfounded** — it has its own
+             per-pixel path and reads 119 px, which clears the >118 acceptance mark that Smear misses.
+             🚨 **ECHO IS THE ONE REAL NO-OP LEFT: 111 px against 110 with the effect OFF, hard core
+             unchanged at 42.** Its branch is the accumulator (`style === 2`) — it never touches the
+             motion field at all, it just merges the previous frame with `lighten`, so on footage where
+             the moving object is BRIGHTER than what it passes over, the trail is immediately overwritten
+             by the new frame. **That is the next piece of work on this entry.**
+             ⚠️ **Do not conclude "switch the default back to Pixel" from the width column.** Pixel scores
+             highest here and is exactly what he called awful — width measures spread, not whether the
+             optical-flow estimate tears the picture into blocks. Those are different questions.
              📋 **The superseded line, kept honest:** the effect does not implement directional blur at all. The
              work is to smear along the measured motion vector, and the acceptance test is a NUMBER —
              the disc must come out wider than 108 px, with a control that fails if the frame did not
