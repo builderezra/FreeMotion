@@ -149,6 +149,15 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.02, 988 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔴 **#595 SOLVED AND PARKED ON HIS CHOICE — the camera is fine, the SCENE has no depth.** FOV 5→159
+and Distance −2000→4000 change 0 pixels (control: moving a layer changes 70,687). `FM.cameraLens`
+computes F correctly and the projection reads `tr.z`… **but a transform has no `z` key and nothing sets
+one**, so every layer is at z=0 and no lens can change a flat scene. **The panel's help text promises
+parallax the app cannot perform.** Options in the entry: SAY so (cheap, #572's shape) or add a real Z
+control (the renderer is already written for it — UI + data field, not a rewrite).
+⚠️ **WHEN A CONTROL "DOES NOTHING", CHECK WHAT IT ACTS ON BEFORE CHECKING THE CONTROL.** Three items now
+(#572, #578, #595) were correct controls with nothing to act on.
+
 ⚠️ **WHEN HE REORDERS SOMETHING, TEST THAT NOTHING WAS LOST — not just the new order.** Reordering a
 literal array is exactly the edit that duplicates or drops an entry, and nothing announces it: six
 sections instead of seven looks as plausible as seven. #594 asserts count, uniqueness and non-emptiness

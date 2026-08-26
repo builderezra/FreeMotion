@@ -4,6 +4,16 @@
 >
 > **State:** v13.02, tests green, tree clean.
 >
+> **🎥 #595 — you are right, and I found exactly why.** Field of view and Distance change **zero
+> pixels** (I checked with your two values; moving a layer for comparison changed 70,687). **But the
+> sliders are not broken.** The camera works out the lens correctly — what is missing is that **no layer
+> in FreeMotion can be at a different depth.** Every layer sits at the same Z, and a lens cannot change a
+> flat scene, any more than a telephoto changes a photograph of a photograph.
+> **The panel even promises parallax it cannot deliver.** Two ways forward and it is your call: I can
+> make the camera panel SAY they do nothing until layers have depth (cheap, stops you chasing a dead
+> control), or add a real depth control to layers — the renderer is already written for it, so that is a
+> UI job rather than a rewrite. **Which?**
+>
 > **🔝 #594 — Tuff is the second filter row now, right under Cinematic.** It was last because of my
 > reasoning, not yours — I had put it there as "newest and most specific". Nothing else moved and no
 > section was lost.
@@ -19977,7 +19987,7 @@ re-opened #480, which I had marked done and had not fixed.
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
 - [ ] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Field of view and distance sliders don't work in camera
       **HIS TWO SHOTS ARE THE PROOF AND THEY ARE A CONTROLLED PAIR** — same project, same frame
@@ -19997,6 +20007,36 @@ re-opened #480, which I had marked done and had not fixed.
       flat scene**, which would make this the #572 shape again: correct behaviour, no way for him to know.
       **His shot shows ONE image layer.** So check that first — it is cheap, and it decides whether this
       is a render bug or a "nothing to see here, and the app should say so" bug.
+      **🔎 REPRODUCED AND FULLY EXPLAINED at v13.02 — he is exactly right, and it is not the slider.**
+      Two shapes and a camera, his exact pair of values:
+      | | pixels changed |
+      |---|---|
+      | FOV 5 → 159 **and** Distance −2000 → 4000 | **0** |
+      | CONTROL — moving one layer 120px | **70,687** |
+      So the render pipeline is alive and the camera settings do nothing whatsoever.
+      **🎯 THE CAUSE, AND IT IS NOT A BUG IN THE CAMERA:**
+      · **`FM.cameraLens` computes the focal length correctly** from `cam.fov` (js/compositor.js:12196),
+        and the projection reads it (`_camLens.F`, line 9767). **That machinery is fine.**
+      · **The projection reads a per-layer depth** — `const zz = tr.z != null ? FM.evalProp(tr.z, t) : 0`
+        (line 9763) — **defaulting to 0.**
+      · ⚠️ **BUT A LAYER'S TRANSFORM HAS NO `z`.** Measured: its keys are `x, y, scale, rotation,
+        opacity, anchorX, anchorY` — no depth. And **no setter for `transform.z` was found in
+        js/inspector.js or js/app.js.**
+      **So every layer sits at z = 0, always. The perspective divide is identical for all of them, and no
+      lens or dolly can change a flat scene** — which is precisely what this entry predicted to check
+      first, and it is the #572 shape again: **the behaviour is correct and there is no way for him to
+      know.** The panel's own help text promises *"layers at different Z separate and the camera's pan
+      gains real parallax"* — **a behaviour the app cannot currently perform**, because nothing can be at
+      a different Z.
+      ❓ **TWO WAYS OUT, and it is his call — with a recommendation:**
+      · **Say so (recommended, and cheap).** The camera panel should tell him these do nothing until
+        layers have depth, in the same spirit as #572's browser warning. **He stops chasing a dead
+        control**, which is the actual harm today.
+      · **Give layers a Z control (the real feature).** The renderer is already written for it — it reads
+        `tr.z` everywhere — so this is a UI and a data field, not a rewrite. **But it is a feature, not a
+        fix**, and worth its own decision rather than being slipped in under a bug report.
+      ⚠️ **DO NOT "fix" the sliders.** They are wired correctly; the value reaches the model and the lens
+      is computed from it. Nothing about them is broken.
       ⚠️ **Do not assume it is the slider.** The value clearly reaches the model (the readout changes).
       Measure whether the RENDER changes between the two values, on a scene with layers at different Z.
 
