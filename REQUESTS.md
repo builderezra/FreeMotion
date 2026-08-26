@@ -2,7 +2,25 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.81
 >
-> **State:** v12.81, **972 tests green**, tree clean.
+> **State:** v12.81, **971 tests green**, tree clean.
+>
+> **🔴 THE ONE THAT MATTERS MOST — #582, "I completely broke the app".** Motion Blur + Shake + Tiles
+> on one layer. That is at the TOP of what I do next, ahead of everything cosmetic, and I have not
+> touched it yet — it needs reproducing with the console open before anyone guesses. You also said those
+> three "NEED to all be added and work because that's a main feature", and that is quoted in the entry so
+> it does not get treated as an edge case.
+>
+> **📥 You sent 15 things tonight. All logged verbatim, none forgotten:** #568 playhead circle · #569
+> Paste look · #570 drag not updating the switch · #571 empty-project screen · #572 the effects answer
+> (measured — see below) · #573 more text effects · #574 two captions at once · #575 extending caption
+> texts · #576 text options hidden behind the preview box · #577 the 550ms hold · #578 Motion Blur
+> (Footage) · #579 saturation / black-and-white filters · #580 crop to canvas size · #581 favouriting a
+> custom filter · #582 the break · #583 "Save as preset".
+>
+> **🔎 One real bug found while checking #579: the "Blackout" filter does not actually desaturate** —
+> measured, it leaves a colour spread of 25.5 where "Noir" gets to 0. Your words were right. Saturation
+> and Grayscale themselves are fine (46.7 → 0 on a coloured shape); they do nothing on WHITE, which is
+> #572's warning problem, not a broken effect.
 >
 > **🔎 v12.81 — I have an ANSWER on the effects, and it is not the one I gave you before (#572).**
 > I measured your exact case — white text, the eight you picked. **Brightness, Contrast and Grayscale
@@ -19810,6 +19828,40 @@ re-opened #480, which I had marked done and had not fixed.
       panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
+
+- [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
+      **THIS IS THE MOST SERIOUS THING IN THE QUEUE — "completely broke the app".** Three separate claims:
+      1. [ ] **A hard break from ONE named combination: Motion Blur + Shake + Tiles on one layer.**
+             **Reproduce that exact stack first** and capture what actually happens — a throw, a hang, or
+             the tab dying. The three are already known-expensive: #474 measured Tiles and the mover family
+             among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
+             compounding is at least as likely as an exception. **Open the console; do not infer from the
+             symptom.**
+      2. [ ] **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
+             from the break. Both DISPLACE the whole layer, so they are very likely fighting over the same
+             padded plate (the `_hasMover`/`fxSlack` allowance in js/compositor.js). Measure before judging.
+      3. [ ] **"some optimisation issues"** — he is right that this family is the expensive one. #474's
+             effect-speed campaign closed with "the vein is now empty" for SINGLE effects; it never measured
+             **combinations**, which is exactly what he is doing. **That is the gap.**
+      ⚠️ **His last clause is the priority statement and should be quoted back in any plan:** *"those
+      effects NEED to all be added and work because that's a main feature."* Stacking effects is not an
+      edge case to him.
+      ⚠️ **Do not start by tuning.** Get the break reproduced and named first — a crash and a slow render
+      need opposite fixes, and guessing between them wastes the tick.
+
+- [ ] **583 — Rename the "Save effects only…" button to "Save as preset".** (26 Aug, annotated screenshot at v12.81.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Make this button say save as preset.
+      **He has circled it:** the button under the effects stack currently reading **"Save effects only…"**,
+      beside Copy and Paste. He wants it to read **"Save as preset"**.
+      ⚠️ **Check the ⋯ menu's wording too** — it already offers *"Save this effect as preset…"*, so after
+      this there are two phrasings for one idea in one panel. **Make them agree.**
+      ⚠️ Trivial to do, but it is a LABEL: grep for the string rather than assuming one occurrence, and
+      check nothing (a test, a tooltip) asserts the old words.
 
 - [ ] **581 — Favouriting a CUSTOM filter should put it at the top of the Filters section.** (26 Aug, phone screenshot at v12.79.)
       **STATUS: 🟢 READY — nothing is stopping this**
