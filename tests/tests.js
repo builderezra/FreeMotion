@@ -2403,6 +2403,75 @@
     }
   });
 
+  test('573: every text animation renders, and none of them is another one wearing a new name', { item: '573' }, async function () {
+    /* Queue 573. Ezra: "Add more text effects", right after finding the text options thin.
+     * There were FIVE and, measured against each other, they were all one idea: an ENTRANCE built from
+     * alpha, a shift and a scale. THE RISK IN AN "ADD MORE" REQUEST IS SHIPPING HIM THE SAME THING
+     * TWICE — queue 563 is the precedent, where a new "Bell" turned out to be the existing "Ding" and
+     * every does-it-make-a-noise check passed. So this does not merely assert the new presets DO
+     * something; it asserts each one differs from its NEAREST EXISTING NEIGHBOUR.
+     * The third block is the one that matters most: `wave` and `jitter` are a new CATEGORY — they never
+     * settle — so they are asserted to still be moving long after every entrance has finished, while
+     * two of the old ones are asserted to be perfectly still at the same moment. That is a difference
+     * in kind, and it cannot be faked by a tweaked easing curve.
+     * MEASURED at v12.89 on 1080x1080: vs "none" 2,129-25,814 px; vs nearest neighbour 5,548-22,009 px;
+     * still-moving wave 5,175 / jitter 7,417 against fade 0 / pop 0. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addTextLayer();
+      const T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+      if (!T) throw new Error('could not make a text layer');
+      T.text = 'HELLO'; T.color = '#ffffff'; T.start = 0; T.duration = 4; T.fontSize = 96;
+      const P = FM.scene.project, W = P.width, H = P.height;
+      const shot = function (preset, t) {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        T.textAnim = { preset: preset, unit: 'char', durIn: 0.6, stagger: 0.04, durOut: 0 };
+        FM.renderScene(c.getContext('2d'), FM.scene, t);
+        return c.getContext('2d').getImageData(0, 0, W, H).data;
+      };
+      const diff = function (a, b) { let n = 0; for (let i = 0; i < a.length; i += 4) { if (Math.abs(a[i] - b[i]) > 8 || Math.abs(a[i + 3] - b[i + 3]) > 8) n++; } return n; };
+      const TS = [0.15, 0.35, 0.9, 2.0];
+      const PRESETS = ['none', 'fade', 'fade-up', 'typewriter', 'pop', 'slide', 'drop', 'spin', 'zoom-out', 'stretch', 'wave', 'jitter'];
+      const sig = {}; PRESETS.forEach(function (p2) { sig[p2] = TS.map(function (t) { return shot(p2, t); }); });
+      const maxDiff = function (a, b) { return Math.max.apply(null, TS.map(function (_, i) { return diff(sig[a][i], sig[b][i]); })); };
+
+      // 1) Every option in the picker must actually do something. A menu entry with no branch behind it
+      //    is a control that lies — the same class of bug queue 572 was about.
+      PRESETS.slice(1).forEach(function (p2) {
+        const d = maxDiff(p2, 'none');
+        if (d < 500) throw new Error('text animation "' + p2 + '" renders identically to None (' + d + ' px differ at every sampled time) — it is an option in the menu that does nothing (queue 573)');
+      });
+
+      // 2) …and must not be a preset he already had. This is the queue-563 Bell/Ding check.
+      [['drop', 'fade-up'], ['spin', 'pop'], ['zoom-out', 'pop'], ['stretch', 'pop'], ['wave', 'fade'], ['jitter', 'fade']].forEach(function (pr) {
+        const d = maxDiff(pr[0], pr[1]);
+        if (d < 2000) throw new Error('the new "' + pr[0] + '" is indistinguishable from the existing "' + pr[1] + '" (' + d + ' px) — "add more text effects" means MORE, not the same one renamed (queue 573, and queue 563 is why this is checked)');
+      });
+
+      // 3) wave and jitter are the new CATEGORY: they never settle. The control is that two of the old
+      //    ones are exactly still at the same instant, which is what makes this a difference in kind.
+      const moving = function (p2) { return diff(shot(p2, 2.0), shot(p2, 2.25)); };
+      ['wave', 'jitter'].forEach(function (p2) {
+        const m = moving(p2);
+        if (m < 500) throw new Error('"' + p2 + '" has stopped moving by 2s (' + m + ' px between 2.00 and 2.25) — it is supposed to keep going for the whole layer, which is the entire reason it is not just another entrance');
+      });
+      ['fade', 'pop'].forEach(function (p2) {
+        const m = moving(p2);
+        if (m !== 0) throw new Error('CONTROL FAILED — the entrance "' + p2 + '" is still changing at 2s (' + m + ' px), so "wave and jitter keep moving" is not telling us anything about wave and jitter');
+      });
+
+      // 4) jitter must be DETERMINISTIC. Math.random() would re-roll per frame: the text would boil
+      //    instead of shaking, and — worse — the export would not match the preview he approved.
+      const twice = diff(shot('jitter', 1.5), shot('jitter', 1.5));
+      if (twice !== 0) throw new Error('rendering jitter at the SAME time twice gave ' + twice + ' differing pixels — it is using real randomness, so the export will not match the preview (queue 573)');
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('571 clause 3: pressing the empty timeline answers from the point you touched', { item: '571' }, async function () {
     /* Queue 571 clause 3. Ezra: "do a nice little colourful reaction when you press on this screen,
      * something that comes from where you tapped, like those keyboards that light but based on what

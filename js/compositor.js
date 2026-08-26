@@ -1868,6 +1868,23 @@ window.FM = window.FM || {};
   function drawAnimatedText(ctx, layer, t, lines, lh, total) {
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
+    /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
+       thing that uses it, and it is what makes drop read as a different idea from fade-up rather than
+       fade-up upside down. */
+    function easeOutBounce(v) {
+      const n = 7.5625, d = 2.75;
+      if (v < 1 / d) return n * v * v;
+      if (v < 2 / d) { v -= 1.5 / d; return n * v * v + 0.75; }
+      if (v < 2.5 / d) { v -= 2.25 / d; return n * v * v + 0.9375; }
+      v -= 2.625 / d; return n * v * v + 0.984375;
+    }
+    /* ⚠️ DETERMINISTIC pseudo-random for `jitter` — NEVER Math.random(). Random would re-roll on every
+       frame, so the text would boil rather than shake, and the exported video would not match what he
+       previewed. Same (unit, time-step) in, same number out, forever. */
+    function hash2(a, b) {
+      const x = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    }
     const unit = an.unit || 'char';
     const durIn = an.durIn != null ? an.durIn : 0.6;
     const durOut = an.durOut || 0;
@@ -1899,16 +1916,50 @@ window.FM = window.FM || {};
         const p = durIn > 0 ? Math.min(1, Math.max(0, (tIn - gi * stagger) / durIn)) : (tIn >= gi * stagger ? 1 : 0);
         const pe = easeOutCubic(p);
         const outA = durOut > 0 ? Math.min(1, Math.max(0, tToEnd / durOut)) : 1;
-        let alpha = 1, dx = 0, dy = 0, sc = 1;
+        /* ---- SIX MORE, AND THEY ARE DELIBERATELY NOT MORE OF THE SAME (queue 573) -----------------
+         * Ezra: "Add more text effects", straight after complaining that the Colouring browser was thin
+         * over a text layer. There were FIVE, and measured against each other they are all one idea:
+         * an ENTRANCE built from alpha, a shift and a scale. Adding a sixth entrance that fades from a
+         * slightly different direction would be the queue-563 trap — the Bell that turned out to be the
+         * Ding — where every "does it do something" check passes and he gets the same effect twice.
+         * So each of these differs from its NEAREST existing neighbour in kind, not degree:
+         *   drop     vs fade-up  — opposite direction AND it lands with a bounce rather than an ease.
+         *   spin     vs pop      — pop only scales; nothing here could ROTATE until now.
+         *   zoom-out vs pop      — pop grows from nothing and overshoots; this falls in from oversized.
+         *   stretch  vs pop      — the first NON-UNIFORM scale: flat and wide, snapping to square.
+         *   wave     vs (none)   — ONGOING. It never settles, so it is not an entrance at all.
+         *   jitter   vs (none)   — ongoing too, and the only one that is not smooth.
+         * ⚠️ WAVE AND JITTER ARE A NEW CATEGORY and that is the point: every previous preset finishes
+         * and leaves the text sitting still. These keep going for the layer's whole life, which is the
+         * kind of thing he was looking for and could not find.
+         * ⚠️ JITTER IS DETERMINISTIC, NOT RANDOM. Math.random() would re-roll every frame, so the text
+         * would boil differently on each render and — worse — the EXPORT would not match the preview.
+         * A hash of (unit index, time-step) gives the same shake for the same frame every time.
+         * ⚠️ Both ongoing presets still fade in on `p`, so the stagger and Duration-in controls keep
+         * meaning what they say rather than silently doing nothing on two of the eleven. */
+        let alpha = 1, dx = 0, dy = 0, sc = 1, scx = 1, scy = 1, rot = 0;
         if (preset === 'fade') alpha = p;
         else if (preset === 'fade-up') { alpha = p; dy = (1 - pe) * fs * 0.6; }
         else if (preset === 'typewriter') alpha = p > 0 ? 1 : 0;
         else if (preset === 'pop') { sc = Math.max(0, easeOutBack(p)); alpha = Math.min(1, p * 2.2); }
         else if (preset === 'slide') { alpha = p; dx = (1 - pe) * fs * 0.9; }
+        else if (preset === 'drop') { alpha = Math.min(1, p * 2.5); dy = -(1 - easeOutBounce(p)) * fs * 0.9; }
+        else if (preset === 'spin') { alpha = Math.min(1, p * 2); sc = Math.max(0, easeOutBack(p)); rot = (1 - pe) * -Math.PI; }
+        else if (preset === 'zoom-out') { alpha = Math.min(1, p * 1.6); sc = 1 + (1 - pe) * 1.8; }
+        else if (preset === 'stretch') { alpha = Math.min(1, p * 2); scx = 0.25 + 0.75 * easeOutBack(p); scy = 1.9 - 0.9 * easeOutBack(p); }
+        else if (preset === 'wave') { alpha = p; dy = Math.sin(tIn * 3.4 + gi * 0.55) * fs * 0.13; }
+        else if (preset === 'jitter') {
+          alpha = p;
+          // 24 steps a second: fast enough to read as a shake, slow enough not to look like noise.
+          const step = Math.floor(tIn * 24);
+          dx = (hash2(gi, step) - 0.5) * fs * 0.09;
+          dy = (hash2(gi + 977, step) - 0.5) * fs * 0.09;
+        }
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
-        if (sc !== 1) ctx.scale(sc, sc);
+        if (rot) ctx.rotate(rot);
+        if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         if (grad) {   // sample the gradient at this unit's position, respecting the gradient angle
           const cx = x + wDraw / 2, dxc = cx - (lineLeft + lineW / 2), dyc = yy;
           let f;

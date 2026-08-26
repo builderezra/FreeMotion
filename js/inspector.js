@@ -4819,7 +4819,16 @@ window.FM = window.FM || {};
     const an = layer.textAnim;
     const ar2 = el('div', 'prop-row'); ar2.appendChild(el('label', null, 'Animate'));
     const asel = document.createElement('select');
-    [['none', 'None'], ['fade', 'Fade in'], ['fade-up', 'Fade up'], ['typewriter', 'Typewriter'], ['pop', 'Pop'], ['slide', 'Slide in']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.preset) o.selected = true; asel.appendChild(o); });
+    /* ⚠️ THIS LIST AND THE ONE IN js/compositor.js ARE THE SAME LIST, and nothing enforces that —
+       an entry here with no branch there is a menu option that silently does nothing, which is exactly
+       the class of bug queue 572 was about. The suite asserts every option renders differently from
+       "none" (queue 573); if you add one, add it in both places or that test fails.
+       Grouped deliberately: the five entrances he already had, then the four new entrances, then the
+       two that NEVER SETTLE — wave and jitter keep moving for the layer's whole life, which is a
+       different kind of thing and is why they sit at the bottom rather than mixed in. */
+    [['none', 'None'], ['fade', 'Fade in'], ['fade-up', 'Fade up'], ['typewriter', 'Typewriter'], ['pop', 'Pop'], ['slide', 'Slide in'],
+     ['drop', 'Drop in'], ['spin', 'Spin in'], ['zoom-out', 'Zoom in from big'], ['stretch', 'Stretch'],
+     ['wave', 'Wave (keeps moving)'], ['jitter', 'Jitter (keeps moving)']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.preset) o.selected = true; asel.appendChild(o); });
     asel.addEventListener('change', () => { an.preset = asel.value; FM.requestRender(); commitH(); rerender(); });
     ar2.appendChild(asel); body.appendChild(ar2);
     if (an.preset !== 'none') {

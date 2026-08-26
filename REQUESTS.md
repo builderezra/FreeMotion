@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.88
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.89
 >
-> **State:** v12.88, tests green, tree clean.
+> **State:** v12.89, tests green, tree clean.
+>
+> **✨ #573 — your text animations went from FIVE to ELEVEN.** New: **Drop in, Spin in, Zoom in from
+> big, Stretch**, and two that are a different kind of thing entirely — **Wave** and **Jitter**, which
+> **keep moving for the whole layer** instead of playing once and stopping. Nothing in there was
+> possible before (text could not even rotate). I measured each new one against the closest one you
+> already had so you are not getting the same effect twice under a new name — that mistake has been made
+> here before with a sound.
 >
 > **🎨 #571 IS FULLY DONE — press the empty timeline and it lights up from your finger.** The colour
 > depends on WHERE you press, like you asked ("based on what button you press"), so every part of the
@@ -20177,8 +20184,7 @@ re-opened #480, which I had marked done and had not fixed.
       starts the thumbnail machinery and makes an unrelated test report six effects as broken. It has
       cost two items already.
 
-- [ ] **573 — Add more text effects.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **573 — Add more text effects.** (26 Aug.) — ✅ **DONE v12.89: five became eleven**
       His words, verbatim:
       > Add more text effects
       Sent immediately after #572, so **read them together**: he was looking at Colouring over a text layer
@@ -20186,6 +20192,32 @@ re-opened #480, which I had marked done and had not fixed.
       different family from the pixel effects in that browser.
       ⚠️ **Establish what "text effects" already exist first** — `textAnim` and the Customise Text panel —
       before adding a parallel set.
+      **CHECKED FIRST, AND HE WAS RIGHT THAT IT WAS THIN.** There were **five**: Fade in, Fade up,
+      Typewriter, Pop, Slide in. Measured against each other they are all ONE idea — an ENTRANCE made of
+      alpha, a shift and a scale — so a sixth entrance would have been more of the same.
+      **Now eleven. The six new ones each differ from their nearest existing relative in KIND:**
+      · **Drop in** — opposite direction to Fade up AND it lands with a bounce rather than an ease.
+      · **Spin in** — nothing in the app could ROTATE text until now; Pop only scales.
+      · **Zoom in from big** — falls in from oversized, where Pop grows from nothing and overshoots.
+      · **Stretch** — the first NON-UNIFORM scale: flat and wide, snapping square.
+      · **Wave (keeps moving)** and **Jitter (keeps moving)** — ⭐ **a NEW CATEGORY.** Every previous
+        preset finishes and leaves the text sitting still. These never settle.
+      **📐 MEASURED at 1080×1080, and this is the queue-563 check, not a formality** — that entry shipped
+      a "Bell" that turned out to be the existing "Ding", and every does-it-make-a-noise test passed:
+      | check | result |
+      |---|---|
+      | every preset vs "None" | all 11 differ, 2,129–25,814 px |
+      | each NEW one vs its closest OLD relative | **5,548–22,009 px — none is a rename** |
+      | still moving at t=2.0→2.25 | **wave 5,175 · jitter 7,417** vs **fade 0 · pop 0** |
+      | jitter, same frame rendered twice | **0 px — deterministic** |
+      ⚠️ **JITTER USES A HASH, NEVER `Math.random()`.** Random re-rolls every frame, so the text would
+      BOIL rather than shake — and worse, **the export would not match the preview he approved.** The
+      test renders the same instant twice and requires zero difference.
+      ⚠️ **Wave and jitter still honour Duration in and Stagger**, so those controls do not silently
+      become no-ops on two of the eleven.
+      ⚠️ **The picker list and the renderer's branch list are the same list and nothing enforces it** —
+      an option with no branch is a menu entry that does nothing, which is exactly #572's complaint. The
+      test asserts every option renders differently from None, so adding one in only one place fails.
 
 - [ ] **574 — Captions: two stacked captions never show at the same time.** (26 Aug, phone screenshot at v12.79.)
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -147,7 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.88, 974 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.89, 975 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **"ADD MORE X" — MEASURE EACH NEW ONE AGAINST ITS NEAREST EXISTING NEIGHBOUR, not against nothing.**
+#573 again, after #563's Bell that was the Ding. Asserting the new thing "does something" passes for a
+rename. The five text presets that existed were all ONE idea (an entrance from alpha/shift/scale), so
+the six added differ in KIND — and two of them never settle, which no previous preset did.
+⚠️ **NEVER `Math.random()` IN A RENDER PATH.** It re-rolls per frame, so a shake boils, and the EXPORT
+stops matching the preview he approved. Hash the (unit, time-step) instead and assert the same frame
+twice is pixel-identical.
+⚠️ **INSTRUMENT WRONG THREE TIMES IN ONE TICK** — `renderScene(ctx, scene, t)`, not `(ctx, t, size)`.
+Read the signature before writing the probe; it is faster than three failed calls.
 
 ⚠️ **RULE 11 FIRED FOR REAL ON #571 CLAUSE 3, AND THE CONTROL IS THE ONLY REASON IT WAS CAUGHT.** The
 burst's animations reported `running` and never advanced. A throwaway control animation sat at
