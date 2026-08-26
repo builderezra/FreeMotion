@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.02
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.03
 >
-> **State:** v13.02, tests green, tree clean.
+> **State:** v13.03, tests green, tree clean.
+>
+> **💡 #596 — the app now tells you what those two layers are for, at the moment you add one.**
+> Controller: an invisible handle — parent layers to it and move them all together. Adjustment: its
+> effects apply to everything BELOW it, so one grade covers the whole video. **You should not have had to
+> ask** — every effect in the app carries a description and those two carried nothing.
+>
+> **🎥 #595 — got your answer, and the depth control is next.** It is a proper feature rather than a
+> patch, so it starts fresh with its scope written down instead of being half-built at the end of a tick.
 >
 > **🎥 #595 — you are right, and I found exactly why.** Field of view and Distance change **zero
 > pixels** (I checked with your two values; moving a layer for comparison changed 70,687). **But the
@@ -19987,7 +19995,7 @@ re-opened #480, which I had marked done and had not fixed.
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
 
 - [ ] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Field of view and distance sliders don't work in camera
       **HIS TWO SHOTS ARE THE PROOF AND THEY ARE A CONTROLLED PAIR** — same project, same frame
@@ -20028,7 +20036,15 @@ re-opened #480, which I had marked done and had not fixed.
       know.** The panel's own help text promises *"layers at different Z separate and the camera's pan
       gains real parallax"* — **a behaviour the app cannot currently perform**, because nothing can be at
       a different Z.
-      ❓ **TWO WAYS OUT, and it is his call — with a recommendation:**
+      **✅ ANSWERED BY EZRA, 26 Aug — HE PICKED THE FEATURE, verbatim:**
+      > do this one Add a real depth control to layers — the renderer is already written for it, so it's a UI and a data field rather than a rewrite. But that's a feature, not a fix, and deserves its own decision rather than being slipped in under a bug report.
+      **So: build the Z control. Not the warning.** He read both options and took the larger one.
+      ⚠️ **The warning option is NOT needed once depth exists** — the controls stop being dead the moment
+      a layer can move in Z, so it would be a message about a state that no longer occurs.
+      ⚠️ **Scope it honestly when building:** the renderer reads `tr.z` in the projection AND in the
+      focus/depth-of-field maths, so a Z that works for the lens should also make Focus behave — check
+      that rather than assuming, and say which parts were verified.
+      ❓ **The two options as they were put to him, kept for the record:**
       · **Say so (recommended, and cheap).** The camera panel should tell him these do nothing until
         layers have depth, in the same spirit as #572's browser warning. **He stops chasing a dead
         control**, which is the actual harm today.
@@ -20040,8 +20056,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Do not assume it is the slider.** The value clearly reaches the model (the readout changes).
       Measure whether the RENDER changes between the two values, on a scene with layers at different Z.
 
-- [ ] **596 — What do the Controller and Adjustment layers actually do?** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **596 — What do the Controller and Adjustment layers actually do?** (26 Aug.) — ✅ **ANSWERED + FIXED v13.03**
       His words, verbatim:
       > What do the controllers and adjustments even do? What is their function?
       **He is asking what two of his own layer types are FOR.** That is worth taking seriously rather than
@@ -20052,6 +20067,18 @@ re-opened #480, which I had marked done and had not fixed.
       (`desc` on every registry entry) and these layer types do not, which is an inconsistency he has now
       run into.
       🔗 Same family as **#572** — the app knowing something and not telling him at the moment he needs it.
+      **✅ ANSWERED IN THE REPLY, AND THE APP NOW SAYS IT TOO.**
+      · **Controller** — an invisible handle. Parent layers to it, move it, and they all move together.
+      · **Adjustment** — its effects apply to every layer BELOW it, so one grade covers the whole video.
+      ⚠️ **IT IS A TOAST ON ADD, NOT A TOOLTIP, AND THAT CHOICE IS THE WHOLE POINT.** A `title` attribute
+      is invisible on a phone — which is where he works — so it would have been a fix that looked done
+      and helped him not at all. **The toast lands at the moment of confusion**, which is #572's lesson:
+      the app knowing something and only saying it somewhere he is not looking is the same fault as not
+      knowing it.
+      ⚠️ **One sentence each, naming the USE rather than the concept.** "A null object with no spatial
+      extent" is accurate and would have told him nothing.
+      ⚠️ A `desc` now sits on both tiles as data, so a visible subtitle can use it later — **that would be
+      a change to the add menu's layout and wants his eye first (#545)**, so it was not slipped in here.
 
 - [ ] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**

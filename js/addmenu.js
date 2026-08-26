@@ -229,8 +229,22 @@ window.FM = window.FM || {};
            control, so an Anchor layer would collide with an existing, different, visible concept — worse
            than a vague name. "Empty" (Blender's word) repeats Null's mistake of naming an absence.
            `layer.type` stays 'null', so every saved project keeps working — this is a string change. */
-        { label: 'Controller', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
-        { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
+        /* ⚠️ THESE TWO SAY WHAT THEY ARE FOR NOW — queue 596. Ezra: *"What do the controllers and
+           adjustments even do? What is their function?"* **He was asking about two of his own layer
+           types, which means the app was not saying.** Every EFFECT in the app carries a `desc`; these
+           carried a name and an icon and nothing else.
+           ⚠️ **THE EXPLANATION IS A TOAST ON ADD, NOT A TOOLTIP.** A `title` is invisible on a phone,
+           which is where he works — it would have been a fix that looked done and helped him not at all.
+           The toast lands at the moment of confusion, which is the #572 lesson: the app knowing something
+           and only saying it somewhere he is not looking is the same fault as not knowing it.
+           ⚠️ **Kept to one sentence each, naming the USE rather than the concept.** "A null object with no
+           spatial extent" is accurate and would tell him nothing. */
+        { label: 'Controller', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'),
+          desc: 'An invisible handle — parent layers to it, then move it to move them all together.',
+          add: function () { FM.addNullLayer && FM.addNullLayer(); if (FM.toast) FM.toast('Controller: an invisible handle. Parent layers to it, then move it to move them all at once.', 4200); } },
+        { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'),
+          desc: 'Applies its effects to everything BELOW it, so one grade can cover the whole video.',
+          add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); if (FM.toast) FM.toast('Adjustment: its effects apply to every layer BELOW it — one grade over the whole video.', 4200); } },
         // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
         // make the container and then fill it. Drag layers onto it, or parent them to it.
         // "New group", not "Empty group" (queue 412) — his words: "Rename empty group to new group".
