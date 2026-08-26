@@ -214,7 +214,19 @@ turbulentdisplace 18.3, spinstreaks 17.4, stretchseg 17.3.
 ✅ **It independently confirms both wins**: **twirl has fallen OUT of the top 15** (26.7 in the first
 sweep) and fractalwarp is 20.2 (28.3 before). Neither was measured through the corrupted path.
 ✅ **Stacking re-confirmed as a non-issue**: 5-deep stack = 0.84x the sum of its parts.
-📋 **Next targets are gridrepeat / kaleidoscope / radialrepeat / bend / innerpinch.** ⚠️ Remember the
+🎯 **GRIDREPEAT IS READ AND IT HAS BOTH PAYING SHAPES — this is a straight implementation, do it first.**
+Per pixel it resolves **4 evalProps** (count, rows, mirror, stagger) and performs **up to 5 DIVISIONS by
+frame constants**: `y/grCellH` (twice — once in the stagger branch, once for grIy), `grX/grCellW`, and
+both `(grX-grIx*grCellW)/grCellW` / `(y-grIy*grCellH)/grCellH`. That is the fractalwarp shape, which paid
+11x. **Plan:** a `prep` returning `{mir, stag, cellW, cellH, icellW:1/cellW, icellH:1/cellH,
+stagCell:stag*cellW}`, then replace every `/cell` with `*icell`.
+⚠️ **The one hazard to check, and it is the twirl hazard again:** `Math.floor(y*icellH)` can disagree with
+`Math.floor(y/cellH)` at an exact tile boundary, which flips a whole TILE index rather than nudging one
+pixel — so a disagreement here is far more visible than twirl's 4%. **Keep a `_gridrepeatLegacy` on
+`FM._warpRef` and require movedPixels === 0**; if it is not zero, keep the divisions for the two
+`Math.floor` calls and use reciprocals only for the two fraction terms, which cannot flip an index.
+
+📋 **Then kaleidoscope / radialrepeat / bend / innerpinch.** ⚠️ Remember the
 two shapes that actually pay (v13.28-29): a removable `atan2`, or per-pixel DIVISIONS. gridrepeat and
 radialrepeat do integer tiling and folding — look for divisions by frame constants there, not for an
 atan2 to delete, and expect ~1.1x unless one of those two shapes is present.
