@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.17
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v13.18
 >
-> **State:** v13.17, 989 tests green, tree clean.
+> **State:** v13.18, 989 tests green, tree clean.
+>
+> **🔓 I got unstuck on my own item by building a video from scratch.** #599 had been parked on "I
+> cannot test this without real footage" — turns out the browser can RECORD one, so the app now gets a
+> genuine moving video clip in a test. **That reason for stopping is gone permanently**, and several
+> entries had leaned on it.
+> **First result, with the safety check passing: three effects that should work on a moving clip did
+> nothing** — but three others in that list need a SECOND layer to work at all, so they prove nothing
+> and I am not counting them. **Three candidates, still not calling them broken.**
 >
 > **📍 EVERYTHING I CAN BUILD WITHOUT YOU IS BUILT.** I went through the remaining items by hand
 > rather than trusting the counter, and all four it calls "ready" are actually waiting on you:
@@ -20498,6 +20506,23 @@ re-opened #480, which I had marked done and had not fixed.
       · **`temporaldenoise` and `framestutter` need frame-to-frame CHANGE** — a static text layer has none.
         **This is #598's shape again** and is the most likely genuine gap of the eight.
       · **`lightwrap` needs a background to wrap against**; **`squish`** deforms and warrants its own look.
+      🔓 **THE "NO VIDEO LAYER" BLOCKER IS SOLVED — v13.17. A video can be MADE here.**
+      `canvas.captureStream()` → `MediaRecorder` → Blob → `File` → **`FM.loadVideoFile()` →
+      `FM.addMediaLayer()`** produces a genuine `type: 'video'` layer (measured: 159KB webm/vp9, 480×480,
+      1.78s, moving detailed content). **Every future "needs real footage" question is answerable — this
+      is worth reusing well beyond #599.**
+      📐 **RESULT ON A REAL VIDEO LAYER, CONTROL PASSING** (brightness 42,456 · invert 43,191 ·
+      vignette 26,253 · blur 14,913 · grayscale 6,390 · pixelate 4,716 — all alive):
+      **All six candidates still changed 0 pixels.**
+      ⚠️ **BUT THAT SPLITS THREE AND THREE, AND ONLY ONE HALF IS A FINDING:**
+      · **`lumamatte`, `compoundblur`, `lightwrap` need a SECOND layer** — a matte source, a blur map, a
+        background to wrap against. **The scene had ONE layer**, so 0 is expected and proves nothing.
+        **Re-test with two layers before saying a word about these.**
+      · **`temporaldenoise`, `framestutter`, `squish` should act on a single moving clip** — and did not.
+        **Those three are now genuine candidates**, for the first time on evidence rather than assumption.
+      ⚠️ **STILL NOT A BUG LIST.** Each of the three needs its own answer to *"what would this need, and
+      can the app PROVE it is absent?"* before anything is shown to him — the bar the colour and motion
+      checks already meet, and the bar two earlier attempts failed.
       ⚠️ **NEXT STEP IS PER-EFFECT, NOT A BATCH.** Each survivor needs the question "what would this need,
       and can the app prove it is absent?" answered separately — the same bar the colour and motion checks
       meet. **Shipping a warning on all eight would repeat the mistake this entry has already made twice.**

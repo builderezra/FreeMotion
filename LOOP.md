@@ -156,6 +156,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
 **v13.16, 989 tests green, tree clean, `HEAD == ssh/main`.**
 
+🔓 **A REAL VIDEO LAYER CAN BE MADE IN A TEST — v13.17, and this unblocks more than #599.**
+`canvas.captureStream()` → `MediaRecorder` → Blob → `File` → `FM.loadVideoFile()` → `FM.addMediaLayer()`
+yields a genuine `type: 'video'` layer (measured: 159KB webm/vp9, 480×480, 1.78s, moving detailed
+content). **"Cannot test that without footage" is no longer a valid reason to stop** — several entries
+have used it.
+⚠️ **AND THE FIRST RESULT SPLIT 3/3:** on a real clip with the control passing, all six #599 candidates
+read 0 — but `lumamatte`/`compoundblur`/`lightwrap` need a SECOND layer (matte source, blur map,
+background) and the scene had one, so those prove nothing. `temporaldenoise`/`framestutter`/`squish`
+should act on a single moving clip and did not. **Only those three are candidates, and still not a bug
+list.**
+
 🛑 **THE QUEUE IS OUT OF WORK I CAN DO ALONE — audited BY HAND on 26 Aug, not taken from the
 classifier (rule 8b).** It reports 4 actionable; opening each one shows all four are parked:
 · **#578** clause 2 (*"needs a lot of work"*) and **#582** clause 2 (*"looked really bad"*) are LOOK
