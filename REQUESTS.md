@@ -21512,7 +21512,35 @@ re-opened #480, which I had marked done and had not fixed.
              from Pixel to Smear replaced a style that visibly damages the picture with one that is
              **within 2% of doing nothing at all** — so the effect stopped looking bad by ceasing to have
              any effect. Echo is a literal no-op at 1.00x.
-             📋 **So clause 2 is now scoped: the effect does not implement directional blur at all.** The
+             ❌ **CORRECTION, same session — the line above ("not one of the four styles smears") is WRONG,
+             and the truth is better news.** Re-measured with a THRESHOLD PROFILE instead of a single
+             cut-off (a faint ghost hides under a strict test — my first predicate only counted near-
+             saturated yellow, so a 16%-alpha smear was invisible to it):
+             | | disc width | strong core | mid |
+             |---|---|---|---|
+             | no effect | 110 px | 43 | 6 |
+             | Smear @ default (amount 1) | 111 | 43 | 10 |
+             | **Smear @ amount 3, samples 24** | **123** | **5** | **91** |
+             | Blend @ default | 122 | 26 | 55 |
+             ✅ **THE MACHINERY WORKS. The DEFAULTS ARE TOO WEAK TO SEE.** Turned up, Smear does exactly
+             what it should — the object widens 110 → 123 px and its hard core collapses 43 → 5, which is
+             a real motion blur. At the shipped default it is within a pixel of doing nothing.
+             ✅ Motion detection is fine too, and that was checked directly rather than assumed: the field
+             computes a global vector of **[12, 0] px** against real motion of 12.7 px/frame, and neither
+             the `wsum < 0.5` nor the `|vector| < 1.2` bail-out fires.
+             🚨 **The real fault, in the code:** Smear draws the SHARP frame at full opacity and then
+             layers the ghosts over it at `globalAlpha = min(0.5, 1.6 / samples)` — **0.16 at the default
+             10 samples**. A genuine motion blur REPLACES the moving object with its smeared average; this
+             one leaves it sharp and adds a faint halo. So the amount slider has to be pushed to 3 before
+             anything reads, and *that* is what "kinda buns" is.
+             📋 **So clause 2 is now scoped, and it is smaller than it looked:** attenuate the sharp base
+             where the motion mask is strong (or raise the ghost alpha) so the default actually reads,
+             then re-pick the default amount. **Acceptance test: disc width > 118 px at DEFAULT settings**,
+             with the frame-advance control.
+             *(The earlier "Pixel shrinks it 40%" reading came from that same over-strict predicate and
+             should not be trusted either — under the profile test Pixel reads 111/43, i.e. also a no-op
+             at default. One threshold is not a measurement; a profile across bands is.)*
+             📋 **The superseded line, kept honest:** the effect does not implement directional blur at all. The
              work is to smear along the measured motion vector, and the acceptance test is a NUMBER —
              the disc must come out wider than 108 px, with a control that fails if the frame did not
              advance. ⚠️ **Do not start by changing sliders** (the entry already said so, and the numbers
