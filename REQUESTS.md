@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.87
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Aug at v12.88
 >
-> **State:** v12.87, tests green, tree clean.
+> **State:** v12.88, tests green, tree clean.
+>
+> **🎨 #571 IS FULLY DONE — press the empty timeline and it lights up from your finger.** The colour
+> depends on WHERE you press, like you asked ("based on what button you press"), so every part of the
+> screen has its own and the same spot always gives the same one. **One honest caveat: I could not watch
+> it move.** The preview pane was throttled (0 animation frames in 450ms), so I checked the look by
+> freezing it at five points of its flight and photographing that. **If the motion feels wrong on your
+> phone, tell me — that is the one part I could not test.** My first go was also too big and I shrank it
+> by half after looking at it; you asked for a "nice little" reaction and the first one was not little.
 >
 > **🔴 #572 IS DONE — and the answer is not the one you have been given three times.** Your effects
 > are not broken. On PURE WHITE, Brightness, Contrast, Grayscale, Saturation and Hue Shift **cannot do
@@ -20214,8 +20222,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ It was made deliberate for a reason — too short and a vertical scroll starts trimming. **Try ~300ms
       and check a scroll still does not arm it**, rather than removing the hold.
 
-- [ ] **571 — Empty-project screen: a glitched blue line, a dead strip at the bottom, and he wants a tap reaction.** (26 Aug, phone screenshot at v12.79, Project 44 with no layers.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **571 — Empty-project screen: a glitched blue line, a dead strip at the bottom, and he wants a tap reaction.** (26 Aug, phone screenshot at v12.79, Project 44 with no layers.)
       His words, verbatim:
       > Weird glitch here with the blue line also for this screen make it so when you tap anywhere on the timeline it works, currently the bottom of the screen has a cut off. And also do a nice little colourful reaction when you press on this screen, something that comes from where you tapped, like those keyboards that light but based on what button you press
       **THREE separate things — tick separately:**
@@ -20228,7 +20235,7 @@ re-opened #480, which I had marked done and had not fixed.
              on the timeline it works, currently the bottom of the screen has a cut off."* So the empty
              state's tap target stops short of the visible area. **Measure where the target ends against
              where the panel ends.**
-      3. [ ] **A colourful tap reaction that comes FROM the point you touched** — his analogy is the
+      3. [x] **A colourful tap reaction that comes FROM the point you touched** ✅ **DONE v12.88** — his analogy is the
              keyboards that light up per key. An idea, not a bug; it is the one part of this that is
              invention. **Design request → #545: draw it and show him.**
       ⚠️ Clause 1 and clause 2 may be the same fault — a box that is the wrong size is also the wrong size
@@ -20260,6 +20267,34 @@ re-opened #480, which I had marked done and had not fixed.
       the test if broken.
       **⏳ CLAUSE 3 IS STILL OPEN** — the colourful tap reaction. It is the invention half and wants a
       picture before it ships (#545), so it did not ride along with two measured fixes.
+      **✅ ALL THREE CLAUSES NOW DONE — clause 3 shipped v12.88, the tick straight after.** The JUMPED
+      note below was honoured rather than used as an exit.
+      **What clause 3 became, and the half that was easy to lose:** his sentence carries TWO requirements
+      — it must come FROM the touch point, and *"based on what button you press"* means the colour must
+      depend on WHERE that point was. A single fixed-colour ripple satisfies the first and silently drops
+      the second, so the hue is a function of position (x sweeps 300°, y adds 60°): every part of the
+      screen has its own colour and the same spot always answers the same way. **A keyboard, not a random
+      flash.** The test asserts the hue CHANGES between two distant presses, not merely that one exists.
+      **It fires on `pointerdown`, not `click`** — "when you PRESS" is the operative word, and a click
+      lands 100–300ms after the finger lifts, which reads as lag rather than response.
+      ⚠️ **FIRST BUILD WAS TOO BIG AND I CHANGED IT AFTER LOOKING.** A 170px bloom and a 120px ring
+      growing to 180px covered half a 380px screen and read as big thin outlines over the timeline. He
+      asked for a *"nice LITTLE"* reaction. Roughly halved (104px bloom, 62px ring to ~96px) with the
+      bloom's alpha raised to compensate — a small bright pop beats a large faint circle at this size.
+      ⚠️ **LOOP RULE 11 BIT AGAIN AND THE CONTROL CAUGHT IT.** The preview pane reported
+      `document.hidden: true`, rAF fired **0 frames in 450ms**, and a throwaway control animation sat at
+      `currentTime` 0 — so the burst's `running` animations not advancing was the PANE, not the code, and
+      **its motion has NOT been watched.** The look was checked by freezing five bursts at 70/180/300/430/
+      550ms of their flight and photographing that. **If the movement feels wrong on his phone, that is
+      the thing I could not test — say so rather than pretending otherwise.**
+      ⚠️ **Teardown is a `setTimeout`, and that is load-bearing rather than incidental:** `animationend`
+      never fires in a throttled tab, so the nodes would pile up for as long as the app stayed open. The
+      same throttling that hid the motion is what proves the choice — the timers fired, the frames did not.
+      Capped at 6 live at once, and `prefers-reduced-motion` is honoured in BOTH the JS and the CSS,
+      because either alone is a single point of failure for an accessibility promise.
+      **CONTROL:** pressing a timeline that HAS layers throws nothing — it must not fire over real clips
+      while he is scrubbing.
+
       **JUMPED: two of three clauses shipped in v12.86; the only thing still open here is the colourful
       tap reaction, which is an INVENTION that wants a drawing in front of him first (#545).** Holding
       #572 and everything behind it behind one design sketch would be the queue rotting at the top

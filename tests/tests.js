@@ -2403,6 +2403,94 @@
     }
   });
 
+  test('571 clause 3: pressing the empty timeline answers from the point you touched', { item: '571' }, async function () {
+    /* Queue 571 clause 3. Ezra: "do a nice little colourful reaction when you press on this screen,
+     * something that comes from where you tapped, like those keyboards that light but based on what
+     * button you press."
+     * TWO requirements in that sentence, and the second is the one easy to drop: it must come FROM the
+     * touch point, AND its colour must depend on WHERE that point was. A single fixed-colour ripple
+     * satisfies the first and quietly ignores the half he described most specifically — so the hue is
+     * asserted to CHANGE with position, not merely to exist.
+     * \u26a0 NOTHING HERE MEASURES MOTION. LOOP rule 11, confirmed again while building this: the preview
+     * pane reported document.hidden true, rAF fired 0 frames in 450ms, and a control animation sat at
+     * currentTime 0. So the animation cannot be timed from a run there, and asserting it would be
+     * asserting the pane's throttling. What IS checkable is structural: the element exists, in the right
+     * place, with the right hue, and it cleans itself up.
+     * \u26a0 THE TEARDOWN IS A setTimeout AND THAT IS LOAD-BEARING — an animationend listener never fires
+     * in a throttled tab, so the nodes would accumulate for as long as the app stayed open. This test
+     * would still pass with animationend in a live tab, which is why the reason is written here. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(260);
+        const panel = document.getElementById('timeline-panel');
+        const tl = document.getElementById('timeline');
+        if (!panel || !panel.classList.contains('tl-empty-start')) throw new Error('not on the empty-start screen, so this is measuring the wrong thing');
+        if (typeof FM._tapBurst !== 'function') throw new Error('FM._tapBurst is missing — pressing the empty screen has no reaction at all (queue 571 clause 3)');
+        [].slice.call(tl.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
+
+        const r = tl.getBoundingClientRect();
+        /* \u26a0 EVERY pointerdown IS CLOSED WITH A pointerup, AND THAT IS NOT TIDINESS — IT IS THE BUG
+           THIS TEST CAUSED. The first version pressed 27 times and never released, which left the
+           timeline's gesture state machine mid-gesture for every test that ran afterwards. THREE
+           unrelated tests went red — the flick tests and the phone-hold-to-move test — all reporting
+           "the fixture is not producing a real gesture", which is their own guard telling the truth
+           about a state THIS test had corrupted. A synthetic gesture has to finish, exactly like a real
+           finger does. (LOOP rule 17 is the same lesson from the effects browser: a test that leaves
+           machinery running is a test that breaks its neighbours.)
+           pointerup does NOT synthesise a click, so this cannot open the add sheet by accident — the
+           burst still fires on the down, which is what is being measured. */
+        const press = function (dx, dy) {
+          const opts = { bubbles: true, cancelable: true, clientX: r.left + dx, clientY: r.top + dy, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+          tl.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, opts, { buttons: 1 })));
+          tl.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, opts, { buttons: 0 })));
+        };
+
+        press(40, 60);
+        await sleep(40);
+        const bursts = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
+        if (bursts.length !== 1) throw new Error('pressing the empty timeline produced ' + bursts.length + ' reactions, not one (queue 571 clause 3)');
+        const px = parseFloat(bursts[0].style.left), py = parseFloat(bursts[0].style.top);
+        if (Math.abs(px - 40) > 1 || Math.abs(py - 60) > 1) throw new Error('the reaction appeared at ' + px + ',' + py + ' but the press was at 40,60 — it has to come from the point he touched');
+        const hueA = bursts[0].style.getPropertyValue('--burst-h');
+        if (!hueA) throw new Error('the reaction has no colour of its own');
+
+        press(300, 320);
+        await sleep(40);
+        const all = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
+        const hueB = all[all.length - 1].style.getPropertyValue('--burst-h');
+        if (hueA === hueB) throw new Error('two presses far apart both came out hue ' + hueA + ' — his ask was "like those keyboards that light but based on what button you press", so the colour has to follow the position');
+
+        for (let i = 0; i < 25; i++) press(100 + i, 100 + i);
+        const capped = tl.querySelectorAll('.tl-tapburst').length;
+        if (capped > 8) throw new Error(capped + ' reactions are live at once — a fast tapper builds a pile of nodes (queue 571 clause 3)');
+
+        await sleep(1000);
+        const leaked = tl.querySelectorAll('.tl-tapburst').length;
+        if (leaked !== 0) throw new Error(leaked + ' reaction nodes survived a second after the last press — they are not torn down, and in a backgrounded tab that leaks for as long as the app is open');
+
+        // --- CONTROL: this is the EMPTY screen's behaviour. With a layer, pressing must do nothing. ---
+        const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(260);
+        press(190, 200);
+        await sleep(60);
+        const onReal = tl.querySelectorAll('.tl-tapburst').length;
+        if (onReal !== 0) throw new Error('CONTROL FAILED — pressing a timeline that HAS layers also throws the reaction, so it fires over real clips while he is scrubbing. He asked for it on "this screen", the empty one.');
+      });
+    } finally {
+      const tl2 = document.getElementById('timeline');
+      if (tl2) [].slice.call(tl2.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('572: the effects BROWSER warns before you spend the pick, not after', { item: '572' }, async function () {
     /* Queue 572. Ezra, for the FOURTH time: "These effects still don't work, you've tried to fix it so
      * many times, what's going on?" — with a screenshot of the Colouring browser and eight effects

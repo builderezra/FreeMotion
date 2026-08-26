@@ -2155,7 +2155,55 @@ window.FM = window.FM || {};
       if (e.target.closest && e.target.closest('.tl-addrow, button, input, select, textarea, a, [role="button"], #tl-ruler, .tl-ruler')) return;
       if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
     });
+    /* ⚠️ THE BURST IS ON pointerdown, NOT click — queue 571 clause 3. Ezra: *"do a nice little
+       colourful reaction when you press on this screen, something that comes from where you tapped,
+       like those keyboards that light but based on what button you press."*
+       **"When you PRESS"** is the word doing the work. A reaction fired on `click` arrives after the
+       finger lifts, which on a phone is 100-300ms later and reads as lag rather than response — the
+       whole point of this kind of feedback is that it is the same instant as the touch.
+       It fires on the WHOLE empty screen including the ＋ and the add row, unlike the click handler
+       above: he asked for a reaction to pressing *this screen*, and a dead patch under the one button
+       he is most likely to press would be the opposite of what he described. */
+    tl.addEventListener('pointerdown', (e) => {
+      if (!tlPanel.classList.contains('tl-empty-start')) return;
+      tapBurst(tl, e.clientX, e.clientY);
+    });
   }
+
+  /* ---- THE COLOURFUL PRESS (queue 571 clause 3) --------------------------------------------------
+   * His analogy is exact and it is the design brief: *"like those keyboards that light but based on
+   * what button you press"* — two requirements, not one. It must come FROM the point of contact, and
+   * its colour must DEPEND on where that point was. A single fixed-colour ripple would satisfy the
+   * first half and quietly drop the second, which is the half he described most specifically.
+   * So the hue is a function of position: x sweeps it through 300° across the screen and y nudges it
+   * another 60°, which means every part of the screen has its own colour and the same spot always
+   * answers the same way — a keyboard, not a random flash.
+   * ⚠️ TEARDOWN IS A setTimeout, NOT an animationend LISTENER. rAF and CSS animations do not advance
+   * in a backgrounded tab, so an element removed on `animationend` can survive forever if the phone
+   * locks mid-press — the app would collect invisible divs for as long as it stays open. This repo has
+   * already been bitten by exactly that (js/popfrom.js), so it uses the same defence.
+   * ⚠️ CAPPED. A drum-roll of taps must not build a pile of live nodes; anything past the cap simply
+   * does not spawn, which is invisible at that speed and cannot leak. */
+  const BURST_MS = 620;
+  const BURST_MAX = 6;
+  function tapBurst(host, clientX, clientY) {
+    if (!host) return;
+    // Someone who has asked the OS for less motion is not asking for a lightshow.
+    try { if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (_) {}
+    if (host.querySelectorAll('.tl-tapburst').length >= BURST_MAX) return;
+    const r = host.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const x = clientX - r.left, y = clientY - r.top;
+    const hue = Math.round(((x / r.width) * 300 + (y / r.height) * 60)) % 360;
+    const b = document.createElement('div');
+    b.className = 'tl-tapburst';
+    b.style.left = x + 'px';
+    b.style.top = y + 'px';
+    b.style.setProperty('--burst-h', String(hue));
+    host.appendChild(b);
+    setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, BURST_MS + 120);
+  }
+  FM._tapBurst = tapBurst;   // seam: the suite drives the real thing, not a copy of it
   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
 
   function buildAddRow() {

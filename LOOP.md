@@ -147,7 +147,19 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.87, 973 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.88, 974 tests green, tree clean, `HEAD == ssh/main`.**
+
+⚠️ **RULE 11 FIRED FOR REAL ON #571 CLAUSE 3, AND THE CONTROL IS THE ONLY REASON IT WAS CAUGHT.** The
+burst's animations reported `running` and never advanced. A throwaway control animation sat at
+currentTime 0 and rAF fired **0 frames in 450ms** with `document.hidden: true` — the PANE, not the code.
+**Motion was therefore not tested and the entry says so.** The look was checked by freezing five bursts
+at 70/180/300/430/550ms and photographing that, which works regardless of throttling and is worth
+reusing.
+⚠️ **AND THE THROTTLING PROVED A DESIGN CHOICE:** the `setTimeout` teardown fired where the frames did
+not. `animationend` would have leaked nodes for as long as the app stayed open.
+⚠️ **LOOK AT IT BEFORE CALLING IT DONE.** The first burst was structurally perfect and visually wrong —
+half the screen wide when he had asked for a "nice little" reaction. Every probe passed. Only the
+picture showed it.
 
 ⚠️ **WHEN HE REPORTS THE SAME THING A FOURTH TIME, THE ANSWER IS NOT THE FEATURE — IT IS THE SILENCE.**
 #572 had been "answered" three times with "they work, your subject cannot show them". True, and useless:

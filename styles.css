@@ -7354,6 +7354,64 @@ body.fm-pushing #toast { z-index: 213; }
    goes with it — a halo around a box that no longer paints is the same edge drawn a second time.
    EMPTY STATE ONLY (his clause 3): the slim row keeps its wash, its dashed outline and its glow, and
    `.tl-empty-start` is phone-and-no-layers, so the desktop timeline never sees this. */
+/* ⚠️ THE PRESS BURST (queue 571 clause 3). Ezra: *"do a nice little colourful reaction when you press
+   on this screen, something that comes from where you tapped, like those keyboards that light but based
+   on what button you press."*
+   TWO rings, not one, and that is what makes it read as a reaction rather than a blob: a soft filled
+   glow that blooms and fades, plus a thin ring that races out ahead of it. One alone looks like a
+   smudge; the ring is what gives it a direction and an edge, which is what "comes from where you
+   tapped" actually looks like.
+   `--burst-h` is set per-press from the tap's position (js/timeline.js), so the colour belongs to the
+   SPOT — his keyboard analogy — and the same place always answers the same way.
+   The element is a zero-size point at the tap and both layers are centred on it with a translate, so
+   the growth is symmetrical about the finger no matter where on the screen it lands. `pointer-events:
+   none` throughout: this is feedback, and it must never eat the tap it is feedback FOR. */
+.tl-tapburst {
+  position: absolute; width: 0; height: 0; pointer-events: none; z-index: 4;
+}
+.tl-tapburst::before,
+.tl-tapburst::after {
+  content: ""; position: absolute; left: 0; top: 0; border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  will-change: transform, opacity;
+}
+/* ⚠️ SIZES ARE DELIBERATELY SMALL — he asked for a *"nice LITTLE colourful reaction"*, and the first
+   build was not little. Rendered at 380px and looked at: a 170px bloom and a 120px ring growing to 1.5
+   (180px) covered half the width of the screen and read as big thin outlines drawn over the timeline
+   rather than a response to a fingertip — the ring dominated and the colour barely registered. Roughly
+   halved, and the bloom's alpha raised to compensate: a small bright pop beats a large faint circle at
+   this size, which is the queue 313 lesson (a full-screen gradient shrunk to a small disc turns to mud)
+   pointed the other way round. */
+/* the soft bloom */
+.tl-tapburst::before {
+  width: 104px; height: 104px;
+  background: radial-gradient(circle,
+    hsla(var(--burst-h, 190), 95%, 70%, .62) 0%,
+    hsla(calc(var(--burst-h, 190) + 40), 92%, 64%, .34) 45%,
+    transparent 74%);
+  animation: tl-burst-bloom 620ms cubic-bezier(.22, .9, .28, 1) forwards;
+}
+/* the ring that runs ahead of it */
+.tl-tapburst::after {
+  width: 62px; height: 62px;
+  border: 2px solid hsla(var(--burst-h, 190), 95%, 74%, .85);
+  animation: tl-burst-ring 620ms cubic-bezier(.16, .84, .30, 1) forwards;
+}
+@keyframes tl-burst-bloom {
+  0%   { transform: translate(-50%, -50%) scale(.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+}
+@keyframes tl-burst-ring {
+  0%   { transform: translate(-50%, -50%) scale(.10); opacity: .9; }
+  70%  { opacity: .35; }
+  100% { transform: translate(-50%, -50%) scale(1.55); opacity: 0; }   /* 62 → ~96px, a fingertip's worth */
+}
+/* Asked the OS for less motion → no lightshow. The JS checks this too; both, because either one alone
+   is a single point of failure for an accessibility promise. */
+@media (prefers-reduced-motion: reduce) {
+  .tl-tapburst { display: none; }
+}
+
 #timeline-panel.tl-empty-start #timeline {
   background:
     radial-gradient(90% 70% at 50% 42%, rgba(90, 199, 237, .16), rgba(90, 199, 237, .04) 60%, transparent 100%),
