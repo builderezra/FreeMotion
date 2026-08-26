@@ -147,9 +147,17 @@ it falls out of doing the work; it is not a tick of its own unless it is blockin
 
 
 ### 📍 CURRENT STATE — keep this short; the history lives in [LOOP-HISTORY.md](LOOP-HISTORY.md)
-**v12.77, 968 tests green, tree clean, `HEAD == ssh/main`.**
+**v12.78, 969 tests green, tree clean, `HEAD == ssh/main`.**
 
-**⚡ THIS STRETCH — v12.69 → v12.77, closing #556, #557, #558, #524, #474, #548, #550, #559, #560 (UI half), #561 and #539 clause 4.**
+**⚡ THIS STRETCH — v12.69 → v12.78, closing #556, #557, #558, #524, #474, #548, #550, #559, #560 (UI half), #561, #562 and #539 clause 4.**
+
+⚠️ **`catch (e) {}` IS WHY A BUG LIVES FOR MONTHS.** #562 was not flaky — **all 29 sound effects threw on
+their first line**, every time, and the empty catch around them meant the app never said a word. Silent
+failure and success look identical, so nobody could have found it by using the app. **When you touch a
+swallowed catch, make it speak.** The fix was one argument; finding it was the whole job.
+⚠️ **AND THE ENTRY'S SUSPECT WAS WRONG AGAIN** — it said "suspended AudioContext, no user gesture"; the
+context measured `running`. That is four in a row (#539, #550, #559, #562). Read the entry for what he
+ASKED; measure the app for what is wrong.
 
 ⚠️ **A BUG THAT TURNS UP A THIRD TIME IS A MISSING FUNCTION, NOT A THIRD FIX.** #561 was the on-canvas
 overlay double-scale — v8.00 had already fixed it once in the drawing overlay, and it was sitting in the
