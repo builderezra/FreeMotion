@@ -214,8 +214,52 @@ window.FM = window.FM || {};
   // Returns true when it INSERTED a new keyframe (vs updated one already at `t`) so callers can
   // refresh the timeline once — this is what makes an auto-keyed dot appear instead of staying
   // "invisible". New keyframes default to LINEAR easing (a straight graph), not ease-in-out.
+  /* ═══ A KEYFRAME LIVES ON A FRAME (queue 625) ════════════════════════════════════════════════════
+   * Ezra: *"Sometimes I try to move key frames and it just duplicates them and sometimes I try to
+   * delete them and I can't."* One mechanism, both halves, and it is a MISMATCH rather than a bug in
+   * either side:
+   *   · the timeline DRAG snaps to the frame grid — `Math.round(timeFromX(x) * fps) / fps`
+   *   · every WRITE below took the raw playhead time, which scrubbing leaves between frames
+   * MEASURED (tests/_625kf.html): a keyframe added at playhead 1.020833 stays at 1.020833, and a drag
+   * onto it lands at 1.033333. **The gap is 0.0125s against a 0.001s dedup tolerance, so both survive
+   * — and at a normal 60 px/s timeline that is 0.75px, far inside one diamond.** They draw on top of
+   * each other, so it reads as a keyframe that duplicated itself; delete one and the other is still
+   * there, unmoved, which is the second half of his report exactly.
+   * SNAPPING AT THE WRITE is the choke point: every route that creates a keyframe goes through these
+   * three lines, so no caller has to remember. Sub-frame precision was never observable anyway — the
+   * compositor samples at frame times, and the drag has always quantised.
+   * ⚠️ Falls back to the raw time when there is no sane fps, rather than dividing by zero and writing
+   * NaN into a keyframe, which would be far worse than the bug being fixed. */
+  // Half a frame — the widest gap at which two keyframes are still the same frame. Falls back to the
+  // old fixed tolerance when there is no usable fps, so behaviour never becomes undefined.
+  function HALF_FRAME() {
+    const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 0;
+    return fps > 0 ? (0.5 / fps) : 1e-3;
+  }
+  FM._halfFrame = HALF_FRAME;
+
+  /* ⚠️ DELEGATES TO FM.snapFrame RATHER THAN RE-IMPLEMENTING IT. The first version of this was its own
+     copy of `Math.round(t * fps) / fps` — a second copy of one number, which is the exact failure this
+     file warns about a few hundred lines down (the default text size was written twice and the two
+     disagreed, so "Reset Text" restored a size no new layer had ever used).
+     The wrapper exists only for LOAD ORDER: scene.js is parsed before app.js, so FM.snapFrame is not
+     defined yet when this file runs — it always is by the time a keyframe is written, and the fallback
+     covers the impossible case rather than trusting it. */
+  function snapKfTime(t) {
+    if (!Number.isFinite(t)) return t;
+    if (typeof FM.snapFrame === 'function') return FM.snapFrame(t);
+    const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 0;
+    return fps > 0 ? Math.round(t * fps) / fps : t;
+  }
+  FM.snapKfTime = snapKfTime;
+
   function upsertKeyframe(p, t, v) {
-    const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
+    t = snapKfTime(t);
+    /* HALF A FRAME, not 1e-3. Snapping above stops NEW pairs forming, but his projects are already
+       full of off-grid keyframes from before this fix, and a 1e-3 window can never match them — he
+       would keep hitting the bug on every project he already has. Half a frame is the honest test for
+       "these are the same keyframe", because nothing between two frames is distinguishable. */
+    const hit = p.kf.find(k => Math.abs(k.t - t) < HALF_FRAME());
     if (hit) { hit.v = v; return false; }
     p.kf.push({ t: t, v: v, e: 'linear' }); p.kf.sort((a, b) => a.t - b.t);
     return true;
@@ -311,10 +355,10 @@ window.FM = window.FM || {};
     let p = layer.transform[key];
     if (!isAnimated(p)) {
       const cur = (typeof p === 'number') ? p : 0;
-      layer.transform[key] = { kf: [{ t: time, v: cur, e: 'linear' }] };
+      layer.transform[key] = { kf: [{ t: snapKfTime(time), v: cur, e: 'linear' }] };
       return true;
     }
-    const hit = p.kf.find(k => Math.abs(k.t - time) < 1e-3);
+    const hit = p.kf.find(k => Math.abs(k.t - time) < HALF_FRAME());
     if (hit) {
       p.kf = p.kf.filter(k => k !== hit);
       if (!p.kf.length) layer.transform[key] = hit.v; // revert to static
@@ -439,10 +483,10 @@ window.FM = window.FM || {};
     if (!isAnimated(p)) {
       // numbers AND strings (colour props like layer.fill) seed from the current static value
       const cur = (typeof p === 'number' || typeof p === 'string') ? p : (dflt != null ? dflt : 0);
-      container[key] = { kf: [{ t: time, v: cur, e: 'linear' }] };
+      container[key] = { kf: [{ t: snapKfTime(time), v: cur, e: 'linear' }] };
       return true;
     }
-    const hit = p.kf.find(k => Math.abs(k.t - time) < 1e-3);
+    const hit = p.kf.find(k => Math.abs(k.t - time) < HALF_FRAME());
     if (hit) {
       p.kf = p.kf.filter(k => k !== hit);
       if (!p.kf.length) container[key] = hit.v;
@@ -470,9 +514,10 @@ window.FM = window.FM || {};
 
   FM.dedupDraggedKfs = function (layer, draggedKfs) {
     const dragged = new Set(draggedKfs || []);
+    const EPS = HALF_FRAME();   // queue 625 — a drag lands ON a frame; the keyframe under it may not be
     (FM.animatedProps ? FM.animatedProps(layer) : []).forEach(p => {
       const dts = p.kf.filter(k => dragged.has(k)).map(k => k.t);
-      if (dts.length) p.kf = p.kf.filter(k => dragged.has(k) || !dts.some(dt => Math.abs(dt - k.t) < 1e-3));
+      if (dts.length) p.kf = p.kf.filter(k => dragged.has(k) || !dts.some(dt => Math.abs(dt - k.t) < EPS));
       p.kf.sort((a, b) => a.t - b.t);
     });
   };

@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.74 — 1021 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.75 — 1022 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,16 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#625 CLOSED v13.75 — the duplicate keyframes, and BOTH halves had one cause.** The drag snaps to the
+frame grid; every other write took the RAW playhead time. Measured: 12.5ms apart, past the 1ms dedup
+window, **0.75px on screen** — so they draw on top of each other, and deleting one leaves the other.
+**Snap at the write + a HALF-FRAME dedup window**, the second so his existing off-grid projects heal.
+🐛 **THE MUTATION GATE CAUGHT THE TEST PASSING FOR THE WRONG REASON** — it drove `toggleKeyframe` only,
+so deleting the snap in `upsertKeyframe` left the suite green. **`upsertKeyframe` is the AUTO-KEY path
+(dragging an already-animated layer) and had NO coverage.** Always mutate a new assertion.
+💡 **AND CHECK FOR AN EXISTING HELPER BEFORE WRITING ONE** — I re-implemented `FM.snapFrame` without
+noticing it existed, in the same file that warns about the text-size number being written twice.
 
 ✅ **#623 CLOSED v13.74 — copy/paste a graph.** The hard part was the MODE: a curve lives in three
 fields (`ez` / `bez` / `e`) and **which are SET is the mode**, so paste writes all three and clears what

@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #625 — "Sometimes I try to move key frames and it just duplicates them and sometimes I try to delete
+ * them and I can't." HYPOTHESIS: the timeline DRAG quantises to the frame grid
+ * (Math.round(t*fps)/fps) while upsertKeyframe pushes at the RAW playhead time. If the playhead is not
+ * frame-aligned, the two land further apart than the 1e-3 dedup tolerance but closer than a pixel — a
+ * duplicate you cannot see and cannot delete, because deleting one leaves the other looking untouched.
+ * ONE mechanism, BOTH clauses. Measured, not argued. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.scene.project)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var P = FM.scene.project; var fps = P.fps || 30;
+    say('project fps = ' + fps + '   frame = ' + (1/fps).toFixed(6) + 's');
+
+    FM.scene.layers.length = 0;
+    var L = FM.makeLayer('shape', { shape:'rect', x:200, y:200, shapeW:100, shapeH:100, fill:'#f0f' });
+    L.start = 0; L.duration = 5; FM.scene.layers.push(L);
+    P.duration = Math.max(P.duration||0, 5);
+    await new Promise(function(r){ setTimeout(r,300); });
+
+    // --- 1. IS THE PLAYHEAD EVER OFF-GRID? scrubbing sets it from pixels.
+    var probeTimes = [1.0, 1.0208333, 1.04166, 1.5, 2.33333];
+    say('');
+    say('=== is a keyframe added at the playhead snapped to the frame grid? ===');
+    var offGrid = 0;
+    probeTimes.forEach(function(t){
+      L.transform.x = 200;                       // reset to static each time
+      FM.time = t;
+      if (FM.setKeyframe) FM.setKeyframe(L, 'x', t);
+      else if (FM.toggleKeyframe) FM.toggleKeyframe(L, 'x', t);
+      var p = L.transform.x;
+      var got = (p && p.kf && p.kf.length) ? p.kf[0].t : null;
+      if (got == null) { say('  t=' + t + ' -> no keyframe created (API not reached)'); return; }
+      var snapped = Math.round(got*fps)/fps;
+      var off = Math.abs(got - snapped);
+      if (off > 1e-6) offGrid++;
+      say('  playhead ' + t.toFixed(6) + ' -> keyframe at ' + got.toFixed(6) +
+          '   off-grid by ' + off.toFixed(6) + 's' + (off > 1e-6 ? '  🚩' : '  (aligned)'));
+    });
+
+    // --- 2. THE COLLISION. A keyframe at a raw time, then a DRAG landing on the nearest frame.
+    say('');
+    say('=== a drag lands on the frame grid; the existing keyframe is not on it ===');
+    L.transform.x = { kf: [ { t: 1.0208333, v: 200, e:'linear' }, { t: 3, v: 400, e:'linear' } ] };
+    var dragged = L.transform.x.kf[1];
+    var nt = Math.round(1.02 * fps) / fps;                 // what the drag would compute
+    dragged.t = nt;
+    say('  existing keyframe t = 1.0208333');
+    say('  dragged keyframe snapped to t = ' + nt.toFixed(6));
+    say('  gap = ' + Math.abs(1.0208333 - nt).toFixed(6) + 's   dedup tolerance = 0.001s');
+    FM.dedupDraggedKfs(L, [dragged]);
+    var left = L.transform.x.kf.map(function(k){ return k.t.toFixed(6); });
+    say('  after dedupDraggedKfs: ' + left.length + ' keyframe(s) -> ' + left.join(', '));
+    if (left.length > 1) {
+      var gapPx = Math.abs(left[0]-left[1]);
+      say('  🚨 TWO KEYFRAMES SURVIVED ' + Math.abs(1.0208333-nt).toFixed(6) + 's APART.');
+      say('     At a typical 60 px/s timeline that is ' + (Math.abs(1.0208333-nt)*60).toFixed(2) +
+          'px — far under one diamond, so they draw on top of each other.');
+      say('     Delete one and the other is still there, unmoved: BOTH of his clauses, one cause.');
+    } else say('  ✅ deduped to one — this hypothesis does NOT hold');
+
+    // --- 3. CONTROL: on-grid, dedup works
+    say('');
+    say('=== control: both on the grid ===');
+    L.transform.x = { kf: [ { t: nt, v: 200, e:'linear' }, { t: 3, v: 400, e:'linear' } ] };
+    var d2 = L.transform.x.kf[1]; d2.t = nt;
+    FM.dedupDraggedKfs(L, [d2]);
+    say('  after dedup: ' + L.transform.x.kf.length + ' keyframe(s)' +
+        (L.transform.x.kf.length === 1 ? '  ✅ dedup works when the times match' : '  🚨 dedup is broken outright'));
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

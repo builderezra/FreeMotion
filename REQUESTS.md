@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.74
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.75
 >
-> **State:** v13.74, 1021 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.75, 1022 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22324,14 +22324,48 @@ re-opened #480, which I had marked done and had not fixed.
       **#617's diagnosis is a nearby precedent** — select mode is `projects tab only` on Home; the
       timeline's own select/hold behaviour is separate code and worth reading together.
 
-- [ ] **625 — Keyframes duplicate when you try to move them, and sometimes cannot be deleted.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **625 — Keyframes duplicate when you try to move them, and sometimes cannot be deleted.** ✅ **DONE v13.75.**
       (27 Aug, at v13.51.)
       His words, verbatim:
       > Sometimes I try to move key frames and it just duplicates them and sometimes I try to delete them and I can’t
 
-      1. [ ] **Dragging a keyframe sometimes DUPLICATES it instead of moving it.**
-      2. [ ] **Deleting a keyframe sometimes does not work.**
+      1. [x] **Dragging a keyframe sometimes DUPLICATES it instead of moving it.** ✅ **DONE v13.75.**
+      2. [x] **Deleting a keyframe sometimes does not work.** ✅ **DONE v13.75 — same cause, as predicted.**
+      ✅ **THE ENTRY WAS RIGHT THAT ONE MECHANISM WOULD EXPLAIN BOTH — but it is not the one it guessed.**
+      Not a sub-threshold drag read as a tap. **It is a MISMATCH, and neither side is wrong on its own:**
+      · the timeline DRAG has always snapped to the frame grid — `Math.round(timeFromX(x) * fps) / fps`
+      · every OTHER write took the **raw** playhead time
+      📐 **MEASURED (tests/_625kf.html), before the fix:**
+      | | |
+      |---|---|
+      | keyframe added at playhead 1.020833 | lands at **1.020833** — 12.5 ms off the grid |
+      | a drag onto it | snaps to **1.033333** |
+      | gap | **0.0125 s** against a **0.001 s** dedup window |
+      | survivors | **two**, and at a normal 60 px/s timeline they are **0.75 px apart** |
+      🚨 **So they draw ON TOP of each other — one diamond that "duplicated" — and deleting one leaves
+      the other unmoved, which is clause 2 word for word.** One cause, both halves.
+      ✅ **FIXED IN TWO PARTS, and the second is the one that matters for HIS projects.**
+      1. **Snap at the write.** Every creation route goes through three lines in `scene.js`, so no caller
+         has to remember. Sub-frame precision was never observable — the compositor samples at frames.
+      2. **The dedup window is HALF A FRAME, not 1e-3.** Snapping stops NEW pairs; it does nothing for
+         the off-grid keyframes already saved in every project he has, and a 1 ms window can never match
+         them. **His existing work heals as he touches it.** ⚠️ A control asserts the window never eats a
+         keyframe a whole frame away — a dedup that swallows real work would be worse than the duplicate.
+      🔑 **SOMEONE HAD ALREADY MET THIS BUG AND PATCHED ONE CALLER.** `setTransform` carries a comment
+      describing the symptom in his words — *"undeletable + duplicate on next edit"* — with a narrow fix
+      for the pause-mid-play case. **The diagnosis was not new; fixing it at the choke point is.**
+      ⚠️ **HONEST SCOPE:** `FM.setTime` already snaps the playhead, so the off-grid window is narrower
+      than the probe alone suggests — it is **while playing**, during a **momentum scrub** (which passes
+      `noSnap` deliberately), and any direct write to `FM.time`. Real, but not every edit.
+      🐛 **THE MUTATION GATE CAUGHT THE TEST PASSING FOR THE WRONG REASON.** The first version drove only
+      `toggleKeyframe`, which snaps at a different line, so deleting the snap inside `upsertKeyframe`
+      left the suite green and the mutation SURVIVED. **`upsertKeyframe` is the AUTO-KEY path — what runs
+      when an already-animated layer is dragged, the commonest way a keyframe is made — and it had no
+      coverage at all.** Covered now, and the re-run was CAUGHT.
+      🐛 **AND I HAD WRITTEN A SECOND COPY OF `FM.snapFrame`** without noticing it existed. That is the
+      exact failure this repo warns about a few hundred lines away in the same file — the default text
+      size was written twice, the copies drifted, and *"Reset Text"* restored a size no new layer ever
+      had. It delegates now; the wrapper exists only for load order.
       ⚠️ **"Sometimes" is the important word in both** — this is intermittent, so the first job is to find
       the CONDITION, not the line. **Do not fix a plausible-looking line and call it done**; an
       intermittent bug that is still there afterwards costs him another report and costs the entry its

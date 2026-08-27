@@ -31655,6 +31655,96 @@
    * look wrong: it makes the editor disagree with the renderer, and the entry's own warning is that
    * pasting handles onto a Steps graph while it still says "Steps" is a curve he did not make.
    * Driven through FM.graphClip rather than the panel, because the contract is about the DATA. */
+  /* #625 — "Sometimes I try to move key frames and it just duplicates them and sometimes I try to
+   * delete them and I can't." ONE mechanism, both halves, and it was a MISMATCH rather than a fault on
+   * either side: the timeline drag snaps to the frame grid (Math.round(t*fps)/fps) while every write
+   * path took the RAW playhead time, which scrubbing leaves between frames.
+   * MEASURED before the fix (tests/_625kf.html): a keyframe added at playhead 1.020833 stayed there,
+   * a drag onto it landed at 1.033333, and the 0.0125s gap sailed past the old 0.001s dedup window.
+   * At a normal 60 px/s timeline that is 0.75px — far inside one diamond — so they draw on top of each
+   * other and deleting one leaves the other looking untouched. */
+  test('#625: keyframes land on the frame grid, so they cannot stack invisibly', { item: '625' }, function () {
+    if (typeof FM.snapKfTime !== 'function') throw new Error('FM.snapKfTime is missing — keyframe times are unsnapped again (#625)');
+    var P = FM.scene.project, fps = P.fps || 30, frame = 1 / fps;
+    var keep = FM.scene.layers.slice(), keepT = FM.time;
+    try {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 80, fill: '#f0f' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+
+      /* A PLAYHEAD BETWEEN FRAMES is the whole precondition — scrubbing sets FM.time from pixels, so
+         this is the ordinary case, not a contrived one. */
+      var between = frame * 30 + frame * 0.375;          // deliberately 3/8 of a frame off the grid
+      if (Math.abs(between * fps - Math.round(between * fps)) < 1e-6) throw new Error('the fixture time is on the grid, so it proves nothing');
+      var snapped = FM.snapKfTime(between);
+      if (Math.abs(snapped * fps - Math.round(snapped * fps)) > 1e-6)
+        throw new Error('snapKfTime(' + between + ') returned ' + snapped + ', which is still off the frame grid');
+
+      // The real write path must snap too — snapping only in the helper would fix nothing.
+      // Seed the property STATIC first: setKeyframe on an already-animated prop takes the toggle
+      // branch and removes one instead of adding, which is why the first version of this test
+      // reported "created nothing" and was measuring the wrong branch.
+      L.transform.x = 200;
+      FM.time = between;
+      /* FM.toggleKeyframe is the real exported name — there is no FM.setKeyframe, and the first
+         version of this test called that and reported "created nothing", which looked like the fix
+         failing and was the test calling a function that does not exist. The probe hid it behind an
+         `if (FM.setKeyframe) … else` fallback chain, so it worked there and not here. Named outright
+         so the next person does not lose the same ten minutes. */
+      if (typeof FM.toggleKeyframe !== 'function') throw new Error('FM.toggleKeyframe is missing — the keyframe write path is unreachable');
+      FM.toggleKeyframe(L, 'x', between);
+      var kfs = L.transform.x && L.transform.x.kf;
+      if (!kfs || !kfs.length) throw new Error('toggleKeyframe created nothing, so this cannot judge the snap');
+      var off = Math.abs(kfs[0].t * fps - Math.round(kfs[0].t * fps)) / fps;
+      if (off > 1e-6) throw new Error('a keyframe added at an off-grid playhead landed at ' + kfs[0].t + ', ' + off + 's off the frame grid — this is #625');
+
+      /* ⚠️ THE AUTO-KEY PATH TOO, AND A MUTATION CHECK IS WHY THIS IS HERE. The first version of this
+         test drove only toggleKeyframe, which snaps at a different line — so deleting the snap inside
+         upsertKeyframe left every test green and the mutation SURVIVED. upsertKeyframe is the path
+         that runs when an already-animated layer is dragged, which is the commonest way a keyframe
+         gets made, and it was the one with no coverage at all. */
+      L.transform.x = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'linear' }] };
+      var autoT = frame * 12 + frame * 0.4;          // an off-grid playhead again
+      FM.setTransform(L, 'x', 5, autoT);
+      var made = L.transform.x.kf.filter(function (k) { return Math.abs(k.t - autoT) < frame; });
+      if (!made.length) throw new Error('setTransform did not auto-key on an animated property, so the upsert path is untested');
+      var aoff = Math.abs(made[0].t * fps - Math.round(made[0].t * fps)) / fps;
+      if (aoff > 1e-6)
+        throw new Error('an AUTO-KEYED keyframe landed at ' + made[0].t + ', ' + aoff +
+          's off the frame grid — this is the #625 path that had no test (upsertKeyframe)');
+
+      /* AND HIS EXISTING PROJECTS MUST HEAL. Snapping stops new pairs forming; it does nothing for the
+         off-grid keyframes already saved in every project he has. A drag landing on the frame next to
+         one must absorb it, which is why the dedup window is half a frame rather than 1e-3. */
+      var legacy = frame * 30 + frame * 0.375;           // as an old build would have written it
+      var target = Math.round(legacy * fps) / fps;
+      L.transform.x = { kf: [{ t: legacy, v: 1, e: 'linear' }, { t: 3, v: 2, e: 'linear' }] };
+      var dragged = L.transform.x.kf[1];
+      dragged.t = target;                                 // what the drag computes
+      FM.dedupDraggedKfs(L, [dragged]);
+      if (L.transform.x.kf.length !== 1)
+        throw new Error('a drag landing on the frame beside a legacy off-grid keyframe left ' +
+          L.transform.x.kf.length + ' keyframes ' + Math.abs(legacy - target).toFixed(6) +
+          's apart — invisible at any zoom, and deleting one leaves the other (#625)');
+
+      /* THE CONTROL, and it matters: the window must NOT be so wide that it eats a keyframe on the
+         NEXT frame. A dedup that swallows real work would be far worse than the duplicate. */
+      L.transform.x = { kf: [{ t: target, v: 1, e: 'linear' }, { t: target + frame, v: 2, e: 'linear' }, { t: 3, v: 3, e: 'linear' }] };
+      var d2 = L.transform.x.kf[2];
+      d2.t = target;
+      FM.dedupDraggedKfs(L, [d2]);
+      var times = L.transform.x.kf.map(function (k) { return k.t; });
+      if (times.length !== 2)
+        throw new Error('dedup left ' + times.length + ' keyframes — a neighbour one whole frame away was eaten: ' + JSON.stringify(times));
+      if (!times.some(function (t) { return Math.abs(t - (target + frame)) < 1e-6; }))
+        throw new Error('the keyframe on the NEXT frame was destroyed by the dedup window');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+      FM.time = keepT;
+    }
+  });
+
   test('#623: a copied graph reproduces its MODE, not just its numbers', { item: '623' }, function () {
     var C = FM.graphClip;
     if (!C || typeof C.read !== 'function') throw new Error('FM.graphClip is missing — #623 has no clipboard');
