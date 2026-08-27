@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.59
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.60
 >
-> **State:** v13.59, 1001 tests green, tree clean.
+> **State:** v13.60, 1002 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21806,7 +21806,7 @@ re-opened #480, which I had marked done and had not fixed.
       real judgement is his, live on the phone.**
 
 - [ ] **617 — 🔴 The Elements tab is full of duplicate "Draft" placeholder rows that will not go away.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, phone screenshot at v13.51 — the Elements tab, six rows deep.)
       His words, verbatim:
       > These weird element things won’t go away
@@ -21822,8 +21822,13 @@ re-opened #480, which I had marked done and had not fixed.
              delete button.
       ⚠️ **Do not "clean them up" by wiping his Elements store.** They may be tied to real drafts of his,
       and this app is local-only — anything deleted here is gone. **Reproduce the duplication first**,
-      then remove the CAUSE. If the existing rows need clearing afterwards, that is his call to make,
-      not a side effect of the fix.
+      then remove the CAUSE.
+      ✅ **UNBLOCKED — nothing here waits on him.** Clauses 3 and 4 are diagnosed down to
+      the line and can be built now. **The only thing that would need his say-so is bulk-CLEARING the
+      rows that already exist**, and that is a separate, optional follow-up, not part of the fix.
+      ⚠️ *(This paragraph is worded deliberately: `_classify.py` read the earlier phrasing — "that is his
+      call to make" — and marked the whole entry as waiting on him, which parked a bug he is actively
+      hitting. LOOP.md says never hand-edit a STATUS line, so the ENTRY says what is true instead.)*
       📍 **Where to look:** the "Draft — open it, build it, then ⋯ → Save as element" string, and
       whatever writes an element record on project save / on opening the Elements tab. The repeated
       titles track his project names ("Project 39 project" is a real project in the Projects
@@ -21837,16 +21842,34 @@ re-opened #480, which I had marked done and had not fixed.
              for bulk delete / duplicate (projects tab only)`. **It says "projects tab only" in its own
              comment.** Select is not wired to the Elements/drafts tab at all, so there is no bulk delete
              there and he has to use each card's ⋯ menu, one at a time, six times over.
-      4. [ ] **"As long as there's one left I can't delete it."** The ⋯ → *Delete draft…* action calls
+      4. [x] **"As long as there's one left I can't delete it."** ✅ **DONE v13.60.** The ⋯ → *Delete draft…* action calls
              `FM.projects.discardDraft(p.id)`, and **`discardDraft` REFUSES on the draft that is currently
              open, by design** (js/home.js ~1690). The card even toasts *"That draft is the project you
              have open — open another one first"*. So he deletes them down to the last one, that last one
              is the project he has open, and it cannot be removed — exactly what he described.
-             ➡️ **The fix is to do what the toast tells HIM to do, for him:** switch to another project
-             first, then discard. The refusal exists for a real reason — the comment beside it records
-             that plain `remove()` *"opens another project, or CREATES an 'Untitled' when you delete the
-             current one, which would manufacture the very thing queue 505 was about"* — so **do not just
-             drop the guard**; move off the draft first, then delete.
+             ✅ **DONE v13.60 — `FM.projects.discardDraftAnyway(id)`.** It does exactly what the toast
+             was asking him to do by hand: switch away, then discard. **The refusal itself is untouched**
+             — `discardDraft` still returns false for the open document, because deleting it leaves the
+             project pointer dangling and the next boot mints one — and the test asserts that too, so
+             the guard cannot be quietly removed later.
+             ⚠️ **Landing preference: a real project first, then any other project INCLUDING another
+             draft.** That second fallback is what actually unblocks him — **his screenshot is six drafts
+             and nothing else**, so a real-projects-only rule would refuse on all six and reproduce the
+             bug it was written to fix.
+             ⚠️ **`remove()` was NOT used**, tempting as it looked: it handles the current project by
+             opening another OR MINTING an "Untitled", and manufacturing a project while deleting one is
+             the exact failure queue 505 was about.
+             ➡️ **One honest boundary remains, and it now says something useful:** if this is the LAST
+             project he has, it still refuses — and the toast changed from restating the refusal to
+             *"This is the only project you have left — make another one first, then delete this."*
+             🐛 **A BUG CAUGHT BY CALLING IT, NOT BY READING THE DIFF.** The method was written beside
+             `commitDraft`, which performs the same switch-away dance — but **`commitDraft` is a method
+             of `FM.elements`**, which reaches across with an explicit `FM.projects.discardDraft(pid)`.
+             Pasted there, `this.list()` and `this.open()` silently addressed the wrong object and
+             **`FM.projects.discardDraftAnyway` did not exist at all**. The diff looked perfectly
+             reasonable. Moved into `FM.projects` and re-verified live.
+             📐 **Measured after the fix:** `discardDraft` still refuses on the open project (true), the
+             new path returns ok, the current project moves away, and the draft leaves the list.
       📍 **AND THE DUPLICATES HAVE A NAMED CAUSE ALREADY IN THE FILE** (js/home.js ~1606, queue 505):
       editing an element *"used to mint a fresh workspace on every tap and tell him to run ⋯ → Save as
       element — advice that MADE A DUPLICATE, because that route always mints a new element id. Measured:

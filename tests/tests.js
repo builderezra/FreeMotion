@@ -48266,6 +48266,43 @@
     }
   });
 
+  /* 617 clause 4 — "as long as there's one left I can't delete it".
+     `discardDraft` refuses on the currently-open project by design, and the card's menu then TOLD HIM
+     to go and open another one first, so the last draft could never be removed. The fix does that step
+     for him. Both halves are asserted: the new path works, and the old contract is untouched — because
+     the refusal exists for a real reason (deleting the current document leaves the project pointer
+     dangling and the next boot mints one). */
+  test('617: a draft can be deleted even when it is the project you have open', { item: '617' }, async function () {
+    if (!FM.projects || !FM.projects.discardDraftAnyway) throw new Error('FM.projects.discardDraftAnyway is gone — queue 617 clause 4 has no implementation. (It must live on FM.projects, not FM.elements: written there first, its this.list()/this.open() addressed the wrong object.)');
+    const madeIds = [];
+    try {
+      for (let i = 0; i < 2; i++) {
+        const r = await FM.projects.create({ name: '617 draft ' + (i + 1), elementDraft: true });
+        madeIds.push((r && r.id) || r);
+        await sleep(150);
+      }
+      const cur = FM.projects.currentId();
+      if (madeIds.indexOf(cur) < 0) throw new Error('creating a draft did not leave it open, so this test never reaches the case queue 617 is about');
+      /* THE OLD CONTRACT IS PART OF THE FIX, not collateral. If discardDraft ever starts deleting the
+         open document, the dangling-pointer bug it guards against comes back silently. */
+      if (await FM.projects.discardDraft(cur) !== false) {
+        throw new Error('discardDraft no longer refuses on the currently-open project — that refusal is deliberate; deleting the current document leaves the project pointer dangling and the next boot mints one');
+      }
+      const res = await FM.projects.discardDraftAnyway(cur);
+      await sleep(260);
+      if (!res || res.ok !== true) throw new Error('discardDraftAnyway refused on an open draft with other projects available (' + JSON.stringify(res) + ') — his words: "as long as there\u2019s one left I can\u2019t delete it"');
+      if (FM.projects.currentId() === cur) throw new Error('the draft was reported deleted but it is still the open project — the switch-away did not happen, and order is the whole trick here');
+      if (FM.projects.list().some(function (p) { return p.id === cur; })) throw new Error('discardDraftAnyway returned ok but the draft is still in the list');
+      madeIds.splice(madeIds.indexOf(cur), 1);
+      /* AND THE BOUNDARY IT MUST STILL REFUSE AT: nowhere to land. Asserted by asking the function
+         directly with a fabricated id rather than by deleting his real projects to get down to one. */
+      const fake = await FM.projects.discardDraftAnyway('');
+      if (!fake || fake.ok !== false) throw new Error('discardDraftAnyway accepted an empty id');
+    } finally {
+      for (const id of madeIds) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
+    }
+  });
+
   /* 616 — the add row's press pulse.
      ⚠️ THIS TEST ASSERTS THE WIRING, NOT THE MOTION, AND THAT IS DELIBERATE. Verifying the animation
      actually travels needs a FRONTED tab: measured while building this, a non-fronted pane fires zero

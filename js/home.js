@@ -1686,10 +1686,20 @@ window.FM = window.FM || {};
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
           if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved as an element will be lost.')) return;
-          const ok = await FM.projects.discardDraft(p.id);
-          /* discardDraft REFUSES on the draft that is currently open, by design — say so rather than
-             letting the card sit there looking like a tap that did nothing. */
-          if (!ok && FM.toast) FM.toast('That draft is the project you have open — open another one first');
+          /* DO IT FOR HIM (queue 617 clause 4). This used to call `discardDraft`, which refuses on the
+             draft you have open, and then TOLD HIM to go and open another one first — so the last
+             draft in the list could never be deleted. His words: "as long as there's one left I can't
+             delete it". `discardDraftAnyway` switches away first, which is what the toast was asking
+             him to do by hand. */
+          const res = await FM.projects.discardDraftAnyway(p.id);
+          if (!res.ok && FM.toast) {
+            /* The only remaining refusal is the genuinely last project: deleting it would leave the
+               current-project pointer dangling and the next boot would mint one. Say the thing he can
+               actually do about it, rather than restating the refusal. */
+            FM.toast(res.why === 'last'
+              ? 'This is the only project you have left — make another one first, then delete this.'
+              : 'That draft could not be deleted.', 4200);
+          }
           render();
         } },
       ]);

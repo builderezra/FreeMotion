@@ -133,7 +133,21 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.59 — everything is pushed and the tree is clean. 1001 tests green.**
+📍 **HANDOVER, 27 Aug, v13.60 — everything is pushed and the tree is clean. 1002 tests green.**
+✅ **#617 clause 4 DONE — he can delete the draft he has open.** `discardDraftAnyway` switches away
+first, then discards; the deliberate refusal in `discardDraft` is untouched and now asserted.
+🚨 **#617 WAS PARKED AS "waiting on you" BY MY OWN CLASSIFIER, AND IT WAS A BUG HE WAS ACTIVELY
+HITTING.** The trigger was a phrase in the entry — "that is his call to make" — about an OPTIONAL
+follow-up. **`_classify.py` has a sanctioned token for this: the literal word `UNBLOCKED` in the body.**
+Rewording round it did nothing; the token worked. ⚠️ **Never hand-edit a STATUS line — say `UNBLOCKED`.**
+✍️ **POLISH-LOG CONVENTION, learned twice now:** `ship.sh` reads any `queue N` in the log line as a
+CLAIM THAT N IS CLOSED and refuses if it is still open. Its only escape is `queue N (partial)`, which is
+a lie when you are merely CITING an old entry. **Cite history as `#N`** — that form does not trip it.
+(Second false positive of this shape; the first was a commit message mentioning `queue 249`.)
+🐛 **AND A BUG THE DIFF COULD NOT SHOW:** the new method was written beside `commitDraft`, which is a
+method of **`FM.elements`**, not `FM.projects` — so `this.list()`/`this.open()` addressed the wrong
+object and the function did not exist where it was called. **Call the thing, do not read the diff.**
+
 ✅ **#616 DONE — the add row is quiet at rest, and a light runs up its frame on press.** Deliberately
 NOT a conic comet: `hm-glint` orbits a CARD, and a conic gradient maps ANGLE not perimeter, so on a
 746x40 row it would crawl up the sides and snap across the top. A rising band is what he described.

@@ -1476,6 +1476,40 @@ window.FM = window.FM || {};
       this.saveIndex(this.list().filter(p => p.id !== id));
       return true;
     },
+    /* DELETE A DRAFT EVEN WHEN IT IS THE ONE YOU HAVE OPEN (queue 617 clause 4).
+     * Ezra: *"You have to manually delete them you can't do the select delete, I figured it out"* …
+     * *"But as long as there's one left I can't delete it"*.
+     * He was exactly right, and the cause is one line: `discardDraft` returns false for `curId()`, by
+     * design, because deleting the current document leaves the current-project pointer dangling and
+     * the next boot mints "My project". So he could delete his way down the list and the last one —
+     * whichever he happened to have open — refused forever, with a toast telling HIM to go and open
+     * something else first.
+     * ⚠️ THE ORDER IS THE WHOLE TRICK, and `commitDraft` below already learned it the hard way: switch
+     * away FIRST, then discard. The other order simply leaves the draft behind.
+     * ⚠️ AND `remove()` IS NOT THE ANSWER, tempting as it looks. It handles the current project by
+     * opening another one OR MINTING AN "Untitled" — and manufacturing a project while deleting one is
+     * the exact failure queue 505 was about.
+     * Landing preference: a real project first, then any other project INCLUDING another draft. That
+     * second fallback is what actually unblocks him — his screenshot is six drafts and nothing else,
+     * so a real-projects-only rule would refuse on all six and reproduce the bug it is fixing.
+     * ⚠️ AND IT HAS TO LIVE IN `FM.projects`, NOT `FM.elements`. Written first beside `commitDraft`,
+     * which does this same switch-away dance — but commitDraft is a method of FM.elements and reaches
+     * across with an explicit `FM.projects.discardDraft(pid)`. Pasted there, this one's `this.list()`
+     * and `this.open()` silently addressed the wrong object, and `FM.projects.discardDraftAnyway` did
+     * not exist at all. Caught by CALLING it in the browser, not by reading the diff.
+     * If there is genuinely nowhere to land — this is the last project he has — it still refuses, and
+     * the caller says so in words he can act on. */
+    async discardDraftAnyway(id) {
+      if (!id) return { ok: false, why: 'noid' };
+      if (id !== curId()) return { ok: await this.discardDraft(id), why: '' };
+      if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
+      const others = this.list().filter(p => p.id !== id);
+      const target = (others.filter(p => !p.elementDraft)[0] || others[0] || {}).id;
+      if (!target) return { ok: false, why: 'last' };
+      await this.open(target);
+      const ok = await this.discardDraft(id);
+      return { ok: ok, why: ok ? '' : 'refused' };
+    },
     async remove(id) {
       const doc = readJSON('fm.proj.' + id, null);
       try {
