@@ -21300,7 +21300,8 @@ re-opened #480, which I had marked done and had not fixed.
              among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
              compounding is at least as likely as an exception. **Open the console; do not infer from the
              symptom.**
-      2. [ ] **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
+      2. [~] **ANSWERED v13.41 — NOT A BUG, A DECISION (a/b/c in the summary block). Awaiting your pick.**
+         **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
              from the break. Both DISPLACE the whole layer, so they are very likely fighting over the same
              padded plate (the `_hasMover`/`fxSlack` allowance in js/compositor.js). Measure before judging.
       3. [x] **"some optimisation issues"** ✅ **DONE v13.15 — he was right, and this was the gap.** — he is right that this family is the expensive one. #474's
