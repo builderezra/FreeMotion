@@ -22056,7 +22056,7 @@ re-opened #480, which I had marked done and had not fixed.
       asserts the OFF case passes just as well if snapping is deleted outright.
 
 - [ ] **621 — Rounded Corners does a poor job in its non-Apple modes, and the Apple mode only works on
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       a few things.** (27 Aug, phone screenshot at v13.50 — a large white shape rotated on the canvas.)
       His words, verbatim:
       > Rounded corners kinda does a shit job when you aren’t using the Apple style and the Apple style only works on few things
@@ -22091,8 +22091,39 @@ re-opened #480, which I had marked done and had not fixed.
              bounding box is the diagonal's envelope, not the shape, so the curve gets cut in the wrong
              place — exactly his screenshot. And the radius is applied in the plate's own pixels, so a
              bigger layer gets a proportionally smaller-looking corner unless something normalises it.
-             ➡️ **Acceptance is measurable and should be built first:** the same layer at 3 sizes and 3
-             rotations must produce the same VISUAL corner radius. Measure it; do not eyeball it.
+             ✅ **MEASURED 27 Aug (at v13.69) — BOTH HALVES CONFIRMED, and the rotation half is worse than
+             "changes": the effect stops working altogether.**
+             📐 **ROTATION.** Same layer, same radius, counting the shape's own pixels by colour (the
+             project background is opaque, so an alpha count measures the background — two probes were
+             thrown away before this one):
+             | rotation | shape px | after rounding | removed |
+             |---|---|---|---|
+             | 0° | 9600 | 7973 | **1627 — 16.9%** |
+             | 45° | 9548 | 9544 | **4 — 0.0%** |
+             🚨 **At 45° it removes four pixels out of nine and a half thousand. It does nothing.** And
+             the reason is exactly the mechanism this entry guessed: the mask is built in `bb`, the
+             AXIS-ALIGNED alpha box. **A rotated rectangle's own corners sit at the MIDDLES of that
+             box's edges**, while the box's corners are empty space — so the rounding cuts away nothing
+             and leaves every real corner sharp.
+             📐 **SIZE.** Radius fixed at 60, measuring the corner as a share of the shape's short side
+             (derived from area: a rounded rect loses `(4−π)r²` to its corners):
+             | scale | shape | effective radius | as % of short side |
+             |---|---|---|---|
+             | 0.25 | 74x50 | 26.9px | **53.8%** |
+             | 0.5 | 150x100 | 53.6px | **53.6%** |
+             | 1.0 | 300x200 | 65.9px | **33.0%** |
+             **20.8 percentage points across a 4x range** — at small sizes the radius is CLAMPED to half
+             the short side (fully round ends), at large sizes it is a modest corner. Same setting,
+             different shape.
+             ⚠️ **THE TWO HALVES ARE NOT THE SAME KIND OF PROBLEM, and that matters for the fix.**
+             **Rotation is unambiguously a BUG** — no setting makes a rotated layer round. **Size is
+             arguably correct**: an absolute radius in pixels is what CSS and every design tool does, so
+             a bigger shape SHOULD get a proportionally smaller corner. What is wrong there is the
+             CLAMP, which silently turns a radius into "half the shape" on anything small.
+             ➡️ **NEXT: fix rotation by masking in the layer's OWN space rather than the plate's bbox** —
+             the kernel does not currently receive `layer`, and other canvas effects do, so the rotation
+             is reachable. **Then ask him about the size policy** rather than guessing: absolute (what it
+             does now, minus the surprise clamp) or proportional.
 
 - [ ] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.**
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -134,6 +134,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 ## STATE
 
 📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1012 tests green.**
+📐 **#621 MEASURED — rounded corners does NOTHING on a rotated layer.** 0°: 16.9% of the shape removed.
+45°: **0.0%** — four pixels out of 9548. The mask is built in the AXIS-ALIGNED alpha box, and a rotated
+rectangle's own corners sit at the MIDDLES of that box's edges, so nothing gets cut.
+📐 **SIZE half: the corner is 53.8% of the short side at scale 0.25 and 33.0% at scale 1.0.** But this
+half is **arguably correct** — an absolute radius is what CSS does. The surprise is the CLAMP to half
+the short side on small shapes. **Rotation is a bug; size is a policy question for him.**
+➡️ **NEXT TICK: mask in the layer's OWN space.** The kernel signature is `(A,B,W,H,bb,p,t)` and other
+canvas effects also receive `layer` — so the rotation is reachable without new plumbing.
+⚠️ **TWO PROBES WERE THROWN AWAY FIRST.** `renderScene` paints an opaque project background, so counting
+ALPHA counts the background: every reading was "the whole canvas, and rounding removed 0". **Count the
+shape's own COLOUR.** The control that caught it was `shapeFitsInsideFrame`.
+
 ✅ **#620 DONE — the magnet governs all four snap sites in Position / Scale.** ⚠️ **The canvas drag does
 NOT snap and that is HIS doing** (the code quotes him asking for it to move to the trackpad), so his
 words "on the canvas" meant those controls. **Read the comments before believing a report contradicts
