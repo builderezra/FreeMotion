@@ -21239,9 +21239,19 @@ re-opened #480, which I had marked done and had not fixed.
       one-line text bbox outward should give stacked REPEATED LINES — which is precisely what the
       `[shake, tiles]` panel shows — while `[tiles]` alone gives narrow vertical strips, i.e. it is
       tiling a **tall thin box** instead of a wide short one.
-      ➡️ **So the bug is: the alpha bbox handed to Tiles is wrong for a text layer unless a preceding
-      effect forces the plate.** Look at `alphaBBoxExact` and how `bb` is derived for a TEXT layer with
-      no prior effect in the stack.
+      ✅ **MEASURED 27 Aug — the layer's TRUE alpha bbox is `464 x 50` (x 127, y 422), ratio 9.28: WIDE and
+      short, exactly right for one line of text.** (Rendered with the full-frame shape layer hidden so the
+      text's own bounds were visible; restored after.)
+      🚨 **So the diagnosis is now exact.** Tiling a 464x50 box outward across 720x900 gives roughly 1.5
+      columns by 18 rows — i.e. **stacked repeated LINES**, which is precisely what the `[shake, tiles]`
+      panel renders. The `[tiles]`-alone panel renders narrow VERTICAL strips, which is what tiling a
+      **tall thin** box looks like. **Tiles alone is being handed a box roughly TRANSPOSED from the real
+      one, or a degenerate slice of it.**
+      ➡️ **Next: instrument `bb` at the call site rather than inferring it from the picture** — log what
+      `tiles` actually receives in both stacks (`[tiles]` vs `[shake, tiles]`) and compare against the
+      measured 464x50. `alphaBBoxExact` and the `bb` derivation at js/compositor.js:7615 are where to
+      look. ⚠️ **Confirm the value, do not deduce it** — the picture has now sent me down two wrong
+      theories on this entry alone (plate, then default mode).
       ❓ **But it does NOT explain the order dependence**, which is the real puzzle: both panels used an
       identically-constructed instance, so both were mode 0, yet `[shake, tiles]` rendered a proper
       mirrored GRID and `[tiles]` rendered strips. **Same mode, same params, different picture.**
