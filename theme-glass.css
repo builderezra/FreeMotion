@@ -680,6 +680,14 @@ html[data-home="light"] #hm-new {
 /* The empty-state copy and the search field, so nothing is left as light-on-light. */
 html[data-home="light"] .hm-empty,
 html[data-home="light"] .hm-empty-sub { color: #5a6478; }
+/* …AND THE TITLE, which this rule forgot (queue 647). Ezra: "All these menus have hard to read text,
+   make it black or sum" — with screenshots of Templates, Elements and Tutorials where the body copy
+   reads fine and the HEADING above it is a ghost. `.hm-empty-title` sets `color: var(--text)`, which
+   is the DARK theme's near-white ink, and the light override above named `.hm-empty` and
+   `.hm-empty-sub` but never the title — so every empty state shipped with an invisible headline.
+   Matched to `.hm-name` (#0d1420), the darkest ink the light home already uses, rather than pure
+   black: it is the same colour as a project card's title, which is what a heading here should weigh. */
+html[data-home="light"] .hm-empty-title { color: #0d1420; }
 html[data-home="light"] #hm-search-input {
   background-color: rgba(255, 255, 255, .9); border-color: rgba(16, 30, 52, .14); color: #10151f;
 }

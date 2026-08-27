@@ -133,7 +133,80 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1014 tests green.**
+📍 **HANDOVER, 27 Aug, v13.70 — 1018 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+handover to a session with NO memory of any of it.**
+
+🔥 **READ #645 FIRST. HE IS FURIOUS AND HE IS RIGHT.** *"if I have to ask you to fix that shit one more
+time"* — the black-and-white filters still do not make anything black and white, and brightness/saturate
+are wrong too. This is the THIRD time (#593, #603, now #645).
+⚠️ **DO NOT CLOSE IT ON A PASSING UNIT TEST — that is how it got closed wrongly before.** Two tests were
+added this session and BOTH PASS: all six `mono` filters render grey on a pure-red SHAPE, and
+saturate(0)/saturate(2)/brightness(0.4)/brightness(1.8) all move the pixels correctly.
+🚨 **So the effect math is NOT the bug.** A shape has a flat fill; **he applies these to FOOTAGE**.
+➡️ **NEXT, and do this before anything else: repeat the SAME measurement on a MEDIA layer, and on a
+BROWSER TILE.** #593 was literally *"the black/white filter TILES show in full colour"*. Third suspect:
+`drawFilterContainer`'s strength cross-fade uses `lighter` (additive), reached only when strength < 1.
+
+🆕 **TWELVE NEW REQUESTS LOGGED THIS SESSION, all verbatim: #645–#656.** #647 is already fixed and shipped.
+· **#646** PC splash cuts from white to colour instead of fading — *"try really hard not to accidentally
+  break anything"*, so narrow diff, and measure the MOBILE path before and after to prove it did not move.
+· **#648** tapping a project in the home menu does not select — only press-and-hold works. **Check against
+  #617 clause 3 (v13.61 routed draft cards through `selectify`) — this may be that regression.**
+· **#649** the New-project dialog's TITLE is dark ink on a dark panel. **Same shape as #647 in the
+  opposite direction** — a family rule that misses one member, now twice. Suspect a
+  `html[data-home="light"]` rule reaching into a dark dialog floating over the light home.
+· **#650** PC hover-expand on project cards, like the editor's Add menu. He named the reference — REUSE
+  it. Gate behind `@media (hover: hover)` or it latches on touch.
+· **#651** the editor's empty Template panel explains nothing. The HOME tab already has the right words.
+· **#652** the ⋯ on a card: no circle at rest, a cursor-GLINTING blue circle on hover, a dot animation on
+  tap for mobile. **Do it WITH #650 or the two will fight over the same hover.**
+· **#653** no way to HEAR an audio effect while adjusting it. Read `audio-fx-live.js` first — and reuse
+  the SFX list's row-preview rather than rebuilding it. Must not auto-play on open.
+· **#654** ⭐ **the first report in this file from someone who is NOT Ezra** — a friend could not work out
+  how to LEAVE the audio edit menu. **Look at the existing exit before adding a second one**; "I couldn't
+  get out" is usually a close button that reads as decoration.
+· **#655** groups get a disclosure ▸ on their timeline row. He wants it GONE — but the second half is
+  *"it glitches out the timeline when you add a group"*. **Reproduce the glitch BEFORE deleting**, or the
+  deletion gets credited with a fix it did not make. Check the arrow is not the only way into a group.
+· **#656** the search bar still wears the DARK theme on the light home, and its hint line is unreadable.
+
+🚨 **THAT IS THE THIRD LIGHT-THEME MISS IN A ROW — #647, #649, #656 — AND IT IS ONE BUG, NOT THREE.**
+A rule under `html[data-home="light"]` names two or three elements and skips a neighbour, so dark-theme
+ink survives on a white page. **Fix it as a CLASS: sweep every light rule in theme-glass.css and find the
+text near it that was never given a light colour.** He has been finding these one screenshot at a time.
+
+✅ **SHIPPED IN v13.70:** #647 (light-home empty-state headings were invisible — the override covered
+`.hm-empty`/`.hm-empty-sub` and never `.hm-empty-title`) and **#617 clause 1**.
+🔎 **#617 clause 1 — CAUSE FOUND AND FIXED, after the entry had given up on it.** `openForEdit` mints a
+workspace then bails with `discardDraft(pid)` on failure — and **`create()` ends with `await this.open(id)`,
+so the draft it just minted IS the current project, and `discardDraft` refuses on the current project by
+design.** The line whose own comment said *"do not strand a draft"* stranded one every time. It strands
+one per ELEMENT, not per tap (the next open matches it by `ofElement` and reuses it), which is why his
+count crept. Fixed by landing back on `returnTo` first. **The refusal itself is correct and the test
+asserts it survives.**
+
+🔊 **#604 — every link inside FreeMotion is measured and SOUND. The exported file HAS audio in it**
+(decoded: peak 0.82 / rms 0.55). moov textbook-correct, `esds` present. **It needs ONE action from him,
+not another session: export on the PC, drag the .mp4 into a Chrome tab, press play.**
+📐 **Found in passing, NOT fixed: the mix CLIPS** — two ordinary layers at volume 1 peak at 1.52–1.61.
+`buildAudioMix` sums and never limits. Logged under #604 clause 2. **Not a fix for "no audio".**
+
+🔎 **#602 clause 2 answered in code:** Spacing and Animate→Typewriter ARE duplicated by effects
+(`textspacing`, `textprogress`); **Line height and Curve are duplicated by NOTHING**, so "remove the
+circled four" would delete two features with no equivalent. A test locks that.
+
+❓ **WAITING ON HIM (none of these hold the queue):** #602 (drop the Typewriter preset?), #604 (the Chrome
+tab test), #610 (option A or B — mockup already sent), #619, #642, #643.
+
+🛠 **`tools/probe.sh _name.html [secs]` runs ONE tests/_*.html probe headless** and refuses while a
+mutation is in progress. Live probes: `_604sfx.html`, `_604boxes.html`, `_617drafts.html`.
+⚠️ **#654/#655/#656 WERE WRITTEN INTO REQUESTS.md WHILE THE v13.70 SHIP WAS RUNNING**, deliberately: he
+was about to reset the app and the alternative was losing them. They are doc-only, so they rode along in
+that commit without being named in its message. **Nothing is missing — this line is the record of it.**
+⚠️ **A BOX WALK IS CODE AND LIES LIKE ANY OTHER MEASUREMENT.** A scan reported `tkhd duration=0` on both
+tracks — a parser bug (v0 tkhd duration is at byte 28, not 24). **The tell was that it accused the VIDEO
+track too, which plainly plays.** If a probe indicts something that demonstrably works, suspect the probe.
+
 🔊 **#604 — EVERY LINK INSIDE FREEMOTION IS NOW MEASURED AND SOUND. The exported file HAS audio in it.**
 Decoded the real export back: peak 0.82 / rms 0.55 against a 0.80 / 0.57 source. Same with a video layer
 plus a built-in SFX through the real path. The moov is textbook-correct — audio `tkhd` 1579, `mdhd`

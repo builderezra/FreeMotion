@@ -31550,6 +31550,181 @@
    * two controls are REACHABLE and BOUND, and that the two genuine duplicates still exist (if either is
    * ever deleted, the reasoning in #602 changes and the entry has to be re-argued rather than silently
    * inherited). */
+  /* #617 clause 1 — WHERE THE DUPLICATE DRAFT ROWS COME FROM. Ezra: "These weird element things won't
+   * go away", six rows deep, two names repeated.
+   * openForEdit mints a workspace, then bails if there is nothing to insert:
+   *     if (!ok) { await FM.projects.discardDraft(pid); return null; }  // do not strand a draft
+   * It stranded one EVERY time. `create()` ends with `await this.open(id)`, so the workspace it just
+   * minted is the CURRENT project, and `discardDraft` refuses on the current project by design
+   * (`id === curId()` returns false — asserted below, because that guard is load-bearing elsewhere and
+   * must not be "fixed" to make this pass). The cleanup called the one function that cannot run here.
+   * It strands one per ELEMENT rather than one per tap, because the next open matches that same
+   * stranded draft by `ofElement` and reuses it — which is why his count crept up instead of exploding.
+   * The failure is forced here rather than waited for: a real insert() failure needs a broken element,
+   * and the bug is in the CLEANUP, not in what made it fail. */
+  /* #603 / #593 — "None of the black and white filters make anything black and white STILL", and the
+   * brightness/saturation filters are wrong too. He has reported this more than once, which is the
+   * failure mode this suite exists to stop, and nothing here tested the LIBRARY filters end to end —
+   * only the individual effects. A filter is a CONTAINER of effects, and the container has its own
+   * render path (drawFilterContainer) with a strength cross-fade, so "the grayscale effect works"
+   * never proved "the Noir filter works". These render the shipped definitions onto a saturated red
+   * and read the pixels back. */
+  /* #647 — Ezra, with screenshots of Templates, Elements and Tutorials: "All these menus have hard to
+   * read text, make it black or sum". On all three the BODY copy read fine and the HEADING above it was
+   * a ghost. The light-theme override named `.hm-empty` and `.hm-empty-sub` and stopped there, so
+   * `.hm-empty-title` kept `color: var(--text)` — the DARK theme's near-white ink — on a near-white page.
+   * The bug is a rule that covers a family and MISSES ONE MEMBER, which no amount of reading catches
+   * reliably. This asserts the invariant instead: on the light home, text ink must be dark. */
+  test('#647: light-theme home text is dark ink, headings included', { item: '647' }, function () {
+    var root = document.documentElement, had = root.getAttribute('data-home');
+    function lumOf(cls) {
+      var d = document.createElement('div');
+      d.className = cls;
+      document.body.appendChild(d);
+      var c = getComputedStyle(d).color;
+      document.body.removeChild(d);
+      var m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(c || '');
+      if (!m) throw new Error('could not read a colour for .' + cls + ' (got ' + c + ')');
+      var v = [+m[1], +m[2], +m[3]].map(function (x) {
+        x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      });
+      return { l: 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2], css: c };
+    }
+    try {
+      root.setAttribute('data-home', 'light');
+      /* The SUB is the control: it was always correct, and it is what proves the light rules are
+         actually applying. Without it a failure here could just mean the stylesheet did not load. */
+      var sub = lumOf('hm-empty-sub');
+      if (sub.l > 0.35) throw new Error('the light-theme BODY ink is already too pale (' + sub.css +
+        ') — the light rules may not be applying, so this test cannot judge the heading');
+      var title = lumOf('hm-empty-title');
+      if (title.l > 0.35) throw new Error('.hm-empty-title is ' + title.css + ' on the LIGHT home — ' +
+        'relative luminance ' + title.l.toFixed(3) + ' against a near-white page. This is #647: the ' +
+        'light override covers .hm-empty and .hm-empty-sub but not the title.');
+      // A heading should be at least as strong as the body text under it, never weaker.
+      if (title.l > sub.l + 0.02) throw new Error('the empty-state HEADING (' + title.css +
+        ') is paler than the body copy under it (' + sub.css + ')');
+    } finally {
+      if (had == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', had);
+    }
+  });
+
+  test('#603: every mono filter actually renders grey', { item: '603' }, function () {
+    if (!FM.filters || typeof FM.filters.bySection !== 'function') throw new Error('FM.filters is not reachable');
+    var mono = FM.filters.bySection('mono') || [];
+    if (mono.length < 3) throw new Error('only ' + mono.length + ' mono filters found — the section is missing, so a pass here would prove nothing');
+    var bad = [];
+    mono.forEach(function (def) {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 300, shapeH: 220, fill: '#ff0000' });
+      var box = FM.filters.makeInstance(def.id);
+      if (!box) { bad.push(def.name + ' (makeInstance returned null)'); return; }
+      L.effects = [box];
+      var c = offscreen(320, 240);
+      FM.renderScene(c.getContext('2d'), scene([L]), 0);
+      var p = px(c.getContext('2d'), 160, 120);
+      // grey means the channels agree. A pure red that survives reads 255,0,0 — a spread of 255.
+      var spread = Math.max(p[0], p[1], p[2]) - Math.min(p[0], p[1], p[2]);
+      if (spread > 26) bad.push(def.name + ' -> rgb(' + p[0] + ',' + p[1] + ',' + p[2] + ') spread ' + spread);
+    });
+    if (bad.length) throw new Error(bad.length + ' of ' + mono.length +
+      ' mono filters left colour on a pure-red layer: ' + bad.join('  |  '));
+  });
+
+  test('#603: the saturate and brightness effects move the pixels they claim to', { item: '603' }, function () {
+    function shot(fx) {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 300, shapeH: 220, fill: '#c04020' });
+      if (fx) L.effects = [fx];
+      var c = offscreen(320, 240);
+      FM.renderScene(c.getContext('2d'), scene([L]), 0);
+      return px(c.getContext('2d'), 160, 120);
+    }
+    function mk(type, params) {
+      var e = FM.fxRegistry && FM.fxRegistry.makeInstance ? FM.fxRegistry.makeInstance(type) : null;
+      if (!e) throw new Error('cannot build a "' + type + '" effect instance');
+      e.params = Object.assign({}, e.params, params);
+      return e;
+    }
+    var base = shot(null);
+    var baseSpread = Math.max(base[0], base[1], base[2]) - Math.min(base[0], base[1], base[2]);
+    if (baseSpread < 40) throw new Error('the control colour is not saturated enough to measure: ' + base.join(','));
+
+    // saturate(0) must flatten the channels together.
+    var flat = shot(mk('saturate', { amount: 0 }));
+    var flatSpread = Math.max(flat[0], flat[1], flat[2]) - Math.min(flat[0], flat[1], flat[2]);
+    if (flatSpread > 12) throw new Error('saturate(0) left a channel spread of ' + flatSpread +
+      ' (rgb ' + flat.slice(0, 3).join(',') + ') — it is not desaturating');
+
+    // saturate(2) must push them further apart than the untouched control.
+    var punch = shot(mk('saturate', { amount: 2 }));
+    var punchSpread = Math.max(punch[0], punch[1], punch[2]) - Math.min(punch[0], punch[1], punch[2]);
+    if (!(punchSpread > baseSpread + 8)) throw new Error('saturate(2) gave a spread of ' + punchSpread +
+      ' against an untouched ' + baseSpread + ' — it is not saturating');
+
+    // brightness must move luminance in the direction asked, both ways.
+    function lum(p) { return 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]; }
+    var dark = shot(mk('brightness', { amount: 0.4 })), bright = shot(mk('brightness', { amount: 1.8 }));
+    if (!(lum(dark) < lum(base) - 8)) throw new Error('brightness(0.4) gave luminance ' + lum(dark).toFixed(1) +
+      ' against an untouched ' + lum(base).toFixed(1) + ' — it is not darkening');
+    if (!(lum(bright) > lum(base) + 8)) throw new Error('brightness(1.8) gave luminance ' + lum(bright).toFixed(1) +
+      ' against an untouched ' + lum(base).toFixed(1) + ' — it is not brightening');
+  });
+
+  test('#617: a failed element edit must not strand a draft workspace', { item: '617' }, async function () {
+    var P = FM.projects, E = FM.elements;
+    if (!P || !E || typeof E.openForEdit !== 'function') throw new Error('FM.elements.openForEdit is not reachable');
+    var drafts = function () { return (P.list() || []).filter(function (p) { return p.elementDraft; }); };
+
+    /* THIS TEST SWITCHES PROJECTS, so it must put the world back — the first version did not, and it
+       left a shape layer and a different open project behind, which took out the effects-preview test
+       further down the suite. A test that passes by breaking its neighbours is not passing. */
+    var wasProject = FM.scene && FM.scene.project && FM.scene.project.id;
+    var wasLayers = FM.scene.layers.slice();
+    var madeProjects = [], madeElement = null;
+    try {
+      var host = await P.create({ name: 'src-617', width: 320, height: 320 });
+      madeProjects.push(host);
+      FM.scene.layers.length = 0;
+      FM.scene.layers.push(FM.makeLayer('shape', { name: 'blob', start: 0, duration: 1 }));
+      if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+      if (!await E.saveFromProject(host, 'probe-617')) throw new Error('could not save a probe element');
+      var eid = (E.list() || []).filter(function (e) { return e.name === 'probe-617'; }).map(function (e) { return e.id; })[0];
+      if (!eid) throw new Error('the probe element did not land in the list');
+      madeElement = eid;
+
+      var before = drafts().length;
+      var realInsert = E.insert;
+      E.insert = async function () { return false; };            // force the "nothing to edit" path
+      var got;
+      try { got = await E.openForEdit(eid); } finally { E.insert = realInsert; }
+
+      if (got !== null) throw new Error('openForEdit returned ' + got + ' when insert() failed — it should give up');
+      var after = drafts();
+      var stranded = after.filter(function (p) { return p.ofElement === eid; });
+      if (stranded.length)
+        throw new Error('a failed edit STRANDED ' + stranded.length + ' draft(s) for this element (' +
+          stranded.map(function (p) { return p.id; }).join(', ') + ') — this is #617 clause 1, the duplicate rows');
+      if (after.length > before)
+        throw new Error('drafts went ' + before + ' -> ' + after.length + ' on a failed edit');
+
+      /* THE GUARD THAT CAUSED IT IS CORRECT AND MUST SURVIVE. Deleting the open document leaves the
+         project pointer dangling and the next boot mints a replacement (clause 4). If a later session
+         "fixes" this test by loosening discardDraft, that is the wrong repair — the caller switches
+         away first, which is what discardDraftAnyway exists to do. */
+      var cur = FM.scene && FM.scene.project && FM.scene.project.id;
+      if (cur && await P.discardDraft(cur) !== false)
+        throw new Error('discardDraft no longer refuses on the OPEN project — that guard is load-bearing (clause 4)');
+    } finally {
+      try { if (madeElement && E.remove) await E.remove(madeElement); } catch (e) {}
+      if (wasProject) { try { await P.open(wasProject); } catch (e) {} }
+      for (var i = 0; i < madeProjects.length; i++) {
+        try { if (madeProjects[i] !== wasProject) await P.discardDraftAnyway(madeProjects[i]); } catch (e) {}
+      }
+      FM.scene.layers.length = 0;
+      for (var j = 0; j < wasLayers.length; j++) FM.scene.layers.push(wasLayers[j]);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('#602: the Aa sheet keeps Line height and Curve — no effect provides either', { item: '602' }, function () {
     if (typeof FM._textExtras !== 'function') throw new Error('FM._textExtras is gone — the Aa sheet has no builder');
     var L = { type: 'text', text: 'Marine Terrace', lineHeight: 1.15, textCurve: 0, fontSize: 95 };

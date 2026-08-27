@@ -1,0 +1,69 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #617 clause 1 — WHY are there duplicate draft rows? The entry measured "three different workspace ids
+ * were minted" across three opens, which CONTRADICTS openForEdit: it looks up an existing draft by
+ * `p.elementDraft && p.ofElement === eid` and reuses it. create() does persist ofElement on both the doc
+ * and the index. So either the lookup fails for a reason not yet named, or the earlier measurement was
+ * of a different path. This drives openForEdit itself and reports the ids. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.projects && w.FM.elements)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+function drafts(FM){ return (FM.projects.list()||[]).filter(function(p){ return p.elementDraft; }); }
+function show(FM, tag){
+  var d = drafts(FM);
+  say(tag + ': ' + d.length + ' draft(s)' + (d.length ? ' -> ' + d.map(function(p){
+    return p.id + (p.ofElement ? ' [ofElement=' + p.ofElement + ']' : ' [NO ofElement]');
+  }).join(', ') : ''));
+  return d;
+}
+async function run(w){
+  try{
+    var FM = w.FM;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    say('projects at start: ' + (FM.projects.list()||[]).length);
+    show(FM,'drafts at start');
+
+    // --- a real element to edit, built the way the app builds one
+    var pid = await FM.projects.create({ name:'Src for 617', width:600, height:600 });
+    var L = FM.makeLayer('shape', { name:'Blob', start:0, duration:2 });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L);
+    if (FM.storage){ FM.storage.markDirty(); await FM.storage.save(); }
+    var ok = await FM.elements.saveFromProject(pid, 'Probe element');
+    say('saveFromProject -> ' + ok);
+    var els = FM.elements.list()||[];
+    var eid = (els.filter(function(e){ return e.name==='Probe element'; })[0]||els[0]||{}).id;
+    if (!eid) return say('❌ no element id — cannot test openForEdit');
+    say('element id: ' + eid + '   (elements now: ' + els.length + ')');
+    show(FM,'drafts after saving the element');
+
+    // --- THE TEST: open the SAME element for editing three times
+    var ids=[];
+    for (var i=1;i<=3;i++){
+      var got = await FM.elements.openForEdit(eid);
+      ids.push(got);
+      say('');
+      say('openForEdit #' + i + ' returned ' + got);
+      show(FM,'  drafts now');
+    }
+    say('');
+    var uniq = ids.filter(function(v,i,a){ return a.indexOf(v)===i; });
+    say('ids returned: ' + JSON.stringify(ids));
+    say(uniq.length === 1
+      ? '✅ REUSED the same workspace all three times — openForEdit does what its comment says.'
+      : '🚨 MINTED ' + uniq.length + ' DIFFERENT workspaces for ONE element — this is the duplicate source.');
+    var d = drafts(FM);
+    say(d.length <= 1 ? '✅ draft count stayed at ' + d.length : '🚨 ' + d.length + ' drafts left behind for one element');
+    var noOf = d.filter(function(p){ return !p.ofElement; });
+    if (noOf.length) say('🚨 ' + noOf.length + ' draft(s) carry NO ofElement — those can never be matched by the reuse lookup, so each edit mints another.');
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

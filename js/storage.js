@@ -1859,7 +1859,23 @@ window.FM = window.FM || {};
       FM.scene.project.background = null;              // transparent, like the element itself
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
       const ok = await this.insert(eid);
-      if (!ok) { await FM.projects.discardDraft(pid); return null; }   // nothing to edit — do not strand a draft
+      /* NOTHING TO EDIT — AND THIS LINE USED TO STRAND A DRAFT EVERY TIME, which is queue 617 clause 1.
+         Its comment said "do not strand a draft" and it stranded one on every failed open, because
+         `create()` ends with `await this.open(id)` — so the workspace it just minted IS the current
+         project — and `discardDraft` REFUSES on the current project by design (`id === curId()`
+         returns false). The cleanup called the one function that cannot run here.
+         MEASURED (tests/_617drafts.html): openForEdit returned null and left `p_…` behind with its
+         `ofElement` set. It strands one per element rather than one per tap — the second open matches
+         that same stranded draft and reuses it — which is why the count creeps rather than explodes.
+         Landing back on `returnTo` is deliberate: that is where he actually was, and it is what makes
+         the ordinary `discardDraft` legal again. `discardDraftAnyway` (clause 4) is the fallback when
+         there is nowhere named to return to; it picks a real project first and refuses only if this is
+         the last project in existence. */
+      if (!ok) {
+        if (returnTo && returnTo !== pid) { await FM.projects.open(returnTo); await FM.projects.discardDraft(pid); }
+        else await FM.projects.discardDraftAnyway(pid);
+        return null;
+      }
       /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
          `insert()` selects what it just added, which is right when you are dropping an element INTO a
          project — you want to move the thing you added. It is wrong for an EDIT: you are opening a

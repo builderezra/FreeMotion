@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.69
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.70
 >
-> **State:** v13.69, 1014 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.70, 1018 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -24508,3 +24508,218 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545:** he described the answer himself ("the little dots at the bottom"), so this shipped his
       own suggestion rather than a menu of alternatives. **Picture sent.** The other honest options were a
       fading right edge, a peeking part-tile, or a count — say the word.
+- [ ] **645 — 🔴🔴 THE BLACK-AND-WHITE FILTERS STILL DO NOT MAKE ANYTHING BLACK AND WHITE, and the
+      **STATUS: 🟢 READY — nothing is stopping this**
+      brightness / saturation filters are wrong too. HE HAS ASKED REPEATEDLY.** (27 Aug, at v13.69.)
+      His words, verbatim:
+      > If I have to ask you to fix the saturation on the filters where it makes them black-and-white on
+      > the black black-and-white filter filters and also just fixing the brightness and saturation
+      > filter filters like if I have to ask you to fix that shit one more time I'm genuinely going to
+      > kill you and just mutilate your dead corpse until there's nothing left but the remnants of pain
+      > and suffering
+      ⚠️ **The anger is earned — this is a REPEAT of #593 and #603 and it has been "fixed" before
+      without fixing what he sees.** Do not close this on a passing unit test again.
+      1. [ ] **The black-and-white filters must render actually grey.**
+      2. [ ] **The brightness filter must change brightness.**
+      3. [ ] **The saturation filter must change saturation.**
+      ✅ **FIRST MEASUREMENT, 27 Aug — and it RULES OUT the obvious cause, which is why this kept being
+      closed wrongly.** Two tests added and both PASS at 1017/1017: every one of the six `mono` filters
+      renders grey on a pure-red SHAPE (channel spread ≤26 of 255), and `saturate(0)`, `saturate(2)`,
+      `brightness(0.4)`, `brightness(1.8)` all move the pixels in the right direction.
+      🚨 **SO THE EFFECT MATH IS NOT THE BUG, AND THAT IS THE TRAP THIS ENTRY MUST NOT FALL INTO AGAIN.**
+      A shape has a flat fill; **he applies these to FOOTAGE**. The remaining suspects, in order:
+      **(a) media/video layers** — a different draw path from shapes; **(b) the TILES in the filter
+      browser**, which is literally what #593 said (*"THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR"*);
+      **(c) the filter container's strength cross-fade**, which uses `lighter` (additive) rather than a
+      plain cross-fade and is only reached when strength < 1.
+      ➡️ **NEXT: repeat the SAME measurement on a media layer and on a browser tile.** A test that passes
+      on a shape has proved nothing about the thing he is looking at.
+
+- [ ] **646 — PC: the loading animation cuts from white to the colours instead of fading, unlike mobile.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, screen recording of the PC version.)
+      His words, verbatim:
+      > If u watch the pc version of the animation the background doesnt fade from white to the colours
+      > it just cuts unlike mobile, try really hard not to accidentally break anything when fixing please
+      ⚠️ **"try really hard not to accidentally break anything"** — he has been bitten by collateral
+      damage, so this one gets a narrow diff and the mobile path must be measured BEFORE and AFTER to
+      prove it did not move.
+      📎 **The recording was sent from his Mac's temp folder and is already gone from disk** (the path
+      lives under `NSIRD_screencaptureui_…` which macOS clears). **Not a blocker** — the splash is
+      `index.html`'s intro plus `splash-v2.mp4`, and the difference between the phone and desktop paths
+      is readable and measurable without the video. Ask for it again only if the code shows no
+      difference at all.
+
+- [ ] **647 — The empty-state HEADINGS on the home menus are unreadable — make them black.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, three phone screenshots at v13.69: Templates, Elements, Tutorials.)
+      His words, verbatim:
+      > All these menus have hard to read text, make it black or sum
+      **WHAT THE SCREENSHOTS SHOW:** on all three tabs the BODY copy reads fine in dark grey, and the
+      HEADING above it — *"No templates yet"*, *"No elements yet"*, *"Tutorials are coming"* — is a pale
+      ghost that is barely visible against the light background.
+      ✅ **CAUSE FOUND BY READING THE RULE, NOT GUESSING (theme-glass.css:681):** the light-theme override
+      names **`.hm-empty` and `.hm-empty-sub`** and stops there. **`.hm-empty-title` was never included**,
+      so it keeps `color: var(--text)` — the DARK theme's near-white ink — on a near-white page. The body
+      text was covered, the headline was not, which is exactly the split he photographed.
+      1. [x] **Make the headings readable.** ✅ **DONE — `html[data-home="light"] .hm-empty-title` at
+             `#0d1420`.** Matched to `.hm-name`, the darkest ink the light home already uses, so a
+             heading weighs the same as a project card's title rather than being a new one-off black.
+
+- [ ] **648 — Home menu: tapping a project to select it does not work — only the press-and-hold drag does.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, at v13.69.)
+      His words, verbatim:
+      > When selecting projects in the home menu  it seemingly doesn't let me tap to select and I have to
+      > do the drag hold thing or nothing else will work
+      ⚠️ **Read against #617 clause 3 before touching anything** — that clause routed DRAFT cards through
+      `selectify` in v13.61, and `selectify` is the shared select behaviour for project, template and
+      element cards. **A tap that no longer selects is exactly the kind of regression that change could
+      have caused**, so the first question is whether this is new since v13.61, not what the tap handler
+      looks like.
+      ➡️ **Measure it before building:** in select mode, dispatch a plain tap (pointerdown/up with no
+      movement) on a project card and read whether it becomes selected. If the tap is being swallowed by
+      the long-press/drag recogniser, the fix is a movement/time threshold, not new tap code.
+
+- [ ] **649 — 🔴 The "New project" dialog's TITLE is unreadable — dark ink on the dark panel.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, phone screenshot at v13.69, circled in red by him.)
+      His words, verbatim:
+      > before u finish up for the update log that this needs fixing, text un readable
+      **WHAT THE SCREENSHOT SHOWS:** the New-project sheet over the home screen. **NAME, ASPECT RATIO,
+      the tiles, Resolution, Frame rate, Background, Canvas, Cancel and Create all read fine in light
+      ink on the dark panel — and the sheet's own heading "New project" is nearly black on that same
+      dark panel**, circled. Only the heading is wrong.
+      ⚠️ **SAME SHAPE OF BUG AS #647, OPPOSITE DIRECTION, AND THAT IS THE LEAD.** #647 was a LIGHT-theme
+      rule that covered `.hm-empty` / `.hm-empty-sub` and missed `.hm-empty-title`. This is a dark panel
+      wearing a heading colour meant for a LIGHT background — so the first place to look is whether a
+      `html[data-home="light"]` rule is reaching inside this dialog, which floats over the light home
+      but is itself dark.
+      ➡️ **Measure it the way #647's guard does** — read the computed colour of the dialog's title and
+      of a label next to it, and assert the heading is not darker than the body around it. **The generic
+      form of this bug is "a family rule that misses one member", and it has now happened twice.**
+
+- [ ] **650 — PC: hovering a project card should expand it, like the Add menu does in the editor.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug.)
+      His words, verbatim:
+      > Make it on the pc version when hovering ur curser over projects it exapnds them or something,
+      > just make it look good, kinda like how in the editing menu it does the same thing when hovering
+      > over the add menu
+      🔑 **He has named the reference himself: the ADD MENU's hover behaviour in the editor.** So this is
+      not a fresh design — **find that hover treatment and reuse it**, which also keeps the two feeling
+      like the same app.
+      ⚠️ **Hover only — must not fire on touch.** A `:hover` rule on a phone latches on tap and stays
+      stuck until you tap elsewhere. Gate it behind `@media (hover: hover) and (pointer: fine)`.
+      ⚠️ **#545 applies** — it is a look, so show him before it ships.
+
+- [ ] **651 — Explain what templates ARE on the empty Templates panel, instead of hiding it behind a button.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, phone screenshot at v13.69 — the editor's Add → Template panel.)
+      His words, verbatim:
+      > also log to explain how templates work in here if u have no templates instead of making u press
+      > the button and have a pop up explain it
+      **WHAT THE SCREENSHOT SHOWS:** the editor's ADD sheet with **Template** selected, and a large empty
+      panel containing only a small dashed square and the words **"No templates yet"**. Nothing says what
+      a template is or how to make one — that explanation currently lives behind a button/popup.
+      ➡️ **Put the explanation IN the empty state**, the way the HOME Templates tab already does
+      (*"Tap + to save a project as one, or use a project's ⋯ menu."* — js/home.js:2040). **The home
+      screen already solved this exact problem**; this panel just never got the same treatment.
+      ⚠️ **Related to #647/#649** only in that empty states keep being the neglected surface — but this
+      one is missing WORDS, not contrast.
+
+- [ ] **652 — The ⋯ on a project card should have no circle until you hover, then a blue circle that
+      **STATUS: 🟢 READY — nothing is stopping this**
+      glints with the cursor; on mobile, a little animation on the dots when tapped.** (27 Aug.)
+      His words, verbatim:
+      > Also log that the three dots on any project in the home meny shouldnt have the circle box around
+      > them until u hover over but then the circle box should be like a blue circle around it that
+      > glints depending on where the curser is, for mobile you can just make it so when you click on
+      > the three dots it does a little animation with the three dots around it
+      1. [ ] **No circle at rest** — the ⋯ sits bare on the card. (`.hm-card-more` currently carries a
+             standing `background-color`; see theme-glass.css:640.)
+      2. [ ] **On hover (PC): a BLUE circle that GLINTS with the cursor position.** A cursor-tracked
+             highlight, not a static ring — so it needs pointer coordinates fed to the element, the same
+             idea as a spotlight gradient following `--mx`/`--my`.
+      3. [ ] **On mobile: tapping the dots animates the three dots themselves.** He is explicit that the
+             hover half does not apply on touch.
+      ⚠️ **Gate the hover behind `@media (hover: hover) and (pointer: fine)`** or it latches on tap and
+      stays stuck — same trap flagged in #650.
+      ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships. Related to **#650**
+      (hover-expand on the card itself); **do them together or they will fight over the same hover.**
+
+- [ ] **653 — There must be a way to HEAR an audio effect while you are adjusting it.** (27 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Note that we need a way to hear audio effects while messing with them
+      **The gap:** audio effects can be dialled with no sound coming out, so every adjustment is guesswork
+      — the visual effects all preview live and the audio ones do not.
+      📍 **Where to look:** `js/audio-fx-live.js` and `js/audio-fx-browser.js` already exist, so some live
+      path may be present — **read them before designing anything**, and check whether the sound-effect
+      browser's row-preview (js/sfx.js — every row previews on tap) can be reused rather than rebuilt.
+      ➡️ **The obvious shape: scrubbing a parameter plays a short loop of the affected clip through the
+      effect**, the way the SFX list auditions a row. **Do not start playback on open** — it must be a
+      deliberate press, or the panel makes noise every time he opens it.
+
+- [ ] **654 — A first-time user could not work out how to LEAVE the audio edit menu.** (27 Aug.)
+      His words, verbatim:
+      > Make a note that my friend said he couldn't figure out how to get out of the audio edit menu
+      🔑 **THIS IS THE FIRST REPORT IN THIS FILE FROM SOMEONE WHO IS NOT EZRA, and that makes it worth
+      more than its size.** Ezra knows where every control is because he watched them get built. A
+      stranger hit the audio edit menu and could not find the way out — so the exit is either invisible,
+      unlabelled, or somewhere a new user does not look.
+      ➡️ **Do not add a second exit until the first one has been LOOKED AT.** Open the audio edit menu at
+      380px and answer three things before designing anything: is there a visible close control, does it
+      look like one (an ✕ or a Done, not a bare chevron), and does the usual escape gesture — tapping the
+      scrim outside it, or a back swipe — actually close it. **Most "I couldn't get out" reports are a
+      close button that is present but reads as decoration.**
+      ⚠️ **Check the hardware/browser Back button too.** On a phone PWA that is the reflex when a panel
+      traps you, and if it exits the whole project instead of the panel, that IS the bug.
+      ⚠️ **Related:** #612 covers menu open/close animations; a panel that animates in from nowhere with
+      no visible affordance is exactly how this happens.
+
+- [ ] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
+      feature, and it GLITCHES THE TIMELINE when a group is added.** (27 Aug, phone screenshot at v13.69.)
+      His words, verbatim:
+      > Log that when you add groups they have a small drop down button that needs removing cos I don't
+      > want the feature it brings and also it being there glitches out the timeline when you add a group
+      **WHAT THE SCREENSHOT SHOWS:** the editor at 380px, a project with two rows — a yellow **"Glass
+      bre…"** audio clip and an orange **"Mask Group"**. The Mask Group row alone carries a **small ▸
+      triangle on the FAR LEFT, outside the eye icon**, where the audio row has nothing. That triangle is
+      the disclosure toggle that expands the group's children inline.
+      1. [ ] **Remove the disclosure arrow from group rows.** He is explicit that he does not want what it
+             opens, so this is a deletion, not a redesign.
+      2. [ ] **The glitch on ADD is the more serious half.** *"it being there glitches out the timeline
+             when you add a group"* — so removing the control may or may not remove the glitch. **Reproduce
+             the glitch FIRST and describe it in this entry before deleting anything**, or the deletion
+             will be credited with a fix it did not make.
+      ⚠️ **Find out what the arrow is the ONLY way to reach before removing it.** If inline expansion is
+      the sole route to a group's children on the phone, deleting it strands them — check that
+      double-tap / the ⋯ menu / Edit Group still gets in. **He asked for the button gone, not for the
+      children to become unreachable.**
+      ⚠️ **The extra element shifts the row's left edge**, which is a strong first suspect for the glitch:
+      a group row is then a different width from every other row, and the timeline lays rows out on a
+      shared grid. Measure a group row against a normal row before and after.
+
+- [ ] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
+      (27 Aug, phone screenshot at v13.69 — search open on the Projects tab, 4 selected.)
+      His words, verbatim:
+      > Search bar needs to look good and reflect the new colour scheme
+      **WHAT THE SCREENSHOT SHOWS:** the light home — white cards, light tabs, dark ink — and sitting in
+      the middle of it a **dark teal/green slab** for the search field, with a **near-white placeholder**
+      *"Search a name or a date…"* on it and a dark round ✕ at its right end. Below it the hint line
+      *"Vague is fine — 'yesterday', 'last week', '2 aug', 'august', or part of a name."* is a **very pale
+      grey that barely reads** on the light background.
+      1. [ ] **The field itself** — it is the only dark surface on the screen. It should read as a light
+             input on the light home: white/near-white fill, the same soft blue rim the cards and tabs
+             already use, dark ink for what you type.
+      2. [ ] **The placeholder** — near-white on dark today; it needs to become a mid grey on light.
+      3. [ ] **The hint line under it** — too pale to read. **Same family of bug as #647 and #649**, and
+             that is now the THIRD time a light-theme rule has missed a member: `.hm-empty-title` (#647),
+             the New-project dialog heading (#649), and this. ⚠️ **Worth fixing as a CLASS this time** —
+             find every rule in `theme-glass.css` under `html[data-home="light"]` and check which text
+             elements nearby were never given a light colour, rather than fixing them one screenshot at
+             a time as he finds them.
+      ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships.
+      📎 **Colours already established on the light home, reuse rather than invent:** `.hm-name` `#0d1420`
+      (strong ink), `.hm-sub` `#5a6478` (body), `.hm-mi` `#5f6b7d`, card rim `rgba(127,216,255,.30)`.
