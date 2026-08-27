@@ -1237,7 +1237,7 @@ better still, keep working inside the turn rather than parking work for a later 
       and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
       along, which is why "it feels janky" kept not matching anything a profiler pointed at.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO. PARTLY ANSWERED v7.62 — the app now tells you why; whether it FIXES your file is still unknown.** His words: *"Added a screen
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
       case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
@@ -1287,6 +1287,16 @@ better still, keep working inside the turn rather than parking work for a later 
       ❓ **SO THE QUESTION TO HIM GETS SHARPER, and it is easier than the old one:** not *"do you see a
       toast"* but **"what does the FILE say — .mov or .mp4?"** His camera roll shows it. **A .mov points
       at the container, an .mp4 at the codec, and the two need different fixes.**
+
+      ✅ **ANSWERED BY EZRA 27 Aug — and the answer retires the question:**
+      > I have no idea
+      **Fair, and it means asking was the wrong move all along.** He is not going to inspect a file
+      format, and this entry has been parked on exactly that since August.
+      ➡️ **So the APP must answer it instead of him.** Everything needed is already in hand at import —
+      `file.name`, `file.type`, and what `canPlayType` says. **Record those alongside the existing
+      no-frame warning** and the next occurrence diagnoses itself.
+      🔑 **The pattern worth naming: if a request has sat on "he needs to tell me X" for months, build
+      the thing that measures X.**
 
       **v11.86 — I FIXED THE HALF THAT WAS MINE TO FIX, and it was a bad one.** Re-reading this entry,
       v7.62 put the useful sentence — *re-export as H.264, or open it in Safari* — in `console.warn`.
@@ -2682,7 +2692,18 @@ better still, keep working inside the turn rather than parking work for a later 
         *(The test asserts the DOT did not grow as well as the target — a "fix" that simply enlarged the
         square would satisfy the size check and look wrong.)*
 
-      **THIS ENTRY STAYS OPEN.** (a) and (b) need one photo from you — if the extra ✓ row sits flush on
+      ✅ **CLOSED 27 Aug — HE SENT THE PHOTO AND IT CONFIRMS THE DIAGNOSIS EXACTLY.**
+      > Here’s ur photo
+      **The screenshot shows the text editor at 380px with the KEYBOARD UP** — and above the keyboard,
+      a separate rounded bar carrying **^ ∨ arrows and a ✓**, with our own blue ✓ still up in the top
+      bar. **That is exactly the two-tick, two-arrow row he reported.**
+      ✅ **It is iOS Safari’s own form-assistant bar, NOT ours** — the v14-Aug measurement stands:
+      with this editor open our DOM holds exactly ONE ✓, zero ^/∨ glyphs and zero "Done". Headless
+      Chrome cannot render Safari’s bar, which is why it never appeared in any test here.
+      ⚠️ **So (a) and (b) are NOT OURS TO REMOVE** — the row belongs to the OS keyboard. What IS ours
+      is that our ✓ sits directly above it, doubling up. **See 602: he wants that whole panel shorter
+      anyway, which is the same screen and the better place to fix the crowding.**
+      🗒️ *(superseded)* **THIS ENTRY STAYS OPEN.** (a) and (b) need one photo from you — if the extra ✓ row sits flush on
       top of the keyboard it is iOS Safari's own form-assistant bar, which cannot exist in any browser
       here and which nothing in our DOM can produce. (c) depends on your project's aspect. Only (d) is
       shipped.
@@ -5456,7 +5477,20 @@ better still, keep working inside the turn rather than parking work for a later 
       it goes to the front; otherwise I will keep it behind the smaller items.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
       your word to jump the queue — asked three times now, and I still rate it the most serious open item.
-      **EZRA, 21 Aug, on moving export off the main thread:** *"idk what the pure talking about"* — the
+      ✅ **ANSWERED BY EZRA 27 Aug — he delegated it, and he is right about the safety net:**
+      > you’ve asked this before and I said do what you think is best, surely there’s no risk coz you
+      > can do this and if anything goes wrong just go back to the version of the code before you
+      > changed anything?
+      **He is correct that it is revertible — git makes any of this undoable, and I should stop
+      presenting reversibility as the reason to hesitate.** ⚠️ **But that was never the real cost.**
+      The cost is TIME: this is days of work on the 9,600-line compositor, and while it runs, nothing
+      else gets done.
+      🔴 **SO MY JUDGEMENT, which is what he asked for: NOT NOW — and the reason is #604.** His export
+      comes out with NO AUDIO, on both his phone and his PC, today. **Moving export to a worker makes
+      a working export smoother; it does nothing for an export that is silent.** Fixing the silence
+      first is worth more than making the broken thing run off the main thread.
+      ➡️ **Revisit the moment #604 and #215 are closed.** Recorded as HIS delegation, not as a refusal.
+      🗒️ **EZRA, 21 Aug, on moving export off the main thread:** *"idk what the pure talking about"* — the
       question was asked in jargon and that is my fault, not his. RE-ASKED in plain terms; his answer to
       the re-asked version is what counts. Do not treat this as declined.
       **ANSWERED BY EZRA, 21 Aug — he wants it, and his reasoning matters:** *"if there's a thing to
@@ -5661,6 +5695,14 @@ better still, keep working inside the turn rather than parking work for a later 
       **STATUS: 📌 NOTE — nothing to build**
       📋 **WHAT IS ACTUALLY LEFT, 24 Aug** (the tool kept flagging this entry as finished because every
       round below is ticked, so here it is in one place instead of buried in the history):
+      ✅ **ANSWERED BY EZRA 27 Aug:**
+      > idk what any of those are
+      **That is my fault, not his — I offered three pieces of jargon and asked him to pick.** Same
+      mistake as the "off the main thread" question he bounced on 21 Aug.
+      ➡️ **Do NOT re-ask as a list of names.** If it is ever worth raising again, show a PICTURE of what
+      each one does (#545: draw options, show him, let him point). **Until then this is not blocking
+      anything — it stays parked and the queue moves on without it.**
+      🗒️ *(the original ask)*
       · **Three NEW FEATURES, and each needs a word from you before I start** — **Corner Pin** (drag
         handles on the canvas), **LUT import** (a file picker + a colour lookup path) and **Curves** (a
         curve editor). These are proper builds of a day or more each, not rounds, and they need a new
@@ -20733,6 +20775,81 @@ re-opened #480, which I had marked done and had not fixed.
       when **#581 has a workable build using the default I had already recommended.** Self-created work
       does not get to jump his queue; if anything it should wait longer than his does.
 
+- [ ] **602 — The text/caption panel hides the text you are editing, and some options duplicate effects.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, annotated phone screenshot at v13.43.)
+      His words, verbatim:
+      > All of these options block you even seeing the text but they’re kinda pointless coz effects do
+      > the same thing so just the circled options
+      **THE SCREENSHOT:** caption/text editor at 380px — top bar (colour, align, Inter, 95 pt, Aa, tick),
+      the Text box, then **Style B/I · Spacing -2 · Line height 1.15 · Curve 0 · Animate None**, then
+      "+ Use as caption track" and "Just this caption clip / Detect speech". **The panel fills the whole
+      screen — the video preview is entirely off-screen below it.**
+      **CIRCLED IN RED:** Spacing, Line height, Curve, Animate.
+      1. [ ] **You cannot see the text while editing it.** Unambiguous, true whichever controls stay.
+      2. [ ] **Some duplicate what effects already do** — he points at the circled four.
+      ⚠️ **"so just the circled options" reads two ways** — remove JUST those four, or keep ONLY them.
+      **(a) is the stronger reading.** ⚠️ But Spacing and Line height were HIS OWN request (shipped
+      v12.31), so (a) reverses that — worth one line of confirmation, not a silent removal. **Curve and
+      Animate are the two genuinely duplicated by effects.**
+      ✅ **Clause 1 needs no decision and goes first: the panel must not cover the preview at 380px.**
+- [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
+      underlying complaint is legitimate.)
+      His words, verbatim:
+      > 4 none of the black and white filters actually make anything black and white STILL
+      >
+      > On top of that these filters in this menu still don’t work you fucking piece of shit
+      **THE SCREENSHOT:** the Colouring effect list with **eight effects applied**, badged 1-8:
+      Brightness · Contrast · Saturation · Hue Shift · **Grayscale(5)** · **Sepia(6)** · **Invert(8)** ·
+      Glow(7). The preview above is still full colour.
+      ✅ **MEASURED IMMEDIATELY, on a real IMAGE layer — and every piece works in isolation:**
+      | thing | result |
+      |---|---|
+      | Grayscale effect alone | **100,100,100 — spread 0** ✅ |
+      | Noir / Silver / Ink / Platinum filters | **spread 0** ✅ |
+      | their picker TILES | **spread 0** ✅ |
+      | a B&W filter on top of his 8-stack | **97,97,97 — spread 0** ✅ |
+      | **his 8-effect stack** | **spread 42 — COLOUR** ← what he sees |
+      🚨 **THE CAUSE: his own stack cancels itself.** Grayscale(5) is followed by **Sepia(6)** which re-adds
+      colour and **Invert(8)** which flips it — so Grayscale is fully undone by effects sitting after it.
+      **The effect is not broken; it is buried.**
+      🚨 **AND THE REAL DEFECT IS THAT NOTHING TELLS HIM.** The app already HAS dead-effect detection —
+      and **`FM.fxDeadOnLayer` returns `null` for that buried Grayscale**, i.e. it does not flag an effect
+      whose result a later effect completely destroys. **He tapped Grayscale, saw no change, and
+      reasonably concluded it was broken. Three reports now (579, 593, this) all trace to that silence.**
+      ➡️ **THE FIX IS THE WARNING, NOT THE EFFECT:** extend the dead-effect check to catch "this effect
+      has no visible result because of what follows it", and say so on the tile. ⚠️ **Do not "fix"
+      grayscale — it works.**
+      ❓ **One thing still unexplained and it must not be glossed:** he says B&W FILTERS still fail, yet a
+      filter on top of his stack measured mono here. **If it is still colour on his phone with a filter
+      applied, the UI apply path differs from the programmatic one and that is the next thing to open.**
+- [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC — and a single sound effect cut
+      **STATUS: 🟢 READY — nothing is stopping this**
+      in and out during playback.** (27 Aug, v13.43, export screenshot.)
+      His words, verbatim:
+      > still laggy, I added a video and it actually played fine then I tried adding one sound effect and
+      > it played good the first time but it was inconsistent and would cut in and out and then I exported
+      > and it was going fine but still no audio. I think my pc has this issue but when I finish exporting
+      > then press save video to camera role it just has no audio
+      **THIS IS THE MOST SERIOUS OPEN ITEM AND IT IS A REPEAT — see #215.** It has now been reported on
+      BOTH devices, which kills any "his phone is odd" theory.
+      🔑 **THE NEW DETAIL IS THE LEAD, and it is very specific:** *"when I finish exporting then press save
+      video to camera roll it just has no audio"*. **His screenshot shows the exporter saying "Encoding
+      audio + video… 60%", so the encoder BELIEVES it has an audio track.** So the loss is either at mux
+      time or on the SAVE/SHARE path, not at encode.
+      ➡️ **Three things to separate before touching anything, in this order:**
+      1. Does the exported Blob itself contain an audio track? (parse the mp4 boxes, or feed it back into
+         a `<video>` and read `mozHasAudio` / `webkitAudioDecodedByteCount` / an AudioContext tap.)
+      2. If YES, the bug is in the **save-to-camera-roll / share** step — which would explain why the
+         progress dialog looks perfect and the file is silent.
+      3. If NO, it is the muxer, and #215 already suspects the audio track never lands.
+      ⚠️ **Do not start by reading the export code.** Answering (1) takes minutes and splits the search in
+      half; guessing wrong costs a session on the wrong half.
+      **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
+      and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
+      not merge it** — the export half is the one he is blocked by.
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
@@ -20989,8 +21106,21 @@ re-opened #480, which I had marked done and had not fixed.
       so the decoration would finish exactly `PAD` px past the project's end. **MEASURE IT before
       removing it** — it may be deliberate (a nub so the bar is visible on a 0s project, which the
       `Math.max(x0 + 24, x1)` beside it also guards).
-      ✅ **MEASURED 27 Aug — I CANNOT REPRODUCE IT, AND THE NAMED SUSPECT IS DISPROVEN. Your call whether
-      it is still happening.**
+      🔴 **HE CONFIRMS IT IS STILL HAPPENING, 27 Aug — so my "cannot reproduce" was a MEASUREMENT MISS,
+      not an absent bug.**
+      > yes it’s overshooting, why don’t you check for urself
+      **His screenshot (Project 49, v13.43):** a 4 s project, one text clip 0→4 s, playhead parked at
+      the end. **The dashed add-row clearly finishes to the RIGHT of the teal clip below it.**
+      ⚠️ **What my measurement compared was `--ar-x1` against the clip element’s bounding rect, and
+      those agreed to 0.0 px at four zooms. So the geometry matches and the PICTURE still does not** —
+      which points at something the bounding box does not capture. **Prime suspect: the clip is drawn
+      with a BORDER-RADIUS, so its visible right edge sits inset from its box by the corner radius,
+      while the dashed row ends square.** That would read as a few px of overshoot at every zoom and
+      would never show up in a rect comparison.
+      ➡️ **NEXT: measure the CLIP’S RENDERED PIXELS, not its rect** — find the rightmost lit pixel of
+      the clip and compare that against the dashed edge. ⚠️ **Do not trust `getBoundingClientRect`
+      for a question about what the eye sees.**
+      🗒️ *(superseded)* ✅ **MEASURED 27 Aug — I CANNOT REPRODUCE IT, AND THE NAMED SUSPECT IS DISPROVEN.**
       At 380px, comparing where the dashed decoration ENDS against the right edge of a clip that runs to
       the project end:
       | case | decoration ends | clip ends | overshoot |
@@ -21267,7 +21397,7 @@ re-opened #480, which I had marked done and had not fixed.
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
       📌 **WHAT IS STILL LEFT (27 Aug), because `next.sh` keeps flagging this entry as "fixed but open":**
@@ -21361,7 +21491,21 @@ re-opened #480, which I had marked done and had not fixed.
              among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
              compounding is at least as likely as an exception. **Open the console; do not infer from the
              symptom.**
-      2. [ ] **ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
+      2. [ ] ✅ **ANSWERED BY EZRA 27 Aug — and he rejected all three of my options for a better one.**
+         His words, verbatim:
+         > I feel like there should be a way to optimise it so it looks really good like alight motion
+         > but doesn’t extremely slow down the app because it’s generating so much stuff that’s off
+         > screen, figure out a way to get both of best worlds
+         **I offered cap-the-repeats / minimum-tile-size / leave-it. He wants none of them: he wants the
+         LOOK kept and the COST removed** — specifically by not generating what is off screen.
+         ⚠️ **So do NOT cap the repeat count** — that is the quality-losing option he just turned down.
+         ➡️ **The work is CULLING, not clamping:** Extend tiles outward from the layer’s alpha bbox until
+         the frame is covered, and with `source: whole clip` it cuts from a plate that extends PAST the
+         frame. **Any copy whose destination rect does not intersect the frame is pure waste** and can be
+         skipped without changing a single visible pixel. Same for the tiles hidden behind opaque ones.
+         ✅ **Acceptance: identical output, fewer draws.** Count `drawImage` calls before/after and assert
+         the rendered frame is byte-identical — this one CAN be exact, unlike the warp work.
+         🗒️ *(superseded)* ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
          summary block) is still outstanding, and an unticked box is the only thing the tools read.**
          **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
              from the break. Both DISPLACE the whole layer, so they are very likely fighting over the same
@@ -21653,8 +21797,20 @@ re-opened #480, which I had marked done and had not fixed.
              Echo / Blend, from v2.49) currently starts on Pixel. ⚠️ **Changing a default does NOT change
              existing instances** — the renderer falls back to `legacy` for an absent key, so check which
              of those a saved project reads before touching it, or every clip he already made re-renders.
-      2. [ ] ✅ **RESOLVED 27 Aug — MOTION BLUR IS NOT BROKEN, IT IS SUBTLE. It is your call whether to
-         make it stronger, and this entry is waiting on you for that.**
+      2. [ ] ✅ **ANSWERED BY EZRA 27 Aug — make it NOTICEABLE and raise the CEILING.**
+         His words, verbatim:
+         > idc what the default is as long as it’s noticeable and also has a higher max
+         ➡️ **Two concrete changes, and he has pre-approved both:** (1) raise the DEFAULT `amount` until the
+         effect reads without touching a slider — measured, not guessed; (2) **raise the MAX** on that
+         slider so it can go further than it does today.
+         ⚠️ **A default change does NOT touch existing instances** — `legacy` is what an absent key reads
+         as, so every Motion Blur he has already placed keeps its current look (the same mechanism
+         clause 1 used at v12.94). Raising the MAX is safe for the same reason.
+         ✅ **Acceptance is the measured one already established:** effect-off 110 px · today’s Smear 117.
+         The new default must land clearly above 117, with the frame-pair assertion (`FM._mfRefVsA`) in
+         hand so the reading is trustworthy.
+         🗒️ *(superseded)* RESOLVED 27 Aug — MOTION BLUR IS NOT BROKEN, IT IS SUBTLE. It is your call whether to
+         make it stronger, and this entry is waiting on you for that.
          Measured on real footage moving **12.7 px/frame**, with the frame-pair assertion in hand
          (`FM._mfRefVsA`, so the kernel provably compared two DIFFERENT frames): **effect off 110 px ·
          Smear 117 (+7) · Echo 122 (+12).** Both styles work.
