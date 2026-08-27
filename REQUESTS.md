@@ -21546,6 +21546,30 @@ re-opened #480, which I had marked done and had not fixed.
 
       RELATED, and worth reading together: #611 just put the menu's blue ring on the HOME + orb. This is the
       TIMELINE + and a different element — do not conflate them, but the visual family should agree.
+
+      🎨 **OPTIONS DRAWN AND SENT, 27 Aug (at v13.56) — waiting on one letter from him.**
+      📐 **MEASURED FIRST, at 375px:** the button is `.tl-addrow-plus`, **21x21 with a 15px glyph**, in a
+      40px row. **That is small**, so every option below was drawn to survive at 21px and then checked
+      blown up — the #545 trap in reverse.
+      🔍 **What it is now:** a round cyan bead with a white specular highlight and a 10px glow. In a
+      timeline made of rounded-RECTANGLE clips it is the only circle on screen, which is exactly why it
+      reads as *"a random plus circle"*.
+      **A — A MINI CLIP (recommended).** A 26x18 rounded rect, tinted, with the plus inside. **It is the
+      shape of the thing it makes** — every clip in the timeline is that rectangle — so the button says
+      "add a clip here" without a word. Cleanest at 21px of the four.
+      **B — AN INSERT CARET.** The plus between two short vertical bars, borrowing the app's existing
+      trim marks (`[|` and `|]`). Reads as *insert at this point*. Lightest touch; least "button".
+      **C — A STACKED LAYER +.** Two offset rounded rects with a plus badge — the LAYER idea rather than
+      the clip idea. ⚠️ **Busiest at 21px**; it holds together but it is the one most at risk on his
+      screen.
+      **D — A DASHED SLOT.** Same dashed outline the add row itself wears, with the plus inside, so the
+      button belongs to the row instead of sitting on it. **The most cohesive; the least loud.**
+      📁 **Mockup: `613-plus-options.html`** — each option in a faithful mock of the add row at 380px,
+      then all five blown up 3x with smoothing off. **Sent to him.**
+      ➡️ **AMBIGUITY RESOLVED BY READING THE SCREENSHOT, not by asking a fourth question.** The arrows
+      POINT AT the + button; where an arrow starts is not what it indicates, and *"instead of the little
+      ball"* names the circle the plus sits in. **Reading (a).** If that is wrong he will see it
+      instantly in the picture, which is cheaper than another blocking question — he already has three.
 - [x] **614 — 🔴 Timeline swiping stops too soon when zoomed out — the fling must scale with zoom. CAUSE FOUND.**
       His words, verbatim:
       > Right now the swiping on the timeline stops too soon, when the project gets bigger and I'm zoomed out

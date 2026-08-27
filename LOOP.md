@@ -134,6 +134,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 ## STATE
 
 📍 **HANDOVER, 27 Aug, v13.56 — everything is pushed and the tree is clean. 997 tests green.**
+🎨 **#613 — FOUR OPTIONS DRAWN AND SENT, NOT BUILT.** The timeline + is `.tl-addrow-plus`, **21x21
+with a 15px glyph**, and it is the only CIRCLE in a timeline made of rounded rectangles — which is why
+it reads as random. Options: **A mini clip (recommended)**, B insert caret, C stacked layers, D dashed
+slot. All drawn to survive 21px, then checked blown up. **He picks a letter.**
+⚠️ **Its flagged ambiguity was resolved by READING, not by asking a fourth question** — the arrows point
+AT the + button, and "the little ball" names the circle. **He already has three open questions; adding a
+fourth for something the screenshot answers is not neutral.**
+📌 **FOUR THINGS NOW WAIT ON HIM:** #602 (which four options go) · #610 (A or B) · #613 (A/B/C/D) ·
+#624 (three readings, two opposite).
+
 🐛 **#611 WAS SHIPPED ONTO THE WRONG BUTTON AND NEARLY TICKED ON ITS OWN WRITE-UP. READ THIS ONE.**
 v13.49 put his blue ring on `.fab-aura`, inside `#add-fab` — the EDITOR's FAB, `display: none` on the
 home screen he photographed. The entry described the fix in convincing detail, `next.sh` flagged it as
