@@ -48266,6 +48266,70 @@
     }
   });
 
+  /* 609 — "The speed slider looks weird and broken". It was drawn 139,999px wide (((100000-1)/5) x 7),
+     and with will-change: transform that is a compositing layer far past the browser's maximum texture
+     size, so the notch gradient got downsampled into blurred smudges. The ruler only ever shows the
+     slice under the centre line, so past WIN it became a window that re-anchors as you scrub.
+     Two things need locking: that the pathological row is bounded, and — just as important — that an
+     ORDINARY row still takes the old path untouched. A "fix" that changed all 200 other scrub rows to
+     rescue one would be the worse bug. */
+  test('609: a huge-range scrub ruler is windowed, and an ordinary one is not', { item: '609' }, async function () {
+    const keep = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      const L = FM.scene.layers[0];
+      if (!L) throw new Error('could not make a layer to inspect');
+      L.start = 0; L.duration = 10;
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(260);
+      if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('speed');
+      await sleep(520);
+      const strip = document.querySelector('#inspector-panel .fx-scrub');
+      if (!strip) throw new Error('the Speed panel has no scrub row on screen — this test can no longer reach the control it is about');
+      const ruler = strip.querySelector('.fx-scrub-ticks');
+      if (!ruler) throw new Error('the scrub row has no ruler element');
+      const w = ruler.getBoundingClientRect().width;
+      /* The control that proves this row is the pathological one. If the range or q ever changes so
+         that the ruler is naturally short, this test would pass while asserting nothing — so it must
+         fail loudly instead of quietly measuring a row it was not written for. */
+      const q = +strip.dataset.q;
+      if (!(q > 0)) throw new Error('the speed row does not publish its notch quantum any more (data-q) — the seam this test reads is gone');
+      if (w < 200) throw new Error('the speed ruler measured ' + Math.round(w) + 'px, which is too short to be the case queue 609 is about — check the range and q before trusting this test');
+      if (w > 16000) throw new Error('the speed ruler is ' + Math.round(w) + 'px wide — queue 609: past the browser\u2019s texture limit it is downsampled and the notches render as blurred smudges. The windowing in tickStrip has stopped working.');
+      /* AND AN ORDINARY ROW MUST BE UNTOUCHED — same builder, short range, no windowing, no background
+         re-phasing. This is the half that stops a fix for one row becoming a regression in 200. */
+      /* ⚠️ THE CONTROL CATEGORY IS SEARCHED FOR, NOT ASSUMED. Written first as openCategory('transform'),
+         which yields ZERO scrub rows — measured — so the control would have thrown on its own setup
+         rather than on the thing it guards. 'element' is where the ordinary ones live today (three rows,
+         q of 20 / 20 / 2), but a rename should make this look elsewhere, not go red for the wrong
+         reason. */
+      let rows = [];
+      const cats = ['element', 'transform', 'position', 'effects'];
+      for (let i = 0; i < cats.length; i++) {
+        try { if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory(cats[i]); } catch (e) { continue; }
+        await sleep(420);
+        const found = [].slice.call(document.querySelectorAll('#inspector-panel .fx-scrub'))
+          .filter(function (st) { const r = st.querySelector('.fx-scrub-ticks'); return r && r.getBoundingClientRect().width < 4000; });
+        if (found.length) { rows = found; break; }
+      }
+      if (!rows.length) throw new Error('no ordinary (short) scrub row could be found in any inspector category, so the "ordinary rows are untouched" half proved nothing');
+      let checked = 0;
+      rows.forEach(function (st) {
+        const r = st.querySelector('.fx-scrub-ticks');
+        if (!r) return;
+        const rw = r.getBoundingClientRect().width;
+        if (rw >= 4000) return;                       // a wide one is legitimately windowed
+        checked++;
+        if (r.style.backgroundPositionX) throw new Error('an ordinary scrub row (' + Math.round(rw) + 'px) has had its notch gradient re-phased (' + r.style.backgroundPositionX + ') — windowing is leaking into rows that never needed it');
+      });
+      if (!checked) throw new Error('no short scrub row was found to act as the control, so the "ordinary rows are untouched" half proved nothing');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 582 clause 2 — "it's generating so much stuff that's off screen". It is not, and this is the
      assertion that keeps it that way. Extend tiles outward from the layer's bounds until the frame is
      covered; every copy whose destination rect misses the frame entirely would be pure waste. Measured

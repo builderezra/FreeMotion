@@ -133,19 +133,38 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.53 — everything is pushed and the tree is clean. 994 tests green.**
+📍 **HANDOVER, 27 Aug, v13.54 — everything is pushed and the tree is clean. 995 tests green.**
+✅ **#582 IS CLOSED — all three clauses.** Clause 2's answer was that the off-screen culling he asked for
+was already there: **464 tile copies, ZERO outside the frame**, now asserted by a test. Two further
+optimisations were tried and **rejected with numbers** (see the entry) so nobody spends a third tick.
+⚠️ **THAT TEST WENT RED TWICE AND ITS OWN CONTROLS CAUGHT BOTH — read this before writing another.**
+Both failures were the probe measuring nothing: a text layer whose font had not loaded, then a project
+size set AFTER the layer was created. Each time Tiles got handed a full-frame placeholder and returned
+early, and a bare count-the-draws assertion would have gone green on a render that never tiled.
+🧩 **TWO PATTERNS IN HIS NEW REPORTS, and neither is visible one entry at a time:**
+· **#626 + #627 + #631 are all "the end of the timeline is blank"** — sped-up clips, the jump-to-end
+  button, and save-frame-as-PNG. A clip runs `[start, start+duration)`, so landing on exactly the end is
+  the first instant nothing is there. **One boundary decision may fix all three. PROVE it first** —
+  render at `end − 1/fps`, `end`, `end + 1/fps` and read the lit-pixel count.
+· **#628 + #630 + #632 (+ the group in #627) are four GROUP reports in one sitting.** Anchor moves the
+  children, zoom pivots at a corner, and the head column wastes width. #628 and #630 are very likely one
+  bug — a group's anchor appears not to default to the centre (his screenshot: Anchor X 75%, Y 0%).
+
 **Shipped this stretch:** timeline fling now scales with zoom so a swipe feels the same at any zoom
 (614) · the effect plates are declared read-heavy and #582 clause 2's culling turned out to be already
 done and already exact (582) · the text options sheet no longer sits on the picture you are editing
 (602 clause 1) · a dead effect tile now says WHY in words a phone can read (603).
-🚨 **HE SENT TWELVE NEW REQUESTS IN ONE SITTING (615–626) — all logged verbatim, none started.**
+🚨 **HE SENT EIGHTEEN NEW REQUESTS (615–632) — all logged verbatim, none started.**
 White home screen (615) · the tacky blue add-row bars → a bottom-to-top pulse (616) · duplicate Element
 drafts you cannot finish deleting (617) · elements show ◇ and still tell you to save by hand (618) ·
 **templates just fork a project instead of offering the media swap — he pre-authorised the size of it:
 "I know it's a big thing to do idc"** (619) · magnet off should stop canvas snapping (620) · rounded
 corners change with size/rotation (621) · the speed jump buttons do not update the view rail (622) ·
 copy/paste graphs (623) · hold-to-select and the edit menu (624, THREE readings, ask before building) ·
-keyframes duplicating and refusing to delete (625) · a blank tail after speeding every clip up (626).
+keyframes duplicating and refusing to delete (625) · a blank tail after speeding every clip up (626) ·
+jump-to-end lands where the layer is invisible (627) · a group's anchor moves its children (628) · undo
+that removes the selected layer should close everything (629) · zooming a group pivots at a corner (630)
+· save-frame-as-PNG on the last frame is black (631) · wasted width in a group's head column (632).
 🎯 **#609 IS DIAGNOSED AND READY TO BUILD — the measurement is done, the fix is named.** The Speed
 ruler is drawn **139,999px wide** (`((100000−1)/5) × 7`), and with `will-change: transform` that blows
 past the browser's max texture size, so the notches downsample into blurred smudges. **Do not change the

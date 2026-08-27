@@ -724,7 +724,28 @@ window.FM = window.FM || {};
     const q = (o.q > 0) ? o.q : tickQuantum(o.min, o.max, o.step, o.unit);
     strip.dataset.q = String(q);   // the notch this row actually uses — read by the suite (queue 455)
     const ruler = el('div', 'fx-scrub-ticks');
-    ruler.style.width = ((o.max - o.min) / q) * TICK + 'px';
+    /* ⚠️ THE RULER IS A WINDOW ONCE IT GETS LONG (queue 609). Ezra: *"The speed slider looks weird and
+     * broken"*, with a screenshot showing a white wall at the far left and a scatter of blurred grey
+     * smudges where the notches should be.
+     * MEASURED at 380px: this element was **139,999px wide** inside a 299px row, its max wall mark at
+     * x 140,071. `((max−min)/q) × TICK` = `((100000−1)/5) × 7`. Both inputs are deliberate — the range
+     * is 0.01x–1000x (queue 184) and `q` is FORCED to 5 (queue 455) because letting it coarsen made the
+     * notch 1000% and he reported *"it goes up 10x at a time"*. So the two complaints are one trade,
+     * and picking a side just swaps which one he files.
+     * The blur is the giveaway: `.fx-scrub-ticks` carries `will-change: transform`, so a 140,000px
+     * element becomes a compositing layer far past the browser's maximum texture size and gets
+     * DOWNSAMPLED. Nothing was wrong with the maths; the browser could not paint the box.
+     * It never needed to be that long — only the slice under the centre line is ever visible. So past
+     * WIN px the element becomes a fixed window that re-anchors as you scrub. Everything else is
+     * untouched: `q`, `TICK`, the drag maths, the feel tuned by queues 455 and 253.
+     * ⚠️ **A SHORT RULER TAKES THE OLD PATH EXACTLY** — `base` stays 0, the transform is the old
+     * transform, and no background offset is written. Every ordinary row (Opacity 0–100 renders 140px)
+     * is byte-for-byte what it was, which is the point: this must not "fix" the pathological case by
+     * changing the 200 rows that were already right. */
+    const totalPx = ((o.max - o.min) / q) * TICK;
+    const WIN = 4000;                       // ~10 screens of ruler; far below any texture limit
+    const virt = totalPx > WIN;
+    ruler.style.width = (virt ? WIN : totalPx) + 'px';
     const marks = [];
     const mark = (v, isEnd) => {
       if (v == null || isNaN(v) || v < o.min - 1e-9 || v > o.max + 1e-9) return;
@@ -736,9 +757,36 @@ window.FM = window.FM || {};
     if (o.min < 0 && o.max > 0) mark(0);
     mark(o.dflt);                                               // the param's default
     if (o.unit === '°') for (let a = Math.ceil(o.min / 45) * 45; a <= o.max + 1e-9; a += 45) mark(a);
-    marks.forEach(m => { const d = el('div', 'fx-scrub-mark' + (m.end ? ' end' : '')); d.style.left = ((m.v - o.min) / q) * TICK + 'px'; ruler.appendChild(d); });
+    const markEls = marks.map(m => { const d = el('div', 'fx-scrub-mark' + (m.end ? ' end' : '')); d.__v = ((m.v - o.min) / q) * TICK; ruler.appendChild(d); return d; });
     strip.appendChild(ruler); strip.appendChild(el('div', 'fx-scrub-notch'));
-    const sync = v => { ruler.style.transform = 'translateX(' + (-((v - o.min) / q) * TICK) + 'px)'; };
+    const place = () => { markEls.forEach(d => { d.style.left = (d.__v - base) + 'px'; }); };
+    let base = 0;
+    place();
+    const sync = v => {
+      const off = ((v - o.min) / q) * TICK;
+      if (virt) {
+        /* Re-anchor the window so the centre line always has ruler either side of it, then move the
+           element the remaining sub-window distance. Clamped to the tape's real ends so the min/max
+           walls still arrive exactly where they always did. */
+        /* ⚠️ ROUNDED AFTER THE CLAMP, not before. `totalPx` is `((max−min)/q) × TICK` and is rarely a
+           whole number — the speed row's is 139,998.6 — so clamping a rounded value against it hands
+           back a FRACTIONAL base at the far end, the notch gradient gets re-phased by a fraction of a
+           pixel, and the ruler goes soft again exactly where this fix was supposed to sharpen it.
+           Measured before the round moved: background-position −23.6px at max. */
+        const want = Math.round(Math.max(0, Math.min(totalPx - WIN, off - WIN / 2)));
+        if (want !== base) {
+          base = want;
+          /* ⚠️ AND THE NOTCH PATTERN HAS TO BE RE-PHASED, or re-anchoring makes the notches JUMP.
+             They are two repeating gradients — 35px for every fifth notch, then 7px — and both repeat
+             from the element's own left edge, which has just moved. Offsetting each by `base` modulo
+             its own period puts every notch back at the same absolute place on the tape. TICK is 7 and
+             the comment on it already says it must match the 7px period in styles.css. */
+          ruler.style.backgroundPositionX = (-(base % 35)) + 'px, ' + (-(base % TICK)) + 'px';
+          place();
+        }
+      }
+      ruler.style.transform = 'translateX(' + (base - off) + 'px)';
+    };
     sync(o.read());
     let drag = null, pend = null, cur = o.read(), lastApplied = null;
     // Push dx SCREEN px through the ruler. `cur` carries the un-quantised position so a slow drag or a

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.54
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.55
 >
-> **State:** v13.54, 996 tests green, tree clean.
+> **State:** v13.55, 996 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21340,8 +21340,7 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **Use a clip that is tight on the left and open at the bottom:**
       `clip-path: inset(0 0 -600px 0)` on the ruler — clips anything left of the lane while letting the
       vertical line run down over the tracks.
-- [ ] **609 — The Speed slider looks weird and broken.** (27 Aug, phone screenshot at v13.44.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **609 — The Speed slider looks weird and broken.** ✅ **DONE v13.55.** (27 Aug, phone screenshot at v13.44.)
       His words, verbatim:
       > The speed slider looks weird and broken
       **THE SCREENSHOT:** the Speed panel with **Speed % = 41**. The track is a wide rounded box, and
@@ -21404,6 +21403,25 @@ re-opened #480, which I had marked done and had not fixed.
       checked on a NORMAL row too (Opacity 0–100 renders a 140px ruler and looks right today) —
       a fix that only helps the pathological case and blurs the ordinary ones is a worse bug.
       ⚠️ **#545: send him a picture of the fixed ruler at 380px before calling it done.**
+
+      ✅ **DONE v13.55 — and the fix is that the ruler stops pretending to be 140,000px long.**
+      Past **4000px** the element becomes a fixed WINDOW that re-anchors as you scrub, because only the
+      slice under the centre line is ever visible. **Nothing else moved:** the range is still
+      0.01x–1000x, `q` is still 5, `TICK` is still 7, and the drag maths is untouched — so the feel
+      tuned by queue 455 and queue 253 is exactly as it was.
+      📐 **Measured at 380px, before → after:** ruler **139,999px → 4,000px**. Typed values 1 / 100 /
+      1000 leave `base` at 0 and write **no** background offset — the OLD path, byte for byte. Only at
+      20,000 and 100,000 does it re-anchor, and the max wall still arrives exactly at the centre line.
+      **Screenshotted: crisp, evenly-spaced notches with a taller one every fifth**, where before it was
+      a white wall at the far left and a scatter of blurred grey smudges.
+      🐛 **One flaw caught in that verification and worth keeping:** `totalPx` is rarely a whole
+      number (this row's is 139,998.6), so clamping a rounded offset against it handed back a
+      **fractional** base at the far end — the gradient got re-phased by −23.6px and the ruler went soft
+      again precisely where the fix was meant to sharpen it. Rounding AFTER the clamp fixes it.
+      🔒 **The test has two halves and the second is the important one:** the speed ruler must stay under
+      the texture limit, AND an ORDINARY row must still take the old path with no background re-phasing.
+      **A fix for one row that changed the other ~200 would be the worse bug**, and the control fails if
+      no short row was found to check.
 - [ ] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
       **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug. A REPEAT — he has asked before and it has not been done.)
@@ -21978,6 +21996,7 @@ re-opened #480, which I had marked done and had not fixed.
       may round or clamp its own way, in which case #631 is its own bug and only #626/#627 share a cause.
 
 - [ ] **632 — Inside a group, the left of the timeline wastes a lot of space.** (27 Aug, phone
+      **STATUS: 🟢 READY — nothing is stopping this**
       screenshot at v13.53 — inside a group, three clips at 3.08x, with a wide empty strip circled in
       orange down the far left of the layer heads.)
       His words, verbatim:
@@ -21998,6 +22017,128 @@ re-opened #480, which I had marked done and had not fixed.
       **#630** (zooming a group pivots at a corner, anchor not findable) and the group in **#627**'s
       screenshots. **Groups are not landing for him.** These are separate bugs and stay separate, but
       whoever picks one up should read all four.
+
+- [ ] **633 — The add-layer row does not draw the line that separates it from the layers.** (27 Aug,
+      **STATUS: 🟢 READY — nothing is stopping this**
+      zoomed phone screenshot at v13.54 — the right-hand end of the timeline, the add row's dashed box,
+      and an orange circle around the gap where the separator should run.)
+      His words, verbatim:
+      > On the layer with the add layer it doesn’t show the line separating layers for some reason
+
+      1. [ ] **The add-layer row needs the same horizontal separator every other row has.**
+      📍 **His circle is on the empty span between the add row's dashed box and the ⋯/grip on the
+      right.** Every ordinary layer row has a line running the full width there; the add row's stops.
+      💡 **NEARLY CERTAIN CAUSE, and it is a known trade in this exact code:** the add row's
+      decoration was deliberately MOVED OFF the row and onto **`.tl-addrow::before`**, bounded by
+      `--ar-x0` (the head divider) and `--ar-x1` (**the project's END**) — queue 550/551, his own words
+      then being *"Make the add layer also end at the end of the project and not the end of the
+      screen"*. The row itself carries `border: 1px dashed transparent`. **So past the end of the
+      project there is nothing drawing a line, by design — and the separator went with it.**
+      ➡️ **The fix is to separate the two ideas that got merged:** the DASHED TINTED BOX should still stop
+      at the project's end (he asked for that), but the **1px row separator** should run the full width
+      like every other row. **Do not just extend `::before`** — that puts back the outline he asked to
+      lose. **A different, full-width rule for the separator only.**
+      ⚠️ **Check the EMPTY-project state too** — `#timeline-panel.tl-empty-start .tl-addrow--empty::before`
+      sets `content: none`, so whatever carries the separator must not live on that pseudo-element or it
+      vanishes there as well.
+      ⚠️ **Verify at 380px against a neighbouring layer row**, and measure both lines' x-extents rather
+      than eyeballing — the whole complaint is that one stops short of the other.
+
+- [ ] **634 — 🔴 Copy Background + Pixelate crams the whole project into the top-left corner.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, phone screenshot at v13.53 — a "Square" layer with **Copy Background** and **Pixelate**
+      stacked, and a pixelated miniature of the entire project sitting in the top-left of the layer.)
+      His words, verbatim:
+      > For some reason when I use copy background and pixelate it just copy’s the project into the top left corner
+
+      1. [ ] **Copy Background followed by Pixelate must not shrink the copy into a corner.**
+      📍 **The screenshot is precise about the symptom:** the pixelated copy is a SMALL version of
+      the whole comp, anchored at the layer's top-left, with the layer's real content drawn at full size
+      below it. So the copy is being drawn at the wrong SCALE and the wrong ORIGIN, not merely offset.
+      💡 **HYPOTHESIS to prove, not assume — and this app has an exact precedent for it.** Copy
+      Background grabs what is beneath the layer, which means it works on a plate, and effects that
+      follow it work in **plate pixels**. If Pixelate (or the plate hand-off) treats a plate-sized source
+      as if it were layer-sized, you get precisely this: the whole comp scaled down into the origin
+      corner. **The `plateScale` / `__fmRS` / `__fmOX`,`__fmOY` machinery in js/compositor.js is where
+      that contract lives** — `nestedPlate` exists because a plate's pixel (0,0) is NOT the comp's (0,0).
+      ➡️ **Reproduce it first with the two effects in that order, then with the order REVERSED.** #582
+      proved that effect ORDER changes everything for plate-based effects, and the same test will say
+      whether this is Copy Background's output or Pixelate's reading of it.
+      ⚠️ **Check Copy Background with OTHER pixel effects too** (blur, mosaic-like ones). If it is the
+      hand-off rather than Pixelate, several effects are wrong and only this pair has been noticed.
+
+- [ ] **635 — Pinch / Bulge's sliders jump too much, too fast — make them gradual.** (27 Aug, at v13.55.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Pinch bulges slider jumps too much too fast, make its sliders more gradual
+
+      1. [ ] **The Pinch/Bulge sliders must move in finer increments.**
+      🔑 **THIS IS THE SAME MECHANISM AS #609 AND THE OLD SPEED COMPLAINT — read all three together,
+      because a general fix may serve all of them.** `tickQuantum(min, max, step, unit)` in
+      js/inspector.js coarsens the notch **so a ruler never exceeds ~100 notches**. That is right for a
+      tight parameter and wrong for a wide one: on the speed row it took the notch to **1000%**, and he
+      reported *"the speed slider goes WAY too fast, it goes up 10x at a time"* (queue 455, fixed there
+      by FORCING `q` to 5 for that one row).
+      ➡️ **So the likely finding is that Pinch/Bulge has a wide range and is getting a coarse `q` for the
+      same reason.** **Measure it: read `data-q` off the row** (the strip publishes it — queue 455 put it
+      there for exactly this) **and compare against the parameter's real `step`.** A `q` many times the
+      step is the bug, in a number.
+      ⚠️ **`q` is not the only lever, and queue 253 is the reason to check both.** Slowing the drag rate
+      alone changes nothing you can land on, because the applied value snaps to `q` — measured then at
+      "a 10px drag moved the value by exactly 0". The answer there was `fine` mode snapping to the
+      parameter's REAL step instead of the display quantum. **If Pinch/Bulge already has that, the fault
+      is `q`; if it does not, that is the fix.**
+      ⚠️ **Do NOT hard-force a constant `q` for this row the way queue 455 did for speed** unless the
+      general fix is genuinely unavailable — that is how the app ends up with a special case per row.
+      **A rule that derives a sane notch from the range is worth more than a third exception.**
+
+- [ ] **636 — A NEW LOADING INTRO, from a video he made in FreeMotion itself — with a way back.**
+      (27 Aug, at v13.55. He attached `Project_42.mp4`.)
+      His words, verbatim, in full (this message also covers **#637**):
+      > Make this the new loading intro, make sure there’s a way to switch back incase, it should work good with the new white background
+      >
+      > Also try switching the logo to the image I sent. Rate the logo as well for how good you think it is
+
+      1. [ ] **Make his video the loading intro.**
+      2. [ ] **A way to switch back, "incase".** ⚠️ **He asked for the escape hatch himself, so it is a
+             requirement, not a nicety — and by the standing rule it must be STRUCTURAL, not a note.**
+             The old `splash.mp4` stays in the repo and the choice is one flag, so reverting is one word
+             rather than a re-import.
+      3. [ ] **It has to work with the WHITE background** — which is **#615**, and is NOT BUILT YET.
+             ⚠️ **The current splash is built for pure black on purpose:** *"The video sits on PURE BLACK
+             and nothing else: its own edges are #000, so the letterbox disappears and the mark floats
+             instead of playing inside a visible square."* **His new video is also black-edged**, so on a
+             white home screen it will read as a black rectangle unless something changes — either the
+             video gets a white/transparent ground, or the splash keeps its black and the FADE handles
+             the hand-off to white. **This clause cannot be finished before #615 exists**, and pretending
+             otherwise would ship a black box onto a white page.
+      📦 **THE ASSET IS ALREADY IN THE REPO, staged and unwired: `splash-v2.mp4` (860 KB)** — copied
+      in the moment he sent it, because the upload folder is temporary and losing his file would mean
+      asking him for it again. `splash.mp4` (649 KB) is untouched beside it.
+      📍 **What the existing splash already does, so none of it gets rebuilt:** once per session via
+      `sessionStorage`, skipped on `prefers-reduced-motion`, tap/Esc/Enter/Space to skip, a poster that
+      is the video's exact first frame, autoplay-refusal falls back to the poster, a video error
+      dismisses instantly, asset urls assigned only when it actually shows, and a two-speed dismissal
+      (a ~900ms fade on a natural end, a 280ms cut when skipped) that came from his own words at v4.92.
+      ➡️ **A NEW POSTER IS REQUIRED, not optional** — the current `splash-poster.png` is the OLD video's
+      first frame. Wire the new video without it and the splash flashes the old mark first.
+      ⚠️ **Measure the new video before wiring it:** duration, dimensions and first-frame colour. The
+      timing of the fade is tied to the mark "still settling", so a different length changes the feel.
+
+- [ ] **637 — Try the new logo image, and rate it.** (27 Aug, at v13.55. Attached, and quoted in full
+      in **#636** above.)
+      His words, verbatim:
+      > Also try switching the logo to the image I sent. Rate the logo as well for how good you think it is
+
+      1. [x] **Rate it — ANSWERED IN CHAT at v13.55**, with the mark rendered at the sizes it actually
+             ships at rather than judged at full size. Verdict and the reasoning are in the reply; the
+             short version is a **7/10** — strong, distinctive silhouette, let down by the bottom-right
+             junction and by how it closes up small.
+      2. [ ] **Actually swap the logo in.** ⚠️ **Where it appears has to be enumerated first** — the home
+             header wordmark, the splash, the PWA manifest icons and the favicon are different files at
+             different sizes, and #545's trap is exactly this: *"a 24px icon that only reads at 64px"*.
+      ⚠️ **#545 APPLIES:** render it at 24px and at the app-icon size, send him the picture, and let him
+      decide — do not swap a brand mark on his behalf on the strength of "he sent it".
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
