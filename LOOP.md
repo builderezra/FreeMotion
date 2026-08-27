@@ -315,7 +315,18 @@ blaming code that turned out to be fine.
 ⚠️ **The fix is SHIPPED and is not harmful** — no holes, static frames untouched, suite green. But **the
 "110 → 117" improvement I told him about is currently supported by only one of two regimes.**
 
-⚡ **v13.40 — Smear now REPLACES the moving object instead of veiling it. #578 STAYS OPEN.**
+↩️ **v13.40 IS REVERTED (v13.42). IT BOUGHT ONE PIXEL.** A/B with `FM.setTime(t)` on every step:
+pre-fix none 110 / Smear 111 / Echo 135; post-fix none 108 / Smear 110 / Echo 135. **The 110 → 117 was
+the corrupted probe.** Reverted surgically — the v13.41 `_tilesLastBB` hook is untouched.
+🔑 **THE ONE INSTRUMENT FLAW BEHIND EVERY WRONG MOTIONFLOW CLAIM TODAY, and there were four:** an
+offscreen walk while the app's rAF render paints the SAME layer at a stale `FM.time` more than 0.35 s
+away, resetting the kernel cache each step. **ALWAYS `FM.setTime(t)` BEFORE `renderScene(ctx, scene, t)`
+when measuring ANY temporal effect** (motionflow, framestutter, temporaldenoise, timewarp).
+✅ **What survives, measured honestly:** Smear does ~nothing at its default (+1 px on a 12.7 px/frame
+subject) — **his "kinda buns" is REAL and 578 clause 2 is still open** — while **Echo works well**
+(135 vs 110), which is the exact opposite of what I reported earlier today.
+
+🗒️ **(reverted) v13.40 — Smear now REPLACES the moving object instead of veiling it.**
 It drew the sharp frame at full opacity then laid ghosts at `min(0.5, 1.6/samples)` = 0.16 over the top,
 so at the default nothing read: **111 px wide vs 110 with the effect OFF.** The base is now erased in
 proportion to the smear's own mask (capped 0.9, so never a hole) and the ghost alpha is solved from the
