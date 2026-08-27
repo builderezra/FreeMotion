@@ -5654,8 +5654,21 @@ better still, keep working inside the turn rather than parking work for a later 
         the filter-string path and instead draw TWICE onto the plate — sharp at full alpha, then the
         blurred copy over it at `globalAlpha = mix`, which is exactly the linear blend
         `sharp*(1-mix) + blurred*mix`. The plate machinery for that already exists.
-        ⚠️ **Not started deliberately: it changes how a very widely used effect is DISPATCHED, so it
-        wants a full verify cycle rather than the tail end of a long session.** Est. one focused tick.
+        ❌ **MY "one focused tick" ESTIMATE WAS WRONG — corrected 27 Aug after reading both draw sites.**
+        The plan (draw the layer sharp, then blurred at `globalAlpha = mix`) needs the CONTENT draw to
+        happen twice. At the main site (`ctx.filter = effectFilter(...)`, js/compositor.js:11853) the
+        content draw is not one call: the code's own comment says the wash *"must land on the finished
+        layer whichever of the EIGHT WAYS it draws"*. So a second pass means either wrapping all eight
+        or hoisting them behind a helper — a refactor of the most load-bearing function in the app, not
+        a two-line branch.
+        ✅ **The other site is trivially easy and is worth knowing:** line ~12424 draws a finished plate
+        with `ctx.filter = hasCss ? filter : 'none'`, so a second `drawImage` at `globalAlpha = mix`
+        would work there in two lines — **but that is the ADJUSTMENT-layer path, not the normal one.**
+        📋 **So the honest options are: (a) implement mix ONLY where a plate already exists and accept
+        it not applying to a plain layer — inconsistent, probably worse than nothing; (b) route blur out
+        of `CSS_FX` into the pixel path when `mix < 1`, which is self-contained but pays a full-frame
+        pixel pass; or (c) the eight-way refactor.** ⚠️ **(b) is the one to price up first**, and it is
+        still a whole session's work with a verify cycle, not a tick.
         📍 **THE SEAMS, so the next attempt is a build and not a third read-through:** the string is
         assembled in `effectFilter()` at **js/compositor.js:1511** (blur's case is line 1533), and it is
         applied to a context at exactly **two** draw sites — **line 11828** (`ctx.filter = effectFilter(...)`,
