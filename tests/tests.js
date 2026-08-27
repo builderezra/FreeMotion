@@ -48266,6 +48266,49 @@
     }
   });
 
+  /* 613 — "keep the plus shape but instead of the little ball do something more fitting". He picked
+     option A: a mini CLIP, because the bead was the only circle on a screen made of rounded rects.
+     Three things need holding, and the middle one is the regression guard: the big "Tap here to start
+     creating" orb SHARES this class, is a separate design he already likes, and is not what he
+     circled — so it has to keep its circle while the slim row loses it. */
+  test('613: the slim add-row + is a clip, the empty-state orb is still a circle', { item: '613' }, async function () {
+    const keep = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        // --- the EMPTY project: the big orb must still be round ---
+        FM.scene.layers.length = 0;
+        FM.selectLayer(null); FM.refreshAll();
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(420);
+        if (!document.querySelector('.tl-addrow--empty')) throw new Error('an empty project is not showing the empty add row, so the control half of this test proved nothing');
+        const big = document.querySelector('.tl-addrow-plus');
+        if (!big) throw new Error('no .tl-addrow-plus in the empty state');
+        const bigR = getComputedStyle(big).borderRadius;
+        if (!/50%/.test(bigR)) {
+          throw new Error('the big start-a-project orb has border-radius ' + bigR + ' — queue 613 changed the SLIM row\u2019s button to a rounded rect and this one shares the class, so it must restore 50% explicitly. He circled the slim row, not this.');
+        }
+        // --- with layers: the slim row, which is the one he circled ---
+        FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
+        FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+        FM.selectLayer(null); FM.refreshAll();
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(420);
+        if (document.querySelector('.tl-addrow--empty')) throw new Error('still in the empty state with layers present — this test never reached the slim row');
+        const p = document.querySelector('.tl-addrow-plus');
+        if (!p) throw new Error('no .tl-addrow-plus in the slim row');
+        const cs = getComputedStyle(p), r = p.getBoundingClientRect();
+        if (/50%/.test(cs.borderRadius)) throw new Error('the slim add-row + is still a circle (border-radius ' + cs.borderRadius + ') — queue 613: "instead of the little ball do something more fitting"');
+        if (!(r.width > r.height + 3)) throw new Error('the slim add-row + measures ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — option A is a CLIP shape, wider than it is tall, so it reads as the thing it makes');
+        /* HIS ONE EXPLICIT KEEP. "keep the plus shape" — a redesign that dropped the glyph would be
+           the opposite of what he asked for, and nothing else here would notice. */
+        if (!p.querySelector('svg path')) throw new Error('the plus glyph is gone from the add-row button — he asked to KEEP the plus and change only what is around it');
+      });
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 615 — the white home screen. Two things need locking, and the FIRST is the one he asked for:
      "make sure there's a way to switch back incase". A look that cannot be switched off is not what
      he agreed to try, so the default and the switch are asserted before anything about the colours. */

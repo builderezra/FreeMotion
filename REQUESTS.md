@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.57
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.58
 >
-> **State:** v13.57, 999 tests green, tree clean.
+> **State:** v13.58, 1000 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21519,8 +21519,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       STARTING POINT: find the notes-menu flip animation first — it is the one he LIKES and the family should
       be derived from it, so read it before designing anything.
-- [ ] **613 — The add-layer “+” should keep its plus but lose the plain circle.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **613 — The add-layer “+” should keep its plus but lose the plain circle.** ✅ **DONE v13.58 — option A, his pick.**
       His words, verbatim:
       > Instead of a random plus circle here, keep the plus shape but instead of the little ball do something
       > more fitting
@@ -21566,13 +21565,24 @@ re-opened #480, which I had marked done and had not fixed.
       button belongs to the row instead of sitting on it. **The most cohesive; the least loud.**
       📁 **Mockup: `613-plus-options.html`** — each option in a faithful mock of the add row at 380px,
       then all five blown up 3x with smoothing off. **Sent to him.**
-      ✅ **HE PICKED, 27 Aug. His words, verbatim:**
+      ✅ **DONE v13.58 — option A, the mini clip. HE PICKED IT. His words, verbatim:**
       > Do A
       ⚠️ **Logged here because #613's options were the ones he had just been sent** — but **#610 also
-      offered an "A"**, and both had A as the recommendation. **Taken as #613; #610 is asked again in
-      the reply rather than assumed.** ➡️ **NEXT TICK: build A — the mini clip.** A 26x18 tinted rounded
-      rect with the plus inside, replacing the round bead on `.tl-addrow-plus` (21x21, 15px glyph).
-      **Keep the plus glyph itself — that was his one explicit "keep".**
+      offered an "A"**, and both had A as the recommendation. **Taken as #613; #610 is asked again rather
+      than assumed.**
+      ✅ **BUILT v13.58.** The bead is gone; the button is a **26x18 rounded rect** (was 21x21 circle),
+      tinted `rgba(90,199,237,.18)` with a 1.6px `#7fd8ff` rim, **and the plus glyph is untouched** —
+      his one explicit *keep*. It now matches the clips it sits above and the layer thumbnails beside
+      it, instead of being the only circle on the screen.
+      ⚠️ **THE BORDER IS AN INSET SHADOW, not a `border`** — a real border would either grow the box and
+      shift the head-column centring that queue 417 fixed, or eat 1.6px of an 18px-tall shape.
+      🚨 **AND THE BIG EMPTY-STATE ORB SHARES THIS CLASS.** *"Tap here to start creating"* is a
+      separate design he already likes (queue 326) and is **not** what he circled — but it inherits from
+      the base rule, so without an explicit `border-radius: 50%` it silently became a rounded SQUARE.
+      **Restored explicitly, and the test asserts it**, because that is a change he never asked for
+      arriving as a side effect of one he did.
+      📐 **Verified at 375px, both states:** empty → 64x64, radius 50%, unchanged; with layers → 26x18,
+      radius 5px, plus path present.
 
       ➡️ **AMBIGUITY RESOLVED BY READING THE SCREENSHOT, not by asking a fourth question.** The arrows
       POINT AT the + button; where an arrow starts is not what it indicates, and *"instead of the little
@@ -22286,6 +22296,7 @@ re-opened #480, which I had marked done and had not fixed.
       decide — do not swap a brand mark on his behalf on the strength of "he sent it".
 
 - [ ] **638 — Replace the "FreeMotion" TEXT logo with the version where the mark IS the M.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       (27 Aug, at v13.57. He sent a Claude Design project link.)
       His words, verbatim:
       > https://claude.ai/design/p/b48a1e06-66fd-4c43-976b-d1d40982d96e?file=support.js&via=share
@@ -22297,7 +22308,32 @@ re-opened #480, which I had marked done and had not fixed.
       1. [ ] **Take the variant where the abstract mark stands in for the M** in "FreeMotion" — i.e. a
              lockup, not a separate icon beside a word.
       2. [ ] **Put it exactly where the current text logo is** — the home screen's top-left wordmark.
-      🔗 **THE LINK: TRIED, AND IT RETURNS `HTTP 403 Forbidden`.** A Claude Design project is behind
+      ✅ **HE SENT THE ARTWORK — `FreeMotion_logo_design.pdf`, 27 Aug. The asset is extracted and ready;
+      only the BUILD is outstanding, and it waits its turn in the queue.**
+      📄 **WHAT THE PDF CONTAINS — four variants, one page:** **PRIMARY** (the horizontal lockup,
+      mark-as-M, large) · **PRIMARY — SMALL** · **STACKED** (mark above `FREEMOTION`) · **APP ICON** (the
+      mark alone in a rounded-square tile). ⚠️ **It says "Page 1 of 2"** — a second page was not
+      rendered here (`sips` rasterises page 1 only, and there is no poppler on this machine). **Worth
+      asking what is on page 2 before the app-icon work**, since that is where a spec sheet usually puts
+      clear-space and minimum sizes.
+      ➡️ **He asked for the PRIMARY one** — *"take the one that has the logo as the M"*.
+      🔧 **EXTRACTED, and how, so it can be redone:** the PDF is vector, so `sips -s format png
+      --resampleWidth 3400` rasterises it properly (3400x4811) rather than upscaling a thumbnail. The
+      lockup's own box is **2318x332** in that render; cropped, converted to **white-on-transparent** by
+      taking ALPHA from luminance (the art is white on near-black), and resampled to **650x96** — 4x the
+      24px display height, which gives a 3x phone headroom.
+      📁 **`brand-wordmark-m.png` is in the scratchpad, NOT yet in the repo**, because the build waits
+      its turn.
+      ✅ **AND IT DROPS IN WITHOUT A LAYOUT FIGHT — measured, because at 375px the header is tight.**
+      Current asset `brand-wordmark.png` is 421x64, aspect 6.58, rendering **158px** wide at 24px tall.
+      The new lockup is aspect **6.77 → 162px**. **Four pixels wider.** No reflow risk with the search,
+      Select and cog buttons.
+      ⚠️ **STILL TO DECIDE WHEN IT IS BUILT, and neither is visible from the filename:** the **`▶` glyph**
+      (`.hm-brand-mark`) sitting left of the wordmark is probably redundant once the mark is INSIDE the
+      word, and the moving specular **glint** is aimed at *"the F's top-left corner"* (styles.css:5703)
+      — **the new lockup moves that corner.**
+
+      🔗 **THE LINK: TRIED FIRST, AND IT RETURNED `HTTP 403 Forbidden`.** A Claude Design project is behind
       his own login, so nothing here can read it. He anticipated exactly this — *"Lmk if that link
       doesn't help"* — so **the answer is to ask him for the ASSET, not to guess at the artwork.**
       ➡️ **What would unblock it, easiest first:** a screenshot of the lockup · or an SVG/PNG export ·

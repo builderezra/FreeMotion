@@ -7529,6 +7529,10 @@ body.fm-pushing #toast { z-index: 213; }
    The glow underneath picks up the same violet so the halo is not arguing with the face. */
 .tl-addrow--empty .tl-addrow-plus {
   width: 64px; height: 64px;
+  /* ⚠️ THE CIRCLE IS RESTORED EXPLICITLY (queue 613). The base rule above is a 5px rounded rect now,
+     and this orb inherits from it — without this line the big start-a-project button silently became a
+     rounded SQUARE. He circled the slim row's bead, not this. */
+  border-radius: 50%;
   color: #06121c;
   position: relative; isolation: isolate;
   background: radial-gradient(120% 100% at 30% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 55%);
@@ -7611,17 +7615,29 @@ body.fm-pushing #toast { z-index: 213; }
    tiny plus button that's on the tap to create layer have some nice colours to it like the old plus
    button did". The old one is the add FAB, which is glass — a caught highlight over a tinted fill — so
    this is the same idea at 21px rather than a new invention. */
+/* A MINI CLIP, NOT A BEAD (queue 613, his option A). Ezra: *"Instead of a random plus circle here,
+   keep the plus shape but instead of the little ball do something more fitting."*
+   **The plus itself is untouched — that was his one explicit KEEP.** Only the thing around it changed.
+   WHY A ROUNDED RECTANGLE: it is the shape of what the button MAKES. Every clip in the timeline is a
+   rounded rect, and the bead was the only circle on the screen, which is exactly what made it read as
+   "random". Now the button is a small empty clip with a plus in it, so it says "add a clip here"
+   without a word — which also answers a thing he did not ask about, since "Tap to add a layer" is the
+   only label it ever had.
+   ⚠️ THE BOX IS 26x18 AND THE BORDER IS AN INSET SHADOW, not a `border`: a real border would either
+   grow the box (and shift the head column's centring, queue 417) or eat 1.6px of an 18px-tall shape.
+   ⚠️ AND THE EMPTY STATE MUST PUT ITS CIRCLE BACK — see the override below. The big "Tap here to start
+   creating" orb shares this class and is a deliberate, separate design he already likes (queue 326);
+   it is NOT what he circled, and turning it into a rounded square would be answering a question he did
+   not ask. */
 .tl-addrow-plus {
-  flex: 0 0 auto; width: 21px; height: 21px; border-radius: 50%;
+  flex: 0 0 auto; width: 26px; height: 18px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
-  color: #04121a;
-  background:
-    radial-gradient(120% 100% at 30% 18%, rgba(255,255,255,.85), rgba(255,255,255,0) 58%),
-    linear-gradient(150deg, #9beeff 0%, #5cc6ee 46%, #35a7dd 100%);
-  box-shadow: 0 0 10px rgba(90, 199, 237, .5), inset 0 0 0 1px rgba(255,255,255,.35);
+  color: #cfeeff;
+  background: rgba(90, 199, 237, .18);
+  box-shadow: inset 0 0 0 1.6px #7fd8ff;
 }
-.tl-addrow-plus svg { width: 15px; height: 15px; display: block; }
-.tl-addrow-plus svg path { stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; fill: none; }
+.tl-addrow-plus svg { width: 13px; height: 13px; display: block; }
+.tl-addrow-plus svg path { stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; fill: none; }
 .tl-addrow-label { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
 /* The ≡ grip, in the same place every other row keeps its one (queue 294, clause 6). Sticky to the
    RIGHT edge so it is reachable however far the timeline is scrolled — the row spans the whole

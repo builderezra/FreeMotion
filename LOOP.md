@@ -133,7 +133,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.57 — everything is pushed and the tree is clean. 999 tests green.**
+📍 **HANDOVER, 27 Aug, v13.58 — everything is pushed and the tree is clean. 1000 tests green.**
+✅ **#613 DONE — his pick, option A.** The timeline + is a 26x18 mini CLIP instead of a bead, because a
+circle was the only one on a screen of rounded rects. **The plus glyph is untouched — his explicit keep.**
+⚠️ **THE PATTERN WORTH CARRYING: the big empty-state orb SHARES `.tl-addrow-plus`**, so changing the
+base rule silently turned a design he likes into a rounded square. **It restores `border-radius: 50%`
+explicitly and a test asserts it.** When a class is shared by two designs, changing one is two changes.
+📌 **STILL WAITING ON HIM:** #602 (which four options go) · **#610 (A or B — his "Do A" was taken as
+#613, and both offered an A)** · #624 (three readings) · **#638 the logo art** — the Claude Design link
+**403s from here**, so he has to send a screenshot, an export, or the SVG.
+
 ✅ **#615 BUILT — the white home screen, OFF BY DEFAULT, switch in Settings.** All five clauses done.
 The escape hatch he led with is a SETTING, not a code flag: he cannot edit code, so a switch only Claude
 can reach is not a way back. Theme scoped to `html[data-home="light"]`, so `dark` is the app he had.
