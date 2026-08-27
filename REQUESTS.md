@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.41
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.42
 >
-> **State:** v13.41, 990 tests green, tree clean.
+> **State:** v13.42, 990 tests green, tree clean.
+>
+> **↩️ I TOLD YOU THREE TIMES THAT I HAD FIXED MOTION BLUR. I HAD NOT — and I have taken it back out.**
+> The "1.5x wider, softer edge" I reported was measured with a broken test: my measuring code was
+> drawing frames while your app was ALSO drawing the same layer at a different moment, which wipes the
+> memory this effect needs. Re-measured properly, the change was worth **one pixel**. So it is reverted
+> rather than left in your app as machinery that does nothing.
+> ⚠️ **Your original complaint is still real and still open:** Smear genuinely does almost nothing at its
+> normal setting. **Echo, on the other hand, works well** (a clear trail). So whatever the fix is, it was
+> not that one. **Nothing you make looks different because of this** — it never did.
 >
 > **🧩 TILES + SHAKE (#582) — I found why it looks bad, and NOTHING IS BROKEN, so this one is your call.**
 > Tiles "Extend" repeats your layer's content outward to fill the frame. Your text line is only ~50px
