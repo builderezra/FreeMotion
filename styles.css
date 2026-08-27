@@ -3949,6 +3949,16 @@ body.white-chrome #time-readout:active {
      timecode readout redraws every frame. Two clocks, 13s and 19s, exactly as before. */
   .fab-aura {
     position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    /* THE BLUE RING, borrowed from this menu rather than invented (queue 611). Ezra: "Put a little blue
+       ring around the add button that's got the same style and glow as everything else in this menu".
+       The values are lifted verbatim from `.hm-card.is-pinned` above — ring rgba(127,216,255,.30), lift
+       rgba(127,216,255,.7) — so the orb is rimmed in the same light blue as the pinned project cards
+       and the tab row, instead of a near-miss shade that reads as a mistake.
+       ⚠️ It goes on .fab-aura, NOT on #add-fab: the button box is `border-radius: 0` (it is a square box
+       holding a round orb), so a ring there would draw a SQUARE around a circle. The aura is the circle.
+       ⚠️ box-shadow, not border: a border would shrink the aura inside the 64px box and pull the
+       gradient away from the glass edge that #add-fab's filter chain derives its rim from. */
+    box-shadow: 0 0 0 1.5px rgba(127, 216, 255, .30), 0 8px 22px -14px rgba(127, 216, 255, .7);
     background:
       radial-gradient(58% 58% at 34% 38%, rgba(74, 236, 208, .95), rgba(41, 217, 187, .34) 54%, transparent 78%),
       radial-gradient(50% 50% at 70% 34%, rgba(150, 122, 255, .95), rgba(122, 92, 255, .34) 50%, transparent 76%),

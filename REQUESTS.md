@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.48
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.49
 >
-> **State:** v13.48, 990 tests green, tree clean.
+> **State:** v13.49, 990 tests green, tree clean.
+>
+> **✅ The + button now has the blue ring** — and it is the SAME blue as your pinned cards, copied from
+> them rather than picked by eye, so it cannot be slightly off.
+> ⚠️ **One honest note: I could not get the + on screen here to photograph it**, so I have confirmed the
+> styling is right but not seen it rendered. **If it looks wrong, say so and it is a one-line change.**
+> ❓ **Two things still waiting on a word from you:** which direction the layer drag handle looks
+> off-centre (left/right/high/low), and whether that saved camera-roll video has sound when you open it
+> in another app. **That second one is the last unknown in your export bug.**
 >
 > **🔎 Your black-and-white complaint: I have now measured every part of it, and nothing is broken.**
 > The effects work, the filters work, the picker tiles work, and the live preview works and updates on
@@ -1331,6 +1339,11 @@ better still, keep working inside the turn rather than parking work for a later 
       toast"* but **"what does the FILE say — .mov or .mp4?"** His camera roll shows it. **A .mov points
       at the container, an .mp4 at the codec, and the two need different fixes.**
 
+      ✅ **THE DIAGNOSTIC HALF SHIPPED v13.44** — a blank clip now reports its real name, MIME type and
+      what `canPlayType` says, instead of asserting H.265 on a path where nothing had confirmed it.
+      ⚠️ **REMAINS OPEN, but there is nothing left to BUILD: it waits on the next time it happens to
+      him.** The app will now say what the file is; until he hits it again there is no new evidence and
+      no amount of work here creates any. **Your call whether it is worth chasing further.**
       ✅ **ANSWERED BY EZRA 27 Aug — and the answer retires the question:**
       > I have no idea
       **Fair, and it means asking was the wrong move all along.** He is not going to inspect a file
@@ -21206,6 +21219,20 @@ re-opened #480, which I had marked done and had not fixed.
       Render them at the size they ship at (380px), not just large, and let him pick.
       ⚠️ **It is also a repeat, which is the failure mode this file exists to stop.** Find the earlier
       entry, link it, and do not re-scope it from scratch.
+- [ ] **611 — A blue ring around the + add button, matching the menu.** (27 Aug, phone screenshot at v13.48.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Put a little blue ring around the add button that’s got the same style and glow as everything
+      > else in this menu
+      **THE SCREENSHOT:** the projects home. The pinned cards and the tab row all carry a light-blue
+      rim; the round gradient **+** orb at the bottom has none.
+      ✅ **DONE v13.49 — and the colour is BORROWED, not chosen.** Ring `rgba(127,216,255,.30)` and lift
+      `rgba(127,216,255,.7)`, lifted verbatim from `.hm-card.is-pinned`, so it is literally the same
+      blue as the pinned cards rather than a near-miss shade.
+      ⚠️ **On `.fab-aura`, not `#add-fab`:** the button box is `border-radius: 0` — a square box holding
+      a round orb — so a ring on it would draw a SQUARE around a circle. And `box-shadow` rather than
+      `border`, which would shrink the aura inside its 64px box and pull the gradient off the glass
+      edge the filter chain derives its rim from.
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
@@ -21756,6 +21783,9 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
+      ⚠️ **REMAINS OPEN (partial): clauses 1 and 3 shipped (v12.97, v13.15); clause 2 has NOT STARTED.**
+      Phrased in these words because `tools/next.sh` reads them — without it the DONE markers inside
+      make the whole entry read as finished.
       📌 **WHAT IS STILL LEFT (27 Aug), because `next.sh` keeps flagging this entry as "fixed but open":**
       **only CLAUSE 2 — "tiles and shake together looked really bad".** Clause 1 (the "break") was
       answered at v12.97 — nothing throws, it is a cost explosion — and cut from ~102 ms to ~52 ms at
