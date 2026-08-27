@@ -1,0 +1,145 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #626 — the blank is INSIDE the clips, not after them (the trailing-gap hypothesis is refuted and the
+ * measurement is in the entry). Two suspects remain:
+ *   (a) a KEYFRAMED speed ramp — that branch keeps the clip window fixed on purpose, so the source runs
+ *       out before the clip's right edge and the tail plays black;
+ *   (b) the source clamp does nothing when the media record has no duration
+ *       (`const srcDur = (mm && mm.duration) ? mm.duration : Infinity`), so a clip that already overran
+ *       its source keeps the overrun through the re-time.
+ * A REAL video of known duration is required — a shape has no source to run out of. Exported here with
+ * the app's own exporter, which is the same trick that settled #604. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.exporter)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var P = FM.scene.project;
+
+    // --- make a 2s video whose frames are BRIGHT, so "black" is unambiguous
+    FM.scene.layers.length = 0;
+    var src = FM.makeLayer('shape', { shape:'rect', x:P.width/2, y:P.height/2, shapeW:P.width*0.8, shapeH:P.height*0.8, fill:'#ffffff' });
+    src.start = 0; src.duration = 2; FM.scene.layers.push(src);
+    P.duration = 2;
+    say('exporting a 2s all-white source clip…');
+    var got = null;
+    await FM.exporter.run({ from:0, to:2, fps:15, outW:240, outH:180, name:'src626',
+                            onReady: async function(r){ got = r; } });
+    if (!got || !got.blob) return say('❌ export produced no blob');
+    say('exported ' + got.blob.size + ' bytes');
+
+    var rec = await FM.loadVideoFile(new w.File([got.blob], 'src626.mp4', { type:'video/mp4' }));
+    say('loadVideoFile -> duration ' + (rec && rec.duration != null ? rec.duration.toFixed(3) + 's' : 'UNKNOWN'));
+
+    function place(){
+      FM.scene.layers.length = 0;
+      FM.addMediaLayer(rec);
+      var L = FM.scene.layers[0];
+      L.start = 0;
+      return L;
+    }
+    function brightAt(frac, L){
+      // sample at frac of the clip's own span
+      var t = L.start + L.duration * frac;
+      var cv = d.createElement('canvas'); cv.width = 160; cv.height = 120;
+      FM.renderScene(cv.getContext('2d'), FM.scene, t);
+      var dd = cv.getContext('2d').getImageData(0,0,160,120).data, lit = 0;
+      for (var i=0;i<dd.length;i+=4) if (dd[i] > 120 && dd[i+1] > 120 && dd[i+2] > 120) lit++;
+      return { t: t, lit: lit };
+    }
+
+    async function report(title, setup){
+      var L = place();
+      await new Promise(function(r){ setTimeout(r,500); });
+      setup(L);
+      FM.timeline.rebuild();
+      await new Promise(function(r){ setTimeout(r,600); });
+      var pts = [0.1, 0.5, 0.75, 0.95].map(function(f){ var r2 = brightAt(f, L); return f + ':' + r2.lit; });
+      say('');
+      say(title);
+      say('   speed=' + JSON.stringify(L.speed) + '  duration=' + L.duration.toFixed(3) +
+          '  project=' + P.duration.toFixed(3));
+      say('   bright pixels through the clip -> ' + pts.join('  '));
+      var last = brightAt(0.95, L).lit, first = brightAt(0.1, L).lit;
+      say('   ' + (last < first * 0.2
+            ? '🚨 THE TAIL IS BLACK — ' + first + ' lit at 10% vs ' + last + ' at 95%'
+            : '✅ the tail still renders (' + first + ' -> ' + last + ')'));
+    }
+
+    // --- THE GROUP CASE. autoFitDuration walks FM.scene.layers only — it never looks inside a group.
+    //     His other screenshot (#655) shows a Mask Group, and "every clip ends at the end" fits three
+    //     children ending together inside a parent that keeps its own longer length.
+    /* TWO members — groupSelection returns early on fewer, which is why the first run of this probe
+       reported "made no group". And members stay in FM.scene.layers with a `parent` field rather than
+       moving into a children array, so autoFitDuration DOES see them. The question is whether the
+       GROUP layer's own duration follows when a child shortens. */
+    FM.scene.layers.length = 0;
+    FM.addMediaLayer(rec);
+    await new Promise(function(r){ setTimeout(r,400); });
+    FM.addMediaLayer(rec);
+    await new Promise(function(r){ setTimeout(r,400); });
+    var kidA = FM.scene.layers[0], kidB = FM.scene.layers[1];
+    if (!kidB) return say('❌ could not place two clips (' + FM.scene.layers.length + ' layers)');
+    kidA.start = 0; kidB.start = 0;
+    say('');
+    say('two children before grouping: ' + kidA.duration.toFixed(3) + ', ' + kidB.duration.toFixed(3));
+
+    if (!FM.groupSelection) return say('❌ FM.groupSelection is missing');
+    FM.scene.selectedIds = [kidA.id, kidB.id]; FM.scene.selectedId = kidA.id;
+    FM.groupSelection();
+    await new Promise(function(r){ setTimeout(r,500); });
+    var grp = FM.scene.layers.filter(function(l){ return l.type === 'group'; })[0];
+    if (!grp) return say('❌ groupSelection made no group (top level: ' + FM.scene.layers.map(function(l){return l.type;}).join(',') + ')');
+    var kids = FM.scene.layers.filter(function(l){ return l.parent === grp.id; });
+    say('group created: duration ' + grp.duration.toFixed(3) + '   members ' + kids.length);
+    say('project.duration = ' + P.duration.toFixed(3));
+
+    // speed BOTH children up, exactly as the inspector would
+    kids.forEach(function(c){ var sp2 = c.duration * 1; c.speed = 1.7; c.duration = Math.max(0.1, sp2 / 1.7); });
+    /* …and then exactly what the inspector's speed slider now does (queue 626). The probe re-times by
+       hand because the real path lives inside a slider callback, so without this line it would keep
+       reporting the ORIGINAL bug and say nothing about the fix. */
+    kids.forEach(function(c){ if (FM.refitGroupsFor) FM.refitGroupsFor(c); });
+    var k = kids[0];
+    FM.timeline.rebuild();
+    await new Promise(function(r){ setTimeout(r,600); });
+    say('');
+    say('after speeding BOTH children to 1.7x:');
+    say('   child    duration ' + k.duration.toFixed(3) + '  end ' + ((k.start||0)+k.duration).toFixed(3));
+    say('   GROUP    duration ' + grp.duration.toFixed(3) + '  end ' + ((grp.start||0)+grp.duration).toFixed(3));
+    say('   project  duration ' + P.duration.toFixed(3));
+    var tail = grp.duration - ((k.start||0)+k.duration);
+    say('   TAIL INSIDE THE GROUP = ' + tail.toFixed(3) + 's');
+
+    function lit(t){
+      var cv = d.createElement('canvas'); cv.width = 160; cv.height = 120;
+      FM.renderScene(cv.getContext('2d'), FM.scene, t);
+      var dd = cv.getContext('2d').getImageData(0,0,160,120).data, n = 0;
+      for (var i=0;i<dd.length;i+=4) if (dd[i] > 120 && dd[i+1] > 120 && dd[i+2] > 120) n++;
+      return n;
+    }
+    var early = lit(0.2), late = lit(Math.max(0, P.duration - 0.05));
+    say('   bright pixels: t=0.20 -> ' + early + '    t=' + (P.duration-0.05).toFixed(2) + ' -> ' + late);
+    if (tail > 0.02 && late < early * 0.2) {
+      say('');
+      say('   🚨 FOUND IT — the group keeps its length, its tail is empty, and the preview goes BLACK.');
+      say('      autoFitDuration walks FM.scene.layers only (app.js:715); it never looks inside a group.');
+    } else if (tail > 0.02) {
+      say('   ⚠️ there IS a ' + tail.toFixed(3) + 's tail inside the group but the picture did not go dark.');
+    } else {
+      say('   ✅ the group shrank with its child — this hypothesis does NOT hold either.');
+    }
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

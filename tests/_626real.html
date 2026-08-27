@@ -1,0 +1,102 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #626 — the blank is INSIDE the clips, not after them (the trailing-gap hypothesis is refuted and the
+ * measurement is in the entry). Two suspects remain:
+ *   (a) a KEYFRAMED speed ramp — that branch keeps the clip window fixed on purpose, so the source runs
+ *       out before the clip's right edge and the tail plays black;
+ *   (b) the source clamp does nothing when the media record has no duration
+ *       (`const srcDur = (mm && mm.duration) ? mm.duration : Infinity`), so a clip that already overran
+ *       its source keeps the overrun through the re-time.
+ * A REAL video of known duration is required — a shape has no source to run out of. Exported here with
+ * the app's own exporter, which is the same trick that settled #604. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.exporter)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var P = FM.scene.project;
+
+    // --- make a 2s video whose frames are BRIGHT, so "black" is unambiguous
+    FM.scene.layers.length = 0;
+    var src = FM.makeLayer('shape', { shape:'rect', x:P.width/2, y:P.height/2, shapeW:P.width*0.8, shapeH:P.height*0.8, fill:'#ffffff' });
+    src.start = 0; src.duration = 2; FM.scene.layers.push(src);
+    P.duration = 2;
+    say('exporting a 2s all-white source clip…');
+    var got = null;
+    await FM.exporter.run({ from:0, to:2, fps:15, outW:240, outH:180, name:'src626',
+                            onReady: async function(r){ got = r; } });
+    if (!got || !got.blob) return say('❌ export produced no blob');
+    say('exported ' + got.blob.size + ' bytes');
+
+    var rec = await FM.loadVideoFile(new w.File([got.blob], 'src626.mp4', { type:'video/mp4' }));
+    say('loadVideoFile -> duration ' + (rec && rec.duration != null ? rec.duration.toFixed(3) + 's' : 'UNKNOWN'));
+
+    function place(){
+      FM.scene.layers.length = 0;
+      FM.addMediaLayer(rec);
+      var L = FM.scene.layers[0];
+      L.start = 0;
+      return L;
+    }
+    function brightAt(frac, L){
+      // sample at frac of the clip's own span
+      var t = L.start + L.duration * frac;
+      var cv = d.createElement('canvas'); cv.width = 160; cv.height = 120;
+      FM.renderScene(cv.getContext('2d'), FM.scene, t);
+      var dd = cv.getContext('2d').getImageData(0,0,160,120).data, lit = 0;
+      for (var i=0;i<dd.length;i+=4) if (dd[i] > 120 && dd[i+1] > 120 && dd[i+2] > 120) lit++;
+      return { t: t, lit: lit };
+    }
+
+    async function report(title, setup){
+      var L = place();
+      await new Promise(function(r){ setTimeout(r,500); });
+      setup(L);
+      FM.timeline.rebuild();
+      await new Promise(function(r){ setTimeout(r,600); });
+      var pts = [0.1, 0.5, 0.75, 0.95].map(function(f){ var r2 = brightAt(f, L); return f + ':' + r2.lit; });
+      say('');
+      say(title);
+      say('   speed=' + JSON.stringify(L.speed) + '  duration=' + L.duration.toFixed(3) +
+          '  project=' + P.duration.toFixed(3));
+      say('   bright pixels through the clip -> ' + pts.join('  '));
+      var last = brightAt(0.95, L).lit, first = brightAt(0.1, L).lit;
+      say('   ' + (last < first * 0.2
+            ? '🚨 THE TAIL IS BLACK — ' + first + ' lit at 10% vs ' + last + ' at 95%'
+            : '✅ the tail still renders (' + first + ' -> ' + last + ')'));
+    }
+
+    await report('=== A. STATIC 1.7x (the slider path) ===', function(L){
+      var span = L.duration * 1;
+      L.speed = 1.7;
+      L.duration = Math.max(0.1, span / 1.7);
+      var mm = FM.media.get(L.id); var sd = (mm && mm.duration) ? mm.duration : Infinity;
+      if (isFinite(sd)) L.duration = Math.max(0.1, Math.min(L.duration, (sd - (L.trimStart||0)) / 1.7));
+    });
+
+    await report('=== B. KEYFRAMED speed ramp (clip window stays fixed, by design) ===', function(L){
+      L.speed = { kf: [ { t: 0, v: 1, e:'linear' }, { t: L.duration, v: 1.7, e:'linear' } ] };
+    });
+
+    await report('=== C. STATIC 1.7x but the media record has NO duration (clamp skipped) ===', function(L){
+      var mm = FM.media.get(L.id); if (mm) mm.duration = 0;      // the falsy case the code falls back on
+      var span = L.duration * 1;
+      L.speed = 1.7;
+      L.duration = Math.max(0.1, span / 1.7);
+      var sd = (mm && mm.duration) ? mm.duration : Infinity;
+      if (isFinite(sd)) L.duration = Math.max(0.1, Math.min(L.duration, (sd - (L.trimStart||0)) / 1.7));
+    });
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

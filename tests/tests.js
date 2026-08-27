@@ -31663,6 +31663,69 @@
    * a drag onto it landed at 1.033333, and the 0.0125s gap sailed past the old 0.001s dedup window.
    * At a normal 60 px/s timeline that is 0.75px — far inside one diamond — so they draw on top of each
    * other and deleting one leaves the other looking untouched. */
+  /* #626 — "even tho every clip ends at the end and I sped them up the same amount so they all end at
+   * the same time, the end of the clip is blank." He was right that it is mechanical.
+   * MEASURED (tests/_626group.html): two clips in a group, both at 1.7x. The children shrink 2.000 to
+   * 1.176 and THE GROUP STAYS AT 2.000, leaving 0.824s of empty tail inside it — bright pixels went
+   * 5184 at t=0.20 to 0 at t=1.95. The project stays long because autoFitDuration measures the GROUP's
+   * end rather than its contents'.
+   * Two earlier hypotheses were refuted by measurement first and are recorded in the entry: there is no
+   * trailing gap after top-level clips, and an exhausted source FREEZES on its last frame rather than
+   * going black. Both mattered — they are why this looks inside a group at all. */
+  test('#626: a group follows its contents when they are re-timed', { item: '626' }, function () {
+    if (typeof FM.refitGroupsFor !== 'function') throw new Error('FM.refitGroupsFor is missing — a group can no longer follow its contents (#626)');
+    var keep = FM.scene.layers.slice();
+    try {
+      var g = FM.makeLayer('group', { name: 'G', x: 0, y: 0 });
+      g.start = 0; g.duration = 2;
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      var b = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#fff' });
+      a.start = 0; a.duration = 2; a.parent = g.id;
+      b.start = 0; b.duration = 2; b.parent = g.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(g, a, b);
+
+      // Both children re-timed to 1.7x, exactly as the speed slider does.
+      a.duration = 2 / 1.7; b.duration = 2 / 1.7;
+      FM.refitGroupsFor(a);
+      var want = Math.round((2 / 1.7) * 1000) / 1000;
+      if (Math.abs(g.duration - want) > 2e-3)
+        throw new Error('the group stayed ' + g.duration.toFixed(3) + 's around children of ' +
+          want.toFixed(3) + 's — that gap is empty and renders BLACK (#626)');
+
+      // IT MUST GROW TOO, or slowing a clip down clips it off at the old group edge.
+      a.duration = 5;
+      FM.refitGroupsFor(a);
+      if (Math.abs(g.duration - 5) > 2e-3) throw new Error('the group did not grow with a lengthened child: ' + g.duration);
+
+      /* START IS LEFT ALONE, deliberately: speeding up shortens from the END, and moving start would
+         shift the group and everything parented to it for a reason nothing asked for. */
+      if (g.start !== 0) throw new Error('refit moved the group start to ' + g.start);
+
+      /* AN EMPTY GROUP KEEPS ITS SPAN. Collapsing it would make a row he can still see vanish. */
+      var e = FM.makeLayer('group', { name: 'E', x: 0, y: 0 });
+      e.start = 0; e.duration = 3;
+      var lone = FM.makeLayer('shape', { shape: 'rect', x: 1, y: 1, shapeW: 5, shapeH: 5, fill: '#fff' });
+      lone.start = 0; lone.duration = 1; lone.parent = e.id;
+      FM.scene.layers.push(e, lone);
+      FM.scene.layers = FM.scene.layers.filter(function (l) { return l !== lone; });   // now childless
+      FM.refitGroupsFor({ parent: e.id });
+      if (e.duration !== 3) throw new Error('an empty group was resized to ' + e.duration + ' — it should keep its span');
+
+      /* NESTED: the inner group settles before the outer measures it, or the outer reads a stale span. */
+      var outer = FM.makeLayer('group', { name: 'O', x: 0, y: 0 }); outer.start = 0; outer.duration = 9;
+      var inner = FM.makeLayer('group', { name: 'I', x: 0, y: 0 }); inner.start = 0; inner.duration = 9; inner.parent = outer.id;
+      var kid = FM.makeLayer('shape', { shape: 'rect', x: 2, y: 2, shapeW: 5, shapeH: 5, fill: '#fff' });
+      kid.start = 0; kid.duration = 1.5; kid.parent = inner.id;
+      FM.scene.layers.push(outer, inner, kid);
+      FM.refitGroupsFor(kid);
+      if (Math.abs(inner.duration - 1.5) > 2e-3) throw new Error('the inner group did not follow its child: ' + inner.duration);
+      if (Math.abs(outer.duration - 1.5) > 2e-3) throw new Error('the OUTER group read a stale inner span: ' + outer.duration + ' (nesting must settle innermost first)');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+    }
+  });
+
   test('#625: keyframes land on the frame grid, so they cannot stack invisibly', { item: '625' }, function () {
     if (typeof FM.snapKfTime !== 'function') throw new Error('FM.snapKfTime is missing — keyframe times are unsnapped again (#625)');
     var P = FM.scene.project, fps = P.fps || 30, frame = 1 / fps;

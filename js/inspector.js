@@ -5250,6 +5250,7 @@ window.FM = window.FM || {};
         // source would end up somewhere neither edge was asked for.
         if (!toEnd) layer.start = end - layer.duration;
         if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+        if (FM.refitGroupsFor) FM.refitGroupsFor(layer);   // queue 626 — the group follows its contents
         const newEnd = layer.start + layer.duration;
         if (newEnd > FM.scene.project.duration) FM.scene.project.duration = newEnd;
         const m2 = FM.media.get(layer.id);
@@ -5297,6 +5298,10 @@ window.FM = window.FM || {};
            * This runs per slider step, and that is fine: each step scales by the ratio between two
            * consecutive real durations, so the product telescopes to the exact total ratio. */
           if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+          // A GROUP AROUND THIS CLIP MUST FOLLOW IT (queue 626) — otherwise the group keeps its old
+          // length, its tail is empty, and the preview goes black there. Measured: children 2.000 →
+          // 1.176 while the group stayed at 2.000.
+          if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
         }

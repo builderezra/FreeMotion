@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.75 (notes)
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.76
 >
-> **State:** v13.75, 1022 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.76, 1023 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21878,8 +21878,7 @@ re-opened #480, which I had marked done and had not fixed.
       (the shipped duration is unchanged), which proves it runs and roughly what it looks like. **The
       real judgement is his, live on the phone.**
 
-- [ ] **617 — 🔴 The Elements tab is full of duplicate "Draft" placeholder rows that will not go away.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **617 — 🔴 The Elements tab is full of duplicate "Draft" placeholder rows that will not go away.** ✅ **DONE — clauses 3/4 in v13.60–61, the duplicate CAUSE in v13.72.**
       (27 Aug, phone screenshot at v13.51 — the Elements tab, six rows deep.)
       His words, verbatim:
       > These weird element things won’t go away
@@ -21888,11 +21887,19 @@ re-opened #480, which I had marked done and had not fixed.
       a diamond icon and the subtitle **"Draft — open it, build it, then ⋯ → Save as element"**.
       Titles: **Cool loop, Cool loop, Project 39 project, Project 39 project, Project 39 project,
       Cool loop** — so they are DUPLICATED, not six distinct things: two names, repeated.
-      1. [ ] **They are duplicates** — the same draft is listed several times over.
-      2. [ ] **They will not go away** — *"won't go away"*. Either there is no way to delete one, or
-             deleting one does not stick, or they are re-created on every visit. **Find out which
-             before writing any fix** — those are three different bugs and only one of them is a
-             delete button.
+      1. [x] **They are duplicates** — the same draft is listed several times over.
+             ✅ **CAUSE FOUND AND FIXED v13.72** — see the block below. `openForEdit` stranded a
+             workspace on **every** failed open, because `create()` opens what it mints and
+             `discardDraft` refuses on the open project by design. The line whose own comment read
+             *"do not strand a draft"* stranded one every time.
+      2. [x] **They will not go away** — *"won't go away"*. ✅ **DONE v13.60 + v13.61** (clauses 3 and 4):
+             the answer turned out to be *all three at once* — Select ignored draft cards, bulk delete
+             addressed a store that had never heard of a draft's id, and the last one standing was the
+             project he had open, which `discardDraft` refuses by design.
+      ⚠️ **ONE HONEST LIMIT ON CLAUSE 1:** the stranding path is **proven** to leave a draft behind, but
+      it was never proven that HIS six came from it — they carry his project names and may still be the
+      pre-v12.26 leftovers this entry suspected. **Both are now closed anyway:** nothing strands new ones,
+      and he can delete the old ones. If the count grows again, that is new evidence and a new entry.
       ⚠️ **Do not "clean them up" by wiping his Elements store.** They may be tied to real drafts of his,
       and this app is local-only — anything deleted here is gone. **Reproduce the duplication first**,
       then remove the CAUSE.
@@ -22377,16 +22384,35 @@ re-opened #480, which I had marked done and had not fixed.
       time and deleting one leaves the other looking untouched.
       ➡️ **Test that first**, because if it holds, one threshold fixes both clauses.
 
-- [ ] **626 — 🔴 All clips sped up by the same amount and ending together, yet the end of the
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      timeline is blank. He thinks the core mechanics are wrong.** (27 Aug, phone screenshot at v13.51 —
+- [x] **626 — 🔴 All clips sped up by the same amount and ending together, yet the end of the
+      timeline is blank. He thinks the core mechanics are wrong.** ✅ **DONE v13.76 — and he was right that it is mechanical.** (27 Aug, phone screenshot at v13.51 —
       Project 41, three clips each badged **1.7×**, all ending at the same x, playhead at 00:01:10, the
       preview BLACK.)
       His words, verbatim:
       > I think you’ve got something wrong mechanically with the timeline, even tho every clip ends at the end and I sped the up the same amount so they all end at the same time, the end of the clip is blank. Makes no sense unless something in the ground mechanics is broken
 
-      1. [ ] **Three clips, same 1.7× speed, same end point — and the timeline runs on past them with
-             nothing in it.**
+      1. [x] **Three clips, same 1.7× speed, same end point — and the timeline runs on past them with
+             nothing in it.** ✅ **DONE v13.76.**
+      🚨 **THE CAUSE: HIS CLIPS ARE IN A GROUP, AND A GROUP DOES NOT FOLLOW ITS CONTENTS.**
+      📐 **MEASURED (tests/_626group.html), two clips in a group, both set to 1.7×:**
+      | | before | after |
+      |---|---|---|
+      | each child | 2.000 | **1.176** |
+      | **the group** | 2.000 | **2.000 — unchanged** |
+      | empty tail inside the group | — | **0.824 s** |
+      | bright pixels at t=1.95 | 5184 | **0 — black** |
+      **The project stays long because `autoFitDuration` measures the GROUP's end, not its contents'.**
+      A group's span **is** its members' span — `groupSelection` defines it that way at creation
+      (`start = min member start, duration = end − start`) — it was simply never recomputed after.
+      ✅ **FIXED: `FM.refitGroupsFor(layer)`**, called from both inspector speed paths. Verified in the
+      same probe that found it: group **2.000 → 1.176**, project follows, tail **0.000**, and the end of
+      the clip renders again (**0 → 5184** lit pixels). Mutation-proved.
+      ⚠️ **DELIBERATELY *NOT* INSIDE `autoFitDuration`, tempting as that was.** That runs on every
+      rebuild, and **a group can be TRIMMED like any other clip — the grips carry no type guard** — so
+      refitting there would silently undo a deliberate trim. That is a worse bug than this one and far
+      harder to attribute. It fires on **re-time only**: the contents changing under you is the one
+      moment a group's length is stale through no choice of yours. **`start` is left alone** — speeding
+      up shortens from the END, and moving start would shift everything parented to the group.
       💡 **HYPOTHESIS, to be PROVEN not assumed:** speeding a clip up SHORTENS it, but the PROJECT's
       duration is not shortened with it, so the timeline keeps the length it had at 1× and the tail is
       empty. His playhead is at 00:01:10, at the clips' right edge, and the preview is black — which is

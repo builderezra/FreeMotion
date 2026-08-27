@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.75 — 1022 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.76 — 1023 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -168,17 +168,16 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
 
-🔎 **#626 MEASURED — the entry's hypothesis is REFUTED and it no longer needs his decision.** There is
-**no trailing gap**: three clips at 1.7x leave `project.duration` at 6.000 against a furthest end of
-6.000. `autoFitDuration` shrinks as well as grows AND **is called on every timeline rebuild**, which the
-speed slider triggers.
-⚠️ **MY FIRST PROBE CALLED `autoFitDuration()` ITSELF** — proving the function WORKS while saying nothing
-about whether it RUNS. Different claims; only the second mattered. **Check the call sites, not just the
-function.**
-➡️ **The blank is INSIDE the clips. Two suspects: (a) a KEYFRAMED speed ramp**, whose branch deliberately
-keeps the clip window fixed so the source runs out early — a ramp still shows a number on the badge;
-**(b) the source clamp does nothing when `mm.duration` is falsy** (`? mm.duration : Infinity`), so a clip
-already overrunning its source keeps the overrun. **Reproduce with a real video of known duration.**
+✅ **#626 CLOSED v13.76 — his clips were in a GROUP, and a group does not follow its contents.**
+Children 2.000 → 1.176 at 1.7x while **the group stayed 2.000**: 0.824s of empty tail inside it, **0 lit
+pixels at t=1.95**. The project stays long because `autoFitDuration` measures the GROUP's end.
+`FM.refitGroupsFor(layer)` fixes it, from the **re-time sites only**.
+⚠️ **NOT from `autoFitDuration`, deliberately** — that runs every rebuild and **a group can be TRIMMED**
+(the grips carry no type guard), so refitting there would silently undo a deliberate trim.
+💡 **TWO HYPOTHESES WERE KILLED BY MEASUREMENT FIRST AND BOTH EARNED THEIR TIME:** there is no trailing
+gap after top-level clips, and **an exhausted source FREEZES on its last frame rather than going black**
+— which is what proved "black" means *nothing is drawn here* and sent the search inside a group.
+✅ **#617 CLOSED** — clause 1's cause was the v13.72 stranding fix; clauses 3/4 gave the delete routes.
 
 ✅ **#625 CLOSED v13.75 — the duplicate keyframes, and BOTH halves had one cause.** The drag snaps to the
 frame grid; every other write took the RAW playhead time. Measured: 12.5ms apart, past the 1ms dedup

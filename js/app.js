@@ -701,6 +701,48 @@ window.FM = window.FM || {};
   // Keep the composition EXACTLY as long as its clips — grows when a clip extends past the end,
   // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
   // trailing empty space. Empty project keeps its configured length.
+  /* ═══ A GROUP FOLLOWS ITS CONTENTS WHEN THEY ARE RE-TIMED (queue 626) ════════════════════════════
+   * Ezra: *"even tho every clip ends at the end and I sped them up the same amount so they all end at
+   * the same time, the end of the clip is blank. Makes no sense unless something in the ground
+   * mechanics is broken."* He was right that it is mechanical.
+   * MEASURED (tests/_626group.html): two clips in a group, both set to 1.7x. The children shrink
+   * 2.000 → 1.176 and **the group stays at 2.000**, leaving an 0.824s empty tail INSIDE it. Bright
+   * pixels went 5184 at t=0.20 to **0 at t=1.95** — black, exactly as he photographed. The project
+   * stays long because `autoFitDuration` measures the GROUP's end, not its contents'.
+   * A group's span IS its members' span — `groupSelection` defines it that way at creation
+   * (start = min member start, duration = end − start). It was simply never recomputed afterwards.
+   *
+   * ⚠️ WHY THIS IS NOT DONE INSIDE autoFitDuration, tempting as that was. That runs on EVERY rebuild,
+   * and a group can be TRIMMED like any other clip — the grips carry no type guard. Refitting on every
+   * rebuild would silently undo a deliberate trim, which is a worse bug than the one being fixed and
+   * would be very hard to attribute. So it is called from the RE-TIME sites only: the contents changing
+   * under you is the one moment the group's length is stale through no choice of yours.
+   * ⚠️ START IS LEFT ALONE. Speeding up shortens from the END; moving `start` would shift the group and
+   * everything parented to it, for no reason this entry asked for. */
+  FM.refitGroupsFor = function (layer) {
+    if (!layer || !FM.scene || !FM.scene.layers) return;
+    const L = FM.scene.layers;
+    const byId = new Map(L.map(l => [l.id, l]));
+    // Walk UP from the changed layer, innermost group first, so a nested group settles before its
+    // parent measures it.
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) {
+      const g = byId.get(pid);
+      if (!g) break;
+      if (g.type === 'group') {
+        const kids = L.filter(k => k.parent === g.id);
+        // An EMPTY group keeps whatever span it has — collapsing it to nothing would make a row he can
+        // still see disappear, which is not what a re-time asked for.
+        if (kids.length) {
+          const end = Math.max.apply(null, kids.map(k => (k.start || 0) + (k.duration || 0)));
+          const nd = Math.max(0.1, Math.round((end - (g.start || 0)) * 1000) / 1000);
+          if (Math.abs((g.duration || 0) - nd) > 1e-4) g.duration = nd;
+        }
+      }
+      pid = g.parent;
+    }
+  };
+
   FM.autoFitDuration = function () {
     // SINGLE SOURCE OF TRUTH for project length: the timeline is only ever as long as its clips —
     // the furthest clip end, or exactly 0 when there are no clips. No minimum/floor, so a 1s clip
