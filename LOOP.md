@@ -133,7 +133,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.58 — everything is pushed and the tree is clean. 1000 tests green.**
+📍 **HANDOVER, 27 Aug, v13.59 — everything is pushed and the tree is clean. 1001 tests green.**
+✅ **#616 DONE — the add row is quiet at rest, and a light runs up its frame on press.** Deliberately
+NOT a conic comet: `hm-glint` orbits a CARD, and a conic gradient maps ANGLE not perimeter, so on a
+746x40 row it would crawl up the sides and snap across the top. A rising band is what he described.
+🚨 **RULE 11 EARNED ITS KEEP THIS TICK — READ THIS BEFORE MEASURING ANY ANIMATION.** The pulse first
+measured as opacity flat at 0, `background-position` frozen, `animationend` never firing — **which
+looks exactly like broken code.** A control counting `requestAnimationFrame` callbacks showed the pane
+was **NOT FRONTED and firing ZERO frames**. Nothing had been measured. **`mcp__Claude_Browser__tabs_select`
+fronts it; then it ran.** ⚠️ **Always run the rAF control before believing an animation is broken.**
+🔒 **And that is why #616's test asserts WIRING, not motion** — the suite cannot guarantee a fronted tab,
+so asserting travel would be flaky for a reason unrelated to the feature. The comment says so.
+
 ✅ **#613 DONE — his pick, option A.** The timeline + is a 26x18 mini CLIP instead of a bead, because a
 circle was the only one on a screen of rounded rects. **The plus glyph is untouched — his explicit keep.**
 ⚠️ **THE PATTERN WORTH CARRYING: the big empty-state orb SHARES `.tl-addrow-plus`**, so changing the

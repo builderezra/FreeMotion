@@ -2254,6 +2254,20 @@ window.FM = window.FM || {};
        that box is up to the font — so it can look level on one screen and high on another. Exactly the
        same finding as the × and the magnifier in queue 209, which were fixed the same way. Two strokes
        about (12,12) are symmetric by construction, so no font can move them again. */
+    /* THE PRESS PULSE (queue 616). Ezra: *"when you press on the timeline add area it has those lines
+       pulse from the bottom to the top and actually go across the top line and not cut off on the
+       sides, with a really clean a good animation inspired by the lines that we have circle around the
+       project you have open"*.
+       ⚠️ A REAL ELEMENT, NOT `::after`. The row's `::before` already carries the resting decoration and
+       is switched OFF entirely in the empty state
+       (`#timeline-panel.tl-empty-start .tl-addrow--empty::before { content: none }`) — and the empty
+       state is precisely the screen he photographed. A child element is drawn in both states, spans the
+       WHOLE row rather than stopping at the project's end, and leaves the queue-550/551 bounding of the
+       resting box alone. */
+    const pulse = document.createElement('span');
+    pulse.className = 'tl-addrow-pulse';
+    pulse.setAttribute('aria-hidden', 'true');
+
     const plus = document.createElement('span');
     plus.className = 'tl-addrow-plus';
     plus.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.6v12.8M5.6 12h12.8"/></svg>';
@@ -2272,6 +2286,19 @@ window.FM = window.FM || {};
     head.appendChild(plus);
     inner.append(head, label);
     row.appendChild(inner);
+    row.appendChild(pulse);
+    /* FIRED ON POINTERDOWN, not on click (queue 616). He said *"when you press"*, and press is the
+       moment the finger lands — waiting for click would start the light after the sheet has already
+       begun opening, which is the half-beat that makes an animation feel bolted on.
+       The class is removed on animationend so a second press replays it; without that the animation
+       runs once and every later press does nothing. */
+    const firePulse = () => {
+      pulse.classList.remove('is-pulsing');
+      void pulse.offsetWidth;                 // reflow, so re-adding the class restarts the animation
+      pulse.classList.add('is-pulsing');
+    };
+    pulse.addEventListener('animationend', () => pulse.classList.remove('is-pulsing'));
+    row.addEventListener('pointerdown', firePulse);
     const open = (e) => {
       if (e) { e.preventDefault(); e.stopPropagation(); }
       /* On a phone this is the sheet the + button used to open. On PC there is no + and no sheet — the

@@ -48266,6 +48266,55 @@
     }
   });
 
+  /* 616 — the add row's press pulse.
+     ⚠️ THIS TEST ASSERTS THE WIRING, NOT THE MOTION, AND THAT IS DELIBERATE. Verifying the animation
+     actually travels needs a FRONTED tab: measured while building this, a non-fronted pane fires zero
+     requestAnimationFrame callbacks and every CSS animation sits frozen — the pulse read as "opacity 0,
+     background-position never moved, animationend never fired", which looks exactly like broken code
+     and was nothing of the kind. The suite cannot guarantee it is fronted, so asserting progress here
+     would be a flaky test that fails for a reason unrelated to the feature. The travel was verified by
+     hand with a control (rAF frame count) and sampled through the motion; what a test CAN hold is that
+     the element exists in both states, spans the whole row, and is armed by a press. */
+  test('616: the add row has a press pulse, wired and full-width', { item: '616' }, async function () {
+    const keep = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        const check = async function (what) {
+          FM.selectLayer(null); FM.refreshAll();
+          if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+          await sleep(380);
+          const row = document.querySelector('.tl-addrow');
+          if (!row) throw new Error('no add row on screen in the ' + what + ' state');
+          const pulse = row.querySelector('.tl-addrow-pulse');
+          /* BOTH states matter. The resting decoration lives on ::before, which is switched OFF
+             entirely in the empty state — and the empty state is the screen he photographed. */
+          if (!pulse) throw new Error('the ' + what + ' add row has no .tl-addrow-pulse — queue 616 needs it in BOTH states, because ::before is content:none when the project is empty');
+          const rr = row.getBoundingClientRect(), pr = pulse.getBoundingClientRect();
+          if (rr.width - pr.width > 6) {
+            throw new Error('the pulse is ' + Math.round(pr.width) + 'px on a ' + Math.round(rr.width) + 'px row (' + what + ') — queue 616: "not cut off on the sides". It must span the row, not stop at the project end like the resting box does.');
+          }
+          pulse.classList.remove('is-pulsing');
+          row.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          if (!pulse.classList.contains('is-pulsing')) throw new Error('pressing the ' + what + ' add row did not arm the pulse — he asked for it "when you press"');
+          if (getComputedStyle(pulse).animationName === 'none') throw new Error('the pulse is armed but resolves to animation-name:none in the ' + what + ' state');
+          pulse.classList.remove('is-pulsing');
+        };
+        FM.scene.layers.length = 0;
+        await check('empty');
+        FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
+        FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+        await check('slim');
+        /* AND IT MUST BE QUIET AT REST — his first complaint was that the bars "don't go away". */
+        const row = document.querySelector('.tl-addrow');
+        const pulse = row.querySelector('.tl-addrow-pulse');
+        if (+getComputedStyle(pulse).opacity !== 0) throw new Error('the pulse is visible at rest (opacity ' + getComputedStyle(pulse).opacity + ') — queue 616 clause 1 is that it should be quiet until pressed');
+      });
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 613 — "keep the plus shape but instead of the little ball do something more fitting". He picked
      option A: a mini CLIP, because the bead was the only circle on a screen made of rounded rects.
      Three things need holding, and the middle one is the regression guard: the big "Tap here to start

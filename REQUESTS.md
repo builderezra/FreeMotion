@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.58
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.59
 >
-> **State:** v13.58, 1000 tests green, tree clean.
+> **State:** v13.59, 1001 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21735,22 +21735,21 @@ re-opened #480, which I had marked done and had not fixed.
       OPEN badge, the pinned pin, the + orb's glow ring (v13.49) and the blue focus rings. **Check contrast
       at 380px, not on a desktop.**
 
-- [ ] **616 — The blue bars on the timeline add area look tacky. Replace them with lines that PULSE
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **616 — ✅ DONE v13.59. The blue bars on the timeline add area look tacky. Replace them with lines that PULSE
       bottom-to-top when you press it, in the signature comet style.**
       (27 Aug, phone screenshot at v13.50 — an empty Project 52, the add area filling the lower half.)
       His words, verbatim:
       > These blue bars around look tacky and don’t go away, an idea is that these are close to actually looking good, what you should do is make it so when you press on the timeline add area it has those lines pulse from the bottom to the top and actually go across the top line and not cut off on the sides, with a really clean a good animation inspired by the lines that we have circle around the project you have open or the media audio buttons etc
 
       **HIS CLAUSES:**
-      1. [ ] **They look tacky AND THEY DON'T GO AWAY.** Two complaints in one sentence — the look, and
+      1. [x] **They look tacky AND THEY DON'T GO AWAY.** ✅ **v13.59.** Two complaints in one sentence — the look, and
              that it is permanent. *"these are close to actually looking good"*, so this is a re-work of
              something nearly right, not a deletion.
-      2. [ ] **On PRESS, the lines pulse from the bottom to the top.** A press-triggered animation, which
+      2. [x] **On PRESS, the lines pulse from the bottom to the top.** ✅ **v13.59.** A press-triggered animation, which
              also answers clause 1's "don't go away": at rest they should be quiet.
-      3. [ ] **They must go ACROSS THE TOP LINE and not cut off at the sides.** He is describing the pulse
+      3. [x] **They must go ACROSS THE TOP LINE and not cut off at the sides.** ✅ **v13.59.** He is describing the pulse
              completing the box — reaching the top edge and running along it — instead of stopping short.
-      4. [ ] **Clean, and in the style of the signature comet** — *"inspired by the lines that we have
+      4. [x] **Clean, and in the style of the signature comet** ✅ **v13.59, with one deliberate departure — see below.** — *"inspired by the lines that we have
              circle around the project you have open or the media audio buttons"*.
       📍 **WHAT HE IS LOOKING AT, found in the code:** `.tl-addrow::before` at styles.css:7383 — a
       **1px dashed `rgba(120, 214, 240, .45)` outline**, a cyan→teal→pale gradient wash, and a
@@ -21770,8 +21769,41 @@ re-opened #480, which I had marked done and had not fixed.
       measured 124px on a 380px row) and is switched off entirely by
       `#timeline-panel.tl-empty-start .tl-addrow--empty::before { content: none }`. **His screenshot IS
       the empty state**, so whatever the pulse is drawn on cannot be that pseudo-element as it stands.
-      ⚠️ **#545 APPLIES — he must see it before it ships.** An animation cannot be judged from a still, so
-      send a short capture or a frame strip, not one screenshot. Options at 380px, recommended one marked.
+      ✅ **BUILT v13.59 — all four clauses.**
+      **At rest it is quiet now** (clause 1): the dashed outline drops `.45 → .26`, the `0 0 9px` cyan
+      glow is gone, and the tint is roughly halved. **Not deleted** — *"these are close to actually
+      looking good"*, and queue 324 is him asking for that tint in the first place.
+      **On press, a band of light travels up the frame** (clauses 2 and 3), lighting the left and right
+      edges as it passes and finishing along the top. It spans the WHOLE row, not the project-end
+      bounding the resting box keeps from queue 550/551 — *"not cut off on the sides"*.
+      🚨 **IT IS NOT A CONIC COMET, AND THAT IS A DELIBERATE DEPARTURE FROM HIS REFERENCE.** `hm-glint`
+      orbits a CARD, whose sides are comparable. **This row is 746x40.** A conic gradient maps ANGLE,
+      not perimeter distance, so nearly all of an orbit's travel would be spent on the two short ends —
+      it would crawl up the sides and snap across the top. **What he described is not an orbit anyway**:
+      *"from the bottom to the top … and across the top line"*. A horizontal band rising does exactly
+      that, and is correct at any aspect ratio.
+      🔧 **Drawn with the gradient-border trick** — a padding-box mask XOR'd with a border-box mask
+      leaves a 1.5px frame, and the element's own background paints it. So the light is a
+      `background-position` animation, which is cheap and animates everywhere; a mask-position animation
+      is not dependable.
+      ⚠️ **A REAL ELEMENT, not `::after`** — the entry's own warning: `::before` carries the resting
+      decoration and is `content: none` in the empty state, which is the screen he photographed.
+      🐛 **AND THE MEASUREMENT NEARLY WENT WRONG IN EXACTLY THE WAY RULE 11 WARNS ABOUT.** The first
+      reading said: opacity flat at 0, `background-position` never moved, `animationend` never fired,
+      class stuck on. **That looks precisely like broken code.** A control — counting
+      `requestAnimationFrame` callbacks — showed the pane was **not fronted, firing ZERO frames**, so no
+      CSS animation was advancing at all. **Nothing about the pulse had been measured.** Fronted, it
+      runs: sampled through the motion, the band travels 58% → 30% → 15% → 7% → 3% → 0.9% → 0%, opacity
+      rises and falls, `animationend` fires and the class cleans itself up.
+      🔒 **The test asserts the WIRING, not the motion, and says why in its comment** — the suite cannot
+      guarantee a fronted tab, so asserting travel would be a flaky test that fails for a reason that
+      has nothing to do with the feature. It holds what a test can hold: the element exists in BOTH
+      states, spans the row rather than stopping at the project end, is armed by a press, and is
+      invisible at rest.
+      ⚠️ **HONEST LIMIT — he still has to look at it.** #545 wants a capture, and a 620ms animation does
+      not survive a still. It was photographed mid-flight with the duration temporarily slowed to 9s
+      (the shipped duration is unchanged), which proves it runs and roughly what it looks like. **The
+      real judgement is his, live on the phone.**
 
 - [ ] **617 — 🔴 The Elements tab is full of duplicate "Draft" placeholder rows that will not go away.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**

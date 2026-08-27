@@ -7384,13 +7384,18 @@ body.fm-pushing #toast { z-index: 213; }
   content: ""; position: absolute; top: -1px; bottom: -1px;
   left: var(--ar-x0, 0px); width: calc(var(--ar-x1, 100%) - var(--ar-x0, 0px));
   border-radius: 10px;
-  border: 1px dashed rgba(120, 214, 240, .45);
+  /* QUIETER AT REST (queue 616 clause 1). Ezra: *"These blue bars around look tacky and don't go
+     away"* — two complaints, and this is the second one. It was `.45` dashed with a `0 0 9px` cyan
+     glow and a tint running the width, all of it permanent. It is now a hairline: the row is still
+     legible as a target, but it no longer shouts, and the LOUD version has moved to the press pulse
+     below, which is where he wanted it. ⚠️ Not deleted — *"these are close to actually looking good"*,
+     and queue 324 is him asking for the tint in the first place. */
+  border: 1px dashed rgba(120, 214, 240, .26);
   /* "make that whole bar stand out with some nice colours like the background menu does" (queue 324).
      A single cyan wash fading to nothing read as a disabled strip; this runs the app's accent through it
      so the bar has a direction and a warm end, which is what makes it read as a thing you press. */
   background:
-    linear-gradient(90deg, rgba(90, 199, 237, .17) 0%, rgba(41, 217, 187, .12) 42%, rgba(150, 232, 255, .05) 78%, transparent 100%);
-  box-shadow: 0 0 9px rgba(90, 199, 237, .16);
+    linear-gradient(90deg, rgba(90, 199, 237, .09) 0%, rgba(41, 217, 187, .06) 42%, rgba(150, 232, 255, .03) 78%, transparent 100%);
   pointer-events: none;   /* decoration only — the ROW keeps every gesture it had */
 }
 /* ⚠️ AND THE DECORATION OBEYS queue 356 TOO — queue 571 clause 1, and this is the "weird glitch with
@@ -8469,4 +8474,61 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pop-card, .pop-card.pop-down, .pop-card.pop-note { animation: none; }
+}
+
+/* ---- THE ADD ROW'S PRESS PULSE (queue 616) ---------------------------------------------------
+   Ezra: "make it so when you press on the timeline add area it has those lines pulse from the bottom
+   to the top and actually go across the top line and not cut off on the sides, with a really clean a
+   good animation inspired by the lines that we have circle around the project you have open or the
+   media audio buttons etc".
+
+   ⚠️ NOT A CONIC COMET, AND THAT IS A DELIBERATE DEPARTURE FROM `hm-glint`. His reference orbits a
+   CARD — a box whose sides are comparable — and a conic gradient maps ANGLE, not perimeter distance.
+   This row is roughly 745x40: nearly all of a conic sweep's angular travel is spent on the two short
+   ends, so an orbiting comet would crawl up the sides and snap across the top. The scar above
+   styles.css:4690 is the same lesson from the other direction — a decoration that MOVES has to be
+   checked while moving, not at rest.
+   What he described is not an orbit anyway: "from the bottom to the top … and across the top line".
+   A horizontal band of light travelling UPWARD lights the left and right edges as it passes and
+   finishes along the top, which is exactly that, and it is correct at any aspect ratio.
+
+   HOW IT IS DRAWN: the standard gradient-border trick — a padding-box mask XOR'd with a border-box
+   mask leaves only a 1.5px frame, and the element's own BACKGROUND paints that frame. So the light is
+   a background-position animation, which is cheap and animates everywhere, rather than a mask
+   position, which does not animate reliably.
+   ⚠️ It spans the whole row (`inset: 0`), NOT `--ar-x0`/`--ar-x1`. "Not cut off on the sides" is about
+   the light's path, and the resting box keeps the project-end bounding he asked for in queue 550/551.
+   ⚠️ `will-change` is deliberately absent: this paints for 620ms on a press, and a permanent
+   compositing layer on every add row is the cost queue 609 measured going badly wrong. */
+.tl-addrow-pulse {
+  position: absolute; inset: 0; border-radius: 10px; pointer-events: none; z-index: 3;
+  opacity: 0;
+  padding: 1.5px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  background-repeat: no-repeat;
+  background-size: 100% 300%;
+  background-position: 0% 100%;
+  /* One lit band with a white core and a cyan falloff — the comet's own recipe (a short bright arc,
+     a tenth of it near-white), straightened out. */
+  background-image: linear-gradient(to top,
+    rgba(150, 232, 255, 0) 0%,
+    rgba(150, 232, 255, .45) 7%,
+    rgba(232, 251, 255, .98) 13%,
+    rgba(150, 232, 255, .45) 20%,
+    rgba(150, 232, 255, 0) 30%);
+}
+.tl-addrow-pulse.is-pulsing { animation: tl-addpulse 620ms cubic-bezier(.22, .7, .28, 1) 1; }
+@keyframes tl-addpulse {
+  0%   { opacity: 0; background-position: 0% 100%; }
+  10%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { opacity: 0; background-position: 0% 0%; }
+}
+/* Someone who asked for less motion gets the row lighting up, without the travel. */
+@media (prefers-reduced-motion: reduce) {
+  .tl-addrow-pulse.is-pulsing { animation: tl-addpulse-flat 260ms ease-out 1; }
+  @keyframes tl-addpulse-flat { 0% { opacity: 0; } 40% { opacity: .85; } 100% { opacity: 0; } }
 }
