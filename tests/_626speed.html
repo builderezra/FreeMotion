@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #626 — "every clip ends at the end and I sped them up the same amount so they all end at the same
+ * time, the end of the clip is blank."
+ * The entry guesses the PROJECT keeps its 1x length so the timeline runs past the clips. But
+ * FM.autoFitDuration says it "shrinks when the furthest clip ends earlier… so the timeline never has
+ * trailing empty space", which argues against that.
+ * COMPETING HYPOTHESIS: speeding a clip up does not SHORTEN it, so it keeps its span while consuming
+ * source 1.7x faster — it runs out of footage ~41% before its own right edge and plays black there.
+ * That is blank INSIDE the clip, not after it, and his playhead sits at the clips' right edge.
+ * Measure which. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.scene.project)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var P = FM.scene.project;
+
+    // three "clips" of known length, laid end to end — shapes stand in for the geometry question,
+    // then a REAL video is used for the source-exhaustion half, which shapes cannot show.
+    FM.scene.layers.length = 0;
+    var L = [];
+    for (var i=0;i<3;i++){
+      var s = FM.makeLayer('shape', { shape:'rect', x:200+i*40, y:200, shapeW:80, shapeH:80, fill:'#0af' });
+      s.start = i*2; s.duration = 2; s.speed = 1; L.push(s); FM.scene.layers.push(s);
+    }
+    if (FM.autoFitDuration) FM.autoFitDuration();
+    await new Promise(function(r){ setTimeout(r,300); });
+    say('BEFORE  project.duration = ' + P.duration.toFixed(3));
+    say('        clips: ' + L.map(function(x){ return x.start.toFixed(2)+'–'+(x.start+x.duration).toFixed(2); }).join(', '));
+    var lastEnd = Math.max.apply(null, L.map(function(x){ return x.start + x.duration; }));
+    say('        furthest clip ends at ' + lastEnd.toFixed(3) + '   → gap ' + (P.duration-lastEnd).toFixed(3));
+
+    // --- speed them all up 1.7x, the way the inspector does
+    say('');
+    say('=== setting every clip to 1.7x (does layer.duration shorten?) ===');
+    L.forEach(function(x){ x.speed = 1.7; });
+    if (FM.autoFitDuration) FM.autoFitDuration();
+    await new Promise(function(r){ setTimeout(r,300); });
+    say('AFTER   project.duration = ' + P.duration.toFixed(3));
+    L.forEach(function(x,i){ say('        clip ' + (i+1) + '  start ' + x.start.toFixed(2) +
+        '  duration ' + x.duration.toFixed(3) + '  speed ' + x.speed + '  end ' + (x.start+x.duration).toFixed(3)); });
+    var lastEnd2 = Math.max.apply(null, L.map(function(x){ return x.start + x.duration; }));
+    say('        furthest clip ends at ' + lastEnd2.toFixed(3));
+    var gap = P.duration - lastEnd2;
+    say('        TRAILING GAP = ' + gap.toFixed(3) + 's  ' +
+        (Math.abs(gap) < 0.002 ? '✅ none — the entry’s hypothesis does NOT hold'
+                               : '🚨 ' + gap.toFixed(3) + 's of empty timeline after the last clip'));
+
+    // --- the other half: does a clip keep its span while its SOURCE runs out?
+    say('');
+    say('=== does speeding a clip up shorten it, or does it exhaust its source mid-clip? ===');
+    say('If duration is unchanged at 1.7x, the clip still occupies its old span but only has');
+    say((1/1.7*100).toFixed(1) + '% of it worth of footage — the last ' + (100-1/1.7*100).toFixed(1) + '% plays black.');
+    var unchanged = L.filter(function(x){ return Math.abs(x.duration - 2) < 1e-6; }).length;
+    say('clips whose duration did NOT change: ' + unchanged + ' of 3');
+    if (unchanged === 3) {
+      say('🚨 SETTING speed ALONE does not retime the clip. Whether that is the bug depends on');
+      say('   whether the INSPECTOR also shortens duration when it sets speed — checking that next.');
+    }
+    // what does the real inspector path do?
+    say('');
+    say('=== what the INSPECTOR does when you set speed (js/inspector.js ~5240) ===');
+    say('(read from source, not simulated: it sets layer.speed and then adjusts duration —');
+    say(' see whether the project-duration line is grow-only.)');
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

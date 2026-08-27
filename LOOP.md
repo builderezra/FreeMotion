@@ -168,6 +168,18 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
 
+🔎 **#626 MEASURED — the entry's hypothesis is REFUTED and it no longer needs his decision.** There is
+**no trailing gap**: three clips at 1.7x leave `project.duration` at 6.000 against a furthest end of
+6.000. `autoFitDuration` shrinks as well as grows AND **is called on every timeline rebuild**, which the
+speed slider triggers.
+⚠️ **MY FIRST PROBE CALLED `autoFitDuration()` ITSELF** — proving the function WORKS while saying nothing
+about whether it RUNS. Different claims; only the second mattered. **Check the call sites, not just the
+function.**
+➡️ **The blank is INSIDE the clips. Two suspects: (a) a KEYFRAMED speed ramp**, whose branch deliberately
+keeps the clip window fixed so the source runs out early — a ramp still shows a number on the badge;
+**(b) the source clamp does nothing when `mm.duration` is falsy** (`? mm.duration : Infinity`), so a clip
+already overrunning its source keeps the overrun. **Reproduce with a real video of known duration.**
+
 ✅ **#625 CLOSED v13.75 — the duplicate keyframes, and BOTH halves had one cause.** The drag snaps to the
 frame grid; every other write took the RAW playhead time. Measured: 12.5ms apart, past the 1ms dedup
 window, **0.75px on screen** — so they draw on top of each other, and deleting one leaves the other.

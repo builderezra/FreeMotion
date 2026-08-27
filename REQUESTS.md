@@ -1,6 +1,6 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.75
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.75 (notes)
 >
 > **State:** v13.75, 1022 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
@@ -22401,6 +22401,35 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **AND THE SPEED FAMILY IS ALREADY UNDER SUSPICION TWICE OVER**: #609 (the Speed slider looks
       broken) and #622 (holding the jump buttons does not update the view rail). **Read all three
       together** — three reports about speed in one day is more likely one mechanism than three.
+
+      ❌ **MEASURED 28 Aug (at v13.75) — THE HYPOTHESIS ABOVE IS REFUTED. There is NO trailing gap.**
+      Three clips end-to-end, all set to 1.7×: `project.duration` **6.000 → 6.000**, furthest clip end
+      **6.000**, **trailing gap 0.000s** (tests/_626speed.html).
+      ✅ **AND THE MECHANISM IS VERIFIED, not assumed.** `FM.autoFitDuration` — *"grows when a clip
+      extends past the end, shrinks when the furthest clip ends earlier"* — **is called on EVERY timeline
+      rebuild** (js/timeline.js:4107, *"so its length can never be stale no matter which edit triggered
+      the rebuild"*), and the speed slider ends with `FM.timeline.rebuild()`. So the project really does
+      shrink to the clips.
+      ⚠️ **A FLAW IN MY OWN FIRST PROBE, worth recording because it nearly became the answer:** it called
+      `autoFitDuration()` itself, so it proved the function WORKS and said nothing about whether it RUNS.
+      Those are different claims and only the second one matters here. The call-site check above is what
+      actually settles it.
+      ✅ **THE STATIC SPEED PATHS ARE BOTH CORRECT TOO** — the slider (inspector.js ~5282) and the
+      solve-for-speed buttons (~5240) each re-time the clip (`layer.duration = span / sp`) **and** clamp
+      it to the source that is really left (`min(dur, (srcDur − trimStart) / sp)`).
+      ➡️ **SO THE BLANK IS INSIDE THE CLIPS, NOT AFTER THEM, and two specific suspects remain:**
+      **(a) SPEED IS KEYFRAMED (a ramp).** That branch is deliberate and documented — `FM.setProp` is
+      used and *"the clip window stays fixed while playback speeds up"*, with a hint in the panel saying
+      so. **A ramped clip keeps its span, exhausts its source early, and plays black for the tail** —
+      his symptom precisely. A ramp still shows a number on the badge, so his screenshot cannot rule it out.
+      **(b) THE SOURCE CLAMP SILENTLY DOES NOTHING WHEN THE MEDIA RECORD HAS NO DURATION.**
+      `const srcDur = (mm && mm.duration) ? mm.duration : Infinity;` — a falsy duration means **no clamp
+      at all**, so a clip that already overran its source keeps the overrun through the re-time. The
+      code's own comment names that case (*"trimStart moved, or the media was replaced"*) and it is
+      exactly the kind of silent skip this file keeps finding at the bottom of "it doesn't work".
+      ➡️ **NEXT: reproduce with a REAL video of known duration** — ramped vs static, and with
+      `mm.duration` present vs missing. **Do not ask him anything yet**: the entry's own instruction was
+      to measure first, and the measurement has already killed the reading that needed his decision.
 
 - [ ] **627 — Jumping to a layer's start or end should SHOW that layer.** (27 Aug, two phone
       **STATUS: 🟢 READY — nothing is stopping this**
