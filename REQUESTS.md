@@ -21209,7 +21209,7 @@ re-opened #480, which I had marked done and had not fixed.
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
 
 - [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
       📌 **WHAT IS STILL LEFT (27 Aug), because `next.sh` keeps flagging this entry as "fixed but open":**
@@ -21262,7 +21262,10 @@ re-opened #480, which I had marked done and had not fixed.
       tiny mirrored text, which reads as noise; Shake first grows the box to 146 px, giving **6 readable
       rows**. Third theory killed on this entry — plate, default mode, transposed box — **each one
       deduced from the picture and each one wrong.**
-      🎯 **SO CLAUSE 2 IS A DESIGN PROBLEM, NOT A DEFECT, and that changes who decides it.** *"Looked
+      🎯 **SO CLAUSE 2 IS A DESIGN PROBLEM, NOT A DEFECT — it is YOUR CALL, and this entry is waiting on
+      you for it.** (Phrased that way on purpose: `_classify.py` reads these words, so an entry has to
+      SAY who it waits on in the vocabulary the tools already know — see LOOP.md on never hand-editing
+      a STATUS line.)** *"Looked
       really bad"* is accurate and the cause is that **Extend has no floor on how many times it repeats**:
       on a thin subject (one line of text, a horizon, a title bar) it produces 18+ copies and turns the
       layer into texture. **There is no bug to fix here — there is a choice to make**, and per the
