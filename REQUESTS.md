@@ -21432,6 +21432,27 @@ re-opened #480, which I had marked done and had not fixed.
       Render them at the size they ship at (380px), not just large, and let him pick.
       ⚠️ **It is also a repeat, which is the failure mode this file exists to stop.** Find the earlier
       entry, link it, and do not re-scope it from scratch.
+
+      🎨 **OPTIONS DRAWN AND SENT, 27 Aug (at v13.55) — waiting on one letter from him.**
+      📐 **What it is TODAY, rendered at 380px and looked at rather than assumed:** the panel is **five
+      bare square checkboxes with plain text** — Outline · Trim path · Dashes · Shadow · Repeater. No
+      icon, no preview, no state colour, nothing. **In an app that is glassy numbered cards everywhere
+      else, this section looks like a debug form**, which is exactly his complaint and he is right.
+      **OPTION A — PREVIEW TILES (recommended).** A 2-column grid of tiles, each showing a tiny render of
+      what the thing DOES: a stroked rounded rect for Outline, a partial stroke for Trim path, a dashed
+      stroke for Dashes, an offset dark copy for Shadow, three stepped copies for Repeater. On = teal
+      border, glow and a ticked dot. Repeater spans the full width so the grid does not end on a lonely
+      half-tile.
+      ➡️ **Why it is the recommendation: it fixes a second problem he has not named.** "Trim path" and
+      "Repeater" are not words that explain themselves — a picture does, before you turn it on.
+      **OPTION B — SWITCH ROWS + LIVE CHIP.** Keeps the compact list, but the checkbox becomes a proper
+      switch, each row gains a small preview chip on the left, and an ON row lights up with a teal wash
+      and bolder label. **Cheaper, tidier, and it scales if more items are ever added** — but it teaches
+      him nothing about what the controls do.
+      📁 **The mockup is `610-outline-shadows-options.html`** — both options next to the current
+      panel, at the width they ship at. **Sent to him; he picks A or B.**
+      ⚠️ **NOT BUILT YET, deliberately** — #545 is explicit that he sees a design before it ships, and he
+      has said it himself: *"I just want options. Yu can just say recommended next to the best option."*
 - [ ] **611 — A blue ring around the + add button, matching the menu.** (27 Aug, phone screenshot at v13.48.)
       **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
@@ -22093,6 +22114,7 @@ re-opened #480, which I had marked done and had not fixed.
       **A rule that derives a sane notch from the range is worth more than a third exception.**
 
 - [ ] **636 — A NEW LOADING INTRO, from a video he made in FreeMotion itself — with a way back.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, at v13.55. He attached `Project_42.mp4`.)
       His words, verbatim, in full (this message also covers **#637**):
       > Make this the new loading intro, make sure there’s a way to switch back incase, it should work good with the new white background
@@ -22126,14 +22148,41 @@ re-opened #480, which I had marked done and had not fixed.
       timing of the fade is tied to the mark "still settling", so a different length changes the feel.
 
 - [ ] **637 — Try the new logo image, and rate it.** (27 Aug, at v13.55. Attached, and quoted in full
+      **STATUS: 🟢 READY — nothing is stopping this**
       in **#636** above.)
       His words, verbatim:
       > Also try switching the logo to the image I sent. Rate the logo as well for how good you think it is
 
-      1. [x] **Rate it — ANSWERED IN CHAT at v13.55**, with the mark rendered at the sizes it actually
-             ships at rather than judged at full size. Verdict and the reasoning are in the reply; the
-             short version is a **7/10** — strong, distinctive silhouette, let down by the bottom-right
-             junction and by how it closes up small.
+      1. [x] **Rate it — ANSWERED at v13.55, and rendered at the sizes it ships at rather than judged
+             big, because #545's trap is exactly "a 24px icon that only reads at 64px". VERDICT: 7/10.**
+             📐 **Measured on the file he sent (2160x2160):** the mark's own box is **1014x648** — it uses
+             **47% of the width and 30% of the height**, so only **14% of the canvas is mark**. Ink fills
+             **66% of its own bounding box**, which is a good, confident weight.
+             ✅ **What is genuinely good:** the three-slab construction is DISTINCTIVE — it looks like
+             nothing Adobe, CapCut or Alight Motion use. It is also on-concept rather than decorative:
+             the pills read as clips on a timeline and the diagonal implies motion, which is the right
+             idea for this app. **And it inverts cleanly — rendered on white it reads just as well**,
+             which matters directly for #615.
+             ⚠️ **What holds it back, in order:**
+             · **The bottom-right junction is unresolved.** The diagonal's rounded cap overlaps and
+               slightly crosses the right bar, leaving a notch that reads as a mistake at every size. It
+               is the first thing the eye catches. The top-left junction does the same thing but survives
+               because the diagonal tucks behind rather than crossing.
+             · **It dies at 16px.** Rendered and looked: at 16 the counters close and it is a smudge; at
+               24 it reads but that same junction mushes; from 32 up it is clean. **Fine for the home
+               header, risky as a favicon.**
+             · **The file is padded for a poster, not an icon.** At 14% coverage it will float small in
+               the middle of an app-icon tile. That is packaging, not drawing — a re-crop fixes it.
+             · **It reads as an N**, and the app is FreeMotion. Fine if the mark is meant to be abstract;
+               worth asking if it was meant to be an initial.
+             ✅ **ANSWERED BY EZRA, 27 Aug — and it retires the only real reservation. His words:**
+             > It’s actually a M just abstract
+             **That reading holds up once you know it**: the two verticals and the diagonal are an M's
+             strokes, and **M is the right initial for FreeMotion**, so the "wrong letter" worry is
+             gone. ⚠️ **It does mean the mark is doing abstraction work**, so the bottom-right junction
+             matters MORE, not less — that notch is what makes it wobble between letters. **Fixing that
+             one join is the single highest-value change to this logo**, and it would move it from 7 to
+             a comfortable 8.
       2. [ ] **Actually swap the logo in.** ⚠️ **Where it appears has to be enumerated first** — the home
              header wordmark, the splash, the PWA manifest icons and the favicon are different files at
              different sizes, and #545's trap is exactly this: *"a 24px icon that only reads at 64px"*.

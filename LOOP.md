@@ -133,7 +133,28 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.54 — everything is pushed and the tree is clean. 995 tests green.**
+📍 **HANDOVER, 27 Aug, v13.55 — everything is pushed and the tree is clean. 996 tests green.**
+🎨 **#610 — OPTIONS DRAWN AND SENT, NOT BUILT.** The panel really is five bare checkboxes; rendered
+at 380px and looked at, he is right that it reads like a debug form. Two options went to him at ship
+width: **A preview tiles (recommended)** — each tile renders what the thing does, which also answers
+"what IS Trim path" — and **B switch rows + a live chip**. **He picks a letter; do not build first.**
+🎨 **#637 — he answered the logo question: it is an abstract M, not an N.** That kills the only real
+reservation (M is the right initial). **The bottom-right junction now matters MORE, not less** — it is
+what makes the mark wobble between letters, and fixing that one join takes it from 7 to a solid 8.
+
+✅ **#609 DONE — the Speed ruler was being drawn 139,999px wide**, past the browser's texture limit, so
+its notches were downsampled into blurred smudges. It is now a 4000px window that re-anchors as you
+scrub; range, `q`, `TICK` and the drag maths untouched, and a short ruler takes the OLD path byte for
+byte. **The test's second half is the important one** — an ordinary row must stay un-windowed, because a
+fix for one row that changed the other ~200 would be the worse bug.
+📦 **`splash-v2.mp4` IS IN THE REPO, STAGED AND UNWIRED (#636).** He sent a new intro video made in
+FreeMotion itself; it was copied in immediately because the upload folder is temporary. `splash.mp4` is
+untouched beside it. ⚠️ **Clause 3 cannot be finished before #615 exists** — his video is black-edged,
+like the current one, and on a white home screen that reads as a black rectangle.
+🎨 **#637 — the logo was RATED (7/10) with it rendered at 16/24/32/48/64px, not judged big.** The
+verdict and the numbers are in the entry. **One question is waiting on him: is the N deliberate, or
+should the mark be an F or an M?**
+
 ✅ **#582 IS CLOSED — all three clauses.** Clause 2's answer was that the off-screen culling he asked for
 was already there: **464 tile copies, ZERO outside the frame**, now asserted by a test. Two further
 optimisations were tried and **rejected with numbers** (see the entry) so nobody spends a third tick.
@@ -154,7 +175,7 @@ early, and a bare count-the-draws assertion would have gone green on a render th
 (614) · the effect plates are declared read-heavy and #582 clause 2's culling turned out to be already
 done and already exact (582) · the text options sheet no longer sits on the picture you are editing
 (602 clause 1) · a dead effect tile now says WHY in words a phone can read (603).
-🚨 **HE SENT EIGHTEEN NEW REQUESTS (615–632) — all logged verbatim, none started.**
+🚨 **HE HAS SENT TWENTY-THREE NEW REQUESTS (615–637) — all logged verbatim, only #609 started.**
 White home screen (615) · the tacky blue add-row bars → a bottom-to-top pulse (616) · duplicate Element
 drafts you cannot finish deleting (617) · elements show ◇ and still tell you to save by hand (618) ·
 **templates just fork a project instead of offering the media swap — he pre-authorised the size of it:
