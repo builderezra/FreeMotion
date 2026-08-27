@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.56
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.57
 >
-> **State:** v13.56, 997 tests green, tree clean.
+> **State:** v13.57, 999 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21566,6 +21566,14 @@ re-opened #480, which I had marked done and had not fixed.
       button belongs to the row instead of sitting on it. **The most cohesive; the least loud.**
       📁 **Mockup: `613-plus-options.html`** — each option in a faithful mock of the add row at 380px,
       then all five blown up 3x with smoothing off. **Sent to him.**
+      ✅ **HE PICKED, 27 Aug. His words, verbatim:**
+      > Do A
+      ⚠️ **Logged here because #613's options were the ones he had just been sent** — but **#610 also
+      offered an "A"**, and both had A as the recommendation. **Taken as #613; #610 is asked again in
+      the reply rather than assumed.** ➡️ **NEXT TICK: build A — the mini clip.** A 26x18 tinted rounded
+      rect with the plus inside, replacing the round bead on `.tl-addrow-plus` (21x21, 15px glyph).
+      **Keep the plus glyph itself — that was his one explicit "keep".**
+
       ➡️ **AMBIGUITY RESOLVED BY READING THE SCREENSHOT, not by asking a fourth question.** The arrows
       POINT AT the + button; where an arrow starts is not what it indicates, and *"instead of the little
       ball"* names the circle the plus sits in. **Reading (a).** If that is wrong he will see it
@@ -21644,8 +21652,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ VERIFY BY MEASURING, not by feel: fling with the same pixel velocity at 3-4 zoom levels and assert
       the distance travelled IN PIXELS is within a few percent. `_lastFling` is already exposed for the suite
       (queue 351) for exactly this kind of test.
-- [ ] **615 — Try a WHITE home screen, with the colourful top bar bleeding down into it and fading out.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **615 — Try a WHITE home screen, with the colourful top bar bleeding down into it and fading out.** ✅ **BUILT v13.57, OFF BY DEFAULT.**
       (27 Aug, phone screenshot at v13.51 — the home list with the top bar circled in red and the page
       body scribbled white.)
       His words, verbatim:
@@ -21669,6 +21676,50 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545 APPLIES — do not ship a look he has not seen.** Render options at the size they ship at
       (a 380px-wide home screen, not a swatch), send the picture, let him pick. His standing words:
       *"I just want options. Yu can just say recommended next to the best option."*
+      ✅ **BUILT v13.57, AND IT IS OFF BY DEFAULT — every clause done.**
+      1. [x] **Revertable.** ⚠️ **A SETTING, not a flag in the code** — *"make sure there's a way to
+             switch back incase"*, and he cannot edit code, so a switch only Claude can reach is not a
+             way back for him. **Settings → "White home screen"**, beside Project sorting because both
+             answer "how does the home screen behave". **Default OFF**: he said *"I wanna TRY"*, which
+             is not a decision, so the app he opens tomorrow is the one he knows until he says so.
+             The whole theme is scoped to `html[data-home="light"]`, so `dark` is byte-for-byte the app
+             he already had — reverting is one attribute, not a hunt.
+      2. [x] **White background** — `#f4f6fa`, a paper white rather than `#fff`. On an OLED phone true
+             white behind small dark text is glare, and every border below is a tint of the same hue so
+             the screen reads as one surface.
+      3. [x] **Film grain kept** — and kept LITERALLY: the tile is WHITE grain, invisible on paper, so
+             the layer is `filter: invert(1)`. That flips white→black and **leaves alpha alone**, which
+             is why it works: the tile varies only in alpha. **Everything he already tuned survives**
+             (queues 76 → 133 → 157 → 282: strength, tile size, the linear timing curve) instead of a
+             new tile being generated and re-tuned from scratch. Raised .022 → .05, because dark-on-light
+             grain at .022 is genuinely invisible.
+      4. [x] **Top bar unchanged** — *"I don't want the top bar look different much"*. It keeps its dark
+             ground, which is also what makes the bleed read as coming FROM it: a dark bar over a bright
+             wash is the edge the whole effect hangs on. Only addition: rounded bottom corners, so it
+             reads as a panel leaning on the page rather than a stripe across it.
+      5. [x] **The colour leans onto the page** — one gradient, under the content, **52vh** tall so the
+             fade ends in the same PLACE on a short phone and a tall one ("towards the bottom" is a
+             proportion of his screen, not a distance). The hues are **the + orb's own conic ramp**
+             **in its EXACT values** — cyan → teal → blue → violet — so it is the app's palette leaning
+             down, not a new scheme invented for this screen.
+             🐛 **AND THAT CLAIM WAS FALSE ON THE FIRST TRY — an existing test caught it.** The
+             gradient had been written from the orb's ramp BY EYE, and **not one of its five hues was an
+             exact match** (127,212,255 vs the real 127,216,255, and so on). `the + button wears the home
+             palette without clipping its own glow` reads the hues straight out of `#home-screen::before`
+             and `.fab-aura` and went red. **It looked right in a screenshot and had quietly broken an
+             invariant the app holds between two screens** — which is exactly the kind of thing prose
+             cannot check and a test can.
+      🐛 **ONE REAL BUG CAUGHT BY MEASURING RATHER THAN LOOKING.** The light rule for the selected tab
+      was written as `.hm-tab.on`. **The class is `.active`, so it matched nothing**, the tab kept its
+      dark-theme label colour `rgb(215,242,253)`, and it measured **1.1:1 against its own pale pill —
+      unreadable.** The screenshot looked plausible. **After: 17.7:1.** Card title 18:1, subtitle 5.8:1.
+      🔒 **Two tests.** The first asserts the SWITCH — off by default, and both directions actually move
+      `data-home` — because a look he cannot turn off is not what he agreed to try. The second asserts
+      nothing is light-on-light, and its comment names the `.on`/`.active` trap so the next person does
+      not repeat it.
+      ➡️ **AND THIS UNBLOCKS #636 CLAUSE 3** — the new intro video "should work good with the new white
+      background" could not be finished while there was no white background. There is now.
+
       ⚠️ **Things white will break that dark hid, and they are the real work:** every `--fg`/muted grey in
       the cards, the project-card thumbnails (dark art on white), the tab pills, the `…` buttons, the
       OPEN badge, the pinned pin, the + orb's glow ring (v13.49) and the blue focus rings. **Check contrast
@@ -22233,6 +22284,41 @@ re-opened #480, which I had marked done and had not fixed.
              different sizes, and #545's trap is exactly this: *"a 24px icon that only reads at 64px"*.
       ⚠️ **#545 APPLIES:** render it at 24px and at the app-icon size, send him the picture, and let him
       decide — do not swap a brand mark on his behalf on the strength of "he sent it".
+
+- [ ] **638 — Replace the "FreeMotion" TEXT logo with the version where the mark IS the M.**
+      (27 Aug, at v13.57. He sent a Claude Design project link.)
+      His words, verbatim:
+      > https://claude.ai/design/p/b48a1e06-66fd-4c43-976b-d1d40982d96e?file=support.js&via=share
+      >
+      > Can you replace our old text logo saying FreeMotion with this instead, take the one that has the logo as the M, and put it where the other was.
+      >
+      > Lmk if that link doesn’t help
+
+      1. [ ] **Take the variant where the abstract mark stands in for the M** in "FreeMotion" — i.e. a
+             lockup, not a separate icon beside a word.
+      2. [ ] **Put it exactly where the current text logo is** — the home screen's top-left wordmark.
+      🔗 **THE LINK: TRIED, AND IT RETURNS `HTTP 403 Forbidden`.** A Claude Design project is behind
+      his own login, so nothing here can read it. He anticipated exactly this — *"Lmk if that link
+      doesn't help"* — so **the answer is to ask him for the ASSET, not to guess at the artwork.**
+      ➡️ **What would unblock it, easiest first:** a screenshot of the lockup · or an SVG/PNG export ·
+      or pasting the SVG markup straight into chat. **Any one of those is enough.**
+      📍 **WHERE IT GOES, already found so the swap is mechanical once the art arrives:**
+      `index.html:565` — `<img class="hm-brand-img" src="brand-wordmark.png?v=2" alt="FreeMotion">`,
+      styled at **24px tall, width auto** (styles.css:5654). So the current logo is a raster wordmark,
+      and the replacement wants to be **an SVG or a 3x PNG** at that height.
+      ⚠️ **It is not just an `src` swap.** `.hm-brand` also carries a **`▶` glyph** (`.hm-brand-mark`)
+      to the left of the wordmark, plus a halo and a moving specular **glint** tuned to the CURRENT
+      artwork — styles.css:5703 aims one catch *"on the F's top-left corner"*. **A new lockup moves that
+      corner**, and the ▶ may be redundant once the mark is inside the word. **Both need a decision when
+      the art lands, and neither is visible from the filename.**
+      ✅ **AND THIS IS THE PAYOFF OF #637** — he confirmed the mark is *"actually a M just abstract"*, so
+      substituting it for the M is exactly what it was drawn for. **The two entries belong together.**
+      ⚠️ **The junction called out in #637's 7/10 rating matters MORE in a lockup**, not less: inside a
+      word the mark has to read as one specific letter at a glance, and the bottom-right notch is what
+      makes it wobble between letters. **Worth fixing before it is set into the wordmark.**
+      📍 **Where it lives now:** the home header wordmark. **#618 clause 1 and #637 clause 2 are the
+      other places a logo appears** (element thumbnails, PWA icons, favicon) — enumerate them before
+      swapping, because they are different files at different sizes.
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:

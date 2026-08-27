@@ -26,6 +26,13 @@ window.FM = window.FM || {};
      * someone's saved element to your preference would be wrong, and is the one exemption this
      * setting has to make. */
     shapeColor: 'random',
+    /* THE WHITE HOME SCREEN (queue 615). Ezra: "I wanna try a white background for the home menu…
+     * make sure there's a way to switch back incase".
+     * ⚠️ THE ESCAPE HATCH IS A SETTING, NOT A NOTE, because he asked for one and because he cannot
+     * edit code — a flag only Claude can flip is not "a way to switch back" for him. Default OFF: he
+     * said "I wanna TRY", which is not a decision, so the app he opens tomorrow is the app he knows
+     * until he says otherwise. */
+    homeLight: false,
     playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
     /* ONE desktop layout (queue 249). Ezra: "I just want two layouts not three."
      * There were three in practice — phone, studio, and classic — because classic was the DEFAULT and
@@ -77,6 +84,11 @@ window.FM = window.FM || {};
        is exactly the Classic look queue 178 removed. Ezra: "Get rid of the classic theme option." */
     document.documentElement.setAttribute('data-theme', 'glass');
     document.body.classList.toggle('demo-mode', !!state.demoMode);
+    /* ⚠️ ON THE ROOT, NOT ON #home-screen (queue 615). The home screen is torn down and rebuilt, and
+       the splash sits OUTSIDE it — an attribute on the element would be lost on every rebuild and
+       could never reach anything painted before home exists. One attribute on <html> is also what
+       makes reverting one line of CSS scoping rather than a hunt. */
+    document.documentElement.setAttribute('data-home', state.homeLight ? 'light' : 'dark');
     /* The `layout-studio` class is GONE (queue 293). It marked one of two desktop layouts; the other has
        been deleted from the stylesheet, so the class selected nothing and applying it said something
        about the app that was no longer true. Verified before removing it: with the Classic rules gone,
@@ -328,6 +340,9 @@ window.FM = window.FM || {};
          DIFFERENT setting that happens to share the word: Classic|Studio is where the inspector sits,
          and it stays.) */
       segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),
+      /* Sits WITH project sorting because both are "how the home screen behaves", and because this is
+         the switch queue 615 promised him — it has to be somewhere he can find it without being told. */
+      toggleRow('White home screen', 'Light background on the projects screen, with the top bar\u2019s colour bleeding down into it. The editor is unaffected.', 'homeLight'),
     ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),

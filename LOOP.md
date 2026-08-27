@@ -133,7 +133,19 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.56 — everything is pushed and the tree is clean. 997 tests green.**
+📍 **HANDOVER, 27 Aug, v13.57 — everything is pushed and the tree is clean. 999 tests green.**
+✅ **#615 BUILT — the white home screen, OFF BY DEFAULT, switch in Settings.** All five clauses done.
+The escape hatch he led with is a SETTING, not a code flag: he cannot edit code, so a switch only Claude
+can reach is not a way back. Theme scoped to `html[data-home="light"]`, so `dark` is the app he had.
+🐛 **A REAL BUG CAUGHT BY MEASURING, NOT LOOKING:** the selected-tab rule was `.hm-tab.on`; the class
+is **`.active`**, so it matched nothing and the tab sat at **1.1:1** against its own pill. The
+screenshot looked fine. **Read the computed value off the element — a plausible screenshot is not proof.**
+➡️ **THIS UNBLOCKS #636 CLAUSE 3** (the new intro video "should work good with the new white background").
+✅ **HE ANSWERED "Do A"** — logged against **#613** (the options he had just been sent). ⚠️ **#610 also
+offered an "A" and both recommended A**, so #610 is asked again rather than assumed.
+➡️ **NEXT TICK: build #613 A** — the mini clip on `.tl-addrow-plus`. **Keep the plus glyph; only the
+round bead goes.**
+
 🎨 **#613 — FOUR OPTIONS DRAWN AND SENT, NOT BUILT.** The timeline + is `.tl-addrow-plus`, **21x21
 with a 15px glyph**, and it is the only CIRCLE in a timeline made of rounded rectangles — which is why
 it reads as random. Options: **A mini clip (recommended)**, B insert caret, C stacked layers, D dashed

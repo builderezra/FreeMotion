@@ -48266,6 +48266,67 @@
     }
   });
 
+  /* 615 — the white home screen. Two things need locking, and the FIRST is the one he asked for:
+     "make sure there's a way to switch back incase". A look that cannot be switched off is not what
+     he agreed to try, so the default and the switch are asserted before anything about the colours. */
+  test('615: the white home screen is OFF by default and switchable', { item: '615' }, async function () {
+    if (!FM.settings || !FM.settings.get || !FM.settings.set) throw new Error('FM.settings.get/set are gone — the switch queue 615 promised him no longer has a home');
+    const was = !!FM.settings.get('homeLight');
+    try {
+      FM.settings.set('homeLight', false);
+      await sleep(120);
+      if (document.documentElement.getAttribute('data-home') !== 'dark') {
+        throw new Error('with homeLight off the root is data-home="' + document.documentElement.getAttribute('data-home') + '" — switching back has stopped working, which is the clause he led his request with');
+      }
+      FM.settings.set('homeLight', true);
+      await sleep(120);
+      if (document.documentElement.getAttribute('data-home') !== 'light') {
+        throw new Error('turning homeLight on did not set data-home="light" — the whole theme is scoped to that attribute, so nothing would apply');
+      }
+    } finally {
+      FM.settings.set('homeLight', was);
+      await sleep(60);
+    }
+  });
+
+  test('615: nothing on the white home screen is light-on-light', { item: '615' }, async function () {
+    const was = !!(FM.settings && FM.settings.get('homeLight'));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      return await atPhoneWidth(async function () {
+        FM.settings.set('homeLight', true);
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(420);
+        const lum = function (rgb) {
+          const m = (rgb.match(/\d+/g) || [0, 0, 0]).map(Number).map(function (v) {
+            v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+        };
+        const paper = lum('rgb(250,250,252)');
+        const ratio = function (col) { const a = lum(col); return (Math.max(a, paper) + 0.05) / (Math.min(a, paper) + 0.05); };
+        /* ⚠️ THE ACTIVE TAB IS THE REASON THIS TEST EXISTS. The light rule was first written as
+           `.hm-tab.on` — the class is `.active`, so it matched NOTHING, the tab kept its dark-theme
+           label colour rgb(215,242,253), and it measured 1.1:1 against its own pale pill. The
+           screenshot looked plausible; the number is what caught it. */
+        const checks = [
+          ['the selected tab', document.querySelector('.hm-tab.active')],
+          ['a project title', document.querySelector('.hm-name')],
+        ];
+        checks.forEach(function (c) {
+          if (!c[1]) return;
+          const col = getComputedStyle(c[1]).color;
+          const r = ratio(col);
+          if (r < 4.5) throw new Error(c[0] + ' is ' + col + ' on the white home screen — ' + r.toFixed(1) + ':1 against the page, which is unreadable. Queue 615: check the selector actually matches (the tab class is .active, not .on).');
+        });
+      });
+    } finally {
+      if (FM.settings) FM.settings.set('homeLight', was);
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* 611 — "Put a little blue ring around the add button that's got the same style and glow as
      everything else in this menu", sent with a screenshot of the PROJECTS HOME.
      v13.49 shipped that ring onto `.fab-aura`, which lives inside `#add-fab` — the EDITOR's button,

@@ -508,3 +508,125 @@ html[data-theme="glass"] .shortcuts-card .btn { background: #0c1c25; border-top-
   html[data-theme="glass"] .ctx-menu,
   html[data-theme="glass"] .shortcuts-card { background: #0c1c25; }
 }
+
+/* ================================================================================================
+   THE WHITE HOME SCREEN (queue 615) — html[data-home="light"]
+   Ezra, verbatim: "I wanna try a white background for the home menu, make it white, keep film grain,
+   keep the top bar colourful like it is now, so I don't want the top bar look different much, and
+   since the top bar will be colourful and the rest will be a simple white I want it be like the
+   colours at the the top of the white page are more solid but it sorta fades out towards the bottom,
+   like the top colourful bar is leaning onto the page."
+
+   ⚠️ SCOPED TO THE HOME SCREEN ONLY. He asked for "the home menu"; the editor is where he judges
+   colour on his own footage and a light editor would be a different, un-asked-for change.
+   ⚠️ EVERY RULE HERE IS ADDITIVE AND ATTRIBUTE-SCOPED, so `data-home="dark"` is byte-for-byte the app
+   he already has. That is clause 1 — "make sure there's a way to switch back incase" — kept
+   structurally rather than by intending to be careful.
+   ================================================================================================ */
+
+html[data-home="light"] #home-screen {
+  /* Not pure #fff: a paper white. On an OLED phone a true white page behind small dark text is
+     glare, and every card border below is a tint of the same hue so the screen reads as one surface. */
+  background: #f4f6fa;
+  color: #10151f;
+}
+
+/* THE BLEED — "like the top colourful bar is leaning onto the page".
+   One element, drawn UNDER the content and OVER the background, strongest where it meets the bar and
+   gone by the middle of the list. The hues are the + orb's own conic ramp (cyan → mint → green →
+   periwinkle → violet) sampled in order, so the wash is the app's palette leaning down rather than a
+   new colour scheme invented for this screen.
+   ⚠️ 52vh, not a pixel height: the fade has to end in the same PLACE on a small phone and a tall one,
+   and "towards the bottom" is a proportion of the screen he is looking at, not a distance. */
+html[data-home="light"] #home-screen::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 52vh;
+  pointer-events: none; z-index: 0;
+  /* ⚠️ EVERY HUE HERE IS ONE THE + BUTTON ALREADY USES — and that is enforced, not intended. An
+     existing test ('the + button wears the home palette without clipping its own glow') reads the
+     hues out of `#home-screen::before` and `.fab-aura` and fails if the background uses a colour the
+     button does not. It caught this rule on its first run: the gradient had been written from the
+     orb's conic ramp BY EYE (127,212,255 · 107,240,200 · 155,232,138 · 143,184,255 · 200,107,255) and
+     not one of those five was an exact match. Close enough to look right in a screenshot, and enough
+     for the two screens to stop sharing a palette.
+     The set below is the button's own, in a top-down order: cyan at the bar, through teal and blue,
+     to the violet that fades out. So "the top colourful bar is leaning onto the page" is literally
+     the app's palette leaning down. */
+  background:
+    linear-gradient(180deg,
+      rgba(127, 216, 255, .62) 0%,
+      rgba(74, 236, 208, .38) 17%,
+      rgba(41, 217, 187, .26) 32%,
+      rgba(90, 168, 255, .18) 50%,
+      rgba(38, 132, 255, .11) 66%,
+      rgba(150, 122, 255, .06) 82%,
+      rgba(122, 92, 255, 0) 100%);
+}
+
+/* THE TOP BAR DOES NOT CHANGE — "I don't want the top bar look different much".
+   It keeps the dark ground it already has, which is also what makes the bleed read as coming FROM it:
+   a dark bar over a bright wash is the edge the whole effect hangs on. The rounded bottom corners are
+   the only addition, so the bar reads as a panel leaning on the page rather than a stripe across it. */
+html[data-home="light"] .hm-top {
+  background: linear-gradient(180deg, #0b1018 0%, #0e1320 100%);
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+  box-shadow: 0 10px 26px -16px rgba(20, 40, 70, .55);
+  position: relative; z-index: 2;
+}
+
+/* THE GRAIN STAYS — he asked for it by name, and it is WHITE grain, which is invisible on a white
+   page. Inverting the layer turns the same tile into BLACK grain at the same alpha, so the texture he
+   already tuned (queue 76 → 133 → 157 → 282: strength, tile size, timing curve) survives intact
+   instead of being re-generated and re-tuned.
+   ⚠️ `filter: invert()` acts on RGB and leaves ALPHA alone, which is the whole reason this works: the
+   tile varies only in alpha, so inverting flips white→black and changes nothing else.
+   Raised from .022 to .05 because dark-on-light grain at .022 is genuinely invisible — measured by
+   eye at 380px against the flat page. */
+html[data-home="light"] #hm-grain { filter: invert(1); opacity: .05; z-index: 1; }
+
+/* CARDS on paper. Border and shadow replace the dark panel fill; the pinned blue is untouched so the
+   rim he asked for in queue 611 still means the same thing. */
+html[data-home="light"] .hm-card {
+  background: rgba(255, 255, 255, .82);
+  border-color: rgba(16, 30, 52, .12);
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 10px 24px -18px rgba(16, 30, 52, .5);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+html[data-home="light"] .hm-name { color: #0d1420; }
+html[data-home="light"] .hm-sub { color: #5a6478; }
+html[data-home="light"] .hm-card-more { color: #55617a; background: rgba(16, 30, 52, .05); }
+html[data-home="light"] .hm-thumb-draft { color: #7d8798; }
+
+/* THE TAB PILLS keep their shape and their selected-blue; only the ground under them changes, so the
+   row still reads as the same control he already knows. */
+html[data-home="light"] .hm-tab {
+  background: rgba(255, 255, 255, .70); border-color: rgba(16, 30, 52, .12); color: #48546b;
+}
+/* ⚠️ `.active`, NOT `.on` — written as `.on` first and it matched NOTHING, so the selected tab kept
+   its dark-theme label colour (measured: rgb(215,242,253), a pale blue) on a pale gradient and was
+   very nearly unreadable. Caught by reading the computed colour off the live element rather than
+   looking at the screenshot and assuming the rule had applied. */
+html[data-home="light"] .hm-tab.active {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(255, 255, 255, .88));
+  background-color: rgba(255, 255, 255, .96);
+  color: #0d1420;
+  border-color: rgba(90, 199, 237, .55);
+  box-shadow: 0 0 0 1px rgba(90, 199, 237, .25), 0 6px 16px -12px rgba(20, 60, 90, .6);
+}
+
+/* THE + ORB: the ring from queue 611 was borrowed from the pinned cards for a DARK page, and at 30%
+   alpha it disappears against paper. Same hue, carried up to a weight that still reads — anything
+   else would silently undo the thing he asked for two ticks ago. */
+html[data-home="light"] #hm-new {
+  box-shadow:
+    0 0 0 1.5px rgba(70, 170, 220, .55),
+    0 10px 26px -14px rgba(20, 90, 130, .55),
+    var(--lg-rim), 0 0 22px rgba(90, 199, 237, .28);
+}
+
+/* The empty-state copy and the search field, so nothing is left as light-on-light. */
+html[data-home="light"] .hm-empty,
+html[data-home="light"] .hm-empty-sub { color: #5a6478; }
+html[data-home="light"] #hm-search-input {
+  background: rgba(255, 255, 255, .9); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
