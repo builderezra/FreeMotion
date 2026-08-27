@@ -133,7 +133,22 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.61 — everything is pushed and the tree is clean. 1003 tests green.**
+📍 **HANDOVER, 27 Aug, v13.62 — everything is pushed and the tree is clean. 1005 tests green.**
+✅ **#639 — THE LIGHT LOOK IS ON BY DEFAULT.** He explicitly told the loop to jump the queue for it and
+in the same breath protected the rest: *"don't forget the other stuff and like still do the other stuff
+just not right away."* **Nothing was dropped.** One switch (Settings → *New light look*) turns the whole
+thing off: white home + light colourful top bar + his new intro + the mark-as-M wordmark.
+⚠️ **STILL OPEN in #639: clause 5, the APP ICON / PWA icons.** Said plainly rather than quietly.
+🚨 **TWO LESSONS FROM THIS ONE, both about things a screenshot cannot show:**
+· **The wordmark is WHITE artwork.** On a light bar it is invisible while the `<img>` remains present,
+  sized and "loaded". `filter: brightness(0)` is the only thing making it visible, and a test asserts it.
+· **The splash reads its own copy of the light default**, because it runs before `settings.js` exists.
+  The first version read a MISSING key as `false` and served the OLD intro on a fresh install while the
+  rest of the app went light. **An absent key means "never chosen", not "chosen off".** A test fetches
+  `index.html` and fails if the two defaults disagree.
+📏 **And measuring the film changed its design:** portrait 9:16, 2.05s, starts #111, **ends PURE
+WHITE** — so the splash box stopped being square, the ground became #111, and it animates to white.
+
 ✅ **#617 clause 3 DONE — element drafts take part in Select, and bulk delete really removes them.**
 🚨 **A STALE COMMENT SENT THE FIRST DIAGNOSIS WRONG, AND TWO COMMENTS IN ONE FILE DISAGREED.**
 `js/home.js:84` said Select was "projects tab only"; `render()` says "Select works on EVERY tab now

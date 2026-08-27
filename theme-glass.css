@@ -532,25 +532,19 @@ html[data-home="light"] #home-screen {
 }
 
 /* THE BLEED — "like the top colourful bar is leaning onto the page".
-   One element, drawn UNDER the content and OVER the background, strongest where it meets the bar and
-   gone by the middle of the list. The hues are the + orb's own conic ramp (cyan → mint → green →
-   periwinkle → violet) sampled in order, so the wash is the app's palette leaning down rather than a
-   new colour scheme invented for this screen.
-   ⚠️ 52vh, not a pixel height: the fade has to end in the same PLACE on a small phone and a tall one,
-   and "towards the bottom" is a proportion of the screen he is looking at, not a distance. */
-html[data-home="light"] #home-screen::before {
-  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 52vh;
+   🚨 IT LIVES ON ITS OWN ELEMENT, AND THE FIRST VERSION DID NOT — that cost the #187 bug back.
+   `#home-screen::before` and `::after` are the TWO DRIFTING LIGHT LAYERS, and `::before` carries
+   `inset: -8%` because it also carries `hm-drift-a`: it translates and scales, so it has to overhang
+   the screen or an edge is left uncovered. That overscan took six rounds to get right (#187, "the
+   black bar"). Overriding the rule to place a 52vh gradient at `top: 0` threw the overscan away, and
+   the strip came straight back — Ezra saw it within the minute: *"the old black bar glitch still
+   happens its just white now"*, and the suite's own #187 test measured it at 9.0px of the left edge.
+   ⚠️ SO: never reuse either pseudo-element on #home-screen. `#hm-bleed` is a real element, sits under
+   the content and over the drift layers, and touches neither.
+   The hues are the + button's, in a top-down order, and an existing test enforces that they match. */
+html[data-home="light"] #hm-bleed {
+  position: absolute; left: 0; right: 0; top: 0; height: 52vh;
   pointer-events: none; z-index: 0;
-  /* ⚠️ EVERY HUE HERE IS ONE THE + BUTTON ALREADY USES — and that is enforced, not intended. An
-     existing test ('the + button wears the home palette without clipping its own glow') reads the
-     hues out of `#home-screen::before` and `.fab-aura` and fails if the background uses a colour the
-     button does not. It caught this rule on its first run: the gradient had been written from the
-     orb's conic ramp BY EYE (127,212,255 · 107,240,200 · 155,232,138 · 143,184,255 · 200,107,255) and
-     not one of those five was an exact match. Close enough to look right in a screenshot, and enough
-     for the two screens to stop sharing a palette.
-     The set below is the button's own, in a top-down order: cyan at the bar, through teal and blue,
-     to the violet that fades out. So "the top colourful bar is leaning onto the page" is literally
-     the app's palette leaning down. */
   background:
     linear-gradient(180deg,
       rgba(127, 216, 255, .62) 0%,
@@ -562,17 +556,12 @@ html[data-home="light"] #home-screen::before {
       rgba(122, 92, 255, 0) 100%);
 }
 
-/* THE TOP BAR DOES NOT CHANGE — "I don't want the top bar look different much".
-   It keeps the dark ground it already has, which is also what makes the bleed read as coming FROM it:
-   a dark bar over a bright wash is the edge the whole effect hangs on. The rounded bottom corners are
-   the only addition, so the bar reads as a panel leaning on the page rather than a stripe across it. */
-html[data-home="light"] .hm-top {
-  background: linear-gradient(180deg, #0b1018 0%, #0e1320 100%);
-  border-bottom-left-radius: 18px;
-  border-bottom-right-radius: 18px;
-  box-shadow: 0 10px 26px -16px rgba(20, 40, 70, .55);
-  position: relative; z-index: 2;
-}
+/* THE TOP BAR: superseded — see "THE LIGHT LOOK, PART TWO" at the end of this file (queue 639).
+   #615 made it DARK here and argued for it: "a dark bar over a bright wash is the edge the whole
+   effect hangs on". He looked at it and said no: *"it needs to be colourful like how it is but reflect
+   the LIGHTNESS that it should be"*. The dark rule is DELETED rather than left to lose the cascade —
+   two rules for one element, where the losing one carries a confident comment, is how the next reader
+   spends twenty minutes working out which is live. */
 
 /* THE GRAIN STAYS — he asked for it by name, and it is WHITE grain, which is invisible on a white
    page. Inverting the layer turns the same tile into BLACK grain at the same alpha, so the texture he
@@ -587,20 +576,28 @@ html[data-home="light"] #hm-grain { filter: invert(1); opacity: .05; z-index: 1;
 /* CARDS on paper. Border and shadow replace the dark panel fill; the pinned blue is untouched so the
    rim he asked for in queue 611 still means the same thing. */
 html[data-home="light"] .hm-card {
-  background: rgba(255, 255, 255, .82);
+  /* ⚠️ background-COLOR, not the `background` shorthand: the shorthand resets background-image to
+     none, and the glass theme paints the card's sheen there. The suite caught it as "the probe card
+     did not pick up the glass theme at all (background-image = none)". */
+  background-color: rgba(255, 255, 255, .82);
   border-color: rgba(16, 30, 52, .12);
   box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 10px 24px -18px rgba(16, 30, 52, .5);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 html[data-home="light"] .hm-name { color: #0d1420; }
 html[data-home="light"] .hm-sub { color: #5a6478; }
-html[data-home="light"] .hm-card-more { color: #55617a; background: rgba(16, 30, 52, .05); }
+html[data-home="light"] .hm-card-more { color: #55617a; background-color: rgba(16, 30, 52, .05); }
 html[data-home="light"] .hm-thumb-draft { color: #7d8798; }
 
 /* THE TAB PILLS keep their shape and their selected-blue; only the ground under them changes, so the
    row still reads as the same control he already knows. */
+/* ⚠️ background-COLOR throughout this block, never the `background` shorthand. The shorthand resets
+   background-IMAGE to none, and the glass theme paints its sheen there — so a flat colour written the
+   short way silently strips the material off whatever it touches. The suite caught it twice in one
+   run: first on the cards ("the probe card did not pick up the glass theme at all"), then, after that
+   was fixed, on the tabs. */
 html[data-home="light"] .hm-tab {
-  background: rgba(255, 255, 255, .70); border-color: rgba(16, 30, 52, .12); color: #48546b;
+  background-color: rgba(255, 255, 255, .70); border-color: rgba(16, 30, 52, .12); color: #48546b;
 }
 /* ⚠️ `.active`, NOT `.on` — written as `.on` first and it matched NOTHING, so the selected tab kept
    its dark-theme label colour (measured: rgb(215,242,253), a pale blue) on a pale gradient and was
@@ -618,8 +615,13 @@ html[data-home="light"] .hm-tab.active {
    alpha it disappears against paper. Same hue, carried up to a weight that still reads — anything
    else would silently undo the thing he asked for two ticks ago. */
 html[data-home="light"] #hm-new {
+  /* ⚠️ THE RING KEEPS ITS 127,216,255 (queue 611). The first light version swapped in a darker blue
+     for legibility on paper and quietly undid the thing he asked for two ticks earlier — the suite
+     caught it as "the home + orb has no blue ring". Same hue, carried to a weight that reads on
+     white by DOUBLING it rather than changing it. */
   box-shadow:
-    0 0 0 1.5px rgba(70, 170, 220, .55),
+    0 0 0 1.5px rgba(127, 216, 255, .95),
+    0 0 0 2.5px rgba(70, 170, 220, .38),
     0 10px 26px -14px rgba(20, 90, 130, .55),
     var(--lg-rim), 0 0 22px rgba(90, 199, 237, .28);
 }
@@ -628,5 +630,77 @@ html[data-home="light"] #hm-new {
 html[data-home="light"] .hm-empty,
 html[data-home="light"] .hm-empty-sub { color: #5a6478; }
 html[data-home="light"] #hm-search-input {
-  background: rgba(255, 255, 255, .9); border-color: rgba(16, 30, 52, .14); color: #10151f;
+  background-color: rgba(255, 255, 255, .9); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+
+/* ================================================================================================
+   THE LIGHT LOOK, PART TWO (queue 639) — he looked at v13.57 and sent back a correction.
+   Verbatim: "I think the top bar it's too dark like it needs to be colourful like how it is but
+   reflect the darkness that it should be. I mean the LIGHTNESS that it should be not the darkness."
+   ⚠️ THIS REVERSES A DECISION #615 ARGUED FOR. That entry kept the bar dark and said "a dark bar over
+   a bright wash is the edge the whole effect hangs on". He has now looked at it and disagreed, so the
+   reasoning loses. Keeping it dark because the argument was tidy would be the wrong kind of stubborn.
+   ================================================================================================ */
+
+/* THE TOP BAR: light, and carrying the colour rather than sitting above it. The same hues as the
+   bleed below it — which are the + button's, enforced by an existing test — so the bar and the page
+   are one wash rather than two ideas. */
+html[data-home="light"] .hm-top {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .88), rgba(255, 255, 255, .62)),
+    linear-gradient(105deg,
+      rgba(127, 216, 255, .55) 0%,
+      rgba(74, 236, 208, .42) 34%,
+      rgba(90, 168, 255, .34) 64%,
+      rgba(150, 122, 255, .40) 100%);
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 10px 26px -18px rgba(30, 70, 110, .55);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+
+/* THE WORDMARK IS WHITE ARTWORK, so on a light bar it vanishes. `brightness(0)` drives every lit
+   pixel to black and LEAVES ALPHA ALONE, so one asset serves both looks — no second file, no extra
+   download, and the two can never drift apart. The drop-shadow is what stops it reading as flat ink
+   on the tinted glass. */
+html[data-home="light"] .hm-brand-img {
+  filter: brightness(0) drop-shadow(0 1px 0 rgba(255, 255, 255, .55));
+}
+/* The halo and the travelling glint are tuned to WHITE artwork on a dark bar; on black-on-light they
+   read as smears. Off in the light look — the tinted glass under the mark is doing that job now. */
+html[data-home="light"] .hm-brand-halo,
+html[data-home="light"] .hm-brand-glint { display: none; }
+
+/* The header's round buttons, so they sit on the glass rather than punching holes in it. */
+html[data-home="light"] .hm-search-btn,
+html[data-home="light"] #hm-select-btn {
+  background-color: rgba(255, 255, 255, .72);
+  border-color: rgba(20, 50, 80, .16);
+  color: #16233a;
+}
+
+/* ---- THE NEW INTRO (queue 639 / 636) ----------------------------------------------------------
+   MEASURED, not assumed: 2160x3840 portrait, 2.05s, starting on rgb(17,17,17) and ENDING ON PURE
+   WHITE. Three consequences, none of them guessable from the filename:
+     · the ground must be #111, not #000, or its own black sits in a darker surround;
+     · the box must be PORTRAIT — the old rule is `min(100vw,100vh)`, a SQUARE sized for the old
+       square film, and a 9:16 video inside that would be a small strip in the middle;
+     · the ground must END WHITE, because the film does. A white last frame on a black page is a hard
+       rectangle, which is exactly the seam queue 162 was about, inverted.
+   The ground is animated rather than switched so the page arrives at white with the film instead of
+   snapping at the end. */
+#splash.splash-light { background: #111; animation: splash-ground 2.05s ease-in forwards; }
+@keyframes splash-ground {
+  0%   { background-color: #111; }
+  62%  { background-color: #111; }
+  100% { background-color: #fff; }
+}
+html.splash-on-light, html.splash-on-light body { background: #111; animation: splash-ground 2.05s ease-in forwards; }
+#splash.splash-light #splash-vid {
+  width: auto; height: 100vh; height: 100dvh;
+  max-width: 100vw; object-fit: contain;
+}
+/* Someone who asked for less motion still gets the right ground, without the ramp. */
+@media (prefers-reduced-motion: reduce) {
+  #splash.splash-light, html.splash-on-light, html.splash-on-light body { animation: none; background: #fff; }
 }

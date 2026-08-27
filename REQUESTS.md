@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.61
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.62
 >
-> **State:** v13.61, 1003 tests green, tree clean.
+> **State:** v13.62, 1005 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22433,6 +22433,7 @@ re-opened #480, which I had marked done and had not fixed.
       swapping, because they are different files at different sizes.
 
 - [ ] **639 — 🔴 DO THE LIGHT LOOK NOW: the new intro, the new logo at the top, and make the white
+      **STATUS: 🟢 READY — nothing is stopping this**
       page actually look nice — INCLUDING a LIGHT, colourful top bar.** (27 Aug, at v13.61.)
       His words, verbatim, in full:
       > Can you focus on making the new animation? The one I sent you and then also putting the new logo up at the top and just making the white page look nice? I think the top bar it’s too dark like it needs to be colourful like how it is but reflect the darkness that it should be. I mean the lightness that it should be not the darkness just make it like this like the fact that the screen is supposed to be light now and you know change the intro animation and the logo for the app and all that stuff cause I just wanna see how it looks as soon as possible because that’s important to me but don’t forget the other stuff and like still do the other stuff just not right away
@@ -22441,9 +22442,9 @@ re-opened #480, which I had marked done and had not fixed.
       rest:** *"I just wanna see how it looks as soon as possible because that's important to me but
       don't forget the other stuff and like still do the other stuff just not right away."* **Nothing is
       dropped — #602, #604, #610, #618, #619 and the rest keep their places.**
-      1. [ ] **The intro animation** — his video, as the loading intro (**#636**).
-      2. [ ] **The new logo at the top** — the mark-as-M lockup (**#638**).
-      3. [ ] **Make the white page look nice** (**#615** polish).
+      1. [x] **The intro animation** ✅ **v13.62.**
+      2. [x] **The new logo at the top** ✅ **v13.62.**
+      3. [x] **Make the white page look nice** ✅ **v13.62.**
       4. [ ] **A LIGHT, COLOURFUL TOP BAR — and this REVERSES a decision I made in #615.**
              He corrects himself mid-sentence, and the correction is the instruction: *"it needs to be
              colourful like how it is but reflect the **darkness** that it should be. I mean the
@@ -22453,10 +22454,67 @@ re-opened #480, which I had marked done and had not fixed.
              His call wins.** ➡️ **And it forces a second change nobody would guess: the wordmark is
              WHITE artwork. On a light bar it disappears.** A dark variant of the lockup is required, not
              optional.
-      5. [ ] **"the logo for the app"** — read as the app icon / PWA icons too, not just the header.
-      ⚠️ **He wants to SEE it**, so the white theme should be ON when he opens the app — with the Settings
-      switch from #615 still there to turn it straight off. **That is a changed default, so it is called
-      out in the reply rather than slipped in.**
+      5. [ ] **"the logo for the app"** — the app icon / PWA icons. ⚠️ **NOT DONE, and said plainly rather than quietly:** the PDF has an APP ICON variant and the icons are separate files at several sizes. Next tick.
+      ✅ **SHIPPED v13.62 — ON BY DEFAULT, one switch for the whole look.**
+      **4. [x] THE TOP BAR IS LIGHT AND COLOURFUL** — white glass over the palette, rounded bottom
+      corners, blurred. **#615's argument for a dark bar loses to him having looked at it.**
+      ➡️ **AND THE CONSEQUENCE NOBODY WOULD GUESS: the wordmark is WHITE artwork**, so on a light bar it
+      vanishes. Solved with **`filter: brightness(0)`**, which drives every lit pixel to black and
+      **leaves alpha alone** — so ONE asset serves both looks. No second file, and the two can never
+      drift apart. **A test asserts that filter**, because without it the logo disappears while the
+      `<img>` stays present, correctly sized and "loaded" — invisible to every other check.
+      🎬 **THE INTRO — AND MEASURING IT CHANGED THE DESIGN.** His film is **2160x3840 portrait,
+      2.05s, starting on rgb(17,17,17) and ENDING ON PURE WHITE.** Three things fall out of that, none
+      of them guessable from the filename:
+      · **the splash ground is #111, not #000** — its own black in a darker surround is a visible box;
+      · **the box had to become PORTRAIT.** The old rule is `min(100vw,100vh)` — a SQUARE, sized for the
+        old square film. A 9:16 video inside that is a small strip in the middle;
+      · **the ground ANIMATES to white over 2.05s**, because the film does. A white last frame on a
+        black page is a hard rectangle — the exact seam queue 162 fixed, inverted.
+      **He made this intro FOR the light look**, which is why it is paired with it rather than given a
+      switch of its own: one setting turns the whole thing on and off. That is the "way to switch back"
+      #636 asked for, and far easier to explain than three toggles.
+      📉 **NO POSTER for the new film, and that is a measurement not an omission:** its first frame is
+      the mark already lit on #111, and the splash box IS #111 — so pre-load and frame 1 differ only by
+      the mark. **Saves a 292KB download.** The old film keeps its poster, because its ground and the
+      splash's never matched.
+      🐛 **A BUG CAUGHT ON A CLEARED STORE — the kind only a genuine first run shows.** The splash must
+      choose its film BEFORE `js/settings.js` exists, so it reads localStorage itself and carries **its
+      own copy of the default**. The first version read the key, found **nothing** (the settings object
+      is only written once something is saved), fell back to **false**, and served the **OLD intro while
+      the rest of the app went light**. **An absent key means "never chosen", not "chosen off".** A test
+      now fetches `index.html` and fails if the two defaults disagree.
+      📐 **Verified on a cleared store at 375px:** `data-home=light` with nothing saved, new wordmark
+      with the darkening filter, `▶` gone, tinted 20px-radius bar; contrast — active tab **18:1**, card
+      title **18:1**, subtitle **5.8:1**.
+
+- [x] **640 — 🔴 "The old black bar glitch still happens its just white now."** ✅ **FIXED BEFORE IT
+      EVER SHIPPED — v13.62 never reached him.** (27 Aug, desktop screenshot at v13.62-in-progress.)
+      His words, verbatim:
+      > the old black bar glitch still happens its just white now
+
+      🚨 **HE AND THE SUITE FOUND IT IN THE SAME MINUTE, AND THE SUITE FOUND IT FIRST.** The #187
+      regression test — *"neither drifting light layer ever walks off an edge"* — went red with
+      **"`#home-screen::before` leaves 9.0px of the left edge uncovered"** while his screenshot was
+      arriving. **The release was blocked by ship.sh and never pushed**, so the version on his phone
+      never had it.
+      🔑 **CAUSE, and it is a lesson about reusing a pseudo-element.** `#home-screen::before` and
+      `::after` are the **two drifting light layers**. `::before` carries `inset: -8%` **because** it
+      also carries `hm-drift-a`: it translates and scales, so it must overhang the screen or an edge is
+      left bare. **That overscan is what #187 took six rounds to get right.** The light look's colour
+      wash was written as an override of that same rule, placing a `52vh` gradient at `top: 0` — which
+      **threw the overscan away**. Same bug, same 2%-of-the-screen strip, now white because the page is.
+      ✅ **FIX: the wash lives on its own element, `#hm-bleed`.** It sits under the content and over the
+      drift layers and touches neither. ⚠️ **Rule worth keeping: never reuse either pseudo-element on
+      `#home-screen`.** Both are load-bearing, and neither can be measured with `getBoundingClientRect`,
+      which is precisely why #187 took six attempts.
+      📐 **Two more regressions in the same red run, both from the same over-broad CSS:**
+      · **The `.hm-card` light rule used the `background` shorthand**, which resets `background-image` to
+        none and wiped the glass theme's sheen — caught as *"the probe card did not pick up the glass
+        theme at all"*. Now `background-color`.
+      · **The light `#hm-new` rule swapped the + orb's ring to a darker blue** for legibility on paper
+        and **quietly undid queue 611**, shipped two ticks earlier. Caught as *"the home + orb has no
+        blue ring"*. Same hue now, doubled rather than changed.
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:

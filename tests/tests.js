@@ -48266,6 +48266,68 @@
     }
   });
 
+  /* 639 — the light look. The splash has to choose its film BEFORE js/settings.js exists, so it reads
+     localStorage itself and carries its own copy of the default. Two defaults that must agree, in two
+     files, with no compiler to notice — so a test notices instead.
+     This is not hypothetical: the first version read the key, found nothing on a genuine first run
+     (the settings object is only written once something is saved), fell back to false, and served the
+     OLD intro while every other part of the app went light. */
+  test('639: the splash\u2019s light default matches the app\u2019s', { item: '639' }, async function () {
+    const appDefault = FM.settings && FM.settings.get ? FM.settings.get('homeLight') : null;
+    if (typeof appDefault !== 'boolean') throw new Error('FM.settings.get("homeLight") is not a boolean — the light look has no setting behind it');
+    let html = '';
+    try { html = await (await fetch('index.html', { cache: 'no-store' })).text(); }
+    catch (e) { throw new Error('could not read index.html to compare the splash default: ' + e.message); }
+    const m = html.match(/var\s+LIGHT\s*=\s*(true|false)\s*;/);
+    if (!m) throw new Error('the splash script no longer declares `var LIGHT = true|false` — this test can no longer check that its default matches the app\u2019s');
+    const splashDefault = m[1] === 'true';
+    if (splashDefault !== appDefault) {
+      throw new Error('the splash defaults to LIGHT=' + splashDefault + ' but FM.settings defaults homeLight to ' + appDefault + ' — a first run would get one look\u2019s intro and the other look\u2019s app');
+    }
+    /* AND THE ABSENT-KEY CASE SPECIFICALLY, which is the one that was wrong: the splash must treat a
+       missing key as "never chosen", not as "chosen off". */
+    if (!/typeof\s+__st\.homeLight\s*===\s*'boolean'/.test(html)) {
+      throw new Error('the splash no longer distinguishes a MISSING homeLight from a false one — an absent key means "never chosen", and reading it as false is what served the old intro on a fresh install');
+    }
+  });
+
+  test('639: in the light look nothing in the header is invisible', { item: '639' }, async function () {
+    const was = !!(FM.settings && FM.settings.get('homeLight'));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      return await atPhoneWidth(async function () {
+        FM.settings.set('homeLight', true);
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(420);
+        const top = document.querySelector('.hm-top');
+        const img = document.querySelector('.hm-brand-img');
+        if (!top || !img) throw new Error('the home header or its wordmark is missing');
+        const lum = function (rgb) {
+          const m = (rgb.match(/\d+/g) || [0, 0, 0]).map(Number).map(function (v) {
+            v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+        };
+        /* THE WORDMARK IS WHITE ARTWORK. On the light bar it is only visible because a filter drives it
+           to black — remove that and the logo silently disappears, which no pixel test elsewhere would
+           catch because the <img> is still there, still the right size, still "loaded". */
+        const f = getComputedStyle(img).filter;
+        if (!f || f === 'none' || !/brightness\(0\)/.test(f)) {
+          throw new Error('the wordmark has no brightness(0) filter in the light look (filter: ' + f + ') — the artwork is WHITE, so on a light bar it would be invisible while looking perfectly healthy in the DOM');
+        }
+        /* And the bar really is light — he asked for that in so many words after seeing it dark. */
+        const bg = getComputedStyle(top).backgroundImage + ' ' + getComputedStyle(top).backgroundColor;
+        if (/rgb\(1[0-9],\s*1[0-9],\s*2[0-9]\)/.test(bg) || /#0[bde]/i.test(bg)) {
+          throw new Error('the top bar still paints a dark ground in the light look — queue 639: "it needs to be colourful like how it is but reflect the LIGHTNESS that it should be"');
+        }
+      });
+    } finally {
+      if (FM.settings) FM.settings.set('homeLight', was);
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* 617 clause 3 — "you can't do the select delete". Draft cards never called `selectify`, so on a tab
      where Select otherwise works they were invisible to it. Two halves, and the SECOND is the one that
      could fail silently: a draft is a PROJECT wearing an Elements-tab card, so bulk delete must not

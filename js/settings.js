@@ -32,7 +32,11 @@ window.FM = window.FM || {};
      * edit code — a flag only Claude can flip is not "a way to switch back" for him. Default OFF: he
      * said "I wanna TRY", which is not a decision, so the app he opens tomorrow is the app he knows
      * until he says otherwise. */
-    homeLight: false,
+    /* ⚠️ DEFAULT FLIPPED TO ON at v13.62 (queue 639). He asked to SEE it — *"I just wanna see how it
+     * looks as soon as possible because that's important to me"* — and a look that is off by default
+     * is a look he has to go and find. The switch below turns the whole thing off in one tap, which is
+     * still the escape hatch he asked for in #615; what changed is which side it starts on. */
+    homeLight: true,
     playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
     /* ONE desktop layout (queue 249). Ezra: "I just want two layouts not three."
      * There were three in practice — phone, studio, and classic — because classic was the DEFAULT and
@@ -342,7 +346,11 @@ window.FM = window.FM || {};
       segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),
       /* Sits WITH project sorting because both are "how the home screen behaves", and because this is
          the switch queue 615 promised him — it has to be somewhere he can find it without being told. */
-      toggleRow('White home screen', 'Light background on the projects screen, with the top bar\u2019s colour bleeding down into it. The editor is unaffected.', 'homeLight'),
+      /* ONE SWITCH FOR THE WHOLE LOOK (queue 639). It started as just the background; it now also
+         chooses the intro film and the wordmark's ink, because those three were made for each other —
+         his new intro literally ends on white. Three separate toggles would be three ways to end up
+         with a mismatched app. */
+      toggleRow('New light look', 'White projects screen with the top bar\u2019s colour bleeding into it, the new intro, and the new logo. Turn this off to go back to the dark look. The editor is unaffected either way.', 'homeLight'),
     ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
