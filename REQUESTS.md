@@ -20956,7 +20956,7 @@ re-opened #480, which I had marked done and had not fixed.
       has depth.**
 
 - [ ] **592 — The add-layer row's edge overshoots the end of the timeline slightly.** (26 Aug, annotated phone close-up at v12.93.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > The edge of the add layer slightly goes to far past the end of the timeline
       **His arrow points at the dashed row's RIGHT edge**, which finishes a few pixels beyond where the
@@ -20967,7 +20967,30 @@ re-opened #480, which I had marked done and had not fixed.
       so the decoration would finish exactly `PAD` px past the project's end. **MEASURE IT before
       removing it** — it may be deliberate (a nub so the bar is visible on a 0s project, which the
       `Math.max(x0 + 24, x1)` beside it also guards).
-      ⚠️ **The word is "slightly" — this is a few pixels, so eyeballing will not settle it.** Compare the
+      ✅ **MEASURED 27 Aug — I CANNOT REPRODUCE IT, AND THE NAMED SUSPECT IS DISPROVEN. Your call whether
+      it is still happening.**
+      At 380px, comparing where the dashed decoration ENDS against the right edge of a clip that runs to
+      the project end:
+      | case | decoration ends | clip ends | overshoot |
+      |---|---|---|---|
+      | zoom 0.5 | 315.6 | 315.6 | **0.0 px** |
+      | zoom 1 | 441.2 | 441.2 | **0.0 px** |
+      | zoom 2 | 692.4 | 692.4 | **0.0 px** |
+      | zoom 4 | 1194.8 | 1194.8 | **0.0 px** |
+      | 2.5s clip in a 4s project | 347.0 | 347.0 | **0.0 px** |
+      ❌ **So the `PAD` theory above is WRONG and must not be acted on** — the entry guessed `PAD` was a
+      stray offset. It is not: the code comment beside it is right that **clips themselves sit at
+      `PAD + t * pxPerSec()` inside the lane**, so the decoration needs the same `PAD` to finish level
+      with them. Removing it would have INTRODUCED a mismatch of exactly PAD px. **The entry's own
+      instruction — "MEASURE IT before removing it" — is what saved that.**
+      ⚠️ **Staging note, because it cost most of the tick:** the add row is not drawn while a layer is
+      SELECTED on a phone (a selected layer triggers the solo view, and the solo branch of `buildTracks`
+      skips it). Deselect first or you measure an empty DOM and conclude nothing.
+      ❓ **So this needs your word before it can close: is it still doing it?** If yes, the useful thing is
+      whether the clip below it was shorter than the project, and roughly how zoomed in you were —
+      because at every combination I can produce, the two edges land on the same pixel. **It may simply
+      have been fixed by the ruler/lane work since v12.93.**
+      🗒️ *(superseded suspicion)* **The word is "slightly" — this is a few pixels, so eyeballing will not settle it.** Compare the
       decoration's right edge against the last clip's right edge and the playhead's x at the project end,
       all three measured, before and after.
       **🔎 MEASURED at v13.01 — NO OVERSHOOT IN EITHER STATE I COULD STAGE.**
