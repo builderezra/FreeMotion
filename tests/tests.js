@@ -31689,6 +31689,57 @@
    * real bounds of 900x300 — a 25px shift where 225px would have been needed.
    * The same probe also proves #630: a group scaled 1.5x grows identically at anchor 0.5/0.5 and
    * 0.0/0.0 (0.0px apart), so the pivot does nothing for a group at all. */
+  /* #629 — "When you undo or redo when on a layer and it basically is undo the creation of the layer …
+   * it shouldn't force you to have another previous layer selected it should just close everything."
+   * The snapshot is a coherent PAST state, so s.selectedId is a layer that existed then. Undoing the
+   * creation of a layer therefore restores whatever was selected BEFORE it — a different layer — and
+   * leaves the inspector open on it. That is not just untidy: it is how you edit the wrong thing
+   * without noticing, because the next slider drag lands somewhere you never chose. */
+  test('#629: undo that removes the selected layer selects nothing', { item: '629' }, async function () {
+    if (!FM.history || typeof FM.history.commit !== 'function') throw new Error('FM.history is not reachable');
+    var keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    try {
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      a.start = 0; a.duration = 2;
+      FM.scene.layers.length = 0; FM.scene.layers.push(a);
+      FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id];
+      FM.history.commit();
+
+      // …now add a SECOND layer and select it, exactly as adding a layer does.
+      var b = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 10, shapeH: 10, fill: '#0f0' });
+      b.start = 0; b.duration = 2;
+      FM.scene.layers.push(b);
+      FM.scene.selectedId = b.id; FM.scene.selectedIds = [b.id];
+      FM.history.commit();
+
+      FM.history.undo();
+      await sleep(60);
+
+      if (FM.layerById(FM.scene, b.id)) throw new Error('the undo did not remove the new layer, so this proves nothing');
+      if (FM.scene.selectedId === a.id)
+        throw new Error('undo dropped the selection onto the PREVIOUS layer — that is #629, and it is how you edit the wrong thing without noticing');
+      if (FM.scene.selectedId !== null)
+        throw new Error('undo left selectedId as ' + FM.scene.selectedId + ' when the selected layer was removed — it must be null');
+      if ((FM.scene.selectedIds || []).length)
+        throw new Error('selectedIds still holds ' + JSON.stringify(FM.scene.selectedIds) + ' after the selected layer was removed');
+
+      /* THE CONTROL, and it is what keeps the fix narrow: an ordinary undo that KEEPS the layer must
+         keep the selection. Clearing it every time would cost him his place on every colour tweak. */
+      FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id];
+      a.transform.x = 999;
+      FM.history.commit();
+      FM.history.undo();
+      await sleep(60);
+      if (!FM.layerById(FM.scene, a.id)) throw new Error('the control undo removed the layer, so it cannot test the keep case');
+      if (FM.scene.selectedId !== a.id)
+        throw new Error('an ordinary undo cleared the selection (' + FM.scene.selectedId + ') — the fix must only fire when the layer is GONE');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+      FM.scene.selectedId = keepSel; FM.scene.selectedIds = keepSel ? [keepSel] : [];
+    }
+  });
+
   test('#628: moving a group anchor does not move the group', { item: '628' }, function () {
     var keep = FM.scene.layers.slice();
     try {

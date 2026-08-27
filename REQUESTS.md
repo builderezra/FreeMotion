@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.78
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.79
 >
-> **State:** v13.78, 1025 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.79, 1026 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22524,14 +22524,27 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Almost certainly the same root cause as #630** (zooming a group pivots at a corner). **Read and
       fix them together**, but keep both entries — they are two symptoms he reported separately.
 
-- [ ] **629 — Undo that removes the selected layer should close the panels, not select a different layer.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **629 — Undo that removes the selected layer should close the panels, not select a different layer.** ✅ **DONE v13.79.**
       (27 Aug, at v13.53.)
       His words, verbatim:
       > When you undo or redo when on a layer and it basically is undo the creation of the layer or whatever it is to essentially make you un able to have that layer selected now it shouldn’t force you to have another previous layer selected it should just close everything
 
-      1. [ ] **When undo/redo removes the layer you had selected, select NOTHING** — close the inspector
-             and go back to the neutral state, rather than falling back to some other layer.
+      1. [x] **When undo/redo removes the layer you had selected, select NOTHING** ✅ **DONE v13.79.**
+      ✅ **CAUSE — and half the guard already existed, which is why this looked fine in the code.**
+      `restore()` filters **`selectedIds`** to surviving layers… and then assigns **`selectedId` raw from
+      the snapshot**. A snapshot is a coherent PAST state, so `s.selectedId` names a layer that existed
+      *then*: **undoing the creation of a layer restores whatever was selected before it existed.**
+      That is not a fallback anyone wrote — it is the old selection coming back with the old scene.
+      ✅ **FIXED:** the selection at the moment of the undo is captured before the swap; if that layer is
+      **gone** from the restored scene, `selectedId` and `selectedIds` are both cleared.
+      ⚠️ **NARROW ON PURPOSE, and the test asserts the control.** It fires ONLY when the layer he was on
+      has disappeared. An ordinary undo that keeps the layer keeps the selection, so undoing a nudge or a
+      colour change does not cost him his place — clearing every time would be its own bug.
+      💡 **His reason was right and worth keeping:** being dropped onto a *different* layer with the same
+      panel open is how you edit the wrong thing without noticing — the next slider drag lands somewhere
+      you never chose. **Selecting nothing is the safe failure.**
+      📐 **Mutation-proved:** disabling the check dropped the selection onto the previous layer and was
+      CAUGHT with that exact sentence.
       💡 **Why he is right, beyond the annoyance:** being dropped onto a *different* layer with the
       same panel open is how you edit the wrong thing without noticing. **Selecting nothing is the safe
       failure.**
@@ -22540,16 +22553,25 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **630 — Zooming a group scales it around a CORNER, and the anchor cannot be found.** (27 Aug, at
       **STATUS: 🟢 READY — nothing is stopping this**
-      ✅ **CAUSE PROVEN 28 Aug (v13.78), while fixing #628 — they ARE the same root cause, as that entry
-      suspected.** 📐 **MEASURED (tests/_628pivot.html): a group scaled 1.5× grows IDENTICALLY at anchor
-      0.5/0.5 and at 0.0/0.0 — the two centroids are 0.0px apart.** The pivot does nothing for a group at
-      all, which is exactly *"they just zoom into the corners and I can't find where the anchor even is"*:
-      there is no anchor to find, because `applyLayerTransform` never reads one and a group has no content
-      box. **The renderer has to learn a group's pivot** — `FM.groupBounds` is the box, and
-      `FM.anchorPivotBox` (added for #628) is the one place that must start returning it.
       v13.53.)
       His words, verbatim:
       > For some reason when I try and zoom groups in the just zoom into the corners and not the middle and I can’t find where the anchor even is
+
+      ✅ **CAUSE PROVEN 28 Aug (v13.78), while fixing #628 — they ARE the same root cause, as that entry
+      suspected.**
+      📐 **MEASURED (tests/_628pivot.html): a group scaled 1.5× grows IDENTICALLY at anchor 0.5/0.5 and at
+      0.0/0.0 — the two centroids are 0.0px apart.** The pivot does nothing for a group at all, which is
+      exactly *"I can't find where the anchor even is"*: **there is no anchor to find.**
+      `applyLayerTransform` translates to (x,y) and scales about that point, never reading
+      `anchorX`/`anchorY`, and a group has no content box of its own — so a group always grows from
+      wherever its (x,y) happens to sit, which for a group created around off-centre children reads as a
+      corner.
+      ➡️ **THE RENDERER HAS TO LEARN A GROUP'S PIVOT.** `FM.groupBounds` is the correct box, and
+      **`FM.anchorPivotBox` (added for #628) is the ONE place that must start returning it** — the
+      anchor-compensation in the panel then becomes correct for free, because it already multiplies by
+      whatever that function says.
+      ⚠️ **Blast radius is real: every group in every project he has.** Deliberately left for its own
+      tick rather than tacked onto #628.
 
       1. [ ] **Scaling a group must pivot where the anchor is, and by default that is the middle.**
       2. [ ] **The anchor must be VISIBLE on a group** — *"I can't find where the anchor even is"*. A

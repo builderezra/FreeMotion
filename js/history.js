@@ -25,6 +25,9 @@ window.FM = window.FM || {};
        one path that can put a layer back AFTER the app has already decided it was malformed —
        without this, "undo" could resurrect exactly the shape an import had just rejected. */
     if (FM.storage && FM.storage._sanitizeLayers) { try { FM.storage._sanitizeLayers(s.layers); } catch (e) {} }
+    /* WHAT WAS SELECTED BEFORE THIS UNDO/REDO — captured before the swap, because the whole question
+       below is whether the layer he was working on survived it (queue 629). */
+    const wasSelected = FM.scene.selectedId;
     suppress = true;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
@@ -32,6 +35,22 @@ window.FM = window.FM || {};
     // Restore the full multi-selection (filtered to surviving layers), so undo right after a
     // multi-select edit doesn't collapse the set align/distribute/nudge act on. (#20)
     FM.scene.selectedIds = (Array.isArray(s.selectedIds) ? s.selectedIds : (s.selectedId ? [s.selectedId] : [])).filter(id => FM.layerById(FM.scene, id));
+    /* ═══ IF THE UNDO TOOK THE LAYER YOU WERE ON, SELECT NOTHING (queue 629) ═══════════════════════
+     * Ezra: *"When you undo or redo when on a layer and it basically is undo the creation of the layer
+     * … it shouldn't force you to have another previous layer selected it should just close everything."*
+     * The snapshot is a coherent past state, so `s.selectedId` is a layer that existed THEN — undoing
+     * the creation of a layer therefore restores whatever was selected before it, which is a DIFFERENT
+     * layer, and leaves the inspector open on it.
+     * ⚠️ THE POINT IS NOT TIDINESS. Being dropped onto another layer with the same panel open is how
+     * you edit the wrong thing without noticing — the next slider drag lands somewhere you never chose.
+     * Selecting nothing is the safe failure, and it is what he asked for.
+     * ⚠️ NARROW ON PURPOSE: this only fires when the layer he actually had selected is GONE from the
+     * restored scene. An ordinary undo that keeps the layer keeps the selection exactly as before, so
+     * undoing a nudge or a colour change does not cost him his place. */
+    if (wasSelected && !FM.layerById(FM.scene, wasSelected)) {
+      FM.scene.selectedId = null;
+      FM.scene.selectedIds = [];
+    }
     suppress = false;
     // Undo can remove the group the user is INSIDE (Edit Group) — a dangling groupContext filters
     // every layer out of the timeline (blank list + stale crumb). Validate and exit if it's gone.

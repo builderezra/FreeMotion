@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.78 — 1025 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.79 — 1026 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,13 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#629 CLOSED v13.79 — and HALF the guard already existed, which is why the code read fine.**
+`restore()` filtered **`selectedIds`** to surviving layers and then assigned **`selectedId` raw** from the
+snapshot — and a snapshot names whatever was selected *before* the undone layer existed. Nobody wrote a
+"fall back to another layer" rule; the old selection simply came back with the old scene.
+💡 **Worth reusing: when one of a pair of parallel fields is validated and the other is not, the bug hides
+in the gap.** Grep for the sibling whenever you find a filter like that.
 
 ✅ **#628 CLOSED v13.78 — and the compensation was the ONLY thing moving his clips.**
 `applyLayerTransform` never reads a group's anchor and a group has no content box, so moving the pivot
