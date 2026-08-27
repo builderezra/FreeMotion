@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.76 — 1023 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.77 — 1024 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,16 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#627 CLOSED v13.77 — and the jump was never broken.** Snap points include clip EDGES, and a clip's
+right edge is `start + duration`: **the first instant the layer is no longer drawn.** So "jump to the end"
+always landed one frame past the last visible one.
+💡 **THE RULE IS ABOUT BLANKNESS, NOT EDGES** — special-casing "clip end minus a frame" would move the
+playhead off a boundary he may have chosen (where you split, or butt the next clip). It steps back only
+when the landing frame shows nothing and the one before shows something. A join between two butted clips
+is left alone; a jump into empty space stays put rather than hunting.
+🔗 **#626 and #627 both produced a black preview and were DIFFERENT bugs** — the entry said to check
+rather than assume, and that was right.
 
 ✅ **#626 CLOSED v13.76 — his clips were in a GROUP, and a group does not follow its contents.**
 Children 2.000 → 1.176 at 1.7x while **the group stayed 2.000**: 0.824s of empty tail inside it, **0 lit

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.76
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.77
 >
-> **State:** v13.76, 1023 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.77, 1024 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22457,14 +22457,29 @@ re-opened #480, which I had marked done and had not fixed.
       `mm.duration` present vs missing. **Do not ask him anything yet**: the entry's own instruction was
       to measure first, and the measurement has already killed the reading that needed his decision.
 
-- [ ] **627 — Jumping to a layer's start or end should SHOW that layer.** (27 Aug, two phone
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **627 — Jumping to a layer's start or end should SHOW that layer.** ✅ **DONE v13.77.** (27 Aug, two phone
       screenshots at v13.51 — a Group clip, playhead jumped from 00:00:39 to 00:00:49, preview BLACK in
       both.)
       His words, verbatim:
       > When you tap the jump button to jump to the end or start of a layer it should show the layer, idk why it doesn’t
 
-      1. [ ] **Tapping jump-to-start / jump-to-end must land somewhere the layer is VISIBLE.**
+      1. [x] **Tapping jump-to-start / jump-to-end must land somewhere the layer is VISIBLE.** ✅ **DONE v13.77.**
+      ✅ **THE HYPOTHESIS HELD — AND THE JUMP WAS NEVER BROKEN.** The snap points include clip EDGES, and
+      a clip's right edge is `start + duration`, **the first instant the layer is no longer drawn**. So
+      "jump to the end of this layer" has always landed exactly one frame past its last visible frame.
+      The boundary is exclusive; the button was doing what it said.
+      ⚠️ **THE RULE IS ABOUT BLANKNESS, NOT ABOUT EDGES, and that is the whole design.** Special-casing
+      *"if the target is a clip end, subtract a frame"* would move the playhead off a boundary he may
+      have put it on deliberately — the exact spot you split on, or butt the next clip against. It only
+      steps back when the landing frame shows **nothing** and the frame before it shows **something**.
+      📐 **Three cases pinned by the test:** a clip's end steps back one frame; **a join between two
+      butted clips is left exactly alone** (something IS drawn there); and a jump into genuine empty
+      space **stays put** rather than hunting backwards and taking him somewhere he never asked to go.
+      A **hidden** layer does not count as content, or the fix would land him on black anyway.
+      🔗 **Read with #626, as the entry asked — they are NOT the same bug.** #626 was a group keeping its
+      length while its children shrank (a real empty tail); this is an exclusive boundary at a clip's
+      end. Both produce a black preview, which is exactly why the entry said to check rather than assume.
+      📐 **Mutation-proved:** removing the step-back left the playhead on the clip end and was CAUGHT.
       📍 **His two screenshots are the evidence and they are precise:** at 00:00:39 the playhead sits
       just past the clip's right edge, at 00:00:49 well past it — **and the preview is black in both.**
       💡 **HYPOTHESIS to prove, not assume:** "jump to end" lands on the layer's END TIME, which is

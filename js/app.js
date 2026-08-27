@@ -5738,16 +5738,40 @@ window.FM = window.FM || {};
     // to the project start / end when there's nothing closer.
     const toStart = document.getElementById('btn-tostart');
     const toEnd = document.getElementById('btn-toend');
+    /* ═══ NEVER LAND ON A BLANK FRAME (queue 627) ══════════════════════════════════════════════════
+     * Ezra: *"When you tap the jump button to jump to the end or start of a layer it should show the
+     * layer, idk why it doesn't"* — with two screenshots of a Group clip and a BLACK preview.
+     * The snap points include clip EDGES, and a clip's right edge is `start + duration`, which is the
+     * FIRST INSTANT THE LAYER IS NO LONGER DRAWN. So "jump to the end of this layer" has always landed
+     * exactly one frame past its last visible frame. The jump was working; the boundary is exclusive.
+     * ⚠️ THE RULE IS DELIBERATELY ABOUT BLANKNESS, NOT ABOUT EDGES. Special-casing "if the target is a
+     * clip end, subtract a frame" would move the playhead off a boundary he may have wanted — the exact
+     * spot you put it to split or to butt the next clip against. This only steps back when the landing
+     * frame shows NOTHING and the frame before it shows something, so a boundary with content on it is
+     * left alone and the only journeys it changes are the ones that were going to show him black. */
+    const frameOf = () => 1 / ((FM.scene.project && FM.scene.project.fps) || 30);
+    const somethingAt = (t) => (FM.scene.layers || []).some(l => {
+      if (!l || l.type === 'camera' || l.visible === false) return false;
+      const s0 = l.start || 0, e0 = s0 + (l.duration || 0);
+      return t >= s0 - 1e-6 && t < e0 - 1e-6;
+    });
+    const notBlank = (t) => {
+      if (!(t > 0) || somethingAt(t)) return t;
+      const back = Math.max(0, t - frameOf());
+      return somethingAt(back) ? back : t;      // still blank a frame earlier — leave it where it was
+    };
     const jumpBack = () => {
       const t = FM.time, eps = 1e-3;
       const before = FM.timelineSnapPoints().filter(p => p < t - eps);
-      FM.pause(); FM.setTime(before.length ? before[before.length - 1] : 0);
+      FM.pause(); FM.setTime(notBlank(before.length ? before[before.length - 1] : 0));
     };
     const jumpFwd = () => {
       const t = FM.time, eps = 1e-3;
       const next = FM.timelineSnapPoints().find(p => p > t + eps);
-      FM.pause(); FM.setTime(next != null ? next : FM.scene.project.duration);
+      FM.pause(); FM.setTime(notBlank(next != null ? next : FM.scene.project.duration));
     };
+    // Seam for the suite: the rule is what matters, and it is testable without the transport buttons.
+    FM._jumpNotBlank = notBlank;
 
     /* ---- SPEED MODE (v5.02) --------------------------------------------------------------------
      * Ezra: "if you hold those down, it'll change the play speed… when you hold down one of the

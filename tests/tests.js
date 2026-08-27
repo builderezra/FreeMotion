@@ -31672,6 +31672,61 @@
    * Two earlier hypotheses were refuted by measurement first and are recorded in the entry: there is no
    * trailing gap after top-level clips, and an exhausted source FREEZES on its last frame rather than
    * going black. Both mattered — they are why this looks inside a group at all. */
+  /* #627 — "When you tap the jump button to jump to the end or start of a layer it should show the
+   * layer, idk why it doesn't", with two screenshots of a Group clip and a BLACK preview.
+   * The jump was working. The snap points include clip EDGES, and a clip's right edge is
+   * start + duration — the FIRST INSTANT the layer is no longer drawn — so "jump to the end" has always
+   * landed one frame past the last visible frame. The rule added is about BLANKNESS, not about edges:
+   * special-casing "clip end minus a frame" would move the playhead off a boundary he may have put it
+   * on deliberately, to split or to butt the next clip against. */
+  test('#627: a jump never lands on a blank frame when the one before it is not', { item: '627' }, function () {
+    if (typeof FM._jumpNotBlank !== 'function') throw new Error('FM._jumpNotBlank is missing — jumps can land on black again (#627)');
+    var keep = FM.scene.layers.slice(), P = FM.scene.project, fps = P.fps || 30, frame = 1 / fps;
+    try {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      L.start = 1; L.duration = 2;                      // covers [1, 3)
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+
+      // THE BUG: the clip's right edge is the first blank instant.
+      var end = L.start + L.duration;
+      var got = FM._jumpNotBlank(end);
+      if (Math.abs(got - end) < 1e-9)
+        throw new Error('jumping to the clip end (' + end + ') stayed there — that frame is past the last visible one and renders black (#627)');
+      if (Math.abs(got - (end - frame)) > 1e-6)
+        throw new Error('landed at ' + got + ' instead of one frame inside the clip (' + (end - frame) + ')');
+
+      // THE START EDGE IS ALREADY VISIBLE and must NOT be nudged — the layer is drawn at its start.
+      if (Math.abs(FM._jumpNotBlank(L.start) - L.start) > 1e-9)
+        throw new Error('the clip START was moved, but the layer is visible there — the rule is about blankness, not edges');
+
+      /* A BOUNDARY WITH CONTENT ON IT IS LEFT ALONE. Two clips butted together: the join is the first
+         one's end AND the second one's start, and something IS drawn there, so the playhead must stay
+         exactly on it — that is where you split, or place the next clip. */
+      var M = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#fff' });
+      M.start = 3; M.duration = 1;
+      FM.scene.layers.push(M);
+      if (Math.abs(FM._jumpNotBlank(3) - 3) > 1e-9)
+        throw new Error('a boundary that HAS content on it was nudged off — that is the spot you split on');
+
+      /* AND IT MUST GIVE UP RATHER THAN WANDER. If the frame before is blank too, leave the playhead
+         where the jump put it: hunting backwards for content would take him somewhere he never asked
+         to go. */
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      var far = 9;
+      if (Math.abs(FM._jumpNotBlank(far) - far) > 1e-9)
+        throw new Error('a jump into empty space wandered to ' + FM._jumpNotBlank(far) + ' instead of staying put');
+
+      // A HIDDEN layer is not content — landing on it would still show black.
+      L.visible = false;
+      if (Math.abs(FM._jumpNotBlank(end) - end) > 1e-9)
+        throw new Error('a HIDDEN layer counted as something to show');
+      L.visible = true;
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+    }
+  });
+
   test('#626: a group follows its contents when they are re-timed', { item: '626' }, function () {
     if (typeof FM.refitGroupsFor !== 'function') throw new Error('FM.refitGroupsFor is missing — a group can no longer follow its contents (#626)');
     var keep = FM.scene.layers.slice();
