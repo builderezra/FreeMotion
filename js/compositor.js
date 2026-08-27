@@ -8988,6 +8988,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     },
     tiles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+      // debug hook, same shape as FM._mfLastField — harmless in prod, and the only way to see the box
+      // this kernel is HANDED rather than inferring it from the picture (queue 582 clause 2)
+      FM._tilesLastBB = bb ? { x: bb.x, y: bb.y, w: bb.w, h: bb.h, W: W, H: H, expand: !!expand } : null;
       const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));
       const mirror = Math.round(fparam(p, 'mirror', 0, t)) === 1;   // fallback Off: old instances byte-identical
       const mode = Math.round(fparam(p, 'mode', 1, t));             // fallback 1 = Grid (classic): old instances byte-identical

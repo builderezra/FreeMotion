@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.40
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.41
 >
-> **State:** v13.40, 990 tests green, tree clean.
+> **State:** v13.41, 990 tests green, tree clean.
+>
+> **🧩 TILES + SHAKE (#582) — I found why it looks bad, and NOTHING IS BROKEN, so this one is your call.**
+> Tiles "Extend" repeats your layer's content outward to fill the frame. Your text line is only ~50px
+> tall, so it repeats **18 times down the screen** and turns into noise. Add Shake first and the content
+> gets bigger, so it only repeats 6 times — and suddenly it looks right. **Same effect, same settings.**
+> ❓ **Pick one and I will do it:**
+> **(a) cap the repeats** at about 6 so it can never turn to mush *(my recommendation)* · **(b) a minimum
+> tile size**, so thin things repeat fewer and larger · **(c) leave it** and use the Count slider.
+> ⚠️ **I have not touched it, because any of these changes every Tiles you have already placed.**
 >
 > **🎬 MOTION BLUR (FOOTAGE) NOW ACTUALLY BLURS — your *"kinda buns"* report.** It was drawing your sharp
 > frame at full strength and laying a faint haze over it, so at the normal setting it did **nothing you
@@ -21242,11 +21251,24 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **MEASURED 27 Aug — the layer's TRUE alpha bbox is `464 x 50` (x 127, y 422), ratio 9.28: WIDE and
       short, exactly right for one line of text.** (Rendered with the full-frame shape layer hidden so the
       text's own bounds were visible; restored after.)
-      🚨 **So the diagnosis is now exact.** Tiling a 464x50 box outward across 720x900 gives roughly 1.5
-      columns by 18 rows — i.e. **stacked repeated LINES**, which is precisely what the `[shake, tiles]`
-      panel renders. The `[tiles]`-alone panel renders narrow VERTICAL strips, which is what tiling a
-      **tall thin** box looks like. **Tiles alone is being handed a box roughly TRANSPOSED from the real
-      one, or a degenerate slice of it.**
+      ❌ **AND THE "TRANSPOSED BOX" CONCLUSION WAS WRONG TOO — instrumented at the call site (v13.41 adds
+      `FM._tilesLastBB`, same shape as `FM._mfLastField`) and the box is CORRECT:**
+      | stack | box handed to Tiles | ratio |
+      |---|---|---|
+      | `[tiles]` | **464 x 50** | 9.28 — **exactly the true content box** |
+      | `[shake, tiles]` | 547 x 146 | 3.75 — enlarged by the shake's displacement |
+      ✅ **So nothing is broken. Tiles is doing precisely what Extend is specified to do**, and the two
+      pictures differ for an ordinary reason: a 50 px-tall box tiled down a 900 px frame is **18 rows** of
+      tiny mirrored text, which reads as noise; Shake first grows the box to 146 px, giving **6 readable
+      rows**. Third theory killed on this entry — plate, default mode, transposed box — **each one
+      deduced from the picture and each one wrong.**
+      🎯 **SO CLAUSE 2 IS A DESIGN PROBLEM, NOT A DEFECT, and that changes who decides it.** *"Looked
+      really bad"* is accurate and the cause is that **Extend has no floor on how many times it repeats**:
+      on a thin subject (one line of text, a horizon, a title bar) it produces 18+ copies and turns the
+      layer into texture. **There is no bug to fix here — there is a choice to make**, and per the
+      standing rule that is HIS: cap the repeat count, impose a minimum tile size, or leave it and let
+      the Count slider carry it. ⚠️ **Do not "fix" this unilaterally — it would change every existing
+      Tiles instance he has already placed.**
       ➡️ **Next: instrument `bb` at the call site rather than inferring it from the picture** — log what
       `tiles` actually receives in both stacks (`[tiles]` vs `[shake, tiles]`) and compare against the
       measured 464x50. `alphaBBoxExact` and the `bb` derivation at js/compositor.js:7615 are where to
