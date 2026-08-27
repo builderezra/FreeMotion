@@ -7616,8 +7616,14 @@ body.fm-pushing #toast { z-index: 213; }
 /* The ≡ grip, in the same place every other row keeps its one (queue 294, clause 6). Sticky to the
    RIGHT edge so it is reachable however far the timeline is scrolled — the row spans the whole
    scrollable width, and a grip parked at the far end of it would be unreachable. */
+/* ⚠️ `right: 3px`, NOT 8, AND THE WIDTH STAYS 34 (queue 606). Ezra: "Don't change the design for the
+   add layers drag buttons but just line it up with the other layers ones". Measured at 380px: this
+   grip centred on x=355 while `.row-drag` below it centred on 360 -- a visible 5px step down the
+   right edge. The two are built differently ON PURPOSE (three spans here, a boxed svg there), so the
+   fix is arithmetic, not a redesign: centre = viewport - right - width/2, and 380-3-17 = 360, which
+   is exactly where .row-drag sits (380-5-15). Change the WIDTH and this breaks again. */
 .tl-addrow-grip {
-  position: sticky; right: 8px; margin-left: auto;
+  position: sticky; right: 3px; margin-left: auto;
   display: flex; flex-direction: column; justify-content: center; gap: 3px;
   width: 34px; height: 100%; min-height: 30px; padding: 0 9px; box-sizing: border-box;
   cursor: grab; touch-action: none; flex: 0 0 auto;
