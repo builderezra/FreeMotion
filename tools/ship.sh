@@ -46,6 +46,31 @@ if [ "$FROM_FILE" = "0" ]; then
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
 
+# ⏱️ BATCH GATE — the biggest drain on his TIME, measured 27 Aug and hard to argue with: 99 commits in
+# 20 hours, 51 of them touching NO app code, 38 version releases. Every one ran the suite (~8-9 min for
+# a code change, which runs it twice; ~4 for docs). That is roughly TEN of those twenty hours spent
+# watching a progress bar instead of working.
+# His words: "you are barely using my usage up and seemingly doing updates very slow ... I leave you on
+# even more than I used to and the usage is less". He was right, and this is the reason.
+# LOOP.md rule 15 already said work 3-5 items then ship ONCE. Remembering it failed, so it is a gate:
+# a DOCS-ONLY ship within 12 minutes of the last commit is refused, forcing notes to accumulate into
+# one release rather than one suite run per sentence. CODE ships are never blocked -- a real fix must
+# always be able to go out. Override with BATCH=0 for a genuine one-off.
+if [ "${BATCH:-1}" = "1" ]; then
+  _changed="$(git status --porcelain | awk '{print $2}')"
+  if ! echo "$_changed" | grep -qE '^(js/|styles[.]css|index[.]html|tests/)'; then
+    _last=$(git log -1 --format=%ct 2>/dev/null || echo 0)
+    _age=$(( $(date +%s) - _last ))
+    if [ "$_age" -lt 720 ]; then
+      echo "⏱️  DOCS-ONLY SHIP REFUSED — last commit was $((_age/60))m ago, needs 12m."
+      echo "   Every ship runs the suite. On 27 Aug, 51 of 99 commits were docs-only: hours of waiting"
+      echo "   for nothing. Keep writing notes and let them ride out with the next real change."
+      echo "   Nothing is lost -- the working tree keeps them. (BATCH=0 tools/ship.sh ... to override.)"
+      exit 1
+    fi
+  fi
+fi
+
 # An edit that did not apply must not be able to ship. tools/apply.py leaves this marker when an
 # anchor fails to match, because edits chained with `;` fail INVISIBLY — v13.25 announced a
 # measurement table in the summary, in the commit and to Ezra, and it was never in the tree.

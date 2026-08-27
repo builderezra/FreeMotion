@@ -1,8 +1,15 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.44
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.45
 >
-> **State:** v13.44, 990 tests green, tree clean.
+> **State:** v13.45, 990 tests green, tree clean.
+>
+> **✅ Your Visual / Filters / Audio row is fixed — all three things you said, in one go.** The buttons now
+> stretch across the whole bar (84px each instead of bunched in the middle), and the row **stays at the
+> top when you scroll** instead of disappearing.
+> ➡️ **Next: why tapping an effect shows you nothing.** Your badges mean *picked*, not *applied* — they
+> only land when you leave the browser, so standing in that menu watching an unchanged preview is exactly
+> what a broken app looks like. **That is the real bug behind three of your reports.**
 >
 > **✅ Everything you sent is logged word for word, and I am working down the list oldest first.**
 > **#129 done:** you said *"I have no idea"* about the file type — fair, so **the app works it out itself
@@ -20879,6 +20886,7 @@ re-opened #480, which I had marked done and had not fixed.
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
       not merge it** — the export half is the one he is blocked by.
 - [ ] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:
       > These buttons are too small, make em cover up that row proper
@@ -20896,6 +20904,110 @@ re-opened #480, which I had marked done and had not fixed.
       between the ✕ and the 🔍 and fill the row. That answers BOTH clauses at once — bigger targets, and
       the "weird position" is the bunching.
       ⚠️ **Verify at 380px** and check the tab labels do not wrap at the widest one ("Filters").
+      **THIRD CLAUSE, same row (27 Aug). His words, verbatim:**
+      > Also with that top row when you swipe down that should stay at the top and not be pinned, so you
+      > have to scroll back up to see
+      **Reading it: the row currently SCROLLS AWAY when you swipe the effect list, and he has to scroll
+      back up to reach the tabs — he wants it to STAY VISIBLE.** The trailing clause describes the
+      annoyance he has now, not the behaviour he wants.
+      ⚠️ *"stay at the top and not be pinned"* is self-contradictory on its face, so this is the one
+      sentence in the entry worth a second look before building — **but every other reading leaves the
+      complaint meaningless, and "sticky header" is the only change that removes the scroll-back-up he
+      is describing.** Build that; it is one line of CSS and trivially reversible if wrong.
+      ➡️ **So all three clauses land on the same element:** make `.fxb-top` fill the row, size properly,
+      and **stick to the top of the sheet while the list scrolls** (`position: sticky; top: 0`).
+- [ ] **606 — The add-layer row’s drag handle is out of line with the layer ones, and the layer ones
+      are not centred in their own box.** (27 Aug, annotated phone screenshot at v13.45.)
+      His words, verbatim:
+      > Don’t change the design for the add layers drag buttons but just line it up with the other layers
+      > ones and also the other layers ones aren’t centred inside their own box so fix that
+      **THE SCREENSHOT:** the right-hand edge of the timeline rows. The **add-layer row’s ≡ sits bare and
+      further LEFT**; the two layer rows below have their ≡ inside a rounded box, sitting further right.
+      He has circled the bare one, drawn an arrow from it down to a boxed one, and circled a boxed one —
+      plus arrows pointing at the ≡ INSIDE its box.
+      **TWO CLAUSES, and the first carries an explicit DO-NOT:**
+      1. [ ] ⚠️ **DO NOT redesign the add-layer handle** — *"Don’t change the design"*. **Only line it up
+         horizontally with the layer rows’ handles.** It stays bare/unboxed; it just moves.
+      2. [ ] **The layer rows’ ≡ is not centred inside its own rounded box.** Centre it.
+      ✅ **Both are pure geometry — measure the two handles’ centres against each other, and the glyph’s
+      centre against its box, then close the gaps.** ⚠️ **Verify at 380px**, and remember queue 571: the
+      touch target must not shrink, only the glyph moves.
+      ✅ **MEASURED AT 380px (27 Aug) — clause 1 is exactly as he says, clause 2 is NOT what it looks
+      like. Do not "fix" clause 2 blind.**
+      | | centre x | size |
+      |---|---|---|
+      | add-row grip `.tl-addrow-grip` | **355.0** | 34x30 |
+      | layer handle `.row-drag` | **360.0** | 30x30 |
+      **Clause 1 = a 5.0 px leftward offset on the add-row grip.** Straightforward, and the fix must move
+      only its POSITION — he said explicitly *"Don’t change the design"*, and the two are built
+      differently on purpose: the add grip is three `<span>`s, the layer handle is an `<svg>`.
+      🚨 **Clause 2: the glyph IS centred, measured — offsetX 0.0, offsetY 0.0 against its button box,**
+      which is `display:flex; align-items:center; justify-content:center; padding:0`. And the icon is
+      symmetric inside its own viewBox too: `viewBox="0 0 24 24"` with `M4 7h16M4 12h16M4 17h16` — lines
+      at y 7/12/17 (centre 12) spanning x 4→20 (centre 12). **Both centres are exact.**
+      ➡️ **So the thing he can see is real but is NOT the glyph-in-button offset.** The remaining suspect
+      is that **the visible rounded box is not the `.row-drag` rect** — if the border comes from a
+      wrapper, a `::before`, or a background inset, the glyph can be centred in the BUTTON while sitting
+      off-centre in the BORDER you actually see. **Next: find what paints that rounded outline and
+      compare the glyph against THAT rect, not the button’s.**
+      ⚠️ **This is the #592 lesson again — a rect comparison said "aligned" while his eye said otherwise,
+      and his eye was right. Measure what is PAINTED.**
+- [ ] **607 — The playhead knob should be BLUE inside normally, and yellow only when it is over a
+      benchmark.** (27 Aug, two annotated phone screenshots at v13.45.)
+      His words, verbatim:
+      > When this button isn’t hovering over a benchmark make it blue inside not yellow but it can be
+      > yellow when going over a benchmark
+      **THE TWO SCREENSHOTS, and the pair is the point:**
+      · At **00:00:10** — the knob is a yellow RING with a dark hollow centre (circled, arrowed).
+      · At **00:00:05** — the knob is a SOLID yellow disc (circled).
+      **So the knob already changes appearance; he is asking for the resting state to be BLUE inside and
+      for yellow to mean "on a benchmark".**
+      ➡️ **Two things to establish before changing a colour:**
+      1. **What do those two states currently MEAN?** Solid-vs-hollow may already be the marker state, in
+         which case this is purely a hue swap on the non-marker one. **Read it, do not assume.**
+      2. **Which blue?** Use the existing accent already on the playhead/UI rather than inventing one —
+         and per #545 he should SEE it before it ships if it is not an obvious token match.
+      ⚠️ **Keep yellow for the benchmark state — he explicitly wants that kept.** Verify at 380px, both
+      states, on and off a marker.
+- [ ] **608 — 🔴 BENCHMARK LINES DRAW OVER THE LEFT-HAND ICON COLUMN. He has asked repeatedly.**
+      (27 Aug, phone screenshot at v13.44.)
+      His words, verbatim:
+      > Also stop being a dickhead and actually make the benchmarks not show up on the left side like
+      > I’ve said before, once it goes past the icon section with the little eyes they’re gone. I’ve
+      > asked so many times and it’s so simple
+      **THE SCREENSHOT:** Project 51. A faint yellow vertical line runs down the FAR LEFT at ~x65 —
+      straight through the eye icons and layer thumbnails — while the timeline lane starts at ~x130.
+      **He is right that it is simple, and he is right that he has said it before.**
+      ✅ **CAUSE (read, 27 Aug):** markers are children of `#tl-ruler` (js/timeline.js:786) positioned at
+      `PAD + mk.t * pps`, and their full-height line is `.tl-marker::after` (styles.css:2489,
+      `height: var(--tl-mark-h, 320px)`). **Nothing clips them.** Scroll the timeline right and a marker
+      slides left out of the lane and keeps painting over the head column.
+      ⚠️ **Plain `overflow: hidden` is the WRONG fix** — the marker line deliberately hangs far BELOW the
+      ruler, so hiding overflow would chop the line off at the ruler’s bottom edge.
+      ➡️ **Use a clip that is tight on the left and open at the bottom:**
+      `clip-path: inset(0 0 -600px 0)` on the ruler — clips anything left of the lane while letting the
+      vertical line run down over the tracks.
+- [ ] **609 — The Speed slider looks weird and broken.** (27 Aug, phone screenshot at v13.44.)
+      His words, verbatim:
+      > The speed slider looks weird and broken
+      **THE SCREENSHOT:** the Speed panel with **Speed % = 41**. The track is a wide rounded box, and
+      inside it sits a **grey block starting well right of the left edge and ending mid-track**, with a
+      thin **blue vertical tick** near its right end. **There is no visible thumb and no fill from the
+      left**, so at 41% the control reads as a stray grey slab rather than a slider at a value.
+      ➡️ **Check first whether this is the shared range-input style failing here or a bespoke control** —
+      the grey slab looks like an unstyled `::-webkit-slider-runnable-track` / thumb combination showing
+      through, which would mean the app’s slider CSS is not reaching this instance.
+      ⚠️ **Verify at 380px, at several values (0, 41, 100, max)** — a control that only looks wrong at
+      certain values is a different bug from one that is always wrong.
+- [ ] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
+      (27 Aug. A REPEAT — he has asked before and it has not been done.)
+      His words, verbatim:
+      > You still haven’t re designed the border and shadow section to look better instead of the simple
+      > tick boxes as it is
+      ⚠️ **This is a DESIGN request, so #545 applies: draw real options and SHOW HIM before building.**
+      Render them at the size they ship at (380px), not just large, and let him pick.
+      ⚠️ **It is also a repeat, which is the failure mode this file exists to stop.** Find the earlier
+      entry, link it, and do not re-scope it from scratch.
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one

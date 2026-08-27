@@ -834,6 +834,17 @@ body.text-editing .sb-wrap { display: none !important; }
    covers all three. The unavailable side follows .cat-card-disabled exactly: visible, dim, still a
    live button so a tap can say why. 40px tall keeps both halves a real thumb target on a phone. */
 .fxmode { display: flex; gap: 6px; margin: 0 0 12px; }
+/* THE Visual/Filters/Audio ROW MUST FILL ITS BAR (queue 605). Ezra, of the phone sheet: "These buttons
+   are too small, make em cover up that row proper" / "They're also just in a weird position".
+   `.fxmode-btn` already had `flex: 1`, so the three tabs split whatever their CONTAINER has — but only
+   the INSPECTOR variant gave `.fxmode` itself `flex: 1` (see fxb-in-inspector below). On the sheet the
+   group therefore shrank to its text and sat bunched between the round X and the round search button,
+   with dead gaps either side. That bunching IS the "weird position"; both complaints are one rule. */
+.fxb-top .fxmode { flex: 1; min-width: 0; margin: 0; }
+/* AND IT STAYS PUT WHILE THE LIST SCROLLS (queue 605, his third clause): "when you swipe down that
+   should stay at the top ... so you have to scroll back up to see". Sticky rather than fixed, so it
+   keeps its place in the sheet's flow and cannot overlap the content beneath it. */
+#fx-browser.fxb-sheet .fxb-top { position: sticky; top: 0; z-index: 3; background: var(--panel); }
 .fxmode-btn { flex: 1; min-width: 0; min-height: 40px; padding: 9px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); font-size: 12.5px; cursor: pointer; }
 .fxmode-btn:hover { background: var(--panel-3); color: var(--text); }
 .fxmode-btn.on { background: var(--accent); border-color: var(--accent); color: #06231d; }
@@ -2476,6 +2487,15 @@ body.white-chrome #time-readout:active {
    he is describing. It is measured now and published as --tl-mark-h by the ruler build; the 320 stays
    only as the fallback for the frame before the first measurement. */
 .tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: var(--tl-mark-h, 320px); background: rgba(255,206,74,.35); }
+/* BENCHMARKS STOP AT THE LANE — they must not paint over the left icon column (queue 608). Ezra, more
+   than once: "make the benchmarks not show up on the left side ... once it goes past the icon section
+   with the little eyes they're gone". Markers live in #tl-ruler at PAD + t*pps, so scrolling right
+   slides one left out of the lane and it kept drawing straight through the eyes and thumbnails.
+   ⚠️ `overflow: hidden` is the WRONG tool here: the ::after line hangs deliberately far BELOW the ruler
+   to run down the tracks, and hiding overflow would chop it off at the ruler's bottom edge. A clip that
+   is tight on the left and OPEN at the bottom does both jobs — the negative bottom inset extends the
+   clip region downward rather than cutting it. */
+#tl-ruler { clip-path: inset(0 0 -600px 0); }
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
 .tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */
