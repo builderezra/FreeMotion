@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.73 — 1020 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.74 — 1021 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,15 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#623 CLOSED v13.74 — copy/paste a graph.** The hard part was the MODE: a curve lives in three
+fields (`ez` / `bez` / `e`) and **which are SET is the mode**, so paste writes all three and clears what
+must not survive — otherwise a Steps graph reads "Steps" and draws a bezier. **Its own clipboard**, since
+the app's carries layers and pasting a graph over a layer would be worse than no feature.
+🐛 **A SHIPPED TEST CAUGHT THE LAYOUT THE MOMENT THE BUTTONS EXISTED** — three 36px chips stacked in the
+84px `.es-side` column hang 7px below the rail on a 290px panel. They wrap now (80px vs 124).
+💡 **That test — "every rail button is really on screen" — is worth knowing about before adding ANY
+control to the easing editor.** It measures every button in every rail and it is why this did not ship broken.
 
 ✅ **#622 CLOSED v13.73 — and the lesson generalises.** The view rail read 1x while the speed changed
 from the transport. Not a missing call: **three displays of one value, two writers, each hand-patching a

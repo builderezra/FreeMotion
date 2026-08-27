@@ -542,6 +542,15 @@ body {
    control it shrank was the one control the test did not watch. Mutation-proved: shrinking this
    to 8x8 left the suite green. The assertion now covers it. */
 .es-loop { flex: none; width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 17px; line-height: 1; cursor: pointer; padding: 0; }
+
+/* Copy / paste a graph (queue 623). Same chip as the loop toggle beside it — they are the same kind of
+   control in the same column, and a second visual language there would read as a different feature.
+   They WRAP: `.es-side` is 84px wide and the panel is 290px tall on a phone, so three chips stacked
+   in a column overflow the rail (the "every rail button is really on screen" test caught exactly
+   that). Two fit across, so wrapping costs 80px of height instead of 124. */
+.es-side-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-content: center; width: 100%; }
+.es-clip { font-size: 15px; line-height: 1; }
+.es-clip.is-armed { color: var(--accent, #4ea8ff); border-color: var(--accent, #4ea8ff); }
 .es-loop.on { color: var(--accent); border-color: rgba(41,217,187,.5); background: rgba(41,217,187,.12); }
 
 /* While an easing editor is mounted the inspector becomes a height-constrained flex column, so the

@@ -47,6 +47,7 @@ window.FM = window.FM || {};
   const CURVE_EASES = ['bounce', 'elastic'];
   const PAD = 26;
   let canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null, famWrap = null;
+  let copyBtn = null, pasteBtn = null;
   let cur = { layer: null, mode: 'all', keys: [], kfs: [] };   // kfs = end-keyframes to edit together
   let dragHandle = null;
 
@@ -294,6 +295,62 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ THE GRAPH CLIPBOARD (queue 623) ═════════════════════════════════════════════════════════
+   * One curve, held by value. Its own slot rather than the app's layer clipboard — see the note on the
+   * buttons for why. Exported whole so the suite can drive it without the DOM: the CONTRACT here is
+   * "a copied graph reproduces itself on any other property", and that is testable without a panel.
+   *
+   * WHAT A CURVE IS, and why all three fields travel together:
+   *   kf.ez  = { fam, preset, p }  a family preset and its parameters (Bounce / Elastic / Steps)
+   *   kf.bez = [x1,y1,x2,y2]       hand-dragged cubic handles
+   *   kf.e   = 'easeInOut' | 'hold' | 'custom' | …   the named ease, and the legacy Hold
+   * Which fields are SET is the mode. Every read site in this file and in evalProp decides what to
+   * draw by their presence — `curFamKey` returns 'steps' for a plain kf.e === 'hold', and every
+   * "is a preset active?" check tests for the ABSENCE of kf.bez. So a paste that leaves a stale field
+   * behind does not merely look wrong, it makes the editor disagree with the renderer. */
+  let _clip = null;
+  FM.graphClip = {
+    // Deep enough that later edits to the source keyframe cannot reach into the clipboard: `p` is a
+    // parameter bag the editor mutates in place while you drag a slider.
+    read(kf) {
+      if (!kf) return null;
+      const g = { e: kf.e || null, bez: kf.bez ? kf.bez.slice() : null, ez: null };
+      if (kf.ez) g.ez = { fam: kf.ez.fam, preset: kf.ez.preset, p: Object.assign({}, kf.ez.p || {}) };
+      // A keyframe with none of the three is a linear default — copying it is legal and pastes linear.
+      return g;
+    },
+    set(g) { _clip = g || null; },
+    get() {
+      if (!_clip) return null;
+      // Hand out a COPY. Pasting the same graph into four properties must not give them one shared
+      // parameter bag that they then all mutate together.
+      return this.read({ e: _clip.e, bez: _clip.bez, ez: _clip.ez });
+    },
+    has() { return !!_clip; },
+    clear() { _clip = null; },
+    /* The whole point: write all three fields deliberately so the destination cannot end up half in
+       one mode and half in another. Mirrors applyEzPreset / applyBez / applyPreset exactly. */
+    applyTo(kf, g) {
+      if (!kf || !g) return false;
+      if (g.ez) {
+        kf.ez = { fam: g.ez.fam, preset: g.ez.preset, p: Object.assign({}, g.ez.p || {}) };
+        delete kf.bez;                       // a family preset and custom handles cannot both be true
+        // Same fallback applyEzPreset leaves: a reader that ignores `ez` gets a sane curve, not linear.
+        kf.e = g.e && g.e !== 'custom' ? g.e : 'easeInOut';
+        return true;
+      }
+      delete kf.ez;
+      if (g.bez) { kf.bez = g.bez.slice(); kf.e = 'custom'; return true; }
+      delete kf.bez;
+      kf.e = g.e || 'easeInOut';             // covers the named eases AND the legacy 'hold' step
+      return true;
+    },
+  };
+
+  function syncClipUI() {
+    if (pasteBtn) pasteBtn.classList.toggle('is-armed', FM.graphClip.has());
+  }
+
   function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; }); FM.requestRender(); redraw(); }
   function applyPreset(key) {
     // Store only the named easing (delete any custom bez). evalProp + bezOf both resolve a named
@@ -425,7 +482,53 @@ window.FM = window.FM || {};
       cur.keys.forEach(k => { const p = cur.get(k); if (FM.isAnimated(p)) p.loopMode = next; });
       FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
     });
-    side.append(carLabel, loopBtn);
+    /* ═══ COPY / PASTE A GRAPH (queue 623) ═══════════════════════════════════════════════════════
+     * Ezra: *"Add the ability to copy paste the graphing and be able to past a graph you made into
+     * any other graph"*. His word is ANY — across properties, not just within one — so the clipboard
+     * holds a curve, not a reference to where it came from.
+     *
+     * ⚠️ IT CARRIES THE MODE, NOT JUST THE NUMBERS, and that is the whole difficulty. A curve lives in
+     * THREE fields and which ones are set IS the mode: `ez` for a family preset (Bounce/Elastic/Steps
+     * and its parameters), `bez` for hand-dragged cubic handles, and the plain string `e` for a named
+     * ease or a Hold. Copying the handles alone and pasting them onto a Steps graph would leave it
+     * reading "Steps" while drawing a bezier — a curve he did not make. So paste writes all three
+     * deliberately, clearing the ones that must not survive, exactly as applyEzPreset/applyBez do.
+     *
+     * ⚠️ ITS OWN CLIPBOARD, DELIBERATELY. The entry asks this to be decided rather than defaulted, and
+     * a shared one is the wrong answer: the app's copy/paste surface carries LAYERS, and "paste a
+     * graph over a layer" — or a layer into a graph — would be worse than not having the feature. A
+     * curve and a layer are not interchangeable, so they do not share a slot. */
+    copyBtn = document.createElement('button'); copyBtn.className = 'es-loop es-clip'; copyBtn.textContent = '⧉';
+    copyBtn.title = 'Copy this graph';
+    copyBtn.addEventListener('click', () => {
+      const g = FM.graphClip.read(cur.kfs[0]);
+      if (!g) { if (FM.toast) FM.toast('Nothing to copy from this graph'); return; }
+      FM.graphClip.set(g);
+      if (FM.toast) FM.toast('Graph copied — open another one and paste');
+      syncClipUI();
+    });
+    pasteBtn = document.createElement('button'); pasteBtn.className = 'es-loop es-clip'; pasteBtn.textContent = '⇥';
+    pasteBtn.title = 'Paste the copied graph';
+    pasteBtn.addEventListener('click', () => {
+      const g = FM.graphClip.get();
+      /* SAYS WHY when there is nothing to paste. An inert button is the silence this repo keeps
+         finding at the bottom of "it doesn't work" reports (#603, #618, #619). */
+      if (!g) { if (FM.toast) FM.toast('No graph copied yet — press ⧉ on a graph first'); return; }
+      if (!cur.kfs.length) { if (FM.toast) FM.toast('This property has no keyframes to paste onto'); return; }
+      cur.kfs.forEach(kf => FM.graphClip.applyTo(kf, g));
+      _railFam = null;                       // the family may have changed, so the rail must rebuild
+      FM.requestRender(); redraw();
+      if (FM.history) FM.history.commit();
+      if (FM.toast) FM.toast('Graph pasted');
+    });
+    /* THE CHIPS WRAP RATHER THAN STACK, and a shipped test is why. `.es-side` is 84px wide and the
+       panel is 290px tall on a phone; three 36px chips in a column are 124px and the existing
+       "every rail button is really on screen" test caught the third one hanging 7px below the rail.
+       Two chips fit across 84px (36+8+36 = 80), so wrapping costs 80px instead of 124 — and the test
+       that caught it stays as the guard, since it measures every button in every rail. */
+    const sideBtns = document.createElement('div'); sideBtns.className = 'es-side-btns';
+    sideBtns.append(loopBtn, copyBtn, pasteBtn);
+    side.append(carLabel, sideBtns);
     main.append(gwrap, side);
     // The two rails now sit UNDER the graph as single rows (see .es-fams/.es-presets in styles.css).
     // Beside it they were a 351px-tall column in a panel that is 290px on a phone, which is why every

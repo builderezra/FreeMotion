@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.73
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.74
 >
-> **State:** v13.73, 1020 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.74, 1021 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22255,16 +22255,40 @@ re-opened #480, which I had marked done and had not fixed.
       already does. ⚠️ **Check the reverse too:** changing it on the rail should be reflected wherever
       the transport shows it. A one-way binding fixed one way round is the same bug tomorrow.
 
-- [ ] **623 — Copy and paste GRAPHS: take a curve you made and paste it into any other graph.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **623 — Copy and paste GRAPHS: take a curve you made and paste it into any other graph.** ✅ **DONE v13.74.**
       (27 Aug, phone screenshot at v13.51 — the Position / Scale easing editor, the Bezier/Bounce/Steps
       row and the six curve presets below it.)
       His words, verbatim:
       > Add the ability to copy paste the graphing and be able to past a graph you made into any other graph
 
-      1. [ ] **Copy the graph you are looking at.**
-      2. [ ] **Paste it into ANY other graph** — his word is *any*, so across properties (Position →
-             Scale → Opacity → an effect's parameter), not just within one.
+      1. [x] **Copy the graph you are looking at.** ✅ **DONE v13.74** — the ⧉ chip beside the graph.
+      2. [x] **Paste it into ANY other graph** — ✅ **DONE v13.74** — the ⇥ chip. The clipboard holds a
+             CURVE, not a reference to where it came from, so it crosses properties freely.
+      ✅ **THE HARD PART WAS THE MODE, NOT THE NUMBERS — exactly as this entry predicted.**
+      A curve lives in **three** fields and **which ones are SET is the mode**: `ez` (a family preset and
+      its parameters — Bounce/Elastic/Steps), `bez` (hand-dragged cubic handles), and the plain string
+      `e` (a named ease, and the legacy Hold). Every read site decides what to draw by their presence —
+      `curFamKey()` reports `'steps'` for a plain `kf.e === 'hold'`, and each "is a preset active?" check
+      tests for the **absence** of `kf.bez`. **So a paste that leaves a stale field behind does not merely
+      look wrong: it makes the editor disagree with the renderer** — the entry's own *"pasting Bezier
+      handles onto a Steps graph and keeping Steps would be a curve he did not make"*. Paste writes all
+      three deliberately and clears what must not survive.
+      ✅ **IT GETS ITS OWN CLIPBOARD, and this entry asked for that to be DECIDED rather than defaulted.**
+      The app's copy/paste surface carries **layers**; pasting a graph over a layer — or a layer into a
+      graph — *"would be worse than no feature at all"*, which is this entry's wording. A curve and a
+      layer are not interchangeable, so they do not share a slot.
+      ⚠️ **The clipboard hands out COPIES.** Pasting one graph onto four properties must not give them a
+      single shared parameter bag they then all mutate together; asserted, because `p` is a bag the
+      editor mutates in place while a slider is dragged.
+      🐛 **A SHIPPED TEST CAUGHT A REAL LAYOUT BUG THE MOMENT THE BUTTONS EXISTED.** `.es-side` is 84px
+      wide and the panel is 290px tall on a phone: three 36px chips stacked in that column overflow the
+      rail, and *"the whole panel fits, and every rail button is really on screen"* measured the third
+      one hanging **7px below it**. The chips wrap instead — two across 84px is 80px of height against
+      124 stacked. **The guard already existed; nothing new had to be invented.**
+      📐 **Mutation-proved:** removing the `delete kf.bez` from the family-preset branch was CAUGHT with
+      *"the editor would say Bounce and draw a bezier"*.
+      ⚠️ **An empty clipboard SAYS so** — both chips toast rather than sitting inert, because silence at
+      the bottom of "it doesn't work" is the single most repeated finding in this file (#603/#618/#619).
       📍 **The screenshot is the easing editor**, so "a graph" is a curve: the Bezier control points,
       or the Bounce/Steps mode and its settings. **Copying has to carry the MODE as well as the numbers**
       — pasting Bezier handles onto a Steps graph and keeping "Steps" would be a curve he did not make.

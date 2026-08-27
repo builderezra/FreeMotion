@@ -31645,6 +31645,70 @@
    * one he noticed would leave the next writer free to forget. So the WRITER notifies, and this
    * asserts that contract rather than any one wiring — a third display added later is covered by
    * subscribing, and this test would catch it being added without. */
+  /* #623 — Ezra: "Add the ability to copy paste the graphing and be able to past a graph you made into
+   * any other graph". His word is ANY, so a copied curve must reproduce itself on a different property.
+   * THE HARD PART IS THE MODE, NOT THE NUMBERS. A curve lives in three fields and which ones are SET is
+   * the mode: `ez` (a family preset and its parameters), `bez` (hand-dragged cubic handles), and the
+   * plain string `e` (a named ease, and the legacy Hold). Every read site decides what to draw by their
+   * presence — curFamKey() reports 'steps' for a plain kf.e === 'hold', and the "is a preset active?"
+   * checks test for the ABSENCE of kf.bez. So a paste that leaves a stale field behind does not merely
+   * look wrong: it makes the editor disagree with the renderer, and the entry's own warning is that
+   * pasting handles onto a Steps graph while it still says "Steps" is a curve he did not make.
+   * Driven through FM.graphClip rather than the panel, because the contract is about the DATA. */
+  test('#623: a copied graph reproduces its MODE, not just its numbers', { item: '623' }, function () {
+    var C = FM.graphClip;
+    if (!C || typeof C.read !== 'function') throw new Error('FM.graphClip is missing — #623 has no clipboard');
+    var had = C.has() ? C.get() : null;
+    try {
+      // 1. A FAMILY PRESET (Bounce) must arrive as a family preset, with its parameters, and must NOT
+      //    bring hand-dragged handles with it.
+      var src = { ez: { fam: 'bounce', preset: 'soft', p: { bounces: 3, decay: 0.4 } }, e: 'easeInOut' };
+      var dst = { bez: [0.1, 0.2, 0.3, 0.4], e: 'custom' };      // a bezier graph, deliberately
+      C.set(C.read(src));
+      C.applyTo(dst, C.get());
+      if (!dst.ez || dst.ez.fam !== 'bounce' || dst.ez.preset !== 'soft')
+        throw new Error('pasting a Bounce graph did not carry the family: ' + JSON.stringify(dst.ez));
+      if (dst.ez.p.bounces !== 3 || dst.ez.p.decay !== 0.4)
+        throw new Error('the family PARAMETERS did not travel: ' + JSON.stringify(dst.ez.p));
+      if ('bez' in dst) throw new Error('the destination kept its cubic handles under a family preset — the editor would say Bounce and draw a bezier (#623)');
+
+      // 2. THE REVERSE. Handles must land as handles and clear the family, or the graph reads Bounce
+      //    and draws a curve nobody made — the exact failure the entry names.
+      var src2 = { bez: [0.9, 0.1, 0.2, 0.8], e: 'custom' };
+      var dst2 = { ez: { fam: 'bounce', preset: 'soft', p: { bounces: 3 } }, e: 'easeInOut' };
+      C.set(C.read(src2));
+      C.applyTo(dst2, C.get());
+      if ('ez' in dst2) throw new Error('pasting cubic handles left the family preset behind (#623)');
+      if (!dst2.bez || dst2.bez.join(',') !== '0.9,0.1,0.2,0.8') throw new Error('the handles did not travel: ' + JSON.stringify(dst2.bez));
+      if (dst2.e !== 'custom') throw new Error('a hand-dragged curve pasted as the named ease "' + dst2.e + '"');
+
+      // 3. HOLD is a STEP, and it is stored as the plain string every older project uses. If it pastes
+      //    as anything else the Steps rail stops matching what the renderer does.
+      C.set(C.read({ e: 'hold' }));
+      var dst3 = { bez: [0.1, 0.2, 0.3, 0.4], e: 'custom', ez: { fam: 'bounce', preset: 'soft', p: {} } };
+      C.applyTo(dst3, C.get());
+      if (dst3.e !== 'hold') throw new Error('a Hold pasted as "' + dst3.e + '"');
+      if ('bez' in dst3 || 'ez' in dst3) throw new Error('pasting a Hold left a bezier or a family behind');
+
+      // 4. THE CLIPBOARD HANDS OUT COPIES. Pasting one graph onto four properties must not give them a
+      //    shared parameter bag they then all mutate together.
+      C.set(C.read({ ez: { fam: 'elastic', preset: 'big', p: { amp: 1 } }, e: 'easeInOut' }));
+      var a = {}, b = {};
+      C.applyTo(a, C.get()); C.applyTo(b, C.get());
+      a.ez.p.amp = 99;
+      if (b.ez.p.amp !== 1) throw new Error('two pastes share one parameter object — editing one graph changed another');
+      var again = C.get(); if (again.ez.p.amp !== 1) throw new Error('editing a pasted graph reached back into the clipboard');
+
+      // 5. Empty clipboard is a state, not a crash — the button toasts instead of doing nothing.
+      C.clear();
+      if (C.has()) throw new Error('clear() left the clipboard armed');
+      if (C.get() !== null) throw new Error('an empty clipboard returned something to paste');
+      if (C.applyTo({}, null) !== false) throw new Error('applyTo accepted a null graph');
+    } finally {
+      if (had) C.set(had); else C.clear();
+    }
+  });
+
   test('#622: every display of the preview rate follows the writer', { item: '622' }, function () {
     if (typeof FM.setPreviewRate !== 'function') throw new Error('FM.setPreviewRate is gone');
     if (typeof FM.onPreviewRate !== 'function') throw new Error('FM.onPreviewRate is missing — the rate has no notification, so displays are hand-patched again (#622)');
