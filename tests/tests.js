@@ -48266,6 +48266,43 @@
     }
   });
 
+  /* 619 — the media-swap sheet exists and is CORRECT; what was wrong is that it says nothing.
+     His report was "pressing a template just creates itself as a project", and the cause is that
+     `templateFill.open()` returns false and shows nothing when a template has no video or image
+     layers — which every one of his does, because his projects are shapes and text.
+     Both halves are asserted, and the FIRST is the control: if slots ever start counting shapes, the
+     second assertion would pass for the wrong reason. */
+  test('619: the template media-swap opens only with media, and never silently', { item: '619' }, async function () {
+    if (!FM.templateFill || !FM.templateFill._slots) throw new Error('FM.templateFill is gone — the media-swap feature queue 619 is about no longer exists');
+    const keep = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      FM.addTextLayer('t');
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 5; });
+      await sleep(200);
+      if (FM.templateFill._slots().length !== 0) throw new Error('a text-and-shapes project reports ' + FM.templateFill._slots().length + ' swappable slots — slots must be video/image only, or the "no media" case can never be detected');
+      if (FM.templateFill.open() !== false) { FM.templateFill.close(); throw new Error('the swap sheet opened for a template with no media — it should return false and show nothing'); }
+      /* AND WITH MEDIA IT MUST OPEN. Without this the first assertion is satisfied by a feature that
+         never works at all. */
+      const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+      cv.getContext('2d').fillRect(0, 0, 32, 32);
+      const blob = await new Promise(function (r) { cv.toBlob(r, 'image/png'); });
+      const rec = await FM.loadImageFile(new File([blob], 'p.png', { type: 'image/png' }));
+      if (FM.addMediaLayer) FM.addMediaLayer(rec);
+      await sleep(300);
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 5; });
+      if (FM.templateFill._slots().length < 1) throw new Error('a project containing an image reports no swappable slots — the feature is broken, not merely quiet');
+      const opened = FM.templateFill.open();
+      FM.templateFill.close();
+      if (!opened) throw new Error('the swap sheet did not open for a template that DOES contain an image');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      try { FM.templateFill.close(); } catch (e) {}
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 644 — NOTHING ON THE LIGHT HOME MAY BE LIGHT-ON-LIGHT, and this SWEEPS rather than naming one rule.
      Three separate times a colour written for white-on-dark survived into the light look and became
      invisible while looking perfectly healthy in the DOM:

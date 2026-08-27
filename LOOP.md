@@ -133,7 +133,19 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.67 — everything is pushed and the tree is clean. 1010 tests green.**
+📍 **HANDOVER, 27 Aug, v13.68 — everything is pushed and the tree is clean. 1011 tests green.**
+🔁 **A CORRECT DECISION TAKEN SILENTLY IS REPORTED AS A BROKEN FEATURE — THREE TIMES TODAY.**
+· **#603** — the app knew the layer had no colour and wrote it in a hover tooltip a phone cannot show.
+· **#618 c2** — the card told him to use a menu item that menu did not contain.
+· **#619** — the template media-swap opens only when there is media, and said nothing when there wasn't.
+**Each was reported as "this doesn't work". None of them was wrong; all three were quiet.** When a
+feature declines to act, that decision has to be visible or it reads as absence.
+✅ **#619 ANSWERED: the feature EXISTS, is wired, and is correct** — `js/template-fill.js`, opened 420ms
+after the push. Measured: text+shapes → 0 slots → no sheet; +1 image → 1 slot → opens. **His projects
+are shapes and text**, so it has silently done nothing every time.
+⚠️ **NOT TICKED.** He asked to swap MEDIA and his templates have none. **One word decides it: is the
+explanation enough, or should shape/text layers be swappable too?** He pre-authorised the size.
+
 🚨 **THREE TIMES NOW, A WHITE-ON-DARK COLOUR HAS SURVIVED INTO THE LIGHT LOOK AND GONE INVISIBLE**
 — the selected tab (1.1:1), the wordmark (white art on a light bar), the pinned title (**1.02:1**, and
 he had to report it). **When adding a theme, every hardcoded light TEXT colour is a candidate; the

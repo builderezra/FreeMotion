@@ -1565,7 +1565,22 @@ window.FM = window.FM || {};
              fixed child raised mid-push would be re-rooted to that transformed ancestor and travel
              with it. Waiting the push out also means the first thing you see is the template, not a
              file-picker screen sliding in over a screen that is still moving. */
-          setTimeout(() => { if (FM.templateFill) FM.templateFill.open(); }, 420);
+          /* ⚠️ AND SAY SO WHEN THERE IS NOTHING TO SWAP (queue 619). `open()` returns FALSE and shows
+             nothing when the template has no video or image layers — deliberately, because a "replace
+             your media" screen over an empty row would be worse. The cost of that silence is what he
+             reported: *"pressing a template just creates itself as a project, not what I wanted and I
+             specified many times to fix this."*
+             MEASURED: a template of text + shapes yields 0 slots and no sheet; the same template with
+             one image yields 1 slot and the sheet opens. His own projects are shapes and text — the
+             logo, the rects, the captions — so the feature has been working correctly and doing
+             nothing, every time, without a word.
+             Silence is the bug, not the behaviour. Same shape as queue 603 and queue 618 clause 2:
+             the app knew exactly why and said nothing, so it read as the feature being absent. */
+          setTimeout(() => {
+            if (!FM.templateFill) return;
+            if (FM.templateFill.open()) return;
+            if (FM.toast) FM.toast('No photos or videos in this template to swap — it is text and shapes, so it opened as a project.', 4600);
+          }, 420);
         } else if (FM.toast) FM.toast('Could not load that template');
       } finally { clearPress(true); }   // eased: on the push path startPush already took it, so this only runs when nothing happened
     }

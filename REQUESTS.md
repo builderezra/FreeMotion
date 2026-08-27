@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.67
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.68
 >
-> **State:** v13.67, 1010 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.68, 1011 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21988,10 +21988,33 @@ re-opened #480, which I had marked done and had not fixed.
       **#343 is ticked `[x]` as "all four clauses (v9.97 / v11.71)".** His report today says the FIRST
       clause is not true in the app: pressing a template forks a project and drops him in it, with no
       media-swap step. **Something between what shipped and what he wanted did not meet.**
-      ➡️ **First job is NOT to build — it is to establish which of these is the case, because they need
-      different fixes:** (a) the swap flow exists but is not on the path a tap takes, (b) it exists and is
-      empty/broken for his templates, or (c) it was never built and #343 was ticked on the other three
-      clauses. **Open a template on the phone layout and follow the actual tap.** ⚠️ #343 being ticked is
+      ✅ **ANSWERED 27 Aug (v13.68) — it is (b), and #343's tick was HONEST. The feature exists, is
+      wired, and is correct. What is wrong is that it says nothing.**
+      📁 **`js/template-fill.js` is real and loaded** — *"Insert your Media: fill a template's clips
+      with your own footage"* — and `home.js`'s `use()` opens it 420ms after the push, deliberately
+      after the animation. **So the tap path DOES reach it.**
+      🔑 **`open()` returns FALSE and shows nothing when the template has no video or image layers**, and
+      its own comment explains why: *"a screen that says 'replace your media' over an empty row would be
+      worse than not appearing."* **That reasoning is sound. The silence is the bug.**
+      📐 **MEASURED, both directions:**
+      | template contents | slots | sheet |
+      |---|---|---|
+      | text + shapes only | **0** | **does not open, silently** |
+      | the same plus one image | **1** | opens |
+      🚨 **HIS PROJECTS ARE SHAPES AND TEXT** — the logo, the rects, the captions. So every template he
+      has made has zero swappable slots, and the feature has been working correctly and doing nothing,
+      every single time, without a word. **From where he stands that is indistinguishable from the
+      feature not existing** — which is exactly what he reported, twice.
+      ✅ **FIXED v13.68: when there is nothing to swap, it says so** — *"No photos or videos in this
+      template to swap — it is text and shapes, so it opened as a project."*
+      🔑 **THIRD TIME THIS EXACT SHAPE HAS APPEARED TODAY:** #603 (the app knew the layer had no colour
+      and put it in a tooltip), #618 clause 2 (an instruction pointing at a menu item that was not
+      there), and this. **A correct decision, taken silently, is reported as a broken feature.**
+      ⚠️ **NOT TICKED, and this is the honest part.** He asked to *"quickly swap out the media for ur own
+      clips"*. The app now explains why that cannot happen for his templates — **it has not given him
+      the thing he wanted.** If what he actually wants is to swap SHAPE and TEXT layers too, that is a
+      real feature and he pre-authorised its size (*"I know it's a big thing to do idc"*). **One word
+      from him decides it: is the explanation enough, or should any layer be swappable?** ⚠️ #343 being ticked is
       exactly the trap `next.sh` warns about — *"an entry is a record of what was ASKED, not of what is
       still missing"*.
       📍 **The shape he wants, from his own screenshot back then:** Alight Motion's *Insert your
