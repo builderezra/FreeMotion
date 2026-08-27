@@ -48266,6 +48266,99 @@
     }
   });
 
+  /* 641 — the two drifting light layers may be RECOLOURED and must never be RE-BOXED.
+     Both halves are real bugs that already happened, in opposite directions, from the same rule:
+       · covering `::before` with the light look's wash destroyed its -8% overscan and brought back
+         #187's bar (white this time — he reported it within the minute);
+       · then moving the wash off it handed the DARK ground straight back, because a pseudo-element
+         with z-index:-1 inside a positioned parent paints ABOVE the parent's own background.
+     So this asserts colour AND geometry together — either one alone would have passed one of them. */
+  test('641: the home drift layers are light-themed but keep their overscan', { item: '641' }, async function () {
+    const was = !!(FM.settings && FM.settings.get('homeLight'));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      return await atPhoneWidth(async function () {
+        FM.settings.set('homeLight', true);
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(380);
+        const hs = document.getElementById('home-screen');
+        if (!hs) throw new Error('no #home-screen');
+        const bef = getComputedStyle(hs, '::before'), aft = getComputedStyle(hs, '::after');
+        const lum = function (rgb) {
+          const m = (rgb.match(/\d+/g) || [0, 0, 0]).map(Number);
+          return (m[0] * 299 + m[1] * 587 + m[2] * 114) / 1000;
+        };
+        /* COLOUR: the base layer paints a ground, and in the light look it must not be the dark one —
+           it sits above #home-screen's own background, so a dark value there makes the whole page dark
+           below the colour wash however light #home-screen itself is. */
+        /* ⚠️ TRANSPARENT IS THE RIGHT ANSWER, and a naive luminance check calls it black. rgba(0,0,0,0)
+           parses to [0,0,0] — so the first version of this assertion would have failed the very fix it
+           was written to protect. What matters is that this layer does not paint an OPAQUE DARK ground
+           over #home-screen's light one; not painting at all is better still. */
+        const bg = bef.backgroundColor || '';
+        const alpha = (function () { const m = bg.match(/rgba?\(([^)]+)\)/); if (!m) return 1;
+          const parts = m[1].split(',').map(function (x) { return parseFloat(x); });
+          return parts.length > 3 ? parts[3] : 1; })();
+        if (alpha > 0.05 && lum(bg) < 128) {
+          throw new Error('#home-screen::before paints an opaque dark ground (' + bg + ') in the light look — it sits ABOVE #home-screen\u2019s own background, so the page goes dark below the wash');
+        }
+        /* GEOMETRY: negative insets are the overscan #187 needed, because both layers DRIFT — they
+           translate and scale, so they must overhang or an edge is left bare. */
+        [['::before', bef], ['::after', aft]].forEach(function (pair) {
+          const cs = pair[1];
+          ['top', 'right', 'bottom', 'left'].forEach(function (side) {
+            const v = parseFloat(cs[side]);
+            if (!(v < 0)) throw new Error('#home-screen' + pair[0] + ' has ' + side + ': ' + cs[side] + ' in the light look — the overscan is gone, and that is the #187 bar. Recolour these layers; never re-box them.');
+          });
+          if (!cs.animationName || cs.animationName === 'none') throw new Error('#home-screen' + pair[0] + ' has stopped drifting in the light look');
+        });
+      });
+    } finally {
+      if (FM.settings) FM.settings.set('homeLight', was);
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
+  /* 618 clause 1 — "they have the weird icon still instead of showing what the element is".
+     The picture was already being captured: a draft IS a project, so the autosave path had been
+     storing its thumbnail all along and the card simply never asked. This asserts the card asks. */
+  test('618: an element draft shows its picture, not the diamond', { item: '618' }, async function () {
+    const made = [];
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      const r = await FM.projects.create({ name: 'thumb probe', elementDraft: true });
+      const id = (r && r.id) || r;
+      made.push(id);
+      await sleep(200);
+      /* ⚠️ THE THUMBNAIL IS SEEDED, NOT SNAPSHOTTED, and that is deliberate. The first version asked
+         the app to take a real snapshot and its control refused the pass — `touchCurrent` only
+         snapshots the CURRENT project, which a freshly created draft is not, so nothing was ever
+         stored and the test would have been measuring the wrong thing. What clause 1 changed is
+         whether the CARD ASKS for a stored thumbnail, so seed one and test exactly that.
+         `getThumb` falls back to the index entry's inline `thumb`, which is reachable from here. */
+      const PIX = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+      const idx = FM.projects.list();
+      const row = idx.filter(function (p) { return p.id === id; })[0];
+      if (!row) throw new Error('the probe draft is not in the project index');
+      row.thumb = PIX;
+      FM.projects.saveIndex(idx);
+      const seeded = await FM.projects.getThumb(id);
+      if (!seeded) throw new Error('seeding a thumbnail did not make getThumb return one — this test cannot tell whether the card asks');
+      FM.home.open();
+      await sleep(500);
+      const tab = [].slice.call(document.querySelectorAll('.hm-tab')).filter(function (b) { return /elements/i.test(b.textContent); })[0];
+      if (tab) { tab.click(); await sleep(700); }
+      const card = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(function (c) { return c.dataset.pid === id; })[0];
+      if (!card) throw new Error('the probe draft has no card on the Elements tab');
+      const img = card.querySelector('.hm-thumb-draft img');
+      if (!img) throw new Error('the draft card shows no <img> — queue 618: it still wears the ◇ placeholder while its picture sits in storage unused');
+    } finally {
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
+    }
+  });
+
   /* 639 clause 5 — the app icons. Three files, none of them reachable from the running app's DOM, so
      the only honest check is to fetch and decode them. Two things matter and neither is visible from
      the filename: they must be OPAQUE (a maskable Android icon and an iOS home-screen icon composite

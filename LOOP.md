@@ -133,7 +133,33 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.63 — everything is pushed and the tree is clean. 1006 tests green.**
+📍 **HANDOVER, 27 Aug, v13.65 — everything is pushed and the tree is clean. 1008 tests green.**
+🚨 **THE WORDMARK'S EFFECT LAYERS ARE MASKED WITH THE WORDMARK IMAGE — SIX REFERENCES, FOUR RULES.**
+Swapping `.hm-brand-img`'s src at v13.62 left all six cut to the OLD logo, so a pale ghost of it sat
+behind the new one in BOTH looks. **He spotted it and described it exactly: "an M as the backdrop for
+the big M… it doesn't look the same."** If the wordmark ever changes again, change all six.
+⚠️ **And the light look had switched off only TWO of the four brand effect layers** — `.hm-brand-wm::
+before`/`::after` kept painting a dark-bar specular over black ink. All four off now.
+📐 **#642: the intro's bars are arithmetic** — his film is 9:16, his phone ~9:19.5, so `height:100dvh`
+made it wider than the screen and `max-width` clamped it into bands. **`object-fit: cover`**, measured
+from his recording: at t=3.48 the middle read 255 while the bands read 124/162.
+⚠️ **Sample a video through PLAYBACK, not seeking** — a seek-based probe returned the identical frame
+eight times and would have been believed.
+📌 **STILL WAITING ON HIM:** #602 · #610 (A or B) · #624 · **#643's taste half — he should see the
+clean wordmark first, since the ghost and the shadow were what made it look bad** · #642 clause 3, a
+nicer home background (#545: draw options).
+
+✅ **#618 clause 1 DONE — element drafts show their picture.** The picture was **already stored**: a
+draft IS a project, so autosave had been snapshotting it all along and the card never asked. Measured
+first (1631 and 2919 chars of stored image data), so this was a 3-line lookup, not a pipeline.
+🔁 **#641 — A REGRESSION FROM MY OWN #640 FIX, CAUGHT IN A SCREENSHOT TAKEN FOR SOMETHING ELSE.**
+Read the two together: covering `#home-screen::before` with the colour wash destroyed its overscan
+(#187's bar, white); moving the wash OFF it handed the dark ground back, because a `z-index:-1`
+pseudo-element inside a positioned parent paints ABOVE the parent's background. **Two opposite bugs,
+one rule.**
+🔑 **RULE: `#home-screen::before`/`::after` may be RECOLOURED, never RE-BOXED.** No inset, no size, no
+transform. The test asserts colour AND geometry together — either alone passes one of the two bugs.
+
 🔎 **#617 clauses 1–2 INVESTIGATED, NOT FIXED, and the entry's assumed cause is REFUTED.** Three
 measured attempts could not make v13.63 accumulate element drafts: editing with a commit is net zero,
 editing without one REPLACES rather than piles up, and the + probe was inconclusive because it opens a

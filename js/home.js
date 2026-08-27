@@ -1667,7 +1667,29 @@ window.FM = window.FM || {};
        that browsers resolve by dropping one of them. */
     const card = el('div', 'hm-card hm-card-draft');
     card.setAttribute('role', 'button'); card.tabIndex = 0;
-    const dthumb = el('div', 'hm-thumb hm-thumb-draft', '◇');
+    /* A PICTURE, NOT A DIAMOND (queue 618 clause 1). Ezra: *"they have the weird icon still instead of
+       showing what the element is when ur in the elements tab home menu"*.
+       ⚠️ THE PICTURE WAS ALREADY THERE. A draft IS a project, so the autosave path has been capturing
+       its thumbnail into IndexedDB all along — measured before building this: both drafts on the test
+       device had one stored (1631 and 2919 chars of data URL). The card simply never asked. So this is
+       the same async lookup `projectCard` does, not a new thumbnail pipeline.
+       The ◇ stays as the placeholder underneath: it shows while the lookup is in flight, and remains
+       for a draft genuinely too new to have been snapshotted yet. */
+    const dthumb = el('div', 'hm-thumb hm-thumb-draft');
+    const dph = el('span', 'hm-thumb-empty', '◇');
+    dthumb.appendChild(dph);
+    if (FM.projects.getThumb) {
+      FM.projects.getThumb(p.id).then(function (url) {
+        if (!url) return;
+        const img = document.createElement('img');
+        img.src = url; img.alt = '';
+        /* Remove the ◇ only once the picture has actually painted — dropping it on assignment leaves
+           an empty box for as long as the decode takes, which reads as a broken card. Same order
+           projectCard uses. */
+        img.addEventListener('load', function () { if (dph.parentNode) dph.remove(); });
+        dthumb.insertBefore(img, dph);
+      }).catch(function () {});
+    }
     card.appendChild(dthumb);
     const body = el('div', 'hm-meta');
     body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));

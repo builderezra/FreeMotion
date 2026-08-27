@@ -542,6 +542,32 @@ html[data-home="light"] #home-screen {
    ⚠️ SO: never reuse either pseudo-element on #home-screen. `#hm-bleed` is a real element, sits under
    the content and over the drift layers, and touches neither.
    The hues are the + button's, in a top-down order, and an existing test enforces that they match. */
+/* THE TWO DRIFTING LIGHT LAYERS, RECOLOURED — COLOURS ONLY, NEVER THE BOX (queue 641).
+   🚨 THIS IS A REGRESSION FROM MY OWN FIX FOR #640, AND WORTH READING AS A PAIR.
+   The colour wash was first written as an override OF `#home-screen::before`, which replaced that
+   layer's dark ground — so the page looked right and the #187 overscan was destroyed (the white bar).
+   Moving the wash onto its own element fixed the bar and **handed the dark ground straight back**:
+   `::before` paints `background-color: #060c0f` and, being a pseudo-element with `z-index: -1` inside
+   a positioned parent, it sits ABOVE `#home-screen`'s own background. Measured: the page read
+   rgb(244,246,250) while everything below the 422px wash showed the dark layer.
+   ⚠️ SO THE RULE IS: recolour these two, never re-box them. No `inset`, no size, no transform — the
+   -8%/-12% overscan and the drift animations are load-bearing and cost six rounds on #187. */
+html[data-home="light"] #home-screen::before {
+  /* ⚠️ TRANSPARENT, NOT PAPER-WHITE. The first fix painted #f4f6fa here, which worked and broke a
+     different test: `the + button wears the home palette` reads every hue out of this rule and
+     requires the + to carry them, so a paper white it has never heard of made the two screens
+     "no longer share a palette". And it was redundant anyway — #home-screen already paints that
+     ground; this layer only had to STOP covering it with the dark one. */
+  background-color: transparent;
+  background-image:
+    radial-gradient(78vmax 58vmax at 12% -8%,  rgba(41, 217, 187, .13), transparent 62%),
+    radial-gradient(66vmax 52vmax at 96% 8%,   rgba(122, 92, 255, .10), transparent 60%),
+    radial-gradient(88vmax 62vmax at 62% 108%, rgba(38, 132, 255, .11), transparent 64%);
+}
+html[data-home="light"] #home-screen::after {
+  background: radial-gradient(52vmax 44vmax at 33.87% 72.58%, rgba(41, 217, 187, .10), transparent 60%);
+}
+
 html[data-home="light"] #hm-bleed {
   position: absolute; left: 0; right: 0; top: 0; height: 52vh;
   pointer-events: none; z-index: 0;
@@ -663,13 +689,20 @@ html[data-home="light"] .hm-top {
    pixel to black and LEAVES ALPHA ALONE, so one asset serves both looks — no second file, no extra
    download, and the two can never drift apart. The drop-shadow is what stops it reading as flat ink
    on the tinted glass. */
-html[data-home="light"] .hm-brand-img {
-  filter: brightness(0) drop-shadow(0 1px 0 rgba(255, 255, 255, .55));
-}
-/* The halo and the travelling glint are tuned to WHITE artwork on a dark bar; on black-on-light they
-   read as smears. Off in the light look — the tinted glass under the mark is doing that job now. */
+/* ⚠️ NO WHITE SHADOW (queue 643). The first version added `drop-shadow(0 1px 0 rgba(255,255,255,.55))`
+   to lift the ink off the tinted glass. He looked at it and said no: *"you've added like this white
+   shadow to it behind but it kinda doesn't look very good… it just looks a little bit tacky and bad
+   from a distance"*. Flat ink it is — the glass under it already separates it from the page. */
+html[data-home="light"] .hm-brand-img { filter: brightness(0); }
+/* ALL FOUR BRAND EFFECT LAYERS OFF IN THE LIGHT LOOK, not just two. The halo and the glint were
+   switched off here from the start; `.hm-brand-wm::before` and `::after` — the specular catch and its
+   partner — were not, and they kept painting. Every one of them is designed for WHITE artwork on a
+   DARK bar, where a pale glow reads as light on glass; over black ink on a light bar the same layers
+   read as the smear he described. They stay for the dark look, where they belong. */
 html[data-home="light"] .hm-brand-halo,
-html[data-home="light"] .hm-brand-glint { display: none; }
+html[data-home="light"] .hm-brand-glint,
+html[data-home="light"] .hm-brand-wm::before,
+html[data-home="light"] .hm-brand-wm::after { display: none; content: none; }
 
 /* The header's round buttons, so they sit on the glass rather than punching holes in it. */
 html[data-home="light"] .hm-search-btn,
@@ -696,9 +729,20 @@ html[data-home="light"] #hm-select-btn {
   100% { background-color: #fff; }
 }
 html.splash-on-light, html.splash-on-light body { background: #111; animation: splash-ground 2.05s ease-in forwards; }
+/* ⚠️ COVER, NOT CONTAIN (queue 642). Ezra, from a screen recording: *"there's like two white bars at
+   the top and bottom when the screen fully zooms in"*.
+   THE ARITHMETIC: his film is 9:16 and his phone is about 9:19.5. With `height: 100dvh; width: auto`
+   the video comes out WIDER than the screen, `max-width: 100vw` clamps it, the height shrinks, and
+   there are bands top and bottom. Measured off his own recording, sampled through PLAYBACK: at t=3.48
+   the middle of the screen is **255** — the film's white ending — while the bands read **124 and 162**.
+   A hard-edged mismatch, precisely where the film is brightest.
+   The ground animation cannot rescue that: it ramps #111→white on a fixed curve and cannot track the
+   film frame by frame, so ANY letterbox will disagree with it somewhere. `cover` removes the letterbox
+   instead of trying to colour-match it — there is then nothing to mismatch. It crops about 18% of a
+   centred logo animation, which is the right trade for a seam that shows on every launch. */
 #splash.splash-light #splash-vid {
-  width: auto; height: 100vh; height: 100dvh;
-  max-width: 100vw; object-fit: contain;
+  width: 100vw; height: 100vh; height: 100dvh;
+  max-width: none; object-fit: cover;
 }
 /* Someone who asked for less motion still gets the right ground, without the ramp. */
 @media (prefers-reduced-motion: reduce) {

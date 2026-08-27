@@ -5731,13 +5731,19 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   animation: hm-wm-breathe 7s ease-in-out infinite;
   will-change: opacity;
 }
+/* ⚠️ THESE MASKS MUST TRACK THE WORDMARK IMAGE (queue 643). Every glow, halo and specular on the
+   brand is SHAPED by masking the wordmark art, so swapping `.hm-brand-img`'s src without changing
+   them leaves the OLD logo's silhouette glowing behind the NEW one. That is exactly what Ezra saw:
+   *"you've got like an M as like the backdrop for like the big M but it's like not… mine looks more
+   like a N than an M"* — a pale ghost of the previous wordmark, offset behind the current one.
+   Six references across four rules. If the wordmark changes again, change all of them. */
 .hm-brand-glint::before,
 .hm-brand-glint::after,
 .hm-brand-halo::before,
 .hm-brand-halo::after {
   content: ""; position: absolute; inset: 0;
-  -webkit-mask-image: url('brand-wordmark.png?v=2');
-          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-image: url('brand-wordmark-m.png?v=1');
+          mask-image: url('brand-wordmark-m.png?v=1');
   -webkit-mask-size: contain;      mask-size: contain;
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
@@ -5787,8 +5793,8 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   background: radial-gradient(120% 180% at 18% 6%,
     rgba(255, 255, 255, 1) 0%, rgba(226, 248, 255, .80) 26%,
     rgba(150, 214, 246, .44) 58%, rgba(74, 140, 182, .26) 100%);
-  -webkit-mask-image: url('brand-wordmark.png?v=2');
-          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-image: url('brand-wordmark-m.png?v=1');
+          mask-image: url('brand-wordmark-m.png?v=1');
   -webkit-mask-size: contain;      mask-size: contain;
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
@@ -5809,8 +5815,8 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   background:
     radial-gradient(5% 30% at 6.5% 20%, rgba(255,255,255,1) 0%, rgba(255,255,255,.62) 40%, rgba(255,255,255,0) 100%),
     radial-gradient(16% 5% at 6.5% 20%, rgba(255,255,255,.72) 0%, rgba(255,255,255,0) 100%);
-  -webkit-mask-image: url('brand-wordmark.png?v=2');
-          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-image: url('brand-wordmark-m.png?v=1');
+          mask-image: url('brand-wordmark-m.png?v=1');
   -webkit-mask-size: contain;      mask-size: contain;
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;

@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=637">
-<link rel="stylesheet" href="theme-glass.css?v=37">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=638">
+<link rel="stylesheet" href="theme-glass.css?v=41">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -173,7 +173,12 @@
          is the mark already lit on a #111 ground, and the splash box now IS #111 — so the pre-load
          state and frame 1 differ only by the mark, which arrives when the video does. The old film
          needed a poster because its ground and the splash's did not match. Saves a 292KB download. */
-      if (pos && !LIGHT) pos.src = 'splash-poster.png?v=3';
+      /* ⚠️ AND WHEN THERE IS NO POSTER, THE ELEMENT GOES (queue 642). Leaving an <img> with no `src`
+         sized to the whole viewport is not free: an empty image can paint as a placeholder box, and
+         "a weird white box that pops up" at the start of the intro is exactly what he reported.
+         Removing it costs nothing — the new film needs no poster, because its first frame is the mark
+         already lit on #111 and the splash box IS #111. */
+      if (pos) { if (LIGHT) pos.remove(); else pos.src = 'splash-poster.png?v=3'; }
       vid.addEventListener('playing', function () { vid.classList.add('playing'); });
       vid.src = LIGHT ? 'splash-v2.mp4?v=1' : 'splash.mp4?v=3';
       var p = vid.play();
@@ -198,7 +203,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v13.63</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v13.65</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -964,7 +969,7 @@
   <script src="js/export-resume.js?v=4"></script>
   <script src="js/medialib.js?v=5"></script>
   <script src="js/template-fill.js?v=1"></script>
-  <script src="js/home.js?v=159"></script>
+  <script src="js/home.js?v=160"></script>
   <script src="js/graph-editor.js?v=16"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.63
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.65
 >
-> **State:** v13.63, 1006 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.65, 1008 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21926,7 +21926,20 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > Elements I’m not sure work very well, they have the weird icon still instead of showing what the element is when ur in the elements tab home menu and they still tell you to manually save it urself
 
-      1. [ ] **The ◇ icon should be a picture of the element.** Every row in the Elements tab wears the
+      1. [x] **The ◇ icon should be a picture of the element.** ✅ **DONE v13.64 — and the picture was
+             already there.**
+             📐 **MEASURED BEFORE BUILDING:** a draft **IS** a project, so the autosave path has been
+             capturing its thumbnail into IndexedDB all along. Both drafts on the test device already had
+             one stored — **1631 and 2919 characters of image data.** The card simply never asked.
+             ✅ So this is the same async `getThumb` lookup `projectCard` already does, not a new
+             thumbnail pipeline. **The ◇ stays underneath** as the placeholder: it shows while the lookup
+             is in flight and remains for a draft too new to have been snapshotted.
+             ⚠️ **The `<img>` replaces the ◇ only on its `load` event**, not on assignment — dropping it
+             earlier leaves an empty box for the length of the decode, which reads as a broken card.
+             📐 **Verified at 375px:** both draft cards painted an 86x86 picture, ◇ gone. **The rows are
+             now told apart at a glance**, which was the actual complaint.
+             ⚠️ **The ELEMENT card already did this** (`if (e.thumb)`, js/home.js:1584) — only the DRAFT
+             card was hardcoded. Worth knowing: two card types, one already correct. Every row in the Elements tab wears the
              same diamond placeholder (`hm-thumb-draft`, the literal character `◇` at js/home.js ~1657),
              so the tab is a list of identical rows and he cannot tell one from another — which is also
              half of why **#617**'s duplicates were so confusing. **Projects already render a real
@@ -22548,6 +22561,91 @@ re-opened #480, which I had marked done and had not fixed.
       · **The light `#hm-new` rule swapped the + orb's ring to a darker blue** for legibility on paper
         and **quietly undid queue 611**, shipped two ticks earlier. Caught as *"the home + orb has no
         blue ring"*. Same hue now, doubled rather than changed.
+
+- [x] **641 — 🔴 On the light look the page went DARK below the colour wash. ✅ FIXED v13.64 before
+      it reached him — and it was a regression from my own fix for #640.** (27 Aug, found while
+      screenshotting #618.)
+      **Not reported by him — caught by looking at a screenshot taken for something else.**
+      🔁 **THE PAIR IS THE LESSON.** #640: the colour wash was written as an override OF
+      `#home-screen::before`, which replaced that layer's dark ground — the page looked right, and the
+      **#187 overscan was destroyed** (his white bar). Fixing that moved the wash to its own element,
+      which **handed the dark ground straight back**: `::before` paints `background-color: #060c0f`, and
+      a pseudo-element with `z-index: -1` inside a positioned parent sits **above** the parent's own
+      background. **Two opposite bugs from the same rule, one from covering it and one from not.**
+      📐 **Measured:** `#home-screen` computed `rgb(244,246,250)` — correct — while everything below the
+      422px wash painted the dark layer.
+      ✅ **FIX: recolour the two drift layers, never re-box them.** No `inset`, no size, no transform —
+      the −8% / −12% overscan and the drift animations are load-bearing and cost six rounds on #187.
+      Only `background-color` and the gradient hues change.
+      🔑 **RULE WORTH KEEPING: `#home-screen::before` and `::after` may be RECOLOURED and must never be
+      RE-BOXED.** Both previous bugs were geometry changes dressed as colour changes.
+
+- [ ] **642 — The intro has a white box at the start and white bars top and bottom; and experiment
+      **STATUS: 🟢 READY — nothing is stopping this**
+      more with the home background design.** (27 Aug, screen recording at v13.63.)
+      His words, verbatim, in full:
+      > If you analyse this video you’ll notice that basically at the start there’s like a weird like white box that pops up. It’s a bit glitchy and also there’s like two white bars at the top and bottom when the screen fully zooms in like I feel like you could probably fix that with a little bit of effort just don’t make the video playback loading intro look shit just like try and fix it up a little bit and also you’ve made the background in the hub menu like white not white but like black now like you’ve made a good dark again and Justin said the top buttons are white which isn’t terrible I would just like you to experiment a bit more and see if there’s a nicer design and layout that you can create for the background
+
+      1. [ ] **A white box pops up at the start of the intro** — *"a bit glitchy"*.
+      2. [ ] **Two white bars, top and bottom, when it fully zooms in.**
+      3. [ ] **Experiment with a nicer background design/layout for the home screen.** ⚠️ **#545 — draw
+             options and show him.** He is asking to be shown alternatives, not handed one.
+      ✅ **"you've made the background… black now" IS ALREADY FIXED — he is on v13.63 and it is #641.**
+      The colour wash sits on its own element; the dark drift layer underneath was painting over the
+      light page below it. **Fixed and shipping in v13.64**, so that half of his message needs no work.
+      📐 **THE BARS ARE MEASURED, from his own recording (1320x2868, 5.25s), sampled through
+      PLAYBACK — a seek-based probe returned the identical frame eight times and was thrown away:**
+      | t | top band | middle | bottom band |
+      |---|---|---|---|
+      | 0.73–1.49 | 9–14 | **0** | 5–7 |
+      | 2.98 | 21 | 105 | 18 |
+      | **3.48** | **124** | **255** | **162** |
+      🚨 **At the end the picture is PURE WHITE and the bands are 124 and 162 — a hard-edged mismatch,
+      which is exactly what he is seeing.** The ground animation ramps #111→white but cannot track the
+      film frame by frame, so any letterbox at all will disagree with it somewhere.
+      ✅ **CAUSE OF THE BARS, and it is arithmetic:** his film is **9:16**; his phone is about **9:19.5**.
+      With `height: 100dvh; width: auto` the video comes out WIDER than the screen, `max-width: 100vw`
+      clamps it, and the height shrinks — **bands top and bottom.** ➡️ **`object-fit: cover` removes the
+      letterbox entirely**, so there is nothing left to mismatch. It crops ~18% of a centred animation,
+      which is the right trade.
+      💡 **THE WHITE BOX AT THE START — HYPOTHESIS, NOT MEASURED.** At t=0.23 the recording is LIGHT
+      (mid 99) before going dark. Two candidates: the app's own light page painting for a frame before
+      the splash covers it, or **`#splash-poster`, an `<img>` that is deliberately given no `src` in the
+      light look** — an empty `<img>` sized to the viewport can render as a placeholder box.
+      ➡️ **The second is cheap to eliminate: do not render the element at all when light.** ⚠️ **Say
+      which of the two it was once he confirms** — a screen recording of a phone's own launch animation
+      can look like an app bug, and I have not proven it either way.
+
+- [ ] **643 — The wordmark has a pale GHOST of the old logo behind it, and the white shadow looks
+      **STATUS: 🟢 READY — nothing is stopping this**
+      tacky. ✅ BOTH FIXED v13.65 — the "different M" was a real bug, not a matter of taste.**
+      (27 Aug, zoomed phone screenshot at v13.63.)
+      His words, verbatim:
+      > At first glance the free motion text looks kinda bad at the top left because you’ve added like this white shadow to it behind but it kinda doesn’t look very good in my opinion and could use a little bit of work just to give it a nice look like just experiment with some different different things because currently it just looks a little bit tacky and bad from a distance especially since you’ve got like an M as like the backdrop for like the big M but it’s like not it doesn’t look the same cause it’s like the M has like different lines than what I have because mine looks more like a N than an M so just experiment with a little bit
+
+      🎯 **HE SPOTTED A BUG AND DESCRIBED IT PRECISELY — *"an M as the backdrop for the big M… it
+      doesn't look the same"*. He is right, and it is not subtle once found.**
+      🚨 **CAUSE: every glow, halo and specular on the brand is SHAPED BY MASKING THE WORDMARK ART**, and
+      there are **six** `mask-image: url('brand-wordmark.png')` references across four rules. Swapping
+      `.hm-brand-img`'s `src` to the new lockup changed the picture and left **all six masks cut to the
+      OLD logo's silhouette** — so a pale ghost of the previous wordmark, with its ordinary M, sat
+      offset behind the new one. **In BOTH looks, not just light.**
+      ✅ **All six now point at `brand-wordmark-m.png`, with a note at the first one saying they must
+      track the image.** If the wordmark changes again, all six change.
+      ✅ **AND THE WHITE SHADOW IS GONE** — *"you've added like this white shadow to it behind but it
+      kinda doesn't look very good"*. That was mine, added at v13.62 to lift the ink off the tinted
+      glass. He looked at it and said no, so it is flat ink now; the glass already separates it.
+      🐛 **A SECOND MISS OF MY OWN, found while fixing the first:** the light look switched off
+      `.hm-brand-halo` and `.hm-brand-glint` but **not `.hm-brand-wm::before` / `::after`** — the
+      specular catch and its partner. Those kept painting: designed for WHITE artwork on a DARK bar,
+      they read as a smear over black ink on a light one. **All four are off in the light look now**,
+      and all four still work in the dark look, where they were designed.
+      📐 **Verified at 375px:** all four layers `display: none`, filter down to plain `brightness(0)`,
+      masks resolving to the new asset.
+      ➡️ **STILL OPEN — the part that is TASTE, not a bug:** *"just experiment with some different
+      things… give it a nice look"*. **#545 applies: draw options at header size and show him.** The
+      ghost and the shadow were making it look bad for reasons that are now removed, **so he should see
+      the clean version before choosing a treatment** — it may already be what he wanted.
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
