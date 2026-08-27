@@ -133,7 +133,20 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1012 tests green.**
+📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1013 tests green.**
+🔎 **#602 CLAUSE 2 ANSWERED BY READING THE CODE, and the entry's old claim was WRONG.** It asserted
+*"Curve and Animate are the two genuinely duplicated by effects"* — nobody had looked. The real answer:
+**Spacing is duplicated exactly** (`textspacing`) and **Animate's Typewriter preset is duplicated and
+beaten** (`textprogress` reveals by WORD with a caret). **Line height and Curve are duplicated by
+NOTHING** — no effect sets leading, and Curve is glyph LAYOUT (`drawArcLine` rotates each character to
+the tangent) where bend/curl/wave displace pixels and smear the letters.
+🚨 **So "remove the circled four" DELETES TWO FEATURES WITH NO EQUIVALENT.** A test now locks that door
+and fails loudly if `textspacing`/`textprogress` ever vanish, since the whole conclusion rests on them.
+💡 **THE LESSON WORTH CARRYING: an entry's own analysis is not evidence.** This one carried a confident,
+wrong sentence for long enough that I nearly asked him to arbitrate between two readings of it. The
+effects catalog has a `text` CATEGORY — six effects that read the STRING, not the pixels
+(`TEXT_ONLY`, js/fx-registry.js:153). Six greps settled what a decision request would not have.
+
 📐 **#621 MEASURED — rounded corners does NOTHING on a rotated layer.** 0°: 16.9% of the shape removed.
 45°: **0.0%** — four pixels out of 9548. The mask is built in the AXIS-ALIGNED alpha box, and a rotated
 rectangle's own corners sit at the MIDDLES of that box's edges, so nothing gets cut.

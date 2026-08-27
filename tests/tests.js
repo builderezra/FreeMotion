@@ -31471,6 +31471,55 @@
    * most are the boundaries — at full progress the original must come back CHARACTER FOR CHARACTER
    * (a tokeniser that drops or doubles a separator fails here and nowhere else), and the legacy path
    * must be untouched across the whole progress range rather than at one sampled value. */
+  /* #602 — Ezra circled Spacing / Line height / Curve / Animate and said they were "kinda pointless
+   * coz effects do the same thing". Checked in code on 27 Aug, and he is right about HALF: `textspacing`
+   * duplicates Spacing exactly, and `textprogress` duplicates Animate's Typewriter preset and beats it
+   * (by word, with a caret). But LINE HEIGHT AND CURVE ARE DUPLICATED BY NOTHING — no effect in the
+   * catalog sets leading, and Curve is glyph LAYOUT (drawArcLine rotates each character to the tangent)
+   * where bend/curl/wave displace pixels of the flattened image and smear the letters.
+   * So the tempting action on that entry — "remove the circled four" — deletes two features with no
+   * equivalent anywhere. That is the door this test locks. It is not a style assertion: it asserts the
+   * two controls are REACHABLE and BOUND, and that the two genuine duplicates still exist (if either is
+   * ever deleted, the reasoning in #602 changes and the entry has to be re-argued rather than silently
+   * inherited). */
+  test('#602: the Aa sheet keeps Line height and Curve — no effect provides either', { item: '602' }, function () {
+    if (typeof FM._textExtras !== 'function') throw new Error('FM._textExtras is gone — the Aa sheet has no builder');
+    var L = { type: 'text', text: 'Marine Terrace', lineHeight: 1.15, textCurve: 0, fontSize: 95 };
+    var host = document.createElement('div');
+    FM._textExtras(L, host, function () {});
+    var labels = [].slice.call(host.querySelectorAll('label')).map(function (n) { return n.textContent.trim(); });
+    ['Line height', 'Curve'].forEach(function (want) {
+      if (labels.indexOf(want) < 0)
+        throw new Error('"' + want + '" is no longer in the Aa sheet, and NO effect replaces it — see #602. Labels present: ' + JSON.stringify(labels));
+    });
+    /* Reachable is not enough — a row that has come unbound from the layer is a dead control that
+       still reads fine. rangeRow paints the current value into `.fx-scrub-val` through its getter
+       (it is a tickStrip, NOT an input[type=range], which is what the first version of this test
+       wrongly reached for), so building twice with different layer values proves the binding. */
+    function shown(h, want) {
+      var ls = [].slice.call(h.querySelectorAll('label'));
+      for (var i = 0; i < ls.length; i++) {
+        if (ls[i].textContent.trim() !== want) continue;
+        var v = ls[i].parentElement && ls[i].parentElement.querySelector('.fx-scrub-val');
+        if (!v) throw new Error('the "' + want + '" row has no value field — see #602');
+        return v.value;
+      }
+      throw new Error('"' + want + '" vanished on rebuild — see #602');
+    }
+    var h2 = document.createElement('div');
+    FM._textExtras({ type: 'text', text: 'Marine Terrace', lineHeight: 2.0, textCurve: 45, fontSize: 95 }, h2, function () {});
+    if (shown(host, 'Line height') === shown(h2, 'Line height'))
+      throw new Error('Line height showed ' + shown(host, 'Line height') + ' for both 1.15 and 2.0 — the row is not bound to the layer');
+    if (shown(host, 'Curve') === shown(h2, 'Curve'))
+      throw new Error('Curve showed ' + shown(host, 'Curve') + ' for both 0 and 45 — the row is not bound to the layer');
+    // The two that ARE duplicated must still exist, or #602's conclusion no longer holds.
+    var T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    ['textspacing', 'textprogress'].forEach(function (k) {
+      if (!T || typeof T[k] !== 'function')
+        throw new Error('the effect "' + k + '" is gone — #602 concluded Spacing/Typewriter were safe to drop BECAUSE it existed. Re-argue the entry.');
+    });
+  });
+
   test('effects: Text Progress can reveal by word and line, from either end', { item: 'fx-text' }, function () {
     for (var q = 0; q <= 1.0001; q += 0.05) {
       var legacy = TXT_FIXTURE.slice(0, Math.round(TXT_FIXTURE.length * Math.min(1, q)));

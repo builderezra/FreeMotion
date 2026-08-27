@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.69
 >
-> **State:** v13.69, 1012 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.69, 1013 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -20896,7 +20896,7 @@ re-opened #480, which I had marked done and had not fixed.
       screen — the video preview is entirely off-screen below it.**
       **CIRCLED IN RED:** Spacing, Line height, Curve, Animate.
       1. [x] **You cannot see the text while editing it.** ✅ **DONE v13.52** — see the measurements below.
-      2. [ ] **Some duplicate what effects already do** — he points at the circled four.
+      2. [x] **Some duplicate what effects already do** — ✅ **CHECKED IN CODE (27 Aug):** two of the four do (Spacing, and Animate's Typewriter preset). **Line height and Curve are duplicated by nothing.** See the table at the bottom. Nothing removed — removing all four would delete two features that have no equivalent.
       ⚠️ **"so just the circled options" reads two ways** — remove JUST those four, or keep ONLY them.
       **(a) is the stronger reading.** ⚠️ But Spacing and Line height were HIS OWN request (shipped
       v12.31), so (a) reverses that — worth one line of confirmation, not a silent removal. **Curve and
@@ -20968,11 +20968,28 @@ re-opened #480, which I had marked done and had not fixed.
       Then a second, smaller version of the same: the cap reserved MIN_PREVIEW but the lift then spent
       18px of it (its own +6 and padTop's +12), so 113px survived where 120 was promised. The cap now
       reserves what the lift spends.
-      ❓ **CLAUSE 2 STILL NEEDS ONE WORD FROM YOU, and it is the only thing holding this entry open.**
-      *"so just the circled options"* — you circled **Spacing, Line height, Curve, Animate**. Do you want
-      those four **REMOVED**, or those four **KEPT and the rest removed**? ⚠️ Asking rather than guessing
-      because **Spacing and Line height were your own request** (shipped v12.31), so removing them
-      reverses something you asked for. **Curve and Animate are the two genuinely duplicated by effects.**
+      ✅ **CLAUSE 2 — THE PREMISE IS NOW CHECKED IN CODE RATHER THAN ARGUED. He is right, but about
+      HALF of what he circled, and the half is not the one I guessed above.**
+      The line above used to say *"Curve and Animate are the two genuinely duplicated by effects"*. **That
+      was wrong, and I had not looked.** The effects catalog has a whole **`text` category — six effects
+      that read the STRING, not the pixels**: `counter`, `textprogress`, `textrandomizer`, `textspacing`,
+      `texttransform`, `timecode` (`TEXT_ONLY` at js/fx-registry.js:153).
+      | circled row | duplicated by an effect? | which, and how well |
+      |---|---|---|
+      | **Spacing** | ✅ **yes, exactly** | `textspacing` — *"Widens or tightens the gaps between letters."* |
+      | **Line height** | ❌ **no** | nothing in 199 effects sets leading |
+      | **Curve** | ❌ **no** | `bend`/`curl`/`wave` displace PIXELS of the flattened image; Curve is `drawArcLine`, which lays each glyph on an arc **rotated to the tangent** so the letters stay crisp. Warping a picture of text smears it — different result, not a duplicate |
+      | **Animate → Typewriter** | ✅ **yes, and the effect is BETTER** | `textprogress` reveals **by word** (its own comment: *"a caption revealed character by character flickers half-words on screen, and by WORD is the only unit that reads"*), with direction and a caret. The sheet's preset is `alpha = p > 0 ? 1 : 0` per glyph — character-only, no caret |
+      | **Animate → the other 11** | ❌ **no** | Fade in / Fade up / Pop / Slide in / Drop in / Spin in / Zoom in from big / Stretch / Wave / Jitter are **per-glyph** transforms (alpha, dx, dy, scale, rotation, per character). An effect gets the finished pixel buffer and cannot know where a glyph is. `wipe` is the closest and it is a straight-edge spatial wipe you keyframe yourself |
+      🚨 **SO READING (a) — "remove all four" — WOULD DELETE TWO FEATURES NOTHING ELSE PROVIDES.** Line
+      height and Curve have no equivalent anywhere in the app. That is no longer a taste call; it is a
+      measurable loss, and it is why nothing has been removed.
+      ➡️ **THE QUESTION IS NOW MUCH SMALLER, and it is the only thing holding this entry open.** The real
+      overlap is **Spacing** (fully) and **Animate's Typewriter preset** (fully, and the effect wins).
+      **My recommendation: leave the sheet alone.** Clause 1 already stopped it covering the preview,
+      which was the complaint that actually bit — *"block you even seeing the text"* — and Spacing was
+      your own request at v12.31. Say the word and I will drop the **Typewriter preset** in favour of
+      `textprogress`, but that is the whole of the honest cut.
 - [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
