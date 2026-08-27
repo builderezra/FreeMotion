@@ -133,7 +133,15 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.68 — everything is pushed and the tree is clean. 1011 tests green.**
+📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1012 tests green.**
+✅ **#620 DONE — the magnet governs all four snap sites in Position / Scale.** ⚠️ **The canvas drag does
+NOT snap and that is HIS doing** (the code quotes him asking for it to move to the trackpad), so his
+words "on the canvas" meant those controls. **Read the comments before believing a report contradicts
+the design — it may be quoting him from three weeks ago.**
+🔒 **The test checks the SOURCE as well as the behaviour** — it counts `magnetOn()` references and fails
+below five. **A gate nothing calls passes a behavioural test forever.**
+🔒 **And it FAILS SAFE:** no `isSnapping` seam → snapping stays ON. A missing API is not a user choice.
+
 🔁 **A CORRECT DECISION TAKEN SILENTLY IS REPORTED AS A BROKEN FEATURE — THREE TIMES TODAY.**
 · **#603** — the app knew the layer had no colour and wrote it in a hover tooltip a phone cannot show.
 · **#618 c2** — the card told him to use a menu item that menu did not contain.

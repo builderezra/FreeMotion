@@ -48266,6 +48266,37 @@
     }
   });
 
+  /* 620 — "when you turn off the magnet button it should stop snapping … like in the position / scale
+     section". Four snap sites live in that section — the X/Y setter, the trackpad, the rotation notches
+     and the anchor pad — spread across ~600 lines, none reachable from outside. So the gate is tested
+     through its seam, AND the source is checked to confirm all four still consult it: a gate nothing
+     calls would pass a behavioural test forever. */
+  test('620: the magnet governs every snap in Position / Scale', { item: '620' }, async function () {
+    if (!FM._magnetOn) throw new Error('FM._magnetOn is gone — the magnet gate queue 620 added has no seam, so nothing can check it');
+    const real = FM.timeline && FM.timeline.isSnapping;
+    try {
+      FM.timeline.isSnapping = function () { return true; };
+      if (FM._magnetOn() !== true) throw new Error('the magnet reads ON but the gate says snapping is off');
+      FM.timeline.isSnapping = function () { return false; };
+      if (FM._magnetOn() !== false) throw new Error('the magnet was turned OFF and the gate still reports snapping on — queue 620 is the whole point');
+      /* FAIL SAFE, deliberately: if the timeline ever stops exposing isSnapping, snapping must stay ON
+         rather than silently vanishing everywhere. A missing seam is not a user turning the magnet off. */
+      delete FM.timeline.isSnapping;
+      if (FM._magnetOn() !== true) throw new Error('with no magnet seam at all the gate reports snapping OFF — a missing API would silently kill snapping across the whole panel');
+    } finally {
+      if (real) FM.timeline.isSnapping = real;
+    }
+    /* AND THE FOUR SITES MUST STILL CONSULT IT. Without this, deleting every call would leave the
+       behavioural half above passing happily. */
+    let src = '';
+    try { src = await (await fetch('js/inspector.js', { cache: 'no-store' })).text(); }
+    catch (e) { throw new Error('could not read js/inspector.js to confirm the snap sites use the gate: ' + e.message); }
+    const uses = (src.match(/magnetOn\(\)/g) || []).length;
+    /* One definition, one seam assignment, and four call sites. Fewer than four calls means a snap
+       site has stopped honouring the magnet. */
+    if (uses < 5) throw new Error('js/inspector.js references magnetOn() only ' + uses + ' time(s) — queue 620 needs it at the X/Y setter, the trackpad, the rotation notches and the anchor pad, so one of them has stopped honouring the magnet');
+  });
+
   /* 619 — the media-swap sheet exists and is CORRECT; what was wrong is that it says nothing.
      His report was "pressing a template just creates itself as a project", and the cause is that
      `templateFill.open()` returns false and shows nothing when a template has no video or image

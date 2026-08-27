@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.68
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.69
 >
-> **State:** v13.68, 1011 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.69, 1012 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22021,13 +22021,30 @@ re-opened #480, which I had marked done and had not fixed.
       Media* screen — the template's slots listed, each one tapped to drop in your own clip, and THEN it
       becomes a project. Not a fork you then have to hunt through.
 
-- [ ] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.** ✅ **DONE v13.69.**
       (27 Aug, at v13.51.)
       His words, verbatim:
       > When you turn off the magnet button it should stop snapping for when you’re moving clips on the canvas too, like in the position / scale section
 
-      1. [ ] **Magnet OFF must stop canvas snapping**, the same way it already stops timeline snapping.
+      1. [x] **Magnet OFF must stop canvas snapping.** ✅ **DONE v13.69 — but not where the words point,
+             and the reason is his own earlier request.**
+             🚨 **THE CANVAS DRAG DOES NOT SNAP, AND HE IS WHY.** The code quotes him: *"the canvas
+             has snapping when you touch to drag stuff, while the touch pad thing to move stuff does
+             not, it should be the other way around."* Canvas snapping was REMOVED and moved to the
+             Move & Transform trackpad — the coarse gesture goes where you put it, the precision one
+             helps you land. **So "moving clips on the canvas" means moving them through those
+             controls**, which is exactly what *"like in the position / scale section"* names.
+             ✅ **Four snap sites found there, all now gated on the magnet:** the X/Y setter
+             (`FM.snapAxis`), the trackpad's own `snapT`, the **rotation notches** (45° / 7° tolerance)
+             and the **anchor pad** (centre, quarters, edges).
+             ⚠️ **All four, deliberately. A magnet that silenced three of them would be worse than one
+             that silenced none** — he could not predict which gesture would obey it.
+             🔒 **It FAILS SAFE:** if the timeline ever stops exposing `isSnapping`, the gate reports
+             snapping ON rather than off. **A missing API is not a user turning the magnet off**, and
+             the alternative is snapping silently vanishing from the whole panel. Asserted.
+             🔒 **And the test checks the SOURCE as well as the behaviour** — it counts `magnetOn()`
+             references in `js/inspector.js` and fails below five (one definition, one seam, four
+             calls). **A gate nothing calls would pass a behavioural test forever.**
              He names the surfaces himself: **dragging a layer on the canvas**, and **the Position /
              Scale controls in the inspector**.
       📍 **This is one switch being read in one place and ignored in another** — find what the magnet

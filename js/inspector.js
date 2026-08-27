@@ -3755,6 +3755,23 @@ window.FM = window.FM || {};
   const MT_SWEEP_STATIC = { move: 1, scale: 1, skew: 1, rotate: 0, anchor: 0 };
   const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, anchorX: 0.5, anchorY: 0.5 };
 
+  /* THE MAGNET GOVERNS EVERY SNAP IN THIS SECTION (queue 620). Ezra: *"When you turn off the magnet
+   * button it should stop snapping for when you're moving clips on the canvas too, like in the
+   * position / scale section."*
+   * ⚠️ WORTH KNOWING BEFORE CHANGING ANYTHING: the CANVAS DRAG DOES NOT SNAP, and that is his doing —
+   * *"the canvas has snapping when you touch to drag stuff, while the touch pad thing to move stuff
+   * does not, it should be the other way around."* So "moving clips on the canvas" means moving them
+   * through THESE controls, which is where the snapping was deliberately moved to. Nothing on the
+   * canvas needed changing; four things here did.
+   * One switch, four sites: the X/Y setter, the trackpad, the rotation notches and the anchor pad. A
+   * magnet that silences three of four would be worse than one that silences none, because you could
+   * not predict which. */
+  function magnetOn() { return !(FM.timeline && FM.timeline.isSnapping) || FM.timeline.isSnapping(); }
+  /* Seam, same idiom as FM._fxDeadHereWhy and FM._tilesLastBB: the four snap sites are spread across
+     600 lines and none of them is reachable from outside, so without this the only way to test the
+     magnet would be to drive four separate gestures — and a test that hard is a test that gets
+     written once and never maintained. */
+  FM._magnetOn = magnetOn;
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
   function mtSet(layer, key, v) { FM.setTransform(layer, key, v, FM.time); FM.requestRender(); if (FM.timeline) FM.timeline.updatePlayhead(); }
   // X/Y setter that SNAPS to the shared align targets (centre / edges / this layer's keyframe
@@ -3763,7 +3780,7 @@ window.FM = window.FM || {};
   function mtSetXY(layer, key, v, typed) {
     if (typed) { mtSet(layer, key, v); return; }   // a TYPED value is exact — snapping/rounding silently rewrote it (545 became 540)
     let target = null;
-    if (FM.snapAxis) { const s = FM.snapAxis(layer, key, v, 8); v = s.v; if (s.hit) target = s.target; }
+    if (FM.snapAxis && magnetOn()) { const s = FM.snapAxis(layer, key, v, 8); v = s.v; if (s.hit) target = s.target; }
     if (FM.showAlignGuide) FM.showAlignGuide(key === 'x' ? target : null, key === 'y' ? target : null);
     mtSet(layer, key, Math.round(v));
   }
@@ -4432,6 +4449,7 @@ window.FM = window.FM || {};
       // keyframes, so you can put it back exactly where it was.
       // Returns the target it caught, or null — the caller needs to KNOW, not just get a number back.
       const snapT = (v, targets, thr) => {
+        if (!magnetOn()) return null;   // magnet off → nothing is ever caught; the caller already handles null
         let best = null, bd = thr;
         for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d < bd) { bd = d; best = targets[i]; } }
         return best;
@@ -4493,7 +4511,7 @@ window.FM = window.FM || {};
        * The angle is accumulated RAW and only snapped on the way out, never written back into rd.acc.
        * Snapping the accumulator would make the drag creep: each move would start from the snapped
        * value, so eight notches of travel would land you somewhere other than 360°. */
-      const SNAP_DEG = 45, SNAP_TOL = 7;
+      const SNAP_DEG = 45, SNAP_TOL = magnetOn() ? 7 : 0;   // magnet off → tolerance 0, so nothing holds (queue 620)
       let lastNotch = null;
       ring.addEventListener('pointermove', e => {
         if (!rd) return;
@@ -4594,7 +4612,7 @@ window.FM = window.FM || {};
       const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to centre, edges and corners'));
       // 260px of swipe crosses the layer, and it snaps to the nine points you actually want
       const SNAP = [0, 0.25, 0.5, 0.75, 1];
-      const snapA = v => { for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
+      const snapA = v => { if (!magnetOn()) return v; for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
       let ad = null;
       apad.addEventListener('pointerdown', e => { ad = { x: e.clientX, y: e.clientY, ax: getA('anchorX'), ay: getA('anchorY') }; try { apad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       apad.addEventListener('pointermove', e => {
