@@ -328,12 +328,20 @@ SYNCED one is BROKEN.** Dumping the two frames the kernel actually compares, dow
 so my render then finds `rec.cv` holding the very frame it is about to draw. A field over two identical
 frames reports zero motion, Smear bails at `wsum < 0.5`, and the Amount slider does nothing. **All of
 that was the instrument.**
-🚨 **CONSEQUENCE, AND IT IS A BAD ONE: THE v13.42 REVERT WAS WRONG.** v13.40's 110 → 117 was measured
-UNSYNCED, i.e. on the probe now proven sound. I withdrew it on the strength of the synced reading,
-which is meaningless. **So a fix that worked was removed from his app.**
-➡️ **NEXT: re-apply v13.40's punch-out (it is in git at `a6f5da7`), with a FRESH unsynced A/B to confirm
-before claiming anything.** ⚠️ **This will be the third change to that hunk — ship it only WITH the
-A/B numbers in hand, and tell him plainly that it was removed and put back.**
+❌ **AND THAT CONSEQUENCE WAS WRONG TOO — MEASURED, and it finally resolves the whole mess. THE v13.42
+REVERT WAS CORRECT. Do not re-apply v13.40.**
+Re-measured the CURRENT (reverted = original) code with the validated probe, `refDiffers = 10` asserted:
+**none 110 · Smear 117 · Echo 122.** **The ORIGINAL code already produces 117.**
+🔑 **So v13.40's "110 → 117" was never before-vs-after. It was EFFECT-OFF vs EFFECT-ON.** I compared a
+no-effect frame against a Smear frame and read it as a fix working. **The punch-out changed nothing,
+the revert cost nothing, and the app is now in the right state.**
+🔑 **AND THE TECHNIQUE THAT FINALLY WORKS: park `FM.time` INSIDE the walk range once, then walk without
+re-syncing.** Not per-step syncing (that rotates the cache and hands the kernel identical frames), and
+not leaving `FM.time` stale far away (that trips the 0.35 s guard every step). The earlier 111 readings
+for Smear were the guard biting; 117 is the true value.
+✅ **WHICH MEANS SMEAR IS NOT BROKEN — it gives +7 px on a 12.7 px/frame subject, and Echo +12.**
+His *"kinda buns"* is then a JUDGEMENT about how subtle it is, not a defect — **and that is a
+recommendation to put to him, not a bug to fix.**
 🔒 **RULE EARNED THE HARD WAY: before trusting ANY temporal-effect measurement, assert that `ref` and the
 current frame actually DIFFER.** The hook is permanent. Every one of the five wrong calls on this entry
 would have been caught by that one assertion.

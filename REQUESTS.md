@@ -8,9 +8,12 @@
 > WAS working.** I built a check that simply asks: are the two frames this effect compares actually
 > different? **The test I used to justify undoing the fix was handing it the SAME frame twice**, so of
 > course it found no motion and no improvement.
-> ↩️ **So the fix I took out at v13.42 should go back in**, and I will re-measure it properly first
-> before I say another word about it. **Nothing you make has changed** through any of this — the effect
-> has looked the same all day.
+> ↩️ **CORRECTION, an hour later: the fix should NOT go back in. Re-measured properly, and the revert was
+> right.** The original code already produced the wider, softer result — my "before" number was never the
+> old code, it was the effect switched OFF. **Your app is in the correct state and I am leaving it alone.**
+> ✅ **And the real answer on Motion Blur: it is NOT broken.** Smear widens a moving object by ~7px and
+> Echo by ~12px on footage moving 12.7px per frame. **So "kinda buns" is about it being too SUBTLE, not
+> about it failing** — which is a taste call for you, not a bug for me.
 > ⚠️ **I have now been wrong about this five times.** The check that settles it is permanent and takes
 > one line, and every one of those five would have been caught by it.
 >
