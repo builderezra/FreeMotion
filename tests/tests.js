@@ -48266,6 +48266,38 @@
     }
   });
 
+  /* 611 — "Put a little blue ring around the add button that's got the same style and glow as
+     everything else in this menu", sent with a screenshot of the PROJECTS HOME.
+     v13.49 shipped that ring onto `.fab-aura`, which lives inside `#add-fab` — the EDITOR's button,
+     display:none on the home screen — so it was real, tested, written up as done, and landed on a
+     button he was not looking at. This test names the element by the screen he was on, so the same
+     miss cannot happen quietly again. */
+  test('611: the HOME + orb carries the menu\u2019s blue ring', { item: '611' }, async function () {
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      return await atPhoneWidth(async function () {
+        if (!FM.home || !FM.home.open) throw new Error('FM.home.open is gone — this test can no longer reach the screen it is about');
+        FM.home.open();
+        await sleep(420);
+        const orb = document.getElementById('hm-new');
+        if (!orb) throw new Error('#hm-new is gone — the home + orb this test is about no longer exists');
+        const r = orb.getBoundingClientRect();
+        const cs = getComputedStyle(orb);
+        /* THE CONTROL, and it is the whole point: the element must actually be ON SCREEN. The button
+           the ring was mistakenly put on measured 0x0 with display:none, and a computed-style check
+           alone was perfectly happy with it. */
+        if (cs.display === 'none' || r.width < 20 || r.height < 20) {
+          throw new Error('#hm-new is not visible on the home screen (' + Math.round(r.width) + 'x' + Math.round(r.height) + ', display:' + cs.display + ') — a ring on a hidden button is what queue 611 shipped by mistake');
+        }
+        if (!/127,\s*216,\s*255/.test(cs.boxShadow)) {
+          throw new Error('the home + orb has no blue ring — its box-shadow is "' + cs.boxShadow.slice(0, 120) + '". Queue 611 wants the pinned cards\u2019 rgba(127,216,255,...), borrowed rather than a near-miss shade.');
+        }
+      });
+    } finally {
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+    }
+  });
+
   /* 609 — "The speed slider looks weird and broken". It was drawn 139,999px wide (((100000-1)/5) x 7),
      and with will-change: transform that is a compositing layer far past the browser's maximum texture
      size, so the notch gradient got downsampled into blurred smudges. The ruler only ever shows the

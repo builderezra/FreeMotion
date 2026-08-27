@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.55
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.56
 >
-> **State:** v13.55, 996 tests green, tree clean.
+> **State:** v13.56, 997 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21453,8 +21453,7 @@ re-opened #480, which I had marked done and had not fixed.
       panel, at the width they ship at. **Sent to him; he picks A or B.**
       ⚠️ **NOT BUILT YET, deliberately** — #545 is explicit that he sees a design before it ships, and he
       has said it himself: *"I just want options. Yu can just say recommended next to the best option."*
-- [ ] **611 — A blue ring around the + add button, matching the menu.** (27 Aug, phone screenshot at v13.48.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **611 — A blue ring around the + add button, matching the menu.** ✅ **DONE v13.56 — v13.49 put it on the wrong button.** (27 Aug, phone screenshot at v13.48.)
       His words, verbatim:
       > Put a little blue ring around the add button that’s got the same style and glow as everything
       > else in this menu
@@ -21467,6 +21466,28 @@ re-opened #480, which I had marked done and had not fixed.
       a round orb — so a ring on it would draw a SQUARE around a circle. And `box-shadow` rather than
       `border`, which would shrink the aura inside its 64px box and pull the gradient off the glass
       edge the filter chain derives its rim from.
+
+      🐛 **AND ALL OF THAT WAS THE WRONG BUTTON. CORRECTED v13.56.** The reasoning above is sound and
+      it was applied to `.fab-aura`, which lives inside **`#add-fab` — the EDITOR's + FAB, and it is
+      `display: none` on the home screen.** His screenshot was the PROJECTS HOME; the orb he circled is
+      **`#hm-new`**, a separate 58x58 button.
+      📐 **MEASURED at 375px with home open, before correcting:** `#hm-new`'s computed box-shadow
+      contained **no `127,216,255` anywhere**, while `.fab-aura`'s did — and `.fab-aura` measured
+      **0x0 with `display: none`**. So the ring was shipped, tested, written up as done, and landed
+      somewhere he could not see it.
+      ✅ **NOW ON `html[data-theme="glass"] #hm-new`** (theme-glass.css) — the rule that actually wins
+      the cascade for this button, found by asking the browser which rules match rather than reading the
+      file, because the value uses `var()` and Chrome hides those from `style.boxShadow`. Same borrowed
+      values: ring `rgba(127,216,255,.30)`, lift `rgba(127,216,255,.7)`, listed FIRST so the ring paints
+      over the lift while the ambient cyan throw stays last. **Verified at 375px: orb 58x58 at (159,730),
+      visible, ring present.**
+      🔑 **THE LESSON, and it is the one `next.sh` prints on every run:** *an entry is a record of
+      what was ASKED, not of what is still missing.* This entry described its own fix in convincing
+      detail and was about to be ticked on the strength of that write-up. **What caught it was opening
+      the screen he photographed and measuring the button he circled.**
+      🔒 **A test now names the element by the SCREEN he was on**, and its control asserts the orb is
+      actually visible — because a computed-style check alone was perfectly happy with a 0x0
+      `display: none` button, which is exactly how this got through the first time.
 - [ ] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:

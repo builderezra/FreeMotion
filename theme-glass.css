@@ -314,7 +314,24 @@ html[data-theme="glass"] #hm-new {
   border: none;
   /* v6.09: rim + lift from the shared material, plus the colour it throws. There is no + CUT-OUT
      any more — the glyph is a stroked SVG on top — so an inset rim is now correct here. */
-  box-shadow: var(--lg-rim), var(--lg-lift), 0 0 20px rgba(90, 199, 237, .30);
+  /* ⚠️ AND THE BLUE RING GOES HERE, NOT ON `.fab-aura` (queue 611, corrected at v13.56). Ezra asked
+     for it with a screenshot of the PROJECTS HOME: *"Put a little blue ring around the add button
+     that's got the same style and glow as everything else in this menu"* — the pinned cards and the
+     tab row carry a light-blue rim and the round + orb at the bottom had none.
+     🐛 **v13.49 put the ring on `.fab-aura`, which lives inside `#add-fab` — the EDITOR's button, and
+     it is `display: none` on the home screen.** So the fix was real, tested, shipped, written up as
+     done — and landed on a button he was not looking at. Measured before correcting it: `#hm-new`'s
+     computed box-shadow contained no `127,216,255` at all, while `.fab-aura`'s did.
+     🔑 **The lesson is the one `next.sh` prints every run: an entry records what was ASKED, not what
+     is still missing.** This one was about to be ticked on the strength of its own write-up.
+     The values are the pinned cards' (`.hm-card.is-pinned`), so it is literally the same blue rather
+     than a near-miss shade — which is what "the same style as everything else in this menu" means.
+     ⚠️ The ring is listed FIRST so it paints on top of the lift, and the ambient throw stays last so
+     the orb still glows into the page behind it. */
+  box-shadow:
+    0 0 0 1.5px rgba(127, 216, 255, .30),
+    0 8px 22px -14px rgba(127, 216, 255, .7),
+    var(--lg-rim), var(--lg-lift), 0 0 20px rgba(90, 199, 237, .30);
   transition: transform .18s cubic-bezier(.3, .8, .3, 1), filter .18s ease, box-shadow .18s ease;
 }
 html[data-theme="glass"] #hm-new:hover {

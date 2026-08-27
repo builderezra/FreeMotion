@@ -133,7 +133,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.55 — everything is pushed and the tree is clean. 996 tests green.**
+📍 **HANDOVER, 27 Aug, v13.56 — everything is pushed and the tree is clean. 997 tests green.**
+🐛 **#611 WAS SHIPPED ONTO THE WRONG BUTTON AND NEARLY TICKED ON ITS OWN WRITE-UP. READ THIS ONE.**
+v13.49 put his blue ring on `.fab-aura`, inside `#add-fab` — the EDITOR's FAB, `display: none` on the
+home screen he photographed. The entry described the fix in convincing detail, `next.sh` flagged it as
+"open but the body says it was fixed", and the obvious move was to tick it. **What caught it was opening
+the screen he photographed and measuring the button he circled:** `#hm-new` had no `127,216,255`
+anywhere, and `.fab-aura` measured **0x0, display:none**.
+🔑 **So: a computed-style check is NOT proof. Assert the element is on screen too** — the new test does,
+and that control is the half that matters.
+
 🎨 **#610 — OPTIONS DRAWN AND SENT, NOT BUILT.** The panel really is five bare checkboxes; rendered
 at 380px and looked at, he is right that it reads like a debug form. Two options went to him at ship
 width: **A preview tiles (recommended)** — each tile renders what the thing does, which also answers
