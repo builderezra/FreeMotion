@@ -21361,24 +21361,7 @@ re-opened #480, which I had marked done and had not fixed.
              among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
              compounding is at least as likely as an exception. **Open the console; do not infer from the
              symptom.**
-      2. [ ] ✅ **RESOLVED 27 Aug — MOTION BLUR IS NOT BROKEN, IT IS SUBTLE. It is YOUR CALL whether to
-         make it stronger, and this entry is waiting on you for that.**
-         Measured on real footage moving **12.7 px/frame**, with the frame-pair assertion in hand
-         (`FM._mfRefVsA`, so the kernel provably saw two DIFFERENT frames): **effect off 110 px ·
-         Smear 117 (+7) · Echo 122 (+12).** Both work.
-         ⚠️ **SIX WRONG CALLS ON THIS ONE ENTRY, all mine, all instrument.** "No style smears" · "Pixel
-         shrinks it 40%" · "Echo is a no-op" · "Smear is fixed" · "the revert was wrong" · and the
-         v13.40 change itself, which was justified by comparing EFFECT-OFF against EFFECT-ON and reading
-         it as before-versus-after. **v13.40 shipped and v13.42 reverted it; the app ends where it
-         started, which is the correct state.**
-         🔑 **The technique that finally worked, so nobody re-derives it:** park `FM.time` INSIDE the walk
-         range once, then walk WITHOUT re-syncing — per-step `FM.setTime` rotates the cache and hands the
-         kernel identical frames, while a stale far-away `FM.time` trips the 0.35 s jump guard every step.
-         **And assert `ref` differs from the current frame before believing any of it.**
-         ❓ **So the only question left is yours: do you want it stronger out of the box?** Raising the
-         default Amount is a one-number change. **I have not touched it — it would alter every Motion
-         Blur you have already placed.**
-         🗒️ *(superseded)* ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
+      2. [ ] **ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
          summary block) is still outstanding, and an unticked box is the only thing the tools read.**
          **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
              from the break. Both DISPLACE the whole layer, so they are very likely fighting over the same
@@ -21662,7 +21645,7 @@ re-opened #480, which I had marked done and had not fixed.
       copy of the formula; a copy keeps passing after the shipped one changes.
 
 - [ ] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.** (26 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > The motion blur footage is kinda buns at the moment, needs a lot of work and also don’t default it to the pixelated blur, it looks awful
       **Two things, and the second is the quick one:**
@@ -21670,7 +21653,23 @@ re-opened #480, which I had marked done and had not fixed.
              Echo / Blend, from v2.49) currently starts on Pixel. ⚠️ **Changing a default does NOT change
              existing instances** — the renderer falls back to `legacy` for an absent key, so check which
              of those a saved project reads before touching it, or every clip he already made re-renders.
-      2. [ ] **"needs a lot of work"** — unscoped, and he has not said what is wrong beyond "buns".
+      2. [ ] ✅ **RESOLVED 27 Aug — MOTION BLUR IS NOT BROKEN, IT IS SUBTLE. It is your call whether to
+         make it stronger, and this entry is waiting on you for that.**
+         Measured on real footage moving **12.7 px/frame**, with the frame-pair assertion in hand
+         (`FM._mfRefVsA`, so the kernel provably compared two DIFFERENT frames): **effect off 110 px ·
+         Smear 117 (+7) · Echo 122 (+12).** Both styles work.
+         ⚠️ **SIX WRONG CALLS ON THIS ENTRY, all mine, all instrument, none of them the code:** "no style
+         smears" · "Pixel shrinks it 40%" · "Echo is a no-op" · "Smear is fixed" · "the revert was wrong"
+         · and the v13.40 change itself, justified by comparing EFFECT-OFF against EFFECT-ON and reading
+         it as before-versus-after. **v13.40 shipped, v13.42 reverted it, and the app ends where it
+         started — which is the correct state.**
+         🔑 **The technique that finally worked, so nobody re-derives it:** park `FM.time` INSIDE the walk
+         range once, then walk WITHOUT re-syncing (per-step `FM.setTime` rotates the cache and hands the
+         kernel identical frames; a stale far-away `FM.time` trips the 0.35 s jump guard every step), and
+         **assert `ref` differs from the current frame before believing any of it.**
+         ❓ **So the only thing left is yours: stronger out of the box?** Raising the default Amount is a
+         one-number change; **I have not touched it, because it alters every Motion Blur already placed.**
+         🗒️ *(the original clause)* **"needs a lot of work"** — unscoped, and he has not said what is wrong beyond "buns".
              **Render it against real footage and look**, then come back with specifics rather than
              guessing. Do not start clause 2 by changing sliders.
              ✅ **27 Aug — DONE, and it has specifics now. He is right, and it is worse than "buns".**
