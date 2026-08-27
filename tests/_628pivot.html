@@ -1,0 +1,91 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #628 — "Moving the anchor shouldn't be moving the position of a bunch of clips in a group."
+ * The compensation (inspector.js ~4583) keeps a layer still by shifting x/y by the anchor delta times
+ * FM.layerSize(layer). A GROUP has no media record, so layerSize falls through to {w:100,h:100} — the
+ * "meaningless 100px box" FM.groupBounds was written to replace. If the group is wider than 100px the
+ * compensation is far too small and the group jumps. Measure both numbers and the actual movement. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.layerSize)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+
+    FM.scene.layers.length = 0;
+    var a = FM.makeLayer('shape', { shape:'rect', x:300, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    var b = FM.makeLayer('shape', { shape:'rect', x:800, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    a.start=0; a.duration=5; b.start=0; b.duration=5;
+    FM.scene.layers.push(a,b);
+    P.duration = Math.max(P.duration||0,5);
+    await new Promise(function(r){ setTimeout(r,400); });
+    FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+    FM.groupSelection();
+    await new Promise(function(r){ setTimeout(r,500); });
+    var g = FM.scene.layers.filter(function(l){ return l.type==='group'; })[0];
+    if (!g) return say('❌ no group created');
+
+    var sz = FM.layerSize(g);
+    var gb = FM.groupBounds ? FM.groupBounds(g, FM.scene, 0) : null;
+    say('FM.layerSize(group)   = ' + sz.w + ' x ' + sz.h + (sz.w===100&&sz.h===100 ? '   🚩 the 100px fallback' : ''));
+    say('FM.groupBounds(group) = ' + (gb ? Math.round(gb.w) + ' x ' + Math.round(gb.h) + ' at (' + Math.round(gb.x) + ',' + Math.round(gb.y) + ')' : 'null'));
+    if (gb) say('ratio (real / assumed) = ' + (gb.w/sz.w).toFixed(2) + 'x wide, ' + (gb.h/sz.h).toFixed(2) + 'x tall');
+
+    // where does the group's CONTENT actually sit, before and after moving the anchor?
+    function centroid(){
+      var cv = d.createElement('canvas'); cv.width = 240; cv.height = 240;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 0.2);
+      var dd = cv.getContext('2d').getImageData(0,0,240,240).data, sx=0, sy=0, n2=0;
+      for (var y=0;y<240;y++) for (var x=0;x<240;x++){ var i=(y*240+x)*4;
+        if (dd[i]>120 && dd[i+1]>120 && dd[i+2]>120){ sx+=x; sy+=y; n2++; } }
+      return n2 ? { x:sx/n2, y:sy/n2, n:n2 } : null;
+    }
+    var before = centroid();
+    say('');
+    say('content centroid BEFORE: ' + (before ? before.x.toFixed(1)+','+before.y.toFixed(1)+'  ('+before.n+'px)' : 'nothing lit'));
+
+    /* DOES THE RENDERER USE A GROUP'S ANCHOR AT ALL? applyLayerTransform translates to (x,y) then
+       rotates/scales about that point — it never reads anchorX/anchorY. A group has no content box of
+       its own; its children are drawn through its transform. If the anchor is inert for a group, then
+       the compensation is the ONLY thing moving anything, and the fix is to not compensate rather than
+       to compensate correctly. Set the anchor with NO compensation and look. */
+    g.transform.anchorX = 0.75; g.transform.anchorY = 0.0;
+    await new Promise(function(r){ setTimeout(r,300); });
+    var noComp = centroid();
+    say('');
+    say('anchor moved to 0.75/0.0 with NO compensation:');
+    say('  centroid ' + (noComp ? noComp.x.toFixed(1)+','+noComp.y.toFixed(1) : 'nothing lit'));
+    var d1 = (before && noComp) ? Math.hypot(noComp.x-before.x, noComp.y-before.y) : -1;
+    say('  moved ' + d1.toFixed(1) + 'px  ' + (d1 < 1
+        ? '→ THE ANCHOR IS INERT FOR A GROUP. The renderer never reads it, so the compensation is the\n     only thing that moves anything — the fix is to NOT compensate, not to compensate better.'
+        : '→ the anchor DOES pivot a group, so the compensation must use the real bounds (900x300).'));
+
+    // …and now with a SCALE applied, because that is when a pivot is supposed to matter at all
+    g.transform.anchorX = 0.5; g.transform.anchorY = 0.5;
+    await new Promise(function(r){ setTimeout(r,200); });
+    g.transform.scale = 1.5;
+    await new Promise(function(r){ setTimeout(r,250); });
+    var sCentre = centroid();
+    g.transform.anchorX = 0.0; g.transform.anchorY = 0.0;
+    await new Promise(function(r){ setTimeout(r,250); });
+    var sCorner = centroid();
+    say('');
+    say('scaled 1.5x, anchor 0.5/0.5 -> ' + (sCentre ? sCentre.x.toFixed(1)+','+sCentre.y.toFixed(1) : '-'));
+    say('scaled 1.5x, anchor 0.0/0.0 -> ' + (sCorner ? sCorner.x.toFixed(1)+','+sCorner.y.toFixed(1) : '-'));
+    var d2 = (sCentre && sCorner) ? Math.hypot(sCorner.x-sCentre.x, sCorner.y-sCentre.y) : -1;
+    say('  difference ' + d2.toFixed(1) + 'px  ' + (d2 < 1
+        ? '🚨 the pivot makes NO difference to a scaled group — this is #630 as well'
+        : '✅ the pivot does change where a scaled group grows from'));
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

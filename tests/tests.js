@@ -31679,6 +31679,65 @@
    * landed one frame past the last visible frame. The rule added is about BLANKNESS, not about edges:
    * special-casing "clip end minus a frame" would move the playhead off a boundary he may have put it
    * on deliberately, to split or to butt the next clip against. */
+  /* #628 — "Moving the anchor shouldn't be moving the position of a bunch of clips in a group i think."
+   * The panel promises it: "The layer stays where it is — only its pivot moves."
+   * MEASURED (tests/_628pivot.html): moving a GROUP's anchor with no compensation moves its content
+   * 0.0px. applyLayerTransform translates to (x,y) and rotates/scales about that point; it never reads
+   * anchorX/anchorY, and a group has no content box. The anchor is INERT for a group — so the
+   * compensation was the only thing moving anything, and it was wrong twice over: FM.layerSize has no
+   * group branch, so a group falls through to the {w:100,h:100} media fallback. Measured 100x100 against
+   * real bounds of 900x300 — a 25px shift where 225px would have been needed.
+   * The same probe also proves #630: a group scaled 1.5x grows identically at anchor 0.5/0.5 and
+   * 0.0/0.0 (0.0px apart), so the pivot does nothing for a group at all. */
+  test('#628: moving a group anchor does not move the group', { item: '628' }, function () {
+    var keep = FM.scene.layers.slice();
+    try {
+      var g = FM.makeLayer('group', { name: 'G', x: 400, y: 500 });
+      g.start = 0; g.duration = 3;
+      var kid = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 500, shapeW: 200, shapeH: 100, fill: '#fff' });
+      kid.start = 0; kid.duration = 3; kid.parent = g.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(g, kid);
+
+      /* THE GROUP FALLS THROUGH TO THE 100px FALLBACK — the number the old compensation multiplied by.
+         Asserted so that if layerSize ever learns about groups, this test says so rather than silently
+         changing meaning. */
+      var sz = FM.layerSize(g);
+      if (sz.w !== 100 || sz.h !== 100)
+        throw new Error('FM.layerSize now reports ' + sz.w + 'x' + sz.h + ' for a group — #628/#630 were reasoned against the 100px fallback, so re-argue them');
+
+      /* ⚠️ THE FIRST VERSION OF THIS TEST WAS DEAD and it is worth saying why. It set
+         `g.transform.anchorX` directly and then asserted x/y had not changed — which is vacuously true,
+         because writing the field never runs the compensation. It would have passed with the bug fully
+         present. The compensation lives in a closure inside the panel builder and cannot be called from
+         here, so the DECISION it depends on is the seam instead: FM.anchorPivotBox. That is the actual
+         rule, and it is what the panel multiplies the anchor delta by. */
+      if (typeof FM.anchorPivotBox !== 'function') throw new Error('FM.anchorPivotBox is missing — the group-anchor rule has no seam (#628)');
+      var gbox = FM.anchorPivotBox(g);
+      if (gbox.w !== 0 || gbox.h !== 0)
+        throw new Error('anchorPivotBox reports ' + gbox.w + 'x' + gbox.h + ' for a GROUP — anything non-zero shifts x/y by that much and moves his clips (#628)');
+
+      /* THE CONTROL, and without it the rule above is satisfied by returning zero for everything —
+         which would break the anchor on every ordinary layer instead. */
+      var sbox = FM.anchorPivotBox(kid);
+      if (!(sbox.w > 0 && sbox.h > 0))
+        throw new Error('anchorPivotBox returned ' + sbox.w + 'x' + sbox.h + ' for a SHAPE — a normal layer still needs its pivot compensated');
+      var ssz = FM.layerSize(kid);
+      if (sbox.w !== ssz.w || sbox.h !== ssz.h)
+        throw new Error('a normal layer must pivot around its own size: got ' + sbox.w + 'x' + sbox.h + ', layerSize says ' + ssz.w + 'x' + ssz.h);
+
+      /* AND THE REASON IT MUST NOT: the anchor is inert for a group, so any shift is pure damage.
+         If this ever stops being true (#630 makes the pivot real), the compensation has to come back —
+         with FM.groupBounds, not layerSize — and this assertion is what will fail to say so. */
+      if (!FM.groupBounds) throw new Error('FM.groupBounds is gone — the correct box for a future group anchor compensation');
+      var gb = FM.groupBounds(g, FM.scene, 0);
+      if (!gb || !(gb.w > 100))
+        throw new Error('groupBounds reported ' + (gb ? gb.w : 'null') + ' — the 100px fallback and the real bounds must differ, or this bug cannot exist');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+    }
+  });
+
   test('#627: a jump never lands on a blank frame when the one before it is not', { item: '627' }, function () {
     if (typeof FM._jumpNotBlank !== 'function') throw new Error('FM._jumpNotBlank is missing — jumps can land on black again (#627)');
     var keep = FM.scene.layers.slice(), P = FM.scene.project, fps = P.fps || 30, frame = 1 / fps;

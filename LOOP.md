@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.77 — 1024 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.78 — 1025 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,18 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#628 CLOSED v13.78 — and the compensation was the ONLY thing moving his clips.**
+`applyLayerTransform` never reads a group's anchor and a group has no content box, so moving the pivot
+does **0.0px** on screen — the code then "corrected" for a movement that never happened. It also
+multiplied by `layerSize`'s **100×100 media fallback** for a group whose real bounds are **900×300**
+(25px shifted where 225 was needed). Now `FM.anchorPivotBox(layer)`.
+🎯 **#630's CAUSE IS PROVEN BY THE SAME PROBE:** a group scaled 1.5x grows **identically** at anchor
+0.5/0.5 and 0.0/0.0 — 0.0px apart. **There is no anchor to find because the renderer never reads one.**
+`FM.anchorPivotBox` is the single place that must start returning `FM.groupBounds`.
+🐛 **A DEAD TEST CAUGHT BEFORE SHIPPING — second time tonight this shape appeared.** Setting
+`transform.anchorX` directly and asserting x/y did not move is **vacuously true**: writing the field never
+runs the compensation. **If a fix lives in a closure, make the DECISION a seam and test that.**
 
 ✅ **#627 CLOSED v13.77 — and the jump was never broken.** Snap points include clip EDGES, and a clip's
 right edge is `start + duration`: **the first instant the layer is no longer drawn.** So "jump to the end"

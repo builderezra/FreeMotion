@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.77
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.78
 >
-> **State:** v13.77, 1024 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.78, 1025 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22489,13 +22489,31 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Read #626 with this** — that one is also "the end of the timeline is blank", and both could be
       one boundary rule. **Do not assume they are the same; check whether fixing this changes that.**
 
-- [ ] **628 — Moving a group's ANCHOR moves the clips inside it.** (27 Aug, phone screenshot at v13.53 —
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **628 — Moving a group's ANCHOR moves the clips inside it.** ✅ **DONE v13.78.** (27 Aug, phone screenshot at v13.53 —
       Position/Scale on a Group, Anchor X 75.0%, Anchor Y 0.0%.)
       His words, verbatim:
       > Moving the anchor shouldn’t be moving the position of a bunch of clips in a group i think
 
-      1. [ ] **Moving the anchor must not move anything.** The panel in his own screenshot promises
+      1. [x] **Moving the anchor must not move anything.** ✅ **DONE v13.78 — measured 13.0px → 0.0px.**
+      🚨 **THE CAUSE IS BETTER THAN "the compensation is wrong": THE COMPENSATION WAS THE ONLY THING
+      MOVING ANYTHING.** `applyLayerTransform` translates to (x,y) and rotates/scales about that point —
+      **it never reads `anchorX`/`anchorY`** — and a group has no content box of its own.
+      📐 **MEASURED (tests/_628pivot.html):** moving a group's anchor with **no** compensation moves its
+      content **0.0px**. So the pivot did nothing on screen, and the code then "corrected" for a movement
+      that never happened.
+      📐 **AND IT WAS WRONG TWICE OVER.** `FM.layerSize` has no group branch, so a group falls through to
+      the media fallback: **100×100 for a group whose real bounds are 900×300** — it shifted **25px where
+      225px** would have been needed, short by exactly the 100-vs-900 gap.
+      ✅ **FIXED via `FM.anchorPivotBox(layer)`** — a named question about what the RENDERER pivots
+      around, living next to `layerSize` and `groupBounds` rather than a `type === 'group'` test buried in
+      the panel's arithmetic. **When #630 makes the pivot real for groups it returns `FM.groupBounds`**,
+      and its comment says so.
+      🐛 **MY FIRST TEST WAS DEAD AND I CAUGHT IT BEFORE SHIPPING.** It set `transform.anchorX` directly
+      and asserted x/y had not moved — **vacuously true**, because writing the field never runs the
+      compensation; it would have passed with the bug fully present. The compensation is a closure inside
+      the panel builder, so the DECISION became the seam instead. **Mutation-proved:** restoring the
+      100×100 box was CAUGHT. A control asserts a normal layer still pivots around its own size, or
+      "return zero for everything" would satisfy the rule and break every non-group anchor. The panel in his own screenshot promises
              exactly this: *"Scaling and rotation happen around this point. The layer stays where it is —
              only its pivot moves."* **That sentence is the spec, and he is reporting it is false for a
              GROUP.**
@@ -22522,6 +22540,13 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **630 — Zooming a group scales it around a CORNER, and the anchor cannot be found.** (27 Aug, at
       **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CAUSE PROVEN 28 Aug (v13.78), while fixing #628 — they ARE the same root cause, as that entry
+      suspected.** 📐 **MEASURED (tests/_628pivot.html): a group scaled 1.5× grows IDENTICALLY at anchor
+      0.5/0.5 and at 0.0/0.0 — the two centroids are 0.0px apart.** The pivot does nothing for a group at
+      all, which is exactly *"they just zoom into the corners and I can't find where the anchor even is"*:
+      there is no anchor to find, because `applyLayerTransform` never reads one and a group has no content
+      box. **The renderer has to learn a group's pivot** — `FM.groupBounds` is the box, and
+      `FM.anchorPivotBox` (added for #628) is the one place that must start returning it.
       v13.53.)
       His words, verbatim:
       > For some reason when I try and zoom groups in the just zoom into the corners and not the middle and I can’t find where the anchor even is

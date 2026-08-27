@@ -1,0 +1,86 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #628 — "Moving the anchor shouldn't be moving the position of a bunch of clips in a group."
+ * The compensation (inspector.js ~4583) keeps a layer still by shifting x/y by the anchor delta times
+ * FM.layerSize(layer). A GROUP has no media record, so layerSize falls through to {w:100,h:100} — the
+ * "meaningless 100px box" FM.groupBounds was written to replace. If the group is wider than 100px the
+ * compensation is far too small and the group jumps. Measure both numbers and the actual movement. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.layerSize)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+
+    FM.scene.layers.length = 0;
+    var a = FM.makeLayer('shape', { shape:'rect', x:300, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    var b = FM.makeLayer('shape', { shape:'rect', x:800, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    a.start=0; a.duration=5; b.start=0; b.duration=5;
+    FM.scene.layers.push(a,b);
+    P.duration = Math.max(P.duration||0,5);
+    await new Promise(function(r){ setTimeout(r,400); });
+    FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+    FM.groupSelection();
+    await new Promise(function(r){ setTimeout(r,500); });
+    var g = FM.scene.layers.filter(function(l){ return l.type==='group'; })[0];
+    if (!g) return say('❌ no group created');
+
+    var sz = FM.layerSize(g);
+    var gb = FM.groupBounds ? FM.groupBounds(g, FM.scene, 0) : null;
+    say('FM.layerSize(group)   = ' + sz.w + ' x ' + sz.h + (sz.w===100&&sz.h===100 ? '   🚩 the 100px fallback' : ''));
+    say('FM.groupBounds(group) = ' + (gb ? Math.round(gb.w) + ' x ' + Math.round(gb.h) + ' at (' + Math.round(gb.x) + ',' + Math.round(gb.y) + ')' : 'null'));
+    if (gb) say('ratio (real / assumed) = ' + (gb.w/sz.w).toFixed(2) + 'x wide, ' + (gb.h/sz.h).toFixed(2) + 'x tall');
+
+    // where does the group's CONTENT actually sit, before and after moving the anchor?
+    function centroid(){
+      var cv = d.createElement('canvas'); cv.width = 240; cv.height = 240;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 0.2);
+      var dd = cv.getContext('2d').getImageData(0,0,240,240).data, sx=0, sy=0, n2=0;
+      for (var y=0;y<240;y++) for (var x=0;x<240;x++){ var i=(y*240+x)*4;
+        if (dd[i]>120 && dd[i+1]>120 && dd[i+2]>120){ sx+=x; sy+=y; n2++; } }
+      return n2 ? { x:sx/n2, y:sy/n2, n:n2 } : null;
+    }
+    var before = centroid();
+    say('');
+    say('content centroid BEFORE: ' + (before ? before.x.toFixed(1)+','+before.y.toFixed(1)+'  ('+before.n+'px)' : 'nothing lit'));
+
+    // move the anchor the way the panel does — compensation included, copied from inspector.js
+    var oldX = 0.5, oldY = 0.5, nx = 0.75, ny = 0.0;
+    g.transform.anchorX = nx; g.transform.anchorY = ny;
+    /* MIRRORS THE SHIPPED RULE (inspector.js, queue 628): the compensation uses the box the RENDERER
+       pivots around, which is nothing for a group because applyLayerTransform never reads its anchor.
+       Without this line the probe would keep re-enacting the ORIGINAL maths and reporting the bug as
+       if nothing had been fixed — the same trap the #626 probe fell into. */
+    var anchorIsLive = g.type !== 'group';
+    var asz = anchorIsLive ? FM.layerSize(g) : { w: 0, h: 0 };
+    var eff = (FM.evalProp(g.transform.scale,0)||1);
+    var dx = (nx-oldX)*asz.w*eff, dy = (ny-oldY)*asz.h*eff;
+    FM.shiftTransform(g,'x', Math.round((FM.evalProp(g.transform.x,0)||0)+dx), 0);
+    FM.shiftTransform(g,'y', Math.round((FM.evalProp(g.transform.y,0)||0)+dy), 0);
+    await new Promise(function(r){ setTimeout(r,300); });
+    var after = centroid();
+    say('content centroid AFTER : ' + (after ? after.x.toFixed(1)+','+after.y.toFixed(1)+'  ('+after.n+'px)' : 'nothing lit'));
+    if (before && after){
+      var moved = Math.hypot(after.x-before.x, after.y-before.y);
+      say('');
+      say('THE CONTENT MOVED ' + moved.toFixed(1) + ' preview px' +
+          (moved > 2 ? '   🚨 the panel promises "the layer stays where it is"' : '   ✅ it stayed put'));
+      if (gb && moved > 2) {
+        var shouldBe = (nx-oldX)*gb.w*eff, was = dx;
+        say('compensation used ' + was.toFixed(1) + 'px where the real bounds need ' + shouldBe.toFixed(1) + 'px');
+        say('→ short by ' + (shouldBe-was).toFixed(1) + 'px, which is exactly the 100-vs-' + Math.round(gb.w) + ' gap.');
+      }
+    }
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

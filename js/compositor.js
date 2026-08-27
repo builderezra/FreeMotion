@@ -13235,6 +13235,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return _measCtx;
   }
 
+  /* ═══ THE BOX THE RENDERER ACTUALLY PIVOTS AROUND (queue 628) ════════════════════════════════════
+   * NOT the same question as "how big is this layer", and conflating them is the bug.
+   * `applyLayerTransform` translates to (x,y) and rotates/scales about that point — it never reads
+   * anchorX/anchorY — and a GROUP has no content box of its own, so its anchor changes nothing on
+   * screen. MEASURED (tests/_628pivot.html): moving a group's anchor with no compensation moves its
+   * content **0.0px**, and a group scaled 1.5x grows identically at anchor 0.5/0.5 and 0.0/0.0.
+   * The anchor panel compensates x/y so a layer stays put when its pivot moves. For a group there is
+   * nothing to compensate FOR, so any shift is pure damage — which is precisely what Ezra reported:
+   * *"Moving the anchor shouldn't be moving the position of a bunch of clips in a group."*
+   * It was wrong twice over: `layerSize` has no group branch, so a group fell through to the
+   * `{w:100,h:100}` media fallback — 100x100 for real bounds of 900x300.
+   * ⚠️ **WHEN #630 MAKES THE PIVOT REAL FOR GROUPS, THIS RETURNS `FM.groupBounds` — not `layerSize`.**
+   * It lives here, next to both, as a named question rather than a `type === 'group'` test buried in
+   * the panel's arithmetic. */
+  FM.anchorPivotBox = function (layer) {
+    if (!layer) return { w: 0, h: 0 };
+    if (layer.type === 'group') return { w: 0, h: 0 };   // the renderer ignores a group's anchor
+    return FM.layerSize(layer);
+  };
+
   FM.layerSize = function (layer) {
     // A cropped media layer's on-screen frame is the CROP size, so the selection box / hit-test / anchor
     // all wrap the visible crop, not the full source.

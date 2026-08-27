@@ -4575,7 +4575,19 @@ window.FM = window.FM || {};
       // Moving the anchor ALONE makes the layer jump, because x/y position the layer BY its anchor.
       // So every write compensates x/y by the same visual distance the anchor travelled, and the
       // layer stays exactly where it looks like it is. Only its pivot moves.
-      const asz = FM.layerSize(layer);
+      /* ⚠️ THE BOX THE RENDERER ACTUALLY PIVOTS AROUND — not the layer's size (queue 628).
+       * Ezra: *"Moving the anchor shouldn't be moving the position of a bunch of clips in a group."*
+       * MEASURED (tests/_628pivot.html): moving a group's anchor with NO compensation moves its content
+       * **0.0px** — `applyLayerTransform` translates to (x,y) and rotates/scales about that point and
+       * never reads anchorX/anchorY, and a group has no content box of its own. **The anchor is inert
+       * for a group, so the compensation was the only thing moving anything.**
+       * It was also compensating by the wrong amount even in principle: `FM.layerSize` has no group
+       * branch, so a group falls through to the `{w:100,h:100}` media fallback — measured 100×100 for a
+       * group whose real bounds are **900×300**, a 25px shift where 225px would have been needed.
+       * ⚠️ WHEN #630 MAKES THE ANCHOR REAL FOR GROUPS, THIS MUST COME BACK — and with `FM.groupBounds`,
+       * not `layerSize`. That is why this is a named question about the RENDERER rather than a
+       * `type === 'group'` special case buried in the maths. */
+      const asz = FM.anchorPivotBox(layer);
       const aEffX = () => mtEval(layer, 'scale') * (layer.transform.scaleX != null ? mtEval(layer, 'scaleX') : 1);
       const aEffY = () => mtEval(layer, 'scale') * (layer.transform.scaleY != null ? mtEval(layer, 'scaleY') : 1);
       const getA = k => { const v = layer.transform[k]; return typeof v === 'number' ? v : (FM.evalProp(v, FM.time) != null ? FM.evalProp(v, FM.time) : 0.5); };
