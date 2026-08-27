@@ -318,6 +318,22 @@ blaming code that turned out to be fine.
 ↩️ **v13.40 IS REVERTED (v13.42). IT BOUGHT ONE PIXEL.** A/B with `FM.setTime(t)` on every step:
 pre-fix none 110 / Smear 111 / Echo 135; post-fix none 108 / Smear 110 / Echo 135. **The 110 → 117 was
 the corrupted probe.** Reverted surgically — the v13.41 `_tilesLastBB` hook is untouched.
+🛑 **STOP MAKING CLAIMS ABOUT SMEAR. BOTH PROBES ARE NOW DISQUALIFIED, in opposite directions.**
+Under the SYNCED probe the motion FIELD reports **zero motion** — 0 moving cells, max vector 0.00,
+`wsum` 0 — so Smear bails at `wsum < 0.5`, draws the sharp frame and returns. **That is why the Amount
+slider does nothing: 111 px at amount 1, 1.5, 2, 3 AND 4.** ⚠️ **But the clip demonstrably HAS motion**
+(a disc crossing at 12.7 px/frame, and the unsynced probe measured its vector as [12, 0]). **A field that
+sees no motion in obviously moving footage is a broken instrument, not a finding.**
+🚨 **So: unsynced corrupts the frame CACHE (0.35 s jump guard), and synced apparently leaves `ref`
+identical to the current frame — most likely because `FM.setTime(t)` makes the app rAF-render the layer
+at the same `t`, rotating the cache so my render then compares a frame against ITSELF.**
+➡️ **NEXT: verify that directly before any fix** — dump `ref` and `A` to two canvases and diff them.
+**If they are identical, the probe is confirmed broken and needs a third design** (most likely: drive
+rendering ONLY through the app's own play loop and sample the preview canvas, rather than calling
+`renderScene` by hand at all). ⚠️ **Do NOT touch the smear branch until a probe exists that detects the
+motion a human can see in the clip.** Four wrong claims and one shipped-then-reverted change came from
+skipping exactly this step.
+
 🔑 **THE ONE INSTRUMENT FLAW BEHIND EVERY WRONG MOTIONFLOW CLAIM TODAY, and there were four:** an
 offscreen walk while the app's rAF render paints the SAME layer at a stale `FM.time` more than 0.35 s
 away, resetting the kernel cache each step. **ALWAYS `FM.setTime(t)` BEFORE `renderScene(ctx, scene, t)`
