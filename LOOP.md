@@ -318,7 +318,27 @@ blaming code that turned out to be fine.
 ↩️ **v13.40 IS REVERTED (v13.42). IT BOUGHT ONE PIXEL.** A/B with `FM.setTime(t)` on every step:
 pre-fix none 110 / Smear 111 / Echo 135; post-fix none 108 / Smear 110 / Echo 135. **The 110 → 117 was
 the corrupted probe.** Reverted surgically — the v13.41 `_tilesLastBB` hook is untouched.
-🛑 **STOP MAKING CLAIMS ABOUT SMEAR. BOTH PROBES ARE NOW DISQUALIFIED, in opposite directions.**
+✅ **SETTLED BY DIRECT COMPARISON (v13.43 hook `FM._mfRefVsA`): the UNSYNCED probe is CORRECT and the
+SYNCED one is BROKEN.** Dumping the two frames the kernel actually compares, downsampled to 40px:
+| probe | differing px | max delta | verdict |
+|---|---|---|---|
+| **synced** | **0 / 2000** | **0** | **IDENTICAL — it compares a frame with ITSELF** |
+| unsynced | 10 / 2000 | 239 | genuinely different frames |
+**Why:** `FM.setTime(t)` makes the app rAF-render the layer at that same `t`, which ROTATES the cache —
+so my render then finds `rec.cv` holding the very frame it is about to draw. A field over two identical
+frames reports zero motion, Smear bails at `wsum < 0.5`, and the Amount slider does nothing. **All of
+that was the instrument.**
+🚨 **CONSEQUENCE, AND IT IS A BAD ONE: THE v13.42 REVERT WAS WRONG.** v13.40's 110 → 117 was measured
+UNSYNCED, i.e. on the probe now proven sound. I withdrew it on the strength of the synced reading,
+which is meaningless. **So a fix that worked was removed from his app.**
+➡️ **NEXT: re-apply v13.40's punch-out (it is in git at `a6f5da7`), with a FRESH unsynced A/B to confirm
+before claiming anything.** ⚠️ **This will be the third change to that hunk — ship it only WITH the
+A/B numbers in hand, and tell him plainly that it was removed and put back.**
+🔒 **RULE EARNED THE HARD WAY: before trusting ANY temporal-effect measurement, assert that `ref` and the
+current frame actually DIFFER.** The hook is permanent. Every one of the five wrong calls on this entry
+would have been caught by that one assertion.
+
+🗒️ **(superseded) STOP MAKING CLAIMS ABOUT SMEAR. BOTH PROBES ARE NOW DISQUALIFIED.**
 Under the SYNCED probe the motion FIELD reports **zero motion** — 0 moving cells, max vector 0.00,
 `wsum` 0 — so Smear bails at `wsum < 0.5`, draws the sharp frame and returns. **That is why the Amount
 slider does nothing: 111 px at amount 1, 1.5, 2, 3 AND 4.** ⚠️ **But the clip demonstrably HAS motion**

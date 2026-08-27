@@ -1,8 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.42
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.43
 >
-> **State:** v13.42, 990 tests green, tree clean.
+> **State:** v13.43, 990 tests green, tree clean.
+>
+> **🔬 I finally found out which of my motion-blur tests was lying — and it means I removed a fix that
+> WAS working.** I built a check that simply asks: are the two frames this effect compares actually
+> different? **The test I used to justify undoing the fix was handing it the SAME frame twice**, so of
+> course it found no motion and no improvement.
+> ↩️ **So the fix I took out at v13.42 should go back in**, and I will re-measure it properly first
+> before I say another word about it. **Nothing you make has changed** through any of this — the effect
+> has looked the same all day.
+> ⚠️ **I have now been wrong about this five times.** The check that settles it is permanent and takes
+> one line, and every one of those five would have been caught by it.
 >
 > **↩️ I TOLD YOU THREE TIMES THAT I HAD FIXED MOTION BLUR. I HAD NOT — and I have taken it back out.**
 > The "1.5x wider, softer edge" I reported was measured with a broken test: my measuring code was

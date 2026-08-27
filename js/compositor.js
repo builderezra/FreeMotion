@@ -8562,6 +8562,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         done(); return;
       }
 
+      /* Debug hook (queue 578): is `ref` actually a DIFFERENT frame from `A`? Two probes disagreed about
+       * whether this kernel sees motion, and the difference between "the effect is broken" and "my probe
+       * handed it the same frame twice" is exactly this comparison. Cheap: 1 in ~4000 pixels. */
+      try {
+        const _dw = 40, _dh = Math.max(1, Math.round(40 * H / W));
+        if (!FM._mfDbgA) { FM._mfDbgA = document.createElement('canvas'); FM._mfDbgB = document.createElement('canvas'); }
+        const _ca = FM._mfDbgA, _cb = FM._mfDbgB;
+        if (_ca.width !== _dw) { _ca.width = _cb.width = _dw; _ca.height = _cb.height = _dh; }
+        const _xa = _ca.getContext('2d'), _xb = _cb.getContext('2d');
+        _xa.clearRect(0, 0, _dw, _dh); _xa.drawImage(A, 0, 0, _dw, _dh);
+        _xb.clearRect(0, 0, _dw, _dh); _xb.drawImage(ref, 0, 0, _dw, _dh);
+        const _da = _xa.getImageData(0, 0, _dw, _dh).data, _db = _xb.getImageData(0, 0, _dw, _dh).data;
+        let _diff = 0, _max = 0;
+        for (let i = 0; i < _da.length; i += 4) {
+          const d0 = Math.abs(_da[i] - _db[i]);
+          if (d0 > 8) _diff++;
+          if (d0 > _max) _max = d0;
+        }
+        FM._mfRefVsA = { differingPx: _diff, of: _da.length / 4, maxDelta: _max, identical: _diff === 0, mode: advance ? 'advance' : (repaint ? 'repaint' : 'none') };
+      } catch (e) { FM._mfRefVsA = { err: String(e).slice(0, 60) }; }
       const F = _mfField(ref, A, W, H, thr);
       FM._mfLastField = F;   // debug hook (harmless in prod)
       if (style === 1) {   // DIRECTIONAL SMEAR — one dominant vector, moving areas only
