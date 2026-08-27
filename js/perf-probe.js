@@ -42,6 +42,13 @@ window.FM = window.FM || {};
     else if (/Android/.test(ua)) bits.push('Android');
     else if (/Mac/.test(ua)) bits.push('macOS');
     else if (/Win/.test(ua)) bits.push('Windows');
+    /* CANVAS FILTER SUPPORT (queue 645). This line exists because the answer can only come from HIS
+       device: Brightness, Saturation and the black-and-white filters all render correctly on every
+       desktop path that has been measured, and he reports them dead on mobile. Those nine effects are
+       the only ones that go through ctx.filter, and an unsupported ctx.filter fails SILENTLY — so
+       without this the report from the broken device looks identical to the report from the healthy one.
+       He already runs this tool and pastes the output, so it costs no new UI and no new habit. */
+    bits.push('canvas filter ' + (FM.ctxFilterOK && FM.ctxFilterOK() ? 'OK' : 'MISSING'));
     return bits.join(' · ');
   }
 
@@ -70,6 +77,19 @@ window.FM = window.FM || {};
    * median is exactly the statistic that cannot see a stutter — half a second of freeze every few
    * seconds leaves the middle untouched — and a stutter is what "laggy" actually means. */
   function verdictLines(lines, m) {
+    /* ⚠️ FIRST, BEFORE ANY TIMING VERDICT (queue 645). This is not a performance fault, but this report
+       is the one thing he actually runs and pastes, and a device that cannot run ctx.filter has NINE
+       effects silently doing nothing — Brightness, Saturation and every black-and-white filter among
+       them. He has reported that three times and every desktop measurement came back clean, because on
+       a desktop it IS clean. It goes at the TOP because a reader who stops after the first READ line
+       must not miss it. */
+    if (FM.ctxFilterOK && !FM.ctxFilterOK()) {
+      lines.push('🚨 THIS DEVICE CANNOT RUN CANVAS FILTERS. Brightness, Saturation, Contrast,');
+      lines.push('Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do NOTHING here, and they');
+      lines.push('fail silently — which is why they work on the PC and not on this device.');
+      lines.push('This is queue 645. Send this line; it is the answer that was missing.');
+      lines.push('');
+    }
     const latePct = m.total ? (m.late / m.total) * 100 : 0;
     const hitching = m.late > 0 && (latePct >= 1 || m.worst > 250);
     if (hitching) {

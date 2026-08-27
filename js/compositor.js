@@ -1458,6 +1458,51 @@ window.FM = window.FM || {};
   FM.CSS_FX = Object.assign(Object.create(null), {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
   });
+
+  /* ═══ DOES ctx.filter ACTUALLY WORK ON THIS DEVICE? (queue 645) ═══════════════════════════════════
+   * Ezra, after three sessions of desktop testing found nothing wrong: *"I noticed that on pc the
+   * effects i say that dont work like saturation actually work, its mobile they dont"*.
+   * The nine types in CSS_FX above are the entire complaint — brightness, saturation and grayscale are
+   * three of them — and they are the only nine that go through `ctx.filter`. The ~190 per-pixel effects
+   * do not, which is exactly why only these look broken to him.
+   * WHY THIS CANNOT BE ASSUMED: line 1522 of this file already records that assigning an unsupported or
+   * invalid string to `ctx.filter` is **silently ignored** — the context keeps what it had and the draw
+   * proceeds UNFILTERED. No throw, no warning, nothing to see. A whole family of effects can be dead on
+   * a device with no evidence left behind, which is precisely the state this queue item was in.
+   *
+   * ⚠️ IT RENDERS A PIXEL RATHER THAN SNIFFING THE API, and that distinction is the whole value.
+   * `'filter' in ctx` only says the property EXISTS; a context can accept the string, echo it back, and
+   * still draw the source untouched. So this greys a RED pixel and reads it back: the only honest
+   * question is whether the picture changed. Same discipline as fxDeadOnLayer, which runs the shipped
+   * filter string over a real pixel instead of reimplementing the arithmetic.
+   * Cached on first use — a per-frame probe would cost more than the effects it is guarding. */
+  let _ctxFilterOK = null;
+  function ctxFilterOK() {
+    if (_ctxFilterOK !== null) return _ctxFilterOK;
+    _ctxFilterOK = false;
+    try {
+      const src = document.createElement('canvas'); src.width = src.height = 4;
+      const sx = src.getContext('2d');
+      if (!sx) return _ctxFilterOK;
+      sx.fillStyle = '#ff0000'; sx.fillRect(0, 0, 4, 4);
+      const dst = document.createElement('canvas'); dst.width = dst.height = 4;
+      const dx = dst.getContext('2d');
+      if (!dx || !('filter' in dx)) return _ctxFilterOK;
+      dx.filter = 'grayscale(1)';
+      dx.drawImage(src, 0, 0);
+      const px = dx.getImageData(1, 1, 1, 1).data;
+      // Pure red greyed is r==g==b. A generous window: any real desaturation proves the filter ran,
+      // and no amount of colour-management wobble turns an UNFILTERED red into a grey.
+      _ctxFilterOK = Math.abs(px[0] - px[1]) < 24 && Math.abs(px[1] - px[2]) < 24 && px[3] > 200;
+    } catch (e) { _ctxFilterOK = false; }
+    return _ctxFilterOK;
+  }
+  FM.ctxFilterOK = ctxFilterOK;
+  /* The list of effects this device cannot render, for anything that wants to SAY so. Empty on a
+     healthy device, so a caller can treat a non-empty answer as "tell him". */
+  FM.cssFxUnavailable = function () {
+    return ctxFilterOK() ? [] : Object.keys(FM.CSS_FX);
+  };
   /* The effect list a layer actually renders with at time t: its own, plus the stack belonging to the
    * caption cue showing right now (queue 151). Returns the SAME array when there is nothing to add, so
    * the caller can tell "nothing changed" without comparing contents. Pure and exported, because the

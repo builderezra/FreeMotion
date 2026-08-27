@@ -31609,6 +31609,49 @@
     }
   });
 
+  /* #645 — Ezra: "on pc the effects i say that dont work like saturation actually work, its mobile they
+   * dont". Brightness, Saturation and the black-and-white filters are three of the NINE types that go
+   * through ctx.filter (FM.CSS_FX), and they are the only nine that do — the ~190 per-pixel effects use
+   * a different path, which is exactly why only these look broken to him.
+   * The reason it survived three sessions of testing: compositor.js:1522 records that an unsupported or
+   * invalid assignment to ctx.filter is SILENTLY IGNORED. The draw proceeds unfiltered, nothing throws,
+   * and the broken device leaves no evidence. FM.ctxFilterOK is the detector, and it must RENDER rather
+   * than sniff the API — a context can accept the string, echo it back, and still draw the source
+   * untouched, so only a pixel can answer. */
+  test('#645: ctxFilterOK answers with a rendered pixel, not an API sniff', { item: '645' }, function () {
+    if (typeof FM.ctxFilterOK !== 'function') throw new Error('FM.ctxFilterOK is missing — #645 has no detector');
+    var got = FM.ctxFilterOK();
+    if (typeof got !== 'boolean') throw new Error('ctxFilterOK returned ' + typeof got + ', not a boolean');
+    // Headless Chrome supports it, so on THIS runner the honest answer is true. A false here would mean
+    // the detector is broken, not that the suite's browser lacks the feature.
+    if (got !== true) throw new Error('ctxFilterOK said false in a browser that demonstrably filters — the detector is wrong');
+    if (FM.ctxFilterOK() !== got) throw new Error('ctxFilterOK is not stable across calls — it must cache');
+
+    /* THE DETECTOR MUST AGREE WITH REALITY, measured the same way it claims to measure. If this
+       assertion and ctxFilterOK ever disagree, the detector is lying and #645's whole diagnosis is
+       built on sand. */
+    var src = document.createElement('canvas'); src.width = src.height = 4;
+    var sx = src.getContext('2d'); sx.fillStyle = '#ff0000'; sx.fillRect(0, 0, 4, 4);
+    var dst = document.createElement('canvas'); dst.width = dst.height = 4;
+    var dx = dst.getContext('2d'); dx.filter = 'grayscale(1)'; dx.drawImage(src, 0, 0);
+    var p = dx.getImageData(1, 1, 1, 1).data;
+    var reallyGreyed = Math.abs(p[0] - p[1]) < 24 && Math.abs(p[1] - p[2]) < 24;
+    if (reallyGreyed !== got)
+      throw new Error('ctxFilterOK said ' + got + ' but a red pixel through grayscale(1) came out rgb(' +
+        p[0] + ',' + p[1] + ',' + p[2] + ') — the detector disagrees with the canvas');
+
+    // …and the list it feeds must name the whole family, or a warning built on it under-reports.
+    if (typeof FM.cssFxUnavailable !== 'function') throw new Error('FM.cssFxUnavailable is missing');
+    var dead = FM.cssFxUnavailable();
+    if (!Array.isArray(dead)) throw new Error('cssFxUnavailable did not return an array');
+    if (got && dead.length) throw new Error('canvas filters work here, yet ' + dead.length + ' effects were reported dead');
+    var css = Object.keys(FM.CSS_FX || {});
+    if (css.length !== 9) throw new Error('FM.CSS_FX holds ' + css.length + ' types, not the 9 this entry reasons about');
+    ['brightness', 'saturate', 'grayscale'].forEach(function (k) {
+      if (css.indexOf(k) < 0) throw new Error('"' + k + '" is no longer a ctx.filter effect — #645 names it explicitly, so re-argue the entry');
+    });
+  });
+
   test('#603: every mono filter actually renders grey', { item: '603' }, function () {
     if (!FM.filters || typeof FM.filters.bySection !== 'function') throw new Error('FM.filters is not reachable');
     var mono = FM.filters.bySection('mono') || [];

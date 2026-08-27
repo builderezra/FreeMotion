@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.70
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.71
 >
-> **State:** v13.70, 1018 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.71, 1019 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -24509,7 +24509,7 @@ re-opened #480, which I had marked done and had not fixed.
       own suggestion rather than a menu of alternatives. **Picture sent.** The other honest options were a
       fading right edge, a peeking part-tile, or a count — say the word.
 - [ ] **645 — 🔴🔴 THE BLACK-AND-WHITE FILTERS STILL DO NOT MAKE ANYTHING BLACK AND WHITE, and the
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       brightness / saturation filters are wrong too. HE HAS ASKED REPEATEDLY.** (27 Aug, at v13.69.)
       His words, verbatim:
       > If I have to ask you to fix the saturation on the filters where it makes them black-and-white on
@@ -24562,10 +24562,18 @@ re-opened #480, which I had marked done and had not fixed.
         effect (the ~190 per-pixel ones) keeps working, which is exactly why only *these* look broken.
       · WARNING: **NOTHING IN THE CODEBASE FEATURE-DETECTS IT.** Grepped: there is no support check
         anywhere. `fx-registry.js:561 supportsFilter` is about filter CONTAINERS, not the canvas API.
-      ➡️ **FIRST STEP AND IT IS CHEAP: prove it on HIS device.** The check is one line — make a 2d
-      context, assign `grayscale(1)` to its filter, read it back and see whether it stuck.
-      **Put that behind the ? button or in Settings so he can read it off the phone**, rather than
-      guessing from here — no desktop can answer this question.
+      ✅ **THE DETECTOR IS BUILT AND SHIPPED — v13.71. `FM.ctxFilterOK()`.**
+      ⚠️ **IT RENDERS A PIXEL RATHER THAN SNIFFING THE API, and that is the whole value.** `'filter' in
+      ctx` only says the property EXISTS — a context can accept the string, echo it back, and still draw
+      the source untouched. So it fills a 4x4 red square, draws it through `grayscale(1)`, and reads the
+      result back: **the only honest question is whether the picture changed.** Cached on first use; a
+      per-frame probe would cost more than the effects it guards.
+      ✅ **AND IT REPORTS THROUGH THE TOOL HE ALREADY USES — no new UI, no new habit.** The perf report's
+      DEVICE line now ends with **`canvas filter OK`** or **`canvas filter MISSING`**, and when it is
+      missing the report OPENS with a block naming all nine dead effects. It goes first, above every
+      timing verdict, because a reader who stops after the first READ line must not miss it.
+      ➡️ **SO THE NEXT MOVE IS ONE LINE FROM HIM: run "what's slow" on the PHONE and send the DEVICE
+      line.** No desktop can answer this — that is the entire lesson of the last three sessions.
       ➡️ **THE FIX, if confirmed: a per-pixel fallback for the CSS_FX family.** grayscale, saturate,
       brightness, contrast, sepia, invert and hue are all trivial per-pixel maths, and the app already has
       ~190 per-pixel effects to model it on. **blur and glow are the hard two** and may need a different

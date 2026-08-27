@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.70 — 1018 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 27 Aug, v13.71 — 1019 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -151,9 +151,13 @@ nine he named.** The compositor's own comment (line 1522) says an invalid assign
 toast, no dead badge. The ~190 per-pixel effects keep working, which is why only *these* look broken.
 ⚠️ **NOTHING IN THE CODEBASE FEATURE-DETECTS IT.** `fx-registry.js:561 supportsFilter` is about filter
 CONTAINERS, not the canvas API.
-➡️ **DO THIS FIRST AND IT IS CHEAP: put the support check where HE can read it off the phone** (the ?
-button or Settings). Make a 2d context, assign `grayscale(1)`, read it back, see if it stuck. **No desktop
-can answer this** — that is the entire lesson of the last three sessions.
+✅ **THE DETECTOR IS BUILT AND SHIPPED (v13.71): `FM.ctxFilterOK()`.** It RENDERS a red pixel through
+`grayscale(1)` and reads it back rather than sniffing the API — a context can accept the string, echo it
+back and still draw untouched. It reports through the perf tool he already pastes: the DEVICE line ends
+`canvas filter OK` / `MISSING`, and a MISSING report OPENS by naming all nine dead effects.
+➡️ **THE NEXT MOVE IS ONE LINE FROM HIM: "what's slow" on the PHONE, send the DEVICE line.** No desktop
+can answer this — that is the entire lesson of the last three sessions. **Do not build the fallback until
+that line arrives**; if it says OK, the diagnosis is wrong and the fallback is a wasted session.
 ➡️ **THEN: a per-pixel fallback for the CSS_FX family.** grayscale/saturate/brightness/contrast/sepia/
 invert/hue are trivial per-pixel maths and there are ~190 per-pixel effects to model it on; **blur and
 glow are the hard two.** Feature-detect ONCE and cache it.
