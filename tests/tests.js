@@ -48266,6 +48266,95 @@
     }
   });
 
+  /* 582 clause 2 — "it's generating so much stuff that's off screen". It is not, and this is the
+     assertion that keeps it that way. Extend tiles outward from the layer's bounds until the frame is
+     covered; every copy whose destination rect misses the frame entirely would be pure waste. Measured
+     at 1080x1080: 464 copies, ZERO of them off-frame. Nothing else in the suite would notice if a
+     future edit dropped the per-copy reject or loosened the i/j bounds. */
+  test('582: Tiles never draws a copy that lands outside the frame', { item: '582' }, async function () {
+    const keep = FM.scene.layers.slice();
+    const p0 = FM.scene.project || {};
+    const proj0 = { width: p0.width, height: p0.height, w: p0.w, h: p0.h };
+    const proto = CanvasRenderingContext2D.prototype, orig = proto.drawImage;
+    try {
+      FM.scene.layers.length = 0;
+      /* ⚠️ A SHAPE, NOT TEXT, AND SCALED DOWN — both deliberate, both learned from this test going red
+         on its first run with "only 2 draws were seen".
+         · TEXT depends on a font being loaded. When it renders nothing the alpha bbox is empty, the
+           `tiles` placeholder hands the kernel a full-frame rect, and the kernel's "already full-frame
+           → nothing to extend" guard returns after ONE draw. Two draws total, tiling loop never
+           entered — which is exactly what the guard below caught.
+         · SCALED to 0.25 so the content is comfortably smaller than the frame. Extend only has copies
+           to make if there is room around the clip; a rect that nearly fills the frame yields a
+           handful of draws and a thin test. */
+      /* ⚠️ THE PROJECT SIZE IS SET FIRST, BEFORE THE LAYER — and the order is the bug, not a detail.
+         Setting it AFTER `addShapeLayer` leaves a layer built for the previous project's geometry: it
+         renders nothing onto the new plate, the alpha bbox comes back empty, the tiles placeholder
+         substitutes a FULL-FRAME rect, and the kernel tiles that instead. Measured while writing this:
+         bb came back as the whole 480x480 frame with 33 draws, which the control below rejects.
+         Setting it first gives a real 60x40 content box and 119 draws. Restored in the finally block. */
+      if (FM.scene.project) {
+        if (FM.scene.project.width !== undefined) { FM.scene.project.width = 480; FM.scene.project.height = 480; }
+        if (FM.scene.project.w !== undefined) { FM.scene.project.w = 480; FM.scene.project.h = 480; }
+      }
+      FM.addShapeLayer('rect');
+      await sleep(220);
+      const L = FM.scene.layers[0];
+      if (!L) throw new Error('could not build a layer to tile');
+      L.start = 0; L.duration = 10;
+      if (L.transform) L.transform.scale = 0.25;
+      /* ⚠️ AND THE DEBUG HOOK IS CLEARED FIRST. `FM._tilesLastBB` is a global the kernel writes on every
+         run, so a value left by an EARLIER test would let the control below pass while this render
+         tiled nothing at all — the control would then be checking someone else's work. */
+      FM._tilesLastBB = null;
+      const inst = FM.fxRegistry.makeInstance('tiles');
+      inst.params.mode = 0; inst.params.source = 1;      // Extend + Whole clip: the path he reported
+      L.effects = [inst];
+      const proj = FM.scene.project || {};
+      const W = Math.max(64, Math.round(proj.width || proj.w || 480)), H = Math.max(64, Math.round(proj.height || proj.h || 480));
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      let total = 0, off = 0, worst = null;
+      proto.drawImage = function (img) {
+        const a = [].slice.call(arguments, 1);
+        let d;
+        if (a.length === 8) d = { x: a[4], y: a[5], w: a[6], h: a[7] };
+        else if (a.length === 4) d = { x: a[0], y: a[1], w: a[2], h: a[3] };
+        else d = { x: a[0] || 0, y: a[1] || 0, w: (img && img.width) || 0, h: (img && img.height) || 0 };
+        /* ⚠️ THE TRANSFORM MATTERS — mirror mode draws through translate()+scale(-1), so the raw
+           destination rect is NOT where the copy lands. Reading it without the matrix reports copies
+           at the wrong place and this assertion becomes noise. */
+        let m = null; try { m = this.getTransform(); } catch (e) {}
+        const cw = this.canvas.width, ch = this.canvas.height;
+        if (m && cw && ch) {
+          const x0 = m.e + m.a * d.x, x1 = m.e + m.a * (d.x + d.w);
+          const y0 = m.f + m.d * d.y, y1 = m.f + m.d * (d.y + d.h);
+          const l = Math.min(x0, x1), r = Math.max(x0, x1), tp = Math.min(y0, y1), b = Math.max(y0, y1);
+          total++;
+          if (r <= 0 || l >= cw || b <= 0 || tp >= ch) { off++; if (!worst) worst = Math.round(l) + ',' + Math.round(tp) + ' on a ' + cw + 'x' + ch + ' canvas'; }
+        }
+        return orig.apply(this, arguments);
+      };
+      cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, W, H);
+      FM.renderScene(cx, FM.scene, 0.5);
+      proto.drawImage = orig;
+      /* THE CONTROL, in two halves. A count alone can pass on a render that never tiled. */
+      const bb = FM._tilesLastBB;
+      if (!bb || bb.w <= 2 || bb.h <= 2) throw new Error('the tiles kernel was handed no usable content box (' + JSON.stringify(bb) + ') — the layer rendered nothing, so this test measured a passthrough and not the tiling loop');
+      if (bb.w >= bb.W && bb.h >= bb.H) throw new Error('the tiles kernel was handed the WHOLE FRAME as its content box — that is the empty-layer placeholder, and the kernel returns early on it, so nothing was tiled');
+      if (total < 4) throw new Error('only ' + total + ' draws were seen for a Tiles render — the probe did not exercise the tiling loop, so a pass here would prove nothing');
+      if (off) throw new Error(off + ' of ' + total + ' tile copies land completely outside the frame (first: ' + worst + '). Queue 582: "it\u2019s generating so much stuff that\u2019s off screen" — the i/j bounds or the per-copy reject in tiles() has been loosened.');
+    } finally {
+      proto.drawImage = orig;
+      if (FM.scene.project && proj0) {
+        if (FM.scene.project.width !== undefined) { FM.scene.project.width = proj0.width; FM.scene.project.height = proj0.height; }
+        if (FM.scene.project.w !== undefined) { FM.scene.project.w = proj0.w; FM.scene.project.h = proj0.h; }
+      }
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 603 — the badge on a dead effect tile has to name the CAUSE, not just the verdict.
      He judged the colour effects on WHITE shapes, where they provably cannot show: grayscale takes
      255,255,255 to 255,255,255. The app knew exactly why and put the sentence in `title`, a hover

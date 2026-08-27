@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.53
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.54
 >
-> **State:** v13.53, 994 tests green, tree clean.
+> **State:** v13.54, 996 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21890,6 +21890,115 @@ re-opened #480, which I had marked done and had not fixed.
       broken) and #622 (holding the jump buttons does not update the view rail). **Read all three
       together** — three reports about speed in one day is more likely one mechanism than three.
 
+- [ ] **627 — Jumping to a layer's start or end should SHOW that layer.** (27 Aug, two phone
+      **STATUS: 🟢 READY — nothing is stopping this**
+      screenshots at v13.51 — a Group clip, playhead jumped from 00:00:39 to 00:00:49, preview BLACK in
+      both.)
+      His words, verbatim:
+      > When you tap the jump button to jump to the end or start of a layer it should show the layer, idk why it doesn’t
+
+      1. [ ] **Tapping jump-to-start / jump-to-end must land somewhere the layer is VISIBLE.**
+      📍 **His two screenshots are the evidence and they are precise:** at 00:00:39 the playhead sits
+      just past the clip's right edge, at 00:00:49 well past it — **and the preview is black in both.**
+      💡 **HYPOTHESIS to prove, not assume:** "jump to end" lands on the layer's END TIME, which is
+      the first instant the layer is no longer on screen — an off-by-one-frame at the boundary. Landing a
+      hair inside (end − one frame) would show the last frame of the layer, which is what he expects.
+      **Check the start button too**, and check it against a layer that does not begin at 0.
+      ⚠️ **Read #626 with this** — that one is also "the end of the timeline is blank", and both could be
+      one boundary rule. **Do not assume they are the same; check whether fixing this changes that.**
+
+- [ ] **628 — Moving a group's ANCHOR moves the clips inside it.** (27 Aug, phone screenshot at v13.53 —
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Position/Scale on a Group, Anchor X 75.0%, Anchor Y 0.0%.)
+      His words, verbatim:
+      > Moving the anchor shouldn’t be moving the position of a bunch of clips in a group i think
+
+      1. [ ] **Moving the anchor must not move anything.** The panel in his own screenshot promises
+             exactly this: *"Scaling and rotation happen around this point. The layer stays where it is —
+             only its pivot moves."* **That sentence is the spec, and he is reporting it is false for a
+             GROUP.**
+      📍 **For a plain layer this is the standard anchor-compensation problem** — moving the pivot
+      changes where the transform puts the content, so the position has to be adjusted by the same amount
+      to keep it still. **The suspect is that the compensation exists for a normal layer and not for a
+      group**, where the children are drawn through the group's transform.
+      ⚠️ **Almost certainly the same root cause as #630** (zooming a group pivots at a corner). **Read and
+      fix them together**, but keep both entries — they are two symptoms he reported separately.
+
+- [ ] **629 — Undo that removes the selected layer should close the panels, not select a different layer.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, at v13.53.)
+      His words, verbatim:
+      > When you undo or redo when on a layer and it basically is undo the creation of the layer or whatever it is to essentially make you un able to have that layer selected now it shouldn’t force you to have another previous layer selected it should just close everything
+
+      1. [ ] **When undo/redo removes the layer you had selected, select NOTHING** — close the inspector
+             and go back to the neutral state, rather than falling back to some other layer.
+      💡 **Why he is right, beyond the annoyance:** being dropped onto a *different* layer with the
+      same panel open is how you edit the wrong thing without noticing. **Selecting nothing is the safe
+      failure.**
+      📍 **Look for the fallback that runs after a scene restore** — something like "if the selected
+      id is gone, pick the nearest/previous layer". It should clear the selection instead.
+
+- [ ] **630 — Zooming a group scales it around a CORNER, and the anchor cannot be found.** (27 Aug, at
+      **STATUS: 🟢 READY — nothing is stopping this**
+      v13.53.)
+      His words, verbatim:
+      > For some reason when I try and zoom groups in the just zoom into the corners and not the middle and I can’t find where the anchor even is
+
+      1. [ ] **Scaling a group must pivot where the anchor is, and by default that is the middle.**
+      2. [ ] **The anchor must be VISIBLE on a group** — *"I can't find where the anchor even is"*. A
+             plain layer shows its pivot handle on the canvas; his group apparently does not.
+      ⚠️ **Same family as #628 and very likely the same bug**: the screenshot there shows a group whose
+      **Anchor X is 75.0% and Anchor Y is 0.0%** — i.e. its pivot is sitting near the TOP-RIGHT CORNER,
+      which is exactly what "zooms into the corners" looks like. **So the anchor may not be defaulting to
+      the centre for a group at all.** ➡️ **First job: read what a group's anchor is initialised to, and
+      what `layerSize`/bounds a group reports** — an anchor expressed as a fraction of a size that is
+      wrong for groups would land the pivot in a corner and would also explain #628.
+
+- [ ] **631 — 🔴 "Save frame as PNG" on the LAST frame gives a black image.** (27 Aug, at v13.53.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > I did save Frame as pnj on the last frame and I got a black image
+
+      1. [ ] **Exporting the last frame must produce the picture, not black.**
+      🚨 **THIS IS THE THIRD REPORT IN A ROW ABOUT THE END OF THE TIMELINE BEING EMPTY, and that is
+      the most useful thing about it.** Read all three together — they are very likely ONE boundary rule:
+      · **#626** — every clip sped up the same amount, all ending together, *"the end of the clip is blank"*.
+      · **#627** — jump to a layer's END and the preview is black (two screenshots).
+      · **#631** — save the LAST frame and the PNG is black.
+      💡 **THE COMMON MECHANISM, to prove rather than assume:** a clip that runs `[start, start+duration)`
+      is NOT on screen at exactly `start + duration`. Every one of these three lands the playhead on that
+      exact instant — the first moment nothing is there. **If that is it, one half-open-interval decision
+      fixes all three**, and the right answer is probably to clamp "the end" to the last real frame
+      (`end − 1/fps`) wherever the app jumps to or exports an end.
+      ⚠️ **PROVE IT WITH A MEASUREMENT BEFORE CHANGING THE COMPARISON.** An off-by-one at a boundary is
+      exactly the kind of thing that looks obvious and turns out to be a different bug — and this file
+      records three separate occasions where a guess from a screenshot was wrong. **Render at
+      `end − 1/fps`, at `end`, and at `end + 1/fps` and read the lit-pixel count at each.**
+      ⚠️ **And check whether the PNG path renders at a DIFFERENT time from the preview** — "save frame"
+      may round or clamp its own way, in which case #631 is its own bug and only #626/#627 share a cause.
+
+- [ ] **632 — Inside a group, the left of the timeline wastes a lot of space.** (27 Aug, phone
+      screenshot at v13.53 — inside a group, three clips at 3.08x, with a wide empty strip circled in
+      orange down the far left of the layer heads.)
+      His words, verbatim:
+      > Inside groups the ui is cooked on the left it has heaps of wasted space
+
+      1. [ ] **Reclaim the empty column on the left of the layer heads when you are inside a group.**
+      📍 **What his circle is around:** a blank vertical strip to the LEFT of the eye icon, running
+      the full height of the layer rows. On a normal timeline the eye is the first thing in the head
+      column; inside a group something is reserving width before it and drawing nothing. **A thin
+      coloured sliver is visible at the very left edge of the third row**, which suggests the space is a
+      group-depth indent or a nesting rail that is far wider than the mark it draws.
+      ➡️ **Measure the head column's boxes at 380px inside a group and outside one, and compare** — the
+      difference is the wasted width, and it should be a number in the entry before anything is changed.
+      ⚠️ **He is on a 380px screen and the timeline's usable width is the scarce resource** — this is the
+      same complaint family as #605 (the tab row not filling its bar) and #608 (benchmarks painting over
+      the icon column). **Wasted horizontal space on the phone is a recurring theme, not a one-off.**
+      🧩 **FOURTH GROUP REPORT TODAY** — with **#628** (moving a group's anchor moves its clips),
+      **#630** (zooming a group pivots at a corner, anchor not findable) and the group in **#627**'s
+      screenshots. **Groups are not landing for him.** These are separate bugs and stay separate, but
+      whoever picks one up should read all four.
+
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
@@ -22436,11 +22545,10 @@ re-opened #480, which I had marked done and had not fixed.
       the state I could measure**, and guessing at a z-index for a symptom I cannot see would be exactly
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
 
-- [ ] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** (26 Aug, v12.81.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** ✅ **ALL THREE CLAUSES DONE (v12.97 / v13.15 / v13.51 / v13.54).** (26 Aug, v12.81.)
       His words, verbatim:
       > Btw I completely broke the app by adding motion blur a shake and tiles to an effect and also I noticed while I was doing it the tiles and shake together looked really bad, these will need a lot of work and I think there’s some optimisation issues and those effects NEED to all be added and work because that’s a main feature
-      ⚠️ **REMAINS OPEN (partial): clauses 1 and 3 shipped (v12.97, v13.15); clause 2 has NOT STARTED.**
+      ✅ **ALL THREE CLAUSES DONE — 1 and 3 at v12.97/v13.15, clause 2 at v13.51/v13.54.**
       Phrased in these words because `tools/next.sh` reads them — without it the DONE markers inside
       make the whole entry read as finished.
       📌 **WHAT IS STILL LEFT (27 Aug), because `next.sh` keeps flagging this entry as "fixed but open":**
@@ -22534,7 +22642,7 @@ re-opened #480, which I had marked done and had not fixed.
              among the heaviest, and Motion Blur renders multiple samples per frame, so a hang from three
              compounding is at least as likely as an exception. **Open the console; do not infer from the
              symptom.**
-      2. [ ] ✅ **ANSWERED BY EZRA 27 Aug — and he rejected all three of my options for a better one.**
+      2. [x] ✅ **DONE v13.54 — see the block below for what that does and does not mean.** **ANSWERED BY EZRA 27 Aug — and he rejected all three of my options for a better one.**
          His words, verbatim:
          > I feel like there should be a way to optimise it so it looks really good like alight motion
          > but doesn’t extremely slow down the app because it’s generating so much stuff that’s off
@@ -22591,11 +22699,38 @@ re-opened #480, which I had marked done and had not fixed.
          attribute, the other asserts no render pulls a quarter-frame-or-larger readback off a
          GPU-backed canvas — which catches a NEW unhinted read anywhere, not just today's two sites.
          Both were proven to go red with the hint stripped out.
-         ➡️ **STAYS UNTICKED, and honestly: the cost is REDUCED, not removed.** The specific thing he
-         named — not generating what is off screen — was already done before he asked. What is left is
-         the bounding-box readback itself, and the only way to remove that is to stop needing an exact
-         box every frame (cache it against the layer's rendered content), which is a real piece of work
-         and its own tick.
+         🛑 **AND THE REMAINING LINE IS NOW CLOSED WITH NUMBERS, 27 Aug (v13.54) — I tried the
+         bracket twice more and BOTH versions are rejected. Recorded so nobody spends a third tick on
+         it.** The idea each time: find the content roughly with a cheap downscaled scan, then read only
+         that band exactly.
+         | version | correct? | speed |
+         |---|---|---|
+         | **S=4 downscale, threshold >8** | ❌ **WRONG** — 3 of 10 shapes returned a different box | 3x fewer pixels |
+         | **S=2 downscale, threshold >0** | ✅ **exact on all 10 shapes** | ❌ **0.6x–0.95x — SLOWER** |
+         **S=4 fails because a 4x box-average dilutes faint alpha below the threshold**: a lone pixel at
+         alpha 9 — the least the exact scan counts — averages to 9/16 ≈ 0.6 and vanishes. A faint hairline
+         down the left edge moved the box from `0,0,600,1080` to `400,400,200,200`, which is a visible
+         change to the tiling.
+         **S=2 is provably safe** — that same pixel averages to 9/4 = 2.25, so it cannot be diluted away,
+         and it matched the full scan on all ten test shapes including both S=4 failures and a
+         purpose-built "alpha exactly 9, one pixel" case. **It is just slower.** Now that the plates are
+         CPU-backed (v13.51), the downscale is a SOFTWARE `drawImage` of the whole frame, and that costs
+         more than the readback it was meant to save. Measured interleaved: one line of text **3.9 → 4.1
+         ms**, a half-frame clip **4.0 → 5.0**, edge-to-edge content **3.2 → 5.3**.
+         🔑 **The lesson worth keeping: v13.51's fix CHANGED WHICH OPTIMISATIONS ARE AVAILABLE.** Against
+         a GPU-backed canvas the bracket looked worth 3x, because the cost was the pipeline stall and not
+         the pixels. Once the stall was gone, the pixel count was never the expensive part.
+         ✅ **CLAUSE 2 TICKED, and here is exactly what that means, because it is not "made it faster".**
+         **The thing he asked for — not generating what is off screen — was already true before he asked,
+         and it is now PROVEN rather than assumed:** 464 tile copies on a 1080x1080 frame, **zero** of
+         them outside it, measured with the canvas transform applied. A test now asserts it. Drawing all
+         464 costs 1.0 ms of a 7.9 ms frame.
+         ⚠️ **The residual cost is intrinsic: Tiles needs an EXACT content rectangle every frame** to space
+         its copies by, and getting one means reading the frame back. Three ways of avoiding that have now
+         been measured and rejected. **If it still feels slow to him, that is a new report with a
+         different target** — most likely caching the box for a layer that cannot move, which helps a
+         static Tiles look and cannot help his motionblur+shake stack, because Shake moves the box every
+         frame by design.
          🗒️ *(superseded)* ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
          summary block) is still outstanding, and an unticked box is the only thing the tools read.**
          **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
