@@ -48266,6 +48266,54 @@
     }
   });
 
+  /* 618 clause 2 — a card that TELLS you to use a menu item must actually offer it.
+     The draft card's subtitle reads "Draft — open it, build it, then ⋯ → Save as element", and that
+     ⋯ menu held only "Open and keep building" and "Delete draft…". The action it named lived on a
+     DIFFERENT card's menu. So he tapped where the app pointed, found neither option was the one just
+     named, and reasonably concluded it was telling him to do something he could not — which is what
+     "they still tell you to manually save it urself" sounds like from the outside.
+     ⚠️ This asserts the RELATIONSHIP, not the wording: it reads the action out of the subtitle and
+     requires the menu to contain it. Reword the subtitle and the test follows; drop the item and it
+     fails. */
+  test('618: the draft card offers the action its own subtitle names', { item: '618' }, async function () {
+    const made = [];
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      const r = await FM.projects.create({ name: 'menu probe', elementDraft: true });
+      const id = (r && r.id) || r;
+      made.push(id);
+      await sleep(200);
+      FM.home.open();
+      await sleep(420);
+      const tab = [].slice.call(document.querySelectorAll('.hm-tab')).filter(function (b) { return /elements/i.test(b.textContent); })[0];
+      if (tab) { tab.click(); await sleep(600); }
+      const card = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(function (c) { return c.dataset.pid === id; })[0];
+      if (!card) throw new Error('the probe draft has no card on the Elements tab');
+      const sub = ((card.querySelector('.hm-sub') || {}).textContent || '').trim();
+      const m = sub.match(/\u22ef\s*\u2192\s*(.+)$/);
+      if (!m) return;   // the subtitle no longer points at a menu item — nothing left to enforce
+      const named = m[1].replace(/[.\u2026\s]+$/, '').trim();
+      if (!named) throw new Error('the subtitle names an empty action: "' + sub + '"');
+      const more = card.querySelector('.hm-card-more');
+      if (!more) throw new Error('the draft card has no ⋯ button, but its subtitle tells you to use one');
+      more.click();
+      await sleep(420);
+      const found = [].slice.call(document.querySelectorAll('body *'))
+        .filter(function (e) { return e.children.length === 0; })
+        .map(function (e) { return (e.textContent || '').trim(); })
+        .filter(function (t) { return t && t !== sub; });
+      const hit = found.some(function (t) { return t.toLowerCase().indexOf(named.toLowerCase()) === 0; });
+      if (!hit) {
+        throw new Error('the draft card says "\u22ef \u2192 ' + named + '" but that menu offers [' + found.filter(function (t) { return t.length < 40; }).slice(0, 6).join(' | ') + '] — an instruction pointing at an action the menu does not have');
+      }
+      document.body.click();
+      await sleep(150);
+    } finally {
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
+    }
+  });
+
   /* 641 — the two drifting light layers may be RECOLOURED and must never be RE-BOXED.
      Both halves are real bugs that already happened, in opposite directions, from the same rule:
        · covering `::before` with the light look's wash destroyed its -8% overscan and brought back

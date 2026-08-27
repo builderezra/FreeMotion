@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.65
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.66
 >
-> **State:** v13.65, 1008 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.66, 1009 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21946,7 +21946,23 @@ re-opened #480, which I had marked done and had not fixed.
              thumbnail; elements should too.** ⚠️ **#268 shipped exactly this for TEMPLATE tiles** —
              *"Template tiles need a real picture of the template, not a logo"*, done v8.58. **Read how
              that one renders its picture before building a second mechanism.**
-      2. [ ] **"They still tell you to manually save it urself."** The subtitle is literally
+      2. [x] **"They still tell you to manually save it urself."** ✅ **DONE v13.66 — and it was a BROKEN
+             INSTRUCTION, not a workflow preference.**
+             🚨 **The card's subtitle reads *"Draft — open it, build it, then ⋯ → Save as element"* —
+             and that ⋯ menu held exactly two items: *Open and keep building* and *Delete draft…*.**
+             **"Save as element…" was on a DIFFERENT card's menu** (the project card's, and the
+             editor's). So he tapped ⋯ exactly where the app pointed him, found that neither option was
+             the one it had just named, and reasonably concluded it was telling him to do something he
+             could not. **That is why his complaint sounds like a workflow objection: from the outside,
+             an instruction you cannot follow and an instruction you resent look identical.**
+             ✅ **Fixed by putting the named action on the card that names it** — the same call the
+             project card makes, so the two cannot drift apart.
+             ⚠️ **Deliberately NOT automatic.** A draft may be a sketch he never wants filed, and minting
+             elements he did not ask for is the failure #505 is about. **The instruction is now true;
+             whether saving should happen BY ITSELF is a separate question and his to answer.**
+             🔒 **The test asserts the RELATIONSHIP, not the wording:** it reads the action out of the
+             subtitle and requires the ⋯ menu to contain it. Reword the subtitle and the test follows;
+             drop the item and it fails. The subtitle is literally
              *"Draft — open it, build it, then ⋯ → Save as element"* — the app instructing him to do the
              filing. He is saying that instruction should not need to exist.
              ⚠️ **This is the same complaint the code already recorded once and only half-fixed.** The

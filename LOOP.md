@@ -133,7 +133,28 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.65 — everything is pushed and the tree is clean. 1008 tests green.**
+📍 **HANDOVER, 27 Aug, v13.66 — everything is pushed and the tree is clean. 1009 tests green.**
+✅ **#618 IS CLOSED.** Clause 2 was a **BROKEN INSTRUCTION**, not a workflow preference: the draft card
+told him to use "⋯ → Save as element" and that menu did not contain it — the action was on the PROJECT
+card's menu. **From the outside, an instruction you cannot follow and one you resent look identical**,
+which is worth remembering the next time a report sounds like a matter of taste.
+🔒 **Its test asserts the RELATIONSHIP, not the wording** — it reads the action out of the subtitle and
+requires the menu to have it. Reword freely; drop the item and it fails.
+
+🚨 **THE HISTORY LIED ONCE TODAY, AND THERE IS NOW A GATE FOR IT. READ THIS BEFORE SHIPPING.**
+His report arrived while the v13.64 ship was mid-suite, and I went straight at it and edited the tree.
+**`ship.sh` commits with `git add -A` AFTER the suite passes**, so the newer work was swept into the
+older commit: `01dd9b3` says **v13.64** and describes thumbnails, while the files inside it say
+**v13.65** and carry the wordmark and intro fixes. **Nothing broke in the app — everything is green and
+pushed. What took the damage is the record**, which is the thing we both read to work out what changed.
+The second ship then died with "nothing to commit", having run two suites for nothing.
+✅ **STRUCTURAL FIX, not a note: `ship.sh` now refuses when the commit SUBJECT names a version that
+disagrees with `index.html`.** Proven in both directions — it refuses `v13.99` against a v13.65 file and
+lets a matching subject through. Only the subject is checked, and only when it names a version, so body
+prose citing old versions and no-version docs commits are unaffected.
+⚠️ **The rule this broke was already written down: DO NOT EDIT THE TREE WHILE A SUITE IS RUNNING.** It
+was broken because a user report felt urgent. **Hold the edits; the ship is 4–8 minutes.**
+
 🚨 **THE WORDMARK'S EFFECT LAYERS ARE MASKED WITH THE WORDMARK IMAGE — SIX REFERENCES, FOUR RULES.**
 Swapping `.hm-brand-img`'s src at v13.62 left all six cut to the OLD logo, so a pale ghost of it sat
 behind the new one in BOTH looks. **He spotted it and described it exactly: "an M as the backdrop for

@@ -1719,6 +1719,25 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open and keep building', action: () => card.click() },
+        /* SAVE AS ELEMENT, ON THE CARD THAT TELLS HIM TO USE IT (queue 618 clause 2).
+           Ezra: *"they still tell you to manually save it urself"* — and the instruction was not even
+           followable. This card's subtitle reads "Draft — open it, build it, then ⋯ → Save as element",
+           and until now this ⋯ menu held exactly two items: Open and keep building, and Delete draft.
+           **The action it named was on a DIFFERENT card's menu** (the project card, and the editor's).
+           So he tapped ⋯ where the app pointed him, found neither of the two options was the one it had
+           just named, and reasonably concluded the thing was telling him to do something he could not.
+           That is a broken instruction, not a workflow preference.
+           Same call the project card makes, so the two cannot drift apart. ⚠️ It is NOT automatic: a
+           draft may be a sketch he never wants filed, and minting elements he did not ask for is the
+           failure #505 is about. The instruction is now true; whether it should happen by itself is a
+           separate question and his to answer. */
+        { label: 'Save as element…', action: async () => {
+          const n = prompt('Element name:', p.name || 'My element');
+          if (!n || !n.trim()) return;
+          const ok = await FM.elements.saveFromProject(p.id, n.trim());
+          if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
+          render();
+        } },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
           if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved as an element will be lost.')) return;

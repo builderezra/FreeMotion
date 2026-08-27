@@ -88,6 +88,29 @@ LOG="$(grep -o '^- v[0-9]\+\.[0-9]\+' POLISH-LOG.md | tail -1 | sed 's/^- //')"
 [ -n "$VER" ] || { echo "❌ could not read the version label out of index.html — fix this gate before shipping"; exit 1; }
 [ "$VER" = "$LOG" ] || { echo "❌ index.html says $VER but the newest POLISH-LOG entry is $LOG — write the log entry first"; exit 1; }
 
+# ---- THE COMMIT MESSAGE MUST NAME THE VERSION IT IS ACTUALLY SHIPPING (27 Aug) ----------------
+# This gate exists because the history lied once. A release was started, and while its suite was
+# running — four to eight minutes — the tree was edited again for the NEXT release. ship.sh commits
+# with `git add -A` AFTER the suite passes, so the newer work was swept into the older commit: the
+# message said v13.64 and described thumbnails, while the files inside it said v13.65 and carried a
+# wordmark fix and an intro fix. Nothing was broken in the app and everything was pushed; what took
+# the damage was the record, which is the thing both of us read to work out what changed and why.
+# The version label in index.html is the truth about what a commit CONTAINS. If the subject line
+# names a version at all, it has to agree with it.
+# ⚠️ Only the SUBJECT (first line) is checked, and only when it names a version. Prose in the body
+# legitimately cites old versions ("shipped at v12.31"), and a docs-only commit ("notes: …") names
+# none — neither is a mismatch.
+SUBJ="$(printf '%s' "$MSG" | head -1)"
+MSGVER="$(printf '%s' "$SUBJ" | grep -o 'v[0-9]\+\.[0-9]\+' | head -1)"
+if [ -n "$MSGVER" ] && [ "$MSGVER" != "$VER" ]; then
+  echo "❌ the commit subject says $MSGVER but index.html says $VER."
+  echo "   These must agree, or the history describes a release it does not contain."
+  echo "   The usual cause: the tree was edited while an earlier ship's suite was still running,"
+  echo "   so this commit is about to sweep up work that belongs to a later version."
+  echo "   Fix the subject, or finish the in-flight release first."
+  exit 1
+fi
+
 # The newest POLISH-LOG entry names the queue items it closes, e.g. "(queue 209)". If any of them is
 # still an OPEN checkbox in REQUESTS.md, the release is about to go out with the item untick — which
 # is the exact failure REQUESTS.md exists to prevent, and it happened on v8.19 when a tick script
