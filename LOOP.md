@@ -223,6 +223,18 @@ I had not read them. Read now, by hand, one at a time:**
   to leave it.
 ➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
 concluded from the classifier — which is the distinction rule 8b insists on.
+🧩 **#582 CLAUSE 2 IS ANSWERED AND IS NOW A DECISION FOR HIM, NOT A BUG (v13.41).** Tiles "Extend"
+repeats the layer's alpha bbox outward; a one-line text box is ~50 px tall, so it repeats **18 times**
+down a 900 px frame and reads as noise. Shake first enlarges the box to 146 px → **6 readable rows**.
+**Same effect, same params — the box was correct both times** (`464x50` vs `547x146`, confirmed with the
+new `FM._tilesLastBB` hook).
+⚠️ **THREE THEORIES DIED HERE, ALL DEDUCED FROM THE PICTURE: padded plate → wrong default mode →
+transposed bbox.** Each collapsed the moment the code was read or the value instrumented. 🔒 **RULE:
+when a picture looks wrong, INSTRUMENT THE INPUT before theorising about the code** — a debug hook took
+two minutes and settled what three rounds of reasoning got wrong.
+📌 **Options put to him (a) cap repeats ~6 [recommended] (b) minimum tile size (c) leave it.**
+**DO NOT pick one unilaterally — any of them changes every Tiles instance he has already placed.**
+
 🚨 **UNRESOLVED INSTRUMENT CONFLICT ON MOTIONFLOW — DO NOT MAKE ANY FURTHER CLAIM ABOUT SMEAR UNTIL THIS
 IS SETTLED. Two probes, opposite answers, same code.**
 | regime | Smear @ default | Echo |
