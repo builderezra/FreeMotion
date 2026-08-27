@@ -1,0 +1,90 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:760px;border:0"></iframe>
+<script>
+/* #645 — shapes grey, footage greys, tiles grey. So the effect math and every render path are fine.
+ * What is left is the FILTER CONTAINER'S CONTROLS: Strength, and the per-effect params inside a filter.
+ * His words name saturation and brightness specifically, and a filter is where you would adjust them. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.filters && w.FM.renderScene)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+function stats(d){ var n=0,sp=0,lu=0;
+  for (var i=0;i<d.length;i+=4){ if(d[i+3]<200) continue;
+    sp += Math.max(d[i],d[i+1],d[i+2]) - Math.min(d[i],d[i+1],d[i+2]);
+    lu += 0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; n++; }
+  return { n:n, spread:n?sp/n:0, lum:n?lu/n:0 }; }
+async function run(w){
+  try{
+    var FM = w.FM, doc = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var c = doc.createElement('canvas'); c.width=240; c.height=240; var g=c.getContext('2d');
+    var cols=['#e01010','#10c020','#1030e0','#e0d010'];
+    for (var i=0;i<4;i++){ g.fillStyle=cols[i]; g.fillRect((i%2)*120,(i>>1)*120,120,120); }
+    var blob = await new Promise(function(r){ c.toBlob(r,'image/png'); });
+    var rec = await FM.loadImageFile(new w.File([blob],'blocks.png',{type:'image/png'}));
+    FM.scene.layers.length = 0; FM.addMediaLayer(rec);
+    await new Promise(function(r){ setTimeout(r,700); });
+    var L = FM.scene.layers[0], P = FM.scene.project;
+    function shoot(){ var cv=doc.createElement('canvas'); cv.width=P.width; cv.height=P.height;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 0.2);
+      return stats(cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data); }
+
+    L.effects = []; var base = shoot();
+    say('UNFILTERED   spread ' + base.spread.toFixed(1) + '   lum ' + base.lum.toFixed(1));
+    say('');
+
+    // ---- 1. STRENGTH sweep on Noir
+    say('=== 1. Noir, sweeping the container STRENGTH ===');
+    var box = FM.filters.makeInstance('noir');
+    say('   default strength param = ' + JSON.stringify(box.params && box.params.strength));
+    L.effects = [box];
+    [1, 0.75, 0.5, 0.25, 0].forEach(function(s){
+      box.params = box.params || {}; box.params.strength = s;
+      var r = shoot();
+      say('   strength ' + String(s).padEnd(5) + ' spread ' + r.spread.toFixed(1).padStart(6) +
+          '   lum ' + r.lum.toFixed(1).padStart(6) +
+          (s===0 ? '   (should match unfiltered)' : ''));
+    });
+
+    // ---- 2. EDIT A CHILD PARAM inside the filter
+    say('');
+    say('=== 2. editing a child effect INSIDE the filter (grayscale amount) ===');
+    var box2 = FM.filters.makeInstance('noir');
+    if (box2.params) box2.params.strength = 1;
+    L.effects = [box2];
+    var gray = (box2.effects||[]).filter(function(e){ return e.type==='grayscale'; })[0];
+    say('   the filter holds: ' + (box2.effects||[]).map(function(e){ return e.type; }).join(', '));
+    if (!gray) say('   ⚠️ no grayscale child to edit');
+    else {
+      [1, 0.5, 0].forEach(function(v){
+        gray.params = gray.params || {}; gray.params.amount = v;
+        var r = shoot();
+        say('   grayscale amount ' + String(v).padEnd(4) + ' spread ' + r.spread.toFixed(1).padStart(6) +
+            (v===0 ? '   (colour should be BACK)' : ''));
+      });
+    }
+
+    // ---- 3. saturate / brightness as children of a filter
+    say('');
+    say('=== 3. saturate and brightness INSIDE a filter container ===');
+    function mk(type, params){ var e = FM.fxRegistry.makeInstance(type); e.params = Object.assign({}, e.params, params); return e; }
+    [['saturate',{amount:0}], ['saturate',{amount:2}], ['brightness',{amount:0.4}], ['brightness',{amount:1.8}]].forEach(function(p){
+      var b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+      b.effects = [mk(p[0], p[1])];
+      if (b.params) b.params.strength = 1;
+      L.effects = [b];
+      var r = shoot();
+      say('   ' + (p[0]+'('+p[1][Object.keys(p[1])[0]]+')').padEnd(16) +
+          ' spread ' + r.spread.toFixed(1).padStart(6) + '   lum ' + r.lum.toFixed(1).padStart(6));
+    });
+    L.effects = [];
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

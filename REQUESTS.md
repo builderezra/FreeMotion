@@ -24532,8 +24532,48 @@ re-opened #480, which I had marked done and had not fixed.
       browser**, which is literally what #593 said (*"THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR"*);
       **(c) the filter container's strength cross-fade**, which uses `lighter` (additive) rather than a
       plain cross-fade and is only reached when strength < 1.
-      ➡️ **NEXT: repeat the SAME measurement on a media layer and on a browser tile.** A test that passes
-      on a shape has proved nothing about the thing he is looking at.
+      ✅ **ALL OF THOSE SUSPECTS ARE NOW ELIMINATED BY MEASUREMENT — every one of them renders correctly:**
+      | path measured | result |
+      |---|---|
+      | mono filters on a SHAPE | grey — spread 0.0 of 255 |
+      | mono filters on real FOOTAGE (a 4-colour PNG, spread 200) | **grey — 0.0**, Newsprint 2.6 |
+      | the filter-browser TILES | **grey — 0.0**, with a colour control at 71.8 proving tiles CAN show colour |
+      | container STRENGTH 1 to 0.75 to 0.5 to 0.25 to 0 | **perfectly linear** 0, 50, 100, 150, 200 |
+      | editing a child param inside a filter (grayscale 1, 0.5, 0) | 0, 96, 181 — colour comes back |
+      | saturate(0)/saturate(2)/brightness(0.4)/brightness(1.8) inside a container | all correct |
+      | the registry DEFAULTS (grayscale def 1) | correct |
+
+      🔑 **HE THEN SAID THE ONE THING THAT EXPLAINS ALL OF IT. His words, verbatim:**
+      > I noticed that on pc the effects i say that dont work like saturation actually work, its mobile
+      > they dont
+      🚨 **EVERY MEASUREMENT ABOVE WAS TAKEN ON DESKTOP CHROME. THE BUG IS MOBILE-ONLY, WHICH IS WHY
+      THREE SESSIONS OF TESTING FOUND NOTHING.** Note this is NOT a viewport question — the suite's phone
+      pass runs at 380px and is green — it is the DEVICE.
+      🎯 **PRIME SUSPECT, AND IT FITS EVERY DETAIL: canvas `ctx.filter` IS NOT SUPPORTED on his mobile
+      browser.**
+      · **The nine effects folded into that one property are exactly the ones he named** — `FM.CSS_FX` is
+        blur, brightness, contrast, **saturate**, hue, **grayscale**, sepia, invert, glow
+        (js/compositor.js:1458). Brightness, saturation and black-and-white are three of those nine.
+      · **The failure is SILENT by design, and this file already says so** (js/compositor.js:1522):
+        *"assigning an invalid string to ctx.filter is silently IGNORED — the context keeps what it had"*.
+        On a context with no filter support the assignment does nothing and the draw proceeds unfiltered.
+        **No error, no toast, no dead-effect badge — the effect is simply not applied.**
+      · **Canvas 2D filter support landed late in Safari and is the classic mobile gap.** Every non-CSS
+        effect (the ~190 per-pixel ones) keeps working, which is exactly why only *these* look broken.
+      · WARNING: **NOTHING IN THE CODEBASE FEATURE-DETECTS IT.** Grepped: there is no support check
+        anywhere. `fx-registry.js:561 supportsFilter` is about filter CONTAINERS, not the canvas API.
+      ➡️ **FIRST STEP AND IT IS CHEAP: prove it on HIS device.** The check is one line — make a 2d
+      context, assign `grayscale(1)` to its filter, read it back and see whether it stuck.
+      **Put that behind the ? button or in Settings so he can read it off the phone**, rather than
+      guessing from here — no desktop can answer this question.
+      ➡️ **THE FIX, if confirmed: a per-pixel fallback for the CSS_FX family.** grayscale, saturate,
+      brightness, contrast, sepia, invert and hue are all trivial per-pixel maths, and the app already has
+      ~190 per-pixel effects to model it on. **blur and glow are the hard two** and may need a different
+      answer. WARNING: **feature-detect ONCE and cache it** — probing per frame would cost more than the
+      effects do.
+      ⚠️ **AND WHATEVER ELSE HAPPENS, THE SILENCE MUST GO.** An effect that cannot run on this device
+      should SAY so, the way the dead-effect badge already does (#603). Three sessions were lost to a
+      failure that leaves nothing behind — the same lesson as #603, #618 and #619.
 
 - [ ] **646 — PC: the loading animation cuts from white to the colours instead of fading, unlike mobile.**
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -24662,6 +24702,7 @@ re-opened #480, which I had marked done and had not fixed.
       deliberate press, or the panel makes noise every time he opens it.
 
 - [ ] **654 — A first-time user could not work out how to LEAVE the audio edit menu.** (27 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > Make a note that my friend said he couldn't figure out how to get out of the audio edit menu
       🔑 **THIS IS THE FIRST REPORT IN THIS FILE FROM SOMEONE WHO IS NOT EZRA, and that makes it worth
@@ -24679,6 +24720,7 @@ re-opened #480, which I had marked done and had not fixed.
       no visible affordance is exactly how this happens.
 
 - [ ] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
+      **STATUS: 🟢 READY — nothing is stopping this**
       feature, and it GLITCHES THE TIMELINE when a group is added.** (27 Aug, phone screenshot at v13.69.)
       His words, verbatim:
       > Log that when you add groups they have a small drop down button that needs removing cos I don't
@@ -24702,6 +24744,7 @@ re-opened #480, which I had marked done and had not fixed.
       shared grid. Measure a group row against a normal row before and after.
 
 - [ ] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, phone screenshot at v13.69 — search open on the Projects tab, 4 selected.)
       His words, verbatim:
       > Search bar needs to look good and reflect the new colour scheme
@@ -24723,3 +24766,30 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships.
       📎 **Colours already established on the light home, reuse rather than invent:** `.hm-name` `#0d1420`
       (strong ink), `.hm-sub` `#5a6478` (body), `.hm-mi` `#5f6b7d`, card rim `rgba(127,216,255,.30)`.
+
+- [ ] **657 — Performance sample from the PC, 10 s: it reads HEALTHY, which is itself the finding.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      (27 Aug, pasted from the app's own "what's slow" tool at v13.70.)
+      The sample, verbatim:
+      > FRAMES 50.7 fps average - median gap 16.7ms - p95 33.4ms - worst 83.4ms - 2 of 507 frames late
+      > QUALITY tier 5 of 6 - mode auto - rendering at 28% scale
+      > app-measured render 12.59ms - app-measured gap 17.35ms
+      > CANVAS 162k pixels - SPLIT playing 16.7ms (507 frames) - scrubbing not sampled
+      > AUDIO 0.0 rate writes/s - 0 seeks - 508 sync ticks - sync error 1ms median - 9ms worst
+      > PROJECT 1920x1080 @60fps - 4 layers (2 video, 2 shape) - 0 effects
+      > DEVICE screen 1408x881 @dpr2 - 6 cores - 8GB - Chrome - macOS
+      📐 **What it actually says, read rather than skimmed:**
+      · **Frames are fine on the PC** — 50.7 fps, median gap 16.7 ms, only 2 late frames in 507.
+      · 🚩 **BUT IT IS RENDERING AT 28% SCALE, at quality tier 5 of 6, to achieve that.** A 1920x1080
+        project is being drawn into **162k pixels — about 8% of full resolution.** The smooth number is
+        BOUGHT, not free, and *"it looks blurry while playing"* would be the same fact from the other side.
+      · **Scrubbing was never sampled** (*"press play AND drag the playhead"*), so the half he complains
+        about most — #387, *"pressing on a layer to scrub is still laggy"* — is missing from this reading.
+      · **Audio is exonerated here:** 0 rate writes, 0 seeks, 1 ms median sync error against a 45 ms dead
+        band. **So the scratchy-audio reports (#148, #96, #604 clause 2) are NOT the sync controller** —
+        the tool says so itself, and names the decoder under load as the next suspect.
+      ➡️ **NEXT: get the same sample from the PHONE, and with SCRUBBING included.** This one is from a
+      6-core Mac while the standing complaints (#95, #125, #387) are about the phone. **Ask him to press
+      play AND drag the playhead during the ten seconds**, or the split stays half-blank.
+      🔗 **Feeds #95, #125, #202, #387.** ⚠️ **Do not close any of them on this** — it is one healthy
+      desktop sample of the wrong device, and it says so itself.

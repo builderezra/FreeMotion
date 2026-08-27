@@ -1,0 +1,81 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:760px;border:0"></iframe>
+<script>
+/* #645 / #593 — the mono filters grey a SHAPE and grey real FOOTAGE. So what he is looking at when he
+ * says "none of them make anything black and white" is the FILTER BROWSER'S TILES, which is literally
+ * what #593 said: "THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR". This mounts the real tiles and
+ * measures their pixels. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.fxThumbs && w.FM.filters)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1000);
+  })();
+});
+function stats(d){
+  var n=0, sp=0;
+  for (var i=0;i<d.length;i+=4){
+    if (d[i+3] < 200) continue;
+    sp += Math.max(d[i],d[i+1],d[i+2]) - Math.min(d[i],d[i+1],d[i+2]); n++;
+  }
+  return { n:n, spread: n? sp/n : 0 };
+}
+async function run(w){
+  try{
+    var FM = w.FM, doc = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.fxThumbs.mountFilter) return say('❌ FM.fxThumbs.mountFilter is missing');
+
+    var mono = FM.filters.bySection('mono')||[];
+    var colourCtl = (FM.filters.all()||[]).filter(function(f){ return f.section !== 'mono'; })[0];
+    var picks = mono.concat(colourCtl ? [colourCtl] : []);
+    say('mounting ' + picks.length + ' tiles (' + mono.length + ' mono + control "' + (colourCtl&&colourCtl.name) + '")');
+
+    var host = doc.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;opacity:0.01;pointer-events:none;z-index:0';
+    doc.body.appendChild(host);
+    var cvs = picks.map(function(f){
+      var cv = doc.createElement('canvas'); cv.width = 96; cv.height = 96;
+      cv.style.cssText = 'width:96px;height:96px';
+      host.appendChild(cv);
+      FM.fxThumbs.mountFilter(cv, f.id);
+      return cv;
+    });
+
+    // the thumbnails render off a queue with art that has to load — poll until they stop changing
+    var last = '', stable = 0;
+    for (var tick=0; tick<60 && stable<3; tick++){
+      await new Promise(function(r){ setTimeout(r,500); });
+      var sig = cvs.map(function(cv){
+        try { return stats(cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data).spread.toFixed(1); }
+        catch(e){ return 'x'; }
+      }).join('|');
+      if (sig === last) stable++; else { stable = 0; last = sig; }
+    }
+    say('tiles settled after polling; signature ' + last);
+    say('');
+
+    var bad = [], blank = [];
+    picks.forEach(function(f, i){
+      var s = stats(cvs[i].getContext('2d').getImageData(0,0,96,96).data);
+      var isMono = f.section === 'mono';
+      var verdict;
+      if (!s.n) { verdict = 'BLANK — nothing painted'; blank.push(f.name); }
+      else if (isMono) verdict = s.spread <= 20 ? 'grey ✅' : 'STILL COLOUR 🚨';
+      else verdict = s.spread > 20 ? 'colour ✅ (control)' : 'control is grey too — the sample may be mono 🚨';
+      say('  ' + (f.name+'              ').slice(0,15) + ' opaque ' + String(s.n).padStart(5) +
+          '  spread ' + s.spread.toFixed(1).padStart(6) + '   ' + verdict);
+      if (isMono && s.n && s.spread > 20) bad.push(f.name + ' spread ' + s.spread.toFixed(1));
+    });
+    say('');
+    if (blank.length) say('⚠️ ' + blank.length + ' tile(s) painted nothing — a blank tile is a different bug from a colourful one.');
+    say(bad.length ? ('🚨 FOUND IT: ' + bad.length + ' of ' + mono.length + ' MONO TILES SHOW COLOUR: ' + bad.join(', '))
+                   : '✅ the mono tiles render grey too — the tiles are NOT the bug.');
+    host.remove();
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

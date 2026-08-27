@@ -1,0 +1,84 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:760px;border:0"></iframe>
+<script>
+/* #645 / #603 / #593 — "None of the black and white filters make anything black and white STILL."
+ * The suite's new tests apply the mono filters to a SHAPE and they pass. A shape has a flat fill; he
+ * applies these to FOOTAGE. This runs the identical measurement on a real IMAGE layer. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.filters && w.FM.renderScene)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+function stats(d){
+  var n=0, sp=0, sat=0;
+  for (var i=0;i<d.length;i+=4){
+    if (d[i+3] < 200) continue;
+    var mx=Math.max(d[i],d[i+1],d[i+2]), mn=Math.min(d[i],d[i+1],d[i+2]);
+    sp += (mx-mn); sat += mx ? (mx-mn)/mx : 0; n++;
+  }
+  return { n:n, spread: n? sp/n : 0, sat: n? sat/n : 0 };
+}
+async function run(w){
+  try{
+    var FM = w.FM, doc = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+
+    // --- a saturated PNG: four strong colour blocks
+    var c = doc.createElement('canvas'); c.width=240; c.height=240;
+    var g = c.getContext('2d');
+    var cols=['#e01010','#10c020','#1030e0','#e0d010'];
+    for (var i=0;i<4;i++){ g.fillStyle=cols[i]; g.fillRect((i%2)*120,(i>>1)*120,120,120); }
+    var blob = await new Promise(function(r){ c.toBlob(r,'image/png'); });
+    var file = new w.File([blob],'blocks.png',{type:'image/png'});
+    say('source PNG: ' + blob.size + ' bytes');
+
+    var rec = await FM.loadImageFile(file);
+    say('loadImageFile -> ' + (rec ? ('ok, ' + (rec.w||rec.width) + 'x' + (rec.h||rec.height) + ' type=' + rec.type) : 'NULL'));
+    if (!rec) return say('❌ could not load the image — cannot test the media path');
+    FM.scene.layers.length = 0;
+    FM.addMediaLayer(rec);
+    await new Promise(function(r){ setTimeout(r,700); });
+    var L = FM.scene.layers[0];
+    if (!L) return say('❌ no layer landed');
+    say('layer: type=' + L.type + ' name=' + (L.name||'?'));
+
+    var P = FM.scene.project;
+    function shoot(){
+      var cv = doc.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 0.2);
+      return stats(cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data);
+    }
+    L.effects = [];
+    var base = shoot();
+    say('');
+    say('UNFILTERED  opaque px ' + base.n + '   mean channel spread ' + base.spread.toFixed(1) + '   mean saturation ' + base.sat.toFixed(3));
+    if (base.spread < 30) return say('❌ the source is not colourful enough to judge — probe is invalid');
+
+    var mono = FM.filters.bySection('mono')||[];
+    say('mono filters: ' + mono.length);
+    say('');
+    var bad = [];
+    for (var k=0;k<mono.length;k++){
+      var def = mono[k];
+      var box = FM.filters.makeInstance(def.id);
+      if (!box){ say('  ' + def.name + ': makeInstance NULL'); bad.push(def.name+' (null)'); continue; }
+      L.effects = [box];
+      var s = shoot();
+      var verdict = s.spread <= 20 ? 'grey ✅' : 'STILL COLOUR 🚨';
+      say('  ' + (def.name+'            ').slice(0,14) + ' spread ' + s.spread.toFixed(1).padStart(6) +
+          '   sat ' + s.sat.toFixed(3) + '   ' + verdict);
+      if (s.spread > 20) bad.push(def.name + ' spread ' + s.spread.toFixed(1));
+    }
+    L.effects = [];
+    say('');
+    say(bad.length ? ('🚨 ' + bad.length + ' of ' + mono.length + ' mono filters LEAVE COLOUR ON FOOTAGE: ' + bad.join(', '))
+                   : '✅ every mono filter greyed the footage — the media path is NOT the bug either.');
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

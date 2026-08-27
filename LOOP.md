@@ -136,18 +136,37 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 📍 **HANDOVER, 27 Aug, v13.70 — 1018 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
-🔥 **READ #645 FIRST. HE IS FURIOUS AND HE IS RIGHT.** *"if I have to ask you to fix that shit one more
-time"* — the black-and-white filters still do not make anything black and white, and brightness/saturate
-are wrong too. This is the THIRD time (#593, #603, now #645).
-⚠️ **DO NOT CLOSE IT ON A PASSING UNIT TEST — that is how it got closed wrongly before.** Two tests were
-added this session and BOTH PASS: all six `mono` filters render grey on a pure-red SHAPE, and
-saturate(0)/saturate(2)/brightness(0.4)/brightness(1.8) all move the pixels correctly.
-🚨 **So the effect math is NOT the bug.** A shape has a flat fill; **he applies these to FOOTAGE**.
-➡️ **NEXT, and do this before anything else: repeat the SAME measurement on a MEDIA layer, and on a
-BROWSER TILE.** #593 was literally *"the black/white filter TILES show in full colour"*. Third suspect:
-`drawFilterContainer`'s strength cross-fade uses `lighter` (additive), reached only when strength < 1.
+🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
+His words, after three sessions of desktop testing found nothing: *"I noticed that on pc the effects i
+say that dont work like saturation actually work, its mobile they dont"*.
+✅ **EVERY DESKTOP PATH IS PROVEN CLEAN BY MEASUREMENT** — mono filters on a shape (spread 0.0), on real
+footage (200 → 0.0), the browser TILES (0.0, with a colour control at 71.8), container strength
+(perfectly linear 0/50/100/150/200), editing child params, saturate/brightness inside containers, and the
+registry defaults. **Nothing is wrong with the maths or with any render path I can reach from a desktop.**
+🎯 **PRIME SUSPECT: canvas `ctx.filter` is NOT SUPPORTED on his mobile browser.** The nine effects folded
+into that one property (`FM.CSS_FX`, compositor.js:1458) are blur, brightness, contrast, **saturate**,
+hue, **grayscale**, sepia, invert, glow — **brightness, saturation and black-and-white are three of the
+nine he named.** The compositor's own comment (line 1522) says an invalid assignment to `ctx.filter` is
+**silently ignored**, so on a context without support the draw simply proceeds unfiltered: no error, no
+toast, no dead badge. The ~190 per-pixel effects keep working, which is why only *these* look broken.
+⚠️ **NOTHING IN THE CODEBASE FEATURE-DETECTS IT.** `fx-registry.js:561 supportsFilter` is about filter
+CONTAINERS, not the canvas API.
+➡️ **DO THIS FIRST AND IT IS CHEAP: put the support check where HE can read it off the phone** (the ?
+button or Settings). Make a 2d context, assign `grayscale(1)`, read it back, see if it stuck. **No desktop
+can answer this** — that is the entire lesson of the last three sessions.
+➡️ **THEN: a per-pixel fallback for the CSS_FX family.** grayscale/saturate/brightness/contrast/sepia/
+invert/hue are trivial per-pixel maths and there are ~190 per-pixel effects to model it on; **blur and
+glow are the hard two.** Feature-detect ONCE and cache it.
+⚠️ **AND KILL THE SILENCE EITHER WAY** — an effect that cannot run on this device must SAY so, like the
+dead-effect badge in #603. Three sessions were lost to a failure that leaves nothing behind.
+🛠 **Probes kept:** `_645media.html` (footage), `_645tiles.html` (browser tiles), `_645strength.html`
+(container strength + child params). All three pass on desktop, which is now the POINT, not a
+disappointment. **A group-path probe was attempted and DELETED — it could not create a group
+(`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
 
-🆕 **TWELVE NEW REQUESTS LOGGED THIS SESSION, all verbatim: #645–#656.** #647 is already fixed and shipped.
+🆕 **THIRTEEN NEW REQUESTS LOGGED, all verbatim: #645–#657.** #657 is a PC perf sample that reads
+healthy — but it renders at **28% scale** to get there, and scrubbing was never sampled. **Get one from
+the PHONE, with the playhead dragged**, before touching #95/#125/#387. #647 is already fixed and shipped.
 · **#646** PC splash cuts from white to colour instead of fading — *"try really hard not to accidentally
   break anything"*, so narrow diff, and measure the MOBILE path before and after to prove it did not move.
 · **#648** tapping a project in the home menu does not select — only press-and-hold works. **Check against
