@@ -611,7 +611,32 @@ html[data-home="light"] .hm-card {
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 html[data-home="light"] .hm-name { color: #0d1420; }
+/* THE PINNED CARD (queue 644). Ezra: *"The pinned buttons are hard to read, simple fix is backing the
+   text black"* — and he is exactly right about the fix.
+   MEASURED before changing it: the pinned title is `#d6f2ff`, a pale blue chosen for the DARK look,
+   sitting on the light look's pale blue tint. **1.02:1 against its own card.** Not "hard to read" —
+   invisible; his screenshot has two arrows pointing at a title that is simply not there.
+   ⚠️ THIRD TIME THIS EXACT SHAPE HAS BITTEN: a colour written for white-on-dark surviving into the
+   light look. The selected tab was rgb(215,242,253) at 1.1:1, the wordmark was white artwork on a
+   light bar, and now this. **When adding a light theme, every hardcoded light-coloured TEXT rule is a
+   candidate, not just the backgrounds** — backgrounds are obvious because you can see them.
+   The tint stays: being pinned should still read at a glance. Only the ink changes. */
+html[data-home="light"] .hm-card.is-pinned {
+  background-color: rgba(214, 238, 255, .55);
+  border-color: rgba(70, 150, 200, .40);
+}
+html[data-home="light"] .hm-card.is-pinned .hm-name { color: #0b121d; }
+html[data-home="light"] .hm-card.is-pinned .hm-sub,
+html[data-home="light"] .hm-card.is-pinned .hm-mi { color: #46566e; }
+
 html[data-home="light"] .hm-sub { color: #5a6478; }
+/* THE META LINE — "4:3 · 2160p · 60fps · 4 layers" (queue 644, found by the sweep, not by him).
+   It was rgb(147,174,185) on white: **2.33:1**, the FOURTH white-on-dark colour to survive into the
+   light look. The new sweep test caught it in the same run that shipped the pinned-title fix, which is
+   the whole argument for sweeping instead of naming rules — this one never had to be reported.
+   Kept QUIETER than the title (18.4:1) and roughly level with the "edited …" line, so the hierarchy he
+   is used to survives; it just has to be readable while it is quiet. */
+html[data-home="light"] .hm-mi { color: #5f6b7d; }
 html[data-home="light"] .hm-card-more { color: #55617a; background-color: rgba(16, 30, 52, .05); }
 html[data-home="light"] .hm-thumb-draft { color: #7d8798; }
 

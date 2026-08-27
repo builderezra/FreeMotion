@@ -133,7 +133,17 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.66 — everything is pushed and the tree is clean. 1009 tests green.**
+📍 **HANDOVER, 27 Aug, v13.67 — everything is pushed and the tree is clean. 1010 tests green.**
+🚨 **THREE TIMES NOW, A WHITE-ON-DARK COLOUR HAS SURVIVED INTO THE LIGHT LOOK AND GONE INVISIBLE**
+— the selected tab (1.1:1), the wordmark (white art on a light bar), the pinned title (**1.02:1**, and
+he had to report it). **When adding a theme, every hardcoded light TEXT colour is a candidate; the
+backgrounds get noticed because you can see them.**
+🔒 **So #644's test SWEEPS rather than naming a rule:** it walks the home screen's real text, measures
+each element against its own nearest opaque ancestor (so a light badge on a dark thumbnail is fine), and
+**pins a card first** — the pinned state is one most runs never reach, which is why this got through.
+✅ **#618 CLOSED** — and note its header was left unticked for a turn while both clauses were ticked, so
+"closed" was said before it was true. **Tick the HEADER, not just the clauses.**
+
 ✅ **#618 IS CLOSED.** Clause 2 was a **BROKEN INSTRUCTION**, not a workflow preference: the draft card
 told him to use "⋯ → Save as element" and that menu did not contain it — the action was on the PROJECT
 card's menu. **From the outside, an instruction you cannot follow and one you resent look identical**,

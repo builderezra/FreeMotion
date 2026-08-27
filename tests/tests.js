@@ -48266,6 +48266,66 @@
     }
   });
 
+  /* 644 — NOTHING ON THE LIGHT HOME MAY BE LIGHT-ON-LIGHT, and this SWEEPS rather than naming one rule.
+     Three separate times a colour written for white-on-dark survived into the light look and became
+     invisible while looking perfectly healthy in the DOM:
+       · the selected tab, rgb(215,242,253) at 1.1:1;
+       · the wordmark, white artwork on a light bar;
+       · the pinned card's title, rgb(214,242,255) at 1.02:1 — he sent a screenshot with two arrows
+         pointing at a title that simply was not there.
+     A test per colour would have caught the third only after he reported it. This walks the home
+     screen's real text and fails on any of it that cannot be read, so the FOURTH one is caught here.
+     ⚠️ It measures against each element's own nearest painted ancestor background, not an assumed
+     page colour — text on a dark thumbnail badge is legitimately light and must not be flagged. */
+  test('644: no text on the light home screen is unreadable', { item: '644' }, async function () {
+    const was = !!(FM.settings && FM.settings.get('homeLight'));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      return await atPhoneWidth(async function () {
+        FM.settings.set('homeLight', true);
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(520);
+        /* Pin one card so the pinned styling is actually on screen — it is a state most runs never
+           reach, which is exactly why it went unnoticed. */
+        const first = document.querySelector('.hm-card[data-pid]');
+        if (first) { first.classList.add('is-pinned'); await sleep(200); }
+        const lum = function (rgb) {
+          const m = (rgb.match(/\d+(\.\d+)?/g) || [0, 0, 0]).map(Number);
+          const f = m.slice(0, 3).map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+          return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+        };
+        const opaqueBgOf = function (el) {
+          let n = el;
+          while (n && n !== document.documentElement) {
+            const c = getComputedStyle(n).backgroundColor;
+            const m = c.match(/rgba?\(([^)]+)\)/);
+            if (m) { const p = m[1].split(',').map(parseFloat); const a = p.length > 3 ? p[3] : 1; if (a >= 0.5) return c; }
+            n = n.parentElement;
+          }
+          return 'rgb(244,246,250)';
+        };
+        const sel = '.hm-name, .hm-sub, .hm-mi, .hm-tab';
+        const bad = [];
+        [].slice.call(document.querySelectorAll(sel)).forEach(function (el) {
+          const r = el.getBoundingClientRect();
+          if (r.width < 4 || r.height < 4) return;
+          if (!(el.textContent || '').trim()) return;
+          const fg = getComputedStyle(el).color, bg = opaqueBgOf(el);
+          const a = lum(fg), b = lum(bg);
+          const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          if (ratio < 3) bad.push((el.className || el.tagName) + ' "' + (el.textContent || '').trim().slice(0, 18) + '" ' + fg + ' on ' + bg + ' = ' + ratio.toFixed(2) + ':1');
+        });
+        if (bad.length) {
+          throw new Error(bad.length + ' unreadable text element(s) on the light home screen: ' + bad.slice(0, 4).join(' | ') + '. Queue 644 — a colour written for white-on-dark has survived into the light look.');
+        }
+      });
+    } finally {
+      if (FM.settings) FM.settings.set('homeLight', was);
+      try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* 618 clause 2 — a card that TELLS you to use a menu item must actually offer it.
      The draft card's subtitle reads "Draft — open it, build it, then ⋯ → Save as element", and that
      ⋯ menu held only "Open and keep building" and "Delete draft…". The action it named lived on a

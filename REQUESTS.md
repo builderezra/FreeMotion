@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.66
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.67
 >
-> **State:** v13.66, 1009 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.67, 1010 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21920,8 +21920,7 @@ re-opened #480, which I had marked done and had not fixed.
       give him a way to clear the ones already there. **Clause 3 is that way**, and it is the one he asked
       for. Clearing them silently is still not on — see the warning above.
 
-- [ ] **618 — Elements don't work very well: the placeholder icon never becomes a preview, and it still
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **618 — Elements don't work very well: the placeholder icon never becomes a preview, and it still
       makes you save them by hand.** (27 Aug, at v13.51. Follows straight on from **#617**.)
       His words, verbatim:
       > Elements I’m not sure work very well, they have the weird icon still instead of showing what the element is when ur in the elements tab home menu and they still tell you to manually save it urself
@@ -22662,6 +22661,34 @@ re-opened #480, which I had marked done and had not fixed.
       things… give it a nice look"*. **#545 applies: draw options at header size and show him.** The
       ghost and the shadow were making it look bad for reasons that are now removed, **so he should see
       the clean version before choosing a treatment** — it may already be what he wanted.
+
+- [x] **644 — 🔴 The pinned card's title is unreadable on the light look. ✅ FIXED v13.67.**
+      (27 Aug, phone screenshot at v13.66 — two red arrows pointing at a title that is not there.)
+      His words, verbatim:
+      > The pinned buttons are hard to read, simple fix is backing the text black
+
+      **He is right, and his fix is the right one.**
+      📐 **MEASURED before changing anything: `#d6f2ff` on the light look's pale-blue pinned tint =
+      1.02:1.** Not "hard to read" — invisible. **After: 15.7:1** for the title, 6.2:1 for the meta line.
+      🚨 **THIS IS THE THIRD TIME THE SAME SHAPE HAS BITTEN:** a colour written for white-on-dark
+      surviving into the light look, while looking perfectly healthy in the DOM.
+      | | measured |
+      |---|---|
+      | the selected tab (#615) | rgb(215,242,253) at **1.1:1** |
+      | the wordmark (#639) | white artwork on a light bar |
+      | the pinned title (this) | rgb(214,242,255) at **1.02:1** |
+      🎯 **AND THE SWEEP EARNED ITS KEEP IN THE SAME RUN — IT FOUND A FOURTH.** The release went red
+      on my own new test: **`.hm-mi`, the card's meta line ("4:3 · 2160p · 60fps · 4 layers"), was
+      rgb(147,174,185) on white — 2.33:1.** Another dark-look grey, never reported, and it would have
+      shipped. **Now 5.4:1**, still quieter than the title (15.7) so the hierarchy he is used to
+      survives — it just has to be readable while it is quiet.
+      🔑 **So the test SWEEPS instead of naming a rule.** It walks the home screen's real text and fails
+      on anything unreadable, measuring against each element's own nearest opaque ancestor — so a light
+      badge on a dark thumbnail is not flagged. **It also pins a card first**, because the pinned state
+      is one most runs never reach, which is exactly why this got through.
+      ⚠️ **The lesson worth keeping: when adding a theme, every hardcoded light TEXT colour is a
+      candidate, not just the backgrounds.** Backgrounds get noticed because you can see them.
+      ⚠️ **The pinned TINT stays** — being pinned should still read at a glance. Only the ink changed.
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
