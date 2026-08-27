@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.72
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.73
 >
-> **State:** v13.72, 1019 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.73, 1020 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22226,16 +22226,30 @@ re-opened #480, which I had marked done and had not fixed.
              is reachable. **Then ask him about the size policy** rather than guessing: absolute (what it
              does now, minus the surprise clamp) or proportional.
 
-- [ ] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.** ✅ **DONE v13.73.**
       (27 Aug, phone screenshot at v13.50 — Project 40, the transport row with − and + either side of
       the timecode, and the right-hand view rail showing "1×".)
       His words, verbatim:
       > When you use these buttons to change the speed by holding on the jump buttons to change them, it doesn’t live update the view settings tab to reflect what speed u have it at
 
-      1. [ ] **Hold the − / + jump buttons to change speed → the view settings tab must follow, live.**
-             The rail in his screenshot reads **1×** while he is actively changing the speed with the
-             transport buttons. One control writes the value; the other never hears about it.
+      1. [x] **Hold the − / + jump buttons to change speed → the view settings tab must follow, live.**
+             ✅ **DONE v13.73.** The rail in his screenshot reads **1×** while he is actively changing the
+             speed with the transport buttons. One control writes the value; the other never hears about it.
+      ✅ **THE CAUSE WAS A SHAPE, NOT A MISSING CALL — and that changed the fix.**
+      **THREE displays of one value** — `#rate-chip`, `#preview-rate`, `#vb-ratelabel` — and **TWO
+      writers**, each hand-patching a **different subset**: the transport's `stepRate` refreshed the chip
+      and the select and **never the rail**; the view bar's `stepViewRate` patched the chip inline.
+      🚨 **Wiring the one pair he noticed would have fixed today and left the next writer free to forget
+      — and a third display is one feature away.** That is a reminder, not a safeguard.
+      ✅ **SO THE WRITER NOTIFIES.** `FM.setPreviewRate` drives the `<select>` itself and then calls every
+      subscriber; `FM.onPreviewRate(fn)` is how a display signs up. **There is now no way to change the
+      rate without every display hearing about it**, whoever changed it and from where — which also
+      answers the entry's own warning that *"a one-way binding fixed one way round is the same bug
+      tomorrow."* Both directions come free, because neither is a binding any more.
+      ⚠️ **Two details that are deliberate:** subscribing twice does not double-fire (a repaint run twice
+      is a bug the moment a subscriber stops being idempotent), and **a throwing subscriber cannot stop
+      the ones after it** — a half-updated UI is precisely the fault being removed.
+      📐 **Mutation-proved:** deleting the rail's subscription made the rail read blank and was CAUGHT.
       📍 **This is a notification gap, not a maths bug** — find what the hold-repeat on the jump
       buttons writes, and make it tell whatever repaints the view rail, the same way the rail's own ±
       already does. ⚠️ **Check the reverse too:** changing it on the rail should be reflected wherever

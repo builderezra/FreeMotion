@@ -652,6 +652,23 @@ window.FM = window.FM || {};
 
   // Global preview playback speed (preview only — export is unaffected). 0.5×, 1×, 2×…
   FM.previewRate = 1;
+  /* ═══ EVERY DISPLAY OF THE RATE FOLLOWS THE WRITER (queue 622) ═══════════════════════════════════
+   * Ezra: *"When you use these buttons to change the speed by holding on the jump buttons to change
+   * them, it doesn't live update the view settings tab to reflect what speed u have it at"*.
+   * He was looking at a rail reading 1× while he changed the speed with the transport.
+   * THE CAUSE IS NOT A MATHS BUG AND NOT A MISSING CALL — it is that there are THREE displays of one
+   * value (`#rate-chip`, `#preview-rate`, `#vb-ratelabel`) and TWO writers, and each writer hand-patched
+   * a DIFFERENT SUBSET of them: the transport's stepRate refreshed the chip and the select and never
+   * the view rail; the view bar's stepViewRate patched the chip inline. Fixing the one wiring he
+   * noticed would have left the next writer free to forget again — and a third display, or a third
+   * writer, is one feature away.
+   * So the WRITER notifies. Anything that paints the rate subscribes once and can never fall behind,
+   * whoever changed it and from where. This is the "make it structural, not remembered" rule applied
+   * to a UI binding: there is now no way to change the rate without every display hearing about it. */
+  FM._rateWatchers = [];
+  FM.onPreviewRate = function (fn) {
+    if (typeof fn === 'function' && FM._rateWatchers.indexOf(fn) < 0) FM._rateWatchers.push(fn);
+  };
   FM.setPreviewRate = function (r) {
     FM.previewRate = r || 1;
     // The transport clock multiplies real seconds by the rate, so a mid-play change has to re-origin
@@ -663,6 +680,15 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el && !layer.reversed) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {} }
     });
+    /* The <select> is a display like any other, so it is driven from here rather than patched by each
+       caller — two of them were already doing it by hand, which is the same duplication in miniature. */
+    const _prSel = document.getElementById('preview-rate');
+    if (_prSel && _prSel.value !== String(FM.previewRate)) _prSel.value = String(FM.previewRate);
+    /* One bad subscriber must not stop the others repainting — a half-updated UI is the bug this
+       whole mechanism exists to remove. */
+    for (let i = 0; i < FM._rateWatchers.length; i++) {
+      try { FM._rateWatchers[i](FM.previewRate); } catch (e) { console.warn('rate watcher failed', e); }
+    }
     // reversed clips play synthesized Web Audio (not the <video>); re-anchor it to the current playhead so
     // a mid-play rate change re-syncs at the new speed (start() rebuilds nodes with playbackRate=previewRate).
     if (FM.playing && FM.audioPlay && FM.scene.layers.some(l => l.type === 'video' && l.reversed && l.visible !== false)) FM.audioPlay.start();
@@ -5313,6 +5339,8 @@ window.FM = window.FM || {};
      * All of these were ⋯ entries; this is the second batch of that menu to find a real home. They
      * are LEFT in the ⋯ menu for now — Ezra asked to empty it gradually, not to cut it over. */
     const vbRateLbl = document.getElementById('vb-ratelabel');
+    /* Subscribed below, once it is defined — this is the rail that read 1× while he was changing the
+       speed from the transport (queue 622). */
     const syncViewBar = () => {
       if (vbRateLbl) vbRateLbl.textContent = (FM.previewRate || 1) + '×';
       const lb = document.getElementById('vb-loop'); if (lb) lb.classList.toggle('on', !!FM.loop);
@@ -5546,6 +5574,7 @@ window.FM = window.FM || {};
 
   FM.syncViewBar = syncViewBar;
     const bindVb = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', () => { fn(); syncViewBar(); }); return b; };
+    FM.onPreviewRate(syncViewBar);   // queue 622 — the rail follows the transport, not just its own buttons
     bindVb('vb-slower', () => stepViewRate(-1));
     bindVb('vb-faster', () => stepViewRate(1));
     bindVb('vb-loop', () => { FM.loop = !FM.loop; if (typeof syncLoopUI === 'function') syncLoopUI(); });
@@ -5727,6 +5756,7 @@ window.FM = window.FM || {};
       syncRateUI();
     }
     FM.toggleSpeedMode = function (on) { speedMode = on == null ? !speedMode : !!on; syncRateUI(); };
+    FM.onPreviewRate(syncRateUI);      // queue 622 — repaint whoever changed it
     // Hold on EITHER button toggles the mode. The click handler below checks a flag the hold sets, so
     // the release that ends a hold never also fires the tap action underneath it.
     [toStart, toEnd].forEach(b => {

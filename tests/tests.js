@@ -31637,6 +31637,59 @@
    * and the broken device leaves no evidence. FM.ctxFilterOK is the detector, and it must RENDER rather
    * than sniff the API — a context can accept the string, echo it back, and still draw the source
    * untouched, so only a pixel can answer. */
+  /* #622 — Ezra: "When you use these buttons to change the speed by holding on the jump buttons to
+   * change them, it doesn't live update the view settings tab to reflect what speed u have it at."
+   * He was watching a rail read 1x while he changed the speed from the transport.
+   * The cause was not a missing call but a SHAPE: three displays of one value (#rate-chip,
+   * #preview-rate, #vb-ratelabel) and two writers, each hand-patching a different subset. Wiring the
+   * one he noticed would leave the next writer free to forget. So the WRITER notifies, and this
+   * asserts that contract rather than any one wiring — a third display added later is covered by
+   * subscribing, and this test would catch it being added without. */
+  test('#622: every display of the preview rate follows the writer', { item: '622' }, function () {
+    if (typeof FM.setPreviewRate !== 'function') throw new Error('FM.setPreviewRate is gone');
+    if (typeof FM.onPreviewRate !== 'function') throw new Error('FM.onPreviewRate is missing — the rate has no notification, so displays are hand-patched again (#622)');
+    var was = FM.previewRate || 1;
+    var seen = [];
+    var mine = function (r) { seen.push(r); };
+    try {
+      FM.onPreviewRate(mine);
+      FM.setPreviewRate(2);
+      if (seen.indexOf(2) < 0) throw new Error('setPreviewRate(2) did not notify subscribers — got ' + JSON.stringify(seen));
+      FM.setPreviewRate(0.5);
+      if (seen.indexOf(0.5) < 0) throw new Error('a second change did not notify — the list is one-shot');
+
+      // THE DISPLAYS THEMSELVES. Absent elements are skipped rather than failed: the suite's DOM is the
+      // real app, but a rail that has not been built yet must not turn this into a flaky test.
+      FM.setPreviewRate(4);
+      var chip = document.getElementById('rate-chip');
+      var rail = document.getElementById('vb-ratelabel');
+      var sel = document.getElementById('preview-rate');
+      if (rail && !/4/.test(rail.textContent || ''))
+        throw new Error('the view rail reads "' + rail.textContent + '" after setPreviewRate(4) — this is #622 exactly');
+      if (chip && !/4/.test(chip.textContent || ''))
+        throw new Error('the rate chip reads "' + chip.textContent + '" after setPreviewRate(4)');
+      if (sel && sel.value !== '4')
+        throw new Error('the preview-rate select is "' + sel.value + '" after setPreviewRate(4)');
+
+      // Registering the same function twice must not double-fire — a repaint run twice is a smell that
+      // becomes a bug the moment a subscriber is not idempotent.
+      var before = seen.length;
+      FM.onPreviewRate(mine);
+      FM.setPreviewRate(1.5);
+      if (seen.length !== before + 1) throw new Error('subscribing twice fired ' + (seen.length - before) + ' times');
+
+      // A THROWING subscriber must not stop the others — a half-updated UI is the bug being fixed.
+      var after = [];
+      FM.onPreviewRate(function () { throw new Error('deliberate'); });
+      FM.onPreviewRate(function (r) { after.push(r); });
+      FM.setPreviewRate(3);
+      if (after.indexOf(3) < 0) throw new Error('a throwing subscriber stopped the ones after it');
+    } finally {
+      FM._rateWatchers = (FM._rateWatchers || []).filter(function (f) { return f !== mine; });
+      try { FM.setPreviewRate(was); } catch (e) {}
+    }
+  });
+
   test('#645: ctxFilterOK answers with a rendered pixel, not an API sniff', { item: '645' }, function () {
     if (typeof FM.ctxFilterOK !== 'function') throw new Error('FM.ctxFilterOK is missing — #645 has no detector');
     var got = FM.ctxFilterOK();

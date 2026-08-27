@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.72 — 1019 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.73 — 1020 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,14 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#622 CLOSED v13.73 — and the lesson generalises.** The view rail read 1x while the speed changed
+from the transport. Not a missing call: **three displays of one value, two writers, each hand-patching a
+different subset.** Wiring the pair he noticed would have left the next writer free to forget.
+**The WRITER notifies now** — `FM.setPreviewRate` calls every subscriber, `FM.onPreviewRate(fn)` signs one
+up. Both directions come free because neither is a binding any more.
+💡 **WORTH REUSING: when a value has more than one display, notify from the setter.** A binding you have
+to remember to add is the bug waiting to happen; this repo's whole safeguard doctrine says so.
 
 ✅ **#619 BUILT v13.72 — TEMPLATES ARE FILLABLE.** The Insert-your-Media sheet counted only video/image
 layers, so it returned false and showed NOTHING for every template he has ever made — his are text and
