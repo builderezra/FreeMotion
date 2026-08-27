@@ -223,6 +223,18 @@ I had not read them. Read now, by hand, one at a time:**
   to leave it.
 ➡️ **SO THE ENTIRE PRE-#296 QUEUE IS AWAITING HIM.** This was CHECKED by reading each entry, not
 concluded from the classifier — which is the distinction rule 8b insists on.
+🔒 **NEVER HAND-EDIT A `**STATUS:` LINE IN REQUESTS.md — `ship.sh` REGENERATES THEM ALL, BY DESIGN.**
+Line 203 of ship.sh runs `tools/status.sh`, which rewrites the STATUS on every open entry from
+`_classify.py`, precisely so a hand-typed label cannot rot. **I edited 582's by hand twice, reported it
+as fixed twice, and both times the next ship silently reverted it** — and the second time I told him I
+could not account for it. This is the account: it was working exactly as intended.
+➡️ **So a wrong STATUS is a CLASSIFIER bug and must be fixed in `_classify.py` (with a self-test —
+it has 20 already), never in the prose.** Open case: **582 is labelled `🟢 READY` when its only
+remaining clause is a pick for HIM**, so it should read `🟠 NEEDS YOU`. The classifier does not see
+"answered, awaiting his decision" inside a clause list. ⚠️ **The `next.sh` guard added the same day
+(honour NEEDS YOU / HELD) is still correct and stays** — it just cannot help until the classifier emits
+the right verdict in the first place.
+
 🧩 **#582 CLAUSE 2 IS ANSWERED AND IS NOW A DECISION FOR HIM, NOT A BUG (v13.41).** Tiles "Extend"
 repeats the layer's alpha bbox outward; a one-line text box is ~50 px tall, so it repeats **18 times**
 down a 900 px frame and reads as noise. Shake first enlarges the box to 146 px → **6 readable rows**.
