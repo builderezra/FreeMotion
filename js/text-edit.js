@@ -124,7 +124,14 @@ window.FM = window.FM || {};
   }
 
   // ---- transient sub-popover (font rail / size slider / colour) ------------
-  function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); }
+  function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); reflowForPop(); }   // give the canvas its band back (queue 602)
+  /* Re-run the layout because the sheet's presence changes how much chrome stands between the top of
+     the screen and the canvas (queue 602). Nothing else fires: a padding change raises no resize event,
+     and opening a popover raises no viewport event either — which is exactly why the canvas used to sit
+     still while a 447px sheet appeared on top of it.
+     ⚠️ GUARDED, because closePop also runs from teardown(), when the bar is already gone and there is
+     no editor left to lay out. */
+  function reflowForPop() { if (active && bar && FM.screen && FM.screen.metrics) onViewport(); }
   function positionPop() {
     if (!pop) return;
     if (isDesktop()) {
@@ -220,6 +227,55 @@ window.FM = window.FM || {};
       if (dr.height > 0 && dr.bottom > below) below = dr.bottom;
     }
     pop.style.top = (below + 6) + 'px';
+    /* ⚠️ AND CAP IT, WHICH THE PHONE NEVER DID (queue 602). Ezra, with a screenshot of this exact
+     * sheet: *"All of these options block you even seeing the text"*.
+     * MEASURED at 375x812 with the editor live: te-bar 0–57, te-dock 57–145, **the Aa sheet 168–615**,
+     * the preview 295–662. The sheet's 447px swallows the preview whole — a hit test at the preview's
+     * centre returns the sheet, not the canvas — and with a ~336pt keyboard the usable window is 0–476,
+     * so the picture is gone entirely. **This is the third time the same bug has been fixed on the
+     * DESKTOP and never here:** #147 measured the Aa popover covering 100.0% of the canvas and moved it
+     * to the side column, and queue 249 measured 99.5% on a short window and taught it to open downward.
+     * Both branches above cap `maxHeight` for exactly these two popovers. The phone branch set a `top`
+     * and stopped, so the one layout he actually uses is the one that never got the fix.
+     * ⚠️ THE CAP IS MEASURED OFF #stage's BORDER BOX, NOT OFF THE PREVIEW — deliberately, and this is
+     * the whole reason it cannot oscillate. layoutPhone below adds this popover's height to the stage's
+     * padding so the canvas slides out from under it; if the cap were derived from where the canvas
+     * currently IS, each pass would move the canvas and change the cap, which is the 8.6px/pass drift
+     * `tests/_kbdevice.py --mutate padtop-feedback` exists to catch. #stage's height comes from its GRID
+     * TRACK, so its border box is immune to the padding written into it. Same invariant, same reason. */
+    if (popKind === 'extras' || popKind === 'font') {
+      const st = document.getElementById('stage');
+      const sr = st && st.getBoundingClientRect();
+      if (sr && sr.height > 0) {
+        const top = below + 6;
+        /* ⚠️ THE FLOOR IS THE VISIBLE WINDOW'S BOTTOM, NOT THE STAGE'S — and getting this wrong is a
+         * whole bug on its own, which the first version of this cap had. #stage's border box runs to
+         * the bottom of the LAYOUT viewport (812 on the measured phone). The keyboard covers the last
+         * ~336 of that, so a cap measured against the stage reads 533px of room where the user can
+         * actually see 197. The sheet then does not get capped at all, the stage lift below pushes the
+         * canvas down to clear it, and the preview lands at 642–796 — under the keyboard. Overlap zero,
+         * picture still invisible, which is his complaint with the cause swapped.
+         * `FM.screen.metrics().bottom` is where the visible window ENDS in layout coordinates, which is
+         * the number this cap has always needed. On a desktop, with no keyboard, it equals the layout
+         * bottom and this behaves exactly as it reads. */
+        const m = (FM.screen && FM.screen.metrics) ? FM.screen.metrics() : null;
+        const floor = Math.min(sr.bottom, m ? m.bottom : sr.bottom);
+        /* −26, not −8: the cap has to reserve exactly what the LIFT will spend, or MIN_PREVIEW is a
+         * promise the layout then breaks. layoutPhone adds `popLift()` (this height + 6) and its own
+         * +12 allowance on top, so a cap that only kept MIN_PREVIEW + 8 clear handed 18 of those px
+         * straight back. Measured with a simulated 336pt keyboard: 113px of canvas survived where 120
+         * was reserved. 6 + 12 + 8 = 26 makes the two agree. */
+        const room = Math.round(floor - MIN_PREVIEW - top - 26);
+        pop.style.maxHeight = Math.max(160, room) + 'px';
+      }
+    }
+  }
+  /* What the open Aa/font sheet costs the canvas, for layoutPhone's padding sum. 0 when nothing is
+     open or when the popover is one of the small ones, which must never be capped or lifted for. */
+  function popLift() {
+    if (!pop || (popKind !== 'extras' && popKind !== 'font')) return 0;
+    const pr = pop.getBoundingClientRect();
+    return pr.height > 0 ? Math.round(pr.height + 6) : 0;
   }
   function openPop(kind, build, btn) {
     if (popKind === kind) { closePop(); return; }
@@ -237,6 +293,7 @@ window.FM = window.FM || {};
     popKind = kind; popBtn = btn || null; popBuild = build;
     if (btn) btn.classList.add('on');
     positionPop();
+    reflowForPop();   // the sheet is chrome now — the canvas has to move out from under it (queue 602)
   }
   // Rebuild the open popover in place (a control inside it changed and its sub-rows need re-rendering).
   function rebuildPop() {
@@ -448,7 +505,13 @@ window.FM = window.FM || {};
       // The canvas now clears the toolbar AND the field above it, and only the keyboard below it.
       // Both numbers moved together: the dock left the bottom, so its height left padBottom and
       // joined padTop. Splitting that change would either overlap the field or leave a dead band.
-      const topPad = Math.min(FM.screen.padTop(r, barH + dockH + 12, m), Math.max(0, r.height - MIN_PREVIEW));
+      /* + THE OPEN Aa SHEET (queue 602). It is fixed-position under the dock and, uncapped, it sat on
+         the picture. It belongs in this sum for exactly the reason the dock does: it is chrome stacked
+         between the top of the screen and the canvas, and the canvas has to start below it. The
+         MIN_PREVIEW clamp on the next line is what stops a tall sheet from collapsing the preview —
+         the sheet gets capped in positionPop, and whatever is left over the clamp it simply overlaps,
+         which is the same trade the keyboard already makes on a short screen. */
+      const topPad = Math.min(FM.screen.padTop(r, barH + dockH + popLift() + 12, m), Math.max(0, r.height - MIN_PREVIEW));
       const room = Math.max(0, r.height - topPad - MIN_PREVIEW);
       stage.style.paddingTop = topPad + 'px';
       stage.style.paddingBottom = Math.min(FM.screen.padBottom(r, 12, m), room) + 'px';

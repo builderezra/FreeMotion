@@ -48266,6 +48266,58 @@
     }
   });
 
+  /* 602 clause 1 — "All of these options block you even seeing the text". The Aa sheet used to be
+     447px tall, unbounded, sitting straight on the canvas. Both DESKTOP branches of positionPop have
+     capped it for months (#147, queue 249); the phone branch never did. This asserts the phone one. */
+  test('602: the Aa sheet does not cover the canvas on a phone', { item: '602' }, async function () {
+    const keep = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        if (!FM.addTextLayer) throw new Error('no FM.addTextLayer — cannot build the case this tests');
+        FM.addTextLayer('Hello world');
+        const L = FM.scene.layers[0];
+        if (!L) throw new Error('the text layer was not created');
+        FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(260);
+        /* ⚠️ `FM.textEdit.start`, NOT `.open` — `.open` does not exist, and a previous session lost a
+           whole tick measuring `.te-panel` at 0px high because of it. `.te-panel` is `display: contents`
+           on the phone, so it measures 0 forever and is never the thing to measure. */
+        FM.textEdit.start(L.id, { selectAll: true });
+        await sleep(520);
+        const aa = [].slice.call(document.querySelectorAll('.te-bar button'))
+          .filter(function (b) { return /^Aa$/.test(b.textContent.trim()); })[0];
+        if (!aa) throw new Error('the Aa button is gone from the text toolbar — this test can no longer reach the sheet it is about');
+        aa.click();
+        await sleep(520);
+        const pop = document.querySelector('.te-pop-extras');
+        const prev = document.getElementById('preview');
+        if (!pop) throw new Error('tapping Aa did not open the options sheet');
+        if (!prev) throw new Error('there is no #preview to be covered');
+        const pr = pop.getBoundingClientRect(), cv = prev.getBoundingClientRect();
+        const overlap = Math.max(0, Math.min(pr.bottom, cv.bottom) - Math.max(pr.top, cv.top));
+        if (overlap > 1) {
+          throw new Error('the Aa sheet (' + Math.round(pr.top) + '–' + Math.round(pr.bottom) + ') covers '
+            + Math.round(overlap) + 'px of the canvas (' + Math.round(cv.top) + '–' + Math.round(cv.bottom)
+            + ') — queue 602, "all of these options block you even seeing the text". positionPop caps it on '
+            + 'the phone and layoutPhone lifts the stage for it; one of those has stopped working.');
+        }
+        if (cv.height < 60) throw new Error('the canvas collapsed to ' + Math.round(cv.height) + 'px with the sheet open — the lift is stealing more than MIN_PREVIEW allows');
+        /* And it has to give the band BACK. A fix that lifts the canvas and never lowers it is a
+           different bug wearing this one's clothes. */
+        const openedH = cv.height;
+        aa.click();
+        await sleep(420);
+        const back = document.getElementById('preview').getBoundingClientRect();
+        if (back.height <= openedH + 1) throw new Error('closing the Aa sheet did not give the canvas its band back (' + Math.round(openedH) + 'px open, ' + Math.round(back.height) + 'px closed)');
+      });
+    } finally {
+      try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   test('582: no effect reads back a big chunk of a GPU-backed canvas per frame', { item: '582' }, async function () {
     const keep = FM.scene.layers.slice();
     const proto = CanvasRenderingContext2D.prototype, orig = proto.getImageData;

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.51
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.52
 >
-> **State:** v13.51, 992 tests green, tree clean.
+> **State:** v13.52, 994 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -1311,7 +1311,7 @@ better still, keep working inside the turn rather than parking work for a later 
       and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
       along, which is why "it feels janky" kept not matching anything a profiler pointed at.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO. PARTLY ANSWERED v7.62 — the app now tells you why; whether it FIXES your file is still unknown.** His words: *"Added a screen
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
       case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
@@ -1376,6 +1376,17 @@ better still, keep working inside the turn rather than parking work for a later 
       no-frame warning** and the next occurrence diagnoses itself.
       🔑 **The pattern worth naming: if a request has sat on "he needs to tell me X" for months, build
       the thing that measures X.**
+
+      🚧 **JUMPED: there is nothing left to BUILD here — this entry is waiting on his DEVICE, not on
+      a tick.** Everything that could be built has been: the app now reports the file's real name, MIME
+      type and `canPlayType` when a clip produces no picture (v13.44), and says it in a tappable toast
+      rather than the console (v11.86). **No amount of work here creates new evidence** — the next
+      occurrence on his phone does. He was asked the one question that would settle it and answered
+      *"I have no idea"*, which is why the app was taught to answer it instead.
+      ⚠️ **LIFT THIS THE MOMENT HE REPORTS A BLANK CLIP AGAIN.** The toast will name the file, and that
+      one line decides between the container theory and the codec theory — which need different fixes.
+      This is not "done" and must not be ticked; it is parked on an event, and the note is here so the
+      parking is visible rather than a silent reordering.
 
       **v11.86 — I FIXED THE HALF THAT WAS MINE TO FIX, and it was a bad one.** Re-reading this entry,
       v7.62 put the useful sentence — *re-export as H.264, or open it in Safari* — in `console.warn`.
@@ -9701,6 +9712,9 @@ better still, keep working inside the turn rather than parking work for a later 
       **E is not a cop-out answer** — it closes the entry honestly, and it is genuinely possible that what
       he wanted is already there. **One letter closes or directs this.**
 - [x] **343 — Templates: swap the media for your own, and eventually let people make and share them.** ✅ **DONE — all four clauses (v9.97 / v11.71).**
+      🔴 **REPORTED NOT DONE, 27 Aug — see #619.** He says pressing a template still just forks a
+      project with no media-swap step: *"not what I wanted and I specified many times to fix this"*.
+      **Do not trust this tick on clause 1 without opening a template and following the tap.**
       (17 Aug, screenshot of Alight Motion's "Insert your Media" screen.) His words, verbatim:
 
       > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
@@ -18521,6 +18535,22 @@ re-opened #480, which I had marked done and had not fixed.
       dead time it was built to hide measured 28ms desktop / 113ms at 6x throttle — so if it still reads as
       janky, the suspect is the phase-2 join competing with the editor's first build, not the curve.
 
+      🔴 **HE RAISED IT AGAIN, 27 Aug at v13.51 — third time. His words, verbatim:**
+      > Also note that the animation for opening a project still isn’t smooth, work hard on making this look good
+      **"Still" and "work hard on this" together mean the two previous passes did not land for him**, and
+      that this is not a nitpick he will forget about. Nothing has been ATTEMPTED since the 24 Aug skip —
+      that tick could not measure and honestly said so, and no tick since has come back to it.
+      ✅ **THE THING THAT BLOCKED IT IS GONE.** The 24 Aug skip was correct for its session: `document.hidden`
+      was **true** and `requestAnimationFrame` fired **0 frames in 1.6s**, so smoothness was unmeasurable.
+      In this session the preview pane has been driving real renders and real timings all day. **Re-check
+      the control first** (rule 11 exists because that reading flips between sessions), then measure —
+      **frame gaps through a real open, not a curve chosen by eye.** The entry's own instruction stands and
+      is now finally followable.
+      ➡️ **What he is asking for, restated so it can be tested:** the card he tapped glides OUT to the left
+      while the editor slides IN from the right, with no stall in between. **The suspect named above —
+      phase 2 joining while the editor does its first build — is where to look first**, because a curve
+      cannot smooth over a frame that never rendered.
+
 - [x] **509 — The play row's numbers may not be centred.** (24 Aug.)
       ✅ **Measured, and your hedge was the accurate part.** On a desktop you would have been wrong: at
       1000px the pill shrink-wraps the digits — 84.4px wide, 1.0px of slack each side, dead centre both
@@ -20865,7 +20895,7 @@ re-opened #480, which I had marked done and had not fixed.
       "+ Use as caption track" and "Just this caption clip / Detect speech". **The panel fills the whole
       screen — the video preview is entirely off-screen below it.**
       **CIRCLED IN RED:** Spacing, Line height, Curve, Animate.
-      1. [ ] **You cannot see the text while editing it.** Unambiguous, true whichever controls stay.
+      1. [x] **You cannot see the text while editing it.** ✅ **DONE v13.52** — see the measurements below.
       2. [ ] **Some duplicate what effects already do** — he points at the circled four.
       ⚠️ **"so just the circled options" reads two ways** — remove JUST those four, or keep ONLY them.
       **(a) is the stronger reading.** ⚠️ But Spacing and Line height were HIS OWN request (shipped
@@ -20879,6 +20909,70 @@ re-opened #480, which I had marked done and had not fixed.
       anything). **Find the real open path first** — most likely a tap on the text layer or its clip
       rather than an exposed API. **His screenshot is sufficient evidence the fault is REAL; what is
       missing is a way to measure a FIX.**
+
+      ✅ **UNBLOCKED AND REPRODUCED 27 Aug (v13.51) — the panel is the "Aa" SHEET, and here are its
+      numbers.** Two things the last session had wrong: the open path is **`FM.textEdit.start(id)`**, not
+      `.open` (which does not exist — that is why `.te-panel` measured 0px high), and `.te-panel` is
+      `display: contents` on the phone, so it will ALWAYS measure 0 and is the wrong thing to measure.
+      **The panel he photographed is the `Aa` sheet** — `buildExtrasPop` at js/text-edit.js:301, whose own
+      comment names it: *"the text options AM keeps out of the top bar (Style / Spacing / Line height /
+      Curve / Animate / Captions)"*.
+      **Its contents, read off the live DOM, match his screenshot word for word:** Style · B · I · Spacing ·
+      Line height · Curve · Animate · None/Fade in/Fade up/Typewriter/Pop/Slide in/Drop in/Spin in/Zoom in
+      from big/Stretch/Wave/Jitter · **+ Use as caption track** · Just this caption clip · The whole project ·
+      One audio clip… · 🎙 Detect speech.
+      📐 **MEASURED at 375x812 with the editor live and the sheet open:**
+      | | top | bottom | height |
+      |---|---|---|---|
+      | te-bar | 0 | 57 | 57 |
+      | te-dock (holds the Text box) | 57 | 145 | 88 |
+      | **the Aa sheet** | **168** | **615** | **447** |
+      | the preview | 295 | 662 | 368 |
+      **The sheet's 168–615 swallows the preview's 295–662 whole**, and a hit test at the preview's centre
+      lands on the sheet, not the canvas. **That is clause 1, reproduced and now measurable.**
+      ➕ **And the keyboard makes it strictly worse, which is the state he photographed.** An iPhone
+      portrait keyboard is ~336pt, leaving 0–476 usable: the sheet alone occupies 168–476 of that and the
+      preview is entirely behind it. Even with the sheet CLOSED, only **181px of the 368px preview**
+      survives the keyboard.
+      ✅ **So clause 1 has a testable acceptance at last:** with the editor live and the Aa sheet open at
+      380px, a hit test at the preview's centre must return the canvas, and a usable band of preview must
+      remain visible with 336px of keyboard subtracted.
+
+      ✅ **CLAUSE 1 DONE v13.52 — and it is the THIRD time this same bug has been fixed on the desktop
+      and never on the phone.** #147 measured the Aa popover covering **100.0%** of the canvas and moved
+      it to the side column. Queue 249 measured **99.5%** on a short desktop window and taught it to open
+      downward. Both of those branches cap the sheet's `maxHeight`. **The phone branch of `positionPop`
+      set a `top` and stopped** — so the one layout he actually uses is the one that never got the fix.
+      **Two changes, both reusing machinery this file already had:**
+      1. **The sheet is capped** so it stops clear of the canvas and scrolls inside itself.
+      2. **The stage lifts for it**, exactly as it already lifts for the toolbar, the dock and the
+         keyboard — `popLift()` joins `barH + dockH` in the padding sum, with the existing MIN_PREVIEW
+         clamp doing its usual job.
+      📐 **MEASURED at 375x812, before → after, with the sheet open:**
+      | | before | after (kbd down) | after (kbd up, 336pt) |
+      |---|---|---|---|
+      | sheet height | 447 (uncapped) | 475 | **179, scrolls** |
+      | sheet over the preview | **swallowed it whole** | **0 px** | **0 px** |
+      | preview visible | 0 with the keyboard | 154 | **116** |
+      | painted at the preview's centre | the sheet | the canvas | the canvas |
+      ⚠️ **ONE HONEST NOTE ON THE MEASUREMENT:** the keyboard is SIMULATED — `FM.screen.metrics` is
+      overridden to report a 336pt keyboard, because a desktop browser has none. That tests the
+      arithmetic I changed, not a real iOS keyboard. `tests/_kbdevice.py` is the harness that raises a
+      real one and it still passes.
+      ⚠️ **AND A BUG THE FIRST VERSION HAD, worth keeping because it is the same trap twice:** the cap
+      was measured against **#stage's border box**, which runs to the bottom of the LAYOUT viewport (812).
+      The keyboard covers the last 336 of that, so the cap read 533px of room where he could see 197 —
+      the sheet went uncapped, the lift pushed the canvas down to clear it, and the preview landed at
+      **642–796, under the keyboard**. Overlap zero, picture still invisible: his complaint with the
+      cause swapped. **The floor has to be `FM.screen.metrics().bottom` — where the VISIBLE window ends.**
+      Then a second, smaller version of the same: the cap reserved MIN_PREVIEW but the lift then spent
+      18px of it (its own +6 and padTop's +12), so 113px survived where 120 was promised. The cap now
+      reserves what the lift spends.
+      ❓ **CLAUSE 2 STILL NEEDS ONE WORD FROM YOU, and it is the only thing holding this entry open.**
+      *"so just the circled options"* — you circled **Spacing, Line height, Curve, Animate**. Do you want
+      those four **REMOVED**, or those four **KEPT and the rest removed**? ⚠️ Asking rather than guessing
+      because **Spacing and Line height were your own request** (shipped v12.31), so removing them
+      reverses something you asked for. **Curve and Animate are the two genuinely duplicated by effects.**
 - [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
       **STATUS: 🟢 READY — nothing is stopping this**
       Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
@@ -21388,6 +21482,266 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ VERIFY BY MEASURING, not by feel: fling with the same pixel velocity at 3-4 zoom levels and assert
       the distance travelled IN PIXELS is within a few percent. `_lastFling` is already exposed for the suite
       (queue 351) for exactly this kind of test.
+- [ ] **615 — Try a WHITE home screen, with the colourful top bar bleeding down into it and fading out.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, phone screenshot at v13.51 — the home list with the top bar circled in red and the page
+      body scribbled white.)
+      His words, verbatim:
+      > Make sure the following is revertable if I change my mind - I wanna try a white background for the home menu, make it white, keep film grain, keep the top bar colourful like it is now, so I don’t want the top bar look different much, and since the top bar will be colourful and the rest will be a simple white I want it be like the colours at the the top of the white page are more solid but it sorta fades out towards the bottom, like the top colourful bar is leaning onto the page.
+
+      **HIS CLAUSES — every one has to be ticked before this entry can be:**
+      1. [ ] **Revertable if he changes his mind.** He led with this, so it is a requirement and not a
+             nicety. **A single switch, not a scatter of edited colour values** — a `light`/`dark` flag on
+             the home screen with the palette behind CSS variables, so going back is one word. ⚠️ *"I wanna
+             TRY"* — he is not committing to it. Build it so the old look is still there, intact.
+      2. [ ] **White background for the home menu.** The home screen only — he did not ask for a light
+             editor, and the editor is where he judges colour.
+      3. [ ] **Keep the film grain.** It is currently a dark-screen effect; on white it has to be re-tuned
+             or it will either vanish or read as dirt. ⚠️ Queue note at REQUESTS.md:9585 — the grain must
+             still STOP when a project opens.
+      4. [ ] **Keep the top bar colourful, and do not change how it looks much.** *"I don’t want the top
+             bar look different much"* — the logo, search, Select and the cog stay as they are.
+      5. [ ] **The colour leans onto the page: solid at the top of the white area, fading out downward.**
+             *"like the top colourful bar is leaning onto the page"* — a vertical gradient spilling from the
+             bar into the white, strongest right under it, gone by the middle of the list.
+      ⚠️ **#545 APPLIES — do not ship a look he has not seen.** Render options at the size they ship at
+      (a 380px-wide home screen, not a swatch), send the picture, let him pick. His standing words:
+      *"I just want options. Yu can just say recommended next to the best option."*
+      ⚠️ **Things white will break that dark hid, and they are the real work:** every `--fg`/muted grey in
+      the cards, the project-card thumbnails (dark art on white), the tab pills, the `…` buttons, the
+      OPEN badge, the pinned pin, the + orb's glow ring (v13.49) and the blue focus rings. **Check contrast
+      at 380px, not on a desktop.**
+
+- [ ] **616 — The blue bars on the timeline add area look tacky. Replace them with lines that PULSE
+      **STATUS: 🟢 READY — nothing is stopping this**
+      bottom-to-top when you press it, in the signature comet style.**
+      (27 Aug, phone screenshot at v13.50 — an empty Project 52, the add area filling the lower half.)
+      His words, verbatim:
+      > These blue bars around look tacky and don’t go away, an idea is that these are close to actually looking good, what you should do is make it so when you press on the timeline add area it has those lines pulse from the bottom to the top and actually go across the top line and not cut off on the sides, with a really clean a good animation inspired by the lines that we have circle around the project you have open or the media audio buttons etc
+
+      **HIS CLAUSES:**
+      1. [ ] **They look tacky AND THEY DON'T GO AWAY.** Two complaints in one sentence — the look, and
+             that it is permanent. *"these are close to actually looking good"*, so this is a re-work of
+             something nearly right, not a deletion.
+      2. [ ] **On PRESS, the lines pulse from the bottom to the top.** A press-triggered animation, which
+             also answers clause 1's "don't go away": at rest they should be quiet.
+      3. [ ] **They must go ACROSS THE TOP LINE and not cut off at the sides.** He is describing the pulse
+             completing the box — reaching the top edge and running along it — instead of stopping short.
+      4. [ ] **Clean, and in the style of the signature comet** — *"inspired by the lines that we have
+             circle around the project you have open or the media audio buttons"*.
+      📍 **WHAT HE IS LOOKING AT, found in the code:** `.tl-addrow::before` at styles.css:7383 — a
+      **1px dashed `rgba(120, 214, 240, .45)` outline**, a cyan→teal→pale gradient wash, and a
+      `0 0 9px` cyan glow. Permanent, and cyan, which is exactly *"blue bars … don't go away"*.
+      📍 **AND THE STYLE HE WANTS ALREADY EXISTS AND IS NAMED:** the `hm-glint` comet at
+      styles.css:4680 — a conic-gradient with one lit arc (~40% of the turn, a white core a tenth of
+      that) orbiting the edge on a 3.8s linear loop. It is on the open project card AND on the sound
+      effects / voice recording menus, which is precisely the pair he cited. **Queue 291 is where he
+      asked for it there:** *"put the our signature white line glow that move around the edges in the
+      menu for sound effects and the menu for recording ur voice."* So this is his own established
+      motif, and clause 4 means bring it to the add area — bottom-to-top rather than orbiting.
+      ⚠️ **The comet has a scar worth reading before reusing it** (the comment above styles.css:4690): a
+      decoration that MOVES has to be checked WHILE MOVING. An override sized for the box at rest was
+      96px short at 90° of rotation. **Measure this at several points through the pulse, not one frame.**
+      ⚠️ **AND THE ADD ROW HAS ITS OWN TRAP:** `::before` is bounded by `--ar-x0`/`--ar-x1` — the head
+      divider and the PROJECT'S END — so on an empty project it collapses to the head's width (queue 571
+      measured 124px on a 380px row) and is switched off entirely by
+      `#timeline-panel.tl-empty-start .tl-addrow--empty::before { content: none }`. **His screenshot IS
+      the empty state**, so whatever the pulse is drawn on cannot be that pseudo-element as it stands.
+      ⚠️ **#545 APPLIES — he must see it before it ships.** An animation cannot be judged from a still, so
+      send a short capture or a frame strip, not one screenshot. Options at 380px, recommended one marked.
+
+- [ ] **617 — 🔴 The Elements tab is full of duplicate "Draft" placeholder rows that will not go away.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      (27 Aug, phone screenshot at v13.51 — the Elements tab, six rows deep.)
+      His words, verbatim:
+      > These weird element things won’t go away
+
+      **WHAT THE SCREENSHOT SHOWS, counted:** six rows, every one of them the same placeholder —
+      a diamond icon and the subtitle **"Draft — open it, build it, then ⋯ → Save as element"**.
+      Titles: **Cool loop, Cool loop, Project 39 project, Project 39 project, Project 39 project,
+      Cool loop** — so they are DUPLICATED, not six distinct things: two names, repeated.
+      1. [ ] **They are duplicates** — the same draft is listed several times over.
+      2. [ ] **They will not go away** — *"won't go away"*. Either there is no way to delete one, or
+             deleting one does not stick, or they are re-created on every visit. **Find out which
+             before writing any fix** — those are three different bugs and only one of them is a
+             delete button.
+      ⚠️ **Do not "clean them up" by wiping his Elements store.** They may be tied to real drafts of his,
+      and this app is local-only — anything deleted here is gone. **Reproduce the duplication first**,
+      then remove the CAUSE. If the existing rows need clearing afterwards, that is his call to make,
+      not a side effect of the fix.
+      📍 **Where to look:** the "Draft — open it, build it, then ⋯ → Save as element" string, and
+      whatever writes an element record on project save / on opening the Elements tab. The repeated
+      titles track his project names ("Project 39 project" is a real project in the Projects
+      screenshot), so the suspect is a draft record being created per save or per open rather than once.
+
+      ✅ **HE DIAGNOSED IT HIMSELF, minutes later. His words, verbatim:**
+      > You have to manually delete them you can’t do the select delete, I figured it out
+      > But as long as there’s one left I can’t delete it
+      **BOTH HALVES CONFIRMED IN THE CODE — this entry is now fully diagnosed and just needs building.**
+      3. [ ] **"You can't do the select delete."** `js/home.js:84` — `let selectMode = false;  // multi-select
+             for bulk delete / duplicate (projects tab only)`. **It says "projects tab only" in its own
+             comment.** Select is not wired to the Elements/drafts tab at all, so there is no bulk delete
+             there and he has to use each card's ⋯ menu, one at a time, six times over.
+      4. [ ] **"As long as there's one left I can't delete it."** The ⋯ → *Delete draft…* action calls
+             `FM.projects.discardDraft(p.id)`, and **`discardDraft` REFUSES on the draft that is currently
+             open, by design** (js/home.js ~1690). The card even toasts *"That draft is the project you
+             have open — open another one first"*. So he deletes them down to the last one, that last one
+             is the project he has open, and it cannot be removed — exactly what he described.
+             ➡️ **The fix is to do what the toast tells HIM to do, for him:** switch to another project
+             first, then discard. The refusal exists for a real reason — the comment beside it records
+             that plain `remove()` *"opens another project, or CREATES an 'Untitled' when you delete the
+             current one, which would manufacture the very thing queue 505 was about"* — so **do not just
+             drop the guard**; move off the draft first, then delete.
+      📍 **AND THE DUPLICATES HAVE A NAMED CAUSE ALREADY IN THE FILE** (js/home.js ~1606, queue 505):
+      editing an element *"used to mint a fresh workspace on every tap and tell him to run ⋯ → Save as
+      element — advice that MADE A DUPLICATE, because that route always mints a new element id. Measured:
+      one element became two, and the workspace was left behind each time."* v12.26+ fixed the minting,
+      **but nothing cleaned up the workspaces already stranded by the old behaviour** — which is very
+      likely what all six of these are. That also explains why they carry his project names.
+      ⚠️ **So there are two jobs here and they are different:** stop making them (done, apparently), and
+      give him a way to clear the ones already there. **Clause 3 is that way**, and it is the one he asked
+      for. Clearing them silently is still not on — see the warning above.
+
+- [ ] **618 — Elements don't work very well: the placeholder icon never becomes a preview, and it still
+      **STATUS: 🟢 READY — nothing is stopping this**
+      makes you save them by hand.** (27 Aug, at v13.51. Follows straight on from **#617**.)
+      His words, verbatim:
+      > Elements I’m not sure work very well, they have the weird icon still instead of showing what the element is when ur in the elements tab home menu and they still tell you to manually save it urself
+
+      1. [ ] **The ◇ icon should be a picture of the element.** Every row in the Elements tab wears the
+             same diamond placeholder (`hm-thumb-draft`, the literal character `◇` at js/home.js ~1657),
+             so the tab is a list of identical rows and he cannot tell one from another — which is also
+             half of why **#617**'s duplicates were so confusing. **Projects already render a real
+             thumbnail; elements should too.** ⚠️ **#268 shipped exactly this for TEMPLATE tiles** —
+             *"Template tiles need a real picture of the template, not a logo"*, done v8.58. **Read how
+             that one renders its picture before building a second mechanism.**
+      2. [ ] **"They still tell you to manually save it urself."** The subtitle is literally
+             *"Draft — open it, build it, then ⋯ → Save as element"* — the app instructing him to do the
+             filing. He is saying that instruction should not need to exist.
+             ⚠️ **This is the same complaint the code already recorded once and only half-fixed.** The
+             note at js/home.js ~1606 (queue 505): editing an element *"used to mint a fresh workspace on
+             every tap and tell him to run ⋯ → Save as element — advice that MADE A DUPLICATE"*. The
+             minting was fixed; **the telling-him-to-do-it-himself was not.**
+      ⚠️ **"I'm not sure work very well" is a soft opening on a real judgement** — read with **#617** on
+      the same day, the Elements feature is not landing for him.
+
+- [ ] **619 — 🔴 Pressing a template just forks it into a project. It should offer to SWAP THE MEDIA.
+      **STATUS: 🟢 READY — nothing is stopping this**
+      He says he has asked many times — and he is right: this is #343 clause 1, which was marked DONE.**
+      (27 Aug, at v13.51.)
+      His words, verbatim:
+      > And templates when you press on them just create themselves as a project, not what I wanted and I specified many times to fix this
+      > I know it’s a big thing to do idc
+
+      ⚠️ **THE SECOND LINE IS THE INSTRUCTION AND IT IS UNUSUAL FOR HIM: he is pre-authorising the size
+      of the job.** *"I know it's a big thing to do idc"* — so do NOT come back with a smaller
+      substitute, and do NOT park it on a decision about scope. Build the real thing.
+      ✅ **HE IS RIGHT THAT HE HAS SAID IT BEFORE. #343, 17 Aug, with the Alight Motion "Insert your
+      Media" screenshot, his words then:**
+      > Also the long term goal for templates is to make it when you press on them you can quickly swap out the media for ur own clips so you can use them as templates and not just the exact same thing as elements, this is how alight motions looks.
+      **#343 is ticked `[x]` as "all four clauses (v9.97 / v11.71)".** His report today says the FIRST
+      clause is not true in the app: pressing a template forks a project and drops him in it, with no
+      media-swap step. **Something between what shipped and what he wanted did not meet.**
+      ➡️ **First job is NOT to build — it is to establish which of these is the case, because they need
+      different fixes:** (a) the swap flow exists but is not on the path a tap takes, (b) it exists and is
+      empty/broken for his templates, or (c) it was never built and #343 was ticked on the other three
+      clauses. **Open a template on the phone layout and follow the actual tap.** ⚠️ #343 being ticked is
+      exactly the trap `next.sh` warns about — *"an entry is a record of what was ASKED, not of what is
+      still missing"*.
+      📍 **The shape he wants, from his own screenshot back then:** Alight Motion's *Insert your
+      Media* screen — the template's slots listed, each one tapped to drop in your own clip, and THEN it
+      becomes a project. Not a fork you then have to hunt through.
+
+- [ ] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, at v13.51.)
+      His words, verbatim:
+      > When you turn off the magnet button it should stop snapping for when you’re moving clips on the canvas too, like in the position / scale section
+
+      1. [ ] **Magnet OFF must stop canvas snapping**, the same way it already stops timeline snapping.
+             He names the surfaces himself: **dragging a layer on the canvas**, and **the Position /
+             Scale controls in the inspector**.
+      📍 **This is one switch being read in one place and ignored in another** — find what the magnet
+      toggle writes, then find every snap that does NOT consult it (canvas drag, the position/scale
+      steppers, and anything else that rounds to a guide or a grid). ⚠️ **Check for MORE than the two he
+      named** — he listed the two he happened to hit; a switch that governs "snapping" should govern all
+      of it, or the next report is the third surface.
+      ⚠️ **And check the reverse holds:** magnet ON must still snap on the canvas. A test that only
+      asserts the OFF case passes just as well if snapping is deleted outright.
+
+- [ ] **621 — Rounded Corners does a poor job in its non-Apple modes, and the Apple mode only works on
+      **STATUS: 🟢 READY — nothing is stopping this**
+      a few things.** (27 Aug, phone screenshot at v13.50 — a large white shape rotated on the canvas.)
+      His words, verbatim:
+      > Rounded corners kinda does a shit job when you aren’t using the Apple style and the Apple style only works on few things
+
+      1. [ ] **The non-Apple rounding modes look bad.** Whatever the default/plain mode does, it is not
+             producing a clean corner.
+      2. [ ] **The Apple (squircle) mode "only works on few things"** — so it is right where it applies
+             and does nothing, or something wrong, elsewhere. **Find out WHICH things it works on and
+             which it does not**, and say so in the entry before changing anything; "few things" is his
+             observation, not a diagnosis, and the boundary is the thing to find.
+      📍 **Where to look:** the `roundcorners` effect in js/compositor.js. It has a note already —
+      it is one of only two effects that pays for the FULL `alphaBBox` scan rather than the fast one,
+      *"because it masks EXACTLY at the content edge — the fast scan's ~12px slack makes its mask rect
+      bigger than the clip, and the tight Apple curve then barely cuts anything."* **That comment
+      describes clause 2's symptom almost word for word**, so start by checking whether the box it gets
+      is right for the cases where he says it does nothing.
+      ⚠️ **His screenshot is a ROTATED shape.** A mask built from an axis-aligned alpha box cannot follow
+      a rotated rectangle's corners — the box is the shape's bounding rect, not its outline. **Check the
+      rotated case explicitly**, because that alone could be all of clause 1.
+      ⚠️ **#545 applies — this is a look.** Render the modes side by side on a few shapes (square,
+      rotated, wide, a photo) at the size they ship at, send him the picture, and let him say which is
+      right rather than describing curves in words.
+
+      ✅ **HE NAMED THE CAUSE HIMSELF, minutes later — and it is the one this entry guessed at. Verbatim:**
+      > The rounded corners effect is really shit also coz it literally changes depending on the layers size / rotation
+      3. [ ] **The rounding must not change with the layer's SIZE or its ROTATION.** That is the actual
+             defect, and it makes clauses 1 and 2 symptoms rather than separate bugs: *"only works on few
+             things"* is what a size/rotation-dependent radius looks like from the outside — it happens to
+             land right on the few layers whose size and angle suit it.
+             📍 **Both halves have a mechanism already visible in the code.** The mask is built from
+             the layer's **alpha bounding box**, which is AXIS-ALIGNED: rotate a rectangle and its
+             bounding box is the diagonal's envelope, not the shape, so the curve gets cut in the wrong
+             place — exactly his screenshot. And the radius is applied in the plate's own pixels, so a
+             bigger layer gets a proportionally smaller-looking corner unless something normalises it.
+             ➡️ **Acceptance is measurable and should be built first:** the same layer at 3 sizes and 3
+             rotations must produce the same VISUAL corner radius. Measure it; do not eyeball it.
+
+- [ ] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.**
+      (27 Aug, phone screenshot at v13.50 — Project 40, the transport row with − and + either side of
+      the timecode, and the right-hand view rail showing "1×".)
+      His words, verbatim:
+      > When you use these buttons to change the speed by holding on the jump buttons to change them, it doesn’t live update the view settings tab to reflect what speed u have it at
+
+      1. [ ] **Hold the − / + jump buttons to change speed → the view settings tab must follow, live.**
+             The rail in his screenshot reads **1×** while he is actively changing the speed with the
+             transport buttons. One control writes the value; the other never hears about it.
+      📍 **This is a notification gap, not a maths bug** — find what the hold-repeat on the jump
+      buttons writes, and make it tell whatever repaints the view rail, the same way the rail's own ±
+      already does. ⚠️ **Check the reverse too:** changing it on the rail should be reflected wherever
+      the transport shows it. A one-way binding fixed one way round is the same bug tomorrow.
+
+- [ ] **623 — Copy and paste GRAPHS: take a curve you made and paste it into any other graph.**
+      (27 Aug, phone screenshot at v13.51 — the Position / Scale easing editor, the Bezier/Bounce/Steps
+      row and the six curve presets below it.)
+      His words, verbatim:
+      > Add the ability to copy paste the graphing and be able to past a graph you made into any other graph
+
+      1. [ ] **Copy the graph you are looking at.**
+      2. [ ] **Paste it into ANY other graph** — his word is *any*, so across properties (Position →
+             Scale → Opacity → an effect's parameter), not just within one.
+      📍 **The screenshot is the easing editor**, so "a graph" is a curve: the Bezier control points,
+      or the Bounce/Steps mode and its settings. **Copying has to carry the MODE as well as the numbers**
+      — pasting Bezier handles onto a Steps graph and keeping "Steps" would be a curve he did not make.
+      ⚠️ **There is already a copy/paste surface in the app he likes** (see #612, the copy/paste popup he
+      asked to animate). **Reuse it rather than inventing a second clipboard** — and decide deliberately
+      whether a graph shares that clipboard or gets its own, because pasting a graph over a layer would
+      be worse than no feature at all.
+      ⚠️ **The six preset buttons under the graph are the existing answer to "reuse a curve"**, so this
+      is him saying the presets are not enough — he wants HIS curve reusable. **Worth considering "save
+      this curve as a preset" alongside copy/paste**, but do NOT substitute it for what he asked for.
+
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one
