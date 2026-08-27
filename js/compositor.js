@@ -7556,6 +7556,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * reusing the very same __fmOX/__fmOY origin machinery the viewport crop uses (there it moves the
    * origin inward; here it moves outward). Returns the plate, the margin in project units, and the
    * scale — or null when the layer is already inside the frame and the normal plate will do. */
+  /* READ-BACK HINT — the single biggest cost in the canvas-effect path, and it is not what it looks
+   * like (queue 582 clause 2). Ezra asked for the tiling to stop "generating so much stuff that's off
+   * screen". Measured, it already does: of 464 tile copies on a 1080x1080 frame, ZERO land outside
+   * the frame, and the whole draw loop costs 1.0 ms of a 7.9 ms frame. The cost is the getImageData
+   * that finds the alpha bounding box, and its price is set by the canvas's BACKING STORE, not by the
+   * pixel count. A GPU-backed canvas has to stall the pipeline and pull the framebuffer across the
+   * bus; doing that straight after ~72 blits measured 42.4 ms. The same workload on a canvas created
+   * with willReadFrequently -- which asks the browser to keep it in CPU memory -- measured 4.5 ms.
+   *   draw 72 tiles then read 1080x1080:   GPU-backed 42.5 ms      CPU-backed 4.5 ms   (9.4x)
+   *   blur filter + image, then read:      GPU-backed  9.0 ms      CPU-backed 6.4 ms
+   *   shadowed shapes x120, then read:     GPU-backed  3.4 ms      CPU-backed 3.4 ms
+   * Nothing got slower, and the output cannot change: it is the same pixels in a different kind of
+   * memory. A is read every frame by tiles and roundcorners; the expanded plate is read every frame
+   * by tiles in Whole-clip mode. Both are declared here.
+   * ⚠️ The flag is only honoured on the FIRST getContext for a canvas -- a later call with different
+   * attributes silently returns the existing context -- so it has to be set where the context is
+   * born, and `_fx2d` exists so a future call site cannot quietly get the un-hinted kind. */
+  function _fx2d(cv) { return cv.getContext('2d', { willReadFrequently: true }); }
+
   function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM) {
     const tr = layer.transform || {};
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
@@ -7581,7 +7600,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _expC = _expPool[_e];
     if (_expC.width !== EW || _expC.height !== EH) { _expC.width = EW; _expC.height = EH; }
     _expC.__fmRS = ps; _expC.__fmOX = -mx; _expC.__fmOY = -my;   // plate pixel (0,0) IS project (-mx,-my)
-    const ec = _expC.getContext('2d');
+    const ec = _fx2d(_expC);   // read in full every frame by tiles' Whole-clip cut
     ec.setTransform(1, 0, 0, 1, 0, 0); ec.clearRect(0, 0, EW, EH);
     baseT(ec);
     ec.globalAlpha = 1; ec.globalCompositeOperation = 'source-over'; ec.filter = 'none';
@@ -7590,6 +7609,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
     return { cv: _expC, mx: mx, my: my, ps: ps };
   }
+
+  /* Test seam: the read-back hint above is invisible in the picture, so nothing else would notice if
+   * a future edit created one of these contexts without it. Reports what the pools actually hold. */
+  FM._readbackHint = function () {
+    const at = (cv) => { try { return !!cv.getContext('2d').getContextAttributes().willReadFrequently; } catch (e) { return null; } };
+    return { A: _cfPool.filter(Boolean).map(s => at(s.A)),
+             expanded: _expPool.filter(Boolean).map(at) };
+  };
 
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -7611,7 +7638,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // canvas-effect fn works in the plate's own pixels (bbox, tile steps, offsets), so B must stay
     // an identity surface or the fn's coordinates would be scaled a second time.
     _cfA.__fmRS = ps; _cfA.__fmOX = OX; _cfA.__fmOY = OY;
-    const actx = _cfA.getContext('2d');
+    const actx = _fx2d(_cfA);   // tiles/roundcorners read this whole canvas every frame
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });

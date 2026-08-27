@@ -48220,4 +48220,81 @@
       if (wasOpen && FM.home && FM.home.open) FM.home.open(); else if (FM.home && FM.home.close) FM.home.close();
     }
   });
+
+  /* ---- 582 clause 2: the read-back hint ---------------------------------------------------------
+   * Ezra asked for the tiling to stop "generating so much stuff that's off screen". Measured, it
+   * already does: of 464 tile copies on a 1080x1080 frame ZERO land outside the frame, and the whole
+   * draw loop is ~1 ms of a ~8 ms frame. The cost is the getImageData that finds the alpha bounding
+   * box, and Chrome itself was logging the fix on every frame — "Multiple readback operations using
+   * getImageData are faster with the willReadFrequently attribute set to true".
+   * These two exist because the hint is INVISIBLE: it changes no pixel, so if a future edit creates
+   * one of these contexts without it, nothing in the picture and nothing in the rest of the suite
+   * would go red. The second test is the durable one — it catches a NEW per-frame full-frame read
+   * added anywhere, not just the two call sites known today. */
+  function _fx582Scene() {
+    FM.scene.layers.length = 0;
+    FM.addTextLayer ? FM.addTextLayer('TILES') : FM.addShapeLayer('rect');
+    const L = FM.scene.layers[0];
+    if (!L) throw new Error('could not make a layer to render');
+    L.start = 0; L.duration = 10;
+    L.effects = ['shake', 'tiles'].map(function (id) { return FM.fxRegistry.makeInstance(id); });
+    const tl = L.effects.filter(function (e) { return e.type === 'tiles'; })[0];
+    tl.params.mode = 0; tl.params.source = 1;   // Extend + Whole clip: the path that builds the expanded plate
+    return L;
+  }
+  function _fx582Render() {
+    const proj = FM.scene.project || {};
+    const W = Math.max(64, Math.round(proj.width || 480)), H = Math.max(64, Math.round(proj.height || 480));
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    for (let k = 0; k < 2; k++) { cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, W, H); FM.renderScene(cx, FM.scene, 0.5); }
+    return { W: W, H: H };
+  }
+
+  test('582: the canvases the effects read every frame are declared read-heavy', { item: '582' }, async function () {
+    const keep = FM.scene.layers.slice();
+    try {
+      _fx582Scene(); _fx582Render();
+      if (!FM._readbackHint) throw new Error('FM._readbackHint is gone — the seam that proves the read-back hint is in place no longer exists');
+      const h = FM._readbackHint();
+      if (!h.A.length) throw new Error('no canvas-effect plate was built by a shake+tiles render, so this test proved nothing — check the scene setup, not the hint');
+      if (h.A.some(function (v) { return v !== true; })) throw new Error('a canvas-effect plate (A) was created without willReadFrequently: ' + JSON.stringify(h.A) + '. tiles and roundcorners getImageData that whole canvas every frame; see _fx2d in js/compositor.js');
+      if (h.expanded.some(function (v) { return v !== true; })) throw new Error("the expanded plate was created without willReadFrequently: " + JSON.stringify(h.expanded) + ". tiles' Whole-clip cut reads it in full every frame");
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
+  test('582: no effect reads back a big chunk of a GPU-backed canvas per frame', { item: '582' }, async function () {
+    const keep = FM.scene.layers.slice();
+    const proto = CanvasRenderingContext2D.prototype, orig = proto.getImageData;
+    const bad = {};
+    try {
+      const L = _fx582Scene();
+      const proj = FM.scene.project || {};
+      const QUARTER = Math.max(1, Math.round((proj.width || 480) * (proj.height || 480) / 4));
+      proto.getImageData = function (x, y, w, h) {
+        let wrf = null; try { wrf = this.getContextAttributes().willReadFrequently; } catch (e) {}
+        if (wrf === false && w * h >= QUARTER) {
+          const key = this.canvas.width + 'x' + this.canvas.height + ' read ' + w + 'x' + h;
+          bad[key] = (bad[key] || 0) + 1;
+        }
+        return orig.apply(this, arguments);
+      };
+      _fx582Render();
+      proto.getImageData = orig;
+      const rows = Object.keys(bad);
+      if (rows.length) {
+        throw new Error('a shake+tiles render pulls ' + rows.length + ' large readback(s) off GPU-backed canvases: '
+          + rows.map(function (k) { return k + ' x' + bad[k]; }).join('; ')
+          + '. Create that context through _fx2d (js/compositor.js) so the browser keeps it in CPU memory — '
+          + 'this is the pattern Chrome warns about, and it was the dominant cost on his motionblur+shake+tiles stack.');
+      }
+    } finally {
+      proto.getImageData = orig;
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();

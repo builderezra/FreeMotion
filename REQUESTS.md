@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.50
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.51
 >
-> **State:** v13.50, 990 tests green, tree clean.
+> **State:** v13.51, 992 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22046,6 +22046,54 @@ re-opened #480, which I had marked done and had not fixed.
          skipped without changing a single visible pixel. Same for the tiles hidden behind opaque ones.
          ✅ **Acceptance: identical output, fewer draws.** Count `drawImage` calls before/after and assert
          the rendered frame is byte-identical — this one CAN be exact, unlike the warp work.
+         🔎 **MEASURED 27 Aug (v13.51) — AND THE CULLING YOU ASKED FOR IS ALREADY THERE AND ALREADY
+         EXACT. The cost is somewhere else entirely.** Instrumented `drawImage` at the call site with
+         the canvas transform applied (mirror flips translate and scale, so the naive rect is wrong):
+         on a 1080x1080 frame Extend issues **464 copies and ZERO of them land outside the frame**.
+         The loop bounds already derive i/j from the frame edges and there is a per-copy reject on top.
+         **There is no off-screen tile being generated to remove.**
+         📐 **WHERE THE TIME ACTUALLY GOES — his exact three-effect stack, 1080x1080, median of 9:**
+         | | time | share |
+         |---|---|---|
+         | the whole frame | **7.9 ms** | |
+         | drawing the 464 copies | **1.0 ms** | 13% |
+         | `getImageData` (finding the alpha bounding box) | **5.6 ms** | **71%** |
+         **So culling draws — the thing this entry set as the acceptance test — could recover 13% at
+         the absolute most, and it is already recovered.** Tiles needs the exact content rectangle to
+         space its copies by, and getting it means pulling the whole frame back from the GPU.
+         ❌ **TRIED AND REJECTED: bracketing the exact scan with a cheap 4x-downsampled one** (scan the
+         small version to find roughly where the content is, then read only that band exactly).
+         **It is 3x cheaper and it is WRONG.** Tested against 9 content shapes, **2 came back with a
+         different box**: a 4x downsample AVERAGES, so content at alpha 12–20 dilutes below the
+         scanner's threshold and vanishes — a faint hairline down the left edge moved the box from
+         `0,0,600,1080` to `400,400,200,200`. That is a visible change to the tiling, so it is not
+         shippable at any speed. **A safe 2x version saves only 1.5 ms → 1.0 ms and is not worth it.**
+         ✅ **SHIPPED v13.51 — the read-back HINT, which is free and provably changes nothing.** The
+         price of `getImageData` is set by the canvas's backing store, not the pixel count: a GPU-backed
+         canvas has to stall and pull the framebuffer across the bus. The plates the effects read every
+         frame are now created with `willReadFrequently`, which asks the browser to keep them in CPU
+         memory. **Chrome had been logging this advice on every single frame** — *"Multiple readback
+         operations using getImageData are faster with the willReadFrequently attribute set to true"* —
+         and nothing was reading the console.
+         ✅ **Output proven identical, not assumed:** the same four renders (tiles / shake+tiles / his
+         three / tiles dragged off-frame) hashed **`9a985d3c`, `de2e972c`, `93a6dde4`, `8bd1b851` with
+         the hint on and the identical four hashes with it off**, lit-pixel counts included.
+         ⚠️ **AND THE HONEST PART, because the first number I got was wrong.** Benchmarked
+         back-to-back, CPU-backed looked **9x** faster (42.5 ms → 4.5 ms). Re-run **strictly
+         interleaved** — alternating the two canvases inside one loop — the gap collapses to
+         **1.0–1.3x**. The 9x was a warm-up artefact of measuring one config fully before the other,
+         which is the exact mistake this file warns about elsewhere. Whole-app A/B across page loads
+         was too noisy to quote at all: the SAME configuration measured 6.6 ms and 35.3 ms on two
+         passes. **So: a modest, free, zero-risk win — not the 6x I nearly wrote down.**
+         🔒 **Two tests lock it in**, because the hint is invisible: one asserts every plate reports the
+         attribute, the other asserts no render pulls a quarter-frame-or-larger readback off a
+         GPU-backed canvas — which catches a NEW unhinted read anywhere, not just today's two sites.
+         Both were proven to go red with the hint stripped out.
+         ➡️ **STAYS UNTICKED, and honestly: the cost is REDUCED, not removed.** The specific thing he
+         named — not generating what is off screen — was already done before he asked. What is left is
+         the bounding-box readback itself, and the only way to remove that is to stop needing an exact
+         box every frame (cache it against the layer's rendered content), which is a real piece of work
+         and its own tick.
          🗒️ *(superseded)* ANSWERED v13.41 — NOT A BUG, A DECISION. Stays UNTICKED because your pick (a/b/c in the
          summary block) is still outstanding, and an unticked box is the only thing the tools read.**
          **"tiles and shake together looked really bad"** — a rendering-quality complaint, separate
