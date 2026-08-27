@@ -1,8 +1,16 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.43
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.44
 >
-> **State:** v13.43, 990 tests green, tree clean.
+> **State:** v13.44, 990 tests green, tree clean.
+>
+> **✅ Everything you sent is logged word for word, and I am working down the list oldest first.**
+> **#129 done:** you said *"I have no idea"* about the file type — fair, so **the app works it out itself
+> now.** When a clip lands with no picture it tells you the file's actual name, type and whether the
+> browser claims it can play it, instead of what it used to do: **assert it was H.265 without checking.**
+> That guess was wrong often enough to send you re-exporting for nothing.
+> ➡️ **Next: your export with no audio** (#604/#215) — the most serious thing on the list, now confirmed
+> on your phone AND your PC.
 >
 > **🔬 I finally found out which of my motion-blur tests was lying — and it means I removed a fix that
 > WAS working.** I built a check that simply asks: are the two frames this effect compares actually
@@ -20822,9 +20830,29 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **THE FIX IS THE WARNING, NOT THE EFFECT:** extend the dead-effect check to catch "this effect
       has no visible result because of what follows it", and say so on the tile. ⚠️ **Do not "fix"
       grayscale — it works.**
-      ❓ **One thing still unexplained and it must not be glossed:** he says B&W FILTERS still fail, yet a
-      filter on top of his stack measured mono here. **If it is still colour on his phone with a filter
-      applied, the UI apply path differs from the programmatic one and that is the next thing to open.**
+      🔴 **HE PUSHED BACK, AND HE IS RIGHT THAT MY ANSWER MISSED IT (27 Aug). His words, verbatim:**
+      > Look idk what you think the issue is with the black and white filters but it’s very simple, they
+      > don’t make shit black and white, no matter what way you do it, and the main issue is that a lot of
+      > effects like saturation just don’t fucking work, so it could never work
+      ✅ **Tested EVERY Colouring effect individually on a real image layer. All twelve work in code:**
+      brightness d=85 · contrast d=42 · **saturate d=57** · hue d=199 · grayscale d=120 · sepia d=104 ·
+      invert d=293 · glow d=9 · vignette d=59 · tint d=169 · duotone d=80 · gamma d=130.
+      **Saturation is NOT broken, and neither is anything else in that menu.**
+      🚨 **SO THE FAULT IS THE PICK→APPLY PATH, AND THE CODE SAYS SO ITSELF.**
+      `js/fx-browser.js:304`: *"The pick list is ORDERED — it is the order they will be ADDED in, which is
+      what the badge says."* **A numbered badge means PICKED, NOT APPLIED.** Picks commit when the browser
+      is EXITED (`exitBrowser` → `commitPicks`, ~line 1538).
+      🚨 **HIS SCREENSHOT IS THE TRAP ITSELF: he is stood INSIDE the browser, eight badges up, judging a
+      preview that has correctly not changed — because nothing has been applied yet.** He concludes the
+      effects do nothing. **Reported THREE TIMES now** (*"working at one point but now they aren’t again"*,
+      *"still don’t do anything at allllllllllllllllll"*, and this), and every previous fix went after a
+      DIFFERENT cause — needs-input effects (v10.32) and exits discarding picks (queue 389).
+      ➡️ **THE FIX: picked effects must be VISIBLE ON THE LAYER WHILE PICKING.** The intent already exists
+      and came from his own words: *"when you tap on an effect it doesn’t just add it selects it and it
+      will show the layer selected like what the layer will look like with the effect selected"* —
+      `FM._fxPreview` is that mechanism. **FIRST JOB: prove whether the live preview actually renders the
+      picked stack at 380px. If it does not, that is the bug and it is the whole complaint.**
+      ⚠️ **Do NOT touch the effects, the filters, or their defaults — all measured working, three ways.**
 - [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC — and a single sound effect cut
       **STATUS: 🟢 READY — nothing is stopping this**
       in and out during playback.** (27 Aug, v13.43, export screenshot.)
@@ -20850,6 +20878,24 @@ re-opened #480, which I had marked done and had not fixed.
       **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
       not merge it** — the export half is the one he is blocked by.
+- [ ] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.**
+      (27 Aug, annotated phone screenshot at v13.43.)
+      His words, verbatim:
+      > These buttons are too small, make em cover up that row proper
+      >
+      > They’re also just in a weird position
+      **THE SCREENSHOT:** the effects browser as a phone sheet. The row holds a round ✕ on the left, the
+      three tabs **Visual / Filters / Audio** bunched in the middle, and a round 🔍 on the right — with
+      empty gaps either side of the tabs. **He has circled the whole row.**
+      ✅ **CAUSE FOUND BEFORE TOUCHING ANYTHING (read, not guessed):** `.fxmode-btn` already has `flex: 1`,
+      so the three tabs share whatever width their CONTAINER has — but `.fxmode` itself only gets
+      `flex: 1` in the **inspector** variant (`styles.css:4103`,
+      `#fx-browser.fxb-in-inspector .fxb-top .fxmode`). **On the phone SHEET there is no such rule, so the
+      group shrinks to its content and leaves the gaps he circled.**
+      ➡️ **FIX: give `.fxb-top .fxmode` `flex: 1; min-width: 0` for the sheet too**, so the tabs stretch
+      between the ✕ and the 🔍 and fill the row. That answers BOTH clauses at once — bigger targets, and
+      the "weird position" is the bunching.
+      ⚠️ **Verify at 380px** and check the tab labels do not wrap at the widest one ("Filters").
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one

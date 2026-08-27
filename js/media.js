@@ -306,6 +306,30 @@ window.FM = window.FM || {};
     } catch (e) { return false; }   // unreadable → unsure → say nothing
   };
 
+  /* WHAT WE ACTUALLY KNOW ABOUT A BLANK CLIP (queue 129, 27 Aug).
+   * Ezra was asked for months whether his file was .mov or .mp4 so the cause could be narrowed. His
+   * answer: **"I have no idea"** — which is fair, and which means asking was always the wrong move.
+   * Everything needed is already in hand at import, so the app reports it instead of him.
+   * ⚠️ This exists because `hevcAdvice()` ASSERTS H.265 on a path where nothing confirmed it. That
+   * diagnosis was measured on 27 Aug and does not hold up: this browser reports H.265 as "probably"
+   * playable while refusing `video/quicktime` outright — so a blank .mov would be blamed on the codec
+   * when the container is the likelier culprit. A guess stated as fact sends him re-exporting for
+   * nothing. */
+  FM.blankClipFacts = function (rec) {
+    const f = rec && rec.file;
+    const name = String((f && f.name) || 'that clip');
+    const type = (f && f.type) || 'unknown';
+    let can = 'unknown';
+    try {
+      const v = document.createElement('video');
+      can = (type && type !== 'unknown') ? (v.canPlayType(type) || 'no') : 'unknown';
+    } catch (e) {}
+    const ext = (name.match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+    return { name: name, ext: ext, type: type, canPlay: can,
+             line: name + ' — type "' + type + '", extension .' + (ext || '?') +
+                   ', browser says canPlayType: "' + can + '".' };
+  };
+
   /* The one message, in one place, so the toast and the console cannot drift apart. */
   FM.hevcAdvice = function () {
     return 'This looks like an iPhone screen recording (H.265). This browser cannot play H.265 — ' +
@@ -392,9 +416,16 @@ window.FM = window.FM || {};
       const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
       /* The advice is one TAP away now rather than console-only (queue 129). He reported this from a
          phone twice; a console.warn was never going to reach him. */
+      /* ⚠️ NOTHING HAS CONFIRMED H.265 ON THIS PATH — the sniff above is the one that can, and it did
+         not fire. So say what is KNOWN and stop asserting a cause (queue 129). */
+      const facts = FM.blankClipFacts(rec);
       if (FM.toast) FM.toast('No picture from “' + shortNm + '” — tap to see why', 8000,
-                             () => { if (FM.toast) FM.toast(FM.hevcAdvice(), 12000); });
+                             () => { if (FM.toast) FM.toast(
+                               'FreeMotion could not get a picture out of this file. ' + facts.line +
+                               ' If it came from a screen recording, re-exporting it as H.264 usually fixes it.',
+                               14000); });
       // The untruncated name and the actionable half, which will not fit in a phone toast.
+      console.warn('FreeMotion BLANK CLIP FACTS — ' + facts.line);
       console.warn('FreeMotion: "' + nm + '" gave no video frame after ' + Math.round(FM.decodeWait / 1000) +
                    's (readyState ' + rec.el.readyState + ', ' + rec.width + 'x' + rec.height + '). The container ' +
                    'parsed, so this is a codec the decoder will not take — screen recordings are usually H.265/HEVC. ' +
