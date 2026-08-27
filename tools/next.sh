@@ -263,6 +263,14 @@ def flush():
     # (No apostrophes in here: this heredoc sits inside a command substitution and one breaks the parse.)
     if cur and re.search(r'REMAIN(?:S)? OPEN|\(partial\)|NOT STARTED', txt, re.I):
         return
+    # AND AN ENTRY WHOSE STATUS SAYS IT IS WAITING ON EZRA IS NOT HOLDING THE QUEUE FOR NOTHING (27 Aug).
+    # 582 shipped two of three clauses and its third turned into a pick for him, so its body legitimately
+    # carries DONE vN while the box stays open -- and this guard shouted about it on EVERY run for days.
+    # Noise that never goes away is noise that gets ignored, which is worse than no warning at all.
+    # The STATUS line is already the canonical statement of who an entry waits on, so honour it rather
+    # than demanding yet another magic phrase somewhere in the prose.
+    if cur and re.search(r'STATUS:[^\n]*(NEEDS YOU|HELD)', txt):
+        return
     if cur and re.search(r'\u2705 \*\*(?:FIXED|DONE|BUILT|SHIPPED) v[0-9]', txt):
         out.append('%d:%s' % (cur[0], cur[1][:100]))
 for i, ln in enumerate(lines, 1):
