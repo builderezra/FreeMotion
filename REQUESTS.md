@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.60
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.61
 >
-> **State:** v13.60, 1002 tests green, tree clean.
+> **State:** v13.61, 1003 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21838,10 +21838,31 @@ re-opened #480, which I had marked done and had not fixed.
       > You have to manually delete them you can’t do the select delete, I figured it out
       > But as long as there’s one left I can’t delete it
       **BOTH HALVES CONFIRMED IN THE CODE — this entry is now fully diagnosed and just needs building.**
-      3. [ ] **"You can't do the select delete."** `js/home.js:84` — `let selectMode = false;  // multi-select
-             for bulk delete / duplicate (projects tab only)`. **It says "projects tab only" in its own
-             comment.** Select is not wired to the Elements/drafts tab at all, so there is no bulk delete
-             there and he has to use each card's ⋯ menu, one at a time, six times over.
+      3. [x] **"You can't do the select delete."** ✅ **DONE v13.61 — and the first diagnosis was WRONG,
+             which is worth more than the fix.**
+             ❌ **What this entry originally blamed:** `js/home.js:84` — *"multi-select for bulk delete /
+             duplicate (projects tab only)"*. **That comment is STALE and has been since v5.04.**
+             Forty lines into `render()` the file says the opposite: *"Select works on EVERY tab now
+             (v5.04)"*. Two comments disagreeing, and the diagnosis quoted the older one.
+             ✅ **The real cause:** `selectify()` exists precisely so *"templates and elements behave
+             identically instead of approximately"*, and v6.17 already fixed the tick-and-outline half
+             for those tabs. **Draft cards simply never called it** — they carried a bare click handler,
+             so on a tab where Select works they alone were invisible to it.
+             ✅ **Fixed by routing draft cards through `selectify`**, exactly as project, template and
+             element cards do: they now carry `data-pid`, show a tick, and hide their ⋯ while selecting
+             (the tick owns that corner — two controls in one corner on a phone is a coin flip).
+             🚨 **AND THE SECOND HALF, WHICH WOULD HAVE FAILED SILENTLY.** Bulk delete calls
+             `K.store.remove(id)`, and `K.store` on the Elements tab is `FM.elements` — **which has
+             never heard of a draft's id, because a draft is a PROJECT wearing an Elements-tab card.**
+             Wiring Select without this would have given him a tick, a count, a confirm and a toast, and
+             deleted nothing. Bulk delete now routes by what the id actually IS, through the same
+             `discardDraftAnyway` the card's own ⋯ uses — so single and bulk cannot drift apart.
+             📐 **Verified live:** 4 draft cards, all with `data-pid`, all showing a tick, zero ⋯ in
+             select mode; ticking one read "1 selected"; ticking three and pressing the real Delete took
+             the draft count 5 → 2.
+             ✍️ **The stale comment is corrected in place**, with a note that it misled this very entry —
+             because a comment that contradicts another comment is how the same wrong turn gets taken a
+             third time.
       4. [x] **"As long as there's one left I can't delete it."** ✅ **DONE v13.60.** The ⋯ → *Delete draft…* action calls
              `FM.projects.discardDraft(p.id)`, and **`discardDraft` REFUSES on the draft that is currently
              open, by design** (js/home.js ~1690). The card even toasts *"That draft is the project you
@@ -22410,6 +22431,32 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Where it lives now:** the home header wordmark. **#618 clause 1 and #637 clause 2 are the
       other places a logo appears** (element thumbnails, PWA icons, favicon) — enumerate them before
       swapping, because they are different files at different sizes.
+
+- [ ] **639 — 🔴 DO THE LIGHT LOOK NOW: the new intro, the new logo at the top, and make the white
+      page actually look nice — INCLUDING a LIGHT, colourful top bar.** (27 Aug, at v13.61.)
+      His words, verbatim, in full:
+      > Can you focus on making the new animation? The one I sent you and then also putting the new logo up at the top and just making the white page look nice? I think the top bar it’s too dark like it needs to be colourful like how it is but reflect the darkness that it should be. I mean the lightness that it should be not the darkness just make it like this like the fact that the screen is supposed to be light now and you know change the intro animation and the logo for the app and all that stuff cause I just wanna see how it looks as soon as possible because that’s important to me but don’t forget the other stuff and like still do the other stuff just not right away
+
+      🚨 **THIS EXPLICITLY JUMPS THE QUEUE, and he authorised it in the same breath as protecting the
+      rest:** *"I just wanna see how it looks as soon as possible because that's important to me but
+      don't forget the other stuff and like still do the other stuff just not right away."* **Nothing is
+      dropped — #602, #604, #610, #618, #619 and the rest keep their places.**
+      1. [ ] **The intro animation** — his video, as the loading intro (**#636**).
+      2. [ ] **The new logo at the top** — the mark-as-M lockup (**#638**).
+      3. [ ] **Make the white page look nice** (**#615** polish).
+      4. [ ] **A LIGHT, COLOURFUL TOP BAR — and this REVERSES a decision I made in #615.**
+             He corrects himself mid-sentence, and the correction is the instruction: *"it needs to be
+             colourful like how it is but reflect the **darkness** that it should be. I mean the
+             **lightness** that it should be not the darkness."*
+             ⚠️ **#615 deliberately kept the bar DARK**, and the entry argued for it: *"a dark bar over a
+             bright wash is the edge the whole effect hangs on."* **He has looked at it and disagreed.
+             His call wins.** ➡️ **And it forces a second change nobody would guess: the wordmark is
+             WHITE artwork. On a light bar it disappears.** A dark variant of the lockup is required, not
+             optional.
+      5. [ ] **"the logo for the app"** — read as the app icon / PWA icons too, not just the header.
+      ⚠️ **He wants to SEE it**, so the white theme should be ON when he opens the app — with the Settings
+      switch from #615 still there to turn it straight off. **That is a changed default, so it is called
+      out in the reply rather than slipped in.**
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:

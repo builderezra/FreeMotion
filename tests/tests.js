@@ -48266,6 +48266,59 @@
     }
   });
 
+  /* 617 clause 3 — "you can't do the select delete". Draft cards never called `selectify`, so on a tab
+     where Select otherwise works they were invisible to it. Two halves, and the SECOND is the one that
+     could fail silently: a draft is a PROJECT wearing an Elements-tab card, so bulk delete must not
+     hand it to that tab's store. */
+  test('617: element drafts take part in Select, and bulk delete actually removes them', { item: '617' }, async function () {
+    const made = [];
+    const realConfirm = window.confirm;
+    try {
+      for (let i = 0; i < 2; i++) {
+        const r = await FM.projects.create({ name: 'suite draft ' + (i + 1), elementDraft: true });
+        made.push((r && r.id) || r);
+        await sleep(140);
+      }
+      FM.home.open();
+      await sleep(420);
+      const tabBtn = [].slice.call(document.querySelectorAll('.hm-tab')).filter(function (b) { return /elements/i.test(b.textContent); })[0];
+      if (!tabBtn) throw new Error('no Elements tab on the home screen');
+      tabBtn.click();
+      await sleep(420);
+      let cards = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(function (c) { return made.indexOf(c.dataset.pid) >= 0; });
+      if (cards.length !== made.length) {
+        throw new Error('only ' + cards.length + ' of ' + made.length + ' draft cards carry a data-pid — without it Select cannot find the card, so a tick updates the count and nothing appears on screen (the v6.17 failure, and the worst kind, because the next thing pressed is Delete)');
+      }
+      const selBtn = document.getElementById('hm-select-btn');
+      if (!selBtn) throw new Error('no Select button on the home screen');
+      selBtn.click();
+      await sleep(360);
+      cards = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(function (c) { return made.indexOf(c.dataset.pid) >= 0; });
+      cards.forEach(function (c) {
+        if (!c.querySelector('.hm-check')) throw new Error('a draft card shows no tick in Select mode — queue 617: "you can\u2019t do the select delete"');
+        if (c.querySelector('.hm-card-more')) throw new Error('a draft card still shows its ⋯ in Select mode — the tick occupies that corner, and two controls in one corner on a phone is a coin flip about which you hit');
+      });
+      cards.forEach(function (c) { c.click(); });
+      await sleep(320);
+      const bar = document.getElementById('hm-selbar');
+      if (!bar) throw new Error('no selection bar after ticking drafts');
+      /* THE HALF THAT COULD FAIL SILENTLY. K.store on the Elements tab is FM.elements, which has never
+         heard of a draft's id — deleting through it would be a no-op with a cheerful toast. */
+      window.confirm = function () { return true; };
+      const del = [].slice.call(bar.querySelectorAll('button')).filter(function (b) { return /^Delete$/.test(b.textContent.trim()); })[0];
+      if (!del) throw new Error('no Delete button on the selection bar');
+      del.click();
+      await sleep(1400);
+      const left = made.filter(function (id) { return FM.projects.list().some(function (p) { return p.id === id; }); });
+      if (left.length) throw new Error(left.length + ' of ' + made.length + ' drafts survived a bulk Delete — a draft is a project wearing an Elements-tab card, so it must be routed to discardDraftAnyway rather than that tab\u2019s store');
+      made.length = 0;
+    } finally {
+      window.confirm = realConfirm;
+      for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
+      try { const sb = document.getElementById('hm-select-btn'); if (sb && sb.textContent.trim() === 'Done') sb.click(); } catch (e) {}
+    }
+  });
+
   /* 617 clause 4 — "as long as there's one left I can't delete it".
      `discardDraft` refuses on the currently-open project by design, and the card's menu then TOLD HIM
      to go and open another one first, so the last draft could never be removed. The fix does that step

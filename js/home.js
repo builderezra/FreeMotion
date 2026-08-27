@@ -81,7 +81,11 @@ window.FM = window.FM || {};
   };
 
   let root = null, grid = null, tab = 'projects';
-  let selectMode = false;                 // multi-select for bulk delete / duplicate (projects tab only)
+  /* multi-select for bulk delete / duplicate. ⚠️ THIS SAID "(projects tab only)" UNTIL v13.61 AND HAD
+     BEEN WRONG SINCE v5.04 — `render()` says "Select works on EVERY tab now". A stale comment is not
+     harmless: queue 617's first diagnosis quoted this line as the CAUSE of "you can't do the select
+     delete", and the real cause was that draft cards never called `selectify`. */
+  let selectMode = false;
   const selected = new Set();             // ids ticked while in select mode
   let query = '';                         // live search text ('' = not searching)
 
@@ -1412,7 +1416,16 @@ window.FM = window.FM || {};
         const cur = FM.projects.currentId();
         ids = ids.sort((a, b) => (a === cur ? 1 : 0) - (b === cur ? 1 : 0));
       }
-      for (const id of ids) await K.store.remove(id);
+      /* ⚠️ A DRAFT IS A PROJECT WEARING AN ELEMENTS-TAB CARD, so it must not go through that tab's
+         store — `FM.elements.remove(draftId)` would be asked to delete something it has never heard
+         of. Route by what the id actually IS. `discardDraftAnyway` is the same call the card's own ⋯
+         menu uses, so bulk and single delete cannot drift apart, and it carries the switch-away that
+         queue 617 clause 4 needed. */
+      const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft).map(x => x.id));
+      for (const id of ids) {
+        if (draftIds.has(id)) await FM.projects.discardDraftAnyway(id);
+        else await K.store.remove(id);
+      }
       exitSelect();
     });
     const cancel = el('button', 'hm-selbtn', 'Cancel');
@@ -1654,7 +1667,8 @@ window.FM = window.FM || {};
        that browsers resolve by dropping one of them. */
     const card = el('div', 'hm-card hm-card-draft');
     card.setAttribute('role', 'button'); card.tabIndex = 0;
-    card.appendChild(el('div', 'hm-thumb hm-thumb-draft', '◇'));
+    const dthumb = el('div', 'hm-thumb hm-thumb-draft', '◇');
+    card.appendChild(dthumb);
     const body = el('div', 'hm-meta');
     body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));
     /* SAY WHICH KIND OF DRAFT THIS IS (queue 525). Two very different things wear this card:
@@ -1704,8 +1718,20 @@ window.FM = window.FM || {};
         } },
       ]);
     });
-    card.appendChild(more);
-    card.addEventListener('click', async () => {
+    /* ⚠️ THE ⋯ IS APPENDED ONLY WHEN NOT SELECTING, exactly as projectCard does it — the tick occupies
+       that same corner, and two overlapping controls in one corner on a phone is a coin flip about
+       which one you hit. */
+    if (!selectMode) card.appendChild(more);
+    /* DRAFTS JOIN SELECT (queue 617 clause 3). Ezra: *"You have to manually delete them you can't do
+       the select delete"* — and he was right, but NOT for the reason this entry first blamed.
+       `selectify` exists precisely so "templates and elements behave identically instead of
+       approximately" (v5.04), and v6.17 already fixed the tick-and-outline half for those two tabs.
+       Draft cards simply never called it: they carried a bare click handler and were invisible to
+       Select, on a tab where Select otherwise works.
+       ⚠️ THE COMMENT AT THE TOP OF THIS FILE SAYS "projects tab only" AND IS STALE — `render()` says
+       "Select works on EVERY tab now (v5.04)". Two comments disagreeing, and the older one is the one
+       this entry's first diagnosis quoted. Fixed below so it cannot mislead a third time. */
+    selectify(card, dthumb, p.id, async () => {
       await FM.projects.open(p.id);
       FM.home.close({ push: true, lead: card });
     });

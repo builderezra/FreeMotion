@@ -133,7 +133,18 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.60 — everything is pushed and the tree is clean. 1002 tests green.**
+📍 **HANDOVER, 27 Aug, v13.61 — everything is pushed and the tree is clean. 1003 tests green.**
+✅ **#617 clause 3 DONE — element drafts take part in Select, and bulk delete really removes them.**
+🚨 **A STALE COMMENT SENT THE FIRST DIAGNOSIS WRONG, AND TWO COMMENTS IN ONE FILE DISAGREED.**
+`js/home.js:84` said Select was "projects tab only"; `render()` says "Select works on EVERY tab now
+(v5.04)". The entry quoted the older one. **Real cause: draft cards never called `selectify`.** The
+stale line is corrected in place — a comment contradicting another comment is how the same wrong turn
+gets taken a third time.
+⚠️ **AND THE SILENT HALF:** bulk delete uses `K.store.remove`, which on the Elements tab is
+`FM.elements` — **a draft is a PROJECT wearing an Elements card**, so that call deletes nothing while
+showing a tick, a count, a confirm and a toast. **When one grid mixes two stores, route by what the id
+IS, not by which tab you are on.**
+
 ✅ **#617 clause 4 DONE — he can delete the draft he has open.** `discardDraftAnyway` switches away
 first, then discards; the deliberate refusal in `discardDraft` is untouched and now asserted.
 🚨 **#617 WAS PARKED AS "waiting on you" BY MY OWN CLASSIFIER, AND IT WAS A BUG HE WAS ACTIVELY
