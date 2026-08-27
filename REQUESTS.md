@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.62
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.63
 >
-> **State:** v13.62, 1005 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.63, 1006 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22432,8 +22432,7 @@ re-opened #480, which I had marked done and had not fixed.
       other places a logo appears** (element thumbnails, PWA icons, favicon) — enumerate them before
       swapping, because they are different files at different sizes.
 
-- [ ] **639 — 🔴 DO THE LIGHT LOOK NOW: the new intro, the new logo at the top, and make the white
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **639 — 🔴 DO THE LIGHT LOOK NOW: the new intro, the new logo at the top, and make the white
       page actually look nice — INCLUDING a LIGHT, colourful top bar.** (27 Aug, at v13.61.)
       His words, verbatim, in full:
       > Can you focus on making the new animation? The one I sent you and then also putting the new logo up at the top and just making the white page look nice? I think the top bar it’s too dark like it needs to be colourful like how it is but reflect the darkness that it should be. I mean the lightness that it should be not the darkness just make it like this like the fact that the screen is supposed to be light now and you know change the intro animation and the logo for the app and all that stuff cause I just wanna see how it looks as soon as possible because that’s important to me but don’t forget the other stuff and like still do the other stuff just not right away
@@ -22454,7 +22453,22 @@ re-opened #480, which I had marked done and had not fixed.
              His call wins.** ➡️ **And it forces a second change nobody would guess: the wordmark is
              WHITE artwork. On a light bar it disappears.** A dark variant of the lockup is required, not
              optional.
-      5. [ ] **"the logo for the app"** — the app icon / PWA icons. ⚠️ **NOT DONE, and said plainly rather than quietly:** the PDF has an APP ICON variant and the icons are separate files at several sizes. Next tick.
+      5. [x] **"the logo for the app"** ✅ **DONE v13.63 — `icon-192`, `icon-512` and `apple-touch-icon`
+             are the new mark.**
+             📐 **Built from the 2160x2160 mark he sent, not from the PDF's own app-icon tile** — that
+             tile is only ~514px in the hi-res render, which is under a 512 icon. The bigger source
+             makes 512 crisp instead of upscaled.
+             ⚠️ **Mark at 58% of the tile, deliberately:** an Android maskable icon may be cropped to a
+             circle of 80% diameter, and the test asserts every lit pixel sits inside it.
+             ⚠️ **Opaque, deliberately:** maskable and iOS icons are composited onto a ground the app
+             does not choose, so transparency shows as black or white depending on the launcher. The
+             test asserts zero non-opaque pixels.
+             🐛 **One bug caught in the contact sheet:** the source's ground is ~rgb(26,26,26), not
+             black, so using its greyscale straight as an alpha channel painted ~10% white across the
+             whole crop — **a visible lighter rectangle behind the mark.** Fixed with a threshold ramp.
+             ✅ **`manifest.json` background_color and theme_color are now `#111111`** — the exact ground
+             his intro starts on, so the PWA launch screen hands off to the first frame without a step.
+             ⚠️ **Checked at 48px too**, because "an icon that only reads at 64px" is #545's named trap.
       ✅ **SHIPPED v13.62 — ON BY DEFAULT, one switch for the whole look.**
       **4. [x] THE TOP BAR IS LIGHT AND COLOURFUL** — white glass over the palette, rounded bottom
       corners, blurred. **#615's argument for a dark bar loses to him having looked at it.**

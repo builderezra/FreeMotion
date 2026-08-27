@@ -133,7 +133,14 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.62 — everything is pushed and the tree is clean. 1005 tests green.**
+📍 **HANDOVER, 27 Aug, v13.63 — everything is pushed and the tree is clean. 1006 tests green.**
+✅ **#639 IS CLOSED — the whole light look is done**, including the app icons he asked for as "the logo
+for the app". **The queue-jump he authorised is finished, so the next tick returns to OLDEST-FIRST.**
+⚠️ **Finishing the jumped item BEFORE going back was deliberate** — leaving clause 5 hanging is exactly
+the quietly-dropped-clause failure REQUESTS.md exists to prevent.
+📌 **STILL WAITING ON HIM:** #602 (which four options go) · #610 (A or B) · #624 (three readings) ·
+#638 page 2 of the logo PDF (only matters if it carries clear-space / minimum-size rules).
+
 ✅ **#639 — THE LIGHT LOOK IS ON BY DEFAULT.** He explicitly told the loop to jump the queue for it and
 in the same breath protected the rest: *"don't forget the other stuff and like still do the other stuff
 just not right away."* **Nothing was dropped.** One switch (Settings → *New light look*) turns the whole

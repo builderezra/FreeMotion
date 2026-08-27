@@ -48266,6 +48266,54 @@
     }
   });
 
+  /* 639 clause 5 — the app icons. Three files, none of them reachable from the running app's DOM, so
+     the only honest check is to fetch and decode them. Two things matter and neither is visible from
+     the filename: they must be OPAQUE (a maskable Android icon and an iOS home-screen icon composite
+     onto an unknown ground — transparency there shows as black or white depending on the launcher),
+     and the mark must sit inside a maskable icon's safe circle or Android crops it. */
+  test('639: the app icons are the new mark, opaque, and inside the maskable safe zone', { item: '639' }, async function () {
+    const files = [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]];
+    for (const [name, want] of files) {
+      const img = await new Promise(function (res, rej) {
+        const i = new Image();
+        i.onload = function () { res(i); };
+        i.onerror = function () { rej(new Error('could not load ' + name)); };
+        i.src = name + '?probe=' + want;
+      });
+      if (img.naturalWidth !== want || img.naturalHeight !== want) {
+        throw new Error(name + ' is ' + img.naturalWidth + 'x' + img.naturalHeight + ', expected ' + want + 'x' + want);
+      }
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(img, 0, 0);
+      const d = cx.getImageData(0, 0, c.width, c.height).data;
+      let transparent = 0, lit = 0;
+      let minx = c.width, miny = c.height, maxx = -1, maxy = -1;
+      for (let y = 0; y < c.height; y++) {
+        for (let x = 0; x < c.width; x++) {
+          const i = (y * c.width + x) * 4;
+          if (d[i + 3] < 250) transparent++;
+          if (d[i] > 150 && d[i + 1] > 150 && d[i + 2] > 150) {
+            lit++;
+            if (x < minx) minx = x; if (x > maxx) maxx = x;
+            if (y < miny) miny = y; if (y > maxy) maxy = y;
+          }
+        }
+      }
+      if (transparent > 0) throw new Error(name + ' has ' + transparent + ' non-opaque pixels — a maskable Android icon and an iOS home-screen icon are composited onto a ground this app does not choose, so transparency shows up as black or white depending on the launcher');
+      if (lit < c.width * c.height * 0.02) throw new Error(name + ' has almost no light pixels (' + lit + ') — the mark is missing or nearly invisible');
+      /* THE MASKABLE SAFE ZONE: Android may crop to a circle of 80% diameter, so every lit pixel has
+         to sit inside it or the mark loses its ends on some launchers. */
+      const cxp = c.width / 2, cyp = c.height / 2, safe = c.width * 0.4;
+      const corners = [[minx, miny], [maxx, miny], [minx, maxy], [maxx, maxy]];
+      for (const [px, py] of corners) {
+        const dist = Math.sqrt((px - cxp) * (px - cxp) + (py - cyp) * (py - cyp));
+        if (dist > safe) throw new Error(name + ': the mark reaches ' + Math.round(dist) + 'px from centre but a maskable icon\u2019s safe circle is ' + Math.round(safe) + 'px — Android would crop its ends');
+      }
+    }
+  });
+
   /* 639 — the light look. The splash has to choose its film BEFORE js/settings.js exists, so it reads
      localStorage itself and carries its own copy of the default. Two defaults that must agree, in two
      files, with no compiler to notice — so a test notices instead.
