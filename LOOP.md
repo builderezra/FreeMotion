@@ -206,7 +206,24 @@ grid points is out by ~10 px and a curve brings it to 0.07.
 ⚠️ **Stacking is NOT the problem — a 5-deep stack measured 0.93x the sum of its parts**, slightly better
 than linear. There is no per-effect overhead to remove. Individual warps are simply expensive.
 
-📍 **QUEUE WALK, 27 Aug — five items read in order, and FOUR are blocked on him. Do not re-derive this.**
+📍 **QUEUE STATE AFTER THE 27 AUG SWEEP — 42 open numbered items, TWO nominally actionable.**
+· **#47** — labelled BIG, but its remaining half (export off the main thread) was long ago established
+  as HIS decision: days of work on the 11k-line compositor for something he has never asked for.
+· **#578** — clause 1 and the clause-2 defect both shipped (v12.94, v13.40). **The one real thread left
+  is WHY ECHO ONLY BUILT ITS TRAIL UNDER THE PROBE I NOW BELIEVE IS WRONG** — 110→263 synced, flat
+  unsynced, while the code says playback renders once per advancing frame. ⚠️ **Explaining that IS the
+  work; do not edit the Echo branch first** — three claims on that entry already died from doing so.
+· **#592 — MEASURED AND CLOSED-PENDING-HIS-WORD (27 Aug): zero overshoot at zooms 0.5/1/2/4 and with a
+  short clip.** The entry's named suspect (`PAD`) is DISPROVEN — clips are themselves offset by PAD, so
+  removing it would have CREATED the bug. ✅ **The entry's own "MEASURE IT before removing it" is what
+  saved that**, which is the best argument yet for writing the doubt down beside the guess.
+  📋 Staging gotcha worth keeping: **the add row is not drawn while a layer is SELECTED on a phone**
+  (solo view skips it) — deselect, or you measure an empty DOM and conclude nothing.
+🔑 **AND THE LESSON THAT FINALLY STUCK: phrase "waiting on him" in `_classify.py`'s OWN vocabulary**
+("your call", "waiting on you") — #592's STATUS generated correctly as NEEDS YOU on the first ship,
+where two hand-edits on #582 had been silently reverted.
+
+📍 **(earlier) QUEUE WALK, 27 Aug — five items read in order, and FOUR are blocked on him.**
 | item | state |
 |---|---|
 | *editing lags* (1st unnumbered) | measurable half DONE, summary in entry → **his verdict** |
