@@ -1,8 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.47
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.48
 >
-> **State:** v13.47, 990 tests green, tree clean.
+> **State:** v13.48, 990 tests green, tree clean.
+>
+> **🔎 Your black-and-white complaint: I have now measured every part of it, and nothing is broken.**
+> The effects work, the filters work, the picker tiles work, and the live preview works and updates on
+> every tap — I checked all four. **Your picture stays colourful because Sepia and Invert sit AFTER
+> Grayscale and put the colour back.** That is what those effects do in that order, and the app was
+> showing you the truth the whole time.
+> ➡️ **What would genuinely help is the app SAYING that** — "Grayscale is applied, but Sepia and Invert
+> after it are adding colour back". I have built and verified the groundwork for it this release.
+> **Try it this way:** put Grayscale LAST in the stack and it will go black and white.
 >
 > **🔊 YOUR EXPORT DOES CONTAIN SOUND — I proved it, and it moves the blame.** I ran a real export with
 > real audio and looked inside the finished file: **the AAC audio track is there.** So FreeMotion is
@@ -20873,7 +20882,59 @@ re-opened #480, which I had marked done and had not fixed.
       effects do nothing. **Reported THREE TIMES now** (*"working at one point but now they aren’t again"*,
       *"still don’t do anything at allllllllllllllllll"*, and this), and every previous fix went after a
       DIFFERENT cause — needs-input effects (v10.32) and exits discarding picks (queue 389).
-      ➡️ **THE FIX: picked effects must be VISIBLE ON THE LAYER WHILE PICKING.** The intent already exists
+      ✅ **NARROWED 27 Aug — THE PREVIEW MECHANISM ITSELF WORKS. Measured, on an image layer:**
+      | | mean colour |
+      |---|---|
+      | no preview | 136,144,108 (spread 36 — colour) |
+      | **`FM._fxPreview` set to grayscale** | **140,140,140 (spread 0 — grey)** |
+      | cleared again | 136,144,108 (colour restored) |
+      **And `previewStack()` (js/fx-browser.js:~361) maps EVERY picked id**, not just the last tap, so
+      the intended behaviour is a live preview of the whole pick list.
+      ❌ **AND THAT NARROWING WAS ALSO WRONG — the trigger is fine too. I went in a circle; here is the
+      whole chain, checked link by link, so nobody walks it again:**
+      · `sheetMode()` = root has `.fxb-sheet` — **true on his phone** (measured).
+      · `_layer` = the passed layer or `layerById(scene, scene.selectedId)` — resolves.
+      · **Tapping a tile calls `togglePick` → `_picked.push` → `restartPreview()`** (fx-browser.js:393-395,
+        commented *"every tap re-previews"*).
+      · `restartPreview()` sets `FM._fxPreview = { id, list: previewStack() }`, and `previewStack()`
+        maps EVERY picked id.
+      · Setting that preview **demonstrably greys the picture** (140,140,140, spread 0).
+      🔑 **SO THE PREVIEW WAS WORKING AND SHOWING HIM THE TRUTH.** His eight-effect stack genuinely
+      renders in colour — measured at spread 42 — because **Sepia re-adds colour and Invert flips it,
+      both sitting AFTER Grayscale.** The picture was right; his conclusion from it was reasonable.
+      ✅ **THE REAL DEFECT, unchanged from the first reading and now the only one left standing:**
+      **nothing tells him an effect has been cancelled by a later one.** `FM.fxDeadOnLayer` returns
+      `null` for that buried Grayscale — the app HAS dead-effect detection and it does not catch
+      "overridden by what follows".
+      ❌ **AND THE "IT IS BEING CANCELLED" PREMISE IS WRONG TOO — measured 27 Aug with a new check.**
+      Built `FM.fxOverriddenOnLayer` (js/compositor.js, beside `fxDeadOnLayer`): it asks the USER's
+      question — **does removing this effect change the FINAL picture?** — where the old one only asks
+      whether an effect changes what it is HANDED.
+      **Run against his exact eight-effect stack: NOTHING is flagged. Every effect contributes.**
+      · `grayscale → invert`: not overridden, and rightly — inverting a grey image gives grey, inverting
+        a colour one gives colour, so the Grayscale genuinely changes the result.
+      · `saturate/hue/sepia → grayscale`: not overridden either — each alters the channel values, so the
+        resulting GREY LEVEL differs. Conservative and correct.
+      ✅ **Verified with a true positive so it is not a check that can never fire:** `grayscale →
+      grayscale` **is** flagged ("no visible effect here — grayscale after it undoes what it does").
+      🔑 **SO THERE IS NO BUG IN HIS STACK. The app showed him the truth.** His picture is colourful
+      because Sepia and Invert ADD colour after Grayscale removes it — that is what those effects do,
+      in that order. **Nothing is broken, nothing is silently dying, and there is no warning to give
+      that would be honest.**
+      ➡️ **What WOULD help him is a different message entirely: "Grayscale is applied, but Sepia and
+      Invert after it are putting colour back."** That is an EXPLANATION of a working stack, not a
+      defect warning — and it needs a heuristic (a colour-removing effect present, yet the final probe
+      still saturated) rather than the exact-match test above. **The new function is the foundation for
+      it and is shipped verified but UNWIRED; wiring it to the tile is the next step.**
+      ⚠️ **Do not touch the effects, the filters, the tiles or the preview — all four measured working.**
+      🗒️ *(superseded)* **THE FAULT IS NOT IN WHETHER THE PREVIEW RENDERS — IT IS IN WHEN IT GETS SET.**
+      `FM._fxPreview = { id: layer.id, list: previewStack() }` is written in exactly ONE place
+      (line ~367). ➡️ **Next: find what gates that line and whether a TAP on a tile reaches it at
+      380px** — the pick clearly updates `_picked` (7 mutation sites) but the preview may only be
+      refreshed on some other trigger, e.g. the hold-to-preview loop (`_loopTimer`) rather than the
+      pick itself. **That gap is the whole of his complaint.**
+      ⚠️ **Do NOT rebuild the preview — it works. Find the missing call.**
+      🗒️ *(superseded)* **THE FIX: picked effects must be VISIBLE ON THE LAYER WHILE PICKING.** The intent already exists
       and came from his own words: *"when you tap on an effect it doesn’t just add it selects it and it
       will show the layer selected like what the layer will look like with the effect selected"* —
       `FM._fxPreview` is that mechanism. **FIRST JOB: prove whether the live preview actually renders the

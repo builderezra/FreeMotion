@@ -133,6 +133,16 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+🔑 **WHEN THREE REPORTS SHARE A SYMPTOM, THE BUG IS USUALLY THE SILENCE, NOT THE FEATURE (27 Aug).**
+Queue 579 / 593 / 603 all say "the effects do nothing". Measured, in this order: the effects work, the
+filters work, the picker tiles work, the live preview works AND is triggered on every tap. **Four
+things proven fine, and each proof was a tick spent.** What is actually broken is that his stack
+cancels itself — Sepia and Invert sit after Grayscale — and **nothing says so**. `FM.fxDeadOnLayer`
+returns null for an effect that a later one completely overrides.
+⚠️ **The lesson for the NEXT such report: before proving the feature works, ask what the app TELLS him
+when it does not.** I checked the mechanism four times and the messaging zero times, and the messaging
+was the fault every time.
+
 ⚠️ **CANVAS TIMING WITHOUT A READBACK MEASURES NOTHING — and it may undercut the v11.72-v12.30 numbers.**
 Timing around `renderScene` with `performance.now()` reported **0.00 ms for EIGHT stacked blurs** on a
 1080x1350 layer. Canvas work is QUEUED: `ctx.filter = 'blur(...)'` costs almost nothing on the CPU and

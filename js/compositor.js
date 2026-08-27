@@ -1651,6 +1651,41 @@ window.FM = window.FM || {};
     return deadWhy(inst.type, before);
   };
 
+  /* ⚠️ IS THIS EFFECT WIPED OUT BY WHAT COMES AFTER IT? (queue 603, and 579 and 593 before it.)
+   * `fxDeadOnLayer` above asks "does this effect change what it is HANDED" — it compares against the
+   * effects BELOW it only. That is the right question for "this effect does nothing on its own", and it
+   * is the WRONG question for what Ezra kept hitting: he stacked Grayscale, then Sepia, then Invert, and
+   * the last two put the colour straight back. Grayscale genuinely changed what it was handed, so the
+   * existing check returned null and the tile said nothing — three reports of "the effects do nothing",
+   * every one of them the app staying silent while it worked exactly as told.
+   * This asks the user's question instead: does REMOVING this effect change the FINAL picture? If not,
+   * the effect is contributing nothing you can see, whatever it does mid-stack.
+   * Same flat-colour probe, same filter builder, so it inherits their limits: colour-only effects, and
+   * a null whenever it cannot be answered honestly. */
+  FM.fxOverriddenOnLayer = function (inst, layer, t) {
+    if (!inst || inst.enabled === false || !FLAT_TESTABLE[inst.type]) return null;
+    const hex = flatColorOf(layer);
+    if (!hex) return null;
+    const time = (typeof t === 'number' && isFinite(t)) ? t : 0;
+    const live = (layer.effects || []).filter(e => e && e.enabled !== false);
+    if (live.indexOf(inst) < 0) return null;
+    // Only meaningful if something actually FOLLOWS it — otherwise fxDeadOnLayer is the right question.
+    if (live.indexOf(inst) === live.length - 1) return null;
+    const without = live.filter(e => e !== inst);
+    if (!without.length) return null;
+    let full, minus;
+    try {
+      full = throughFilter(hex, effectFilter({ effects: live }, time, 1));
+      minus = throughFilter(hex, effectFilter({ effects: without }, time, 1));
+    } catch (e) { return null; }                                   // never break a render over a hint
+    for (let i = 0; i < 4; i++) if (Math.abs(full[i] - minus[i]) > 1) return null;   // it still shows
+    const after = live.slice(live.indexOf(inst) + 1).map(e => e.type);
+    return { type: inst.type, overriddenBy: after,
+             why: 'This has no visible effect here — ' +
+                  (after.length === 1 ? after[0] : after.slice(0, 2).join(' and ')) +
+                  (after.length > 2 ? ' and others' : '') + ' after it undo what it does.' };
+  };
+
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
   // #rrggbb (or #rgb) + 0..1 alpha → rgba() string, for keyframeable shadow opacity.
