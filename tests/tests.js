@@ -48266,6 +48266,54 @@
     }
   });
 
+  /* 603 — the badge on a dead effect tile has to name the CAUSE, not just the verdict.
+     He judged the colour effects on WHITE shapes, where they provably cannot show: grayscale takes
+     255,255,255 to 255,255,255. The app knew exactly why and put the sentence in `title`, a hover
+     tooltip a phone cannot display, so what he saw was "does nothing here" — which reads as *broken*.
+     Three angry reports came out of that one word choice, so it is worth a test. */
+  test('603: a dead effect tile says WHY, in words a phone can read', { item: '603' }, async function () {
+    if (!FM._fxDeadShortLabel) throw new Error('FM._fxDeadShortLabel is gone — the badge wording this test is about no longer has a seam');
+    const cases = [
+      ['Grayscale can’t change this layer — it has no colour to work on. Give the layer a colour first.', 'layer has no colour'],
+      ['Contrast is turned UP and this layer is already pure white — drag it below 1 to see anything.', 'layer is pure white'],
+    ];
+    cases.forEach(function (c) {
+      const got = FM._fxDeadShortLabel(c[0]);
+      if (got !== c[1]) throw new Error('the badge for "' + c[0].slice(0, 40) + '…" reads "' + got + '" where it should read "' + c[1] + '" — queue 603, the badge has to name the cause or it reads as "this effect is broken"');
+    });
+    /* ⚠️ AND THE FALLBACK MUST STILL EXIST. A rewrite that made every reason fall through to the
+       generic string would pass a test that only checked the two above. */
+    if (FM._fxDeadShortLabel('something nobody has written a short form for') !== 'does nothing here') {
+      throw new Error('the generic fallback wording is gone — an unrecognised reason must still say something');
+    }
+    /* And on a real WHITE layer the picker must actually produce one of these. This is the end-to-end
+       half: the wording helper could be perfect while nothing ever calls it. */
+    const keep = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      const L = FM.scene.layers[0];
+      if (!L) throw new Error('could not make a shape layer');
+      if (L.fill !== undefined) L.fill = '#ffffff';
+      if (L.color !== undefined) L.color = '#ffffff';
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(200);
+      if (!FM._fxDeadHereWhy) throw new Error('FM._fxDeadHereWhy is gone — the tile-level check has no seam');
+      const why = FM._fxDeadHereWhy('saturate');
+      if (!why) throw new Error('Saturation on a pure white layer is not being flagged as dead — that is the exact case queue 603 is about (measured: white stays 255,255,255)');
+      if (!/no colour to work on/i.test(why)) throw new Error('the reason for Saturation on white reads "' + why + '" — it no longer explains that the layer has no colour');
+      /* The control: on a COLOURED layer it must go quiet, or the badge means nothing. */
+      if (L.fill !== undefined) L.fill = '#e0603c';
+      if (L.color !== undefined) L.color = '#e0603c';
+      FM.refreshAll();
+      await sleep(200);
+      if (FM._fxDeadHereWhy('saturate')) throw new Error('Saturation is flagged dead on a COLOURFUL layer too — a badge that always fires tells him nothing');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
   /* 602 clause 1 — "All of these options block you even seeing the text". The Aa sheet used to be
      447px tall, unbounded, sitting straight on the canvas. Both DESKTOP branches of positionPop have
      capped it for months (#147, queue 249); the phone branch never did. This asserts the phone one. */

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.52
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.53
 >
-> **State:** v13.52, 994 tests green, tree clean.
+> **State:** v13.53, 994 tests green, tree clean.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -20974,7 +20974,7 @@ re-opened #480, which I had marked done and had not fixed.
       because **Spacing and Line height were your own request** (shipped v12.31), so removing them
       reverses something you asked for. **Curve and Animate are the two genuinely duplicated by effects.**
 - [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
       underlying complaint is legitimate.)
       His words, verbatim:
@@ -21063,6 +21063,49 @@ re-opened #480, which I had marked done and had not fixed.
       defect warning — and it needs a heuristic (a colour-removing effect present, yet the final probe
       still saturated) rather than the exact-match test above. **The new function is the foundation for
       it and is shipped verified but UNWIRED; wiring it to the tile is the next step.**
+      🎯 **FOUND IT, 27 Aug (v13.53) — AND HE WAS RIGHT ABOUT WHAT HE SAW. The cause is his LAYERS,
+      and the defect is that the app put the explanation somewhere a phone cannot reach.**
+      🚨 **Every screenshot he has sent on this is WHITE SHAPES ON BLACK.** Measured on a white shape:
+      | effect on a WHITE layer | result |
+      |---|---|
+      | Grayscale | 255,255,255 → **255,255,255 — no change** |
+      | Saturation (to 0) | **no change** |
+      | Hue Shift | **no change** |
+      | Sepia | 255,255,239 (the only one that does anything) |
+      | the same four on a COLOURED layer | **all four work** — grayscale 224,96,60 → 121,121,121 |
+      **White has no colour to remove.** *"They don't make shit black and white"* — a white rectangle is
+      already black and white. *"A lot of effects like saturation just don't fucking work"* — on white,
+      saturation genuinely does nothing. **Nothing is broken; he was judging the effects on the one kind
+      of layer where they cannot show.**
+      🔑 **AND THE APP KNEW. `FM.fxDeadOnLayer` returns the exact right sentence** — *"Grayscale can't
+      change this layer — it has no colour to work on. Give the layer a colour first."* — **and the
+      picker put it in `title`, a HOVER TOOLTIP, which a phone can never show.** What he could see was a
+      badge reading **"does nothing here"**, which reads as *this effect is broken*, not *your layer is
+      white*. ⚠️ **This is the #129 lesson word for word** — *the app worked out the answer and then
+      wrote it somewhere you could never read it* — and it cost three angry reports.
+      ✅ **FIXED v13.53, and it is one string:** the badge now names the CAUSE — **"layer has no colour"**,
+      **"layer is pure white"**, **"layer never moves"** — and **tapping it toasts the full sentence**
+      (the tappable toast from v11.83). Verified live at phone width: the Hue Shift and Saturation tiles
+      read "layer has no colour", Contrast and Brightness read "layer is pure white", and a tap put
+      *"Hue Shift can't change this layer — it has no colour to work on. Give the layer a colour first."*
+      on screen. `title` stays for the desktop hover, which was never the broken half.
+      🐛 **AND THE TEST'S CONTROL CAUGHT A SECOND, REAL BUG ON ITS FIRST RUN — which is the whole
+      argument for writing controls.** The assertion *"a badge that always fires tells him nothing"* went
+      red: Saturation was still flagged dead on a COLOURFUL layer. **The picker caches the answer under
+      `layer.id | effect count | can-it-move | effect id` — and the layer's COLOUR is not in that key.**
+      So a shape that was white when the picker first looked kept its "layer has no colour" badge after
+      he coloured it in, with the effect working perfectly underneath. **The comment beside that key
+      already warned about exactly this** for the movement input — *"any input to the answer belongs in
+      the key"* — and the colour was the input nobody added. `FM.flatColorOf` is now exported and joins
+      the key; measured white → flags, coloured → silent, back to white → flags again.
+            ⚠️ **STAYS OPEN UNTIL HE SAYS IT LANDS.** The measurement says there is no defect in the effects and
+      the message now names the cause — but he has told me twice that my conclusion missed it, and the
+      thing that decides this is him trying it, not another probe.
+      ❓ **And one honest possibility this does NOT cover:** if he applies a B&W filter to a COLOURED
+      layer and it still does not go grey, that is a different bug and none of the above touches it.
+      **The badge will stay silent in that case** (measured: null on a coloured layer), so silence now
+      means "this should work" — which is itself the information he needs.
+
       ⚠️ **Do not touch the effects, the filters, the tiles or the preview — all four measured working.**
       🗒️ *(superseded)* **THE FAULT IS NOT IN WHETHER THE PREVIEW RENDERS — IT IS IN WHEN IT GETS SET.**
       `FM._fxPreview = { id: layer.id, list: previewStack() }` is written in exactly ONE place
@@ -21709,6 +21752,7 @@ re-opened #480, which I had marked done and had not fixed.
              rotations must produce the same VISUAL corner radius. Measure it; do not eyeball it.
 
 - [ ] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, phone screenshot at v13.50 — Project 40, the transport row with − and + either side of
       the timecode, and the right-hand view rail showing "1×".)
       His words, verbatim:
@@ -21723,6 +21767,7 @@ re-opened #480, which I had marked done and had not fixed.
       the transport shows it. A one-way binding fixed one way round is the same bug tomorrow.
 
 - [ ] **623 — Copy and paste GRAPHS: take a curve you made and paste it into any other graph.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, phone screenshot at v13.51 — the Position / Scale easing editor, the Bezier/Bounce/Steps
       row and the six curve presets below it.)
       His words, verbatim:
@@ -21741,6 +21786,74 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The six preset buttons under the graph are the existing answer to "reuse a curve"**, so this
       is him saying the presets are not enough — he wants HIS curve reusable. **Worth considering "save
       this curve as a preset" alongside copy/paste**, but do NOT substitute it for what he asked for.
+
+- [ ] **624 — Holding a layer on the left of the timeline to select it, and the edit menu.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      (27 Aug, phone screenshot at v13.51 — "1 selected" in the top bar, one layer's head highlighted on
+      the left, and the 8-tile edit menu open at the bottom.)
+      His words, verbatim:
+      > When you hold on a layer to select like on the left side of the screen, it should open up the edit menu for that layer because you’re trying to multi select
+
+      ❓ **THIS ONE IS AMBIGUOUS AND I AM NOT GUESSING — it needs one word from him.** The sentence says
+      the edit menu **should** open, but the reason given — *"because you're trying to multi select"* —
+      argues the other way, and **his screenshot already shows the menu open**. Three readings:
+      **(a)** Holding to multi-select should NOT pop the edit menu, because you are selecting, not
+      editing — the screenshot is him photographing the thing he wants gone. *(Likeliest: it fits the
+      screenshot and the stated reason.)*
+      **(b)** It should open, and open **for the layer you held** rather than whatever was selected
+      before — i.e. the menu is right but it is showing the wrong layer.
+      **(c)** It should open, full stop, and today it does not on the left-hand head column (only when
+      you tap the clip itself).
+      ➡️ **Do NOT build any of these until he says which.** All three are small; picking wrong means
+      shipping the opposite of what he asked for, and (a) and (c) are exact opposites.
+      📍 **Where it lives when the answer comes:** the long-press on the layer HEAD (the eye +
+      thumbnail column on the left of the timeline) and whatever raises the inspector's category grid.
+      **#617's diagnosis is a nearby precedent** — select mode is `projects tab only` on Home; the
+      timeline's own select/hold behaviour is separate code and worth reading together.
+
+- [ ] **625 — Keyframes duplicate when you try to move them, and sometimes cannot be deleted.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (27 Aug, at v13.51.)
+      His words, verbatim:
+      > Sometimes I try to move key frames and it just duplicates them and sometimes I try to delete them and I can’t
+
+      1. [ ] **Dragging a keyframe sometimes DUPLICATES it instead of moving it.**
+      2. [ ] **Deleting a keyframe sometimes does not work.**
+      ⚠️ **"Sometimes" is the important word in both** — this is intermittent, so the first job is to find
+      the CONDITION, not the line. **Do not fix a plausible-looking line and call it done**; an
+      intermittent bug that is still there afterwards costs him another report and costs the entry its
+      credibility. Reproduce it, then fix it, then reproduce the fix.
+      📍 **The likeliest shape, worth checking first:** a drag that starts but does not pass the
+      movement threshold gets treated as a TAP, and a tap on empty track adds a keyframe — so a
+      not-quite-drag would land a second one on top of the first. That single mechanism would explain
+      BOTH halves: the duplicate, and then "I can't delete it" because there are two stacked at the same
+      time and deleting one leaves the other looking untouched.
+      ➡️ **Test that first**, because if it holds, one threshold fixes both clauses.
+
+- [ ] **626 — 🔴 All clips sped up by the same amount and ending together, yet the end of the
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      timeline is blank. He thinks the core mechanics are wrong.** (27 Aug, phone screenshot at v13.51 —
+      Project 41, three clips each badged **1.7×**, all ending at the same x, playhead at 00:01:10, the
+      preview BLACK.)
+      His words, verbatim:
+      > I think you’ve got something wrong mechanically with the timeline, even tho every clip ends at the end and I sped the up the same amount so they all end at the same time, the end of the clip is blank. Makes no sense unless something in the ground mechanics is broken
+
+      1. [ ] **Three clips, same 1.7× speed, same end point — and the timeline runs on past them with
+             nothing in it.**
+      💡 **HYPOTHESIS, to be PROVEN not assumed:** speeding a clip up SHORTENS it, but the PROJECT's
+      duration is not shortened with it, so the timeline keeps the length it had at 1× and the tail is
+      empty. His playhead is at 00:01:10, at the clips' right edge, and the preview is black — which is
+      what an empty tail looks like. ⚠️ **That is a guess from a screenshot, and this file records three
+      separate occasions where a guess from a screenshot was wrong** (queue 582 alone burned three).
+      **Reproduce it: three clips, set each to 1.7×, then read `scene.project.duration` against the last
+      clip's real end.**
+      ➡️ **If the hypothesis holds, the question is what SHOULD happen**, and it is his call: the project
+      shrinks to fit, or it keeps its length and the blank tail is deliberate (room to add more).
+      **Do not pick silently** — but do measure first, because if the numbers disagree it is a real
+      arithmetic bug and no decision is needed.
+      ⚠️ **AND THE SPEED FAMILY IS ALREADY UNDER SUSPICION TWICE OVER**: #609 (the Speed slider looks
+      broken) and #622 (holding the jump buttons does not update the view rail). **Read all three
+      together** — three reports about speed in one day is more likely one mechanism than three.
 
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:

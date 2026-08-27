@@ -1589,6 +1589,12 @@ window.FM = window.FM || {};
     grayscale: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   });
 
+  /* Exported for fx-browser's dead-effect CACHE KEY (queue 603). The colour is an INPUT to
+     "does this effect do anything here", so leaving it out of the key meant a layer that was white
+     when you first opened the picker kept its "layer has no colour" badge after you coloured it in.
+     Caught by the control half of the 603 test the moment it was written — the same class of bug the
+     comment beside that key already warns about for "can this layer move". */
+  FM.flatColorOf = function (layer) { try { return flatColorOf(layer); } catch (e) { return null; } };
   function flatColorOf(layer) {
     if (!layer) return null;
     const c = layer.type === 'text' ? layer.color : (layer.type === 'shape' ? layer.fill : null);

@@ -820,7 +820,14 @@ window.FM = window.FM || {};
        blurs and changes neither the layer id nor its effect count, so a cached "it never moves" would
        have survived him keyframing the thing and gone on lying. Any input to the answer belongs in the
        key; this one is a boolean, so it costs nothing. */
-    const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M') + '|' + id;
+    /* ⚠️ AND THE LAYER'S COLOUR IS IN THE KEY TOO (queue 603), for exactly the reason the note above
+       gives about movement: it is an INPUT to the answer. Without it, a shape that was WHITE when the
+       picker first cached "layer has no colour" kept that badge after he coloured it in — the effect
+       would then work perfectly while the tile went on saying it could not. Caught by the control half
+       of the 603 test ("a badge that always fires tells him nothing") on its first run, which is the
+       whole argument for writing the control. */
+    const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M')
+              + '|' + (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?') + '|' + id;
     if (_deadCache.has(key)) return _deadCache.get(key);
     // The motion family first — it is a cheaper question than pushing a pixel through a filter.
     if (MOTION_FX[id] && cannotMove(layer)) { _deadCache.set(key, MOTION_FX[id]); return MOTION_FX[id]; }
@@ -834,13 +841,40 @@ window.FM = window.FM || {};
     return why;
   }
   FM._fxDeadHereWhy = deadHereWhy;                    // seam: the suite asks the real thing, not a copy
+  /* WHAT THE BADGE SAYS IS THE WHOLE FIX (queue 603). It used to read "does nothing here" with the
+   * REASON in `title` — a hover tooltip, which a phone cannot show. So the app knew exactly why and
+   * put it in the one place he could never reach, and "does nothing here" reads as *this effect is
+   * broken*, not *your layer is white*. That is three angry reports, the last of them: "none of the
+   * black and white filters actually make anything black and white STILL … a lot of effects like
+   * saturation just don't fucking work".
+   * MEASURED, and he was right about what he saw and wrong about the cause: on a WHITE shape —
+   * which is what every one of his screenshots shows — grayscale takes 255,255,255 to 255,255,255,
+   * saturation and hue likewise. Nothing is broken. White has no colour to remove. On a coloured
+   * layer all four work (measured: 224,96,60 → 121,121,121 for grayscale).
+   * ⚠️ THIS IS THE #129 LESSON REPEATING — "the app worked out the answer and then wrote it somewhere
+   * you could never read it". Same fix: say it where he is, in words that name the cause.
+   * The badge now carries the SHORT cause, and a tap gives the full sentence (the tappable toast from
+   * v11.83). `title` stays for the desktop hover, which was never the broken half. */
+  function deadShortLabel(why) {
+    if (/no colour to work on/i.test(why)) return 'layer has no colour';
+    if (/already pure white/i.test(why)) return 'layer is pure white';
+    if (/already pure black/i.test(why)) return 'layer is pure black';
+    if (/never moves|does not move|cannot move/i.test(why)) return 'layer never moves';
+    if (/at this value/i.test(why)) return 'no change at this value';
+    return 'does nothing here';
+  }
   function deadHereHint(id) {
     const why = deadHereWhy(id);
     if (!why) return null;
-    const s = el('span', 'fxb-needs fxb-dead', 'does nothing here');
+    const s = el('span', 'fxb-needs fxb-dead', deadShortLabel(why));
     s.title = why;
+    /* Tappable, and it must NOT also pick the effect — the badge sits inside the tile, whose own tap
+       adds or picks. A tap here is a question about the tile, not a choice of it. */
+    s.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); if (FM.toast) FM.toast(why, 5200); });
+    s.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
     return s;
   }
+  FM._fxDeadShortLabel = deadShortLabel;   // seam: the suite asserts the wording, not a copy of it
 
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
