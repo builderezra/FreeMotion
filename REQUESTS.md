@@ -1,8 +1,31 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.49
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.50
 >
-> **State:** v13.49, 990 tests green, tree clean.
+> **State:** v13.50, 990 tests green, tree clean.
+>
+> **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
+> swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
+> flick get capped and then stop dead while it was still moving. Measured across three zoom levels, the
+> limits are now identical in pixels — they used to vary 16x. **The glide length you liked is unchanged.**
+> ⚠️ **A confession worth having:** I built it right, tested it against a CACHED file, saw the old
+> numbers, and reverted a working fix — then found the stale cache. Your own notes warn about exactly
+> that. Re-applied and verified properly.
+> ❓ **Two one-word answers still open:** which way the drag handle looks off, and whether that saved
+> camera-roll video has sound in another app.
+>
+> **✅ The + orb has your blue ring** — the same blue as your pinned cards, copied from them so it
+> cannot be slightly off. (I could not get the + on screen here to photograph it, so if it looks wrong
+> that is a one-line change.)
+> **📥 Your four newest are logged word-for-word: 611 ring · 612 menu animations · 613 the + shape ·
+> 614 timeline swiping.**
+> **🔴 614 already has its CAUSE, found while writing it down:** the swipe's speed cap and stop-threshold
+> are measured in SECONDS, but how a swipe feels is a PIXELS thing — and zoom is the conversion between
+> them. Zoomed out, your finger speed becomes a huge time-velocity, gets capped, then trips the "stop
+> now" threshold while still visibly moving. **That is both halves of what you described, from one unit
+> mismatch, and it is a small fix with a proper test.**
+> ❓ **Two one-word answers still open:** which way the drag handle looks off, and whether that saved
+> camera-roll video has sound in another app.
 >
 > **✅ The + button now has the blue ring** — and it is the SAME blue as your pinned cards, copied from
 > them rather than picked by eye, so it cannot be slightly off.
@@ -21233,6 +21256,138 @@ re-opened #480, which I had marked done and had not fixed.
       a round orb — so a ring on it would draw a SQUARE around a circle. And `box-shadow` rather than
       `border`, which would shrink the aura inside its 64px box and pull the gradient off the glass
       edge the filter chain derives its rim from.
+- [ ] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      His words, verbatim:
+      > Can you do something similar you did with the pc version but for the moniker where each version has
+      > a nice animation, be creative and put in lots of effort and make it make sense and still user
+      > friendly, do it for the copy and paste menu as well when it pops up, I love what you did with the
+      > notes menu how it flipped up, something like that for the rest but not the exact same thing. Also
+      > for the add menu that pops up from the bottom, it looks nice but it's missing something, like the
+      > animation when it pops up could use some work just so the app feels premium
+
+      FOUR CLAUSES:
+      1. Mobile menus should each get their own nice open animation, matching what the PC version already has.
+      2. The copy/paste menu needs one when it pops up.
+      3. The notes menu's FLIP-UP is the benchmark he likes — "something like that for the rest but NOT the
+         exact same thing", i.e. a family of related motions, not one animation copy-pasted everywhere.
+      4. The bottom add sheet already looks nice but its pop-up animation is "missing something" — he wants it
+         to feel PREMIUM.
+
+      AMBIGUITY TO SETTLE, not guess: "the moniker" is almost certainly autocorrect. Most likely "the MOBILE"
+      (he contrasts it with "the pc version"). Do not assume — one word from him confirms it, and building the
+      wrong surface wastes the whole job.
+
+      ⚠️ #545 APPLIES — this is a DESIGN request. Draw real options, render them AT 380px, show him, let him
+      pick. Do not ship an animation he has not seen. His standing words: "I just want options. Yu can just
+      say recommended next to the best option."
+
+      ⚠️ SCOPE: this is a creative job needing exploration across several menus, and it is worth doing
+      properly rather than dashing. It deserves a session with full context, not the tail of a long one.
+
+      STARTING POINT: find the notes-menu flip animation first — it is the one he LIKES and the family should
+      be derived from it, so read it before designing anything.
+- [ ] **613 — The add-layer “+” should keep its plus but lose the plain circle.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Instead of a random plus circle here, keep the plus shape but instead of the little ball do something
+      > more fitting
+
+      THE SCREENSHOT: Project 51's timeline, 8 layer rows. Two red arrows converge on the LEFT END of the
+      "Tap to add a layer" row — at the round blue **+** button — and the same arrows start up near the small
+      white dot sitting in the toolbar strip above (left of the transport controls).
+
+      WHAT HE IS ASKING, as far as the words carry:
+      · KEEP the plus glyph itself.
+      · The plain round "ball" it sits in is the problem — it reads as generic/"random".
+      · Replace the container with something that FITS the timeline row it lives in.
+
+      ⚠️ AMBIGUITY, flag rather than guess: the arrows touch BOTH the + button and the little white dot above
+      it. Two readings:
+        (a) only the + button's circle should change — "the little ball" IS that circle; or
+        (b) he is pointing at the white dot as a second offender, or as the thing the + should resemble.
+      One word settles it. Building the wrong element wastes the job, and the two live in different files.
+
+      ⚠️ #545 APPLIES — a design request. Draw REAL options, render them AT THE SIZE THEY SHIP AT (the button
+      measures ~34px in that row), show him, let him pick. His standing words: "I just want options. Yu can
+      just say recommended next to the best option."
+
+      RELATED, and worth reading together: #611 just put the menu's blue ring on the HOME + orb. This is the
+      TIMELINE + and a different element — do not conflate them, but the visual family should agree.
+- [x] **614 — 🔴 Timeline swiping stops too soon when zoomed out — the fling must scale with zoom. CAUSE FOUND.**
+      His words, verbatim:
+      > Right now the swiping on the timeline stops too soon, when the project gets bigger and I'm zoomed out
+      > and stuff the swiping feels off, just make sure the swiping is adjusted for how zoomed in the timeline
+      > is and feel fluent no matter what
+
+      *** CAUSE FOUND WHILE LOGGING IT — this is a build, not an investigation. ***
+
+      js/timeline.js:2695 —
+          const MOM_FRICTION = 0.947, MOM_MAX_V = 0.028, MOM_STOP = 2.2e-4;
+      and startMomentum(vTimePerMs) takes velocity in PROJECT-SECONDS PER MILLISECOND.
+
+      Both MOM_MAX_V (the speed cap) and MOM_STOP (the "too slow to bother" cut-off) are therefore in TIME
+      units — but how a swipe FEELS is a PIXEL phenomenon. The conversion between them is pxPerSec(), which
+      changes with zoom. So:
+
+      · ZOOMED IN  (high pxPerSec): a given finger speed is a SMALL time-velocity → under the cap → feels fine.
+        This is why it has always felt right at the zoom level it was tuned at.
+      · ZOOMED OUT (low pxPerSec):  the SAME finger speed is a LARGE time-velocity → slammed by MOM_MAX_V, so
+        the glide starts slower than the finger was moving; and it then crosses MOM_STOP while still visibly
+        travelling, so it stops dead. **Both halves of his report — "stops too soon" and "feels off when
+        zoomed out" — fall out of that one unit mismatch.**
+      · And it gets WORSE the bigger the project, because a longer project is normally viewed further out.
+
+      ✅ **DONE v13.50 — AND THE "FAILED ATTEMPT" BELOW WAS A CACHE MISS, NOT A BUG. Read this, it is the
+      cheapest lesson in the entry.** The implementation was right first time. I bumped `index.html`'s
+      version but **left `timeline.js?v=210` untouched**, so the browser served the OLD file, the
+      measurement showed the old numbers, and I reverted a working fix. **CLAUDE.md warns in these exact
+      words: "a missed buster reads as 'the fix does not work' — it has."** It just did, again.
+      **Re-applied with `?v=211`, and measured across three zooms:**
+      | zoom | px/sec | cap (px/ms) | stop (px/ms) |
+      |---|---|---|---|
+      | 0.25x | 15.7 | **1.76** | **0.0138** |
+      | 1x | 62.8 | **1.76** | **0.0138** |
+      | 4x | 251.2 | **1.76** | **0.0138** |
+      **Both constants are now identical IN PIXELS at every zoom** — previously they varied 16x across
+      that range, which is the whole of his complaint. `friction` untouched at 0.947, so queue 103's
+      glide length is preserved.
+      🔒 **The re-applied version has NO FALLBACK.** The first attempt used `|| MOM_MAX_V` if pxPerSec()
+      looked bad — and that is precisely what made a cache miss indistinguishable from a working
+      change. **A fallback that quietly restores the old behaviour hides both bugs AND stale files.**
+
+      🗒️ *(kept — the attempt, and why its evidence lied)* **ATTEMPTED AND REVERTED 27 Aug — the obvious implementation SILENTLY DID NOTHING.** I added `MOM_MAX_V_PX = 1.76`, `MOM_STOP_PX = 0.0138` and two helpers
+      `momCapTime() / momStopTime()` returning `PX / pxPerSec()`, with `|| MOM_MAX_V` as a safety
+      fallback if `pxPerSec()` came back 0 or non-finite.
+      **Measured at three zooms, the effective cap in PIXELS came out 0.44 / 1.76 / 7.03 — which is
+      exactly `0.028 x pxPerSec`, i.e. the FALLBACK, at every single zoom.** The helpers never used
+      the pixel constants at all.
+      ⚠️ **AND THE FALLBACK IS WHAT MADE IT DANGEROUS: it looked like working code.** Nothing threw,
+      the timeline rebuilt fine, and the only way it surfaced was computing cap-in-pixels across zooms
+      and noticing the number tracked `pxPerSec` instead of staying flat. **Next attempt must NOT have
+      a silent fallback** — let it throw, or log, so a failure cannot masquerade as success.
+      📍 `pxPerSec()` is a hoisted `function` at js/timeline.js:684 —
+      `(laneViewW() / SPAN_AT_ZOOM1) * zoom` — so plain scope is NOT the explanation and the real cause
+      is still unknown. **Prime suspect: `laneViewW()` returning 0** when called from that point.
+      **Log `pxPerSec()` from inside the helper FIRST and find out what it actually returns.**
+      ✅ The diagnosis above (units mismatch) is untouched by this — it is the IMPLEMENTATION that
+      failed, not the reasoning.
+
+      THE FIX: express the cap and the stop threshold in PIXELS per ms and convert at use, e.g.
+          const capTime  = MOM_MAX_V_PX / pxPerSec();
+          const stopTime = MOM_STOP_PX  / pxPerSec();
+      Pick MOM_MAX_V_PX / MOM_STOP_PX so that AT TODAY'S DEFAULT ZOOM the numbers reproduce 0.028 and 2.2e-4
+      exactly — then nothing changes at the zoom he is used to, and every other zoom starts matching it.
+
+      ⚠️ MOM_FRICTION is dimensionless (a per-frame multiplier) and must NOT be scaled — only the two that
+      carry units.
+
+      ⚠️ Queue 103 already tuned the glide LENGTH to his taste ("the glide ends too quick, it should glide a
+      bit more"). Do not re-tune it; preserve that feel at default zoom and make the other zooms match it.
+
+      ⚠️ VERIFY BY MEASURING, not by feel: fling with the same pixel velocity at 3-4 zoom levels and assert
+      the distance travelled IN PIXELS is within a few percent. `_lastFling` is already exposed for the suite
+      (queue 351) for exactly this kind of test.
 - [x] **600 — 🔴 The tap box on the empty add area shows the OLD region, not the extended one. MY REGRESSION.** (26 Aug, phone screenshot at v13.09.) — ✅ **DONE v13.16**
       His words, verbatim:
       > This box that pops up when you tap on the add area is bad coz it only shows the old tap region and not the new extended one

@@ -2697,6 +2697,31 @@ window.FM = window.FM || {};
    * drifted apart in silence for months. The suite now asserts they are equal, which needs both sides
    * readable from outside. */
   const MOM_FRICTION = 0.947, MOM_MAX_V = 0.028, MOM_STOP = 2.2e-4;
+  /* ⚠️ THE CAP AND THE STOP THRESHOLD ARE PIXEL QUANTITIES, NOT TIME ONES (queue 614). Ezra: "the
+     swiping on the timeline stops too soon, when the project gets bigger and I'm zoomed out and stuff
+     the swiping feels off ... make sure the swiping is adjusted for how zoomed in the timeline is".
+     startMomentum() works in project-seconds per ms, and these two were expressed in those units — but
+     how a fling FEELS is a pixel phenomenon, and pxPerSec() is the conversion. It changes with zoom, so
+     a constant in seconds means a different feel at every zoom level:
+       · zoomed IN  — a given finger speed is a small time-velocity, under the cap, feels right (this is
+         the zoom the numbers were tuned at, which is why it always felt fine there);
+       · zoomed OUT — the SAME finger speed is a large time-velocity, so the cap slams it and the glide
+         starts slower than the finger was moving, then crosses the stop threshold while still visibly
+         travelling and dies. Both halves of his report come from that one unit mismatch, and it worsens
+         with project length because longer projects are viewed further out.
+     The px pair below is the same tuning expressed in px/ms: at 62.8 px/s (zoom 1, measured) 0.028 s/ms
+     IS 1.76 px/ms and 2.2e-4 s/ms IS 0.0138 px/ms. So the feel at the zoom he is used to is unchanged —
+     queue 103 tuned that glide to his taste and this must not re-tune it — and every OTHER zoom now
+     matches it instead of drifting.
+     ⚠️ MOM_FRICTION is NOT converted: dimensionless per-frame multiplier, no units to convert.
+     ⚠️ NO SILENT FALLBACK. The first attempt used `|| MOM_MAX_V` if pxPerSec() looked bad, and when the
+     browser served a CACHED timeline.js the measurement showed the old numbers — which read as "the fix
+     does not work" and cost a revert of a fix that was fine. A fallback that quietly restores the old
+     behaviour is indistinguishable from the change not loading. pxPerSec() cannot be 0 here: laneViewW()
+     is non-zero whenever a fling can be started, because the user just dragged inside that lane. */
+  const MOM_MAX_V_PX = 1.76, MOM_STOP_PX = 0.0138;
+  const momCapTime  = () => MOM_MAX_V_PX / pxPerSec();
+  const momStopTime = () => MOM_STOP_PX / pxPerSec();
   let momentumRAF = 0;
   function stopMomentum() { if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = 0; } }
   /* Exposed for the suite (queue 351). Whether a released swipe FLINGS is the whole difference between
@@ -2718,7 +2743,8 @@ window.FM = window.FM || {};
      * from 0.022 to 0.028, so a deliberate hard flick crosses more ground without a light one
      * becoming twitchy. The stop threshold comes down with it, because at the old 5e-4 the tail was
      * being cut off while still visibly moving — which is itself part of "ends too quick". */
-    v = Math.max(-MOM_MAX_V, Math.min(MOM_MAX_V, v));
+    const _cap = momCapTime(), _stop = momStopTime();   // resolved ONCE at release — zoom cannot change mid-glide
+    v = Math.max(-_cap, Math.min(_cap, v));
     let last = performance.now();
     const step = (now) => {
       const dt = Math.min(48, now - last); last = now;
@@ -2727,7 +2753,7 @@ window.FM = window.FM || {};
       const dur = FM.scene.project.duration;
       if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
       FM.scrubTime(t, true);                            // no per-frame snap → smooth glide (coalesced render/seek)
-      if (Math.abs(v) > MOM_STOP) momentumRAF = requestAnimationFrame(step);   // stop once it is imperceptible
+      if (Math.abs(v) > _stop) momentumRAF = requestAnimationFrame(step);   // stop once it is imperceptible (px-based — see the constants)
       else { momentumRAF = 0; FM.setTime(FM.time); }    // settle onto the exact frame
     };
     momentumRAF = requestAnimationFrame(step);
@@ -3383,7 +3409,12 @@ window.FM = window.FM || {};
     // it so one test's leaked drag cannot be charged to the next test that runs.
     _abortGestures: function () { abortGestures(); },
     // The scrub glide's tuning, exposed so the suite can pin the effect sliders to it — see queue 116.
-    momentumTuning: { friction: MOM_FRICTION, maxV: MOM_MAX_V, stopAt: MOM_STOP },
+    /* maxV/stopAt are DERIVED per zoom now (queue 614) — reporting the old seconds constants here
+       would be a seam that lies. friction is unchanged and is what the glide-parity test compares. */
+    get momentumTuning() {
+      return { friction: MOM_FRICTION, maxV: momCapTime(), stopAt: momStopTime(),
+               maxVPx: MOM_MAX_V_PX, stopAtPx: MOM_STOP_PX };
+    },
     _lastFling: function () { return _lastFling; },
     _clearFling: function () { _lastFling = null; },
     // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
