@@ -21891,7 +21891,26 @@ re-opened #480, which I had marked done and had not fixed.
              reasonable. Moved into `FM.projects` and re-verified live.
              📐 **Measured after the fix:** `discardDraft` still refuses on the open project (true), the
              new path returns ok, the current project moves away, and the draft leaves the list.
-      📍 **AND THE DUPLICATES HAVE A NAMED CAUSE ALREADY IN THE FILE** (js/home.js ~1606, queue 505):
+      🔎 **CLAUSES 1 & 2 INVESTIGATED 27 Aug (v13.63) — AND THE CAUSE THIS ENTRY ASSUMED IS WRONG.
+      I could not make the current build accumulate drafts. Three attempts, all measured:**
+      | what was tried | result |
+      |---|---|
+      | Edit an element 3x, going Home each time | **net ZERO.** Drafts 2→3 on open, 3→2 on Home, every time. Elements never grew. |
+      | Edit 3x and NEVER go Home | **+1 total, not +3.** Three different workspace ids were minted, but only one survived — it replaces rather than piles up. |
+      | Tap **+** on the Elements tab 3x | **0 drafts.** ⚠️ **INCONCLUSIVE, not a refutation** — that + opens a name prompt the probe never completed, so it may not have exercised creation at all. Say so rather than count it. |
+      ❌ **SPECIFICALLY REFUTED: this entry (quoting the queue-505 comment) said `openForEdit` "reuses the
+      element's own workspace and carries its id".** Measured, it mints a **NEW** workspace id every
+      time — `p_mtbf3ub3d7wdn`, `p_mtbf3vo13s7h5`, `p_mtbf3x0oe1mhd` across three opens. It cleans the
+      previous one up, which is why nothing accumulates, but "reuses" is not what it does. **A comment
+      describing an outcome, not a mechanism, and it sent this investigation down the wrong path.**
+      ➡️ **SO THE HONEST STANDING: nothing observed in v13.63 still creates duplicates.** His six are
+      most likely what the code comment says — **stranded by the pre-v12.26 behaviour** — and the fix
+      for that shipped long ago; what he was missing was a way to clear them, which **v13.60 and v13.61
+      gave him**.
+      ⚠️ **THIS IS NOT "PROVEN FIXED" AND MUST NOT BE TICKED AS SUCH.** A cause I cannot reproduce is a
+      cause I have not found. **If the count grows again after clearing them, that is new evidence and
+      the third row of that table is where to start** — drive the + prompt to completion.
+      📍 **THE OLD ASSUMED CAUSE, kept because the file keeps its history** (js/home.js ~1606, queue 505):
       editing an element *"used to mint a fresh workspace on every tap and tell him to run ⋯ → Save as
       element — advice that MADE A DUPLICATE, because that route always mints a new element id. Measured:
       one element became two, and the workspace was left behind each time."* v12.26+ fixed the minting,

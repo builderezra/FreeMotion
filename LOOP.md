@@ -134,6 +134,17 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 ## STATE
 
 📍 **HANDOVER, 27 Aug, v13.63 — everything is pushed and the tree is clean. 1006 tests green.**
+🔎 **#617 clauses 1–2 INVESTIGATED, NOT FIXED, and the entry's assumed cause is REFUTED.** Three
+measured attempts could not make v13.63 accumulate element drafts: editing with a commit is net zero,
+editing without one REPLACES rather than piles up, and the + probe was inconclusive because it opens a
+name prompt the probe never completed (**said as inconclusive, not counted as a refutation**).
+❌ **The entry claimed `openForEdit` "reuses the element's own workspace".** It does not — it mints a
+NEW id every time and cleans up the previous one. **A comment describing an OUTCOME, not a MECHANISM,
+sent the investigation down the wrong path.** Worth remembering: this file's comments are excellent and
+are still not the code.
+⚠️ **Not ticked.** A cause I cannot reproduce is a cause I have not found. If his count grows again,
+start at the + prompt and drive it to completion.
+
 ✅ **#639 IS CLOSED — the whole light look is done**, including the app icons he asked for as "the logo
 for the app". **The queue-jump he authorised is finished, so the next tick returns to OLDEST-FIRST.**
 ⚠️ **Finishing the jumped item BEFORE going back was deliberate** — leaving clause 5 hanging is exactly
