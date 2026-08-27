@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.71
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.72
 >
-> **State:** v13.71, 1019 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.72, 1019 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -22045,7 +22045,7 @@ re-opened #480, which I had marked done and had not fixed.
       the same day, the Elements feature is not landing for him.
 
 - [ ] **619 — 🔴 Pressing a template just forks it into a project. It should offer to SWAP THE MEDIA.
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       He says he has asked many times — and he is right: this is #343 clause 1, which was marked DONE.**
       (27 Aug, at v13.51.)
       His words, verbatim:
@@ -22083,11 +22083,39 @@ re-opened #480, which I had marked done and had not fixed.
       🔑 **THIRD TIME THIS EXACT SHAPE HAS APPEARED TODAY:** #603 (the app knew the layer had no colour
       and put it in a tooltip), #618 clause 2 (an instruction pointing at a menu item that was not
       there), and this. **A correct decision, taken silently, is reported as a broken feature.**
-      ⚠️ **NOT TICKED, and this is the honest part.** He asked to *"quickly swap out the media for ur own
-      clips"*. The app now explains why that cannot happen for his templates — **it has not given him
-      the thing he wanted.** If what he actually wants is to swap SHAPE and TEXT layers too, that is a
-      real feature and he pre-authorised its size (*"I know it's a big thing to do idc"*). **One word
-      from him decides it: is the explanation enough, or should any layer be swappable?** ⚠️ #343 being ticked is
+      🚨 **AND PARKING IT ON "ONE WORD FROM HIM" WAS WRONG — HE HAD ALREADY GIVEN IT.**
+      *"I know it's a big thing to do idc"* is a pre-authorisation, and this entry's own header says
+      **"do NOT park it on a decision about scope. Build the real thing."** It then parked it on a
+      decision about scope. Asking him to choose between "an explanation" and "the feature" was asking
+      him to re-authorise something he had already authorised in the message being quoted.
+      ✅ **BUILT v13.72 — TEXT AND SHAPE LAYERS ARE FILLABLE SLOTS NOW.** A template you cannot change
+      is an element, and his words were that templates should be *"not just the exact same thing as
+      elements"*. For a text-and-shape template the thing you change is the WORDS and the COLOURS.
+      · **`slots()` takes media + text + shape**, still in timeline order — the order you watch them in.
+      · **The control follows the slot.** A file picker is right for a clip and wrong for a caption, so
+        exactly one control is mounted at a time: *Replace Media* for media, **Your words** (a text
+        field) for text, **Your colour** (a swatch) for a shape. The other two are REMOVED from the DOM
+        rather than disabled — a dead button is still a thing to read past.
+      · **Edits are live on every keystroke**, because this screen exists so he can SEE the template
+        become his; a preview that only updates on commit is a form, not a fill. **History commits once
+        on blur**, so undo does not walk back through a caption letter by letter.
+      · **The chips render their own contents** — a text or shape slot has no media to blit, so it is
+        rendered as a one-layer scene. Without that every non-media chip is an identical dark square
+        and the row stops doing its only job.
+      · **The stale toast is gone.** *"No photos or videos… so it opened as a project"* named a cause
+        that is no longer the cause; it now only fires for a template with nothing in it at all.
+      📐 **VERIFIED AT 380px, his layout** (tests/_619fill.html): a text+shape template reports **2
+      slots**, `open()` returns **true**, the text chip shows the text field and the shape chip shows
+      the colour swatch, typing changed `layer.text` **and the preview repainted**, the swatch wrote
+      `#ff0044` to the shape, the field is **16px** (below that iOS zooms the page on focus), and the
+      sheet does not scroll sideways.
+      ⚠️ **THREE SHIPPED TESTS ASSERTED THE OLD BEHAVIOUR AND WERE REVERSED ON PURPOSE** — one said in
+      as many words *"a shape and a text layer are not yours to replace"*, another that a text-and-shape
+      project must report **zero** slots. They were faithful tests of the shipped behaviour, and the
+      shipped behaviour was the bug. Each now carries why it flipped, so nobody flips it back. **The
+      control moved with them:** the case that must still stay silent is an EMPTY template.
+      ❓ **LEFT OPEN DELIBERATELY UNTIL HE HAS SEEN IT** — he asked for this twice and it has been
+      wrongly marked done once already (#343). **Not ticking it on my own say-so.** ⚠️ #343 being ticked is
       exactly the trap `next.sh` warns about — *"an entry is a record of what was ASKED, not of what is
       still missing"*.
       📍 **The shape he wants, from his own screenshot back then:** Alight Motion's *Insert your

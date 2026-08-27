@@ -133,7 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.71 — 1019 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
+📍 **HANDOVER, 28 Aug, v13.72 — 1019 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
 handover to a session with NO memory of any of it.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
@@ -167,6 +167,21 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#619 BUILT v13.72 — TEMPLATES ARE FILLABLE.** The Insert-your-Media sheet counted only video/image
+layers, so it returned false and showed NOTHING for every template he has ever made — his are text and
+shapes. He reported it twice as *"templates just create themselves as a project"*. Text and shape layers
+are slots now, each with the control that edits it: **Your words**, **Your colour**, **Replace Media**.
+🚨 **THE ENTRY HAD PARKED THIS ON "one word from him" AND HE HAD ALREADY GIVEN IT** — *"I know it's a big
+thing to do idc"* is a pre-authorisation, and the entry's own header said *"do NOT park it on a decision
+about scope"*. **Re-read what he wrote before asking him to choose; the answer is often already there.**
+⚠️ **THREE SHIPPED TESTS ASSERTED THE OLD RULE AND WERE REVERSED ON PURPOSE** — one said outright *"a
+shape and a text layer are not yours to replace"*. They were faithful tests of the shipped behaviour and
+the shipped behaviour was the bug. Each carries why it flipped. **The control moved with them: the case
+that must still stay silent is an EMPTY template.**
+📐 Verified at 380px (tests/_619fill.html): 2 slots, opens, right control per chip, typing repaints the
+preview, swatch writes the fill, field is 16px (iOS zoom guard), no sideways scroll.
+❓ **LEFT OPEN until he has seen it** — asked twice, and wrongly marked done once already (#343).
 
 🆕 **THIRTEEN NEW REQUESTS LOGGED, all verbatim: #645–#657.** #657 is a PC perf sample that reads
 healthy — but it renders at **28% scale** to get there, and scrubbing was never sampled. **Get one from

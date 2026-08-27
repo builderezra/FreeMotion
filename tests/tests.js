@@ -9530,23 +9530,36 @@
       // that simply echoed the layer array would pass a same-order fixture and still be wrong.
       const mk = (type, name, start, d) => { const L = FM.makeLayer(type, { name: name, x: 100, y: 100, shape: 'rect', shapeW: 50, shapeH: 50, fill: '#fff' }); L.start = start; L.duration = d; return L; };
       FM.scene.layers.length = 0;
-      FM.scene.layers.push(mk('video', 'third', 6, 2), mk('shape', 'Title', 0, 8), mk('image', 'first', 0, 3),
+      /* Every start is DISTINCT (0 / 0.5 / 1 / 3 / 6). The first version of this fixture gave the
+         shape and the image both start 0, so the expected order depended on the sort's tie-breaking
+         rather than on the timeline — a test that would have passed or failed on an implementation
+         detail nobody meant to assert. */
+      FM.scene.layers.push(mk('video', 'third', 6, 2), mk('shape', 'Title', 0.5, 8), mk('image', 'first', 0, 3),
                            mk('text', 'Caption', 1, 4), mk('video', 'second', 3, 2.5));
       FM.scene.project.duration = 9;
+      /* ⚠️ THIS USED TO ASSERT 3 SLOTS — media only — and said "a shape and a text layer are not yours
+         to replace". Queue 619 reversed that on purpose: his templates ARE text and shapes, so
+         media-only meant the sheet never opened for him and said nothing, which he reported twice as
+         the feature not existing. Text and shape layers are fillable slots now. TIMELINE ORDER is the
+         part that has not changed and is still what this fixture is built out of order to prove. */
       const got = FM.templateFill._slots();
-      if (got.length !== 3) throw new Error('the slot row listed ' + got.length + ' clips, not the 3 media layers (a shape and a text layer are not yours to replace)');
+      if (got.length !== 5) throw new Error('the slot row listed ' + got.length + ' slots, not the 5 fillable layers (media + text + shape — see #619)');
       const names = got.map(l => l.name).join(',');
-      if (names !== 'first,second,third') throw new Error('the slots are in layer order, not timeline order: ' + names);
+      if (names !== 'first,Title,Caption,second,third') throw new Error('the slots are not in timeline order: ' + names);
 
       /* ENOUGH SLOTS TO OVERFLOW THE RAIL, and that is not padding the fixture — it is the condition
          the bug needs. A rail that fits its contents never scrolls, so scroll-snap has nothing to snap
          and the gutter check below passes with the fix removed. The mutation check said exactly that
          about the first version of this test, which used the three clips above. The rail is capped at
          `min(680px, 94vw)`, so twelve 84px slots overflow it at any width the suite can run at. */
+      /* 9 more on top of the 5 above = 14. It was 12 when only the 3 media layers counted; #619 made
+         the text and the shape fillable too, so the same fixture now draws two more chips. The NUMBER
+         is incidental — what this stretch is for is overflowing the rail — but it is asserted exactly
+         so that a slot quietly appearing or vanishing shows up here rather than nowhere. */
       for (let i = 0; i < 9; i++) FM.scene.layers.push(mk('image', 'fill' + i, 9 + i, 1));
       FM.scene.project.duration = 20;
       if (!FM.templateFill.open()) throw new Error('open() refused a project that has replaceable clips');
-      if (document.querySelectorAll('#tpl-fill .tfill-slot').length !== 12) throw new Error('expected 12 slots, drew ' + document.querySelectorAll('#tpl-fill .tfill-slot').length);
+      if (document.querySelectorAll('#tpl-fill .tfill-slot').length !== 14) throw new Error('expected 14 slots, drew ' + document.querySelectorAll('#tpl-fill .tfill-slot').length);
       if (!FM.templateFill.isOpen()) throw new Error('open() reported success but the screen is not showing');
       const rail = document.querySelector('#tpl-fill .tfill-slots');
       const slot = document.querySelector('#tpl-fill .tfill-slot');
@@ -9561,11 +9574,17 @@
          edge with its selection ring clipped off. `scroll-padding` is what makes snap respect the gutter. */
       if (sr.left - rr.left < 10) throw new Error('the first slot sits ' + Math.round(sr.left - rr.left) + 'px from the rail edge (scrollLeft ' + rail.scrollLeft + ') — its selection ring is clipped against the side of the screen');
 
-      // A template of nothing but text and shapes has nothing to fill, and a screen saying "replace
-      // your media" over an empty row is worse than no screen.
+      /* ⚠️ REVERSED BY QUEUE 619. This used to strip the media and assert the screen REFUSED to open —
+         "a screen saying 'replace your media' over an empty row is worse than no screen". Sound, and
+         it meant the screen never opened for Ezra at all, because his templates are text and shapes.
+         Stripping the media now leaves two fillable slots, so it must OPEN; the case that still stays
+         silent is a template with nothing in it whatsoever. */
       FM.templateFill.close();
       FM.scene.layers = FM.scene.layers.filter(l => l.type !== 'video' && l.type !== 'image');
-      if (FM.templateFill.open() !== false) throw new Error('the screen opened for a template with no media clips to replace');
+      if (FM.templateFill.open() !== true) throw new Error('the fill screen refused a text-and-shapes template — that silence is exactly what #619 reported, twice');
+      FM.templateFill.close();
+      FM.scene.layers.length = 0;
+      if (FM.templateFill.open() !== false) throw new Error('the screen opened for a template with nothing in it at all');
       if (FM.templateFill.isOpen()) throw new Error('open() returned false but left the screen up');
     } finally {
       try { FM.templateFill.close(); } catch (e) {}
@@ -48642,13 +48661,33 @@
     if (!FM.templateFill || !FM.templateFill._slots) throw new Error('FM.templateFill is gone — the media-swap feature queue 619 is about no longer exists');
     const keep = FM.scene.layers.slice();
     try {
+      /* ⚠️ THIS TEST WAS INVERTED BY QUEUE 619, DELIBERATELY, AND THE OLD VERSION IS WHY.
+         It asserted that a text-and-shapes project reports ZERO slots and that the sheet must NOT
+         open — "slots must be video/image only". That was a faithful test of the shipped behaviour and
+         the shipped behaviour was the bug: HIS templates are text and shapes (the logo, the rects, the
+         captions), so the sheet never opened once, and he reported it twice as templates "just
+         creating themselves as a project". A template you cannot change is an element, and his words
+         were that templates should be "not just the exact same thing as elements".
+         So the assertion is now the opposite, and the control moved with it: the thing that must NOT
+         open is a template with NOTHING in it at all. */
       FM.scene.layers.length = 0;
       FM.addShapeLayer('rect');
       FM.addTextLayer('t');
       FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 5; });
       await sleep(200);
-      if (FM.templateFill._slots().length !== 0) throw new Error('a text-and-shapes project reports ' + FM.templateFill._slots().length + ' swappable slots — slots must be video/image only, or the "no media" case can never be detected');
-      if (FM.templateFill.open() !== false) { FM.templateFill.close(); throw new Error('the swap sheet opened for a template with no media — it should return false and show nothing'); }
+      if (FM.templateFill._slots().length !== 2) throw new Error('a text-and-shapes project reports ' + FM.templateFill._slots().length + ' fillable slots, not 2 — #619 made the words and the colours fillable, and his templates contain nothing else');
+      if (FM.templateFill.open() !== true) throw new Error('the fill sheet did NOT open for a text-and-shapes template — that silence IS #619, reported twice');
+      FM.templateFill.close();
+      // THE CONTROL: an empty template still has nothing to fill, and must still stay silent.
+      FM.scene.layers.length = 0;
+      await sleep(120);
+      if (FM.templateFill._slots().length !== 0) throw new Error('an EMPTY project reports slots — the filter has stopped filtering');
+      if (FM.templateFill.open() !== false) { FM.templateFill.close(); throw new Error('the fill sheet opened for a template with nothing in it at all'); }
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      FM.addTextLayer('t');
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 5; });
+      await sleep(150);
       /* AND WITH MEDIA IT MUST OPEN. Without this the first assertion is satisfied by a feature that
          never works at all. */
       const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;

@@ -8123,6 +8123,18 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
                  color: var(--text); border: 1px solid var(--accent, #4ea8ff);
                  background: color-mix(in srgb, var(--accent, #4ea8ff) 20%, transparent); }
 .tfill-replace:disabled { opacity: .45; cursor: default; border-color: var(--line); background: var(--panel-2); }
+/* The text and colour controls (queue 619). They occupy the same place in the column as Replace Media
+   and exactly one of the three is ever mounted, so the sheet's height does not jump as you move along
+   the row — a control that shifts the layout under your thumb is worse than one that is merely wrong. */
+.tfill-edit { margin: 12px 14px 0; display: flex; align-items: center; gap: 10px; }
+.tfill-edit-lab { flex: none; font-size: 12.5px; font-weight: 650; color: var(--text-dim, #9aa7b8); }
+.tfill-edit-in { flex: 1; min-width: 0; padding: 12px 12px; border-radius: 12px; font-size: 15px;
+                 color: var(--text); background: var(--panel-2, #1e2533); border: 1px solid var(--accent, #4ea8ff); }
+/* 16px on the phone: anything smaller makes iOS ZOOM THE PAGE on focus, which throws the sheet's
+   measured layout out and is the reason the text editor's own field is 16px too. */
+@media (max-width: 700px) { .tfill-edit-in { font-size: 16px; } }
+.tfill-edit-col { flex: none; width: 56px; height: 44px; padding: 0; cursor: pointer;
+                  border-radius: 12px; border: 1px solid var(--accent, #4ea8ff); background: var(--panel-2, #1e2533); }
 /* On a wide window the same screen simply centres — a 1440px-wide preview of a phone-shaped template
    would be a wall of letterbox, and the rail would run half a metre. */
 @media (min-width: 701px) {

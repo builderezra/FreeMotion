@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* #619 at PHONE WIDTH — his layout. The fill sheet must open for a text-and-shape template, show the
+ * RIGHT control per slot, actually change the picture, and not overflow 380px. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.templateFill && w.FM.scene)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    FM.scene.layers.length = 0;
+    FM.addShapeLayer('rect'); FM.addTextLayer('SOLD IN 9 DAYS');
+    FM.scene.layers.forEach(function(l){ l.start=0; l.duration=5; });
+    await new Promise(function(r){ setTimeout(r,400); });
+    say('template: ' + FM.scene.layers.map(function(l){return l.type;}).join(' + '));
+    say('slots: ' + FM.templateFill._slots().length);
+    var opened = FM.templateFill.open();
+    say('open() -> ' + opened);
+    if (!opened) return say('❌ it still refuses — the whole point of #619');
+    await new Promise(function(r){ setTimeout(r,500); });
+
+    var root = d.getElementById('tpl-fill');
+    var chips = [].slice.call(d.querySelectorAll('#tpl-fill .tfill-slot'));
+    say('chips drawn: ' + chips.length);
+    var rr = root.getBoundingClientRect();
+    say('sheet box: ' + Math.round(rr.width) + 'x' + Math.round(rr.height) + ' at (' + Math.round(rr.left) + ',' + Math.round(rr.top) + ')');
+    if (rr.width > 381) say('🚨 the sheet is wider than the phone');
+    if (root.scrollWidth > root.clientWidth + 1) say('🚨 the sheet scrolls sideways (' + root.scrollWidth + ' in ' + root.clientWidth + ')');
+    else say('✅ no horizontal overflow');
+
+    function ctrl(){
+      return { rep: !!d.querySelector('#tpl-fill .tfill-replace'),
+               txt: !!d.querySelector('#tpl-fill .tfill-edit-in'),
+               col: !!d.querySelector('#tpl-fill .tfill-edit-col') };
+    }
+    // slot order is timeline; both start at 0 so read them by the layer type behind each chip
+    var byId = {}; FM.scene.layers.forEach(function(l){ byId[l.id]=l; });
+    for (var i=0;i<chips.length;i++){
+      chips[i].click();
+      await new Promise(function(r){ setTimeout(r,220); });
+      var L = byId[chips[i].dataset.id], c = ctrl();
+      var want = L.type==='text' ? 'txt' : L.type==='shape' ? 'col' : 'rep';
+      var shown = c.txt?'txt':c.col?'col':c.rep?'rep':'NONE';
+      say('  chip ' + (i+1) + ' (' + L.type + ') -> control "' + shown + '"  ' + (shown===want?'✅':'🚨 expected '+want));
+    }
+
+    // --- does editing the words actually change the picture?
+    var tl = FM.scene.layers.filter(function(l){return l.type==='text';})[0];
+    var tchip = chips.filter(function(b){ return byId[b.dataset.id].type==='text'; })[0];
+    tchip.click(); await new Promise(function(r){ setTimeout(r,220); });
+    var input = d.querySelector('#tpl-fill .tfill-edit-in');
+    say('');
+    say('text field value: "' + input.value + '"   font-size ' + w.getComputedStyle(input).fontSize + ' (16px+ or iOS zooms)');
+    var cv = d.querySelector('#tpl-fill .tfill-cv');
+    function ink(){ var g=cv.getContext('2d'); var dd=g.getImageData(0,0,cv.width,cv.height).data; var n=0;
+      for (var i=0;i<dd.length;i+=4) if (dd[i+3]>40) n++; return n; }
+    var before = ink();
+    input.value = 'MY OWN WORDS HERE AND MORE';
+    input.dispatchEvent(new w.Event('input', { bubbles:true }));
+    await new Promise(function(r){ setTimeout(r,400); });
+    var after = ink();
+    say('layer.text is now "' + tl.text + '"');
+    say('preview ink: ' + before + ' -> ' + after + (after!==before ? '   ✅ the picture changed' : '   🚨 the preview did not update'));
+
+    var scl = FM.scene.layers.filter(function(l){return l.type==='shape';})[0];
+    var schip = chips.filter(function(b){ return byId[b.dataset.id].type==='shape'; })[0];
+    schip.click(); await new Promise(function(r){ setTimeout(r,220); });
+    var col = d.querySelector('#tpl-fill .tfill-edit-col');
+    col.value = '#ff0044'; col.dispatchEvent(new w.Event('input', { bubbles:true }));
+    await new Promise(function(r){ setTimeout(r,300); });
+    say('shape fill is now ' + JSON.stringify(scl.fill) + (String(scl.fill).toLowerCase()==='#ff0044' ? '   ✅' : '   🚨'));
+    FM.templateFill.close();
+  } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

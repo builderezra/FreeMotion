@@ -1579,7 +1579,13 @@ window.FM = window.FM || {};
           setTimeout(() => {
             if (!FM.templateFill) return;
             if (FM.templateFill.open()) return;
-            if (FM.toast) FM.toast('No photos or videos in this template to swap — it is text and shapes, so it opened as a project.', 4600);
+            /* THIS MESSAGE USED TO BE THE WHOLE FIX, and queue 619 replaced it with the feature.
+               It said "no photos or videos… it is text and shapes, so it opened as a project", which
+               was true and fired EVERY time, because his templates ARE text and shapes. Now text and
+               shape layers are fillable slots, so reaching this line means the template has no media,
+               no text and no shapes — very nearly an empty one — and the message has to say that
+               instead, or it names a cause that is no longer the cause. */
+            if (FM.toast) FM.toast('That template has nothing to fill in — no clips, text or shapes — so it opened as a project.', 4600);
           }, 420);
         } else if (FM.toast) FM.toast('Could not load that template');
       } finally { clearPress(true); }   // eased: on the push path startPush already took it, so this only runs when nothing happened
