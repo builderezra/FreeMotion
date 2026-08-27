@@ -133,6 +133,23 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+📍 **HANDOVER, 27 Aug, v13.48 — everything is pushed and the tree is clean.**
+**Shipped today for him:** tab row fills its bar and sticks (605) · benchmark lines no longer paint over
+the left icon column (608) · playhead knob blue at rest, yellow on a benchmark (607) · add-layer grip
+aligned to the layer handles (606.1) · blank clips report their real format instead of asserting H.265
+(129) · seven warp effects faster, plus ~1.5x on every effect from PREVIEW_SS.
+**Proven NOT broken, so nobody re-hunts them:** every Colouring effect · the B&W filters · their picker
+tiles · the live effect preview · the exporter's audio track · the add-row overshoot geometry.
+🎯 **NEXT, in order:** (1) **#604 — save the exported Blob, re-open it, re-scan for `mp4a`.** The file
+HAS audio when it leaves the encoder, so the loss is in `deliver()` (exporter.js:66) or beyond. This is
+the one blocking him from finishing a video. (2) **#602 clause 1** — panel covers the preview; find the
+real open path first, `FM.textEdit.open` does not raise it. (3) **#606 clause 2** — the glyph is centred
+in its button (offset 0,0) so measure what is PAINTED, not the rect. (4) #609 speed slider · #610
+border/shadow design (#545 applies: draw options, show him).
+⏱️ **AND KEEP BATCHING.** 99 commits in 20 hours, 51 docs-only, each running the suite — about half his
+wall clock. `ship.sh` now refuses a docs-only ship within 12 minutes of the last commit; let notes ride
+out with real changes.
+
 🔑 **WHEN THREE REPORTS SHARE A SYMPTOM, THE BUG IS USUALLY THE SILENCE, NOT THE FEATURE (27 Aug).**
 Queue 579 / 593 / 603 all say "the effects do nothing". Measured, in this order: the effects work, the
 filters work, the picker tiles work, the live preview works AND is triggered on every tap. **Four

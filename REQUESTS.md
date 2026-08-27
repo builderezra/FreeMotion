@@ -20836,6 +20836,13 @@ re-opened #480, which I had marked done and had not fixed.
       v12.31), so (a) reverses that — worth one line of confirmation, not a silent removal. **Curve and
       Animate are the two genuinely duplicated by effects.**
       ✅ **Clause 1 needs no decision and goes first: the panel must not cover the preview at 380px.**
+      ⚠️ **STAGING NOTE (27 Aug) — I could not open the text editor programmatically, so this is NOT
+      yet measurable.** `FM.textEdit.open` / `FM.openTextEditor` did not raise the panel: `.te-panel`
+      was present in the DOM but **0px high**, which makes any reading taken then worthless (it
+      reported "preview 0px visible" purely because the panel had no height, not because it covered
+      anything). **Find the real open path first** — most likely a tap on the text layer or its clip
+      rather than an exposed API. **His screenshot is sufficient evidence the fault is REAL; what is
+      missing is a way to measure a FIX.**
 - [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
       **STATUS: 🟢 READY — nothing is stopping this**
       Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
@@ -20988,6 +20995,33 @@ re-opened #480, which I had marked done and had not fixed.
       long-standing suspicion that the track never lands is WRONG.**
       🚨 **THEREFORE THE LOSS IS IN THE SAVE STEP — exactly where he said it was** (*"when I finish
       exporting then press save video to camera role it just has no audio"*).
+      ✅ **AND THE FILE ITSELF IS STRUCTURALLY SOUND — checked 27 Aug by walking the top-level boxes:**
+      `ftyp@0(28)` → `mdat@28(9819)` → `moov@9847(1495)`. **Not fragmented** (no `moof`), both tracks
+      present. **So FreeMotion produces a correct, ordinary MP4 with an AAC track in it.**
+      🛑 **AND DO NOT "FIX" THAT — `fastStart: false` IS DELIBERATE, and changing it would undo queue 47.**
+      js/exporter.js:79-99 spells out the trade: with fastStart the muxer must hold the whole file in an
+      ArrayBufferTarget; with it OFF the writes go sequentially and the finished file stays **off the JS
+      heap**. That is the out-of-memory protection built for long exports on his phone, and the comment
+      already names the cost — *"no fastStart means the file is not progressive"*. **I flagged fast-start
+      as "worth doing anyway for robustness" one tick earlier; that was wrong and is withdrawn.**
+      ✅ **CHECKED, and the "two paths" worry is UNFOUNDED — which STRENGTHENS the finding above.**
+      The in-memory `Mp4Muxer.Muxer` at :668 lives inside `encodeM4A()`: it is the **audio-only** export
+      (the M4A/MP3 format option), configured with an `audio` track and no video. **Every VIDEO export
+      goes through `createMp4Sink('video/mp4')` at :852** — one path, no branch.
+      **So the test that found `mp4a` present ran the same road his exports take**, and the conclusion
+      holds: the file leaves FreeMotion with its audio track intact.
+      📋 **One observation, deliberately NOT claimed as the cause: `moov` sits AFTER `mdat`, i.e. the
+      file is not "fast-start".** That is legal and local players handle it fine, so it does not
+      explain a silent video on its own. **Moving `moov` to the front is standard practice and cheap
+      (mp4-muxer supports it), and is worth doing for streaming robustness — but shipping it as a FIX
+      for this symptom would be a guess, and this entry has already cost enough of those.**
+      ⚠️ **What is now established: the loss is NOT in the encoder, NOT in the muxer, and NOT in the
+      file structure.** Everything up to the moment the Blob is handed over is correct.
+      ➡️ **So the remaining suspects are `deliver()` itself and what the OS does with the file** — and
+      `deliver()` only wraps the same bytes in a `File` and calls `navigator.share`. **The next real
+      evidence has to come from HIS device: after saving to the camera roll, does the saved item play
+      with sound in another app?** That distinguishes "iOS dropped it on import" from "it is there and
+      something else is muting playback", and nothing here can answer it.
       📍 **`deliver()` at js/exporter.js:66 is the whole of that step**, and it has two routes:
       1. `navigator.share({ files: [file] })` when `canShare` allows — **this is the iOS path**, and
          the file is rebuilt as `new File([blob], name, { type: 'video/mp4' })`.
@@ -21032,7 +21066,7 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **So all three clauses land on the same element:** make `.fxb-top` fill the row, size properly,
       and **stick to the top of the sheet while the list scrolls** (`position: sticky; top: 0`).
 - [ ] **606 — The add-layer row’s drag handle is out of line with the layer ones, and the layer ones
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       are not centred in their own box.** (27 Aug, annotated phone screenshot at v13.45.)
       His words, verbatim:
       > Don’t change the design for the add layers drag buttons but just line it up with the other layers
@@ -21051,7 +21085,20 @@ re-opened #480, which I had marked done and had not fixed.
          three-span build untouched — only the offset moved**, per his "Don't change the design".
       1b. [ ] ⚠️ **DO NOT redesign the add-layer handle** — *"Don’t change the design"*. **Only line it up
          horizontally with the layer rows’ handles.** It stays bare/unboxed; it just moves.
-      2. [ ] **The layer rows’ ≡ is not centred inside its own rounded box.** Centre it.
+      2. [ ] ⚠️ **MEASURED THREE WAYS AND IT COMES OUT CENTRED — I cannot reproduce this, so it needs
+         one detail from you rather than a blind "fix".**
+         · glyph inside its button: **0.0px** off-centre, both axes
+         · the visible rounded box IS the button (`.row-drag` carries the background, 1px border and
+           `border-radius: 8px` itself — styles.css:4861), so there is no wrapper to be offset against
+         · the icon is symmetric inside its own artboard: `viewBox="0 0 24 24"`, lines
+           `M4 7h16M4 12h16M4 17h16` — y 7/12/17 centres on 12, x 4→20 centres on 12
+         · box inside its row: **0.5px high** — sub-pixel, and not something an eye picks up
+         ❓ **What would settle it in a word: is it sitting too far LEFT, RIGHT, HIGH or LOW?** That
+         turns an unreproducible report into a one-line fix. **Your call** — and this entry is waiting
+         on you for it.
+         ⚠️ **Do not nudge it on a hunch.** #592 taught the opposite lesson (my rect said aligned, his
+         eye was right), so this stays open rather than being closed as "measured fine" — but a nudge
+         in the wrong direction would make it worse for him and I have no evidence which way to go.
       ✅ **Both are pure geometry — measure the two handles’ centres against each other, and the glyph’s
       centre against its box, then close the gaps.** ⚠️ **Verify at 380px**, and remember queue 571: the
       touch target must not shrink, only the glyph moves.
@@ -21128,7 +21175,23 @@ re-opened #480, which I had marked done and had not fixed.
       inside it sits a **grey block starting well right of the left edge and ending mid-track**, with a
       thin **blue vertical tick** near its right end. **There is no visible thumb and no fill from the
       left**, so at 41% the control reads as a stray grey slab rather than a slider at a value.
-      ➡️ **Check first whether this is the shared range-input style failing here or a bespoke control** —
+      ⚠️ **FIRST THEORY TRIED AND WRONG (27 Aug) — recorded so it is not tried again.** I read the
+      `rangeRow('Speed %', get, set, …)` call, saw no bounds on the visible lines, and concluded
+      `tickStrip` was being handed `min: undefined`. **It is not.** The arguments are there, 38 lines
+      further down where the long setter finally closes:
+      `}, SPD_MIN * 100, SPD_MAX * 100, 5, () => FM.inspector.refresh(), 5));`
+      I had already written a comment into `js/inspector.js` asserting the bounds were missing;
+      **it was reverted the moment the closing line was read.** A call whose arguments are 38 lines
+      from its opening is easy to misread — scroll to the closing paren before believing any of it.
+      ✅ **WHAT IS ACTUALLY TRUE: the slider’s range is 1 to 100000** (SPD_MIN 0.01 → SPD_MAX 1000, as
+      percentages), step 5. **That is the strongest remaining suspect for "looks weird and broken":**
+      a ruler spanning five orders of magnitude has to render something strange at a normal value like
+      his 41, and every other `rangeRow` in the file uses a tight range (0-100, 0-200, 0-360).
+      ➡️ **NEXT: render the control at 380px at several values (0, 41, 100, 1000) and LOOK** — compare
+      against a known-good row such as Opacity (0-100). ⚠️ **Narrowing the range also narrows what he
+      can TYPE** (the text box clamps with the same min/max), so if the range is the fault the fix has
+      to keep the typed path wide — that is a real design constraint, not a detail.
+      🗒️ *(superseded)* **Check first whether this is the shared range-input style failing here or a bespoke control** —
       the grey slab looks like an unstyled `::-webkit-slider-runnable-track` / thumb combination showing
       through, which would mean the app’s slider CSS is not reaching this instance.
       ⚠️ **Verify at 380px, at several values (0, 41, 100, max)** — a control that only looks wrong at
