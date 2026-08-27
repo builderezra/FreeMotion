@@ -2905,13 +2905,21 @@ body.white-chrome #time-readout:active {
 #tl-headtap::after {
   content: ""; width: 18px; height: 18px; border-radius: 50%;
   background: var(--panel-2, #1e2533); border: 0;
-  box-shadow: 0 0 0 2px #eaf0f8, 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 0 3px rgba(255, 206, 74, .9);
+  /* ⚠️ THE RESTING RING IS THE ACCENT, NOT MARKER-YELLOW (queue 607). Ezra: "When this button isn't
+     hovering over a benchmark make it blue inside not yellow but it can be yellow when going over a
+     benchmark". Yellow is the BENCHMARK colour throughout the timeline, so wearing it at rest made
+     the playhead look permanently parked on one. The filled-yellow state below (.on-mark) is
+     untouched — that is the meaning he wants kept. */
+  box-shadow: 0 0 0 2px #eaf0f8, 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 0 3px var(--accent, #29d9bb);
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
 }
 /* ⚠️ EVERY box-shadow BELOW MUST RE-STATE THE WHITE COLLAR. `box-shadow` replaces the whole list,
    it does not add to it — so a hover rule that forgets the `0 0 0 2px #eaf0f8` makes the ring pop off
    the line on hover, which is the exact fault queue 568 clause 2 is fixing, only intermittent. */
-#tl-headtap:hover::after { box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(255, 206, 74, .5), inset 0 0 0 3px rgba(255, 206, 74, 1); }
+/* Hover OFF a marker keeps the accent too — yellow here would say "benchmark" for the same reason. */
+#tl-headtap:hover::after { box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(41, 217, 187, .5), inset 0 0 0 3px var(--accent, #29d9bb); }
+#tl-centerline.on-mark #tl-headtap:hover::after, #tl-centerline.mark-hover #tl-headtap:hover::after {
+  box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(255, 206, 74, .5), inset 0 0 0 3px rgba(255, 206, 74, 1); }
 #tl-headtap:active { transform: scale(.9); }
 /* Parked ON a bookmark: the disc fills, because now the tap REMOVES rather than adds. */
 #tl-centerline.on-mark #tl-headtap::after { background: var(--kf, #ffce4a); box-shadow: 0 0 0 2px #eaf0f8, 0 0 9px rgba(255, 206, 74, .6); }   /* collar re-stated — see the warning above */

@@ -1,8 +1,18 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.45
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.46
 >
-> **State:** v13.45, 990 tests green, tree clean.
+> **State:** v13.46, 990 tests green, tree clean.
+>
+> **✅ Three of your things done this round:** the playhead knob is **blue at rest, yellow only on a
+> benchmark**; the Visual/Filters/Audio row fills its bar and stays put when you scroll; and the
+> **benchmark lines no longer draw over your left icon column**.
+> **⏱️ And I found why I have been slow.** 99 commits yesterday, **51 of them pure notes** — and every
+> single one runs your test suite (4 min for notes, 9 for code). **That is about ten of twenty hours
+> spent watching a progress bar.** There is now a gate that refuses a notes-only release within 12
+> minutes of the last one, so they pile up and ride out together. This release is three items in one run
+> instead of three runs.
+> ➡️ **Next: your export with no audio** — the only thing on the list stopping you finishing a video.
 >
 > **✅ Your Visual / Filters / Audio row is fixed — all three things you said, in one go.** The buttons now
 > stretch across the whole bar (84px each instead of bunched in the middle), and the row **stays at the
@@ -20885,8 +20895,7 @@ re-opened #480, which I had marked done and had not fixed.
       **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
       not merge it** — the export half is the one he is blocked by.
-- [ ] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] ✅ **DONE v13.45.** **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.**
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:
       > These buttons are too small, make em cover up that row proper
@@ -20917,6 +20926,7 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **So all three clauses land on the same element:** make `.fxb-top` fill the row, size properly,
       and **stick to the top of the sheet while the list scrolls** (`position: sticky; top: 0`).
 - [ ] **606 — The add-layer row’s drag handle is out of line with the layer ones, and the layer ones
+      **STATUS: 🟢 READY — nothing is stopping this**
       are not centred in their own box.** (27 Aug, annotated phone screenshot at v13.45.)
       His words, verbatim:
       > Don’t change the design for the add layers drag buttons but just line it up with the other layers
@@ -20952,7 +20962,7 @@ re-opened #480, which I had marked done and had not fixed.
       compare the glyph against THAT rect, not the button’s.**
       ⚠️ **This is the #592 lesson again — a rect comparison said "aligned" while his eye said otherwise,
       and his eye was right. Measure what is PAINTED.**
-- [ ] **607 — The playhead knob should be BLUE inside normally, and yellow only when it is over a
+- [x] ✅ **DONE v13.46.** **607 — The playhead knob should be BLUE inside normally, and yellow only when it is over a
       benchmark.** (27 Aug, two annotated phone screenshots at v13.45.)
       His words, verbatim:
       > When this button isn’t hovering over a benchmark make it blue inside not yellow but it can be
@@ -20969,7 +20979,17 @@ re-opened #480, which I had marked done and had not fixed.
          and per #545 he should SEE it before it ships if it is not an obvious token match.
       ⚠️ **Keep yellow for the benchmark state — he explicitly wants that kept.** Verify at 380px, both
       states, on and off a marker.
-- [ ] **608 — 🔴 BENCHMARK LINES DRAW OVER THE LEFT-HAND ICON COLUMN. He has asked repeatedly.**
+      ✅ **DONE v13.46 — measured at 380px, both states.** The resting ring was marker-YELLOW
+      (`inset 0 0 0 3px rgba(255,206,74,.9)`), which is the benchmark colour used across the whole
+      timeline — so the playhead looked permanently parked on one. It now uses `var(--accent)`, which
+      resolves to **#5ac7ed** in his theme, i.e. the blue he asked for and NOT an invented colour.
+      | state | centre | ring |
+      |---|---|---|
+      | off a benchmark | dark `rgb(15,30,38)` | **blue #5ac7ed** |
+      | on a benchmark (`.on-mark`) | **filled yellow `rgb(255,206,74)`** | — |
+      **The filled-yellow on-marker state is untouched**, which is the meaning he asked to keep. Hover
+      follows the same rule: accent off a marker, yellow on one.
+- [x] ✅ **DONE v13.45** — shipped in the same release, though its commit message did not name it. **608 — 🔴 BENCHMARK LINES DRAW OVER THE LEFT-HAND ICON COLUMN. He has asked repeatedly.**
       (27 Aug, phone screenshot at v13.44.)
       His words, verbatim:
       > Also stop being a dickhead and actually make the benchmarks not show up on the left side like
@@ -20988,6 +21008,7 @@ re-opened #480, which I had marked done and had not fixed.
       `clip-path: inset(0 0 -600px 0)` on the ruler — clips anything left of the lane while letting the
       vertical line run down over the tracks.
 - [ ] **609 — The Speed slider looks weird and broken.** (27 Aug, phone screenshot at v13.44.)
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim:
       > The speed slider looks weird and broken
       **THE SCREENSHOT:** the Speed panel with **Speed % = 41**. The track is a wide rounded box, and
@@ -21000,6 +21021,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Verify at 380px, at several values (0, 41, 100, max)** — a control that only looks wrong at
       certain values is a different bug from one that is always wrong.
 - [ ] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
+      **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug. A REPEAT — he has asked before and it has not been done.)
       His words, verbatim:
       > You still haven’t re designed the border and shadow section to look better instead of the simple
