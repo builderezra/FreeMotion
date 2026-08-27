@@ -285,10 +285,22 @@ exercising DIFFERENT code paths, and neither is obviously "the real one".
 `tick()` (js/app.js:~1728) reads the clock into `FM.time` and calls `render()` **once per rAF frame**,
 and `render()` (js/app.js:92) calls `renderScene(ctx, scene, FM.time)` exactly once. **One render per
 frame, t advancing** — that is `advance`, `ref = rec.cv`.
-🔄 **SO THE CONCLUSION INVERTS: the UNSYNCED probe is the representative one**, because it does exactly
-one renderScene per advancing t, matching playback. **My "sync" fix made it WORSE, not better** — calling
-`FM.setTime(t)` triggers `requestRender()`, adding a SECOND render at the same t, which sends the kernel
-down `repaint` (`ref = rec.prev`) — a path playback never takes with one render per frame.
+❌ **AND THAT INVERSION WAS ITSELF WRONG — the mechanism is now fully explained (27 Aug). The SYNCED
+probe is the correct one.** I reasoned that "unsynced = one render per advancing t = playback". It is
+not: unsynced means **MY render plus the APP's render at a DIFFERENT time**, which playback never does.
+**Measured: `FM.time` was 0 while my walk ran 0.40 → 0.83.** So the app's rAF render kept resetting
+`rec.t` to 0, and every one of my renders was **more than the 0.35 s jump guard away from it** —
+`advance` false EVERY frame, cache reset every frame. That is exactly the flat 110-110-110 Echo trace,
+and syncing fixes it because `FM.time` then tracks the walk.
+🚨 **IT ALSO EXPLAINS WHY THE READINGS KEPT CONTRADICTING EACH OTHER: the corruption depends on where
+`FM.time` HAPPENS to be sitting**, which differed between runs. Not noise — a hidden variable.
+🚨 **AND THE UNCOMFORTABLE CONSEQUENCE, which must not be buried: under the SYNCED regime the v13.40
+Smear fix measures 111/42 pre-fix and 111/42 post-fix — NO IMPROVEMENT.** The 110 → 117 win was
+measured unsynced, i.e. in the corrupted regime. **So v13.40 is NOT validated after all**; my "the clean
+A/B was already in the table" conclusion is withdrawn too, because both of those rows were unsynced.
+➡️ **NEXT: re-run the pre-fix / post-fix A/B with `FM.setTime(t)` on every step** (swap the old
+compositor in via `git show <v13.40 commit>~1:js/compositor.js`, as before). ⚠️ **If it shows no gain,
+say so to him and consider reverting v13.40** — it is a visual change that would then be buying nothing.
 ✅ **AND THE CLEAN A/B WAS ALREADY IN THE TABLE ABOVE — no re-run needed.** Rows 1 and 3 are BOTH
 unsynced, i.e. both taken in the regime that matches playback:
 **pre-fix 111 px / core 43  →  post-fix 117 px / core 26.** So v13.40 is validated on a like-for-like
