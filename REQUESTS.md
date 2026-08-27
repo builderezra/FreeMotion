@@ -21369,6 +21369,41 @@ re-opened #480, which I had marked done and had not fixed.
       through, which would mean the app’s slider CSS is not reaching this instance.
       ⚠️ **Verify at 380px, at several values (0, 41, 100, max)** — a control that only looks wrong at
       certain values is a different bug from one that is always wrong.
+
+      🎯 **RENDERED AND LOOKED, 27 Aug (v13.53) — THE CAUSE IS MEASURED, NOT DEDUCED, AND IT IS NOT
+      THE RANGE ITSELF. It is that the ruler is drawn 140,000 PIXELS WIDE.**
+      📐 **Measured live at 380px with the Speed panel open:**
+      | element | value |
+      |---|---|
+      | the row | x 62, **299px wide** |
+      | `.fx-scrub-ticks` (the ruler) | x 73, **139,999px wide** |
+      | its `max` wall mark | **x 140,071** |
+      | its midpoint mark | x 70,071 |
+      **The arithmetic is exact and it is nobody's mistake in isolation:** width = `((max−min)/q) × TICK`
+      = `(100000−1)/5 × 7` = **139,998.6px**. `TICK` is 7 (js/inspector.js:539) and `q` is FORCED to 5
+      for this row — deliberately, by queue 455, because letting `tickQuantum` coarsen it made the notch
+      **1000%** and he reported *"The speed slider goes WAY too fast, it goes up 10x at a time"*.
+      🚨 **SO THE TWO COMPLAINTS ARE THE SAME TRADE, and picking a side just swaps which one he files.**
+      Coarsen `q` → the drag jumps 10× per notch (his old report). Keep `q` at 5 → the ruler is 140,000px
+      (this report). **Both are consequences of a linear ruler over five orders of magnitude.**
+      🐛 **AND THE VISIBLE SYMPTOM IS A RASTERISATION FAILURE, which is why it looks "broken"
+      rather than merely wrong.** `.fx-scrub-ticks` carries `will-change: transform` (styles.css:1488)
+      and its notches are a **7px repeating-linear-gradient**. A 139,999px element with `will-change`
+      forces a compositing layer far past the browser's maximum texture size, so it is downsampled —
+      **screenshotted at Speed 100: a white wall at the far left and a scatter of BLURRED GREY SMUDGES
+      where the notches should be.** That is his *"weird and broken"*, exactly.
+      ✅ **THE FIX, and it needs no change to the range, to `q`, to `TICK` or to the drag maths:**
+      **the ruler does not need to exist at full length — only the visible window is ever on screen.**
+      Draw a strip-sized element, scroll the notch gradient with `background-position-x` instead of
+      translating a giant div, and place only the marks that fall inside the window. `sync()` becomes
+      the single place that offset is applied. **Everything about how the drag FEELS is untouched**,
+      which matters because queue 455 and queue 253 both tuned that feel.
+      📍 **Contained: the ruler element is used in exactly five places** — js/inspector.js:726, 727,
+      739, 740, 741 — so this is a small change to one shared control, not a rework.
+      ⚠️ **It IS shared, though: `tickStrip` builds every scrub row in the app.** Any change has to be
+      checked on a NORMAL row too (Opacity 0–100 renders a 140px ruler and looks right today) —
+      a fix that only helps the pathological case and blurs the ordinary ones is a worse bug.
+      ⚠️ **#545: send him a picture of the fixed ruler at 380px before calling it done.**
 - [ ] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
       **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug. A REPEAT — he has asked before and it has not been done.)

@@ -133,7 +133,30 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.48 — everything is pushed and the tree is clean.**
+📍 **HANDOVER, 27 Aug, v13.53 — everything is pushed and the tree is clean. 994 tests green.**
+**Shipped this stretch:** timeline fling now scales with zoom so a swipe feels the same at any zoom
+(614) · the effect plates are declared read-heavy and #582 clause 2's culling turned out to be already
+done and already exact (582) · the text options sheet no longer sits on the picture you are editing
+(602 clause 1) · a dead effect tile now says WHY in words a phone can read (603).
+🚨 **HE SENT TWELVE NEW REQUESTS IN ONE SITTING (615–626) — all logged verbatim, none started.**
+White home screen (615) · the tacky blue add-row bars → a bottom-to-top pulse (616) · duplicate Element
+drafts you cannot finish deleting (617) · elements show ◇ and still tell you to save by hand (618) ·
+**templates just fork a project instead of offering the media swap — he pre-authorised the size of it:
+"I know it's a big thing to do idc"** (619) · magnet off should stop canvas snapping (620) · rounded
+corners change with size/rotation (621) · the speed jump buttons do not update the view rail (622) ·
+copy/paste graphs (623) · hold-to-select and the edit menu (624, THREE readings, ask before building) ·
+keyframes duplicating and refusing to delete (625) · a blank tail after speeding every clip up (626).
+🎯 **#609 IS DIAGNOSED AND READY TO BUILD — the measurement is done, the fix is named.** The Speed
+ruler is drawn **139,999px wide** (`((100000−1)/5) × 7`), and with `will-change: transform` that blows
+past the browser's max texture size, so the notches downsample into blurred smudges. **Do not change the
+range, `q` or `TICK`** — `q` is forced to 5 on purpose (queue 455, "it goes up 10x at a time"). Draw only
+the visible window and scroll the gradient with `background-position-x`. Check a NORMAL row too.
+📌 **BLOCKED ON ONE WORD FROM HIM, both asked in the summary block:** #602 clause 2 (which of the
+four circled options go) and #624 (three readings, two of them opposites).
+🔑 **#129 is marked JUMPED** — nothing left to build, it waits on the next blank clip on his phone.
+**Lift it the moment he reports one.**
+
+🗒 *(previous handover, kept for its lessons)* **27 Aug, v13.48.**
 **Shipped today for him:** tab row fills its bar and sticks (605) · benchmark lines no longer paint over
 the left icon column (608) · playhead knob blue at rest, yellow on a benchmark (607) · add-layer grip
 aligned to the layer handles (606.1) · blank clips report their real format instead of asserting H.265
