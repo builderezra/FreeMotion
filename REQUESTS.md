@@ -2,7 +2,7 @@
 
 > ## 📌 WHAT I NEED FROM YOU — updated 27 Aug at v13.69
 >
-> **State:** v13.69, 1013 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.69, 1014 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -21217,14 +21217,70 @@ re-opened #480, which I had marked done and had not fixed.
          the file is rebuilt as `new File([blob], name, { type: 'video/mp4' })`.
       2. `download(blob, name)` otherwise — the PC path.
       ⚠️ **He reports it on BOTH devices, so a suspect common to both routes is more likely than an
-      iOS-share quirk.** ➡️ **Next: save the very same Blob that just tested POSITIVE for `mp4a`, then
-      re-open the saved file and re-run this box scan on it.** If the track is gone after saving, the
-      fault is in `deliver`; if it survives, the fault is in the PLAYER/camera-roll import and not in
-      FreeMotion at all — and that is worth knowing before another session is spent on the exporter.
+      iOS-share quirk.**
+      🛑 **THAT PROPOSED NEXT STEP WAS A DEAD END AND IS WITHDRAWN.** "Save the blob then re-scan it"
+      **cannot fail**: `deliver()` does `new File([blob], name)`, which reuses the same immutable bytes.
+      It would have cost a session to prove that a copy is a copy.
+      ✅ **THE QUESTION WORTH ASKING INSTEAD — and it is now ANSWERED. THE EXPORTED FILE CONTAINS REAL,
+      LOUD SOUND.** A box scan finding `mp4a` proves a track EXISTS; it says nothing about whether that
+      track carries audio. A broken decoder config or all-zero samples produce an identical scan and a
+      silent file. So the file was **decoded and MEASURED** (tests/_604sfx.html):
+      | | peak | rms |
+      |---|---|---|
+      | the source tone (440 Hz control) | 0.8000 | 0.5657 |
+      | the MIXED buffer, before encoding | 0.8000 | 0.5657 |
+      | **the exported MP4, decoded back** | **0.8224** | **0.5512** |
+      **1.58 s, 2 channels, `FM._audioTrackDropped` null.** The soundtrack survives the round trip.
+      ✅ **AND IN HIS ACTUAL SCENARIO TOO — a video layer WITH audio plus a built-in sound effect added
+      through the real path** (`FM.sfx.add` → render → `encodeWav` → `FM.loadVideoFile` → `addMediaLayer`).
+      Mixer drops: `[]`. Decoded export: **peak 1.61, rms 0.62**. Both layers are in the file.
+      ✅ **THE MOOV IS TEXTBOOK-CORRECT — checked box by box** (tests/_604boxes.html), because Chrome's
+      `decodeAudioData` reads samples straight out of `mdat` and is LENIENT, while iOS Photos and
+      QuickTime are strict about track metadata. A track that is fine for one and rejected by the other
+      would look exactly like his report. It is fine for both:
+      | | video | audio |
+      |---|---|---|
+      | `tkhd` duration | 1533 | **1579** |
+      | `mdhd` | 1.533 s | **1.579 s** |
+      | samples | 23 | **74** |
+      | `stsd` | avc1 | **mp4a, 2ch, 48 kHz** |
+      | decoder config | — | **`esds` present, 51 bytes, AAC LC** |
+      ⚠️ **ONE FALSE ALARM, MINE, WORTH KEEPING.** The first run of that scan reported **`tkhd
+      duration = 0` on BOTH tracks**, which reads as a smoking gun. **It was my parser.** In a
+      version-0 `tkhd` the duration is at byte 28; I read byte 24, which is the RESERVED field and is
+      always zero. **A box walk is code and gets the same scepticism as any other measurement** — the
+      tell was that it was zero on both tracks, including the video track that plainly plays.
+      ✅ **AND THE ONE PIECE NOTHING HAD EVER TESTED IS NOW TESTED — AND IT IS CORRECT.**
+      js/exporter.js says of the streaming sink: *"exposed for tests/_mp4sink.html, which checks the
+      assembly against a dense reference buffer"*. **That file does not exist**, and the suite had no
+      reference to `createMp4Sink` anywhere. It folds writes into a Blob every 4 MB and splices
+      out-of-order patches at `finish()` — and **an export under 4 MB never folds**, so every probe
+      above exercised none of it while HIS exports go through all of it. It now has a real test (folds
+      12 times, patches out of order, patches the same bytes twice, straddles the end, checks the heap
+      bound #47 exists for) and it reproduces the reference **byte for byte**. Mutation-proved: reversing
+      the patch order was CAUGHT.
+      🚨 **SO EVERY LINK INSIDE FREEMOTION IS NOW MEASURED AND SOUND:** mix → encode → mux → byte
+      assembly → file structure → decodable, audible content. **The file that leaves the app has sound
+      in it.** `deliver()` cannot change that; it hands over the same bytes.
+      ❓ **THE NEXT EVIDENCE CAN ONLY COME FROM HIS DEVICE, AND IT IS ONE ACTION, NOT A SESSION.**
+      ➡️ **On the PC: export something short with sound, then DRAG THE EXPORTED .mp4 INTO A CHROME TAB
+      and press play.**
+      · **Sound in Chrome** → the file is good and the loss is in the camera-roll import / the player,
+        which is outside FreeMotion and is worth knowing before another session goes into the exporter.
+      · **No sound in Chrome either** → it is something about the PROJECT (a solo'd shape silences every
+        soundtrack — see the mixer's own comment) or his environment, and the mixer's drop report will
+        name it. Send the toast if one appears.
 
       **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
       not merge it** — the export half is the one he is blocked by.
+      📐 **A REAL DEFECT FOUND IN PASSING WHILE MEASURING THE ABOVE, NOT YET FIXED: THE MIX CLIPS.**
+      Two ordinary layers at volume 1 (a clip plus one sound effect) mixed to **peak 1.52–1.61**, and
+      the decoded export carried that same peak. Anything over 1.0 hard-clips through the AAC encoder,
+      so overlapping sounds distort — and the more layers overlap, the worse it gets. `buildAudioMix`
+      sums and never limits. **This is not the "no audio" bug and must not be sold as a fix for it**,
+      but it is a genuine audio-quality fault sitting in the same function, and it fits *"it was
+      inconsistent"* better than anything else found so far.
 - [x] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.** ✅ **DONE v13.45.**
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:

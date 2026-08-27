@@ -133,7 +133,32 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1013 tests green.**
+📍 **HANDOVER, 27 Aug, v13.69 — everything is pushed and the tree is clean. 1014 tests green.**
+🔊 **#604 — EVERY LINK INSIDE FREEMOTION IS NOW MEASURED AND SOUND. The exported file HAS audio in it.**
+Decoded the real export back: peak 0.82 / rms 0.55 against a 0.80 / 0.57 source. Same with a video layer
+plus a built-in SFX through the real path. The moov is textbook-correct — audio `tkhd` 1579, `mdhd`
+1.579s, 74 samples, **`esds` present**. Mix → encode → mux → byte assembly → structure → audible content:
+all verified. `deliver()` hands over the same immutable bytes and cannot change it.
+🛑 **The entry's own "next step" was a DEAD END and is withdrawn:** "save the blob then re-scan it"
+cannot fail, because `new File([blob])` reuses the same bytes. **Decoding it was the question worth
+asking** — a box scan proves a track EXISTS, never that it carries sound.
+⚠️ **A BOX WALK IS CODE AND LIES LIKE ANY OTHER MEASUREMENT.** My first scan reported `tkhd duration=0`
+on BOTH tracks — a smoking gun, and a parser bug: version-0 `tkhd` duration is at byte 28, I read 24
+(the reserved field, always zero). **The tell was that it was zero on the VIDEO track too, which plainly
+plays.** If a probe indicts something that demonstrably works, suspect the probe.
+🔍 **A COMMENT POINTING AT A TEST THAT DOES NOT EXIST IS WORSE THAN NO COMMENT.** exporter.js said the
+streaming sink was "exposed for tests/_mp4sink.html" — no such file, and zero suite coverage of
+`createMp4Sink`. It folds every 4 MB and splices out-of-order patches, **so an export under 4 MB
+exercises none of it** while his real ones exercise all of it. Now tested byte-for-byte and CORRECT.
+🛠 **`tools/probe.sh _name.html [secs]` runs ONE tests/_*.html probe headless** and refuses while a
+mutation is in progress. Every ad-hoc probe before this was hand-rolled python pasted into a Bash call.
+➡️ **#604 NOW NEEDS ONE ACTION FROM HIM, not another session: export on the PC, drag the .mp4 into a
+Chrome tab, press play.** Sound there = the loss is the camera-roll import / player, outside the app.
+No sound there = the project or environment, and the mixer's drop report will name it.
+📐 **FOUND IN PASSING, NOT FIXED: THE MIX CLIPS.** Two ordinary layers at volume 1 peaked at 1.52–1.61.
+`buildAudioMix` sums and never limits, so overlapping sounds hard-clip through AAC. Logged under #604's
+second clause. **Not a fix for "no audio" and must not be sold as one.**
+
 🔎 **#602 CLAUSE 2 ANSWERED BY READING THE CODE, and the entry's old claim was WRONG.** It asserted
 *"Curve and Animate are the two genuinely duplicated by effects"* — nobody had looked. The real answer:
 **Spacing is duplicated exactly** (`textspacing`) and **Animate's Typewriter preset is duplicated and

@@ -12894,6 +12894,74 @@
     }
   });
 
+  /* #604 / #47 — THE STREAMING MP4 SINK, WHICH NOTHING TESTED.
+   * js/exporter.js says of it: "exposed for tests/_mp4sink.html, which checks the assembly against a
+   * dense reference buffer". THAT FILE DOES NOT EXIST, and the suite had no reference to
+   * createMp4Sink at all — so the single piece of the export chain that does non-trivial byte
+   * assembly was covered by a comment pointing at nothing.
+   * Why it matters for #604 specifically: the sink folds writes into a Blob every 4 MB and splices
+   * out-of-order patches at finish(). A SMALL export never folds and never really patches, so every
+   * probe that exports a few seconds exercises none of it — while Ezra's real exports are many
+   * megabytes and go through all of it. "Exports have no audio" is exactly what a mis-assembled file
+   * looks like from outside.
+   * The model here is the sink's own contract, stated in its comments: offsets stay true (a hole is
+   * zero-filled), and a byte written twice ends up with the value written LAST. */
+  test('export: the streaming MP4 sink assembles bytes exactly, across folds and out-of-order patches', { item: '604' }, async function () {
+    if (typeof FM._createMp4Sink !== 'function') throw new Error('FM._createMp4Sink is not reachable — the sink cannot be tested');
+
+    // A dense reference the sink must reproduce byte for byte. Values are position-derived so a
+    // misplaced run is identifiable, not just unequal.
+    function mkRef() { return []; }
+    function refWrite(ref, pos, bytes) {
+      while (ref.length < pos) ref.push(0);                    // hole -> zero fill, offsets stay true
+      for (var i = 0; i < bytes.length; i++) ref[pos + i] = bytes[i];   // later write wins
+    }
+    function chunk(seed, n) { var a = new Uint8Array(n); for (var i = 0; i < n; i++) a[i] = (seed * 31 + i * 7) & 0xff; return a; }
+
+    var FOLD = 64;                       // tiny, so a few hundred bytes cross many fold boundaries
+    var sink = FM._createMp4Sink('video/mp4', FOLD);
+    var ref = mkRef();
+    function write(pos, bytes) { sink.onData(bytes, pos); refWrite(ref, pos, bytes); }
+
+    // 1. plain sequential appends that cross several folds
+    var at = 0;
+    for (var k = 0; k < 7; k++) { var c = chunk(k + 1, 40); write(at, c); at += 40; }   // 280 bytes, FOLD 64
+    // 2. a HOLE — the muxer jumping forward; the gap must be zero-filled so later offsets stay true
+    write(at + 25, chunk(90, 30)); at = at + 25 + 30;
+    // 3. a patch WHOLLY BEHIND the end — this is the real mdat-header rewrite at finalize
+    write(4, chunk(200, 8));
+    // 4. a second patch over the SAME bytes: the later value must win
+    write(4, chunk(201, 8));
+    // 5. a patch that STRADDLES the end — half overwrites, half extends
+    write(at - 10, chunk(150, 26)); at = at - 10 + 26;
+    // 6. more sequential work AFTER patching, to prove patching did not desync `length`
+    write(at, chunk(77, 100)); at += 100;
+
+    if (sink.length !== ref.length)
+      throw new Error('sink.length is ' + sink.length + ' but the reference is ' + ref.length + ' bytes — offsets have drifted');
+    if (sink.patchCount < 3)
+      throw new Error('only ' + sink.patchCount + ' patches were recorded — the out-of-order path was not exercised, so a pass here would prove nothing');
+
+    var blob = sink.finish();
+    if (blob.size !== ref.length)
+      throw new Error('the finished blob is ' + blob.size + ' bytes where ' + ref.length + ' were written');
+    var got = new Uint8Array(await blob.arrayBuffer());
+    for (var i = 0; i < ref.length; i++) {
+      if (got[i] !== ref[i]) {
+        var from = Math.max(0, i - 4), to = Math.min(ref.length, i + 5);
+        throw new Error('byte ' + i + ' is ' + got[i] + ', expected ' + ref[i] +
+          '  (got ' + [].slice.call(got.subarray(from, to)).join(',') +
+          ' vs ref ' + ref.slice(from, to).join(',') + ')');
+      }
+    }
+
+    // The heap bound is the WHOLE POINT of the sink (#47: a 60-minute export must not sit in RAM).
+    // Without this, a "fix" that stopped folding would keep every byte on the heap and still pass above.
+    if (sink.peakHeapBytes > FOLD * 3)
+      throw new Error('peak heap was ' + sink.peakHeapBytes + ' bytes against a ' + FOLD +
+        '-byte fold — the sink is not folding, which is the out-of-memory protection #47 exists for');
+  });
+
   test('export: a layer that contributes no audio is NAMED, not dropped in silence', { item: 'audio-drop-report' }, async function () {
     /* Queue 215, the most serious open item in REQUESTS.md, and the one thing this test can actually
      * change today. Ezra: "I made a fresh project, added some sound effects, pressed export with some

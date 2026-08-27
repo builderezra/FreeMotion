@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #604 — the entry proved the exported MP4 CONTAINS an `mp4a` box. That is not the same as containing
+ * SOUND: a track with a broken decoder config, or one whose samples are all zero, produces an identical
+ * box scan and a silent file. This DECODES the exported blob and measures amplitude. */
+var out = [];
+function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.exporter)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait, 50); }
+    setTimeout(run.bind(null, w), 800);
+  })();
+});
+async function run(w) {
+  try {
+    var FM = w.FM;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    // --- a known, LOUD tone: 440Hz at 0.8 amplitude, 1.5s, encoded as a WAV the app can import
+    var SR = 48000, DUR = 1.5, N = Math.floor(SR*DUR);
+    var pcm = new Int16Array(N);
+    for (var i=0;i<N;i++) pcm[i] = Math.round(Math.sin(2*Math.PI*440*i/SR) * 0.8 * 32767);
+    var hdr = new ArrayBuffer(44), dv = new DataView(hdr);
+    function s4(o,t){ for(var k=0;k<4;k++) dv.setUint8(o+k, t.charCodeAt(k)); }
+    s4(0,'RIFF'); dv.setUint32(4, 36+pcm.byteLength, true); s4(8,'WAVE'); s4(12,'fmt ');
+    dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,SR,true); dv.setUint32(28,SR*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+    s4(36,'data'); dv.setUint32(40, pcm.byteLength, true);
+    var wav = new Blob([hdr, pcm.buffer], {type:'audio/wav'});
+
+    // sanity: the SOURCE tone must itself be loud, or the whole test proves nothing
+    var ac = new (w.AudioContext||w.webkitAudioContext)();
+    var srcBuf = await ac.decodeAudioData(await wav.arrayBuffer());
+    var sd = srcBuf.getChannelData(0), sp=0, ss=0;
+    for (var i=0;i<sd.length;i++){ var v=Math.abs(sd[i]); if(v>sp)sp=v; ss+=sd[i]*sd[i]; }
+    say('SOURCE tone      peak ' + sp.toFixed(4) + '   rms ' + Math.sqrt(ss/sd.length).toFixed(4));
+    if (sp < 0.5) return say('❌ the source tone is not loud — abandoning, the probe would prove nothing');
+
+    // --- HIS ACTUAL SCENARIO: a video layer that has audio, PLUS a built-in sound effect
+    //     added through the real FM.sfx.add path (render -> encodeWav -> loadVideoFile -> addMediaLayer).
+    var P = FM.scene.project;
+    P.duration = Math.max(P.duration || 0, DUR);
+    FM.scene.layers.length = 0;
+    var L = FM.makeLayer('video', { name: 'Clip with sound', start: 0, duration: DUR });
+    FM.scene.layers.push(L);
+    FM.media.set(L.id, { file: new File([wav], 'tone.wav', { type: 'audio/wav' }), el: null });
+    say('layer 1: ' + L.name);
+
+    if (!FM.sfx || typeof FM.sfx.add !== 'function') return say('❌ FM.sfx.add is not reachable');
+    var defs = (FM.sfx.list && FM.sfx.list()) || FM.sfx.defs || null;
+    var def = null;
+    if (defs && defs.length) def = defs.filter(function(d){ return d.id==='impact'; })[0] || defs[0];
+    if (!def) return say('❌ could not reach the sound-effect catalogue');
+    say('adding sound effect: ' + def.name + ' (' + def.id + ', dur ' + def.dur + 's)');
+    await FM.sfx.add(def);
+    await new Promise(function(r){ setTimeout(r, 600); });
+    say('layers now: ' + FM.scene.layers.map(function(x){ return x.type + ':' + (x.name||'?'); }).join(', '));
+    FM.scene.layers.forEach(function(x){
+      var m = FM.media.get(x.id);
+      say('   ' + (x.name||x.id) + '  start=' + (x.start||0).toFixed(2) + ' dur=' + (x.duration||0).toFixed(2) +
+          '  vol=' + JSON.stringify(x.volume) + ' muted=' + !!x.muted + ' visible=' + (x.visible!==false) +
+          ' solo=' + !!x.solo + '  media=' + (m ? (m.file ? 'file ' + m.file.size + 'B' : 'NO FILE') : 'NONE'));
+    });
+    P.duration = Math.max(P.duration||0, DUR);
+
+    // --- does the MIX itself carry the tone? (upstream of the encoder)
+    var mix = await FM.exporter.buildAudioMix(FM.scene, 0, P.duration);
+    if (!mix) return say('❌ buildAudioMix returned nothing');
+    var md = mix.audioBuffer.getChannelData(0), mp=0, ms=0;
+    for (var i=0;i<md.length;i++){ var v=Math.abs(md[i]); if(v>mp)mp=v; ms+=md[i]*md[i]; }
+    say('mixer drops after mix: ' + JSON.stringify(FM._lastAudioDrops));
+    say('MIXED buffer     peak ' + mp.toFixed(4) + '   rms ' + Math.sqrt(ms/md.length).toFixed(4) +
+        '   (' + mix.sampleRate + 'Hz x' + mix.channels + ')');
+
+    // --- run a REAL export and grab the blob
+    say('exporting (real path)…');
+    var got = null;
+    FM._lastAudioDrops = null;
+    await FM.exporter.run({
+      from: 0, to: P.duration, fps: 15, outW: 320, outH: 240, name: 'probe604',
+      onReady: async function (r) { got = r; }        // stop before deliver()
+    });
+    if (FM._lastAudioDrops && FM._lastAudioDrops.length) say('mixer drops: ' + JSON.stringify(FM._lastAudioDrops));
+    if (!got || !got.blob) return say('❌ the export produced no blob');
+    say('exported blob    ' + got.blob.size + ' bytes  type=' + got.blob.type);
+    say('FM._audioTrackDropped = ' + JSON.stringify(FM._audioTrackDropped));
+
+    // --- THE POINT: decode the exported file and measure it
+    var buf = await got.blob.arrayBuffer();
+    var dec = null, derr = null;
+    try { dec = await ac.decodeAudioData(buf.slice(0)); } catch (e) { derr = e && (e.message||String(e)); }
+    if (!dec) { say('❌ decodeAudioData FAILED on the exported file: ' + derr);
+                say('   → the audio track exists as a box but is NOT DECODABLE.'); return; }
+    var dd = dec.getChannelData(0), dp=0, ds=0;
+    for (var i=0;i<dd.length;i++){ var v=Math.abs(dd[i]); if(v>dp)dp=v; ds+=dd[i]*dd[i]; }
+    var rms = Math.sqrt(ds/dd.length);
+    say('DECODED export   peak ' + dp.toFixed(4) + '   rms ' + rms.toFixed(4) +
+        '   dur ' + dec.duration.toFixed(2) + 's  ch ' + dec.numberOfChannels);
+    say('');
+    say(rms > 0.05 ? '✅ THE EXPORTED FILE CONTAINS REAL SOUND — the loss is NOT in FreeMotion.'
+                   : '🚨 THE EXPORTED FILE DECODES TO (near) SILENCE — the bug is upstream of the file.');
+  } catch (e) { say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>
