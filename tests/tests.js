@@ -45164,6 +45164,37 @@
     FM.audioHealth.reset();
   });
 
+  /* ⚠️ AND IT MUST SURVIVE HIM LEAVING WITHOUT PRESSING STOP — which on a phone is the likely path.
+   * The report is written by FM.pause. What he actually does is play it, hear the sound break, and
+   * switch away to tell me: home button, app switcher, another tab. Playback is torn down with the
+   * stop button never pressed, and the one recording of the fault he was trying to report goes with
+   * it. An instrument that only survives the tidy path misses the case it was built for. */
+  test('leaving the app without pressing stop still saves the audio report', { item: '663' }, async function () {
+    if (!FM.audioHealth) throw new Error('FM.audioHealth is missing');
+    let before = null;
+    try { before = localStorage.getItem('fm.lastAudioReport'); } catch (e) {}
+    try {
+      try { localStorage.removeItem('fm.lastAudioReport'); } catch (e) {}
+      FM.audioHealth.reset();
+      const el = { currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1,
+                   play() { return Promise.resolve(); }, pause() {}, addEventListener() {} };
+      const m = { layerId: 'leave', el: el };
+      FM.audioHealth.note(m, 1000, true);
+      FM.audioHealth.note(m, 1300, true);
+      if (!FM._audioHealth.playMs) throw new Error('the fixture recorded no playback, so this test would pass on an empty report');
+      // the app going into the background, without FM.pause ever running
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pagehide'));
+      let text = null;
+      try { text = localStorage.getItem('fm.lastAudioReport'); } catch (e) {}
+      if (!text) throw new Error('switching away without pressing stop lost the report — that is the path he will actually take when the sound misbehaves on his phone');
+      if (text.indexOf('CUT OUT') < 0) throw new Error('the report saved on leaving does not carry the cut-out line');
+    } finally {
+      FM.audioHealth.reset();
+      try { if (before == null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', before); } catch (e) {}
+    }
+  });
+
   /* ═══ A CLIP WITH NO PICTURE WRITES DOWN WHAT IT WAS (queue 129) ═══════════════════════════════
    * That entry's last open question is asked of HIM: "what does the FILE say — .mov or .mp4? A .mov
    * points at the container, an .mp4 at the codec, and the two need different fixes."
@@ -46258,7 +46289,16 @@
     const RENAMED = ['copybg', 'fillbehind', 'magnifybg', 'counter', 'textprogress', 'textrandomizer',
                      'textspacing', 'texttransform', 'pulseopacity', 'mattefringe', 'solidmatte',
                      'gridrepeat', 'linearrepeat', 'radialrepeat', 'blocknoise', 'hexarray', 'rays',
-                     'rasterextrude', 'starpoly3d', 'axiscross3d', 'hollowbox3d', 'fliplayer'];
+                     'rasterextrude', 'starpoly3d', 'axiscross3d', 'hollowbox3d', 'fliplayer',
+                     /* ⚠️ `roundcorners` JOINED THIS LIST LAST, AND IT IS THE ONE THE ENTRY CALLED WORST.
+                        Clause 1 renamed twenty-two labels copied from Alight Motion and MISSED the only
+                        one that was not copied from AM at all — ours read "Rounded Corners / Apple
+                        style", with a second hit on the toggle ("Apple corners") and a third in the
+                        effect browser's description. That is another company's TRADE MARK in our own
+                        UI, on a product he intends to publish, and BEFORE-PUBLISHING.md exists for
+                        exactly this class of thing. It shipped for months because the rename swept the
+                        AM names and nobody looked at ours. */
+                     'roundcorners'];
     const gone = RENAMED.filter(t => !FM.fxRegistry.makeInstance(t));
     if (gone.length)
       throw new Error('these effect keys no longer exist: ' + gone.join(', ') +
@@ -46273,7 +46313,7 @@
     /* THE RENAME ITSELF, on a sample — otherwise this test passes just as well on the old names and
        proves only that nothing broke, which was never in doubt. */
     const want = { copybg: 'Backdrop Clone', textprogress: 'Type-On', radialrepeat: 'Ring Array',
-                   hexarray: 'Honeycomb', fliplayer: 'Card Flip' };
+                   hexarray: 'Honeycomb', fliplayer: 'Card Flip', roundcorners: 'Squircle Corners' };
     const wrong = [];
     for (const k of Object.keys(want)) {
       const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
@@ -46294,6 +46334,102 @@
       if (label && !keepNames[k].test(label)) moved.push(k + ' is now "' + label + '"');
     }
     if (moved.length) throw new Error('industry-standard names were renamed too: ' + moved.join(' · ') + ' — he said those are fine');
+
+    /* ⚠️ AND NO OTHER COMPANY'S NAME MAY SIT IN THE UI. The label above is only one instance; the check
+       that matters is the class. Apple's mark appeared in THREE user-facing strings for this one effect
+       — the label, a toggle and the browser description — so finding and fixing the label alone would
+       have left two. Comments are exempt: explaining WHY a curve exponent is what it is needs the word. */
+    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok)\b/i;
+    const hits = [];
+    const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
+    for (const d of defs) {
+      const key = d.key || d.id || d.type;
+      for (const [what, text] of [['label', d.label || d.name], ['description', d.desc || d.description]]) {
+        if (text && BRANDS.test(text)) hits.push(key + ' ' + what + ': "' + text + '"');
+      }
+      for (const p of (d.params || [])) {
+        if (p && p.label && BRANDS.test(p.label)) hits.push(key + ' param: "' + p.label + '"');
+      }
+    }
+    if (hits.length) throw new Error('another company\'s name is in the effect UI: ' + hits.join(' · ') +
+                                     ' — this is the class #484 called the worst, and it is a publishing blocker (BEFORE-PUBLISHING.md)');
+  });
+
+  /* ═══ QUEUE 657 — "HEALTHY" MUST NOT MEAN "SMOOTH BECAUSE IT GAVE UP SHARPNESS" ═══════════════
+   * His PC sample read HEALTHY, and the entry's own headline is that this WAS the finding: it was
+   * rendering at 28% scale, so the steady frames were bought rather than free. The QUALITY line in the
+   * same report already printed "28% scale" while the READ line above it said "looks healthy" — the
+   * report contradicted itself, and the half he reads first was the wrong half.
+   * That matters beyond wording: #95, #125, #202 and #387 are all open on "does it feel better on your
+   * phone", and a report that files a reduced-raster run as a clean bill of health is exactly how a
+   * real complaint gets closed wrongly. */
+  test('#657: a smooth sample says so when the smoothness came from a reduced raster', { item: '657' }, function () {
+    if (!FM.perfProbe || !FM.perfProbe._verdict) throw new Error('FM.perfProbe._verdict is not exposed, so the verdict cannot be tested');
+    const good = { med: 16, worst: 20, late: 0, total: 120, appMs: 4, budget: 16.7 };
+    const full = FM.perfProbe._verdict(Object.assign({}, good, { effective: 1 }));
+    if (!/healthy/i.test(full)) throw new Error('a genuinely healthy full-resolution sample no longer reads as healthy: ' + full);
+
+    const paid = FM.perfProbe._verdict(Object.assign({}, good, { effective: 0.28 }));
+    if (/looks healthy/i.test(paid)) throw new Error('a run drawing at 28% scale still reads as "looks healthy" — that is exactly how #657 got filed as a clean bill of health while the same report said 28% four lines below');
+    if (paid.indexOf('28%') < 0) throw new Error('the verdict does not say what scale it was drawing at: ' + paid);
+    if (!/blurr|soft/i.test(paid)) throw new Error('the verdict does not connect the number to what he would SEE — "28% scale" means nothing to him, "softer while playing" is the same fact in his words: ' + paid);
+
+    /* AND IT MUST NOT CRY WOLF at a factor nobody could notice. Tier 1 is the first visible step; a
+       report that hedges on every sample is a report that stops being read — the same failure the
+       queue's own half-done warning had. */
+    const mild = FM.perfProbe._verdict(Object.assign({}, good, { effective: 0.9 }));
+    if (/BOUGHT/.test(mild)) throw new Error('a 90%-scale sample was reported as bought smoothness — that is within noise and would hedge every healthy run: ' + mild);
+
+    /* A sample that is genuinely hitching must still say SO, not be relabelled. */
+    const bad = FM.perfProbe._verdict({ med: 40, worst: 400, late: 9, total: 120, appMs: 4, budget: 16.7, effective: 0.28 });
+    if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
+  });
+
+  /* ═══ QUEUE 645 — THE WARNING MUST STOP WHEN THE EFFECTS START WORKING ═════════════════════════
+   * #661 existed because the app told him nine colour effects were fine on a device where they drew
+   * NOTHING: *"These effects still don't work on mobile, this is probably the biggest issue you still
+   * haven't solved."* v13.94-v14.02 fixed that twice over — it stopped lying, and then js/gl-color.js
+   * made the effects actually render through a shader when `ctx.filter` is missing.
+   * ⚠️ AND THAT LEFT THE REPORTER BEHIND. `FM.cssFxUnavailable()` still answered from `ctx.filter`
+   * alone, so on a phone with WebGL and no ctx.filter the effects browser painted "Brightness,
+   * Contrast, Saturation… will do nothing here" across a page where they had just started working.
+   * **A wrong reassurance and a wrong warning are the same defect** — his complaint was never about
+   * which direction the screen was wrong in, it was that the screen and the app disagreed. */
+  test('#645: the device-cannot-run-filters warning stops once the shader can run them', { item: '645' }, function () {
+    if (!FM.cssFxUnavailable) throw new Error('FM.cssFxUnavailable is missing');
+    if (!FM.CSS_FX) throw new Error('FM.CSS_FX is missing');
+    const saved = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    try {
+      // 1. the ordinary device: ctx.filter works, nothing is lost, no banner
+      FM._forceNoCtxFilter = false; FM._noGL = false;
+      if (FM.cssFxUnavailable().length) throw new Error('a device with working canvas filters was told its effects are dead');
+
+      // 2. HIS DEVICE as of v14.02: no ctx.filter, but the shader covers all nine
+      FM._forceNoCtxFilter = true; FM._noGL = false;
+      if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available to the suite, so the case this test exists for is UNTESTED');
+      const withShader = FM.cssFxUnavailable();
+      if (withShader.length) throw new Error('with the colour shader available the app STILL reports ' + withShader.length +
+        ' effects as dead — that banner would sit on the effects browser telling him nine effects do nothing, on the page where they had just been fixed');
+
+      // 3. genuinely lost: no ctx.filter AND no WebGL. The warning is TRUE here and must survive.
+      FM._forceNoCtxFilter = true; FM._noGL = true;
+      const lost = FM.cssFxUnavailable();
+      if (lost.length !== Object.keys(FM.CSS_FX).length)
+        throw new Error('a device with neither canvas filters nor WebGL was told everything is fine — it reported ' +
+          lost.length + ' of ' + Object.keys(FM.CSS_FX).length + '; silencing a true warning is the same bug as raising a false one');
+
+      /* AND THE BANNER ITSELF FOLLOWS IT, because the function having no callers was the original
+         complaint in #661 — a correct answer nobody asks for changes nothing. */
+      if (FM._fxDeviceFilterBanner) {
+        FM._forceNoCtxFilter = true; FM._noGL = false;
+        if (FM._fxDeviceFilterBanner()) throw new Error('the effects browser still builds the "these do nothing" banner on a device where the shader runs them');
+        FM._forceNoCtxFilter = true; FM._noGL = true;
+        if (!FM._fxDeviceFilterBanner()) throw new Error('the banner vanished on a device that genuinely cannot run these effects — that is the case it was written for');
+      }
+    } finally {
+      FM._forceNoCtxFilter = saved.force; FM._noGL = saved.noGL;
+      if (FM.glColor && FM.glColor._reset) FM.glColor._reset();
+    }
   });
 
   /* ═══ QUEUE 552 — THE WAY BACK INTO A DRAWING WAS BEHIND THE THING HE ASKED TO AVOID ════════════

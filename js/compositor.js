@@ -389,9 +389,9 @@ window.FM = window.FM || {};
       { key: 'tint', label: 'Tint amount', min: 0, max: 100, step: 1, def: 12, unit: '%' },
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '\u00b0' },
     ] },
-    { type: 'roundcorners', label: 'Rounded Corners / Apple style', params: [
+    { type: 'roundcorners', label: 'Squircle Corners', params: [
       // The tick box is listed FIRST because it decides whether the two sliders under it do anything.
-      { key: 'style', label: 'Apple corners', toggle: true, def: 1,
+      { key: 'style', label: 'Continuous curve', toggle: true, def: 1,
         note: 'One continuous squircle across the whole layer — the app-icon shape. Radius does nothing while this is on.' },
       { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px', overriddenBy: 'style' },
       // NO smoothing slider. It only ever applied to the old Apple-flavoured-rounded-rect path, and now
@@ -1521,8 +1521,24 @@ window.FM = window.FM || {};
   FM.ctxFilterOK = ctxFilterOK;
   /* The list of effects this device cannot render, for anything that wants to SAY so. Empty on a
      healthy device, so a caller can treat a non-empty answer as "tell him". */
+  /* ⚠️ "UNAVAILABLE" HAS TO MEAN UNAVAILABLE, AND THIS FUNCTION STOPPED MEANING IT (queue 645/661).
+   * It was written when `ctx.filter` was the only way these nine effects could draw, so "no ctx.filter"
+   * and "these do nothing" were the same sentence. **v14.02 made them different.** `drawLayer` now
+   * routes all nine through the shader in js/gl-color.js when ctx.filter is missing, so on a device
+   * with WebGL and no ctx.filter the effects WORK — while this function still reported them dead, and
+   * the effects browser painted a banner saying "Brightness, Contrast, Saturation… will do nothing
+   * here" over a page where they had just started working.
+   * That is #661's own bug wearing the opposite sign. That entry existed because the app told him
+   * these effects were fine when they were dead; fixing the effects without fixing the REPORTER would
+   * have left it telling him they are dead now that they are fine. **A wrong reassurance and a wrong
+   * warning are the same defect**, and the whole complaint was that the screen said one thing and the
+   * app did another.
+   * So the question is asked in the order the renderer actually asks it: ctx.filter, then the shader,
+   * and only if BOTH are gone is anything genuinely lost. */
   FM.cssFxUnavailable = function () {
-    return ctxFilterOK() ? [] : Object.keys(FM.CSS_FX);
+    if (ctxFilterOK()) return [];
+    if (FM.glColor && FM.glColor.available && FM.glColor.available()) return [];
+    return Object.keys(FM.CSS_FX);
   };
   /* The effect list a layer actually renders with at time t: its own, plus the stack belonging to the
    * caption cue showing right now (queue 151). Returns the SAME array when there is nothing to add, so

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.14
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.15
 >
-> **State:** v14.14, 1061 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.15, 1064 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -11021,6 +11021,20 @@ better still, keep working inside the turn rather than parking work for a later 
       move any more; the first move is a normal-sized export whose muxer output is inspected directly.
       **STATUS CHANGES: this is no longer waiting on him.** 🟢 READY, and it is the oldest ready item in
       the file, so it is next.
+
+      🚨🚨 **STOP — THE PARAGRAPH YOU JUST READ IS REFUTED BY THIS ENTRY'S OWN TOP. Do not act on it.**
+      It reasons: he saw no toast → every reporting path stayed silent → the muxer is the one region
+      with no witness → go and inspect the muxer. **The first arrow is broken.** The 28 Aug block at the
+      HEAD of this entry (v13.92) measured it: `#toast` is **z-index 60** and `#export-overlay` is
+      **100**, `position: fixed; inset: 0`, dimmed and blurred. **Every one of those warnings fires
+      while the overlay is on screen, so "no toast" is what a WORKING warning looks like too.** Seeing
+      nothing distinguishes nothing, and a month of searching was spent on the strength of it.
+      📌 **This note exists because the correction is at the TOP and the refuted conclusion is at the
+      BOTTOM** — read from the end, which is how anyone reads an entry they have already opened before,
+      and you get sent to the muxer. **The answer now comes from the device instead**: the export report
+      (v14.04, Settings → "Your last export") records which of the five loss paths actually fired,
+      whether a track was written, and whether this browser even has an AudioEncoder. **That block of
+      text decides this entry.** Nothing here should be searched again until it arrives.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
 
@@ -13899,6 +13913,33 @@ wait for them to report back."*
       `type` keys untouched so no existing project loses an effect. He can also veto any single name — the
       table above is a proposal, not a decision.
 
+      🔬 **29 AUG — AUDITED, AND IT WAS NEVER WAITING ON YOU.** Six entries were all marked "NEEDS YOU
+      — waiting on your answer" while **none of them stated a question**. Read properly against the
+      code, five are workable right now and one (#638) was already finished. **That is twelve items
+      today found parked on an answer that was never needed** — six earlier, six here. The failure is
+      always the same shape: a question gets asked, the ground moves underneath it, and nothing
+      re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
+      to need you but names no question, which is what surfaced all six.
+
+      ═══ ✅ **29 AUG (v14.15) — THE ONE CLAUSE 1 MISSED, AND IT WAS THE ONE THIS ENTRY CALLED WORST.** ═══
+      v14.09 renamed twenty-two labels copied from Alight Motion. **It missed the only one that was not
+      copied from AM at all — ours.** *"Rounded Corners / Apple style"*, with a second hit on the toggle
+      (*"Apple corners"*) and a third in the effect browser's description. This entry's own words:
+      **"AND THE WORST ONE IS NOT FROM AM AT ALL — IT IS OURS… that puts Apple's trade mark in our UI…
+      This one should go first and needs no debate."** It went last, because the rename swept the AM
+      names and nobody looked at ours.
+      ✅ **Now `Squircle Corners`, with the toggle reading `Continuous curve`** — and *Squircle* is
+      already our own vocabulary, shipping in the add menu. **The stored key `roundcorners` is
+      untouched**, so nothing in any saved project loses the effect.
+      🔒 **AND THE CLASS IS GUARDED, not just this instance.** Finding the label alone would have left
+      two, because the mark was in three different kinds of string. A sweep now asserts that **no effect
+      label, parameter or description anywhere** contains Apple, Alight Motion, After Effects, Adobe,
+      Premiere, Final Cut, CapCut, Instagram or TikTok — verified in the running app to catch all three
+      placements and to pass cleanly on the real registry. Comments are exempt; explaining why a curve
+      exponent is what it is needs the word.
+      ⚠️ **This is a publishing blocker, not tidying** — see BEFORE-PUBLISHING.md. Clause 2 (the ~30 AM
+      effects we lack, under our own names) is still open and is workable now.
+
 - [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
       Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it
       was still being dressed like a wide screen. Before → after: featured cards **150px → 112px**;
@@ -16002,8 +16043,7 @@ wait for them to report back."*
       group bound.
       🔗 **Related to 215:** a clip stranded past the end is exactly the shape that made an export come
       out silent, and v11.21 taught the mixer to name it. This stops it happening by accident.
-- [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
       ➡️ **NOT ACTUALLY BLOCKED — he answered it and I kept asking.** His words are in this entry: *"i dont see why not having all the options, i mean if its a bad idea for any reason then no but I just want options."* That is a rule delegating the call, and the reason it asks for is already measured here (no browser encodes MP3; it needs a ~100 KB CDN library and a service-worker entry, and M4A is smaller and plays everywhere MP3 does). It has sat on the summary table twice with no reply. **Act: mark it Held with that reason, or ship lamejs — either needs nothing from him.**
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
@@ -16112,6 +16152,22 @@ wait for them to report back."*
       2. Add MP3 anyway via a CDN library, service-worker cached. Real work, and it makes the app carry
          a dependency it has never had.
       **If he says leave it, this entry is DONE — all three clauses answered.**
+      ═══ ✅ **29 AUG — CLOSED BY HIS OWN RULE, not by me overriding him.** ═══
+      **His words set a CONDITION, and the condition is met.** Verbatim, in this entry:
+      > i dont see why not having all the options, i mean if its a bad idea for any reason then no but I just want options.
+      **That is a rule delegating the call: give me everything UNLESS there is a reason not to.** The
+      reason his sentence asks for is measured directly above — MP3 is the one format no browser can
+      encode (`tests/_audiocodecs.html`: neither WebCodecs nor MediaRecorder will produce it), so it
+      means shipping a ~100 KB JavaScript encoder plus a service-worker entry, into an app whose whole
+      premise is no build step and no npm — **and it buys nothing, because M4A/AAC plays everywhere MP3
+      does and is smaller.**
+      🛑 **So this stopped needing an answer the moment that was measured, and I kept asking anyway.**
+      It sat on the summary table he reads TWICE with no reply, which is what a question nobody needs to
+      answer looks like. **Held: WAV + M4A is the complete set, and both already ship.**
+      ↩️ **One word reverses it.** If you want MP3 regardless of the trade, say "MP3" and it goes in —
+      it is a known amount of work, not a research problem. **This is your rule being applied, not your
+      preference being guessed at**, and that distinction is why it is closed rather than parked.
+
 - [x] **396 — The UI sizes itself from the TIMELINE instead of from itself.** ✅ **v10.35.** (19 Aug, via the phone inbox.)
       His words, verbatim: *"An issue where the ui thinks it should be the size based on the timeline and
       not itself"*
@@ -20982,8 +21038,7 @@ re-opened #480, which I had marked done and had not fixed.
       ends within a couple of pixels of the screen edge, so "it stops before the edge" is true of the
       broken build too. The test asserts that gap exists before measuring anything.
 
-- [ ] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
       ═══ ✅ **28 AUG (v14.11) — ALL THREE CLAUSES WERE ALREADY BUILT, AND PUT IN THE ONE PLACE HE ASKED
       TO AVOID.** ═══
       1. [x] **Continue a finished drawing** — `✎ Draw more` calls `FM.startDraw` with the layer id, so
@@ -22428,6 +22483,14 @@ re-opened #480, which I had marked done and had not fixed.
 
       STARTING POINT: find the notes-menu flip animation first — it is the one he LIKES and the family should
       be derived from it, so read it before designing anything.
+      🔬 **29 AUG — AUDITED, AND IT WAS NEVER WAITING ON YOU.** Six entries were all marked "NEEDS YOU
+      — waiting on your answer" while **none of them stated a question**. Read properly against the
+      code, five are workable right now and one (#638) was already finished. **That is twelve items
+      today found parked on an answer that was never needed** — six earlier, six here. The failure is
+      always the same shape: a question gets asked, the ground moves underneath it, and nothing
+      re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
+      to need you but names no question, which is what surfaced all six.
+
 - [x] **613 — The add-layer “+” should keep its plus but lose the plain circle.** ✅ **DONE v13.58 — option A, his pick.**
       His words, verbatim:
       > Instead of a random plus circle here, keep the plus shape but instead of the little ball do something
@@ -23069,6 +23132,14 @@ re-opened #480, which I had marked done and had not fixed.
              is reachable. **Then ask him about the size policy** rather than guessing: absolute (what it
              does now, minus the surprise clamp) or proportional.
 
+      🔬 **29 AUG — AUDITED, AND IT WAS NEVER WAITING ON YOU.** Six entries were all marked "NEEDS YOU
+      — waiting on your answer" while **none of them stated a question**. Read properly against the
+      code, five are workable right now and one (#638) was already finished. **That is twelve items
+      today found parked on an answer that was never needed** — six earlier, six here. The failure is
+      always the same shape: a question gets asked, the ground moves underneath it, and nothing
+      re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
+      to need you but names no question, which is what surfaced all six.
+
 - [x] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.** ✅ **DONE v13.73.**
       (27 Aug, phone screenshot at v13.50 — Project 40, the transport row with − and + either side of
       the timecode, and the right-hand view rail showing "1×".)
@@ -23664,8 +23735,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545 APPLIES:** render it at 24px and at the app-icon size, send him the picture, and let him
       decide — do not swap a brand mark on his behalf on the strength of "he sent it".
 
-- [ ] **638 — Replace the "FreeMotion" TEXT logo with the version where the mark IS the M.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **638 — Replace the "FreeMotion" TEXT logo with the version where the mark IS the M.**
       (27 Aug, at v13.57. He sent a Claude Design project link.)
       His words, verbatim:
       > https://claude.ai/design/p/b48a1e06-66fd-4c43-976b-d1d40982d96e?file=support.js&via=share
@@ -23724,6 +23794,13 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Where it lives now:** the home header wordmark. **#618 clause 1 and #637 clause 2 are the
       other places a logo appears** (element thumbnails, PWA icons, favicon) — enumerate them before
       swapping, because they are different files at different sizes.
+
+      ═══ ✅ **29 AUG — ALREADY DONE, and it was done under another entry.** ═══
+      Both clauses are shipped. The lockup where the mark stands in for the M is committed as
+      `brand-wordmark-m.png` at exactly the 650x96 this entry specified, landed with the light-look
+      release (v13.62) rather than under this number — which is why nothing here was ever ticked.
+      **An entry records what was ASKED, not what is still missing**, and nothing keeps those in step
+      automatically. This is the fourth time that gap has left a finished item sitting open.
 
 - [x] **639 — 🔴 DO THE LIGHT LOOK NOW: the new intro, the new logo at the top, and make the white
       page actually look nice — INCLUDING a LIGHT, colourful top bar.** (27 Aug, at v13.61.)
@@ -25686,6 +25763,29 @@ re-opened #480, which I had marked done and had not fixed.
       should SAY so, the way the dead-effect badge already does (#603). Three sessions were lost to a
       failure that leaves nothing behind — the same lesson as #603, #618 and #619.
 
+      🔬 **29 AUG — AUDITED, AND IT WAS NEVER WAITING ON YOU.** Six entries were all marked "NEEDS YOU
+      — waiting on your answer" while **none of them stated a question**. Read properly against the
+      code, five are workable right now and one (#638) was already finished. **That is twelve items
+      today found parked on an answer that was never needed** — six earlier, six here. The failure is
+      always the same shape: a question gets asked, the ground moves underneath it, and nothing
+      re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
+      to need you but names no question, which is what surfaced all six.
+
+      ═══ ✅ **29 AUG (v14.15) — THE WARNING WAS STILL RUNNING AFTER THE BUG WAS FIXED.** ═══
+      🚨 **This entry got its fix under #661 (v13.94–v14.02) — and the app went on saying it had not.**
+      `FM.cssFxUnavailable()` still answered from `ctx.filter` alone, so on a phone with WebGL and no
+      ctx.filter — exactly his device — the effects browser painted **"Brightness, Contrast,
+      Saturation… will do nothing here"** across a page where those effects had just started working
+      through the shader.
+      🔑 **#661 existed because the app told him these effects were fine when they were dead. This is
+      the same defect with the sign flipped**, and it is worth naming plainly: **a wrong reassurance and
+      a wrong warning are the same bug.** His complaint was never about which direction the screen was
+      wrong in — it was that the screen and the app disagreed.
+      ✅ The function asks the renderer's real question now: ctx.filter, then the shader, and only if
+      BOTH are missing is anything actually lost. **The warning still fires, unchanged, on a device with
+      neither** — silencing a true warning would be the same mistake again, so the test pins that case
+      as hard as the other two, and pins the banner following it.
+
 - [ ] **646 — PC: the loading animation cuts from white to the colours instead of fading, unlike mobile.**
       **STATUS: 🟢 READY — nothing is stopping this**
       (27 Aug, screen recording of the PC version.)
@@ -25923,6 +26023,29 @@ re-opened #480, which I had marked done and had not fixed.
       play AND drag the playhead during the ten seconds**, or the split stays half-blank.
       🔗 **Feeds #95, #125, #202, #387.** ⚠️ **Do not close any of them on this** — it is one healthy
       desktop sample of the wrong device, and it says so itself.
+
+      🔬 **29 AUG — AUDITED, AND IT WAS NEVER WAITING ON YOU.** Six entries were all marked "NEEDS YOU
+      — waiting on your answer" while **none of them stated a question**. Read properly against the
+      code, five are workable right now and one (#638) was already finished. **That is twelve items
+      today found parked on an answer that was never needed** — six earlier, six here. The failure is
+      always the same shape: a question gets asked, the ground moves underneath it, and nothing
+      re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
+      to need you but names no question, which is what surfaced all six.
+
+      ═══ ✅ **29 AUG (v14.15) — THE REPORT NO LONGER CONTRADICTS ITSELF.** ═══
+      This entry's headline is *"it reads HEALTHY, which is itself the finding"* — the sample was
+      **drawing at 28% scale**, so the steady frames were **bought, not free**, and *"it looks blurry
+      while playing"* is the same fact said from the other side.
+      🚨 **And the report already knew.** Its QUALITY line printed *"rendering at 28% scale"* **four
+      lines below** a READ line saying *"this sample looks healthy"*. The verdict was never handed the
+      number, so the headline and the body disagreed — **and the half he reads first was the wrong
+      half.** That is not a wording nit: #95, #125, #202 and #387 are all open on *"does it feel better
+      on your phone"*, and a report that files a reduced-raster run as a clean bill of health is exactly
+      how a real complaint gets closed wrongly.
+      ✅ It now says the smoothness was bought, at what scale, and **what that means to look at** — a
+      percentage means nothing to him, "softer while playing" is the same fact in his words — plus where
+      the switch is. ⚠️ **It does not cry wolf above 75%**, because a report that hedges on every sample
+      stops being read: that is the same failure the queue's own half-done warning had this morning.
 
 - [ ] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
       **STATUS: 🟢 READY — nothing is stopping this**

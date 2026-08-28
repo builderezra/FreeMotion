@@ -202,4 +202,19 @@
       } catch (e) {}
     }
   };
+
+  /* ⚠️ …AND ALSO WHEN HE LEAVES WITHOUT PRESSING STOP, which on a phone is the LIKELY case.
+   * The report is written by FM.pause. Picture what he actually does: he plays it, hears the sound
+   * break up, and switches away to tell me — home button, app switcher, another tab. Playback is torn
+   * down without the stop button ever being pressed, and the one recording of the fault he was trying
+   * to report goes with it. An instrument that only survives the tidy path is an instrument that
+   * misses the case it was built for.
+   * `pagehide` and a hidden `visibilitychange` are the two events iOS Safari actually delivers on the
+   * way out; `beforeunload` is unreliable there. Both go through the same guarded save, which is a
+   * no-op when nothing played. */
+  try {
+    const bail = function () { try { FM.audioHealth.save(); } catch (e) {} };
+    window.addEventListener('pagehide', bail, false);
+    document.addEventListener('visibilitychange', function () { if (document.hidden) bail(); }, false);
+  } catch (e) {}
 })();

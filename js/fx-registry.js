@@ -289,7 +289,7 @@ window.FM = window.FM || {};
     stroke: 'Draws an outline around the layer\u2019s own shape.',
     dropshadow: 'Casts a shadow behind the layer.',
     innerglow: 'Glows inward from the layer\u2019s edges.',
-    roundcorners: 'Rounds the layer\u2019s corners, Apple-style — a continuous curve, not a plain arc.',
+    roundcorners: 'Rounds the layer\u2019s corners with one continuous curve, not a plain arc.',
     liquidglass: 'A glass panel over the layer: refraction, a lit rim and a soft specular.',
     // Both used to promise the COMPOSITION, and both used to deliver it — by painting over the whole
     // frame and erasing the layers underneath. They are bounded to their own layer now (v6.35,

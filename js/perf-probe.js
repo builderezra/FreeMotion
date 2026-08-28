@@ -105,6 +105,17 @@ window.FM = window.FM || {};
       lines.push('video decode, NOT the render loop. That is the case every earlier pass missed.');
     } else if (m.med > m.budget * 1.5) {
       lines.push('READ: our own drawing is genuinely slow — the render loop is the cost.');
+    } else if (m.effective != null && m.effective < 0.75) {
+      /* HEALTHY-BUT-PAID-FOR (queue 657). Smooth frames at a reduced raster are not the same claim as
+         smooth frames, and telling him "healthy" here is how a real complaint gets filed as a clean
+         bill of health. The threshold is 0.75 because tier 1 is the first step that is visible at all;
+         above that the softening is not something a person would name. */
+      lines.push('READ: the frames are steady, but they are BOUGHT — this is drawing at ' +
+                 Math.round(m.effective * 100) + '% scale, not full size.');
+      lines.push('So "smooth" here also means "softer while playing". If it looked blurry during');
+      lines.push('playback, that is this, and it is the app choosing smooth over sharp on purpose.');
+      lines.push('It sharpens the moment you stop. If you would rather have sharp and accept the');
+      lines.push('stutter, say so — Settings → Playback quality is the switch.');
     } else {
       lines.push('READ: this sample looks healthy — steady frames and no hitching. If it felt slow');
       lines.push('WHILE measuring, say so; that means the slowness is somewhere this cannot see.');
@@ -355,7 +366,14 @@ window.FM = window.FM || {};
           lines.push('READ: nothing can be concluded from this run — measure again with the app on');
           lines.push('screen the whole time.');
         } else {
-          verdictLines(lines, { med: med, worst: worst, late: late, total: sorted.length, appMs: appMs, budget: budget });
+          /* ⚠️ THE VERDICT HAS TO SEE THE PRICE (queue 657). His PC sample read HEALTHY, and that
+             WAS the finding: it was rendering at 28% scale, so the steady frames were BOUGHT, not
+             free — "it looks blurry while playing" is the same fact said from the other side. The
+             QUALITY line above already printed the number and the READ line could not see it, so the
+             report's headline said "healthy" while its own body said "28%". A report that contradicts
+             itself is worse than one that says nothing. */
+          verdictLines(lines, { med: med, worst: worst, late: late, total: sorted.length, appMs: appMs, budget: budget,
+                                effective: qi ? qi.effective : null, tier: qi ? qi.tier : null });
         }
         if (typeof done === 'function') done(lines.join('\n'));
       }
