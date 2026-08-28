@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.98
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.99
 >
-> **State:** v13.98, 1047 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.99, 1047 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25820,3 +25820,34 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The text category already exists** — `TEXT_ONLY` at js/fx-registry.js:153 holds `counter`,
       `textprogress`, `textrandomizer`, `textspacing`, `texttransform`, `timecode` — so there is a home
       for these and a working pattern to copy.
+
+- [x] **665 — 🔴 WHY THE UNREADABLE-TEXT BUGS KEEP REACHING HIM — and four more of them.** ✅ **DONE
+      v13.99.** (28 Aug, prompted by his own words on #649.)
+      His words, verbatim:
+      > Idk why ur so selective with what you fix, like this text here is still un readable and I told you to do before I told you to fix other text that wasn’t readable and for some reason you did that stuff but not this
+
+      🚨 **HE IS RIGHT, AND THE CAUSE IS NOT SELECTIVENESS — IT IS THAT THE GUARD WAS BLIND.**
+      The #644 sweep exists precisely to catch text that cannot be read on the light home. Its own header
+      says it *"walks the home screen's real text"*. **It was checking four hardcoded class names** —
+      `.hm-name, .hm-sub, .hm-mi, .hm-tab` — so it had never once looked at `.hm-empty-title` (#647),
+      the dialog title (#649), `.hm-meta`, `.hm-search-hint` or `.hm-note`.
+      **AND IT ONLY EVER VISITED THE PROJECTS TAB**, while #647 was reported on the EMPTY STATES of
+      Templates, Elements and Tutorials. **The guard against unreadable text had never seen the screen
+      he found it on.** That is why each fix never prevented the next one.
+      ⚠️ **MY FIRST FIX TO IT DID NOT WORK, AND THE MUTATION TOOL CAUGHT ME.** Broadening the selector to
+      every text element ran green and I wrote it up as solved; putting the `.hm-meta` bug back left the
+      test **still green**, because `.hm-meta` only exists on Templates/Elements cards and the test never
+      went there. **A broader selector cannot see an element that was never rendered.** Fixed properly:
+      it now walks the DOM AND clicks through every tab, with two controls — it fails if it examines
+      fewer than six elements, and if it never reaches an empty state. **Re-mutated: CAUGHT.**
+      📐 **THE FOUR MORE IT FOUND, all measured:**
+      | | |
+      |---|---|
+      | `.hm-meta` | Templates/Elements card meta at **2.29:1** — the **third** recurrence of #647. The light rule themes `.hm-mi` (the meta ITEM) but not `.hm-meta` (the row), and those tabs put text directly in the row |
+      | `.hm-empty-mark` | the 30px glyph **directly above** the heading #647 fixed, still a pale ghost — and that rule names `.hm-empty-sub`, **a class that does not exist**, while missing two that do |
+      | `.hm-note` | the "nothing matched exactly" banner — a black bar between white cards |
+      | `.hm-selbar` | a black slab across the bottom, **and the #649 inheritance trap verbatim**: a dark background with no `color`, so the next child added inherits the light page's near-black. Nothing is unreadable today only because both current children happen to set their own |
+      ✅ **All four fixed, and `.hm-selbar` now declares its own ink** — the same class-level fix as
+      `.hm-dlg-card`, so the trap cannot spring again.
+      🔗 **`.hm-search-hint` and `.hm-search-wrap` were also found and are NOT logged here — they are
+      already #656 clauses 1 and 3.** Duplicating an open item would be its own kind of mess.

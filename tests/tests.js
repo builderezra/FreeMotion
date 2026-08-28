@@ -50296,17 +50296,67 @@
           }
           return 'rgb(244,246,250)';
         };
-        const sel = '.hm-name, .hm-sub, .hm-mi, .hm-tab';
-        const bad = [];
+        /* ⚠️ EVERY TEXT NODE ON THE SCREEN, NOT A HAND-WRITTEN LIST (queue 665). This was
+           `'.hm-name, .hm-sub, .hm-mi, .hm-tab'` while this test's own header promised it "walks the
+           home screen's real text" — so it never looked at `.hm-empty-title`, `.hm-meta`,
+           `.hm-empty-mark`, `.hm-search-hint` or `.hm-note`.
+           🚨 THAT IS WHY #647 HAD TO BE REPORTED BY EZRA, and why #649 and three more got through
+           after it: the guard against unreadable text could not see the elements that were unreadable.
+           A hand-maintained list of what to check is the same shape of bug as the hand-maintained list
+           of what to theme — it is the bug checking for itself. Walk the DOM instead: anything inside
+           the home screen that owns a text node is in scope, automatically, including whatever is
+           added next. */
+        const sel = '#home-screen *';
+        const bad = [], seen = [];
+        /* ⚠️ AND IT HAS TO VISIT EVERY TAB, WHICH IS THE HALF THE SELECTOR REWRITE MISSED (queue 665).
+         * Broadening the selector was not enough and a mutation proved it: putting the `.hm-meta` bug
+         * back left this test GREEN, because `.hm-meta` is only on Templates and Elements cards and this
+         * only ever looked at Projects. **A guard cannot see an element that was never rendered.**
+         * #647's unreadable headings were the EMPTY STATES of those same three tabs — so the screen this
+         * test never visited is precisely the screen he reported. */
+        const sweep = function () {
         [].slice.call(document.querySelectorAll(sel)).forEach(function (el) {
           const r = el.getBoundingClientRect();
           if (r.width < 4 || r.height < 4) return;
           if (!(el.textContent || '').trim()) return;
+          // OWN text only: a container inherits its children's textContent and would be judged on ink
+          // it never paints, which produces noise rather than findings.
+          var own = false;
+          for (var ci = 0; ci < el.childNodes.length; ci++) {
+            var nn = el.childNodes[ci];
+            if (nn.nodeType === 3 && nn.nodeValue && nn.nodeValue.trim()) { own = true; break; }
+          }
+          if (!own) return;
           const fg = getComputedStyle(el).color, bg = opaqueBgOf(el);
           const a = lum(fg), b = lum(bg);
           const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          seen.push(String(el.className || el.tagName));
           if (ratio < 3) bad.push((el.className || el.tagName) + ' "' + (el.textContent || '').trim().slice(0, 18) + '" ' + fg + ' on ' + bg + ' = ' + ratio.toFixed(2) + ':1');
         });
+        };
+        sweep();
+        const tabs = [].slice.call(document.querySelectorAll('.hm-tab'));
+        for (let ti = 0; ti < tabs.length; ti++) {
+          tabs[ti].click();
+          await sleep(420);
+          sweep();
+        }
+        /* ⚠️ THE CONTROL, AND IT IS THE POINT OF THE REWRITE (queue 665). This sweep passed for weeks
+           while five unreadable elements sat on the screen, because its selector list did not name
+           them — a guard that is looking at nothing passes just as cheerfully as one that finds
+           nothing. So it now has to prove it LOOKED: a plausible number of elements, and specifically
+           the families that have actually broken (#647's empty-state title, #649's dialog, and the
+           meta line that is the third recurrence). If the home screen is ever rendered without them,
+           this fails and says so rather than going quietly blind. */
+        if (seen.length < 6) {
+          throw new Error('the contrast sweep only examined ' + seen.length + ' text element(s) — it is not seeing the screen, so a pass proves nothing');
+        }
+        /* …and it must have reached the EMPTY STATES, which are what he actually reported in #647 and
+           the one screen the old version of this test could never see. */
+        if (!seen.some(function (c) { return /hm-empty/.test(c); })) {
+          throw new Error('the sweep never saw an empty-state element across ' + tabs.length + ' tab(s) — ' +
+                          'that is the screen #647 was reported on, so this test is still blind to it');
+        }
         if (bad.length) {
           throw new Error(bad.length + ' unreadable text element(s) on the light home screen: ' + bad.slice(0, 4).join(' | ') + '. Queue 644 — a colour written for white-on-dark has survived into the light look.');
         }
