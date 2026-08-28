@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.02
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.03
 >
-> **State:** v14.02, 1051 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.03, 1051 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25902,3 +25902,20 @@ re-opened #480, which I had marked done and had not fixed.
       📐 **VERIFIED LIVE at 375px on the light home:** contents 375 against a 375 viewport, **0 controls
       off screen**, every button still full height. The test carries a control asserting the bar has its
       full set of buttons, because a pass on the shorter Templates bar would prove nothing.
+
+- [x] **667 — A DELETED TEST IS INDISTINGUISHABLE FROM A PASSING ONE — ship.sh now refuses one.**
+      ✅ **DONE v14.03.** (28 Aug, from a mistake I made an hour earlier and nearly shipped.)
+      **WHAT HAPPENED:** a text edit meant to REPLACE one test spliced away four — #649, both #664s and
+      #666. **The suite went green on 1051 → 1047, and green is exactly what that looks like.** It was
+      caught only because it occurred to me to diff the test NAMES against the last commit, by hand.
+      ⚠️ **THE EXISTING TEST-FLOOR CHECK DOES NOT COVER THIS, and believing it did was the danger.** It
+      compares a COUNT: four deletions plus four additions net to zero and it says nothing. And the floor
+      is a number a session edits by hand every release, so the honest way to silence it is the same
+      keystroke as the honest way to update it.
+      ✅ **THE GATE COMPARES NAMES.** Every `test('…')` in `HEAD:tests/tests.js` must still exist in the
+      working tree. **Deleting a test stays legitimate** — a fixture dies, a feature goes — so it is not
+      forbidden, it is **DECLARED**: put `DROPS TEST: <why>` in the commit message and it passes. That
+      turns a silent deletion into a line in the log, which is the same shape as the `JUMPED:` escape
+      hatch on the queue-order gate.
+      🔒 **Proved by simulating the exact deletion that prompted it** — the gate fires and names the
+      missing test. A gate nobody has watched fire is a gate nobody should trust.

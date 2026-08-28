@@ -331,6 +331,29 @@ echo "✅ $SUM"
 # paying five minutes to prove that on every one of them is how a gate gets switched off. Deliberately
 # NOT an allowlist of "UI files": such a list is right the day it is written and stale by the next
 # module, which is the failure mode this file exists to remove.
+# ─── NO TEST MAY VANISH WITHOUT SAYING SO (28 Aug) ──────────────────────────────────────────────
+# A DELETED TEST IS INDISTINGUISHABLE FROM A PASSING ONE. On 28 Aug a text edit meant to REPLACE one
+# test spliced away four — #649, both #664s and #666 — and the suite went green on 1047 where it had
+# been 1051. Green is exactly what that looks like. It was found only by diffing the test NAMES against
+# the last commit, by hand, because it happened to occur to me.
+# ⚠️ THE TEST-FLOOR CHECK ABOVE IS NOT THIS. It compares a COUNT, so four deletions and four additions
+# net to zero and it says nothing — and the floor is a number a session edits by hand, so the honest
+# way to silence it is the same keystroke as the honest way to update it.
+# This compares the NAMES. Deleting a test is a legitimate thing to do — a fixture dies, a feature goes
+# — so it is not forbidden, it is DECLARED: put "DROPS TEST:" in the commit message and it passes. That
+# turns a silent deletion into a line in the log, which is the whole pattern this file is built on.
+GONE="$(git show HEAD:tests/tests.js 2>/dev/null | grep -o "^  test('[^']*'" | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_before.txt
+grep -o "^  test('[^']*'" tests/tests.js | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_after.txt
+comm -23 /tmp/fm_tests_before.txt /tmp/fm_tests_after.txt)"
+if [ -n "$GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS TEST:'; then
+  echo "❌ these tests exist in HEAD and are GONE from the working tree:"
+  printf '   · %s\n' $(printf '%s' "$GONE" | tr ' ' '_') 2>/dev/null || printf '%s\n' "$GONE"
+  echo
+  echo "   A deleted test is indistinguishable from a passing one — the suite goes GREEN."
+  echo "   If the deletion is deliberate, say so: put \"DROPS TEST: <why>\" in the commit message."
+  exit 1
+fi
+
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
   echo "→ running the suite again at PHONE width (380px)…"
