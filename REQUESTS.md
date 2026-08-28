@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.99
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.00
 >
-> **State:** v13.99, 1047 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.00, 1048 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25851,3 +25851,19 @@ re-opened #480, which I had marked done and had not fixed.
       `.hm-dlg-card`, so the trap cannot spring again.
       🔗 **`.hm-search-hint` and `.hm-search-wrap` were also found and are NOT logged here — they are
       already #656 clauses 1 and 3.** Duplicating an open item would be its own kind of mess.
+
+- [x] **666 — 🔴 CANCEL hangs off the side of the screen in select mode.** ✅ **DONE v14.00.**
+      (28 Aug — found by the #665 sweep, NOT by him, which is the way round it should be.)
+      📐 **MEASURED at 375px on the Projects tab:** the bar is **375** wide, its contents are **410**, and
+      **Cancel spans 337–410 — thirty-five pixels past the edge.** `flex-wrap: nowrap` and
+      `overflow-x: visible`, so it can neither fold nor be scrolled to. **The one control that gets you
+      OUT of select mode was the one hanging off the screen.**
+      ⚠️ **PROJECTS-TAB ONLY, and that is why it survived.** Templates and Elements drop the Duplicate
+      button and fit with 16px to spare, so anything checking on those tabs passes.
+      ✅ **FIXED BY WRAPPING, not shrinking.** The four buttons plus the count need 35px more than the
+      phone has, and the only way to recover that inside one row is to cut padding — which eats the 44px
+      touch targets #98 clause (d) was raised to protect. A second row costs nothing and cannot put
+      anything out of reach.
+      📐 **VERIFIED LIVE at 375px on the light home:** contents 375 against a 375 viewport, **0 controls
+      off screen**, every button still full height. The test carries a control asserting the bar has its
+      full set of buttons, because a pass on the shorter Templates bar would prove nothing.

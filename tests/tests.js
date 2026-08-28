@@ -45653,6 +45653,47 @@
     }
   });
 
+  /* ═══ QUEUE 666 — THE WAY OUT OF SELECT MODE WAS OFF THE SIDE OF THE SCREEN ═════════════════════
+   * Found by the family-rule sweep, not by him — MEASURED at 375px on the Projects tab: the bar is 375
+   * wide, its contents are 410, and **Cancel spanned 337–410**. Thirty-five pixels of the one control
+   * that gets you OUT hanging past the edge, with `flex-wrap: nowrap` and `overflow-x: visible`, so it
+   * could neither fold nor be scrolled to.
+   * ⚠️ PROJECTS-TAB ONLY, which is why it survived: Templates and Elements drop the Duplicate button and
+   * fit with room to spare, so any check that happened to run on those tabs passed. */
+  test('#666: nothing in the select bar hangs off a phone screen', { item: '666' }, async function () {
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    return await atPhoneWidth(async function () {
+      try {
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(500);
+        const btn = document.getElementById('hm-select-btn');
+        if (!btn) throw new Error('#hm-select-btn is not on the home screen');
+        btn.click();
+        await sleep(400);
+        const bar = document.querySelector('.hm-selbar');
+        if (!bar) throw new Error('the select bar did not appear, so this test measured nothing');
+        const kids = [].slice.call(bar.children);
+        /* THE CONTROL: the bar has to be carrying its full set of buttons. On Templates it drops one and
+           fits trivially, which is exactly how this went unnoticed — a pass on a shorter bar is empty. */
+        if (kids.length < 5) throw new Error('the select bar only has ' + kids.length + ' children — this is not the crowded Projects-tab bar the bug lives on');
+        const vw = window.innerWidth;
+        const off = kids.filter(c => c.getBoundingClientRect().right > vw + 0.5)
+                        .map(c => (c.className || c.tagName).split(' ')[0] + ' ends at ' + Math.round(c.getBoundingClientRect().right));
+        if (off.length)
+          throw new Error(off.length + ' control(s) hang off a ' + vw + 'px screen: ' + off.join(' · ') +
+                          ' — on the Projects tab that is Cancel, the one button that gets you out of select mode');
+        // …and every button must still be a real touch target rather than shrunk to fit
+        const small = kids.filter(c => /hm-selbtn/.test(c.className || '') && c.getBoundingClientRect().height < 30);
+        if (small.length) throw new Error(small.length + ' select-bar button(s) are under 30px tall — fitting the row by shrinking the targets is not a fix');
+      } finally {
+        const c = [].slice.call(document.querySelectorAll('.hm-selbtn')).filter(b => /cancel/i.test(b.textContent || ''))[0];
+        if (c) { try { c.click(); } catch (e) {} }
+        await sleep(150);
+        try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      }
+    });
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

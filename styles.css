@@ -4781,7 +4781,21 @@ body.hm-selecting .hm-pin { display: none; }
    a background and no ink hands its parent's ink to every child that does not set one. On the light
    home that parent's ink is near-black. Nothing is unreadable today only because both current children
    happen to set their own — which is luck, not design. */
-.hm-selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 215; display: flex; align-items: center; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); color: var(--text); }
+/* `color` declared, for the same reason .hm-dlg-card declares it (queue 649/665): a dark bar that sets
+   a background and no ink hands its parent's ink to every child that does not set one. On the light
+   home that parent's ink is near-black. Nothing is unreadable today only because both current children
+   happen to set their own — which is luck, not design.
+   ⚠️ AND IT WRAPS (queue 666). MEASURED at 375px on the Projects tab: the bar is 375 wide and its
+   contents are 410, so **Cancel spanned 337-410 — thirty-five pixels off the side of the screen.** The
+   one control that gets you OUT of select mode was the one hanging off the edge, with `flex-wrap:
+   nowrap` and `overflow-x: visible`, so it could neither fold nor be scrolled to.
+   Projects-tab only, which is why it survived: Templates and Elements drop the Duplicate button and fit
+   with 16px to spare, so any check on those tabs passes.
+   WRAPPING RATHER THAN SHRINKING: the four buttons plus the count need 35px more than the phone has,
+   and the only way to claw that back inside one row is to cut padding — which eats the 44px touch
+   targets that queue 98 clause (d) was raised to protect. A second row costs nothing and cannot put
+   anything out of reach. */
+.hm-selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 215; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); color: var(--text); }
 .hm-selcount { font-size: 13px; font-weight: 700; color: var(--text); }
 .hm-selspacer { flex: 1; }
 .hm-selbtn { padding: 8px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
