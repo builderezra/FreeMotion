@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.03
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.04
 >
-> **State:** v14.03, 1051 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.04, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -66,6 +66,12 @@
 > changed until you say. Everything else in that entry turned out to be closed already: the two tick
 > buttons are Safari's own keyboard bar (your photo settled that), and the "225pt but tiny" complaint
 > was measured — the number and the picture agree.
+>
+> **📋 YOUR NEXT SILENT EXPORT CAN END THIS — one tap.** Settings → **"Your last export"** → Copy →
+> send it to me. It says whether a soundtrack was written, which of the five reasons dropped it, and
+> **whether your phone's browser can encode audio at all** — which is now the main suspect, because you
+> told me today the export bug is mobile-only and your PC is fine. That one sentence retired a theory
+> both entries had been built on for weeks.
 >
 > **🔇 AND I FOUND OUT WHY YOU NEVER SAW A "NO AUDIO" WARNING — THEY WERE BEHIND THE EXPORT SCREEN.**
 > The app has five separate warnings for a lost soundtrack, built over five rounds of chasing this. All
@@ -25799,9 +25805,21 @@ re-opened #480, which I had marked done and had not fixed.
       that is present on desktop Chrome and absent or partial on iOS Safari.** That path already toasts,
       and until v13.92 that toast was painted behind the export overlay (#215) — **which is precisely
       why he saw a silent file and no message.** The two findings fit each other perfectly.
-      1. [ ] **Determine what iOS Safari actually does with the AAC probe**, rather than assuming.
-      2. [ ] **If AAC is unavailable there, the export must not silently ship a mute file** — say it
-             BEFORE the render starts, not after, since v13.92 put a surface in the card for exactly this.
+      1. [x] **THE APP NOW ANSWERS IT FROM HIS DEVICE (v14.04)** rather than me assuming. Every export
+             writes `fm.lastExportReport`, and **Settings → "Your last export"** shows it with a Copy
+             button, next to "What's slow". It carries: whether a track was written · which of the five
+             drop reasons fired · **whether this browser even HAS an `AudioEncoder`** (the strongest
+             mobile-only suspect — WebCodecs is exactly the kind of API that is present on desktop Chrome
+             and absent on iOS Safari) · what the mix peaked at · the user agent.
+             **Every one of those values already existed and had no readers outside the suite.**
+             ➡️ **NEXT TIME AN EXPORT IS SILENT: Settings → Your last export → Copy → send it.** That is
+             one tap on the device where it happens, and it ends four rounds of guessing.
+      2. [x] **The pre-render warning was ALREADY correct and wired** — `checkExportAudioSupport` probes
+             `AudioEncoder.isConfigSupported` when the Export dialog opens and puts *"This export will
+             have no sound"* in the dialog itself, not in a toast, so #215's z-index bug never hid it.
+             **Checked before building anything, and nothing needed changing.** If his phone cannot
+             encode AAC he should be seeing that warning BEFORE the render — and the report above will
+             now say whether the probe is the thing that is wrong.
 
 - [ ] **663 — Audio still cuts in and out on mobile (the popping itself seems fixed).** (28 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

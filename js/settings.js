@@ -460,6 +460,42 @@ window.FM = window.FM || {};
       perfBtns.append(perfBtn, copyBtn);
       perfWrap.append(perfHead, perfBtns, perfOut);
       body.appendChild(group(perfWrap));
+
+      /* ---- "Your last export" (queue 604 / 215 / 662) ------------------------------------------
+       * He has reported a silent export four times, and every round died the same way: everything
+       * measurable on a desktop is healthy, and the device it happens on cannot be inspected. On
+       * 28 Aug he settled the biggest unknown himself — the export bug is MOBILE ONLY; his PC exports
+       * fine — which retires the "both devices" premise those entries were built on.
+       * The exporter has always known exactly why a soundtrack was dropped. It said so in a toast, and
+       * queue 215 then found every one of those toasts was painted BEHIND the export overlay. This is
+       * the same information written down instead of flashed: whether a track was written, which of the
+       * five drop reasons fired, whether the browser even HAS an AudioEncoder, and what the mix peaked
+       * at. Same shape as "What's slow" above, for the same reason — that one is the only thing that
+       * ever moved the lag reports along. */
+      const expWrap = el('div', 'set-row set-perf');
+      const expOut = el('pre', 'set-perf-out');
+      let expText = '';
+      try { expText = localStorage.getItem('fm.lastExportReport') || ''; } catch (e) {}
+      expOut.textContent = expText || 'Nothing yet — export something and this will say what happened to the sound.';
+      const expCopy = el('button', 'set-action', 'Copy'); expCopy.type = 'button'; expCopy.disabled = !expText;
+      expCopy.addEventListener('click', async () => {
+        const text = expOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied — paste it to me', 3000); }
+        catch (e) {
+          try {
+            const r = document.createRange(); r.selectNodeContents(expOut);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            if (FM.toast) FM.toast('Selected — use Copy from the menu', 3000);
+          } catch (e2) {}
+        }
+      });
+      const expHead = el('div', 'set-rowtext');
+      expHead.appendChild(el('div', 'set-label', 'Your last export'));
+      expHead.appendChild(el('div', 'set-hint', 'What happened to the sound the last time you exported \u2014 including whether this browser can encode audio at all. If an export comes out silent, this is the thing to send me.'));
+      const expBtns = el('div', 'set-perf-btns');
+      expBtns.append(expCopy);
+      expWrap.append(expHead, expBtns, expOut);
+      body.appendChild(group(expWrap));
     }
 
     const foot = el('div', 'set-foot');

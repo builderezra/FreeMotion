@@ -45812,6 +45812,53 @@
     });
   });
 
+  /* ═══ QUEUE 662 — THE EXPORT WRITES DOWN WHAT HAPPENED TO THE SOUND ═════════════════════════════
+   * He has reported a silent export four times. Every round ended the same way: everything measurable
+   * on a desktop is healthy, and the device it happens on cannot be inspected. On 28 Aug he settled the
+   * biggest unknown himself — *"The export issues I have were on mobile … I've exported pc before just
+   * fine"* — which retires the "both devices" premise #604 and #215 were both built on.
+   * The exporter has always KNOWN why a soundtrack was dropped; it said so in a toast, and #215 found
+   * every one of those toasts was painted behind the export overlay. This writes it down instead. */
+  test('#662: an export leaves a report that names the audio outcome', { item: '662' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
+    let before = null;
+    try { before = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    try {
+      try { localStorage.removeItem('fm.lastExportReport'); } catch (e) {}
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3;
+      FM.scene.layers.push(box);
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'q662', onReady: async () => {} });
+
+      let rep = null;
+      try { rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+      if (!rep) throw new Error('the export wrote no report — "no audio" stays a description he cannot evidence from his phone');
+      /* The report is only worth anything if it names the things the four rounds of this bug actually
+         turned on. Each of these was a real dead end that a line here would have shortened. */
+      const must = [
+        ['audio', 'whether a track was written at all'],
+        ['dropped', 'which of the five drop reasons fired'],
+        ['AAC encode', 'whether this browser even HAS an AudioEncoder — the strongest mobile-only suspect'],
+        ['device', 'which browser it happened in'],
+      ];
+      const missing = must.filter(m => rep.indexOf(m[0]) < 0).map(m => m[0] + ' (' + m[1] + ')');
+      if (missing.length) throw new Error('the export report does not carry: ' + missing.join(' · '));
+      /* THE CONTROL: a report that says the same thing whatever happened is a template, not evidence.
+         This project has NO audio, so it must say so rather than claiming a track. */
+      if (!/audio\s+NO TRACK/.test(rep))
+        throw new Error('a silent project\'s report does not say NO TRACK — it reads: ' + rep.split('\n').filter(l => /^audio/.test(l))[0]);
+    } finally {
+      FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      try { if (before == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', before); } catch (e) {}
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

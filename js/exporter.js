@@ -1062,6 +1062,36 @@ window.FM = window.FM || {};
          * the expensive way.
          * The answer travels with the file now, onto the one card he is looking at when he presses
          * Save. It cannot be missed, cannot time out, and cannot be painted behind anything. */
+        /* ═══ AND IT IS WRITTEN DOWN, so his next report is a FACT rather than a description ═════════
+         * Queue 604/215/662. He has reported a silent export four times, and every round has ended the
+         * same way: everything measurable on a desktop is healthy, and the one device it happens on
+         * cannot be inspected. On 28 Aug he settled the biggest unknown himself — *"The export issues I
+         * have were on mobile, I don't got my pc rn but I've exported pc before just fine"* — which
+         * retires the "both devices" premise both entries were built on and points the whole search at
+         * iOS Safari.
+         * Every one of these values already existed and had NO READERS outside the suite. Stored, they
+         * turn "no audio" into a block of text he can paste from the device where it happens — the same
+         * thing `fm.lastPerfReport` did for the lag reports, which is the only reason those ever moved.
+         * ⚠️ Wrapped in try/catch and never awaited: a full storage quota or a private-mode throw must
+         * not be able to fail an export that has otherwise just succeeded. */
+        try {
+          const rep = [
+            'FreeMotion export report',
+            'when       ' + new Date().toISOString(),
+            'file       ' + outName + '  ' + Math.round(outBlob.size / 1024) + ' KB',
+            'video      ' + outW + 'x' + outH + ' @' + fps + 'fps, ' + Math.max(0, end - start).toFixed(2) + 's',
+            'audio      ' + (mix ? 'TRACK WRITTEN' : 'NO TRACK'),
+            'dropped    ' + (FM._audioTrackDropped || 'no'),
+            'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
+              (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (turned down x' + FM._lastMixGain.toFixed(3) + ')' : ''),
+            'drops      ' + JSON.stringify(FM._lastAudioDrops || []),
+            'suppressed ' + JSON.stringify(FM._lastAudioSuppressed || []),
+            'AAC encode ' + (typeof AudioEncoder === 'undefined' ? 'AudioEncoder MISSING in this browser' : 'AudioEncoder present'),
+            'canvas fx  ' + (FM.ctxFilterOK ? (FM.ctxFilterOK() ? 'OK' : 'THIS DEVICE CANNOT RUN CANVAS FILTERS') : '?'),
+            'device     ' + (navigator.userAgent || '').slice(0, 120),
+          ].join('\n');
+          localStorage.setItem('fm.lastExportReport', rep);
+        } catch (e) {}
         await opts.onReady({
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
