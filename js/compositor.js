@@ -7637,6 +7637,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'return u_ax > 0.5 ? vec2(xy.x, fmCy + (xy.y - fmCy) / sf) : vec2(fmCx + (xy.x - fmCx) / sf, xy.y);'
   ].join('\n');
 
+  /* TILE ROTATE — chop into tiles and spin each tile's content about its own centre, with alternate
+     tiles counter-rotating so it reads as a weave rather than a uniform turn. */
+  WARP_FX.tilerotate.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var sz = FM.evalProp(p.size, t); if (sz == null) sz = 120; if (sz < 8) sz = 8;
+    sz = Math.max(2, sz * (ps || 1));
+    var ang = FM.evalProp(p.angle, t); if (ang == null) ang = 45;
+    return { sz: sz, ang: ang };
+  };
+  WARP_FX.tilerotate.glsl = [
+    'float ix = floor(xy.x / u_sz), iy = floor(xy.y / u_sz);',
+    'vec2 cc = vec2(ix * u_sz + u_sz * 0.5, iy * u_sz + u_sz * 0.5);',
+    'float sgn = mod(ix + iy, 2.0) >= 0.5 ? -1.0 : 1.0;',
+    'float a = u_ang * 0.017453292519943295 * sgn;',
+    'vec2 dxy = xy - cc;',
+    'float cs = cos(a), sn = sin(a);',
+    'return cc + vec2(dxy.x * cs - dxy.y * sn, dxy.x * sn + dxy.y * cs);'
+  ].join('\n');
+
   /* RADIAL REPEAT — a fan of wedges, optionally mirrored and twisted. This is the kernel that reads
      drawWarpEffect's RAW cx/cy/maxR arguments rather than its own prep, which is why the shader wrapper
      exposes fmCx/fmCy/fmMaxR derived from res. */
