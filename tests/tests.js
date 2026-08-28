@@ -44949,6 +44949,160 @@
     }
   });
 
+  /* ═══ A RUN OF WARPS COLLAPSES INTO ONE GPU CHAIN ══════════════════════════════════════════════
+   * The oldest entry named this as its own next step and was explicit that it was not yet a result:
+   * "A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer — it
+   * is written here as the plan, not as a result."
+   * Each warp used to render its own 2D plate, upload it, warp it, and draw the result BACK onto a
+   * canvas that the next warp uploaded again — so every effect after the first paid a full-frame
+   * upload for a picture already sitting in GPU memory. Now one upload, N passes ping-ponging between
+   * two framebuffer textures, one blit.
+   * 📐 MEASURED (tests/_glchain.html) at his own 1080x1350 with twirl → ripple → wave:
+   *    CPU 117.0 ms · GPU one-at-a-time 7.1 ms · GPU chained 3.3 ms — 35.5x vs the CPU loop and
+   *    **2.15x on top of** the per-effect GPU path. Byte-identical: 0 of 1,458,000 pixels differ.
+   *    (The entry guessed "roughly 3x". It is 2.15x. The measured number is the one that goes here.)
+   * ⚠️ THE CONTROL IS THE WHOLE TEST, for the same reason as the one above: runChain returns null on
+   * any trouble and the per-effect path then draws a perfectly correct frame. Without FM._noGLChain
+   * pinning which route ran, a chain that never engaged would pass this test silently. */
+  test('a run of stacked warps renders as one GPU chain, and draws the same picture', { item: 'lag-gl' }, async function () {
+    if (!FM.glWarp) throw new Error('FM.glWarp is missing — js/gl-warp.js did not load');
+    if (!FM.glWarp.runChain) throw new Error('FM.glWarp.runChain is missing — the chain was reverted or renamed');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU chain is UNTESTED: ' + FM.glWarp.stats().reason);
+    if (!FM._warpFx) throw new Error('FM._warpFx is not exposed');
+    const ported = Object.keys(FM._warpFx).filter(k => typeof FM._warpFx[k] === 'function' && FM._warpFx[k].glsl);
+    if (ported.length < 3) throw new Error('fewer than three kernels carry a .glsl, so there is no chain to test');
+    /* ⚠️ MORE THAN ONE CHAIN LENGTH, AND THE REASON IS THE SHARPEST THING LEARNED HERE.
+       A chain of N warps has N-1 passes reading a framebuffer texture, and the bug this guards
+       against — reading that texture upside down — puts a vertical MIRROR in each of those passes.
+       Ripple, Twirl and most of the family are symmetric about the centre, so a mirror COMMUTES with
+       them: mirror-warp-mirror is the same as warp. **Two flipped passes therefore cancel exactly.**
+       Tested at three kernels (wave → ripple → twirl) the mutation moved 0.3% of pixels and the test
+       passed — not because the fixture was weak, which is what I assumed and twice tried to fix, but
+       because 3 kernels means 2 flips and 2 flips is the identity.
+       Running 2, 3 and 4 makes at least one case have an ODD number of flipped passes, which nothing
+       can cancel. It also walks the ping-pong buffers through _ping[0] → _ping[1] → _ping[0], so the
+       alternation itself is exercised rather than assumed. */
+    const lens = [2, 3, 4].filter(n => n <= ported.length);
+    if (!lens.length) throw new Error('not enough ported kernels to form any chain');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, dur: P.duration, noGL: FM._noGL, noCh: FM._noGLChain };
+    try {
+      const W = 420, H = 420;                    // above gl-warp's size floor, or it refuses outright
+      P.width = W; P.height = H; P.duration = 3;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 112, shapeW: 300, shapeH: 156, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 316, y: 78, shapeW: 96, shapeH: 96, fill: '#ff9a4f' });
+      L2.start = 0; L2.duration = 3;
+      FM.scene.layers.push(L2, L);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const shot = () => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, FM.scene, 0.5); return cx.getImageData(0, 0, W, H).data; };
+
+      for (const n of lens) {
+        const kinds = ported.slice(0, n);
+        L.effects = kinds.map(k => {
+          const inst = FM.fxRegistry.makeInstance(k);
+          if (!inst) throw new Error('could not make a "' + k + '" instance — this test would be comparing a scene with no effects in it');
+          return inst;
+        });
+
+        FM._noGL = false; FM._noGLChain = true; FM.glWarp._reset();
+        const one = shot();
+        const oneStats = FM.glWarp.stats();
+        if (oneStats.chains !== 0) throw new Error('FM._noGLChain did not stop the chain at ' + n + ' warps — the two sides of this comparison are the same path');
+        if (!(oneStats.gpu > 0)) throw new Error('the per-effect GPU path did not run at ' + n + ' warps (' + oneStats.reason + '), so there is nothing to compare a chain against');
+
+        FM._noGLChain = false; FM.glWarp._reset();
+        const chained = shot();
+        const chStats = FM.glWarp.stats();
+        if (!(chStats.chains > 0)) throw new Error('the warps did NOT chain at ' + n + ' (' + chStats.reason + ') — this test would otherwise compare the per-effect path with itself and pass');
+        if (chStats.chained / chStats.chains !== n) throw new Error('the chain merged ' + (chStats.chained / chStats.chains) + ' effects of ' + n + ' — a partial collapse means the run detection stopped early');
+
+        let lit = 0, big = 0;
+        for (let i = 0; i < one.length; i += 4) {
+          if (one[i + 3] > 4) lit++;
+          const e = Math.max(Math.abs(one[i] - chained[i]), Math.abs(one[i + 1] - chained[i + 1]),
+                             Math.abs(one[i + 2] - chained[i + 2]), Math.abs(one[i + 3] - chained[i + 3]));
+          if (e > 24) big++;
+        }
+        if (!(lit > 2000)) throw new Error('the ' + n + '-warp fixture lit only ' + lit + ' pixels — it is not drawing anything, so an identical pair proves nothing');
+        const pct = 100 * big / (one.length / 4);
+        /* 0.5%, the same threshold the per-kernel test uses and for the same reason. Measured at
+           0.000% — the chain runs the identical shaders on the identical maths, and the only thing it
+           skips is a round trip through a 2D canvas, which cannot lose precision. Anything above this
+           is a real change, not noise. */
+        if (pct > 0.5) throw new Error('the chained render of ' + kinds.join(' → ') + ' differs from the per-effect one on ' + pct.toFixed(3) + '% of pixels — collapsing the run changed the picture');
+      }
+    } finally {
+      FM._noGL = saved.noGL; FM._noGLChain = saved.noCh;
+      FM.glWarp._reset();
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; P.duration = saved.dur;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* ⚠️ AND IT MUST STOP AT ANYTHING THAT IS NOT A WARP — this is the correctness half, and it is the
+   * one that would fail silently. The chain may only collapse a CONTIGUOUS run at the OUTERMOST end
+   * of the stack. Reaching across a pixel effect would apply that effect in the wrong place, and the
+   * result would still be a plausible-looking frame, which is precisely why it needs an assertion
+   * rather than an eye. `postFxOrder` is shared with the dispatcher so the two orderings cannot drift.
+   * (The first version of this check used `invert` — a ctx.filter colour effect that never enters the
+   * post-effect stack at all — so the run really WAS contiguous and the probe cried wolf. The effect
+   * in the middle has to be one that genuinely dispatches through applyPostFx.) */
+  test('a pixel effect between two warps stops the GPU chain collapsing across it', { item: 'lag-gl' }, async function () {
+    if (!FM.glWarp || !FM.glWarp.runChain) throw new Error('FM.glWarp.runChain is missing');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so this is UNTESTED: ' + FM.glWarp.stats().reason);
+    const ported = Object.keys(FM._warpFx || {}).filter(k => typeof FM._warpFx[k] === 'function' && FM._warpFx[k].glsl);
+    if (ported.length < 3) throw new Error('fewer than three ported kernels, so there is no run to break');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, dur: P.duration, noGL: FM._noGL, noCh: FM._noGLChain };
+    try {
+      const W = 420, H = 420;
+      P.width = W; P.height = H; P.duration = 3;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 280, shapeH: 340, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      const mid = FM.fxRegistry.makeInstance('pixelate');
+      if (!mid) throw new Error('could not make a pixelate instance — this test needs a non-warp that dispatches through applyPostFx');
+      // warp, PIXELATE, warp, warp  → only the outer two warps may merge
+      L.effects.push(FM.fxRegistry.makeInstance(ported[0]), mid,
+                     FM.fxRegistry.makeInstance(ported[1]), FM.fxRegistry.makeInstance(ported[2]));
+      if (L.effects.some(e => !e)) throw new Error('an effect instance came back null — the fixture is not what this test claims');
+      FM.scene.layers.push(L);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const shot = () => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, FM.scene, 0.5); return cx.getImageData(0, 0, W, H).data; };
+
+      FM._noGL = false; FM._noGLChain = false; FM.glWarp._reset();
+      const withChain = shot();
+      const st = FM.glWarp.stats();
+      if (!(st.chains > 0)) throw new Error('nothing chained at all (' + st.reason + ') — this test cannot say where the run stopped');
+      const per = st.chained / st.chains;
+      if (per !== 2) throw new Error('the chain merged ' + per + ' effects across a stack of warp/pixelate/warp/warp — it must merge exactly the outer 2, or a pixel effect is being applied in the wrong place in the stack');
+
+      FM._noGLChain = true; FM.glWarp._reset();
+      const noChain = shot();
+      let big = 0, lit = 0;
+      for (let i = 0; i < withChain.length; i += 4) {
+        if (noChain[i + 3] > 4) lit++;
+        const e = Math.max(Math.abs(withChain[i] - noChain[i]), Math.abs(withChain[i + 1] - noChain[i + 1]),
+                           Math.abs(withChain[i + 2] - noChain[i + 2]), Math.abs(withChain[i + 3] - noChain[i + 3]));
+        if (e > 24) big++;
+      }
+      if (!(lit > 2000)) throw new Error('the fixture lit only ' + lit + ' pixels — an identical pair would prove nothing');
+      const pct = 100 * big / (withChain.length / 4);
+      if (pct > 0.5) throw new Error('with a pixel effect in the middle the chained render differs on ' + pct.toFixed(3) + '% of pixels — the collapse changed the effect order');
+    } finally {
+      FM._noGL = saved.noGL; FM._noGLChain = saved.noCh;
+      FM.glWarp._reset();
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; P.duration = saved.dur;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* THE FALLBACK IS NOT DECORATION — it is what runs on every device without WebGL, and a path nobody
    * exercises is a path that rots. gl-warp.js returns null for each "cannot" and the compositor must
    * take its old loop every time, silently and correctly. */

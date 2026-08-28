@@ -150,6 +150,80 @@ NUM   = re.compile(r'^- \[ \] \*\*(\d+)([a-z]?) ')
 JUMPED = re.compile(r'JUMPED:')
 
 
+# ── WHICH UNTICKED CLAUSES INSIDE A DONE ENTRY ARE ACTUALLY A MISS ─────────────────────────────────
+# next.sh warns when an entry is ticked DONE while a clause inside it is not. That warning caught two
+# genuine half-shipped requests (#418, #352) and is worth keeping. But it fired on #615 forever, and
+# #615 is FINISHED — because the house style writes HIS clause list first, as he asked for it, and then
+# a second ticked list under the DONE marker. The first list is the request, not the state.
+# A banner that is wrong every tick is a banner you stop reading, so the rule is:
+#   · a clause is HEDGED if it says why it is unticked (his own "potentially", "until he confirms") —
+#     that is a decision, not a miss;
+#   · a clause is SUPERSEDED if it sits above a DONE marker and its NUMBER comes back ticked below it —
+#     that is the same clause, restated as finished.
+# Everything else is a real miss and gets shouted about.
+_CLAUSE_OPEN = re.compile(r'^\s*(\d+[a-z]?)\. \[ \]')
+_CLAUSE_DONE = re.compile(r'^\s*(\d+[a-z]?)\. \[x\]', re.I)
+_DONE_MARK = re.compile(r'(✅|═══).*(DONE|BUILT|SHIPPED|FIXED)', re.I)
+_HEDGE = re.compile(r'\(idea|potentially|long term|eventually|one day|until (he|you) confirm|'
+                    r'unticked until|his call|your call|held\b', re.I)
+# A clause can also be resolved by MOVING it: #579's first clause is not a to-do, it is a finding that
+# the complaint belongs to #572 and must be fixed there. That is a decision too. Kept DELIBERATELY
+# NARROW — it needs a redirect phrase AND another entry's number in the same clause, because a loose
+# rule here is how five real items were hidden by a passing mention (see _standing's comment).
+_REDIRECT = re.compile(r'(?:not here|not a separate|belongs (?:to|in)|tracked (?:in|as|under)|'
+                       r'covered by|fix it there|duplicate of)', re.I)
+_ENTRYREF = re.compile(r'#\d+')
+
+
+def live_clauses(body):
+    """Unticked clauses in a DONE entry that are genuinely unaccounted for."""
+    lines = body.split('\n')
+    mark = next((i for i, l in enumerate(lines) if _DONE_MARK.search(l)), None)
+    resolved = set()
+    if mark is not None:
+        for l in lines[mark:]:
+            m = _CLAUSE_DONE.match(l)
+            if m:
+                resolved.add(m.group(1))
+    live = []
+    for i, l in enumerate(lines):
+        m = _CLAUSE_OPEN.match(l)
+        if not m:
+            continue
+        if mark is not None and i < mark and m.group(1) in resolved:
+            continue                      # the request, restated as finished below
+        blk = [l]
+        for nxt in lines[i + 1:]:         # the reason is usually on the wrapped lines under it
+            if _CLAUSE_OPEN.match(nxt) or _CLAUSE_DONE.match(nxt) or not nxt.startswith('    '):
+                break
+            blk.append(nxt)
+        txt = ' '.join(blk)
+        if _HEDGE.search(txt) or (_REDIRECT.search(txt) and _ENTRYREF.search(txt)):
+            continue
+        live.append(l)
+    return live
+
+
+# Each case is a real entry shape, and the first one is the false alarm that cost this rule its credibility.
+_LIVE = [
+    ('1. [ ] white background\n2. [ ] keep grain\n      ✅ **BUILT v13.57 — every clause done.**\n'
+     '1. [x] white background\n2. [x] grain kept', 0,
+     '#615: his clause list restated as ticked under the DONE marker is not a miss'),
+    ('1. [ ] white background\n2. [ ] keep grain\n      ✅ **BUILT v13.57.**\n1. [x] white background', 1,
+     'a clause that never comes back ticked IS a miss (#418, #352 shipped half a request)'),
+    ('1. [ ] add a cloud voice (long term)', 0, 'a clause that says why it is parked is a decision'),
+    ('1. [ ] the thing he asked for', 1, 'a bare unticked clause with no DONE block anywhere is a miss'),
+    ('1. [ ] rename it\n      unticked until he confirms the wording', 0,
+     'the reason lives on the WRAPPED line under the clause, not the clause itself (#426)'),
+    ('1. [ ] saturation does not work\n      so this clause is #572, not here. Fix it there.', 0,
+     '#579: a clause moved to another entry is resolved, not missing'),
+    ('1. [ ] saturation does not work\n      this is like #572 and also like #593', 1,
+     'MENTIONING another entry must not hide a clause — only an explicit redirect does'),
+    ('1. [ ] do the thing\n      not here', 1,
+     'a redirect with no entry number to redirect TO is not a resolution'),
+]
+
+
 def entries(md):
     """Split REQUESTS.md into whole entries, header line first. Shared so the gate and the listing
        can never disagree about where one request ends and the next begins."""
@@ -369,7 +443,12 @@ if __name__ == '__main__':
         if got != want:
             bad += 1
             print('FAIL: work_queue expected %-22s got %-22s — %s' % (want, got, why))
-    _total = len(_CASES) + len(_ORDER) + len(_WORK)
+    for body, want, why in _LIVE:
+        got = len(live_clauses(body))
+        if got != want:
+            bad += 1
+            print('FAIL: live_clauses expected %d got %d — %s' % (want, got, why))
+    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE)
     if bad:
         print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)

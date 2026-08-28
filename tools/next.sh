@@ -199,27 +199,15 @@ fi
 # banner that fires on those every single tick trains you to ignore the banner, which is worse than not
 # having one.
 HALFDONE="$(python3 - "$F" <<'PYH'
-import sys, re, io
+import sys, re, io, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'tools'))
+sys.path.insert(0, 'tools')
+from _classify import live_clauses          # self-tested; ship.sh refuses if its rules break
 txt = io.open(sys.argv[1], encoding='utf-8').read().split('\n')
-CLAUSE = re.compile(r'^\s*\d+[a-z]?\. \[ \]')
-# a clause that explains itself is not a miss — it is a decision
-HEDGE = re.compile(r'\(idea|potentially|long term|eventually|one day|until (he|you) confirm|'
-                   r'unticked until|his call|your call|held\b', re.I)
 out, cur, body = [], None, []
 def flush():
     if not cur: return
-    # A CLAUSE IS A BLOCK, NOT A LINE. The reason a clause is deliberately unticked is almost always
-    # written on the wrapped lines under it — checking only the first line re-flagged #426 for a note
-    # sitting two lines below the checkbox.
-    live = []
-    for i, c in enumerate(body):
-        if not CLAUSE.match(c): continue
-        blk = [c]
-        for nxt in body[i + 1:]:
-            if CLAUSE.match(nxt) or not nxt.startswith('    '): break
-            blk.append(nxt)
-        if not HEDGE.search(' '.join(blk)):
-            live.append(c)
+    live = live_clauses('\n'.join(body))
     if live:
         out.append('%d:%s' % (cur[0], cur[1][:96]))
         for c in live[:3]:

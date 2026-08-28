@@ -3,13 +3,16 @@
 <pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
 <iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
 <script>
-/* HOW MUCH IS LEFT ON THE TABLE BY NOT KEEPING A CHAIN ON THE GPU?
- * The oldest queue item's own diagnosis is that STACKING is what makes his projects crawl — "five
- * effects on six shapes already gives 45 fps on a fast desktop and 17 fps at 6x". Each warp today
- * renders the layer-minus-itself into a fresh 2D plate and uploads that plate, so N warps cost N plate
- * renders and N uploads even though the picture never needed to leave the GPU between them.
- * Making it resident is a real restructuring of a RECURSIVE path, so measure the prize before paying
- * for it: if the cost per extra warp is already small, the work is not worth the risk. */
+/* A RUN OF WARPS, COLLAPSED INTO ONE GPU CHAIN — the oldest entry's own named next step.
+ * v13.81 put each warp on the GPU individually, and its note said plainly what was still missing:
+ * "A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer — it
+ * is written here as the plan, not as a result."
+ * Three questions here, and the first is the one that makes the other two mean anything:
+ *   1. did the chain actually RUN, and does the control really turn it off?
+ *   2. is it the same picture as the nested path it replaces?
+ *   3. how much faster, on a stack, at his own 1080x1350?
+ * And a fourth that is about correctness rather than speed: a NON-warp sitting between two warps
+ * must STOP the collapse, because merging across it would apply the effects in the wrong order. */
 var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
 document.getElementById('a').addEventListener('load', function () {
   var w = document.getElementById('a').contentWindow, n = 0;
@@ -22,83 +25,116 @@ async function run(w){
   try{
     var FM = w.FM, d = w.document, P = FM.scene.project;
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.glWarp) return say('❌ FM.glWarp is missing — the module did not load');
+    if (!FM.glWarp.runChain) return say('❌ FM.glWarp.runChain is missing');
+    say('WebGL available to the app: ' + FM.glWarp.available() + '   ' + (FM.glWarp.stats().reason || ''));
+
     var W = 1080, H = 1350;
-    P.width = W; P.height = H; P.duration = 4;
+    P.width = W; P.height = H; P.duration = 6;
+    FM.scene.layers.length = 0;
+    var L = FM.makeLayer('shape', { shape:'rect', x: 540, y: 675, shapeW: 760, shapeH: 940, fill:'#4fd1ff' });
+    L.start = 0; L.duration = 6; L.effects = [];
+    // THREE warps, all shader-carrying, in stack order = application order.
+    var want = ['twirl','ripple','wave'], made = [];
+    want.forEach(function(ty){
+      var i = FM.fxRegistry.makeInstance(ty);
+      if (i) { made.push(ty); L.effects.push(i); }
+    });
+    if (L.effects.length < 3) return say('❌ only made ' + made.join(',') + ' — this probe needs three warps or it is not testing a chain');
+    if (L.effects[0].params) L.effects[0].params.amount = 140;
+    var L2 = FM.makeLayer('shape', { shape:'rect', x: 380, y: 420, shapeW: 300, shapeH: 300, fill:'#ff9a4f' });
+    L2.start = 0; L2.duration = 6;
+    FM.scene.layers.push(L2, L);
+    await new Promise(function(r){ setTimeout(r,700); });
+
     var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
-    var cx = cv.getContext('2d');
-    /* ⚠️ A FENCE, OR THIS PROBE LIES — and it lied once already. Timing renderScene alone reported a
-       five-warp stack at 2.4 ms and a six-warp one at 28.1: not a cliff at six, but five rows of
-       QUEUED GPU work that had not happened yet, followed by the bill. The same trap as gl.finish()
-       not blocking, in a third costume.
-       Reading a single pixel back off the 2D canvas forces every drawImage before it to have really
-       landed. One pixel, so it measures the fence and not a readback. */
-    function fence(){ cx.getImageData(0, 0, 1, 1); }
-    function med(n){ var a=[]; for (var i=0;i<n;i++){ var t=performance.now(); cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.6); fence(); a.push(performance.now()-t);} a.sort(function(p,q){return p-q;}); return a[a.length>>1]; }
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    function shot(){ cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.7); return cx.getImageData(0,0,W,H).data; }
+    /* ⚠️ THE FENCE, AND WITHOUT IT EVERY NUMBER BELOW IS A LIE. `renderScene` returns as soon as the
+       GPU work is QUEUED — the first run of this probe reported 0.1 ms for three warps at 1080x1350
+       and a "chained" figure HALF as fast as unchained, which is what timing an empty queue looks
+       like. Reading one pixel back forces the draw to have actually happened. This is the third time
+       this exact mistake has been made in this project; the fence is why it is caught now. */
+    function timed(){ var t0=performance.now(); cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.7); cx.getImageData(0,0,1,1); return performance.now()-t0; }
+    function med(f, n){ var a=[]; for (var i=0;i<n;i++) a.push(f()); a.sort(function(x,y){return x-y;}); return a[a.length>>1]; }
 
-    // A REAL STACK, not the same effect N times: mixed kernels are what a project actually carries.
-    var STACK = ['twirl','ripple','kaleidoscope','bulge','wave','tileshift'];
-    function build(n){
-      FM.scene.layers.length = 0;
-      var A = FM.makeLayer('shape', { shape:'rect', x:540, y:675, shapeW:620, shapeH:820, fill:'#4fd1ff' });
-      A.start=0; A.duration=4; A.effects=[];
-      for (var i=0;i<n;i++){ var inst = FM.fxRegistry.makeInstance(STACK[i]); if (inst) A.effects.push(inst); }
-      var B = FM.makeLayer('shape', { shape:'rect', x:330, y:380, shapeW:220, shapeH:220, fill:'#ff9a4f' });
-      B.start=0; B.duration=4;
-      FM.scene.layers.push(B, A);
-      return A.effects.length;
-    }
-    say('a stack of MIXED warps on one layer at ' + W + 'x' + H + ':');
-    say('');
-    say('warps   CPU ms    GPU ms   speedup   GPU passes   ms per EXTRA warp (GPU)');
-    var prevG = null;
-    for (var n=1;n<=6;n++){
-      var made = build(n);
-      if (made !== n) { say('only ' + made + ' of ' + n + ' instances were made — stopping'); break; }
-      await new Promise(function(r){ setTimeout(r,300); });
-      FM._noGL = true;  FM.glWarp._reset(); med(2); var c = med(5);
-      FM._noGL = false; FM.glWarp._reset(); med(2); var g = med(5); var gs = FM.glWarp.stats();
-      var per = prevG === null ? '' : (g - prevG).toFixed(2);
-      say(pad(n,8) + pad(c.toFixed(1),10) + pad(g.toFixed(1),9) + pad((c/g).toFixed(1)+'x',10) +
-          pad(gs.gpu,13) + per);
-      prevG = g;
-    }
-    function pad(s,n){ s=String(s); while (s.length<n) s+=' '; return s; }
-    say('');
-    say('READ THE LAST COLUMN. If each extra warp costs a few tenths of a ms, the chain is already');
-    say('cheap and keeping it resident on the GPU is not worth restructuring a recursive path for.');
+    // ── 1. one warp at a time, on the GPU but NOT chained (what v13.81 shipped) ──
+    FM._noGL = false; FM._noGLChain = true;  FM.glWarp._reset(); timed();
+    var oneShot = shot(); var oneMs = med(timed, 5); var oneStats = FM.glWarp.stats();
+    // ── 2. the whole run collapsed into one chain ──
+    FM._noGLChain = false; FM.glWarp._reset(); timed();
+    var chShot = shot(); var chMs = med(timed, 5); var chStats = FM.glWarp.stats();
+    // ── 3. the CPU loop, for the number that answers his complaint ──
+    FM._noGL = true; FM.glWarp._reset(); timed();
+    var cpuMs = med(timed, 3); var cpuStats = FM.glWarp.stats();
+    FM._noGL = false;
 
-    /* THE CLIFF. Whatever happens at the sixth warp is worth more than the rest of this probe: five
-       effects is exactly the case the queue entry describes as unusable. Separate the two candidate
-       causes — is it the SIXTH KERNEL, or the sixth POSITION? Same question, one reordering. */
     say('');
-    say('─── WHERE IS THE CLIFF? ───');
-    async function timeStack(list){
-      FM.scene.layers.length = 0;
-      var A = FM.makeLayer('shape', { shape:'rect', x:540, y:675, shapeW:620, shapeH:820, fill:'#4fd1ff' });
-      A.start=0; A.duration=4; A.effects=[];
-      for (var i=0;i<list.length;i++){ var inst = FM.fxRegistry.makeInstance(list[i]); if (inst) A.effects.push(inst); }
-      var B = FM.makeLayer('shape', { shape:'rect', x:330, y:380, shapeW:220, shapeH:220, fill:'#ff9a4f' });
-      B.start=0; B.duration=4;
-      FM.scene.layers.push(B, A);
-      await new Promise(function(r){ setTimeout(r,250); });
-      FM._noGL = false; FM.glWarp._reset(); med(3);
-      var g = med(5); var gs = FM.glWarp.stats();
-      return { ms: g, gpu: gs.gpu, cpu: gs.cpu, n: A.effects.length };
+    say('THE CONTROL FIRST — WHICH PATH ACTUALLY RAN:');
+    say('   _noGLChain = true   → gpu ' + oneStats.gpu + ', chains ' + oneStats.chains + '   ' + (oneStats.chains === 0 && oneStats.gpu > 0 ? '✅ per-effect GPU, no chain' : '🚨 the control does not control'));
+    say('   _noGLChain = false  → gpu ' + chStats.gpu + ', chains ' + chStats.chains + ', chained ' + chStats.chained + '   ' + (chStats.chains > 0 ? '✅ the chain really ran' : '🚨 IT DID NOT CHAIN — everything below is measuring the same path twice: ' + chStats.reason));
+    say('   _noGL = true        → gpu ' + cpuStats.gpu + ', cpu ' + cpuStats.cpu + '   ' + (cpuStats.gpu === 0 ? '✅ CPU only' : '🚨'));
+
+    say('');
+    say('SPEED — a full renderScene at ' + W + 'x' + H + ' with THREE stacked warps (' + made.join(' → ') + '):');
+    say('   CPU loop            ' + cpuMs.toFixed(1) + ' ms');
+    say('   GPU, one at a time  ' + oneMs.toFixed(1) + ' ms   → ' + (cpuMs/oneMs).toFixed(1) + 'x vs CPU');
+    say('   GPU, chained        ' + chMs.toFixed(1) + ' ms   → ' + (cpuMs/chMs).toFixed(1) + 'x vs CPU, ' + (oneMs/chMs).toFixed(2) + 'x vs unchained');
+
+    function compare(a, b, label){
+      var diff=0, big=0, lit=0, worst=0;
+      for (var q=0;q<a.length;q+=4){
+        if (a[q+3]>4) lit++;
+        var e = Math.max(Math.abs(a[q]-b[q]), Math.abs(a[q+1]-b[q+1]), Math.abs(a[q+2]-b[q+2]), Math.abs(a[q+3]-b[q+3]));
+        if (e>0) diff++; if (e>24) big++; if (e>worst) worst=e;
+      }
+      var pct = 100*big/(a.length/4);
+      say('   ' + label + ': differing ' + diff + ' (' + (100*diff/(a.length/4)).toFixed(2) + '%), >24 ' + big + ' (' + pct.toFixed(3) + '%), worst ' + worst +
+          '   ' + (pct < 0.5 ? '✅ same frame' : '🚨 DIFFERENT PICTURE'));
+      return pct;
     }
-    var TRIALS = [
-      ['twirl','ripple','kaleidoscope','bulge','wave'],                       // the fast five
-      ['twirl','ripple','kaleidoscope','bulge','wave','tileshift'],           // +tileshift LAST
-      ['tileshift','twirl','ripple','kaleidoscope','bulge','wave'],           // tileshift FIRST
-      ['twirl','ripple','kaleidoscope','bulge','wave','twirl'],               // sixth = a known-cheap one
-      ['twirl','ripple','kaleidoscope','bulge','wave','twirl','ripple'],      // seven
-      ['tileshift'],                                                          // tileshift alone
-    ];
-    for (var q=0;q<TRIALS.length;q++){
-      var r2 = await timeStack(TRIALS[q]);
-      say(pad(r2.n + ' warps', 10) + pad(r2.ms.toFixed(1) + ' ms', 11) +
-          pad('gpu ' + r2.gpu + '/cpu ' + r2.cpu, 16) + TRIALS[q].join(' → '));
+    say('');
+    say('SAME PICTURE? (chained vs the nested per-effect path it replaces)');
+    compare(oneShot, chShot, 'chain vs unchained');
+
+    /* ── 4. A NON-WARP BETWEEN TWO WARPS MUST BREAK THE RUN ─────────────────────────────────────
+       This is the correctness question, not a speed one. The chain collapses a CONTIGUOUS run at the
+       outermost end; if it reached across an effect that is not a warp, that effect would end up
+       applied in the wrong place in the stack. The picture would still look plausible, which is
+       exactly why it needs a measurement rather than an eye. */
+    /* ⚠️ IT MUST BE AN EFFECT THAT IS ACTUALLY IN THE POST-EFFECT STACK. The first version of this
+       check used `invert`, which is a ctx.filter colour effect and never enters postFxOrder at all —
+       so the run really was contiguous, the chain was right, and the probe called it a bug. Pixelate
+       is dispatched through applyPostFx like the warps are, so it genuinely sits between them. */
+    var mid = FM.fxRegistry.makeInstance('pixelate') || FM.fxRegistry.makeInstance('posterize');
+    if (!mid) { say(''); say('ⓘ could not make a pixel effect — the ordering check did not run'); }
+    else {
+      L.effects.splice(1, 0, mid);           // twirl, invert, ripple, wave  → only the last two may chain
+      FM._noGLChain = false; FM.glWarp._reset(); timed();
+      var mixShot = shot(); var mixStats = FM.glWarp.stats();
+      FM._noGLChain = true; FM.glWarp._reset(); timed();
+      var mixRef = shot();
+      say('');
+      say('ORDERING — a colour effect sitting BETWEEN warps (' + L.effects.map(function(e){return e.type;}).join(' → ') + '):');
+      // per CHAIN, not cumulative — `chained` counts every pass across every render this probe did.
+      var perChain = mixStats.chains ? mixStats.chained / mixStats.chains : 0;
+      say('   chains ' + mixStats.chains + ', ' + perChain.toFixed(1) + ' effects per chain, of ' + L.effects.length + ' on the layer' +
+          '   ' + (perChain === 2 ? '✅ the run stopped at the pixel effect (only the outer two warps merged)'
+                                  : '🚨 it collapsed ACROSS the pixel effect'));
+      compare(mixRef, mixShot, 'with the break');
+      L.effects.splice(1, 1);
     }
-    FM._noGL = false; FM.glWarp._reset();
+
+    /* ── 5. THE FALLBACK STILL WORKS. A path nobody exercises is a path that rots. ── */
+    FM._noGLChain = false; FM.glWarp._reset();
+    P.width = 160; P.height = 160;
+    var sc = d.createElement('canvas'); sc.width = 160; sc.height = 160;
+    FM.renderScene(sc.getContext('2d'), FM.scene, 0.7);
+    var sm = FM.glWarp.stats();
+    say('');
+    say('THE FALLBACK, at 160x160 (under the size floor):  gpu ' + sm.gpu + ', cpu ' + sm.cpu + ', chains ' + sm.chains +
+        '   ' + (sm.chains === 0 && sm.cpu > 0 ? '✅ small plates still take the CPU loop' : 'ⓘ ' + sm.reason));
+    P.width = W; P.height = H;
   } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
   window.__done = true;
 }

@@ -2645,6 +2645,56 @@ window.FM = window.FM || {};
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
+  /* ═══ THE EFFECT STACK IN THE ORDER IT IS ACTUALLY APPLIED ═══════════════════════════════════════
+   * Array order IS application order; the LAST entry is the OUTERMOST, and the dispatcher peels from
+   * that end. Two rules are baked in and both are load-bearing, with the reasoning kept at the call
+   * site below: Squish composites outermost (queue 323), and vignette only joins the stack on layers
+   * that do not draw it inline.
+   * ⚠️ IT IS A FUNCTION BECAUSE THE GPU CHAIN IN drawWarpEffect HAS TO ASK THE SAME QUESTION. Two
+   * copies of this ordering would agree today and diverge the first time either changed — and the
+   * symptom would be a chain collapsing effects that had something else BETWEEN them, i.e. a silently
+   * wrong picture rather than an error. One function, both callers.
+   */
+  function postFxOrder(layer) {
+    const vigOk = layer.type !== 'video' && layer.type !== 'image';
+    const pp0 = (layer.effects || []).filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
+      && !(e.type === 'motionflow' && layer.type === '_flat'));
+    /* SQUISH COMPOSITES INNERMOST, wherever it sits in the stack.
+     * Every other effect renders its clean copy of the layer into a COMP-SIZED plate, so anything
+     * that runs before Squish has already thrown away the one thing Squish exists to use: the part
+     * of the layer hanging outside the frame. Its alpha bbox then stops exactly ON the wall, no
+     * penetration is measured, and it early-outs. Measured on a 480x480 comp, a 150px ball half off
+     * the right edge — `[effect, squish]` against that effect ALONE:
+     *     pixelate 0   bulge 0   tint 0   tiles 0   dropshadow 0   glitch 0   wave 0  bytes differ
+     * Byte-identical: adding Squish to a layer that already had ANY effect did nothing whatsoever,
+     * silently, because fx-browser pushes the newcomer onto the END of the array. (The other order,
+     * `[squish, effect]`, always worked — 21,888 bytes for pixelate, 39,707 for bulge.)
+     * So the rule is a RENDER-ORDER one, not a stack-order one: no add, drag-reorder, undo, project
+     * import or AI-authored node can put an effect underneath Squish, because there is no "under
+     * Squish" any more. Pinning it in the DATA instead would have to be re-enforced at every one of
+     * those sites, and each one is a chance to lose the effect again in silence.
+     * The stack still reads top-down as before; only Squish is special-cased, the same way the
+     * dispatcher below already special-cases motionflow, and the way pen masks / 3D tilt / manual
+     * blends are pinned outside the effect array entirely. */
+    /* SQUISH COMPOSITES OUTERMOST NOW (queue 323). The note above is kept because its reasoning was
+       correct for the code as it stood, and the reason it no longer applies is worth being explicit
+       about: it was pinned INNERMOST because every other effect rendered its copy of the layer into
+       a COMP-SIZED plate, so running one before Squish threw away the off-frame overhang that Squish
+       exists to squash back in. Those plates inherit the TARGET's extent now — see nestedPlate — so
+       an effect running inside Squish's padded plate stays inside it and clips nothing.
+       With that fixed, innermost is the wrong end, and it is exactly what Ezra reported: *"if a shake
+       makes it move the squish doesn't do anything"*. Innermost, Squish measures the layer BEFORE the
+       shake has moved it — sitting mid-frame, no penetration, so it correctly does nothing — and the
+       shake then pushes it over a wall nobody is enforcing. Outermost, its padded plate is rendered
+       with every other effect applied, so what it measures is where the layer actually ENDS UP.
+       Still a render-order rule and not a stack-order one, for the same reason as before: no add,
+       reorder, undo or import can put an effect on the wrong side of it, because there is no wrong
+       side to be on. */
+    return (pp0.length > 1 && pp0.some(e => e.type === 'squish'))
+      ? pp0.filter(e => e.type !== 'squish').concat(pp0.filter(e => e.type === 'squish'))
+      : pp0;
+  }
+
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === FM.FX_CONTAINER) return drawFilterContainer(ctx, layer, t, scene, fx);
@@ -5917,16 +5967,71 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
       wA.__fmRS = ps; wA.__fmOX = OX; wA.__fmOY = OY;
       const actx = wA.getContext('2d');
-      baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
-      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-      drawLayer(actx, tmp, t, scene);
+      /* The clean copy of the layer that this effect warps, with `skip` REMOVED from the stack so the
+         rest still compose. It is a function because the GPU chain below needs the same plate with a
+         whole RUN of effects removed rather than one — and because a chain that cannot run has to be
+         able to re-render the single-effect plate and carry on as if it had never been tried. */
+      function plate(skip) {
+        baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
+        actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+        const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => skip.indexOf(e) < 0), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+        drawLayer(actx, tmp, t, scene);
+      }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      function uniformsFor(k, params) {
+        /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
+           A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
+        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+      }
+      /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
+       * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
+       * — it is written here as the plan, not as a result."* This is that plan.
+       * Two stacked warps used to recurse: the inner one rendered its own plate, uploaded it, warped
+       * it, and drew the result BACK onto a 2D canvas, which this call then uploaded again. Every
+       * effect after the first paid a full-frame upload for a picture that was already in GPU memory.
+       * ⚠️ ONLY A CONTIGUOUS RUN ENDING AT THE OUTERMOST EFFECT MAY COLLAPSE. `postFxOrder` is the
+       * dispatcher's own ordering — not a second copy of it — so anything that is not a
+       * shader-carrying warp (a colour effect, a vignette, Squish) STOPS the run at that point and
+       * everything below it keeps recursing exactly as before. Collapsing across a non-warp would
+       * apply the effects in the wrong order and look like a wrong picture rather than an error.
+       * The intermediate blits this skips are 1:1 copies — `drawImage(warped, OX, OY, PWp, PHp)`
+       * under `baseT` is the identity at every plate scale (see nestedPlate) — so nothing is being
+       * traded away for the speed. */
+      let chain = null;
+      /* `FM._noGLChain` is the CONTROL, and it is not a debug leftover. A test that renders a stack
+         twice and finds the same picture has proved nothing unless one of those renders definitely
+         took the other route — the chain returns null on any trouble, so a broken chain and a working
+         one both produce a correct frame. This switch is how the suite pins which path ran. */
+      if (!FM._noGLChain && mapFn.glsl && FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+        const pp = postFxOrder(layer);
+        if (pp.length > 1 && pp[pp.length - 1] === fx) {
+          const run = [];
+          for (let i = pp.length - 1; i >= 0; i--) {
+            const k = WARP_FX[pp[i].type];
+            if (!k || !k.glsl) break;
+            run.unshift({ fx: pp[i], k: k });
+          }
+          if (run.length > 1) chain = run;
+        }
+      }
       /* OPT-IN PER-FRAME PRECOMPUTE (queue 474). A warp kernel is called once per pixel and gets no
        * chance to hoist anything out of that loop, so any term depending only on x, or only on y, is
        * recomputed 1.46 million times a frame. A kernel that has such terms can expose `.prep`, which
        * runs ONCE here and is handed back to every call as the last argument. Kernels without one are
        * untouched — the extra argument is simply ignored by the other 28. */
+      let warped = null;
+      if (chain) {
+        plate(chain.map(c => c.fx));
+        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => ({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) })));
+        /* A chain that could not run has left the WRONG plate in wA — the inner warps are missing
+           from it. Re-render the single-effect plate so the paths below are exactly what they would
+           have been had the chain never been attempted. Costs one render on a path that only happens
+           when WebGL fails mid-frame; the alternative is a silently unwarped picture. */
+        if (!warped) plate([fx]);
+      } else {
+        plate([fx]);
+      }
       const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
@@ -5939,8 +6044,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * is exactly what the line at the bottom already wanted.
        * Returns null for every "cannot" — no WebGL, a lost context, a kernel with no shader, a plate too
        * small to be worth it — and null means the loop that has always been here. */
-      let warped = null;
-      if (mapFn.glsl && FM.glWarp) {
+      if (!warped && mapFn.glsl && FM.glWarp) {
         /* ⚠️ A KERNEL CAN NEED UNIFORMS ITS CPU SELF NEVER HOISTED. `prep` exists to make the JS loop
          * faster, so a kernel with nothing worth hoisting simply has none — bulge deliberately has no
          * prep because prepping it MEASURED SLOWER (0.74x, repeatable; its early-out retires most
@@ -12467,48 +12571,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // vignette routes through the pixel path ONLY for non-media layers — media draws it inline over
       // the clip's own bounds (media branch), and that behaviour must not change. Text/shape/path/group
       // layers used to silently ignore the effect entirely.
-      const vigOk = layer.type !== 'video' && layer.type !== 'image';
-      // A GROUP reaches the effect stack already flattened, with its own transform baked into the
-      // pixels — so there is nothing left for the content blur to neutralise, and it would smear the
-      // group when you DRAG it, the exact opposite of what it promises. The browser no longer offers
-      // it there; this drops it from any project that already had one, rather than rendering the
-      // reverse of the effect's own name.
-      const pp0 = layer.effects.filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
-        && !(e.type === 'motionflow' && layer.type === '_flat'));
-      /* SQUISH COMPOSITES INNERMOST, wherever it sits in the stack.
-       * Every other effect renders its clean copy of the layer into a COMP-SIZED plate, so anything
-       * that runs before Squish has already thrown away the one thing Squish exists to use: the part
-       * of the layer hanging outside the frame. Its alpha bbox then stops exactly ON the wall, no
-       * penetration is measured, and it early-outs. Measured on a 480x480 comp, a 150px ball half off
-       * the right edge — `[effect, squish]` against that effect ALONE:
-       *     pixelate 0   bulge 0   tint 0   tiles 0   dropshadow 0   glitch 0   wave 0  bytes differ
-       * Byte-identical: adding Squish to a layer that already had ANY effect did nothing whatsoever,
-       * silently, because fx-browser pushes the newcomer onto the END of the array. (The other order,
-       * `[squish, effect]`, always worked — 21,888 bytes for pixelate, 39,707 for bulge.)
-       * So the rule is a RENDER-ORDER one, not a stack-order one: no add, drag-reorder, undo, project
-       * import or AI-authored node can put an effect underneath Squish, because there is no "under
-       * Squish" any more. Pinning it in the DATA instead would have to be re-enforced at every one of
-       * those sites, and each one is a chance to lose the effect again in silence.
-       * The stack still reads top-down as before; only Squish is special-cased, the same way the
-       * dispatcher below already special-cases motionflow, and the way pen masks / 3D tilt / manual
-       * blends are pinned outside the effect array entirely. */
-      /* SQUISH COMPOSITES OUTERMOST NOW (queue 323). The note above is kept because its reasoning was
-         correct for the code as it stood, and the reason it no longer applies is worth being explicit
-         about: it was pinned INNERMOST because every other effect rendered its copy of the layer into
-         a COMP-SIZED plate, so running one before Squish threw away the off-frame overhang that Squish
-         exists to squash back in. Those plates inherit the TARGET's extent now — see nestedPlate — so
-         an effect running inside Squish's padded plate stays inside it and clips nothing.
-         With that fixed, innermost is the wrong end, and it is exactly what Ezra reported: *"if a shake
-         makes it move the squish doesn't do anything"*. Innermost, Squish measures the layer BEFORE the
-         shake has moved it — sitting mid-frame, no penetration, so it correctly does nothing — and the
-         shake then pushes it over a wall nobody is enforcing. Outermost, its padded plate is rendered
-         with every other effect applied, so what it measures is where the layer actually ENDS UP.
-         Still a render-order rule and not a stack-order one, for the same reason as before: no add,
-         reorder, undo or import can put an effect on the wrong side of it, because there is no wrong
-         side to be on. */
-      const pp = (pp0.length > 1 && pp0.some(e => e.type === 'squish'))
-        ? pp0.filter(e => e.type !== 'squish').concat(pp0.filter(e => e.type === 'squish'))
-        : pp0;
+      const pp = postFxOrder(layer);
       const outer = pp[pp.length - 1];
       /* MOTION BLUR (OBJECT) DISPATCHES OUTERMOST NOW (queue 382), not at the base of the recursion.
        * Ezra: "Motion blur should work when other effects make a layer move, currently it doesn't, like

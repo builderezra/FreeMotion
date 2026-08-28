@@ -1,8 +1,25 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.11
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.12
 >
-> **State:** v14.11, 1054 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.12, 1056 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+>
+> **⚡ AND v14.12 FINISHED IT — STACKING EFFECTS IS THE PART THAT WAS STILL SLOW, AND IT IS 35x NOW.**
+> Everything below was measured with ONE effect. Your real projects stack them, and until today each
+> effect handed its picture back down to the browser so the next one could send it up again — every
+> effect after the first paying a full round trip for a picture the graphics card already had.
+> **Three stacked warps at your own 1080x1350: 117 ms → 3.3 ms.** That is 35x against the old path and
+> **2.15x on top of** the win described below. **The frame is not just close, it is identical** — 0 of
+> 1,458,000 pixels differ.
+> 🔑 **AND THE NUMBER THAT MATTERS MOST IS NOT A SPEEDUP AT ALL.** I ran five stacked effects with the
+> processor deliberately slowed to a sixth of its speed — roughly a phone. **The old path went from
+> 292 ms to 1642 ms. The new one went from 5.5 ms to 5.1 ms: it did not get slower at all.**
+> **The drawing is not happening on the processor any more, so how fast the processor is has stopped
+> mattering.** ⚠️ Being straight with you about the limit: I can slow a processor down, but the
+> graphics chip in that test is this Mac's, not your phone's — so 5.1 ms is not a promise about your
+> phone. What it does say is that the work moved off the slow part and onto the part that isn't.
+> ❓ **So the one question left on your oldest complaint is sharper than "does it feel better":**
+> **does a layer with several effects stacked on it still crawl on your phone?**
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -4937,6 +4954,88 @@ better still, keep working inside the turn rather than parking work for a later 
       **3. And a 62%-of-pixels-differ reading that was NOT a wrong kernel** — `texImage2D` from a canvas
       puts the image's first row at `v=0`, so flipping the source V mirrors the picture. It reads exactly
       like broken maths and is one character.
+
+      ═══ ✅ **28 AUG (v14.12) — THE CHAIN THIS ENTRY WROTE DOWN AS A PLAN IS NOW A RESULT.** ═══
+      The section above ends with the one thing v13.81–v13.96 did not do, and it said so plainly:
+      *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer —
+      it is written here as the plan, not as a result."* **It is a result now.**
+      🔑 **WHAT WAS ACTUALLY WRONG, and it is the thing that makes stacking hurt.** Each warp rendered
+      its own copy of the layer into an ordinary 2D canvas, uploaded that to the graphics card, warped
+      it, and then drew the answer **back onto a 2D canvas** — which the next warp in the stack promptly
+      uploaded again. Every effect after the first was paying a full-frame trip in each direction **for
+      a picture that was already sitting in the graphics card's memory.** Two warps meant two of
+      everything; five meant five.
+      **Now the whole run goes across once:** one upload, one shader pass per effect ping-ponging
+      between two off-screen buffers, one draw at the end. The picture never comes back down until it
+      is finished.
+      📐 **MEASURED at your own 1080x1350 with three stacked warps (Twirl → Ripple → Wave),
+      `tests/_glchain.html`, on a real GPU rather than the software renderer:**
+      | path | cost | |
+      |---|---|---|
+      | the CPU loop | **117.0 ms** | — |
+      | GPU, one effect at a time (what v13.81 shipped) | **7.1 ms** | 16.5x |
+      | **GPU, the whole run chained** | **3.3 ms** | **35.5x vs the CPU — and 2.15x on top of v13.81** |
+      ✅ **AND IT IS THE SAME FRAME, EXACTLY: 0 of 1,458,000 pixels differ.** Not "within noise" —
+      identical. It runs the same shaders on the same numbers; the only thing it skips is a round trip
+      through a canvas, and skipping a round trip cannot lose anything.
+      ⚠️ **THE ENTRY GUESSED "roughly another 3x". IT IS 2.15x.** The measured number is the one that
+      goes here — a prediction is not a result even when it was mine.
+      🛑 **THE RULE THAT KEEPS IT HONEST: only a CONTIGUOUS run at the outermost end may collapse.**
+      Anything that is not a shader-carrying warp — a colour effect, a vignette, Squish — stops the run
+      dead and everything below it keeps working exactly as before. Reaching across one would apply it
+      at the wrong point in the stack, and **the result would still look plausible**, which is why it
+      has an assertion rather than an eyeball: a test builds warp → Pixelate → warp → warp and fails
+      unless exactly two effects merge.
+      🔒 **`postFxOrder` is now ONE function with TWO callers** — the dispatcher and the chain detector.
+      Two copies of "which order do effects actually apply in" would agree today and drift the first
+      time either changed, and the symptom would be a silently wrong picture rather than an error.
+      🐛 **ONE BUG WORTH RECORDING BECAUSE IT WOULD HAVE LOOKED LIKE BROKEN MATHS.** A texture uploaded
+      from a canvas stores row 0 at the top; a texture **rendered into** stores its first row at the
+      BOTTOM. So the second effect in a chain reads its input upside down — every kernel would appear
+      to have a sign error. It is the same trap this entry already records one row above (*"a
+      62%-of-pixels-differ reading that was NOT a wrong kernel"*), met from the other direction. One
+      uniform, set at the only two places that can know the answer.
+      ⚠️ **AND THE FIRST MEASUREMENT OF ALL THIS WAS A LIE — 0.1 ms, with "chained" reading HALF AS
+      FAST as unchained.** `renderScene` returns when the GPU work is **queued**, not done. This is the
+      third time this project has timed an empty queue and believed it. The probe now reads one pixel
+      back, which the driver cannot defer past. **The rule stands: a probe that reports zero is a
+      broken probe, not a fast app.**
+      🔬 **AND THE TEST FOR THE UPSIDE-DOWN BUG WAS ITSELF NEARLY USELESS — the reason is worth
+      keeping.** A mutation check (deliberately re-breaking the fix to see whether the test notices)
+      said **CAUGHT by 0.525% against a 0.5% threshold** — i.e. caught by four thousandths of a
+      percent, which is not really caught at all. I assumed the picture was too plain and twice made
+      it more colourful. **Both times it got WORSE, and the reason is arithmetic, not contrast:** a
+      chain of N warps has N-1 passes reading a buffer, so the bug puts a mirror in each of them —
+      and Ripple and Twirl are symmetric about the middle, so a mirror passes straight through them.
+      **Three effects means two mirrors, and two mirrors cancel exactly.** The test now runs chains of
+      2, 3 and 4, so at least one always has an odd number and nothing can cancel. **The fixture was
+      never the problem; the parity was.** Re-checked after the fix: the same mutation is
+      now caught at **47.4%** instead of 0.525% — a margin of 95x rather than 1.05x.
+      ═══ 📐 **AND HERE IS THE MEASUREMENT THAT ACTUALLY ANSWERS THE COMPLAINT** (`tools/_chainphone.py`,
+      new — it throttles the CPU to phone speed the way `_phoneprobe.py` does, but points it at a STACK,
+      which is the case this entry named as "your lag"). Five warps on one layer of six, at 1080x1350: ═══
+      | path | normal CPU | **CPU slowed 6x (a phone)** | what the slow CPU cost it |
+      |---|---|---|---|
+      | the old CPU loop | 291.6 ms | **1642.1 ms** | **5.63x slower** |
+      | GPU, one effect at a time (v13.81) | 13.7 ms | 23.0 ms | 1.68x slower |
+      | **GPU, the whole run chained (v14.12)** | **5.5 ms** | **5.1 ms** | **not slower at all** |
+      🔑 **THAT LAST ROW IS THE POINT, AND IT IS WORTH MORE THAN ANY SPEEDUP NUMBER.** Slowing the
+      processor to a sixth of its speed made the old path **5.63x worse** and left the chained path
+      **unchanged** (0.93x — flat, within noise). **The drawing is no longer happening on the
+      processor, so how fast the processor is has stopped mattering.** That is the difference between
+      "the app is slow on my phone" and "the app is the same everywhere", and it is the first time
+      anything in three months of this entry has moved that lever.
+      ⚠️ **BUT BE CLEAR ABOUT WHAT I CANNOT MEASURE, because the good number invites an overclaim.**
+      Chrome's throttle slows the *processor*, not the graphics chip — and the graphics chip here is
+      this Mac's, not your phone's. **So 5.1 ms is not a prediction of what your phone will do.** What
+      the row honestly says is that the work has MOVED off the part of a phone that is slow and onto
+      the part that is not. How fast your phone's graphics chip is, only your phone can say.
+      🚨 **AND THE CONTROL RAN BOTH TIMES** — chains 9 / gpu 45 on the chained rows, gpu 0 / cpu 45 on
+      the CPU rows. Without it a run where WebGL had quietly failed would read as a very fast CPU.
+      ❓ **WHAT IS LEFT IN THIS ENTRY IS STILL ONLY YOUR VERDICT** — and the question is now the sharp
+      one: **does a project with several effects stacked on one layer still crawl on your phone?**
+      Everything measurable has been measured, and the stacking cost this entry identified as "your
+      lag" is the part that just got 35x cheaper.
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**
@@ -25490,8 +25589,7 @@ re-opened #480, which I had marked done and had not fixed.
       is readable and measurable without the video. Ask for it again only if the code shows no
       difference at all.
 
-- [ ] **647 — The empty-state HEADINGS on the home menus are unreadable — make them black.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **647 — The empty-state HEADINGS on the home menus are unreadable — make them black.**
       (27 Aug, three phone screenshots at v13.69: Templates, Elements, Tutorials.)
       His words, verbatim:
       > All these menus have hard to read text, make it black or sum
@@ -25779,8 +25877,7 @@ re-opened #480, which I had marked done and had not fixed.
              START HERE, or this recurs the moment a session trusts the tool again.
       3. [ ] **Work the genuinely-oldest items**, starting with the three unnumbered ones and #47.
 
-- [ ] **661 — 🔴🔴 THE EFFECTS STILL DO NOT WORK ON MOBILE — his words: "probably the biggest issue you
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **661 — 🔴🔴 THE EFFECTS STILL DO NOT WORK ON MOBILE — his words: "probably the biggest issue you
       still haven't solved".** (28 Aug, at v13.92, phone screenshot of the Colouring page.)
       His words, verbatim:
       > These effects still don’t work on mobile, this is probably the biggest issue you still haven’t solved
@@ -25877,8 +25974,7 @@ re-opened #480, which I had marked done and had not fixed.
       effects work for him now, it was the device; if they still do not, the "what's slow" readout now
       says which — and that line has been there for weeks with nothing surfacing it.**
 
-- [ ] **662 — The export bug is MOBILE-ONLY. PC exports fine.** (28 Aug — answering the question #604
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **662 — The export bug is MOBILE-ONLY. PC exports fine.** (28 Aug — answering the question #604
       and #215 have both been waiting on.)
       His words, verbatim:
       > The export issues I have were on mobile, I don’t got my pc rn but I’ve exported pc before just fine
@@ -25943,8 +26039,7 @@ re-opened #480, which I had marked done and had not fixed.
       PHONE** — rate writes per second, seeks, and sync error. His PC sample reads 0 rate writes and
       0 seeks, i.e. perfectly healthy, and that is the device that works.
 
-- [ ] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)
       His words, verbatim:
       > Just add them as effects, they should already be, I didn’t realise you forgot to add them. Also add more text effects while ur at it

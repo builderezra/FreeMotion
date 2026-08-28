@@ -46,7 +46,7 @@
 
   let _cv = null, _gl = null, _tex = null, _quad = null, _dead = false;
   const _progs = new Map();          // glsl body → { prog, u: {name → location} }
-  const _stats = { gpu: 0, cpu: 0, compiled: 0, lost: 0, reason: '' };
+  const _stats = { gpu: 0, cpu: 0, compiled: 0, lost: 0, chained: 0, chains: 0, reason: '' };
 
   /* ONE canvas and ONE context for the whole app. A WebGL context is an expensive object and browsers
      cap how many may exist at once (~16); allocating one per effect per layer would hit that ceiling on
@@ -92,6 +92,7 @@
 
   function reset() {
     _gl = null; _cv = null; _tex = null; _quad = null; _progs.clear();
+    _fbo = null; _ping[0] = null; _ping[1] = null; _ppW = 0; _ppH = 0;
   }
 
   function shader(g, type, src) {
@@ -146,6 +147,7 @@
       'varying vec2 uv;',
       'uniform sampler2D src;',
       'uniform vec2 res;',
+      'uniform float u_fmChainFlip;',
       decls,
       PRELUDE,
       /* Two kernels read drawWarpEffect's RAW cx/cy/maxR arguments rather than their own prep, and
@@ -168,7 +170,16 @@
       '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
       '  vec2 s = floor(fmWarp(xy));',
       '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
-      '  gl_FragColor = texture2D(src, (s + vec2(0.5)) / res);',
+      /* ⚠️ WHERE ROW 0 OF THE SOURCE TEXTURE LIVES DEPENDS ON HOW IT GOT THERE, and getting this
+         wrong flips the picture rather than breaking it — the failure looks like a wrong effect, not
+         like a bug. A texture uploaded from a CANVAS (UNPACK_FLIP_Y false) stores canvas row 0 at
+         v=0, top-down, which is what every kernel assumes. A texture RENDERED INTO through a
+         framebuffer stores its first row at the GL bottom, so image row 0 sits at v=1 — upside down.
+         `run` uploads a canvas and passes 0; `runChain` passes 1 for every pass after the first,
+         because those read the previous pass's framebuffer texture. One uniform, set at the only two
+         places that can know the answer. */
+      '  vec2 st = (s + vec2(0.5)) / res;',
+      '  gl_FragColor = texture2D(src, vec2(st.x, abs(u_fmChainFlip - st.y)));',
       '}'
     ].join('\n');
     const prog = g.createProgram();
@@ -180,7 +191,8 @@
       g.deleteProgram(prog);
       throw new Error('warp link: ' + log);
     }
-    const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src') };
+    const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src'),
+                _flip: g.getUniformLocation(prog, 'u_fmChainFlip') };
     uNames.forEach(n => { u[n] = g.getUniformLocation(prog, 'u_' + n); });
     p = { prog: prog, u: u };
     _progs.set(key, p);
@@ -192,6 +204,37 @@
      something fixed, and a 120x120 effect thumbnail is mostly that fixed cost. 200x200 is where the
      two crossed when measured; it is a floor, not a tuning knob. */
   const MIN_PX = 40000;
+
+  /* ═══ THE PING-PONG PAIR, for runChain ═══════════════════════════════════════════════════════════
+   * Two textures and one framebuffer, reused for the life of the page. A chain of N warps renders
+   * N-1 passes into these and the LAST pass onto the canvas, so the picture never leaves the GPU
+   * between effects and never becomes a canvas the next effect has to upload again. */
+  let _fbo = null, _ping = [null, null], _ppW = 0, _ppH = 0;
+
+  function ppTex(g, W, H) {
+    if (_ping[0] && _ppW === W && _ppH === H) return true;
+    for (let i = 0; i < 2; i++) {
+      if (_ping[i]) g.deleteTexture(_ping[i]);
+      const tx = g.createTexture();
+      g.bindTexture(g.TEXTURE_2D, tx);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+      // NEAREST for the same reason the source texture uses it: the CPU loop truncates, so any
+      // smoothing here would be the GPU inventing pixels the twin never had.
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.NEAREST);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST);
+      g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, W, H, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+      _ping[i] = tx;
+    }
+    if (!_fbo) _fbo = g.createFramebuffer();
+    _ppW = W; _ppH = H;
+    g.bindFramebuffer(g.FRAMEBUFFER, _fbo);
+    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, _ping[0], 0);
+    const ok = g.checkFramebufferStatus(g.FRAMEBUFFER) === g.FRAMEBUFFER_COMPLETE;
+    g.bindFramebuffer(g.FRAMEBUFFER, null);
+    if (!ok) { _stats.reason = 'framebuffer incomplete'; _ppW = 0; }
+    return ok;
+  }
 
   FM.glWarp = {
     /* srcCanvas → the warped picture, as a CANVAS ready for drawImage. Never an ImageData: the readback
@@ -229,6 +272,11 @@
         g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
         g.uniform1i(p.u.src, 0);
         g.uniform2f(p.u.res, W, H);
+        /* EXPLICIT 0, not "it defaults to 0". Programs are CACHED and shared with runChain, which
+           leaves this at 1 on the passes that read a framebuffer texture. Relying on the default
+           would give a correct picture until the first chained render and an upside-down one after
+           — the worst kind of order-dependent bug. */
+        g.uniform1f(p.u._flip, 0);
         for (let i = 0; i < names.length; i++) { const v = uniforms[names[i]]; g.uniform1f(p.u[names[i]], v === true ? 1 : v === false ? 0 : v); }
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
@@ -241,11 +289,78 @@
         return null;
       }
     },
+    /* ═══ A WHOLE RUN OF WARPS, WITHOUT COMING BACK DOWN ════════════════════════════════════════
+       The oldest entry on his list said this in as many words: *"A CHAIN OF WARPS DOES NOT YET STAY
+       ON THE GPU… worth roughly another 3x on a stacked layer — it is written here as the plan, not
+       as a result."* This is that.
+       Two warps on one layer used to cost two of everything: the inner one rendered into a 2D plate,
+       was uploaded, warped, and drawn BACK onto a 2D canvas, which the outer one then uploaded
+       again. The pixels crossed the bus twice for no reason — the second effect wants exactly the
+       picture the first one just produced, and that picture was already sitting in GPU memory.
+       Now: ONE upload, N shader passes ping-ponging between two framebuffer textures, ONE blit.
+       `passes` is [{body, uniforms}, …] in APPLICATION order — passes[0] runs first.
+       Returns the canvas, or null for every "cannot", and null means the caller's existing path. */
+    runChain: function (srcCanvas, W, H, passes) {
+      if (FM._noGL) { _stats.cpu++; _stats.reason = 'disabled by FM._noGL'; return null; }
+      if (!passes || passes.length < 2 || !srcCanvas || !(W > 0) || !(H > 0)) return null;
+      if (W * H < MIN_PX) { _stats.reason = 'below the size floor'; return null; }
+      const g = gl();
+      if (!g) return null;
+      try {
+        if (g.isContextLost && g.isContextLost()) { reset(); _stats.reason = 'context lost'; return null; }
+        if (!ppTex(g, W, H)) return null;
+        if (_cv.width !== W || _cv.height !== H) { _cv.width = W; _cv.height = H; }
+        g.bindBuffer(g.ARRAY_BUFFER, _quad);
+        g.activeTexture(g.TEXTURE0);
+        // pass 0 reads the uploaded canvas; every later pass reads the texture the one before wrote
+        g.bindTexture(g.TEXTURE_2D, _tex);
+        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
+        let srcTex = _tex;
+        for (let i = 0; i < passes.length; i++) {
+          const uni = passes[i].uniforms || {}, names = [];
+          for (const k in uni) {
+            const v = uni[k];
+            if (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v))) names.push(k);
+          }
+          names.sort();
+          const p = program(g, passes[i].body, names);
+          const last = (i === passes.length - 1);
+          /* The LAST pass draws onto the canvas, so the result is a canvas ready for drawImage and
+             nothing is ever read back — the whole reason this family is 11x and not 2.5x. */
+          g.bindFramebuffer(g.FRAMEBUFFER, last ? null : _fbo);
+          if (!last) g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, _ping[i % 2], 0);
+          g.useProgram(p.prog);
+          const loc = g.getAttribLocation(p.prog, 'p');
+          g.enableVertexAttribArray(loc);
+          g.vertexAttribPointer(loc, 2, g.FLOAT, false, 0, 0);
+          g.bindTexture(g.TEXTURE_2D, srcTex);
+          g.uniform1i(p.u.src, 0);
+          g.uniform2f(p.u.res, W, H);
+          g.uniform1f(p.u._flip, i === 0 ? 0 : 1);   // see the shader — a framebuffer texture is upside down
+          for (let n = 0; n < names.length; n++) {
+            const v = uni[names[n]];
+            g.uniform1f(p.u[names[n]], v === true ? 1 : v === false ? 0 : v);
+          }
+          g.viewport(0, 0, W, H);
+          g.drawArrays(g.TRIANGLES, 0, 3);
+          if (!last) srcTex = _ping[i % 2];
+        }
+        g.bindFramebuffer(g.FRAMEBUFFER, null);
+        _stats.gpu += passes.length;
+        _stats.chained += passes.length;
+        _stats.chains++;
+        return _cv;
+      } catch (e) {
+        try { g.bindFramebuffer(g.FRAMEBUFFER, null); } catch (_) {}
+        _stats.reason = String(e && e.message || e);
+        return null;
+      }
+    },
     /* For the suite, and it is load-bearing: every assertion about the GPU path needs a control proving
        the GPU path RAN. A test that passes because the code fell back to the CPU loop has measured the
        CPU loop and said nothing at all about this file. */
     stats: function () { return Object.assign({}, _stats); },
     available: function () { return !FM._noGL && !!gl(); },
-    _reset: function () { reset(); _dead = false; _stats.gpu = 0; _stats.cpu = 0; _stats.compiled = 0; _stats.reason = ''; }
+    _reset: function () { reset(); _dead = false; _stats.gpu = 0; _stats.cpu = 0; _stats.compiled = 0; _stats.chained = 0; _stats.chains = 0; _stats.reason = ''; }
   };
 })();
