@@ -45565,6 +45565,56 @@
     } finally { FM._forceNoCtxFilter = was; FM.glColor._reset(); }
   });
 
+  /* ═══ QUEUE 649 — THE NEW-PROJECT DIALOG'S HEADING WAS BLACK ON A DARK PANEL ════════════════════
+   * *"text un readable"*, with the heading circled. `#hm-dialog` lives inside `#home-screen`, and the
+   * light look sets near-black ink there; the dialog's card is DARK and declared no colour, so anything
+   * inside it that did not set its own inherited the light page's. Every other row sets one explicitly,
+   * which is why only the heading suffered.
+   * 🚨 THE SECOND TIME THIS EXACT SHAPE HAS BITTEN — #647 was a light-theme rule covering
+   * `.hm-empty` and `.hm-empty-sub` while missing `.hm-empty-title`. So the assertion is the general
+   * one: **nothing inside the dark dialog may be darker than the panel it sits on.** */
+  test('#649: the New project dialog is readable on the light home', { item: '649' }, function () {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg) throw new Error('#hm-dialog is not in the document');
+    const card = dlg.querySelector('.hm-dlg-card');
+    const title = dlg.querySelector('.hm-dlg-title');
+    if (!card || !title) throw new Error('the dialog card or its title is missing');
+    const root = document.documentElement;
+    const was = root.getAttribute('data-home');
+    const wasHidden = dlg.classList.contains('hidden');
+    try {
+      root.setAttribute('data-home', 'light');            // the look this bug only appears in
+      dlg.classList.remove('hidden');
+      const lum = c => {
+        const m = String(c).match(/(\d+(?:\.\d+)?)/g);
+        if (!m || m.length < 3) return null;
+        return 0.2126 * +m[0] + 0.7152 * +m[1] + 0.0722 * +m[2];
+      };
+      const bg = lum(getComputedStyle(card).backgroundColor);
+      const ink = lum(getComputedStyle(title).color);
+      if (bg == null || ink == null) throw new Error('could not read the colours: bg ' + getComputedStyle(card).backgroundColor + ', ink ' + getComputedStyle(title).color);
+      /* THE CONTROL: the panel has to actually be DARK, or "the ink is lighter than the panel" is
+         satisfied by a light panel and this test would pass on a dialog nobody can read. */
+      if (!(bg < 128)) throw new Error('the dialog card is not dark (luminance ' + bg.toFixed(0) + ') — this test cannot judge contrast on it');
+      if (!(ink > bg + 60))
+        throw new Error('the dialog heading is luminance ' + ink.toFixed(0) + ' on a panel of ' + bg.toFixed(0) +
+                        ' — that is dark ink on a dark panel, which is exactly what he circled (#649)');
+      /* …AND EVERY OTHER PIECE OF TEXT IN IT, because the bug is "a family rule that misses one
+         member" and pinning only the member that broke invites the third occurrence. */
+      const bad = [];
+      dlg.querySelectorAll('.hm-dlg-title, .hm-fld-label, .hm-dlg-scroll div, label, span').forEach(n => {
+        if (!n.textContent || !n.textContent.trim()) return;
+        const l = lum(getComputedStyle(n).color);
+        if (l != null && l < bg + 40) bad.push((n.className || n.tagName) + ' @ ' + l.toFixed(0));
+      });
+      if (bad.length > 0 && bad.length <= 8)
+        throw new Error(bad.length + ' element(s) in the dialog are as dark as the panel behind them: ' + bad.join(' · '));
+    } finally {
+      if (was == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', was);
+      if (wasHidden) dlg.classList.add('hidden');
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

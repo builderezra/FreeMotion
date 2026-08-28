@@ -4811,7 +4811,20 @@ body.hm-selecting .hm-pin { display: none; }
 #hm-dialog.hidden { display: none; }
 /* the card is a column so the options scroll while the title + Create row stay put on a phone */
 .hm-dlg-card { display: flex; flex-direction: column; width: min(380px, 92vw); max-height: min(88vh, 88dvh); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
-.hm-dlg-title { flex: none; font-weight: 800; font-size: 16px; margin-bottom: 12px; }
+/* ⚠️ `color` ON THE CARD, NOT JUST THE TITLE (queue 649) — and the difference is the whole point.
+   Ezra: *"text un readable"*, circling the New-project sheet's own heading, which was near-BLACK on a
+   dark panel while every label under it read fine.
+   THE CAUSE: `#hm-dialog` lives INSIDE `#home-screen`, and the light look sets `color: #10151f` there
+   (theme-glass.css). The dialog's card is dark but declared no ink of its own, so anything inside it
+   that did not set a colour INHERITED THE LIGHT PAGE'S. Every other row — the field labels, the
+   buttons — sets its own colour explicitly, which is exactly why the heading was the only casualty.
+   🚨 THIS IS THE #647 BUG A SECOND TIME: a family rule that misses one member. There, a light-theme
+   rule covered `.hm-empty` and `.hm-empty-sub` and missed `.hm-empty-title`.
+   So the fix goes on the CARD as well as the title. Declaring the dark panel's ink once stops every
+   FUTURE child inheriting the light page's — fixing the class rather than the instance, which is the
+   only version of this fix that does not come back a third time. */
+.hm-dlg-card { color: var(--text); }
+.hm-dlg-title { flex: none; font-weight: 800; font-size: 16px; margin-bottom: 12px; color: var(--text); }
 .hm-dlg-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 4px; }
 .hm-fld-label { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 7px; }
 .hm-dlg-scroll > .hm-fld-label:first-child { margin-top: 0; }

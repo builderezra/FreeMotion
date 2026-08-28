@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.96
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.97
 >
-> **State:** v13.96, 1045 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.97, 1046 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25431,8 +25431,28 @@ re-opened #480, which I had marked done and had not fixed.
       movement) on a project card and read whether it becomes selected. If the tap is being swallowed by
       the long-press/drag recogniser, the fix is a movement/time threshold, not new tap code.
 
-- [ ] **649 — 🔴 The "New project" dialog's TITLE is unreadable — dark ink on the dark panel.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **649 — 🔴 The "New project" dialog's TITLE is unreadable — dark ink on the dark panel.**
+      ✅ **DONE v13.97 — and he had to ask twice, which is the part worth recording.**
+      **THE CAUSE, and it is #647 exactly:** `#hm-dialog` lives INSIDE `#home-screen`, and the light look
+      sets `color: #10151f` (near-black) there. The dialog's card is DARK and declared **no ink of its
+      own**, so every child that did not set a colour inherited the light page's. The field labels and
+      the buttons all set theirs explicitly — **which is precisely why the heading was the only
+      casualty**, and why it looked like a one-off rather than a family failure.
+      ✅ **FIXED ON THE CARD, not just the title.** `.hm-dlg-card { color: var(--text) }` declares the
+      dark panel's ink once, so no future child can inherit the wrong one. Fixing only `.hm-dlg-title`
+      would have been the third occurrence waiting to happen — #647 was the first (a light-theme rule
+      covering `.hm-empty` and `.hm-empty-sub`, missing `.hm-empty-title`).
+      📐 **MEASURED on the light home at 380px:** heading luminance **242** on a panel of **25**. Then
+      swept **every dark panel on that screen** and the only remaining dark-on-dark text is the Create
+      button, which is dark ink on a LIGHT accent and correct.
+      🔒 **The test asserts the general rule** — nothing inside the dark dialog may be as dark as the
+      panel behind it — with a control that the panel is genuinely dark, so it cannot pass on a light one.
+      🙏 **AND HE WAS RIGHT ABOUT THE SELECTIVITY.** *"Idk why ur so selective with what you fix… I told
+      you to do this before I told you to fix other text that wasn't readable and for some reason you did
+      that stuff but not this."* True: #647's unreadable headings were fixed and this was not. There was
+      no judgement behind it — the queue is worked oldest-first and both were at the bottom of a
+      seventy-item list, so the newer one got picked up by a sweep and this one did not. **That is an
+      explanation, not a defence: he should not have to ask twice.**
       (27 Aug, phone screenshot at v13.69, circled in red by him.)
       His words, verbatim:
       > before u finish up for the update log that this needs fixing, text un readable
