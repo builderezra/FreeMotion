@@ -1354,6 +1354,35 @@ window.FM = window.FM || {};
    * went the wrong way.
    * Back closes the SUB-VIEW, Done closes the WHOLE browser. Built once rather than three times so the
    * two cannot drift apart — which is how they came to differ from the root header in the first place. */
+  /* ═══ SAY THE REAL THING, WHERE HE IS (queue 661) ══════════════════════════════════════════════
+   * Ezra, with a red square selected on his phone: seven tiles badged "no change at this value" —
+   * Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert. *"These effects still don't
+   * work on mobile, this is probably the biggest issue you still haven't solved."*
+   * 🚨 THE APP ALREADY KNEW, AND HAD WRITTEN THE ANSWER SOMEWHERE HE WOULD NEVER LOOK. `js/perf-probe.js`
+   * has said this since queue 645, verbatim: *"THIS DEVICE CANNOT RUN CANVAS FILTERS. Brightness,
+   * Saturation, Contrast, Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do NOTHING here, and
+   * they fail silently — which is why they work on the PC and not on this device."* That sentence lives
+   * inside a diagnostics readout he has to go hunting for. `FM.cssFxUnavailable()` was written to be
+   * asked this question and **had no callers at all**.
+   * ⚠️ THIS IS THE #129 AND #215 LESSON FOR THE THIRD TIME — the app works out the answer and puts it
+   * where he cannot read it, while the screen he IS looking at tells him something else and wrong.
+   * So it goes on every effects page, and only ever on a device where it is true. */
+  function deviceFilterBanner() {
+    const gone = (FM.cssFxUnavailable && FM.cssFxUnavailable()) || [];
+    if (!gone.length) return null;
+    const b = el('div', 'fxb-devwarn',
+      'This device can’t run canvas filters — Brightness, Contrast, Saturation, Hue Shift, ' +
+      'Grayscale, Sepia, Invert, Blur and Glow will do nothing here. It is the device, not the effect.');
+    b.title = 'Tap for more';
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (FM.toast) FM.toast('These effects are drawn with a browser feature this device does not support. ' +
+                             'They work on your PC. Nothing is wrong with your project.', 7000);
+    });
+    return b;
+  }
+  FM._fxDeviceFilterBanner = deviceFilterBanner;   // suite seam
+
   function subTop(titleText, closeView) {
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back');
@@ -1376,8 +1405,14 @@ window.FM = window.FM || {};
     done.title = 'Add the effects you picked and close';
     done.addEventListener('click', () => { if (_picked.length) commitPicks(); else FM.fxBrowser.close(); });
     top.appendChild(done);
-    return top;
-  }
+    /* The banner rides with the header so every sub-view gets it without each one remembering.
+       Returns a fragment rather than the bare header — callers only ever appendChild it. */
+    const warn = deviceFilterBanner();
+    if (!warn) return top;
+    const frag = document.createDocumentFragment();
+    frag.appendChild(top); frag.appendChild(warn);
+    return frag;
+    }
 
   function openCategory(cat) {
     const view = el('div', 'fxb-catview');

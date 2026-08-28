@@ -142,7 +142,7 @@ window.FM = window.FM || {};
   FM._perfState = function () {
     return { tier: _playTier, tiers: PLAY_TIERS.length, factor: PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)],
              renderAvg: _renderAvg, gapAvg: _gapAvg, locked: !!_locked, lockAt: _lockAt, dropFrom: _dropFrom,
-             cooldown: _tierCooldown, ctx: _costCtx,
+             cooldown: _tierCooldown, ctx: _costCtx, inMotion: !!_inMotion,
              canvasPx: (typeof canvas !== 'undefined' && canvas) ? canvas.width * canvas.height : 0 };
   };
   // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
@@ -1313,7 +1313,23 @@ window.FM = window.FM || {};
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing) FM.seekVideosToTime();
     else clockAnchor(FM.time);                         // moving the playhead mid-play re-origins the clock, or the next tick would drag it straight back
+    /* ⚠️ MEASURED, not just drawn (queue 125) — and this file has already learned this lesson once.
+     * The note on the `seeked` listeners a thousand lines below says it outright: *"FM.requestRender
+     * times the render and feeds noteMotion, while a bare render() is invisible to it — so roughly half
+     * of a video scrub's real cost never reached the adaptive quality ladder at all."* That fix was
+     * applied to four listeners. **This call site was missed, and it is not a quiet one:** the effects
+     * browser previews a layer by calling `FM.setTime` on a `setInterval` at **24 a second**
+     * (js/fx-browser.js), and `FM.scrubTime` above already routes through `requestRender` for exactly
+     * this reason. So while the effects sheet is open — a full-comp preview, on a phone, with the
+     * effect under consideration applied — every frame was invisible to the ladder, `_inMotion` never
+     * latched, and the quality never dropped no matter how badly it was struggling.
+     * ⚠️ It stays a SYNCHRONOUS render rather than becoming `requestRender()`. Eleven callers in this
+     * file alone rely on the picture being on the canvas by the time setTime returns, and deferring it
+     * to a rAF would change all of them to chase one measurement. Timing it costs nothing and changes
+     * nothing. */
+    const _t0 = performance.now();
     render();
+    noteMotion(performance.now() - _t0);
     FM.timeline.updatePlayhead();
     updateReadout();
   };

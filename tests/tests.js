@@ -45272,6 +45272,119 @@
     } finally { meta.textContent = before; }
   });
 
+  /* ═══ QUEUE 125 — THE QUALITY LADDER WAS BLIND WHILE THE EFFECTS SHEET PREVIEWED ════════════════
+   * `noteMotion` is what tells the adaptive quality ladder how expensive the picture is, and it has
+   * exactly ONE call site: inside `FM.requestRender`'s rAF. A bare synchronous `render()` is invisible
+   * to it. js/app.js already learned this on the `seeked` listeners — its own note says *"roughly half
+   * of a video scrub's real cost never reached the adaptive quality ladder at all"* — and fixed four of
+   * them. `FM.setTime` was missed, and the effects browser drives `FM.setTime` on a setInterval at
+   * **24 a second** while previewing a layer. So on the one screen where a phone is compositing a full
+   * comp WITH the effect under consideration applied, the ladder saw nothing and never dropped quality.
+   * This asserts the measurement reaches it, which is the thing that was missing. */
+  test('#125: seeking feeds the quality ladder, not just the canvas', { item: '125' }, async function () {
+    if (typeof FM.setTime !== 'function') throw new Error('FM.setTime is not reachable');
+    if (typeof FM._perfState !== 'function') throw new Error('FM._perfState is not exposed, so the ladder cannot be observed');
+    const S = FM.scene, keep = S.layers.slice(), keepT = FM.time, wasPlaying = FM.playing;
+    try {
+      FM.playing = false;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 300, shapeH: 300, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 5;
+      S.layers.length = 0; S.layers.push(L);
+
+      /* ⚠️ THE FIRST VERSION OF THIS TEST WAS DEAD AND THE MUTATION TOOL SAID SO. It asserted
+         `renderAvg > 0` after driving setTime — but `renderAvg` is GLOBAL and every earlier test in the
+         suite has already pushed it above zero, so it passed with the fix removed. A test that survives
+         its own fix being deleted measures nothing.
+         `_inMotion` is the honest signal: it can ONLY become true inside `noteMotion`, after
+         MOTION_FRAMES consecutive MEASURED renders. If a bare `render()` is invisible to the ladder,
+         driving setTime cannot latch it, however many times it is called. */
+      const st0 = FM._perfState();
+      if (typeof st0.inMotion !== 'boolean') throw new Error('FM._perfState() does not report inMotion, so this test cannot see the thing it is about');
+      // settle first: whatever the previous test left behind must not be read as this test's result
+      await new Promise(r => setTimeout(r, 400));
+      if (FM._perfState().inMotion) throw new Error('the ladder still reports inMotion before this test drove anything — it has not settled, so a true below would prove nothing');
+
+      for (let i = 0; i < 14; i++) {
+        FM.setTime(0.05 * i);
+        await new Promise(r => setTimeout(r, 12));
+      }
+      if (!FM._perfState().inMotion)
+        throw new Error('14 setTime() calls did not put the quality ladder in motion — a bare render() is ' +
+                        'invisible to noteMotion, so the effects sheet\'s 24-a-second preview never reaches ' +
+                        'the ladder and it cannot drop quality however badly the phone is struggling (#125)');
+    } finally {
+      FM.playing = wasPlaying;
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* ═══ QUEUE 661 — "THESE EFFECTS STILL DON'T WORK ON MOBILE" ════════════════════════════════════
+   * His screenshot: a RED square selected, and seven tiles badged "no change at this value" —
+   * Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert.
+   * 🔑 THE BADGE REFUTES ITSELF, and that is what these tests pin. For Grayscale to say "at this value"
+   * rather than "no colour to work on", `deadWhy` must have found the pixel NOT grey — but grayscale(1)
+   * on a non-grey pixel MUST move it, so `fxDeadOnLayer` would have returned null and there would be no
+   * badge at all. Both cannot be true. The only way out is that `throughFilter` handed back its own
+   * input, i.e. ctx.filter never applied — either because the device cannot run canvas filters, or
+   * because something in the layer's own stack made the filter STRING unparseable (which is silently
+   * ignored, taking every effect on the layer with it).
+   * Neither can be reproduced on the suite's healthy desktop browser. What CAN be asserted is the
+   * contradiction itself: on a coloured layer, these effects must never be called dead. */
+  test('#661: a colour effect is never called dead on a coloured layer', { item: '661' }, function () {
+    if (typeof FM.fxDeadOnLayer !== 'function') throw new Error('FM.fxDeadOnLayer is not reachable');
+    if (!FM.fxRegistry || !FM.fxRegistry.makeInstance) throw new Error('the effect registry is not reachable');
+    const red = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#e8443f' });
+    red.effects = [];
+    /* THE CONTROL FIRST: the probe must be ABLE to call something dead, or "nothing was called dead"
+       below is satisfied by a probe that has simply stopped working — which is the very failure this
+       test is about. Grayscale on a GREY layer genuinely does nothing, and must say so. */
+    const grey = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#808080' });
+    grey.effects = [];
+    const greyWhy = FM.fxDeadOnLayer(FM.fxRegistry.makeInstance('grayscale'), grey, 0);
+    if (!greyWhy) throw new Error('the probe did not call grayscale dead on a GREY layer — it can no longer judge anything, so the assertions below would pass vacuously');
+    if (!/no colour to work on/i.test(greyWhy)) throw new Error('grayscale on grey said "' + greyWhy + '" — it should name the layer having no colour');
+
+    // …and now the case from his screenshot. None of these may be called dead on a red square.
+    const bad = [];
+    for (const id of ['grayscale', 'sepia', 'invert', 'saturate', 'hue', 'brightness', 'contrast']) {
+      const inst = FM.fxRegistry.makeInstance(id);
+      if (!inst) continue;
+      const why = FM.fxDeadOnLayer(inst, red, 0);
+      if (why) bad.push(id + ': "' + why + '"');
+    }
+    /* grayscale, sepia and invert CANNOT be neutral at any setting on a coloured pixel. If any of them
+       is called dead here, either the filter did not run or the probe is lying — and the app then shows
+       him a confident, wrong per-effect explanation on seven tiles at once. */
+    const mustMove = bad.filter(b => /^(grayscale|sepia|invert)\b/.test(b));
+    if (mustMove.length)
+      throw new Error('these cannot be neutral on a coloured layer and were still called dead — ' +
+                      'the filter did not run, or the probe is lying: ' + mustMove.join(' · '));
+  });
+
+  /* A KEYFRAMED GLOW COLOUR USED TO POISON THE WHOLE FILTER STRING (queue 661).
+   * Glow's colour is keyframable, and `effectFilter` read it RAW — so a keyframed value stringified to
+   * `[object Object]`, making `drop-shadow(0 0 16px [object Object])`. An unparseable `ctx.filter` is
+   * SILENTLY IGNORED, so every CSS effect on that layer stopped working at once and nothing said a
+   * word. That is one live route to exactly the symptom he reported. */
+  test('#661: a keyframed glow colour does not kill every other effect on the layer', { item: '661' }, function () {
+    if (typeof FM.fxDeadOnLayer !== 'function') throw new Error('FM.fxDeadOnLayer is not reachable');
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#e8443f' });
+    const glow = FM.fxRegistry.makeInstance('glow');
+    if (!glow) throw new Error('could not make a glow instance');
+    glow.params = glow.params || {};
+    // exactly the shape a keyframed property has
+    glow.params.color = { kf: [{ t: 0, v: '#ff0000' }, { t: 1, v: '#0000ff' }] };
+    L.effects = [glow];
+    const g = FM.fxRegistry.makeInstance('grayscale');
+    const why = FM.fxDeadOnLayer(g, L, 0);
+    if (why)
+      throw new Error('with a KEYFRAMED glow colour beneath it, grayscale was reported dead ("' + why + '") — ' +
+                      'the glow colour is being read raw, so the filter string contains [object Object], ' +
+                      'and an unparseable ctx.filter is silently ignored: every effect on the layer dies at once');
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

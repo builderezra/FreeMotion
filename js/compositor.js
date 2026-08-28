@@ -1586,7 +1586,15 @@ window.FM = window.FM || {};
         // Bloom is STACKED drop-shadows: one pass is a halo, three is a glow that actually reads as
         // light. Passes 1 emits the single shadow it always did, character for character.
         case 'glow': {
-          const gr = nn('radius', 12), gc = (p.color || '#ffffff');
+          /* ⚠️ `FM.evalProp`, NOT the raw value — glow's colour is KEYFRAMABLE (queue 555) and a
+           * keyframed property is an OBJECT, not a string. `'…' + {kf:[…]}` stringifies to
+           * `[object Object]`, which makes `drop-shadow(0 0 16px [object Object])` — and an invalid
+           * token does not fail loudly: assigning an unparseable string to `ctx.filter` is SILENTLY
+           * IGNORED, so the ENTIRE filter list dies and every CSS effect on that layer stops working
+           * at once. Every other param on this line already goes through evalProp; this one was
+           * missed. It is also a candidate cause of "grayscale does nothing on my phone" (queue 661),
+           * because one keyframed glow anywhere in the stack silently kills the lot. */
+          const gr = nn('radius', 12), gc = (FM.evalProp(p.color, t) || '#ffffff');
           const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
           for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + (gr * S) + 'px ' + gc + ')');
           break;
@@ -1688,6 +1696,26 @@ window.FM = window.FM || {};
     if (!inst || inst.enabled === false || !FLAT_TESTABLE[inst.type]) return null;
     const hex = flatColorOf(layer);
     if (!hex) return null;
+    /* ═══ THE INSTRUMENT MUST PROVE ITSELF, EVERY CALL (queue 661) ════════════════════════════════
+     * Ezra, on a phone, with a RED square selected: Brightness, Contrast, Saturation, Hue Shift,
+     * **Grayscale, Sepia and Invert** all badged "no change at this value".
+     * 🚨 THOSE SEVEN ARE NOT "THE BROKEN EFFECTS" — THEY ARE EXACTLY `FLAT_TESTABLE`, i.e. the whole
+     * set this probe is allowed to judge. It returned dead for 100% of its own domain, and the five
+     * that looked fine (Tint, Duotone, Gamma, Glow, Vignette) are precisely the ones it never judges.
+     * 🔑 AND THE BADGE REFUTES ITSELF. For Grayscale to say "at this value" rather than "no colour to
+     * work on", `deadWhy` must have found the pixel NOT grey — but grayscale(1) on a non-grey pixel
+     * MUST move it, so the comparison below would have returned null and there would be no badge at
+     * all. Both cannot be true. The only way out is that `throughFilter` handed back its own input:
+     * **`ctx.filter` never applied.**
+     * That happens two ways, and this guard covers both: a device that cannot run canvas filters at
+     * all (js/perf-probe.js has said so since queue 645 — in a diagnostics readout he would have to go
+     * hunting for), or a filter STRING that fails to parse, which is silently ignored and takes every
+     * effect on the layer with it (see the glow note above for a live example).
+     * So: push a pixel through a filter that MUST move it, down the SAME path, on every call. If it
+     * does not move, this function knows nothing and says nothing. **A probe that cannot tell "the
+     * filter never ran" from "the effect does nothing" must not be allowed to claim the second.** */
+    const ctl = throughFilter('#ff0000', 'invert(1)');
+    if (!ctl || ctl[0] > 64) return null;          // invert(1) takes red's R from 255 to 0
     const time = (typeof t === 'number' && isFinite(t)) ? t : 0;
     const list = (layer.effects || []);
     const at = list.indexOf(inst);

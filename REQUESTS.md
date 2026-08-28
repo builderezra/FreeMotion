@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.93
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.94
 >
-> **State:** v13.93, 1038 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.94, 1041 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -21825,6 +21825,12 @@ re-opened #480, which I had marked done and had not fixed.
       and **stick to the top of the sheet while the list scrolls** (`position: sticky; top: 0`).
 - [ ] **606 — The add-layer row’s drag handle is out of line with the layer ones, and the layer ones
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **SCREENSHOT RECEIVED 28 Aug (at v13.92) — and it shows something the earlier measurement missed.**
+      Four rows are visible. The three LAYER handles each sit inside a dark rounded box; **the add-layer
+      row's handle has NO BOX AT ALL** and sits noticeably further left than the boxed ones. The previous
+      note in this entry recorded them as aligned *"both at 360px, 0.0 offset"* — that measured the ≡
+      GLYPH, and the thing that is out of line is the box around it, which the add-layer row does not have.
+      ⚠️ **Measure the BOX, not the glyph, and measure it at 380px in the layout he uses.**
       are not centred in their own box.** (27 Aug, annotated phone screenshot at v13.45.)
       His words, verbatim:
       > Don’t change the design for the add layers drag buttons but just line it up with the other layers
@@ -25647,3 +25653,78 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] **Make it structural, not remembered** — `next.sh` must stop hiding blocked items from
              START HERE, or this recurs the moment a session trusts the tool again.
       3. [ ] **Work the genuinely-oldest items**, starting with the three unnumbered ones and #47.
+
+- [ ] **661 — 🔴🔴 THE EFFECTS STILL DO NOT WORK ON MOBILE — his words: "probably the biggest issue you
+      **STATUS: 🟢 READY — nothing is stopping this**
+      still haven't solved".** (28 Aug, at v13.92, phone screenshot of the Colouring page.)
+      His words, verbatim:
+      > These effects still don’t work on mobile, this is probably the biggest issue you still haven’t solved
+
+      **THE SCREENSHOT:** the effects browser, Colouring page 1/12, with a plain RED SQUARE selected on
+      the canvas. Twelve tiles are visible, each previewing against a stock sunset photo. **Seven of them
+      carry a badge reading "no change at this …" (truncated):** Brightness · Contrast · Saturation ·
+      Hue Shift · **Grayscale** · **Sepia** · **Invert**. Tint, Duotone, Gamma, Glow and Vignette do not.
+      🔑 **THE ASYMMETRY IS THE WHOLE CLUE, and it splits the seven in two.** Brightness, Contrast,
+      Saturation and Hue Shift have NEUTRAL defaults — a badge saying they change nothing at their
+      default setting is **correct and honest**. **But GRAYSCALE, SEPIA and INVERT cannot be neutral at
+      any setting**; applied to a colour photo they must change it. So for those three the badge is
+      either lying, or they are shipping disabled/at zero amount, or the thumbnail pipeline is not
+      applying them at all.
+      🔗 **This is the same complaint as #593, #603 and #645** — *"none of the black and white filters
+      make anything black and white"* — and those entries concluded the effects worked and that his
+      picture stayed colourful because Sepia and Invert sat AFTER Grayscale in his stack. **That
+      explanation cannot cover this screenshot**: these are the browser's own tiles, one effect each,
+      against the browser's own subject, with no stack at all.
+      ⚠️ **AND HE IS RIGHT THAT IT IS THE BIGGEST ONE.** Four entries have circled this and every one
+      closed on reasoning rather than on this specific evidence.
+
+- [ ] **662 — The export bug is MOBILE-ONLY. PC exports fine.** (28 Aug — answering the question #604
+      **STATUS: 🟢 READY — nothing is stopping this**
+      and #215 have both been waiting on.)
+      His words, verbatim:
+      > The export issues I have were on mobile, I don’t got my pc rn but I’ve exported pc before just fine
+
+      🚨 **THIS RETIRES A PREMISE BOTH ENTRIES WERE BUILT ON.** #604's header says *"on PHONE and PC —
+      and it has now been reported on BOTH devices, which kills any 'his phone is odd' theory"*. **That
+      is withdrawn: it is his phone.** Every measurement in #604 and #215 was taken in desktop Chrome,
+      where everything is healthy — mix, encode, mux, byte assembly, file structure and a decoded
+      round-trip that came back loud. **All of that was measuring the device that works.**
+      ➡️ **THE SEARCH IS NOW iOS SAFARI SPECIFICALLY, and there is an obvious first suspect:**
+      `aac-unavailable`. The exporter probes `AudioEncoder.isConfigSupported({codec:'mp4a.40.2'})` and
+      drops the whole soundtrack when it fails — **WebCodecs `AudioEncoder` is exactly the kind of API
+      that is present on desktop Chrome and absent or partial on iOS Safari.** That path already toasts,
+      and until v13.92 that toast was painted behind the export overlay (#215) — **which is precisely
+      why he saw a silent file and no message.** The two findings fit each other perfectly.
+      1. [ ] **Determine what iOS Safari actually does with the AAC probe**, rather than assuming.
+      2. [ ] **If AAC is unavailable there, the export must not silently ship a mute file** — say it
+             BEFORE the render starts, not after, since v13.92 put a surface in the card for exactly this.
+
+- [ ] **663 — Audio still cuts in and out on mobile (the popping itself seems fixed).** (28 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Seems fixed for the scratchy popping but audio still doesn’t play consistently on mobile, it cuts in and out
+
+      ✅ **HALF OF #148 IS CONFIRMED FIXED BY HIM** — the scratchy popping. That is v7.66's clip-edge fade
+      plus v13.90's loop-wrap fade.
+      🔴 **What remains is "cuts in and out", MOBILE ONLY**, which is the same phrase as #604's second
+      clause and #96. 🔗 **Merge the thinking with #662: both are now mobile-only audio.**
+
+- [ ] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
+      **STATUS: 🟢 READY — nothing is stopping this**
+      #602's standing offer, and the answer is the opposite of what was offered.)
+      His words, verbatim:
+      > Just add them as effects, they should already be, I didn’t realise you forgot to add them. Also add more text effects while ur at it
+
+      🔑 **HE DID NOT WANT ANYTHING REMOVED — he wants them PROMOTED.** #602 offered to delete the
+      Typewriter preset because `textprogress` duplicates it. His answer reframes the whole entry: the
+      point was never that the panel has too much, it is that **things which behave like effects should
+      be IN the effects list**, where they can be stacked, keyframed and previewed like everything else.
+      **"They should already be"** is the operative phrase — he assumed they were.
+      1. [ ] **Line height as an effect** — nothing in 199 effects sets leading today.
+      2. [ ] **Curve as an effect** — `drawArcLine` lays each glyph on an arc rotated to the tangent;
+             `bend`/`curl`/`wave` displace PIXELS and smear text, so this is genuinely absent.
+      3. [ ] **More text effects.** Open-ended and his own words, so log it as its own clause rather
+             than quietly scoping it to the two above.
+      ⚠️ **The text category already exists** — `TEXT_ONLY` at js/fx-registry.js:153 holds `counter`,
+      `textprogress`, `textrandomizer`, `textspacing`, `texttransform`, `timecode` — so there is a home
+      for these and a working pattern to copy.

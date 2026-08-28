@@ -3109,6 +3109,14 @@ body.white-chrome #time-readout:active {
 /* The in-export equivalent (queue 215): #export-status normally reads "Encoding audio + video… 60%",
    and when the soundtrack has been lost it has to stop looking like progress. */
 #export-status.export-status-warn { color: var(--warn, #ffb03a); font-weight: 600; }
+/* The device-cannot-run-filters banner in the effects browser (queue 661). It is the honest cause
+   of seven tiles saying 'no change at this value', and it has to read as INFORMATION rather than
+   an error — nothing is wrong with his project. */
+.fxb-devwarn {
+  margin: 8px 10px 2px; padding: 9px 11px; border-radius: 9px; cursor: pointer;
+  background: rgba(255,176,58,.10); border: 1px solid rgba(255,176,58,.42);
+  color: var(--warn, #ffb03a); font-size: 12px; line-height: 1.45;
+}
 #xr-save:disabled { opacity: .55; cursor: default; }
 
 /* ---- The export dialog's control column (queue 141 part 3) -------------------------------------
