@@ -1,0 +1,116 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:780px;border:0"></iframe>
+<script>
+/* #630, the half that was left: the SELECTION BOX and the ANCHOR DOT.
+ *
+ * v13.80 taught applyParentChain to pivot a group about FM.groupPivot. FM.groupBounds — read by the
+ * selection box, the canvas hit-test, the drag and the resize — kept its own byte-identical copy of
+ * the old geometry and placed the box at `gx + centre*gs`. Under the pivot sandwich a child renders
+ * at `g + P + S*(L - P)`, so the content centre is `g + P + S*(centre - P)`; the two agree only at
+ * scale 1.
+ *
+ * ⚠️ THE ASSERTION IS UNIT-FREE ON PURPOSE. renderScene's third argument is TIME, not a scale, so
+ * there is no honest constant for turning a centroid in canvas pixels into project coordinates —
+ * an earlier version of this probe divided by the time and reported a 79px "bias" that was pure
+ * arithmetic fiction. What IS unambiguous: scaling a group about its DEFAULT (centre) anchor must
+ * leave both the rendered content and the box centre exactly where they were. Nothing to convert.
+ * The control is the same scale with the anchor at the LEFT EDGE, where both must move together. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.layerSize)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 900);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    FM.scene.layers.length = 0;
+    var a = FM.makeLayer('shape', { shape:'rect', x:300, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    var b = FM.makeLayer('shape', { shape:'rect', x:800, y:500, shapeW:400, shapeH:300, fill:'#ffffff' });
+    a.start=0; a.duration=5; b.start=0; b.duration=5;
+    FM.scene.layers.push(a,b);
+    P.duration = Math.max(P.duration||0,5);
+    await new Promise(function(r){ setTimeout(r,400); });
+    FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id;
+    FM.groupSelection();
+    await new Promise(function(r){ setTimeout(r,500); });
+    var g = FM.scene.layers.filter(function(l){ return l.type==='group'; })[0];
+    if (!g) return say('no group created');
+
+    var N = 240;
+    function centroid(){    // canvas px, whatever the fit — only ever compared with itself
+      var cv = d.createElement('canvas'); cv.width = N; cv.height = N;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 0);
+      var dd = cv.getContext('2d').getImageData(0,0,N,N).data, sx=0, sy=0, n2=0;
+      for (var y=0;y<N;y++) for (var x=0;x<N;x++){ var i=(y*N+x)*4;
+        if (dd[i+3]>8 && dd[i]>120 && dd[i+1]>120 && dd[i+2]>120){ sx+=x; sy+=y; n2++; } }
+      return n2 ? { x:sx/n2, y:sy/n2, n:n2 } : null;
+    }
+    function snap(){ return { c: centroid(), b: FM.groupBounds(g, FM.scene, 0) }; }
+    function line(tag, s){
+      say(tag);
+      say('   content centroid  ' + (s.c ? s.c.x.toFixed(1)+','+s.c.y.toFixed(1)+'  ('+s.c.n+'px)' : 'nothing lit'));
+      say('   groupBounds       ' + (s.b ? s.b.x.toFixed(1)+','+s.b.y.toFixed(1)+'   '+s.b.w.toFixed(0)+'x'+s.b.h.toFixed(0) : 'null'));
+    }
+    async function settle(){ await new Promise(function(r){ setTimeout(r,350); }); }
+
+    g.transform.anchorX = 0.5; g.transform.anchorY = 0.5; g.transform.scale = 1;
+    await settle();
+    var s1 = snap(); line('CENTRE ANCHOR, scale 1', s1);
+    g.transform.scale = 1.6;
+    await settle();
+    var s2 = snap(); line('CENTRE ANCHOR, scale 1.6', s2);
+    var moveC = Math.hypot(s2.c.x-s1.c.x, s2.c.y-s1.c.y);
+    var moveB = Math.hypot(s2.b.x-s1.b.x, s2.b.y-s1.b.y);
+    say('');
+    say('   content moved ' + moveC.toFixed(1) + 'px (canvas) — ' + (moveC < 3 ? 'grows in place' : 'DRIFTS'));
+    say('   box moved     ' + moveB.toFixed(1) + 'px (project) — ' + (moveB < 3 ? 'stays on it' : '<<< THE BOX LEFT THE GROUP'));
+    say('   box grew      ' + (s2.b.w/s1.b.w).toFixed(2) + 'x wide (should be 1.60)');
+
+    // CONTROL: anchor at the LEFT EDGE. Now BOTH must move, or the check above is vacuous.
+    g.transform.scale = 1; g.transform.anchorX = 0; g.transform.anchorY = 0;
+    await settle();
+    var c1 = snap();
+    g.transform.scale = 1.6;
+    await settle();
+    var c2 = snap();
+    say('');
+    say('CONTROL — anchor at the corner, same 1.6x:');
+    say('   content moved ' + Math.hypot(c2.c.x-c1.c.x, c2.c.y-c1.c.y).toFixed(1) + 'px  ' +
+        (Math.hypot(c2.c.x-c1.c.x, c2.c.y-c1.c.y) > 3 ? 'yes — the pivot really is being used' : 'NO — the pivot is inert'));
+    say('   box moved     ' + Math.hypot(c2.b.x-c1.b.x, c2.b.y-c1.b.y).toFixed(1) + 'px  ' +
+        (Math.hypot(c2.b.x-c1.b.x, c2.b.y-c1.b.y) > 3 ? 'yes — the box tracks the pivot too' : 'NO — the box ignores the anchor'));
+
+    g.transform.scale = 1; g.transform.anchorX = 0.5; g.transform.anchorY = 0.5;
+    await settle();
+    say('');
+    say('--- clause 2: can you SEE a group anchor? ---');
+    FM.scene.selectedIds = [g.id]; FM.scene.selectedId = g.id;
+    if (FM.selectLayer) FM.selectLayer(g.id);
+    if (FM.inspector && FM.inspector.openCategory) { try { FM.inspector.openCategory('transform'); } catch(e){} }
+    await settle();
+    var dot = d.querySelector('.anchor-dot');
+    say('anchor-dot display  : ' + (dot ? (dot.style.display||'(unset)') : 'MISSING') +
+        (dot && dot.style.display === 'none' ? '   <<< a group STILL shows no anchor (clause 2)' : ''));
+    if (dot && dot.style.display !== 'none') {
+      var gp = FM.groupPivot(g, FM.scene, FM.time);
+      var gx = FM.evalProp(g.transform.x, FM.time)||0, gy = FM.evalProp(g.transform.y, FM.time)||0;
+      var gb = FM.groupBounds(g, FM.scene, FM.time);
+      var L = parseFloat(dot.style.left), T = parseFloat(dot.style.top);
+      var k = L / (gx + gp.x);
+      say('dot at              : ' + L.toFixed(1) + ',' + T.toFixed(1) + ' wrap px');
+      say('pivot (project)     : ' + (gx+gp.x).toFixed(1) + ',' + (gy+gp.y).toFixed(1));
+      say('implied view scale  : ' + k.toFixed(4) + ' from x, ' + (T/(gy+gp.y)).toFixed(4) + ' from y  ' +
+          (Math.abs(k - T/(gy+gp.y)) < 0.002 ? 'consistent' : '<<< the two axes disagree'));
+      say('box centre (project): ' + gb.x.toFixed(1) + ',' + gb.y.toFixed(1) +
+          '   ' + (Math.hypot(gb.x-(gx+gp.x), gb.y-(gy+gp.y)) < 2 ? 'the dot sits in the middle of the box, as a default anchor should' : 'dot and box centre disagree'));
+    }
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

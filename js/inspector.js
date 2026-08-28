@@ -4588,6 +4588,16 @@ window.FM = window.FM || {};
        * not `layerSize`. That is why this is a named question about the RENDERER rather than a
        * `type === 'group'` special case buried in the maths. */
       const asz = FM.anchorPivotBox(layer);
+      /* ⚠️ A GROUP COMPENSATES BY A DIFFERENT LAW, and getting this wrong re-broke #628 for one run.
+       * A normal layer draws its content offset by −size·anchor, so moving the pivot displaces it by
+       * R·S·δ and the correction is exactly that, which is what the code below computes.
+       * A GROUP has no content of its own: since #630 its children sit at `gx + P + R·S·(L − P)`, so
+       * moving the pivot by δ displaces them by **(1 − R·S)·δ** — which is ZERO at scale 1 with no
+       * rotation, because the pivot sandwich collapses to the identity. Compensating a group the normal
+       * way shifted it by the full 225px when nothing had moved at all (measured: 46.4 preview px).
+       * So the correction is (R·S − 1)·δ, and it is applied below by adjusting the factor rather than
+       * the direction — see `pivotLaw`. */
+      const isGroupPivot = layer.type === 'group';
       const aEffX = () => mtEval(layer, 'scale') * (layer.transform.scaleX != null ? mtEval(layer, 'scaleX') : 1);
       const aEffY = () => mtEval(layer, 'scale') * (layer.transform.scaleY != null ? mtEval(layer, 'scaleY') : 1);
       const getA = k => { const v = layer.transform[k]; return typeof v === 'number' ? v : (FM.evalProp(v, FM.time) != null ? FM.evalProp(v, FM.time) : 0.5); };
@@ -4600,10 +4610,22 @@ window.FM = window.FM || {};
         // displacement is in the LAYER's own space, and the layer is drawn translate → rotate →
         // scale, so it has to be rotated into the parent frame before it can be added to x/y.
         // Without this a rotated layer jumped the moment you touched its pivot.
-        let dx = (nx - oldX) * asz.w * aEffX();
-        let dy = (ny - oldY) * asz.h * aEffY();
+        /* δ is the pivot's travel in the layer's own space. For a normal layer it is already scaled,
+           because the content offset is −size·anchor·scale. For a GROUP it must stay UNSCALED: the
+           children live in the group's child space and the scale is applied on top of the pivot, which
+           is the whole reason the law below differs. */
+        let dx = (nx - oldX) * asz.w * (isGroupPivot ? 1 : aEffX());
+        let dy = (ny - oldY) * asz.h * (isGroupPivot ? 1 : aEffY());
         const rot = (mtEval(layer, 'rotation') || 0) * Math.PI / 180;
-        if (rot) { const c = Math.cos(rot), s = Math.sin(rot); const rx = dx * c - dy * s; dy = dx * s + dy * c; dx = rx; }
+        if (isGroupPivot) {
+          // (R·S − 1)·δ : zero when the group is unrotated and unscaled, which is exactly when moving
+          // its pivot changes nothing on screen.
+          const sx = aEffX(), sy = aEffY();
+          const c = Math.cos(rot), sn = Math.sin(rot);
+          const rx = (dx * sx) * c - (dy * sy) * sn;
+          const ry = (dx * sx) * sn + (dy * sy) * c;
+          dx = rx - dx; dy = ry - dy;
+        } else if (rot) { const c = Math.cos(rot), s = Math.sin(rot); const rx = dx * c - dy * s; dy = dx * s + dy * c; dx = rx; }
         // shiftTransform, not mtSet: on a layer with ANIMATED position, setTransform would upsert a
         // keyframe at the playhead — moving the pivot would silently add a keyframe and bend the
         // existing animation. shiftTransform moves the whole curve, which is what a pivot change means.

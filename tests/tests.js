@@ -29457,13 +29457,31 @@
       const dx = moved.cx - base.cx;
       if (Math.abs(dx - 20) > 1) throw new Error('10 on each of two nested groups moved the child ' + dx.toFixed(1) + 'px, not 20 — the levels are not composing'); }
 
-    /* 3. SCALE must do BOTH things: make the child bigger AND push it further from the origin. Checking
-       only the size would pass a chain that scaled in place, which is a different picture entirely. */
-    { const f = build(); f.G1.transform.scale = 2;
+    /* 3. SCALE — AND THIS ASSERTION WAS REVERSED BY QUEUE 630, DELIBERATELY.
+       It used to require that scaling a group pushed its child FURTHER FROM THE ORIGIN (centre 100 →
+       200), with the note that "checking only the size would pass a chain that scaled in place". That
+       was a faithful test of the shipped behaviour, and the shipped behaviour is what Ezra reported:
+       *"when I try and zoom groups in they just zoom into the corners and not the middle"*. Groups are
+       created at (0,0) on purpose, so scaling about the origin threw the contents at the top-left corner.
+       A group now scales about its ANCHOR — the centre of its members' bounds by default.
+       ⚠️ THE ORIGINAL CONCERN IS STILL RIGHT AND IS STILL TESTED, just properly: "scaled in place" must
+       not pass. With ONE child, staying centred IS correct, so a second child is added and the test
+       asserts the two SPREAD APART by the scale factor while the pair stays centred. That proves the
+       group scales the SPACE, not merely each child's size — which is what assertion 3 always meant. */
+    { const f = build();
+      const S2 = FM.makeLayer('shape', { name: 'S2', shape: 'rect', x: 180, y: 100, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 4 });
+      S2.parent = f.G2.id; f.scene.layers.push(S2);
+      const pairBase = stat(f.scene);
+      f.G1.transform.scale = 2;
       const sc = stat(f.scene);
-      if (sc.offFrame) throw new Error('the scaled child left the frame — widen the fixture rather than trusting this');
-      if (Math.abs(sc.w - base.w * 2) > 2) throw new Error('a group scaled by 2 made its child ' + sc.w + 'px wide, not ' + (base.w * 2));
-      if (Math.abs(sc.cx - base.cx * 2) > 2) throw new Error('a group scaled by 2 left its child centred at ' + sc.cx.toFixed(1) + ', not ' + (base.cx * 2).toFixed(1) + ' — it resized in place instead of scaling the space'); }
+      if (sc.offFrame) throw new Error('the scaled pair left the frame — widen the fixture rather than trusting this');
+      // the ARRANGEMENT scales: the pair's overall width doubles
+      if (Math.abs(sc.w - pairBase.w * 2) > 4)
+        throw new Error('a group scaled by 2 made its contents ' + sc.w + 'px across, not ' + (pairBase.w * 2) + ' — the space is not scaling, only the shapes');
+      // …and it grows about its own centre rather than the project origin (queue 630)
+      if (Math.abs(sc.cx - pairBase.cx) > 3)
+        throw new Error('a scaled group moved its contents from ' + pairBase.cx.toFixed(1) + ' to ' + sc.cx.toFixed(1) +
+          ' — it is still pivoting on the origin, which is what threw them into the corner (#630)'); }
 
     /* 4. A FULL TURN IS THE IDENTITY. This is the cheap, exact check on rotation: quarter turns swing the
        child to negative coordinates and off-frame (that is correct geometry, not a bug — it cost a probe
@@ -31695,6 +31713,217 @@
    * creation of a layer therefore restores whatever was selected BEFORE it — a different layer — and
    * leaves the inspector open on it. That is not just untidy: it is how you edit the wrong thing
    * without noticing, because the next slider drag lands somewhere you never chose. */
+  /* #630 — "when I try and zoom groups in they just zoom into the corners and not the middle and I
+   * can't find where the anchor even is."
+   * There was no anchor to find. applyParentChain scales a child about the PARENT'S OWN (x,y), and
+   * groupSelection creates every group at (0,0) on purpose ("any x/y here would instantly displace
+   * every member"). So scaling a group scaled the whole child space about the project ORIGIN — the
+   * top-left corner. A group now rotates/scales about its anchor, defaulting to the centre of its
+   * members' bounds. Asserted on the MATHS (FM.groupPivot) and on real pixels in tests/_630scaled.html. */
+  test('#630: a group pivots on its anchor, not on the project origin', { item: '630' }, function () {
+    if (typeof FM.groupPivot !== 'function') throw new Error('FM.groupPivot is missing — a group has no pivot again (#630)');
+    var keep = FM.scene.layers.slice();
+    try {
+      var g = FM.makeLayer('group', { name: 'G', x: 0, y: 0 });
+      g.start = 0; g.duration = 3;
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      var b = FM.makeLayer('shape', { shape: 'rect', x: 600, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      a.start = 0; a.duration = 3; a.parent = g.id;
+      b.start = 0; b.duration = 3; b.parent = g.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(g, a, b);
+
+      // Default anchor = the CENTRE of the members' bounds, which is what "zoom into the middle" means.
+      var p = FM.groupPivot(g, FM.scene, 0);
+      if (!p) throw new Error('groupPivot returned null for a group with two visible children');
+      if (Math.abs(p.x - 400) > 1 || Math.abs(p.y - 400) > 1)
+        throw new Error('the default pivot is ' + p.x + ',' + p.y + ' — it should be the centre of the members (400,400)');
+
+      // …and it FOLLOWS the anchor, or the control he was told to look for still does nothing.
+      g.transform.anchorX = 0; g.transform.anchorY = 0;
+      var p0 = FM.groupPivot(g, FM.scene, 0);
+      if (Math.abs(p0.x - 150) > 1) throw new Error('anchor 0 gave pivot x ' + p0.x + ' — it should be the left edge of the members (150)');
+      g.transform.anchorX = 1;
+      var p1 = FM.groupPivot(g, FM.scene, 0);
+      if (Math.abs(p1.x - 650) > 1) throw new Error('anchor 1 gave pivot x ' + p1.x + ' — it should be the right edge (650)');
+      if (p1.x === p0.x) throw new Error('the pivot does not move with the anchor — that is #630 exactly');
+
+      /* NOT THE PROJECT ORIGIN. The old behaviour pivoted at (0,0) whatever the members did, which is
+         what threw them into the corner. If the pivot is ever 0,0 for a group with off-centre members,
+         the bug is back. */
+      g.transform.anchorX = 0.5; g.transform.anchorY = 0.5;
+      var pc = FM.groupPivot(g, FM.scene, 0);
+      if (pc.x === 0 && pc.y === 0) throw new Error('a group with members at 200..650 pivots on the ORIGIN — #630 has regressed');
+
+      /* ⚠️ AND THE RENDERER MUST ACTUALLY USE IT — this half exists because a mutation check said so.
+         Deleting `ctx.translate(piv.x, piv.y)` from applyParentChain left every assertion above GREEN,
+         because they only test `groupPivot`'s arithmetic. Two pixel tests elsewhere caught it, so the
+         code was protected — but a test that does not cover its own fix is one edit away from being
+         decorative. This measures the thing he actually reported: a scaled group must grow in place,
+         not fly toward the origin. */
+      g.transform.anchorX = 0.5; g.transform.anchorY = 0.5;
+      var PW = 900, PH = 900;
+      var sc0 = { project: { name: 'p', width: PW, height: PH, fps: 30, duration: 3 }, layers: FM.scene.layers.slice(), selectedId: null, selectedIds: [] };
+      var cvp = document.createElement('canvas'); cvp.width = 300; cvp.height = 300;
+      var cxp = cvp.getContext('2d');
+      var shot = function () {
+        cxp.clearRect(0, 0, 300, 300);
+        FM.renderScene(cxp, sc0, 0);
+        var d = cxp.getImageData(0, 0, 300, 300).data, n = 0, sx = 0, sy = 0;
+        for (var y = 0; y < 300; y++) for (var x = 0; x < 300; x++) {
+          var i2 = (y * 300 + x) * 4;
+          if (d[i2 + 3] > 8 && d[i2] > 120) { n++; sx += x; sy += y; }
+        }
+        return n ? { x: sx / n, y: sy / n, n: n } : null;
+      };
+      g.transform.scale = 1;
+      var un = shot();
+      if (!un) throw new Error('the pixel fixture rendered nothing, so it cannot judge the pivot');
+      g.transform.scale = 1.6;
+      var big = shot();
+      if (!big) throw new Error('the scaled fixture rendered nothing');
+      if (!(big.n > un.n * 1.4))
+        throw new Error('scaling the group by 1.6 barely changed its area (' + un.n + ' -> ' + big.n + ') — the scale is not reaching the children');
+      var drift = Math.hypot(big.x - un.x, big.y - un.y);
+      if (drift > 6)
+        throw new Error('a scaled group moved its contents ' + drift.toFixed(1) + 'px — it is pivoting on the origin and throwing them toward the corner, which is #630');
+      g.transform.scale = 1;
+
+      /* AN EMPTY GROUP HAS NO PIVOT and must return null, so applyParentChain falls straight through to
+         the behaviour it always had rather than translating by NaN. */
+      var e = FM.makeLayer('group', { name: 'E', x: 0, y: 0 });
+      FM.scene.layers.push(e);
+      if (FM.groupPivot(e, FM.scene, 0) !== null) throw new Error('an empty group reported a pivot');
+      if (FM.groupPivot(a, FM.scene, 0) !== null) throw new Error('a non-group reported a group pivot');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+    }
+  });
+
+  /* #630, the SECOND half — and a regression the first half left behind.
+   * `FM.groupBounds` is what the selection box, the canvas hit-test, the drag and the resize all read,
+   * and it carried its own byte-identical copy of the geometry `applyParentChain` had just been taught
+   * to pivot. So it went on placing the box at `gx + centre*gs` while the content rendered at
+   * `g + P + S*(centre − P)`. 📐 MEASURED (tests/_630box.html) before the fix: at 1.6x the box sat
+   * 455px away from the group it was drawn around. The size was always right, which is exactly why it
+   * did not look broken. Both now share ONE walk and ONE anchor reader. */
+  test('#630: the selection box stays on a group that is scaled', { item: '630' }, function () {
+    var keep = FM.scene.layers.slice();
+    try {
+      var g = FM.makeLayer('group', { name: 'G', x: 0, y: 0 });
+      g.start = 0; g.duration = 3;
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      var b = FM.makeLayer('shape', { shape: 'rect', x: 600, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      a.start = 0; a.duration = 3; a.parent = g.id;
+      b.start = 0; b.duration = 3; b.parent = g.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(g, a, b);
+
+      // members span 150..650 in x, so the centre — and the default pivot — is 400.
+      g.transform.anchorX = 0.5; g.transform.anchorY = 0.5; g.transform.scale = 1;
+      var b1 = FM.groupBounds(g, FM.scene, 0);
+      if (!b1) throw new Error('groupBounds returned null for a group with two visible children');
+      if (Math.abs(b1.x - 400) > 1 || Math.abs(b1.w - 500) > 1)
+        throw new Error('the unscaled box is ' + b1.w + ' wide at ' + b1.x + ' — expected 500 at 400');
+
+      /* SCALING ABOUT THE CENTRE MUST NOT MOVE THE BOX. It grows around the same point the content
+         grows around, because they are now the same point. The old code returned 800 here. */
+      g.transform.scale = 1.6;
+      var b2 = FM.groupBounds(g, FM.scene, 0);
+      if (Math.abs(b2.w - 800) > 1) throw new Error('the box did not grow with the group: ' + b2.w + ' (expected 800)');
+      if (Math.abs(b2.x - b1.x) > 1)
+        throw new Error('scaling a group about its CENTRE moved the selection box from ' + b1.x + ' to ' + b2.x +
+                        ' — the box has left the group, so the handles and the hit-test are in empty space (#630)');
+
+      /* CONTROL — with the anchor on the LEFT EDGE the box MUST move, or the check above would pass
+         just as happily on a box that ignores the pivot entirely and always reports the centre. */
+      g.transform.scale = 1; g.transform.anchorX = 0;
+      var c1 = FM.groupBounds(g, FM.scene, 0);
+      g.transform.scale = 1.6;
+      var c2 = FM.groupBounds(g, FM.scene, 0);
+      if (Math.abs(c2.x - c1.x) < 20)
+        throw new Error('control failed: scaling about the LEFT EDGE left the box at ' + c2.x + ' — it is not reading the anchor at all');
+      // and it must land where the pivot law puts it: P + S*(C - P) = 150 + 1.6*(400-150) = 550
+      if (Math.abs(c2.x - 550) > 1)
+        throw new Error('corner-anchored 1.6x put the box centre at ' + c2.x + ' — the pivot law says 550');
+
+      /* THE BOX AND THE RENDERER MUST AGREE, not merely each be self-consistent. This is the pair that
+         drifted, so it is the pair that gets asserted: where applyParentChain actually draws a member
+         is `g + P + S*(L − P)`, and the box centre must be that same expression at L = the centre. */
+      g.transform.anchorX = 0.35; g.transform.anchorY = 0.5; g.transform.scale = 2.2;
+      var piv = FM.groupPivot(g, FM.scene, 0);
+      var want = piv.x + 2.2 * (400 - piv.x);
+      var b3 = FM.groupBounds(g, FM.scene, 0);
+      if (Math.abs(b3.x - want) > 1)
+        throw new Error('box centre ' + b3.x.toFixed(1) + ' but the renderer puts the content centre at ' + want.toFixed(1) + ' — they have drifted apart again');
+      g.transform.scale = 1; g.transform.anchorX = 0.5;
+
+      // an empty group still has no bounds, and the hit-test relies on that null
+      var e = FM.makeLayer('group', { name: 'E', x: 0, y: 0 });
+      FM.scene.layers.push(e);
+      if (FM.groupBounds(e, FM.scene, 0) !== null) throw new Error('an empty group reported bounds');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+    }
+  });
+
+  /* #630 clause 2 — *"I can't find where the anchor even is."*
+   * Half of that was that a group HAD no pivot; the other half is that canvas-edit switched the dot
+   * off for groups outright (`layer.type !== 'group'`, commented "a group has no pivot of its own to
+   * show"), so making the pivot real changed nothing you could see. A group's pivot lands at exactly
+   * `g + P` — the sandwich cancels for the pivot point itself — and that is where the dot goes. */
+  test('#630: a group shows its anchor on the canvas', { item: '630' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var keep = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      var g = FM.makeLayer('group', { name: 'G', x: 0, y: 0 });
+      g.start = 0; g.duration = 5;
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      var b = FM.makeLayer('shape', { shape: 'rect', x: 600, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      a.start = 0; a.duration = 5; a.parent = g.id;
+      b.start = 0; b.duration = 5; b.parent = g.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(g, a, b);
+      FM.selectLayer(g.id);
+      FM.inspector.openCategory('transform'); await frame();
+      var dot = document.querySelector('.anchor-dot');
+      if (!dot) throw new Error('no anchor dot element at all');
+      if (dot.style.display === 'none')
+        throw new Error('a GROUP still shows no anchor — "I can\'t find where the anchor even is" (#630 clause 2)');
+      var at = function () { return { l: parseFloat(dot.style.left), t: parseFloat(dot.style.top) }; };
+      var p0 = at();
+      if (!isFinite(p0.l) || !isFinite(p0.t)) throw new Error('the group anchor has no position: ' + JSON.stringify(p0));
+
+      /* IT MUST BE AT THE PIVOT, not at the group's (x,y) — which is (0,0) for every group the app
+         creates, i.e. the top-left corner, i.e. the exact place he could not find it. */
+      if (p0.l < 4 && p0.t < 4)
+        throw new Error('the group anchor is drawn at the project origin (' + p0.l + ',' + p0.t + ') — that is the corner, not the middle');
+
+      // MOVING THE ANCHOR MUST MOVE THE DOT. The control: without this, a dot pinned anywhere passes.
+      g.transform.anchorX = 0; g.transform.anchorY = 0;
+      FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); await frame();
+      var p1 = at();
+      if (Math.abs(p1.l - p0.l) < 2)
+        throw new Error('dragging the group anchor to the corner did not move the dot (' + p0.l + ' -> ' + p1.l + ') — it is not showing the pivot');
+      // …and it must move the RIGHT WAY: anchor 0 is the LEFT edge of the members.
+      if (!(p1.l < p0.l)) throw new Error('anchor 0 put the dot to the RIGHT of centre (' + p0.l + ' -> ' + p1.l + ')');
+
+      // AN EMPTY GROUP HAS NOTHING TO POINT AT, and a dot at (0,0) would be a confident lie.
+      FM.scene.layers.length = 0;
+      var e = FM.makeLayer('group', { name: 'E', x: 0, y: 0 });
+      e.start = 0; e.duration = 5;
+      FM.scene.layers.push(e);
+      FM.selectLayer(e.id);
+      FM.inspector.openCategory('transform'); await frame();
+      if (document.querySelector('.anchor-dot').style.display !== 'none')
+        throw new Error('an EMPTY group drew an anchor dot — there is no pivot to show');
+    } finally {
+      FM.scene.layers.length = 0;
+      for (var i = 0; i < keep.length; i++) FM.scene.layers.push(keep[i]);
+      FM.scene.selectedId = sel0;
+      FM.inspector.openCategory('home');
+    }
+  });
+
   test('#629: undo that removes the selected layer selects nothing', { item: '629' }, async function () {
     if (!FM.history || typeof FM.history.commit !== 'function') throw new Error('FM.history is not reachable');
     var keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
@@ -31763,9 +31992,29 @@
          here, so the DECISION it depends on is the seam instead: FM.anchorPivotBox. That is the actual
          rule, and it is what the panel multiplies the anchor delta by. */
       if (typeof FM.anchorPivotBox !== 'function') throw new Error('FM.anchorPivotBox is missing — the group-anchor rule has no seam (#628)');
+      /* ⚠️ THIS ASSERTION WAS REVERSED BY QUEUE 630, ONE VERSION AFTER IT WAS WRITTEN, AND THAT IS THE
+         POINT OF HAVING IT. #628 shipped {0,0} because the renderer ignored a group's anchor, so any
+         compensation was pure damage. #630 taught the renderer to pivot a group about that anchor — so
+         the compensation is needed again, and it must use the MEMBERS' BOUNDS.
+         What must never come back is `FM.layerSize`, which has no group branch and returns the
+         {w:100,h:100} media fallback — measured 100x100 for a group whose real bounds are 900x300. That
+         is the actual #628 defect, and it is what this now guards. */
       var gbox = FM.anchorPivotBox(g);
-      if (gbox.w !== 0 || gbox.h !== 0)
-        throw new Error('anchorPivotBox reports ' + gbox.w + 'x' + gbox.h + ' for a GROUP — anything non-zero shifts x/y by that much and moves his clips (#628)');
+      var local = FM.groupBoundsLocal(g, FM.scene, FM.time);
+      if (!local) throw new Error('groupBoundsLocal returned nothing for a group with a visible child');
+      if (Math.abs(gbox.w - local.w) > 1e-6 || Math.abs(gbox.h - local.h) > 1e-6)
+        throw new Error('anchorPivotBox reports ' + gbox.w + 'x' + gbox.h + ' for a GROUP but its members span ' +
+          local.w + 'x' + local.h + ' — the compensation would shift x/y by the wrong amount and move his clips (#628)');
+      var fallback = FM.layerSize(g);
+      if (gbox.w === fallback.w && gbox.h === fallback.h && fallback.w === 100)
+        throw new Error('anchorPivotBox is back on layerSize\u2019s 100x100 media fallback for a group — that IS #628');
+
+      /* AN EMPTY GROUP HAS NO PIVOT, so there is nothing to compensate for and x/y must not move. */
+      var empty = FM.makeLayer('group', { name: 'EMPTY', x: 0, y: 0 });
+      FM.scene.layers.push(empty);
+      var ebox = FM.anchorPivotBox(empty);
+      if (ebox.w !== 0 || ebox.h !== 0)
+        throw new Error('an EMPTY group reported a pivot box of ' + ebox.w + 'x' + ebox.h + ' — there is nothing to pivot around');
 
       /* THE CONTROL, and without it the rule above is satisfied by returning zero for everything —
          which would break the anchor on every ordinary layer instead. */
@@ -44533,6 +44782,84 @@
     } finally {
       FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
       FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* #604, SECOND CLAUSE — *"it played good the first time but it was inconsistent and would cut in and
+   * out"*. 🛑 THIS IS NOT THE "no audio" HALF and must never be reported as fixing it: every link from
+   * the mixer to the finished file was measured for #604 and all of them are sound.
+   * What WAS found in passing, and is a real defect: `buildAudioMix` sums every layer through its own
+   * gain node and never limits the total. 📐 MEASURED on his own scenario — a video clip plus one
+   * built-in sound effect, both at volume 1 — the mix peaked at **1.52-1.61**, and the decoded export
+   * carried that peak. Everything over 1.0 hard-clips through AAC, so overlapping sounds buzz, and it
+   * gets worse with every layer that overlaps. */
+  async function mixPeakProbe(FM, amp, n) {
+    const P = FM.scene.project;
+    P.duration = 0.3; P.width = 64; P.height = 64;
+    FM.scene.layers.length = 0;
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    for (let k = 0; k < n; k++) {
+      const song = FM.makeLayer('video', { name: 'song' + k });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3;
+      FM.scene.layers.push(song);
+      // IDENTICAL waveforms on purpose: n copies in phase sum to exactly n*amp, so the overshoot is a
+      // number this test chose rather than one it has to hope for.
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.3), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * amp; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: buf });
+    }
+    FM._lastMixGain = undefined; FM._lastMixRawPeak = undefined; FM._lastMixPeak = undefined;
+    const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 0.3);
+    let real = 0;
+    if (mix && mix.audioBuffer) {
+      for (let c = 0; c < mix.audioBuffer.numberOfChannels; c++) {
+        const d = mix.audioBuffer.getChannelData(c);
+        for (let i = 0; i < d.length; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > real) real = v; }
+      }
+    }
+    return { mix: mix, real: real, gain: FM._lastMixGain, raw: FM._lastMixRawPeak, peak: FM._lastMixPeak };
+  }
+
+  test('#604: overlapping sounds do not clip the exported mix', { item: '604' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
+    try {
+      /* THE CONTROL COMES FIRST and it is doing two jobs: one ordinary layer must be left EXACTLY as
+         mixed (a limiter that quietly normalises every export would pass the loud case and be wrong),
+         and it proves the fixture makes a real noise, so a small peak below means something. */
+      const one = await mixPeakProbe(FM, 0.8, 1);
+      if (!one.mix) throw new Error('the fixture produced no mix at all, so nothing below is measured');
+      if (!(one.real > 0.5)) throw new Error('a single layer at 0.8 mixed to a peak of ' + one.real + ' — the fixture is not making audio');
+      if (one.gain !== 1) throw new Error('a mix that never went over 1.0 was turned down by ' + one.gain + ' — the limiter must not touch a mix that does not clip');
+
+      /* THE CASE: two identical layers in phase sum to 1.6, which is exactly what his project did. */
+      const two = await mixPeakProbe(FM, 0.8, 2);
+      if (!two.mix) throw new Error('the two-layer fixture produced no mix');
+      if (!(two.raw > 1.2))
+        throw new Error('two layers at 0.8 summed to only ' + two.raw + ' — the fixture is not overshooting, so it cannot test the limiter');
+      if (!(two.real <= 1.0))
+        throw new Error('the mix peaks at ' + two.real.toFixed(3) + ' — everything over 1.0 hard-clips through AAC, which is the buzz on overlapping sounds (#604)');
+      if (!(two.gain < 1)) throw new Error('the mix overshot to ' + two.raw + ' and the gain stayed at ' + two.gain);
+
+      /* …AND IT MUST STILL BE LOUD. Landing at 0.995 rather than somewhere near zero is the difference
+         between a limiter and a bug: dividing by the wrong quantity would also satisfy "<= 1.0". */
+      if (!(two.real > 0.9))
+        throw new Error('the limiter crushed the mix to a peak of ' + two.real.toFixed(3) + ' — it should land just under 1.0, not turn the soundtrack off');
+
+      /* BALANCE UNTOUCHED: a flat gain scales everything by one number, so four in-phase copies must
+         come out at the same peak as two — both are pinned to the ceiling — while the RAW sum doubles.
+         A knee or a per-layer correction would not keep that relationship. */
+      const four = await mixPeakProbe(FM, 0.8, 4);
+      if (!(four.raw > two.raw * 1.6))
+        throw new Error('four copies summed to ' + four.raw + ' against two at ' + two.raw + ' — the fixture is not stacking, so this comparison is meaningless');
+      if (Math.abs(four.real - two.real) > 0.02)
+        throw new Error('two copies landed at ' + two.real.toFixed(3) + ' and four at ' + four.real.toFixed(3) + ' — the correction is not a flat gain to the ceiling');
+    } finally {
+      FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._lastMixGain = undefined; FM._lastMixRawPeak = undefined; FM._lastMixPeak = undefined;
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }

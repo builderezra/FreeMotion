@@ -516,6 +516,38 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > peak) peak = v; }
     }
     FM._lastMixPeak = peak;
+    /* ═══ AND THE MIX MUST NOT CLIP — measured on his own scenario (queue 604) ═════════════════════
+     * `buildAudioMix` sums every layer through its own gain node and nothing ever limits the total.
+     * 📐 MEASURED while proving the export DOES carry sound: two ordinary layers at volume 1 — a video
+     * clip plus one built-in sound effect, added through the real path — mixed to **peak 1.52-1.61**,
+     * and the decoded MP4 carried that same peak. Everything above 1.0 hard-clips going through AAC,
+     * so overlapping sounds buzz, and the more layers overlap the worse it gets.
+     * 🛑 **THIS IS NOT THE "NO AUDIO" BUG AND MUST NEVER BE SOLD AS ONE.** Every link from mix to file
+     * was measured for #604 and all of them are sound. This is a separate, genuine defect found in the
+     * same function, and it fits the half of his report that says the sound *"would cut in and out"*
+     * and *"was inconsistent"* better than anything else found.
+     * WHY A FLAT NORMALISE RATHER THAN A SOFT-KNEE LIMITER: dividing by the peak is the only correction
+     * that leaves every layer's balance EXACTLY as mixed — it changes one number, not the shape of the
+     * waveform. A knee would keep more loudness and would also be the first thing in this file capable
+     * of altering how a mix sounds relative to the preview in a way nobody asked for. Losing 4 dB on a
+     * 1.6 peak is inaudible next to the buzz it replaces.
+     * The 0.995 is real headroom, not superstition: AAC is lossy and the decoded waveform overshoots
+     * its input slightly — the round-trip above came back at 0.8224 from a 0.8000 source. Landing
+     * exactly on 1.0 would clip on the way out of the decoder instead of on the way in. */
+    FM._lastMixGain = 1;
+    FM._lastMixRawPeak = peak;
+    if (peak > 1) {
+      const g = 0.995 / peak;
+      for (let c = 0; c < rendered.numberOfChannels; c++) {
+        const d = rendered.getChannelData(c);
+        for (let i = 0; i < d.length; i++) d[i] *= g;
+      }
+      FM._lastMixGain = g;
+      peak *= g;
+      FM._lastMixPeak = peak;
+      console.info('[export] the mix summed to ' + FM._lastMixRawPeak.toFixed(2) + ' — turned down by ' +
+                   (20 * Math.log10(g)).toFixed(1) + ' dB so it does not clip through AAC');
+    }
     if (peak <= 0.0001) {
       console.warn('[export] the mix rendered but is pure silence — every contributing clip is muted or at zero volume');
       FM._audioTrackDropped = 'mix-silent';

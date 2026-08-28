@@ -53,38 +53,43 @@ async function run(w){
     say('');
     say('content centroid BEFORE: ' + (before ? before.x.toFixed(1)+','+before.y.toFixed(1)+'  ('+before.n+'px)' : 'nothing lit'));
 
-    // move the anchor the way the panel does — compensation included, copied from inspector.js
-    var oldX = 0.5, oldY = 0.5, nx = 0.75, ny = 0.0;
-    g.transform.anchorX = nx; g.transform.anchorY = ny;
-    /* MIRRORS THE SHIPPED RULE (inspector.js, queue 628): the compensation uses the box the RENDERER
-       pivots around, which is nothing for a group because applyLayerTransform never reads its anchor.
-       Without this line the probe would keep re-enacting the ORIGINAL maths and reporting the bug as
-       if nothing had been fixed — the same trap the #626 probe fell into. */
-    /* Mirrors the shipped rule. Since #630 the renderer DOES pivot a group, so anchorPivotBox returns
-       the members' bounds and the compensation is live again — the promise "the layer stays where it
-       is" must still hold, which is what this probe re-checks. */
-    var asz = FM.anchorPivotBox(g);
-    var isGroupPivot = (g.type === 'group');
-    var eff = (FM.evalProp(g.transform.scale,0)||1);
-    // mirrors the shipped law: a group compensates by (R.S - 1).delta, zero at scale 1
-    var dx = (nx-oldX)*asz.w*(isGroupPivot ? 1 : eff), dy = (ny-oldY)*asz.h*(isGroupPivot ? 1 : eff);
-    if (isGroupPivot) { dx = dx*eff - dx; dy = dy*eff - dy; }
-    FM.shiftTransform(g,'x', Math.round((FM.evalProp(g.transform.x,0)||0)+dx), 0);
-    FM.shiftTransform(g,'y', Math.round((FM.evalProp(g.transform.y,0)||0)+dy), 0);
+    /* THE CASE THE NEW LAW EXISTS FOR: a SCALED group. At scale 1 the pivot is inert, so #628 passes
+       trivially. With a scale applied, moving the pivot really does move the children — and the panel
+       must cancel exactly that. This is where (R.S - 1).delta earns its keep. */
+    g.transform.scale = 1.5;
     await new Promise(function(r){ setTimeout(r,300); });
-    var after = centroid();
-    say('content centroid AFTER : ' + (after ? after.x.toFixed(1)+','+after.y.toFixed(1)+'  ('+after.n+'px)' : 'nothing lit'));
-    if (before && after){
-      var moved = Math.hypot(after.x-before.x, after.y-before.y);
-      say('');
-      say('THE CONTENT MOVED ' + moved.toFixed(1) + ' preview px' +
-          (moved > 2 ? '   🚨 the panel promises "the layer stays where it is"' : '   ✅ it stayed put'));
-      if (gb && moved > 2) {
-        var shouldBe = (nx-oldX)*gb.w*eff, was = dx;
-        say('compensation used ' + was.toFixed(1) + 'px where the real bounds need ' + shouldBe.toFixed(1) + 'px');
-        say('→ short by ' + (shouldBe-was).toFixed(1) + 'px, which is exactly the 100-vs-' + Math.round(gb.w) + ' gap.');
-      }
+    var beforeScaled = centroid();
+    say('');
+    say('group scaled 1.5x, centroid ' + (beforeScaled ? beforeScaled.x.toFixed(1)+','+beforeScaled.y.toFixed(1) : '-'));
+
+    var oldX2 = 0.5, oldY2 = 0.5, nx2 = 0.1, ny2 = 0.9;
+    var box = FM.anchorPivotBox(g);
+    var eff2 = 1.5;
+    var dxx = (nx2-oldX2)*box.w, dyy = (ny2-oldY2)*box.h;
+    dxx = dxx*eff2 - dxx; dyy = dyy*eff2 - dyy;      // (R.S - 1).delta, no rotation
+    g.transform.anchorX = nx2; g.transform.anchorY = ny2;
+    FM.shiftTransform(g,'x', Math.round((FM.evalProp(g.transform.x,0)||0)+dxx), 0);
+    FM.shiftTransform(g,'y', Math.round((FM.evalProp(g.transform.y,0)||0)+dyy), 0);
+    await new Promise(function(r){ setTimeout(r,300); });
+    var afterScaled = centroid();
+    say('anchor moved to 0.1/0.9 WITH compensation, centroid ' + (afterScaled ? afterScaled.x.toFixed(1)+','+afterScaled.y.toFixed(1) : '-'));
+    if (beforeScaled && afterScaled) {
+      var m2 = Math.hypot(afterScaled.x-beforeScaled.x, afterScaled.y-beforeScaled.y);
+      say('moved ' + m2.toFixed(1) + 'px  ' + (m2 < 3
+        ? '✅ a SCALED group also stays put when its pivot moves'
+        : '🚨 the compensation does not cancel the pivot change on a scaled group'));
     }
+
+    // …and WITHOUT compensation it must genuinely move, or the test above proves nothing
+    g.transform.anchorX = 0.5; g.transform.anchorY = 0.5;
+    await new Promise(function(r){ setTimeout(r,250); });
+    var c1 = centroid();
+    g.transform.anchorX = 0.1; g.transform.anchorY = 0.9;
+    await new Promise(function(r){ setTimeout(r,250); });
+    var c2 = centroid();
+    var m3 = (c1 && c2) ? Math.hypot(c2.x-c1.x, c2.y-c1.y) : -1;
+    say('CONTROL: same pivot move with NO compensation -> ' + m3.toFixed(1) + 'px  ' +
+        (m3 > 3 ? '✅ the pivot really does matter at scale 1.5' : '🚨 inert even when scaled — #630 did not take'));
   } catch(e){ say('❌ threw: ' + (e && (e.stack||e.message||String(e)))); }
   window.__done = true;
 }

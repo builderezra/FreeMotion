@@ -2858,15 +2858,28 @@ window.FM = window.FM || {};
     if (identity) return { baked: 0, skipped: 0 };
     if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
     const rad = grot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+    /* ═══ THE BAKE MUST USE THE SAME PIVOT THE RENDERER DOES (queue 630) ═════════════════════════════
+     * This function is the algebra of `applyParentChain` written out longhand, so the two are a matched
+     * pair: whatever the renderer does to place a member, this must reproduce exactly, or ungrouping
+     * moves everything you had positioned. When #630 taught the renderer to rotate/scale a group about
+     * its ANCHOR instead of the origin, this still baked about the origin — and the shipped test
+     * "ungrouping leaves the layers where the group put them" caught it immediately, reporting members
+     * jumping from 59,22..148,159 to 41,64..103,159.
+     * Read the pivot BEFORE the members are re-parented — which is already why ungroup() calls this
+     * first, and it is the reason that ordering is load-bearing rather than incidental.
+     * Null pivot (an empty group, or no measurable members) falls back to the origin, which is exactly
+     * what the renderer does in the same case. */
+    const _piv = (FM.groupPivot && FM.groupPivot(g, FM.scene, 0)) || { x: 0, y: 0 };
+    const Px = _piv.x || 0, Py = _piv.y || 0;
     let baked = 0;
     FM.scene.layers.forEach(l => {
       if (l.parent !== g.id) return;
       const t = l.transform; if (!t) return;
       // A member with its OWN animated position cannot be shifted by editing one number either.
       if (FM.isAnimated && (FM.isAnimated(t.x) || FM.isAnimated(t.y))) return;
-      const lx = FM.evalProp(t.x, 0) || 0, ly = FM.evalProp(t.y, 0) || 0;
-      t.x = gx + (cos * lx - sin * ly) * sc;
-      t.y = gy + (sin * lx + cos * ly) * sc;
+      const lx = (FM.evalProp(t.x, 0) || 0) - Px, ly = (FM.evalProp(t.y, 0) || 0) - Py;
+      t.x = gx + Px + (cos * lx - sin * ly) * sc;
+      t.y = gy + Py + (sin * lx + cos * ly) * sc;
       if (grot && !(FM.isAnimated && FM.isAnimated(t.rotation))) t.rotation = (FM.evalProp(t.rotation, 0) || 0) + grot;
       if (sc !== 1 && !(FM.isAnimated && FM.isAnimated(t.scale))) {
         const ls = FM.evalProp(t.scale, 0);

@@ -608,11 +608,20 @@ window.FM = window.FM || {};
     let sc = FM.evalProp(tr.scale, t);
     let cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
     let rot = FM.evalProp(tr.rotation, t);
+    /* WHERE THE ANCHOR DOT GOES, which for a GROUP is not (x,y) (queue 630, clause 2).
+     * Ezra: *"I can't find where the anchor even is."* Half of that was that a group had no pivot at
+     * all — #630 gave it one — and half is this: the dot was switched off for groups outright, so even
+     * once the pivot became real there was still nothing on the canvas to find.
+     * A group's children render at `g + P + R·S·(L − P)`, so the pivot itself (L = P) lands at exactly
+     * `g + P` — no rotation, no scale, nothing to undo. That is the whole calculation. */
+    const gpiv = (layer.type === 'group' && FM.groupPivot) ? FM.groupPivot(layer, FM.scene, t) : null;
+    let apx = cx + (gpiv ? gpiv.x : 0), apy = cy + (gpiv ? gpiv.y : 0);
     if (layer.parent) {   // parented: the box must sit where the COMPOSITOR draws the layer (world), not at its raw local coords
       const w = parentXform(layer, t);
       const c = Math.cos(w.rot), si = Math.sin(w.rot);
       const wx = w.x + w.s * (c * cx - si * cy), wy = w.y + w.s * (si * cx + c * cy);
-      cx = wx; cy = wy; rot += w.rot * 180 / Math.PI; sc *= w.s;
+      const ax2 = w.x + w.s * (c * apx - si * apy), ay2 = w.y + w.s * (si * apx + c * apy);
+      cx = wx; cy = wy; apx = ax2; apy = ay2; rot += w.rot * 180 / Math.PI; sc *= w.s;
     }
     const s = layerSize(layer), ds = localScale();
     // Match the compositor's effective non-uniform scale + skew so the box and its corner handles hug
@@ -666,10 +675,15 @@ window.FM = window.FM || {};
     if (anchorDot) {
       /* Shown for the WHOLE of Move & Transform now, not just its anchor sub-mode (queue 205) — it
        * replaces the outline he asked to hide, so it has to be there the moment the section opens.
-       * Groups still opt out: a group has no pivot of its own to show. */
-      const showA = (FM._mtMode === 'anchor' || owns === 'transform') && layer.type !== 'group';
+       * ⚠️ GROUPS USED TO OPT OUT — "a group has no pivot of its own to show" — and that was true right
+       * up until #630 gave it one. A group now shows its dot like anything else, at `g + P`. It opts
+       * out only when there is genuinely nothing to point at: an EMPTY group has no members to measure,
+       * so `groupPivot` returns null and a dot at (x,y) would be a confident lie about a pivot that
+       * does not exist. (queue 630, clause 2) */
+      const showA = (FM._mtMode === 'anchor' || owns === 'transform') &&
+                    (layer.type !== 'group' || !!gpiv);
       anchorDot.style.display = showA ? 'block' : 'none';
-      if (showA) { anchorDot.style.left = (cx * ds) + 'px'; anchorDot.style.top = (cy * ds) + 'px'; }
+      if (showA) { anchorDot.style.left = (apx * ds) + 'px'; anchorDot.style.top = (apy * ds) + 'px'; }
     }
   }
 

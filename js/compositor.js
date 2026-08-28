@@ -1939,10 +1939,28 @@ window.FM = window.FM || {};
       const py = bv ? bv(pl, 'y', FM.evalProp(ptr.y, t), t) : FM.evalProp(ptr.y, t);
       ctx.translate(px, py);
       const prot = (bv ? bv(pl, 'rotation', FM.evalProp(ptr.rotation, t), t) : FM.evalProp(ptr.rotation, t)) * Math.PI / 180;
+      const ps = bv ? bv(pl, 'scale', FM.evalProp(ptr.scale, t), t) : FM.evalProp(ptr.scale, t);
+      /* ═══ A GROUP ROTATES AND SCALES ABOUT ITS ANCHOR, NOT ABOUT THE ORIGIN (queue 630) ═══════════
+       * Ezra: *"when I try and zoom groups in they just zoom into the corners and not the middle and
+       * I can't find where the anchor even is."*
+       * There was no anchor to find. This loop scales a child about the PARENT'S OWN (x,y), and
+       * `groupSelection` creates every group at (0,0) deliberately — "any x/y here would instantly
+       * displace every member the moment they're grouped". So a group scaled the whole child space
+       * about the project ORIGIN, i.e. the top-left corner, which is exactly what he saw.
+       * The standard pivot sandwich: translate TO the pivot, rotate/scale, translate back. With the
+       * default anchor (0.5, 0.5) that is the centre of the members' own bounding box.
+       * ⚠️ ONLY WHEN IT CHANGES SOMETHING. No rotation and no scale means the sandwich collapses to
+       * the identity, so an untransformed group takes the original path byte-for-byte and the
+       * measurement cost is not paid on every child of every group on every frame.
+       * ⚠️ `groupPivot` returns null for an empty group or a non-group, and then this behaves exactly
+       * as it always did — a null parent must never move anything. */
+      const needsPivot = (prot !== 0 || ps !== 1) && pl.type === 'group';
+      const piv = needsPivot && FM.groupPivot ? FM.groupPivot(pl, scene, t) : null;
+      if (piv) ctx.translate(piv.x, piv.y);
       if (prot) ctx.rotate(prot);
       accumRot += prot;
-      const ps = bv ? bv(pl, 'scale', FM.evalProp(ptr.scale, t), t) : FM.evalProp(ptr.scale, t);
       if (ps !== 1) { const cps = Math.max(0.001, ps); ctx.scale(cps, cps); }   // clamp like the layer's own scale — an overshoot ease through 0/negative flipped every child for a frame
+      if (piv) ctx.translate(-piv.x, -piv.y);
     }
     return accumRot;
   }
@@ -13251,7 +13269,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * the panel's arithmetic. */
   FM.anchorPivotBox = function (layer) {
     if (!layer) return { w: 0, h: 0 };
-    if (layer.type === 'group') return { w: 0, h: 0 };   // the renderer ignores a group's anchor
+    if (layer.type === 'group') {
+      /* SINCE #630 THE RENDERER DOES PIVOT A GROUP, so the panel must compensate again — and with the
+         members' own bounds, never `layerSize`, which has no group branch and returns the 100x100
+         media fallback (measured 100x100 for a group whose real bounds are 900x300).
+         Still {0,0} when there is nothing to measure: an empty group has no pivot, so nothing to
+         correct for, and shifting x/y then would move it for no reason. */
+      const b = FM.groupBoundsLocal ? FM.groupBoundsLocal(layer, FM.scene, FM.time) : null;
+      return b ? { w: b.w, h: b.h } : { w: 0, h: 0 };
+    }
     return FM.layerSize(layer);
   };
 
@@ -13292,30 +13318,82 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
   // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
-  FM.groupBounds = function (group, scene, t) {
-    const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
-    const gs = FM.evalProp(group.transform.scale, t) || 1;
+  /* The members' extent in the group's OWN child space — before the group's x/y/scale are applied.
+   * FM.groupBounds returns the same box already converted into the parent's space, which is what a
+   * selection rectangle wants; a PIVOT has to be expressed where the children actually live, or the
+   * group's own scale gets applied to it twice. Split out rather than derived by dividing groupBounds
+   * back down, because that inverse is exactly the sort of arithmetic that silently breaks when the
+   * forward version gains a term. (queue 630) */
+  FM.groupBoundsLocal = function (group, scene, t) {
+    if (!group || !scene || !scene.layers) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
     const seen = new Set();
     (function walk(gid, ox, oy) {
-      if (seen.has(gid)) return;   // every other parent walk in the app carries a seen/hop guard; this
-      seen.add(gid);               // one did not, so one bad group turned into an unopenable project.
+      if (seen.has(gid)) return;
+      seen.add(gid);
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
         if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
         if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
         if (!FM.isLayerVisibleAt(l, t)) return;
-        const s = FM.layerSize(l);
+        const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
-        const x = ox + FM.evalProp(l.transform.x, t), y = oy + FM.evalProp(l.transform.y, t);
-        const w = s.w * sc / 2, h = s.h * sc / 2;
+        const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
+        const w = sz.w * sc / 2, h = sz.h * sc / 2;
         any = true;
         minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
         minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
       });
     })(group.id, 0, 0);
     if (!any) return null;
-    return { x: gx + ((minX + maxX) / 2) * gs, y: gy + ((minY + maxY) / 2) * gs, w: (maxX - minX) * gs, h: (maxY - minY) * gs };
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
+  };
+
+  /* WHERE A GROUP PIVOTS, in its own child space (queue 630).
+   * Ezra: *"when I try and zoom groups in they just zoom into the corners and not the middle and I
+   * can't find where the anchor even is."* There was no anchor to find: `applyParentChain` scales a
+   * child about the PARENT'S OWN (x,y), and `groupSelection` creates every group at (0,0) on purpose
+   * ("any x/y here would instantly displace every member"). So scaling a group scaled the whole child
+   * space about the project ORIGIN — the top-left corner, which is precisely what he described.
+   * Returns null when there is nothing to measure, and the caller then behaves exactly as before. */
+  /* The anchor read, ONCE, off a box that has already been measured. groupBounds needs the same pivot
+   * groupPivot returns, and having it read anchorX/anchorY a second time is exactly the matched-pair
+   * hazard #630 already paid for twice (bakeGroupTransform baked about the origin after
+   * applyParentChain had stopped doing so, and ungrouping moved his layers). One reader. */
+  function pivotIn(group, b) {
+    const tr = group.transform || {};
+    const ax = (typeof tr.anchorX === 'number' && isFinite(tr.anchorX)) ? tr.anchorX : 0.5;
+    const ay = (typeof tr.anchorY === 'number' && isFinite(tr.anchorY)) ? tr.anchorY : 0.5;
+    return { x: b.minX + ax * b.w, y: b.minY + ay * b.h };
+  }
+
+  FM.groupPivot = function (group, scene, t) {
+    if (!group || group.type !== 'group') return null;
+    const b = FM.groupBoundsLocal(group, scene, t);
+    if (!b || !(b.w >= 0)) return null;
+    return pivotIn(group, b);
+  };
+
+  /* ═══ THE GROUP'S BOX IN ITS PARENT'S SPACE — AND IT MUST PIVOT LIKE THE RENDERER (queue 630) ═════
+   * Read by the selection box, the canvas hit-test, the drag and the resize. It used to place the box
+   * at `gx + centre*gs`, which is where a group's content sat when `applyParentChain` scaled the whole
+   * child space about the ORIGIN. Since #630 a child renders at `g + P + S*(L − P)`, so the content
+   * centre is `g + P + S*(centre − P)` — the same number ONLY when the scale is 1.
+   * 📐 MEASURED (tests/_630box.html) before this: at scale 1.6 the box sat **455px** away from the
+   * content it is supposed to be drawn around, so selecting a scaled group drew the handles into empty
+   * space and the hit-test answered for the wrong region. The size term was always right; only the
+   * centre was wrong, which is why nothing looked obviously broken at a glance.
+   * ⚠️ It now shares ONE walk with `groupBoundsLocal` instead of carrying a byte-identical copy of it.
+   * The copy is how this drifted: #630 taught the renderer a pivot and there was a second, silent
+   * implementation of the same geometry sitting here that nobody had to update. */
+  FM.groupBounds = function (group, scene, t) {
+    const b = FM.groupBoundsLocal(group, scene, t);
+    if (!b) return null;
+    const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
+    const gs = FM.evalProp(group.transform.scale, t) || 1;
+    const p = pivotIn(group, b);
+    const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    return { x: gx + p.x + (cx - p.x) * gs, y: gy + p.y + (cy - p.y) * gs, w: b.w * gs, h: b.h * gs };
   };
 
   FM.renderThumb = function (layer, canvas) {

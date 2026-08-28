@@ -133,8 +133,7 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **HANDOVER, 28 Aug, v13.79 — 1026 tests green. HE IS RESETTING THE CLAUDE APP, so this is a real
-handover to a session with NO memory of any of it.**
+📍 **STATE, 28 Aug, v13.80 — 1030 tests green. The loop is running on a one-minute cron.**
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
 His words, after three sessions of desktop testing found nothing: *"I noticed that on pc the effects i
@@ -167,6 +166,47 @@ dead-effect badge in #603. Three sessions were lost to a failure that leaves not
 (container strength + child params). All three pass on desktop, which is now the POINT, not a
 disappointment. **A group-path probe was attempted and DELETED — it could not create a group
 (`FM.groupLayers` / `FM.makeGroupFrom` are not the right entry points), so the group path is UNTESTED.**
+
+✅ **#630 CLOSED v13.80 — groups zoom about their MIDDLE now.** `applyParentChain` scaled a child about
+the parent's own (x,y) and `groupSelection` creates every group at **(0,0) on purpose**, so scaling threw
+the contents at the project origin. `FM.groupPivot` + a pivot sandwich, applied **only when rotation or
+scale is non-identity** so an untransformed group is byte-for-byte unchanged.
+🚨 **THE BLAST RADIUS WAS REAL — three things broke and all three were worth knowing:**
+**1.** `bakeGroupTransform` is `applyParentChain`'s algebra longhand for UNGROUP — a matched pair — and it
+still baked about the origin, so ungrouping moved his layers. **Change them together, always.**
+**2.** A shipped test asserted the OLD origin-scaling. Its concern was right, so it was kept by adding a
+second child: the pair must **spread apart while staying centred**.
+**3.** **#628 regressed for one run.** A group compensates by `(R·S − 1)·δ`, **zero at scale 1**, because
+its children sit at `gx + P + R·S·(L − P)`. A normal layer's content is always offset by its anchor; a
+group's is not. Verified 0.0px unscaled, 0.0px scaled, 13.6px uncompensated.
+💡 **mutate.sh's "caught, but not by the test you expected" is a REAL result, not a nag** — #630's test
+only asserted the maths, so it would have survived its own fix being deleted. It has a pixel half now.
+
+✅ **#630 FULLY CLOSED v13.80 — BOTH clauses, and clause 2 caught a regression clause 1 had left.**
+The anchor dot was switched off for groups outright (`layer.type !== 'group'`, commented *"a group has
+no pivot of its own to show"* — true until clause 1). It shows at `g + P` now; the sandwich cancels for
+the pivot point itself, so there is nothing to undo.
+🚨 **AND THE MATCHED-PAIR FAILURE HAPPENED A THIRD TIME IN THE SAME ITEM.** `FM.groupBounds` — the
+selection box, the **hit-test**, the drag and the resize — carried a byte-identical copy of the geometry
+`applyParentChain` had just been taught to pivot. **MEASURED: at 1.6× the box sat 455px off the group.**
+The size term was right, so nothing looked broken. It now shares ONE walk (`groupBoundsLocal`) and ONE
+anchor reader (`pivotIn`) with the pivot.
+💡 **THE LESSON, and it is now three for three: when you change how a transform is composed, grep for
+every function that reproduces that algebra.** In this item that was `bakeGroupTransform` (ungroup),
+a shipped test, the #628 compensation, and `groupBounds`. Four copies of one law.
+
+✅ **#602 CLOSED v13.80** — clause 1 shipped v13.52; clause 2 was answered by reading all 199 effects
+and the answer is *remove nothing* (Line height and Curve have no equivalent; Spacing was his own
+request). It was holding the queue for a recommendation, not for work. **One standing offer left in the
+entry: drop Animate→Typewriter for `textprogress`. Do not do it without his word** — deleting a control
+he may be using is a direction call.
+
+✅ **#604's CLIPPING HALF FIXED v13.80. 🛑 NOT the "no audio" bug — never report it as one.**
+`buildAudioMix` summed and never limited; two ordinary layers at volume 1 hit **peak 1.52–1.61** and the
+decoded export carried it, so overlapping sounds hard-clip through AAC. Flat gain to 0.995 when the sum
+crosses 1.0 (AAC overshoots its input — 0.8000 in came back 0.8224, so 1.0 would clip on the way OUT).
+❓ **#604 stays open on ONE action of his:** export on the PC, drag the .mp4 into a Chrome tab, play it.
+Everything inside FreeMotion is measured and sound; nothing here can answer what the OS does next.
 
 ✅ **#629 CLOSED v13.79 — and HALF the guard already existed, which is why the code read fine.**
 `restore()` filtered **`selectedIds`** to surviving layers and then assigned **`selectedId` raw** from the

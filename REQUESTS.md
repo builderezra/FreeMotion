@@ -1,8 +1,34 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.79
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.80
 >
-> **State:** v13.79, 1026 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.80, 1030 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+>
+> **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
+> *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
+> There genuinely was no anchor to find: every group is created at (0,0) and the renderer scaled the
+> whole group about that point — the top-left corner of your project. A group now grows around its
+> middle, and **the anchor dot shows on the canvas** like it does on a normal layer.
+> 🚨 **And fixing the first half quietly broke something you would have hit within a minute:** the
+> selection box — which is also the thing your FINGER hits — was left behind, and sat **455px away**
+> from any group you had scaled. Handles and taps in empty space. Found by measuring rather than by
+> you reporting it, and fixed in the same release.
+>
+> **🔊 OVERLAPPING SOUNDS NO LONGER DISTORT (#604, the half I could actually fix).** Two ordinary
+> sounds at normal volume added up past the maximum a video file can hold, so they hard-clipped and
+> buzzed — worse with every extra layer. That fits your *"it played good the first time but it was
+> inconsistent and would cut in and out"* better than anything else I have found.
+> 🛑 **This is NOT the "no audio" bug and I am not claiming it is.** That one is still down to one
+> thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
+> Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
+> → it is the project or your browser, and the app will name the reason.
+>
+> **✅ #602 IS CLOSED.** The text panel stopped covering your preview back in v13.52. The other half —
+> *"they're kinda pointless coz effects do the same thing"* — I checked against all 199 effects instead
+> of guessing: **only Spacing and Animate→Typewriter are real duplicates.** Line height and Curve have
+> no equivalent anywhere in the app, and Spacing was your own request. So nothing was removed.
+> ➡️ **One offer, open whenever:** say the word and Typewriter goes (the `textprogress` effect does it
+> better — by word, with a caret). I did not delete a control you might be using without asking.
 >
 > **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
 > swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
@@ -24,16 +50,7 @@
 > them. Zoomed out, your finger speed becomes a huge time-velocity, gets capped, then trips the "stop
 > now" threshold while still visibly moving. **That is both halves of what you described, from one unit
 > mismatch, and it is a small fix with a proper test.**
-> ❓ **Two one-word answers still open:** which way the drag handle looks off, and whether that saved
-> camera-roll video has sound in another app.
->
-> **✅ The + button now has the blue ring** — and it is the SAME blue as your pinned cards, copied from
-> them rather than picked by eye, so it cannot be slightly off.
-> ⚠️ **One honest note: I could not get the + on screen here to photograph it**, so I have confirmed the
-> styling is right but not seen it rendered. **If it looks wrong, say so and it is a one-line change.**
-> ❓ **Two things still waiting on a word from you:** which direction the layer drag handle looks
-> off-centre (left/right/high/low), and whether that saved camera-roll video has sound when you open it
-> in another app. **That second one is the last unknown in your export bug.**
+> ❓ **Still one word from you:** which direction the layer drag handle looks off-centre.
 >
 > **🔎 Your black-and-white complaint: I have now measured every part of it, and nothing is broken.**
 > The effects work, the filters work, the picker tiles work, and the live preview works and updates on
@@ -20884,8 +20901,19 @@ re-opened #480, which I had marked done and had not fixed.
       when **#581 has a workable build using the default I had already recommended.** Self-created work
       does not get to jump his queue; if anything it should wait longer than his does.
 
-- [ ] **602 — The text/caption panel hides the text you are editing, and some options duplicate effects.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **602 — The text/caption panel hides the text you are editing, and some options duplicate effects.**
+      ✅ **DONE — clause 1 shipped v13.52, clause 2 answered and closed v13.80.**
+      📌 **WHY IT IS CLOSED RATHER THAN STILL WAITING ON YOU.** Both clauses are ticked and the work is
+      finished: the panel no longer covers the preview, and the "do effects already do this?" question
+      was answered by reading all 199 effects rather than guessing — the table below is the answer.
+      **The conclusion is that nothing should be removed**, because two of the four you circled (Line
+      height and Curve) have no equivalent anywhere in the app, and Spacing was your own request at
+      v12.31. Leaving the entry open was holding the queue for a recommendation, not for work.
+      ➡️ **ONE STANDING OFFER, kept here so it is not lost:** the only genuine duplicate worth cutting is
+      **Animate → Typewriter**, which the `textprogress` effect does better (by word, with a caret, vs
+      the preset's character-only reveal). **Say the word and it goes.** It is deliberately not being
+      removed on my own judgement — deleting a control you might be using is a direction call, not an
+      execution one, and existing projects that use the preset would need it kept for playback anyway.
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:
       > All of these options block you even seeing the text but they’re kinda pointless coz effects do
@@ -21138,7 +21166,7 @@ re-opened #480, which I had marked done and had not fixed.
       picked stack at 380px. If it does not, that is the bug and it is the whole complaint.**
       ⚠️ **Do NOT touch the effects, the filters, or their defaults — all measured working, three ways.**
 - [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC — and a single sound effect cut
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       in and out during playback.** (27 Aug, v13.43, export screenshot.)
       His words, verbatim:
       > still laggy, I added a video and it actually played fine then I tried adding one sound effect and
@@ -21274,13 +21302,27 @@ re-opened #480, which I had marked done and had not fixed.
       **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
       not merge it** — the export half is the one he is blocked by.
-      📐 **A REAL DEFECT FOUND IN PASSING WHILE MEASURING THE ABOVE, NOT YET FIXED: THE MIX CLIPS.**
-      Two ordinary layers at volume 1 (a clip plus one sound effect) mixed to **peak 1.52–1.61**, and
-      the decoded export carried that same peak. Anything over 1.0 hard-clips through the AAC encoder,
-      so overlapping sounds distort — and the more layers overlap, the worse it gets. `buildAudioMix`
-      sums and never limits. **This is not the "no audio" bug and must not be sold as a fix for it**,
-      but it is a genuine audio-quality fault sitting in the same function, and it fits *"it was
-      inconsistent"* better than anything else found so far.
+      ✅ **THE CLIPPING HALF IS FIXED v13.80. 🛑 IT IS NOT THE "NO AUDIO" BUG AND IS NOT BEING SOLD AS
+      ONE** — every link from mixer to finished file was measured above and all of them are sound.
+      📐 **THE DEFECT, measured on your own scenario:** a video clip plus one built-in sound effect, both
+      at volume 1, mixed to **peak 1.52–1.61**, and the decoded export carried that peak. Everything over
+      1.0 hard-clips going through AAC, so overlapping sounds buzz — and it gets worse with every layer
+      that overlaps. `buildAudioMix` summed and never limited.
+      **It now turns the whole mix down by one number when the sum goes over 1.0** — landing at 0.995
+      rather than 1.0, because AAC is lossy and the decoded waveform overshoots its input slightly (the
+      round-trip above came back at 0.8224 from a 0.8000 source, so landing exactly on 1.0 would clip on
+      the way OUT of the decoder instead of on the way in).
+      **A flat gain rather than a soft-knee limiter on purpose:** dividing by the peak leaves every
+      layer's balance exactly as mixed — it changes one number, not the shape of the waveform. A knee
+      keeps more loudness and would be the first thing in this file able to change how a mix *sounds*
+      relative to the preview, which nobody asked for. Losing 4 dB on a 1.6 peak is inaudible next to
+      the buzz it replaces, and a mix that never crosses 1.0 is left byte-for-byte untouched.
+      ⚠️ **THIS FITS *"it was inconsistent"* BETTER THAN ANYTHING ELSE FOUND** — a soundtrack that
+      distorts only while two sounds overlap is exactly a sound that seems fine and then is not.
+      ❓ **THE ENTRY STAYS OPEN FOR ONE THING ONLY, and it is one action on your side, not a session:**
+      export something short with sound on the PC, **drag the exported .mp4 into a Chrome tab and press
+      play**. Sound → the file is good and the loss is in the camera-roll import or the player. No sound
+      → it is the project or the environment, and the mixer's own drop report will name it.
 - [x] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.** ✅ **DONE v13.45.**
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:
@@ -22551,8 +22593,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Look for the fallback that runs after a scene restore** — something like "if the selected
       id is gone, pick the nearest/previous layer". It should clear the selection instead.
 
-- [ ] **630 — Zooming a group scales it around a CORNER, and the anchor cannot be found.** (27 Aug, at
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **630 — Zooming a group scales it around a CORNER, and the anchor cannot be found.** ✅ **DONE v13.80.** (27 Aug, at
       v13.53.)
       His words, verbatim:
       > For some reason when I try and zoom groups in the just zoom into the corners and not the middle and I can’t find where the anchor even is
@@ -22570,12 +22611,62 @@ re-opened #480, which I had marked done and had not fixed.
       **`FM.anchorPivotBox` (added for #628) is the ONE place that must start returning it** — the
       anchor-compensation in the panel then becomes correct for free, because it already multiplies by
       whatever that function says.
-      ⚠️ **Blast radius is real: every group in every project he has.** Deliberately left for its own
-      tick rather than tacked onto #628.
+      ✅ **BUILT v13.80. A group rotates and scales about its ANCHOR now — the centre of its members'
+      bounds by default.** `FM.groupPivot` + the standard pivot sandwich in `applyParentChain`
+      (translate to the pivot → rotate/scale → translate back). **Only when it changes something:** no
+      rotation and no scale collapses to the identity, so an untransformed group takes the original path
+      byte-for-byte and no measuring cost is paid per child per frame.
+      📐 **MEASURED (tests/_630scaled.html):** scaled 1.5×, the contents sit at **119,110** against an
+      unscaled **121,111** — it grows in place. **Before the fix the same scale threw them to 127,166**,
+      off toward the corner.
+      🚨 **THE BLAST RADIUS WAS REAL AND THIS IS WHAT IT COST — three things broke and each was worth it.**
+      **1. A GENUINE REGRESSION: ungrouping moved his layers.** `bakeGroupTransform` is the algebra of
+      `applyParentChain` written out longhand for ungroup, so the two are a matched pair — and it still
+      baked about the origin. The shipped test caught it immediately with real numbers
+      (`59,22..148,159 → 41,64..103,159`). **It reads the pivot before the members are re-parented, which
+      is why ungroup calls it first — that ordering is load-bearing, not incidental.**
+      **2. A TEST THAT ASSERTED THE BUG.** *"scale must… push it further from the origin… checking only
+      the size would pass a chain that scaled in place"* — a faithful test of the behaviour he reported.
+      **Its concern was still right**, so it was kept properly rather than deleted: a **second child** was
+      added, and it now asserts the pair **spreads apart while staying centred**. That proves the SPACE
+      scales, which is what the assertion always meant.
+      **3. #628 REGRESSED FOR ONE RUN, and that is the subtle part.** A group compensates by a different
+      law: its children sit at `gx + P + R·S·(L − P)`, so moving the pivot displaces them by
+      **(1 − R·S)·δ — ZERO at scale 1**, unlike a normal layer whose content is always offset by its
+      anchor. Compensating the normal way shifted the group **46.4px when nothing had moved.** The panel
+      now applies `(R·S − 1)·δ` for groups. **Verified: unscaled → 0.0px, scaled 1.5× → 0.0px, and the
+      same move UNCOMPENSATED → 13.6px**, so the check is not vacuous.
+      ⚠️ **A NOTE ON ITS MUTATION PROOF, because the tool was right to complain.** The first run was
+      CAUGHT — but by two unrelated pixel tests, not by #630's own, which only asserted `groupPivot`'s
+      arithmetic. `mutate.sh` reports that as a distinct outcome, and it is a fair one: a test that would
+      survive its own fix being deleted is one refactor away from decorative. A pixel half was added
+      (a scaled group must grow in place) and the re-run fires on it. **It trips the area control first**,
+      because a broken pivot pushes content partly off-frame before the drift check is reached.
 
-      1. [ ] **Scaling a group must pivot where the anchor is, and by default that is the middle.**
-      2. [ ] **The anchor must be VISIBLE on a group** — *"I can't find where the anchor even is"*. A
-             plain layer shows its pivot handle on the canvas; his group apparently does not.
+      ✅ **CLAUSE 2 BUILT v13.80 — AND IT FOUND A REGRESSION CLAUSE 1 HAD LEFT BEHIND.**
+      **(a) The dot was switched OFF for groups outright.** `canvas-edit.js` read
+      `layer.type !== 'group'`, commented *"a group has no pivot of its own to show"* — true right up
+      until clause 1 gave it one. So making the pivot real changed nothing he could see. A group now
+      shows its anchor like anything else, at exactly `g + P` (the sandwich cancels for the pivot point
+      itself, so there is no rotation or scale to undo). An **empty** group still shows none: there is
+      nothing to measure, and a dot at (0,0) would be a confident lie about a pivot that does not exist.
+      **(b) 🚨 THE SELECTION BOX HAD LEFT THE GROUP — the matched-pair failure, for the third time in
+      this one item.** `FM.groupBounds` — read by the selection box, the canvas **hit-test**, the drag
+      and the resize — carried its own byte-identical copy of the geometry `applyParentChain` had just
+      been taught to pivot, and went on placing the box at `gx + centre*gs`.
+      📐 **MEASURED (tests/_630box.html): at 1.6× the box sat 455px away from the group it is drawn
+      around.** The size term was always right, which is exactly why nothing looked broken at a glance —
+      but the handles and the tap target were in empty space on every scaled group.
+      **It now shares ONE walk (`groupBoundsLocal`) and ONE anchor reader (`pivotIn`) with the pivot.**
+      Copies are how this drifted three separate times; there is one less copy now.
+      📐 **AFTER:** scaling about the centre moves the box **0.0px** and the content **2.4px** (edge
+      antialiasing); the control — the same 1.6× about the *corner* anchor — moves the box 284.6px and
+      the content 20.0px, so the check is not vacuous. The dot lands on the box centre at a default
+      anchor, and both axes imply the same view scale (0.2616), so it is not accidentally right in one.
+
+      1. [x] **Scaling a group must pivot where the anchor is, and by default that is the middle.** ✅ v13.80
+      2. [x] **The anchor must be VISIBLE on a group** — *"I can't find where the anchor even is"*. A
+             plain layer shows its pivot handle on the canvas; his group apparently does not. ✅ v13.80
       ⚠️ **Same family as #628 and very likely the same bug**: the screenshot there shows a group whose
       **Anchor X is 75.0% and Anchor Y is 0.0%** — i.e. its pivot is sitting near the TOP-RIGHT CORNER,
       which is exactly what "zooms into the corners" looks like. **So the anchor may not be defaulting to
@@ -25018,3 +25109,34 @@ re-opened #480, which I had marked done and had not fixed.
       play AND drag the playhead during the ten seconds**, or the split stays half-blank.
       🔗 **Feeds #95, #125, #202, #387.** ⚠️ **Do not close any of them on this** — it is one healthy
       desktop sample of the wrong device, and it says so itself.
+
+- [ ] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
+      **STATUS: 🟢 READY — nothing is stopping this**
+      two phone screenshots.)
+      His words, verbatim:
+      > When hovering over the benchmark that’s for setting the thumbnail make it so that it turns the playhead fully blue instead of
+
+      ⚠️ **THE SENTENCE IS CUT OFF AT "instead of" — the last word is missing.** Asked; do not guess it
+      silently. The strong reading from the two pictures is *"instead of a hollow ring"*, and everything
+      below assumes that until he says otherwise.
+      **THE TWO SCREENSHOTS, which are the same project one benchmark apart:**
+      · **First (00:03:05):** the playhead knob is a **solid yellow disc**. No benchmark near it.
+      · **Second (00:02:25):** the knob is a **blue RING — hollow, dark in the middle** — and a small
+        **yellow benchmark flag** sits at the left of the ruler with a **blue triangle** beside the knob.
+      ➡️ **So the ring is the "you are on the thumbnail benchmark" state, and he wants it FILLED.**
+      🔗 **Same element as #568 and #587** (the playhead knob: blue at rest, yellow only on a benchmark).
+      Read what those two settled before changing anything — this is a third rule on one small circle
+      and the three must not contradict each other.
+
+- [ ] **659 — The Custom format should say "Auto adjusts", not "Any size".** (28 Aug, at v13.79, phone
+      **STATUS: 🟢 READY — nothing is stopping this**
+      screenshot of the New project dialog with the Custom tile circled in red.)
+      His words, verbatim:
+      > Make the custom format say auto adjusts instead of any size
+
+      **THE SCREENSHOT:** the New project sheet — NAME, then the six aspect-ratio tiles (9:16 Phone ·
+      16:9 Wide · 1:1 Square · 4:5 Post · 4:3 Classic · **Custom / Any size**), Width x Height 1440 x 1080,
+      30 fps, the background swatches, and Canvas 1440 x 1080 - 30 fps. **Custom is circled.**
+      1. [ ] **The Custom tile's sub-label reads "Auto adjusts" instead of "Any size".**
+      ✅ **Unambiguous and tiny — a string, not a behaviour change.** Verify at 380px that the longer
+      label does not wrap or clip inside the tile, which is the only way this can go wrong.
