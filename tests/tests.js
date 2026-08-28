@@ -45139,6 +45139,51 @@
     }
   });
 
+  /* ═══ QUEUE 129 — THE DIAGNOSTIC ITSELF HAD NO TEST ══════════════════════════════════════════════
+   * *"A 2-second screen recording adds a clip with NO VIDEO."* The fix for this entry is not a fix at
+   * all — the app cannot manufacture an iOS screen recording, so what shipped is a FACTS LINE the user
+   * is asked to send when it next happens. `grep -rn blankClipFacts tests/` returned NOTHING, so the
+   * whole deliverable would have survived any mutation, and this warning fires exactly once, on his
+   * phone, months from now. This repo's own rule: a warning nobody can test is a warning that will be
+   * broken on the day it is needed. */
+  test('#129: the blank-clip facts line carries what the browser actually said', { item: '129' }, function () {
+    if (typeof FM.blankClipFacts !== 'function') throw new Error('FM.blankClipFacts is gone — the whole v13.44 deliverable for #129 rests on it');
+    const facts = rec => FM.blankClipFacts(rec);
+
+    // A .mov, which is the shape his screen recording arrives in.
+    const mov = facts({ file: { name: 'RPReplay_Final1723.mov', type: 'video/quicktime' }, el: null });
+    if (mov.ext !== 'mov') throw new Error('extension read as "' + mov.ext + '"');
+    if (mov.type !== 'video/quicktime') throw new Error('type read as "' + mov.type + '"');
+    if (mov.line.indexOf('RPReplay_Final1723.mov') < 0) throw new Error('the facts line does not name the file: ' + mov.line);
+    if (mov.line.indexOf('video/quicktime') < 0) throw new Error('the facts line does not carry the type: ' + mov.line);
+
+    // …and an .mp4, which may be H.264 OR H.265 — which is exactly why the line has to say more.
+    const mp4 = facts({ file: { name: 'clip.mp4', type: 'video/mp4' }, el: null });
+    if (mp4.ext !== 'mp4' || mp4.line.indexOf('clip.mp4') < 0) throw new Error('mp4 facts wrong: ' + mp4.line);
+
+    /* THE ELEMENT'S OWN STATED REASON — the half that was being thrown away. `el.error.code` is the
+       only signal that separates "the CODEC was refused" (DECODE) from "the CONTAINER was"
+       (SRC_NOT_SUPPORTED), and the entry has two live theories that are exactly those two. */
+    const dec = facts({ file: { name: 'a.mp4', type: 'video/mp4' }, el: { error: { code: 3, message: 'no decoder' } } });
+    if (dec.errCode !== 3) throw new Error('errCode read as ' + dec.errCode + ' instead of 3');
+    if (dec.line.indexOf('DECODE') < 0) throw new Error('a MEDIA_ERR_DECODE is not named in the line: ' + dec.line);
+    const src = facts({ file: { name: 'a.mov', type: 'video/quicktime' }, el: { error: { code: 4 } } });
+    if (src.line.indexOf('SRC_NOT_SUPPORTED') < 0) throw new Error('a MEDIA_ERR_SRC_NOT_SUPPORTED is not named: ' + src.line);
+    if (dec.line === src.line) throw new Error('a codec refusal and a container refusal produce the SAME line — the one distinction this facts line exists to make is missing');
+
+    /* NO ERROR IS ALSO A FACT, and a different one: "the decode produced nothing and the element
+       raised nothing" is not the same situation as a refusal, and reading it as blank would lose that. */
+    const quiet = facts({ file: { name: 'a.mp4', type: 'video/mp4' }, el: {} });
+    if (quiet.errCode !== 0) throw new Error('an element with no error reported code ' + quiet.errCode);
+    if (quiet.line.indexOf('none raised') < 0) throw new Error('a silent failure does not say so: ' + quiet.line);
+
+    // …and it must never throw on the shapes the rest of the suite hands it.
+    for (const r of [null, {}, { file: null, el: null }, { file: { name: 'x' } }]) {
+      const out = FM.blankClipFacts(r);
+      if (!out || typeof out.line !== 'string' || !out.line) throw new Error('blankClipFacts produced no line for ' + JSON.stringify(r));
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

@@ -333,6 +333,15 @@ window.FM = window.FM || {};
    * playable while refusing `video/quicktime` outright — so a blank .mov would be blamed on the codec
    * when the container is the likelier culprit. A guess stated as fact sends him re-exporting for
    * nothing. */
+  /* ⚠️ THE BROWSER'S OWN STATED REASON WAS BEING THROWN AWAY (queue 129, 28 Aug). This read only
+   * `rec.file` — name, type, extension, canPlayType — all of which are guesses from the OUTSIDE. The
+   * element knows why it refused the file and says so in `el.error.code`, and that one number is what
+   * separates the entry's two live theories: **MEDIA_ERR_DECODE (3) means the container parsed and the
+   * CODEC was refused; MEDIA_ERR_SRC_NOT_SUPPORTED (4) means the CONTAINER was.** Repo-wide `el.error`
+   * was read in exactly one place (js/exporter.js) as a truthiness guard, and `MEDIA_ERR_*` appeared
+   * nowhere at all. A NULL error is itself a fact worth printing — "the decode produced nothing and the
+   * element raised no error" is a different situation from a refusal, and the difference matters. */
+  const MEDIA_ERR = { 1: 'ABORTED', 2: 'NETWORK', 3: 'DECODE', 4: 'SRC_NOT_SUPPORTED' };
   FM.blankClipFacts = function (rec) {
     const f = rec && rec.file;
     const name = String((f && f.name) || 'that clip');
@@ -343,9 +352,16 @@ window.FM = window.FM || {};
       can = (type && type !== 'unknown') ? (v.canPlayType(type) || 'no') : 'unknown';
     } catch (e) {}
     const ext = (name.match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+    // Guarded: the suite's stand-in elements are plain objects with no `error` property at all.
+    let err = null, errText = 'none raised';
+    try {
+      err = (rec && rec.el && rec.el.error) || null;
+      if (err) errText = (MEDIA_ERR[err.code] || ('code ' + err.code)) + (err.message ? ' — ' + err.message : '');
+    } catch (e) { errText = 'unreadable'; }
     return { name: name, ext: ext, type: type, canPlay: can,
+             errCode: err ? err.code : 0, err: errText,
              line: name + ' — type "' + type + '", extension .' + (ext || '?') +
-                   ', browser says canPlayType: "' + can + '".' };
+                   ', browser says canPlayType: "' + can + '", element error: ' + errText + '.' };
   };
 
   /* The one message, in one place, so the toast and the console cannot drift apart. */
@@ -360,6 +376,26 @@ window.FM = window.FM || {};
     const repaint = () => { if (FM.requestRender) FM.requestRender(); };
     rec.el.addEventListener('loadeddata', repaint);
     rec.el.addEventListener('canplay', repaint);
+    /* ⚠️ A DECODE ERROR ARRIVING AFTER METADATA WAS SWALLOWED ENTIRELY (queue 129, 28 Aug).
+     * `FM.loadVideoFile`'s own error listener is `{once:true}` and opens with `if (settled) return`,
+     * and `finish()` sets `settled = true` on `loadedmetadata` — which is exactly the shape this whole
+     * section is about: **the container parses, so metadata arrives and settles the load, and THEN the
+     * decoder refuses the codec.** Nothing was listening for that, so the user sat through the full
+     * 15-second `decodeWait` for a toast that never mentioned the error the browser had already
+     * raised. Say it as soon as it happens, with the same facts line. */
+    rec.el.addEventListener('error', () => {
+      if (rec._blankSaid) return;
+      rec._blankSaid = true;
+      clearTimeout(rec._decodeTimer); rec._decodeTimer = 0;
+      rec.undecodable = true;
+      const facts = FM.blankClipFacts(rec);
+      const nm = String((rec.file && rec.file.name) || 'that clip');
+      const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      if (FM.toast) FM.toast('No picture from “' + shortNm + '” — tap to see why', 8000,
+                             () => { if (FM.toast) FM.toast('FreeMotion could not get a picture out of this file. ' + facts.line, 14000); });
+      console.warn('FreeMotion BLANK CLIP FACTS (error event) — ' + facts.line);
+      if (FM.requestRender) FM.requestRender();
+    });
 
     /* ---- …AND SAY SO WHEN THE FRAME NEVER COMES (queue 129) ---------------------------------
      * Ezra, on a two-second screen recording, for the second time: "it still has the issue of being
@@ -424,11 +460,26 @@ window.FM = window.FM || {};
       });
     }
 
-    rec._decodeTimer = setTimeout(() => {
+    rec._decodeTimer = setTimeout(async () => {
       rec._decodeTimer = 0;
-      if (settled || !rec.el || rec.el.readyState >= 2) return;
+      if (settled || !rec.el || rec.el.readyState >= 2 || rec._blankSaid) return;
       settled = true;
+      rec._blankSaid = true;
       rec.undecodable = true;
+      /* ⚠️ THE ONE FACT THAT DECIDES THIS ENTRY WAS NEVER GATHERED ON HIS DEVICE (queue 129, 28 Aug).
+       * The sniff above is gated behind `!FM.canDecodeHEVC()` — deliberately, because that branch
+       * ACCUSES, and accusing needs both the browser's refusal and the file's bytes to agree. **But his
+       * phone is a Safari-based PWA, where `canDecodeHEVC()` is TRUE**, so on the exact device where
+       * this happens the sniff never ran and the facts line he would be asked to send could not say
+       * whether the file is H.265 — the only thing that separates the codec theory from the container
+       * theory, since an .mp4 may be either.
+       * Here it is a FACT, not an accusation: it runs unconditionally, it changes no verdict, it only
+       * adds a line. The accusing gate above is untouched.
+       * `settled` and the timer are cleared BEFORE the await, so nothing can race in behind it. */
+      let hevcFact = '';
+      try {
+        if (FM.sniffHevc && rec.file) hevcFact = (await FM.sniffHevc(rec.file)) ? ' Bytes carry the H.265 tag.' : ' Bytes do NOT carry the H.265 tag.';
+      } catch (e) { hevcFact = ''; }
       const nm = String((rec.file && rec.file.name) || 'that clip');
       // Same width budget as the audio-only toast next door: #toast shrink-fits inside ~190px at 380px.
       const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
@@ -437,6 +488,7 @@ window.FM = window.FM || {};
       /* ⚠️ NOTHING HAS CONFIRMED H.265 ON THIS PATH — the sniff above is the one that can, and it did
          not fire. So say what is KNOWN and stop asserting a cause (queue 129). */
       const facts = FM.blankClipFacts(rec);
+      facts.line += hevcFact;
       if (FM.toast) FM.toast('No picture from “' + shortNm + '” — tap to see why', 8000,
                              () => { if (FM.toast) FM.toast(
                                'FreeMotion could not get a picture out of this file. ' + facts.line +

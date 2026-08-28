@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.90
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.91
 >
-> **State:** v13.90, 1035 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.91, 1036 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -1432,6 +1432,41 @@ better still, keep working inside the turn rather than parking work for a later 
       rather than the console (v11.86). **No amount of work here creates new evidence** — the next
       occurrence on his phone does. He was asked the one question that would settle it and answered
       *"I have no idea"*, which is why the app was taught to answer it instead.
+
+      ═══ 🚨 **28 AUG (v13.91) — THAT DECLARATION WAS WRONG, AND THE WAY IT WAS WRONG IS THE POINT.** ═══
+      *"Waiting on his device"* was true of the FIX and false of the INSTRUMENT — and the instrument was
+      built to be the thing that runs on his device. Three defects in it, all found by reading the code
+      rather than the entry:
+      **1. 🔴 THE ONE FACT THAT DECIDES THIS ENTRY WAS NEVER GATHERED ON HIS PHONE.** `FM.sniffHevc`
+      reads the file's own bytes for the H.265 tag — and it was gated behind `!FM.canDecodeHEVC()`
+      (js/media.js:411). **His phone is a Safari-based PWA, where that is FALSE**, so on the exact device
+      where this happens the sniff never ran. The facts line he would be asked to send therefore could
+      not say whether the file is H.265 — **the only thing that separates the codec theory from the
+      container theory**, since an `.mp4` may be either. It now runs unconditionally in the timeout path
+      as a FACT (*"bytes carry the H.265 tag"* / *"bytes do NOT"*). ⚠️ The ACCUSING branch at :411 keeps
+      its both-conditions gate exactly as it was — that gate exists to stop a confident wrong diagnosis
+      and is not what was broken.
+      **2. THE BROWSER'S OWN STATED REASON WAS THROWN AWAY.** `blankClipFacts` read only the FILE — name,
+      type, extension, canPlayType — every one of them a guess from outside. The element knows why it
+      refused and says so in `el.error.code`: **DECODE (3) means the container parsed and the CODEC was
+      refused; SRC_NOT_SUPPORTED (4) means the CONTAINER was.** Those are precisely this entry's two live
+      theories. Repo-wide, `el.error` was read in one place as a truthiness guard and `MEDIA_ERR_*`
+      appeared nowhere at all. **A null error is now printed too** — "the decode produced nothing and the
+      element raised nothing" is a third situation, and reading it as blank would have lost it.
+      **3. AN ERROR ARRIVING AFTER METADATA WAS SWALLOWED FOR THE FULL FIFTEEN SECONDS.** `loadVideoFile`'s
+      error listener is `{once:true}` and returns immediately once `settled` is true — and `settled` is
+      set on `loadedmetadata`. **That is exactly this entry's shape: the container parses, metadata
+      arrives and settles the load, and THEN the decoder refuses the codec.** Nothing was listening, so
+      the user waited out `decodeWait` for a toast that never mentioned the error the browser had already
+      raised. `wireVideoRepaint` now listens, and the two paths share a one-shot flag so they cannot both
+      speak.
+      🔒 **AND THE DELIVERABLE ITSELF HAD NO TEST.** `grep -rn blankClipFacts tests/` returned nothing —
+      the entire v13.44 deliverable, which this entry now rests on, would have survived any mutation, and
+      it fires exactly once, on his phone, months from now. It is asserted now, including that a codec
+      refusal and a container refusal produce DIFFERENT lines, which is the one distinction it exists to
+      make.
+      ⚠️ **THE FIX IS STILL WAITING ON HIS DEVICE — that part of the declaration was right.** What
+      changed is that when it next happens, the report will actually contain the answer.
       ⚠️ **LIFT THIS THE MOMENT HE REPORTS A BLANK CLIP AGAIN.** The toast will name the file, and that
       one line decides between the container theory and the codec theory — which need different fixes.
       This is not "done" and must not be ticked; it is parked on an event, and the note is here so the
