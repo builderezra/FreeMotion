@@ -46392,6 +46392,76 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 633 — THE ADD ROW LOST THE LINE THAT SEPARATES IT ═════════════════════════════════
+   * Ezra: *"On the layer with the add layer it doesn't show the line separating layers for some
+   * reason"*, circled on the span between the dashed box and the grip on the right.
+   * TWO IDEAS HAD BEEN MERGED. Queue 550/551 moved the add row's decoration onto `::before` and bounded
+   * it at the PROJECT'S END, because that is what he asked for — *"Make the add layer also end at the
+   * end of the project and not the end of the screen"*. The 1px separator every other row has went with
+   * it, so past the project's end nothing drew a line.
+   * ⚠️ THE TEST HAS TO PIN BOTH HALVES. Extending `::before` would restore the separator and put back
+   * the outline he asked to have shortened — a fix that satisfies this report by undoing an earlier
+   * one. So the dashed box must STILL stop short. */
+  test('#633: the add-layer row draws the same separator as every other row', { item: '633' }, function () {
+    const S = FM.scene, keep = S.layers.slice();
+    try {
+      S.layers.length = 0;
+      for (let i = 0; i < 2; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100 + i * 40, y: 100, shapeW: 60, shapeH: 60, fill: '#4fd1ff' });
+        L.start = 0; L.duration = 3; S.layers.push(L);
+      }
+      FM.refreshAll();
+      const add = document.querySelector('.tl-addrow');
+      const row = document.querySelector('.track-row');
+      if (!add) throw new Error('no add-layer row rendered — the fixture is not reaching the timeline');
+      if (!row) throw new Error('no ordinary layer row rendered to compare against');
+      const a = getComputedStyle(add), r = getComputedStyle(row);
+
+      /* ⚠️ THE DESKTOP ADD ROW IS A DIFFERENT THING AND MUST NOT GROW A SEPARATOR. On PC it is
+         `.tl-addrow--line` — a 7px glowing hairline that IS the divider, with `border: none` — while on
+         a phone it is a full layer-height row. His report is a PHONE screenshot, so the separator
+         belongs to the phone presentation only, and asserting it on both would demand a border on
+         something whose whole design is that it is already a line.
+         The suite runs twice, desktop and at 380px, so the branch below is exercised on both sides. */
+      if (add.classList.contains('tl-addrow--line')) {
+        if (a.borderBottomStyle !== 'none' && parseFloat(a.borderBottomWidth) >= 0.5)
+          throw new Error('the PC add row grew a bottom border — it is already a line, so that draws two');
+        if (!/gradient|rgb/.test(a.backgroundImage + a.backgroundColor))
+          throw new Error('the PC add row lost the glowing line that IS its divider');
+        return;
+      }
+
+      if (a.borderBottomStyle === 'none' || parseFloat(a.borderBottomWidth) < 0.5)
+        throw new Error('the add row still has no bottom separator, which is the report');
+      if (a.borderBottomColor !== r.borderBottomColor)
+        throw new Error('the add row separator is ' + a.borderBottomColor + ' where every other row is ' +
+                        r.borderBottomColor + ' — it has to be the SAME line, not a line');
+
+      /* IT MUST RUN THE FULL WIDTH. That is literally what he circled: the ordinary rows' line reaches
+         the grip on the right and the add row's stopped. */
+      const aw = add.getBoundingClientRect().width, rw = row.getBoundingClientRect().width;
+      if (Math.abs(aw - rw) > 1) throw new Error('the add row is ' + Math.round(aw) + 'px wide against ' +
+        Math.round(rw) + 'px for a layer row, so its separator cannot line up with theirs');
+
+      /* AND THE DASHED BOX MUST STILL STOP AT THE PROJECT'S END — queue 550/551, his own request. If a
+         fix for this report widened that, it would have undone an earlier one he asked for by name. */
+      const bw = parseFloat(getComputedStyle(add, '::before').width);
+      if (isFinite(bw) && bw >= aw - 1) throw new Error('the dashed box now spans the whole row (' + Math.round(bw) +
+        'px of ' + Math.round(aw) + 'px) — that puts back the outline running to the screen edge, which he asked to have shortened');
+
+      /* AND IT STILL OCCUPIES EXACTLY ONE LAYER SLOT. Queue 356 measured that to the pixel — "the lines
+         and stuff are just off, going slightly lower than high" — and a border added carelessly is
+         exactly how that comes back. */
+      const slot = add.getBoundingClientRect().height + parseFloat(a.marginTop) + parseFloat(a.marginBottom);
+      const rowSlot = row.getBoundingClientRect().height + parseFloat(r.marginTop) + parseFloat(r.marginBottom);
+      if (Math.abs(slot - rowSlot) > 1.5) throw new Error('the add row now takes ' + slot.toFixed(1) +
+        'px of the stack against a layer row\'s ' + rowSlot.toFixed(1) + ' — the separator changed its height, undoing queue 356');
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 632 — INSIDE A GROUP, THE LEFT OF THE TIMELINE WAS DEAD SPACE ═════════════════════
    * Ezra: *"Inside groups the ui is cooked on the left it has heaps of wasted space"*, with the strip
    * circled on a 380px phone.

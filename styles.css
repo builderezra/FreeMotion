@@ -7447,6 +7447,20 @@ body.fm-pushing #toast { z-index: 213; }
      (the head divider) and --ar-x1 (the project's end), both published by buildAddRow from the LIVE head
      width — `--head-w` reads 82px while the phone's real head is 66. */
   border: 1px dashed transparent;
+  /* ⚠️ THE SEPARATOR IS THE ROW'S, THE DASHED BOX IS THE PSEUDO-ELEMENT'S (queue 633). Ezra: *"On the
+     layer with the add layer it doesn't show the line separating layers for some reason"*, circled on
+     the span between the dashed box and the grip on the right.
+     Two ideas had been merged. Queue 550/551 moved the decoration onto ::before and bounded it at the
+     PROJECT'S END, because he asked for exactly that — *"Make the add layer also end at the end of the
+     project and not the end of the screen"*. The 1px row separator every other row has went with it,
+     so past the project's end there was nothing drawing a line.
+     They are separated again here: the tinted dashed box still stops at the project's end, and the
+     SEPARATOR runs the full width like `.track-row`'s does. Extending ::before instead would have put
+     back the outline he asked to have shortened.
+     ⚠️ It costs no height. The `1px dashed transparent` above already reserves this edge — only its
+     colour and style change, so the row still occupies exactly one 42px layer slot (queue 356, which
+     was measured to the pixel and must not be undone by a fix to something else). */
+  border-bottom: 1px solid var(--line-soft);
   background: none;
 }
 .tl-addrow::before {

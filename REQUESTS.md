@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.22
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.23
 >
-> **State:** v14.22, 1071 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.23, 1072 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23835,14 +23835,13 @@ re-opened #480, which I had marked done and had not fixed.
       normal row uses 8px, so in-group rows sat slightly LEFT of ordinary ones. From a width
       measurement those two look identical and they are not the same thing. The test caught it.
 
-- [ ] **633 — The add-layer row does not draw the line that separates it from the layers.** (27 Aug,
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **633 — The add-layer row does not draw the line that separates it from the layers.** (27 Aug,
       zoomed phone screenshot at v13.54 — the right-hand end of the timeline, the add row's dashed box,
       and an orange circle around the gap where the separator should run.)
       His words, verbatim:
       > On the layer with the add layer it doesn’t show the line separating layers for some reason
 
-      1. [ ] **The add-layer row needs the same horizontal separator every other row has.**
+      1. [x] **The add-layer row needs the same horizontal separator every other row has.**  ✅ v14.23
       📍 **His circle is on the empty span between the add row's dashed box and the ⋯/grip on the
       right.** Every ordinary layer row has a line running the full width there; the add row's stops.
       💡 **NEARLY CERTAIN CAUSE, and it is a known trade in this exact code:** the add row's
@@ -23860,6 +23859,27 @@ re-opened #480, which I had marked done and had not fixed.
       vanishes there as well.
       ⚠️ **Verify at 380px against a neighbouring layer row**, and measure both lines' x-extents rather
       than eyeballing — the whole complaint is that one stops short of the other.
+
+
+      ═══ ✅ **29 AUG (v14.23) — FIXED, AND THIS ENTRY'S DIAGNOSIS WAS EXACTLY RIGHT.** ═══
+      Two ideas had been merged, precisely as written above. Queue 550/551 moved the add row's
+      decoration onto `::before` and bounded it at the **project's end** — because you asked for that in
+      those words: *"Make the add layer also end at the end of the project and not the end of the
+      screen"*. **The 1px separator every other row has went with it**, so past the project's end
+      nothing drew a line. That is the gap you circled.
+      ✅ **They are separate again.** The tinted dashed box still stops at the project's end; the
+      SEPARATOR runs the full width, in `var(--line-soft)` — **the same line `.track-row` uses**, not a
+      new one that merely looks similar.
+      ⚠️ **It costs no height.** The row already carried `1px dashed transparent`, so only that edge's
+      colour and style change. Queue 356 measured this row into exactly one 42px layer slot — *"the
+      lines and stuff are just off, going slightly lower than high"* — and a border added carelessly is
+      exactly how that comes back. The test asserts the slot is unchanged.
+      🔒 **AND IT PINS THE THING THAT MUST NOT REGRESS:** the dashed box must still STOP SHORT. Widening
+      `::before` would have fixed this report by undoing the earlier one you asked for by name.
+      🖥️ **The PC add row is deliberately untouched** — there it is `.tl-addrow--line`, a 7px glowing
+      hairline that IS the divider, with no border at all. Your report is a phone screenshot, and
+      demanding a separator on something whose whole design is being a line would draw two. The test
+      branches, and the suite runs both widths.
 
 - [ ] **634 — 🔴 Copy Background + Pixelate crams the whole project into the top-left corner.**
       **STATUS: 🟢 READY — nothing is stopping this**
