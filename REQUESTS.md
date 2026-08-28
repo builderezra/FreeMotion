@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.89
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.90
 >
-> **State:** v13.89, 1034 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.90, 1035 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -7295,6 +7295,31 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ═══ ✅ **28 AUG (v13.90) — A THIRD CUT FOUND AND FIXED: THE LOOP WRAP.** ═══
+      **This entry has already fixed two places where a waveform gets opened at an arbitrary sample:**
+      the CLIP EDGES (v7.66) and pressing PLAY mid-clip — both by opening the element at volume 0 and
+      letting `declickGain` lift it over 45ms. **A loop wrap is a third, and it had none of that care.**
+      📍 `wrapTo` (js/app.js:1580) hard-seeks `m.el.currentTime` on every playing video layer — and an
+      imported song IS a video layer with a 0x0 picture — while setting neither `_resumedAt` nor
+      `volume = 0`. `FM.play()` sets exactly those two, three hundred lines below, with a comment naming
+      this entry. **So every lap of a loop cut the sound off mid-cycle and started it again mid-cycle at
+      full volume: two clicks a lap, for as long as you leave it running.**
+      ⚠️ **WHY IT LOOKED ALREADY HANDLED, which is the part worth keeping:** the sync tick's resume
+      branch DOES set `_resumedAt` and `volume = 0` — but it is **gated on the element being PAUSED**,
+      and on a mid-timeline loop-region wrap the element is playing, so it never fires. `declickGain`
+      has no transport or loop term of its own; its only mid-clip fade is `_resumedAt`. The envelope was
+      therefore a flat 1.0 straight through the cut.
+      ✅ **FIXED — the same two lines as `play()`, in the third place that needed them.**
+      🔒 **The test carries two guards on purpose:** a CONTROL asserting the envelope is flat 1.0
+      mid-clip (without it the fade assertion could pass for a reason unrelated to the wrap), and a check
+      that a **REVERSED** layer is NOT silenced — its element is deliberately never seeked, so silencing
+      it would have left reversed clips mute permanently. Mutation-checked: removing the two lines is
+      CAUGHT.
+      ⚠️ **This does not close the entry.** It is a defect on its own terms — an abrupt cut of a playing
+      waveform is wrong whether or not it is *your* pop — which is the same argument v7.66 shipped under.
+      **Whether YOUR popping is this one still needs one thing from you: is it at a clip edge, on a loop,
+      or right through the middle of one long clip?** The "what's slow" readout answers it from numbers
+      if you tap it while it is happening.
       His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
       trying to play back stuff, this is related to the long on going lag issues with freemotion."*
       **Taking his diagnosis seriously — it is the most useful thing in the report.** Scratchy popping on

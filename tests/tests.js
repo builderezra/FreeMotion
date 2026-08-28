@@ -45075,6 +45075,70 @@
     } finally { FM._audioDurationFromDecode = real; }
   });
 
+  /* ═══ QUEUE 148 — THE LOOP WRAP CLICKS, and it is the third place a waveform gets cut ═══════════
+   * *"Imported audio plays back with a scratchy POPPING that hurts to listen to."*
+   * v7.66 fixed the CLIP EDGES and the play() note fixed STARTING mid-clip, both by opening the
+   * element silent and letting `declickGain` lift it over 45ms. **A loop wrap does the same violence
+   * and had none of the same care**: `wrapTo` hard-seeks `el.currentTime` on an element that is
+   * already playing, so every lap cut the sound mid-cycle and restarted it mid-cycle at full volume.
+   * ⚠️ The reason this looked handled: the sync tick's resume branch DOES set `_resumedAt` and
+   * `volume = 0` — but only when the element is PAUSED, which on a mid-timeline loop-region wrap it is
+   * not. So that branch never fires and the envelope is flat 1.0 through the cut. */
+  test('#148: a loop wrap fades the sound back in instead of cutting it', { item: '148' }, function () {
+    if (typeof FM._wrapTo !== 'function') throw new Error('FM._wrapTo is not exposed, so the wrap cannot be driven');
+    if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is not exposed');
+    const S = FM.scene, keep = S.layers.slice(), keepT = FM.time;
+    const P = S.project, keepDur = P.duration, keepIn = P.loopIn, keepOut = P.loopOut;
+    try {
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 8;
+      S.layers.length = 0; S.layers.push(song);
+      P.duration = 8;
+      // A stand-in element: the wrap only ever writes currentTime/volume and reads neither back.
+      const el = { currentTime: 0, volume: 1, muted: false, paused: false, playbackRate: 1,
+                   play() { return Promise.resolve(); }, pause() {} };
+      const m = { kind: 'video', el, duration: 8, width: 0, height: 0 };
+      FM.media.set(song.id, m);
+
+      /* THE CONTROL, and it is doing real work: mid-clip, with nothing recently resumed, the envelope
+         must be a FLAT 1.0. If it were already fading here, the assertion below would pass for a
+         reason that has nothing to do with the wrap. */
+      m._resumedAt = 0; el.volume = 1;
+      const mid = FM._declickGain(song, 4, m, performance.now());
+      if (!(mid > 0.999)) throw new Error('the control failed: mid-clip gain is already ' + mid.toFixed(3) + ', so a fade below would prove nothing');
+
+      // …now wrap, exactly as a loop does.
+      FM._wrapTo(2);
+      if (!(m._resumedAt > 0))
+        throw new Error('the wrap did not mark the element as resumed, so declickGain has nothing to fade from — every lap of a loop cuts the sound (#148)');
+      if (el.volume !== 0)
+        throw new Error('the wrap left the element at volume ' + el.volume + ' — it must open silent and be lifted, which is what play() does three lines apart');
+
+      // and the envelope must actually RISE from there rather than being pinned at zero
+      const at0 = FM._declickGain(song, 2, m, m._resumedAt);
+      const at22 = FM._declickGain(song, 2, m, m._resumedAt + 22);
+      const at60 = FM._declickGain(song, 2, m, m._resumedAt + 60);
+      if (!(at0 < 0.05)) throw new Error('the fade starts at ' + at0.toFixed(3) + ' rather than silence');
+      if (!(at22 > at0 && at22 < 0.95)) throw new Error('half way through the fade the gain is ' + at22.toFixed(3) + ' — it is not ramping');
+      if (!(at60 > 0.999)) throw new Error('the fade never reaches full volume (' + at60.toFixed(3) + ' after 60ms) — the sound would stay quiet after every wrap');
+
+      /* A REVERSED layer is deliberately skipped by the wrap's seek, so it must not be silenced
+         either — otherwise this fix would mute reversed clips for good. */
+      const rev = FM.makeLayer('video', { name: 'rev' });
+      rev.start = 0; rev.duration = 8; rev.reversed = true;
+      const rel = { currentTime: 0, volume: 1, muted: false, paused: false, playbackRate: 1, play() { return Promise.resolve(); }, pause() {} };
+      S.layers.push(rev);
+      FM.media.set(rev.id, { kind: 'video', el: rel, duration: 8, width: 0, height: 0 });
+      FM._wrapTo(3);
+      if (rel.volume !== 1) throw new Error('a REVERSED layer was silenced by the wrap (volume ' + rel.volume + ') — its element is never seeked, so it has nothing to fade in from and would stay mute');
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.duration = keepDur; P.loopIn = keepIn; P.loopOut = keepOut;
+      FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

@@ -1584,7 +1584,25 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id); if (!m) return;
       const local = FM.layerLocalTime(layer, t);
-      if (!layer.reversed && local != null && !(FM.seekBusy && FM.seekBusy(m))) { try { m.el.currentTime = local; m._syncAt = now; } catch (e) {} }
+      if (!layer.reversed && local != null && !(FM.seekBusy && FM.seekBusy(m))) {
+        try {
+          m.el.currentTime = local; m._syncAt = now;
+          /* ═══ A LOOP WRAP IS A HARD SEEK ON A WAVEFORM THAT IS ALREADY PLAYING (queue 148) ════════
+           * `FM.play()` three hundred lines below opens an element at volume 0 and lets `declickGain`
+           * lift it over 45ms, with the comment *"pressing PLAY is the other place a waveform gets
+           * opened at an arbitrary sample"*. **A wrap is a third place, and it was missed** — so every
+           * lap of a loop cut the sound off mid-cycle and restarted it mid-cycle at full volume, which
+           * is two clicks a lap for as long as you leave it running.
+           * ⚠️ THE TEMPTING REASON TO THINK THIS IS ALREADY HANDLED, AND WHY IT IS NOT: the sync tick's
+           * resume branch does set `_resumedAt` and `volume = 0` — but it is gated on the element being
+           * PAUSED, and on a mid-timeline loop-region wrap the element is playing, so it never fires.
+           * `declickGain` has no transport or loop term of its own; its only mid-clip fade is
+           * `_resumedAt`, so without these two lines the envelope is flat 1.0 straight through the cut.
+           * Same three lines as play(), for the same reason, in the third place that needed them. */
+          m._resumedAt = now;
+          m.el.volume = 0;
+        } catch (e) {}
+      }
     });
     clockAnchor(t);                            // the wrap is a real discontinuity — re-origin the clock…
     if (FM.audioPlay) FM.audioPlay.start();
@@ -1600,6 +1618,9 @@ window.FM = window.FM || {};
      a real play() would now be defeated by the start-wait added in queue 95 — a fake element that never
      advances is exactly what that wait is for, so the tick would never reach here. */
   FM._syncMediaToClock = function () { return syncMediaToClock(); };
+  /* Suite seam for queue 148 — a loop wrap is only reachable from inside the rAF tick otherwise,
+     and the thing under test is what `wrapTo` does to a PLAYING element, not the tick's timing. */
+  FM._wrapTo = function (t) { return wrapTo(t); };
   function syncMediaToClock() {
     FM.playbackStats.syncs++;
     const now = performance.now();
