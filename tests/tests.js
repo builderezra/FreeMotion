@@ -45911,6 +45911,44 @@
     if (moved.length) throw new Error('industry-standard names were renamed too: ' + moved.join(' · ') + ' — he said those are fine');
   });
 
+  /* ═══ QUEUE 552 — THE WAY BACK INTO A DRAWING WAS BEHIND THE THING HE ASKED TO AVOID ════════════
+   * *"being able to continue the drawing INSTEAD OF the current edit points system"*. All three clauses
+   * were built — ✎ Draw more, and keyframable Draw from / Draw to — and every one of them was put
+   * INSIDE the Edit Points panel, which auto-starts point editing and throws an overlay over the canvas
+   * the moment it opens. So the feature answering "instead of edit points" is reachable only through
+   * edit points. The entry read as done and was not.
+   * A second door on the layer ⋯ menu, which is reachable from every surface. */
+  test('#552: a drawing can be continued without entering point editing', { item: '552' }, function () {
+    if (!FM.layerMenuItems && !FM.layerMoreItems) throw new Error('no layer menu builder is reachable');
+    const S = FM.scene, keep = S.layers.slice();
+    try {
+      const path = FM.makeLayer('shape', { shape: 'path', x: 100, y: 100, fill: '#fff' });
+      path.closed = false;
+      path.points = [{ x: 0, y: 0 }, { x: 40, y: 30 }, { x: 80, y: 10 }];
+      S.layers.length = 0; S.layers.push(path);
+      const items = FM.layerMenuItems ? FM.layerMenuItems(path) : [];
+      const labels = items.map(i => String(i && i.label || ''));
+      if (!labels.some(l => /draw more/i.test(l)))
+        throw new Error('the layer menu offers no way back into a drawing: ' + labels.filter(Boolean).slice(0, 8).join(' · ') +
+                        ' — the only route is the Edit Points panel, which is the system he asked to be free of');
+      /* THE CONTROL, and it is the half that stops this becoming clutter: a CLOSED path and a plain
+         rectangle must NOT offer it. "Draw more" on a closed shape is not a thing, and an entry that
+         adds a dead item to every layer's menu is worse than the one it replaced. */
+      const closed = FM.makeLayer('shape', { shape: 'path', x: 100, y: 100, fill: '#fff' });
+      closed.closed = true; closed.points = [{ x: 0, y: 0 }, { x: 40, y: 30 }];
+      S.layers.length = 0; S.layers.push(closed);
+      if ((FM.layerMenuItems ? FM.layerMenuItems(closed) : []).map(i => String(i && i.label || '')).some(l => /draw more/i.test(l)))
+        throw new Error('a CLOSED path offers "Draw more" — that is not what the words mean and the panel does not offer it either');
+      const rect = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff' });
+      S.layers.length = 0; S.layers.push(rect);
+      if ((FM.layerMenuItems ? FM.layerMenuItems(rect) : []).map(i => String(i && i.label || '')).some(l => /draw more/i.test(l)))
+        throw new Error('a plain rectangle offers "Draw more"');
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

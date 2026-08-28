@@ -3747,6 +3747,16 @@ window.FM = window.FM || {};
          · this one              — the whole look, including movement
          · Effects card → button — the effects list and nothing else
          · an effect row's ⋯     — that ONE effect's settings */
+    /* ✎ DRAW MORE, REACHABLE WITHOUT ENTERING POINT EDITING (queue 552). His words: *"being able to
+     * continue the drawing INSTEAD OF the current edit points system"* — and the button that does it
+     * was put INSIDE that system. It lives in the Edit Points panel (js/inspector.js), and opening that
+     * panel auto-starts point editing and throws an overlay over the canvas, so the one route back into
+     * a drawing is behind the exact thing he asked to be free of.
+     * The panel keeps it — this is a second door, not a move. Open paths only, same condition as the
+     * panel's, because trimming or extending a CLOSED path is not what "draw more" means. */
+    if (layer.type === 'shape' && layer.shape === 'path' && !layer.closed && FM.startDraw) {
+      items.push({ label: '✎  Draw more', action: () => FM.startDraw('freehand', { layerId: layer.id }) });
+    }
     items.push({ label: 'Save whole look as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to

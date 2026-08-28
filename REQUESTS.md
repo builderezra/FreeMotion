@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.10
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.11
 >
-> **State:** v14.10, 1053 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.11, 1054 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -20773,7 +20773,23 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ➡️ **NOT BLOCKED — already built and this text is stale.** `js/inspector.js` has ✎ Draw more calling `FM.startDraw` with the layer id, plus keyframable Draw from / Draw to. **The real defect is that both routes are buried under the Edit Points overlay, and that is buildable without him.**
+      ═══ ✅ **28 AUG (v14.11) — ALL THREE CLAUSES WERE ALREADY BUILT, AND PUT IN THE ONE PLACE HE ASKED
+      TO AVOID.** ═══
+      1. [x] **Continue a finished drawing** — `✎ Draw more` calls `FM.startDraw` with the layer id, so
+             new strokes join the existing path and the eraser reaches what is there.
+      2. [x] **A progression slider with a start and an end** — Draw from / Draw to.
+      3. [x] **Keyframable** — both use `kfNumRow`, so keyframing Draw to from 0 to 100 draws the stroke on.
+      🚨 **SO WHY DID IT STILL READ AS MISSING? BECAUSE ALL THREE LIVE INSIDE THE EDIT POINTS PANEL** —
+      and opening that panel **auto-starts point editing** (`FM.pointEdit.start(layer.id)`) and throws an
+      overlay over the canvas. **His words were *"being able to continue the drawing INSTEAD OF the
+      current edit points system"***, and the feature answering that sentence was reachable only by going
+      through the system it was meant to replace. The entry read as done to every tool and as missing to
+      him, and both were right.
+      ✅ **`✎ Draw more` is on the layer ⋯ menu now too** — one menu, reachable from every surface. The
+      panel keeps it: this is a second door, not a move.
+      🔒 **The test asserts a CLOSED path and a plain rectangle do NOT offer it.** Adding a dead item to
+      every layer's menu would be worse than the problem it fixes, and "draw more" on a closed shape is
+      not a thing the panel offers either.
       His words, verbatim:
       > A long time ago I asked for some changes to the sketching menu that never arrived - like being able to continue the drawing instead of the current edit points system, and having a slider for progression so you could change the start and end, combined with key frames allowing you to have an animation that looks like it's being drawn
       **Clauses — tick separately:**
