@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.97
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.98
 >
-> **State:** v13.97, 1046 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.98, 1047 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -56,8 +56,9 @@
 > are drawn with the graphics card when that feature is missing — the same trick as this morning's speed
 > work. Proven by making a healthy browser pretend to be broken, so the exact path your phone takes is
 > tested here rather than only by you.
-> ⚠️ **Blur and Glow are still dead on such a device** — they need a different kind of shader, and I
-> would rather say so than fake it. And I still cannot prove this is YOUR fault line: if the effects work
+> ✅ **Blur works now too (v13.98)** — eight of the nine are covered. **Only Glow is still dead** on
+> such a device: it is a shadow drawn *behind* the layer rather than a filter over it, so it needs
+> different machinery again, and I would rather say so than fake it. And I still cannot prove this is YOUR fault line: if the effects work
 > for you now it was the device; if not, the readout now names the real reason.
 >
 > **🎨 ONE LETTER FROM YOU CLOSES #98 — I have sent you a picture.** How big should text be when you
@@ -25746,9 +25747,20 @@ re-opened #480, which I had marked done and had not fixed.
              render the layer with those effects stripped, push the plate through the shader, blit.
              Nothing is read back. Guarded on `ctxFilterOK()` first, so a healthy device never even
              builds the op list — **it cannot regress a path it never runs on.**
-      3. [x] **blur and glow stay honestly dead** — and more than that, a stack CONTAINING one is left
-             entirely alone. Applying the colours and silently dropping the blur would substitute a
-             DIFFERENT picture, which is worse than the effect not working. There is a test for it.
+      3. [x] **blur landed too, v13.98 — EIGHT OF THE NINE ARE NOW COVERED and only GLOW is left.**
+             Blur is not a colour matrix (it reads neighbouring pixels), so it is a separable two-pass
+             Gaussian with its own framebuffer, chained after the matrix through the plate pool's other
+             half — each GPU pass writes the same canvas, so a chain must be copied out between passes.
+             📐 **THE SIGMA CONSTANT WAS MEASURED, NOT LOOKED UP.** The specs disagree about whether
+             `blur(Npx)` means a standard deviation of N or of N/2. At N/2 the mean per-pixel alpha error
+             against the real `ctx.filter` was **6–19 out of 255**; at sigma = N it is **0.57–1.08**
+             across radii 2, 4, 8, 16 and 24. The number that shipped is the one that agreed.
+             🛑 **GLOW is still refused, and a stack containing it is left ENTIRELY alone** — it is a
+             stacked drop-shadow, i.e. the silhouette composited BEHIND the layer rather than a filter
+             over it, so the shader genuinely cannot express it. Applying the colours and dropping the
+             glow would silently substitute a different picture, which is worse than the effect not
+             working. There is a test for that, and one asserting the blur really softens an edge (a
+             blur that did nothing would also score a small error against a small radius).
       📐 **MEASURED with the flag on:** a red square with grayscale renders **grey, and the same grey
       `ctx.filter` produces** — the test asserts both, plus a control proving the reference path greys it
       in the first place, plus that the layer does not simply vanish.

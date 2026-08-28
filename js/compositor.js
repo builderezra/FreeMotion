@@ -5926,20 +5926,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * stripped out, so the re-entrant drawLayer finds nothing left to hand back here.
    * ⚠️ blur and glow are NOT handled — they read neighbouring pixels, so they need a convolution rather
    * than a matrix, and they stay honestly dead on such a device rather than being faked. */
+  /* Splits the layer's CSS effects into what the shader can do: a colour MATRIX (one pass, any number
+   * of ops) and a list of BLUR radii (one pass each). GLOW is still refused outright — it is a stacked
+   * drop-shadow, which needs the silhouette composited behind the layer rather than a filter over it,
+   * and half-applying a stack would silently substitute a different picture. */
   function cssColorOps(layer, t) {
     if (!FM.glColor) return null;
     const list = (layer && layer.effects) || [];
-    const ops = [];
+    const matrix = [], blurs = [];
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (!e || e.enabled === false) continue;
       if (!FM.CSS_FX[e.type]) continue;
-      if (!FM.glColor.supports(e.type)) return null;          // blur/glow in the stack → leave it all alone
       const p = e.params || {};
+      if (e.type === 'blur') {
+        const r = FM.evalProp(p.radius, t);
+        blurs.push(Number.isFinite(r) ? r : 6);
+        continue;
+      }
+      if (!FM.glColor.supports(e.type)) return null;          // glow → leave the whole stack alone
       const raw = e.type === 'hue' ? FM.evalProp(p.deg, t) : FM.evalProp(p.amount, t);
-      ops.push({ type: e.type, value: Number.isFinite(raw) ? raw : (e.type === 'hue' ? 0 : 1) });
+      matrix.push({ type: e.type, value: Number.isFinite(raw) ? raw : (e.type === 'hue' ? 0 : 1) });
     }
-    return ops.length ? ops : null;
+    return (matrix.length || blurs.length) ? { matrix: matrix, blurs: blurs } : null;
   }
 
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
@@ -5958,7 +5967,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const actx = wA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-      const keep = new Set(ops.map(o => o.type));
+      const keep = new Set(ops.matrix.map(o => o.type).concat(ops.blurs.length ? ['blur'] : []));
       const tmp = Object.assign({}, layer, {
         blendMode: 'normal',
         effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
@@ -5966,8 +5975,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         transform: Object.assign({}, layer.transform, { opacity: 1 }),
       });
       drawLayer(actx, tmp, t, scene);
-      const outCv = FM.glColor.apply(wA, W, H, ops);
-      if (!outCv) return false;                               // no GPU either — the caller carries on as before
+      /* ⚠️ EACH GPU PASS WRITES THE SAME CANVAS, so a chain has to be copied out between passes or the
+       * second would read what it is writing. `wB` is the plate pool's other half, already the right
+       * size, already allocated — the same canvas drawWarpEffect uses for its output. */
+      let cur = wA;
+      const needB = () => {
+        const wB = _wpPool[d].B;
+        if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
+        const bx = wB.getContext('2d');
+        bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
+        return { cv: wB, cx: bx };
+      };
+      if (ops.matrix.length) {
+        const o = FM.glColor.apply(cur, W, H, ops.matrix);
+        if (!o) return false;
+        if (ops.blurs.length) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+      }
+      for (let bi = 0; bi < ops.blurs.length; bi++) {
+        // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
+        const o = FM.glColor.blur(cur, W, H, ops.blurs[bi] * ps);
+        if (!o) return false;
+        if (bi < ops.blurs.length - 1) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+      }
+      const outCv = cur;
+      if (!outCv || outCv === wA) return false;                // nothing was applied — let the old path run
       ctx.save();
       baseT(ctx);
       ctx.globalAlpha = opacity;

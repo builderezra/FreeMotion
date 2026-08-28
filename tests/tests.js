@@ -45538,12 +45538,51 @@
     }
   });
 
-  /* A STACK WITH BLUR IN IT MUST BE LEFT ALONE. blur reads neighbouring pixels, so the matrix cannot
-   * express it — and half-applying a stack (the colours but not the blur) would be a DIFFERENT picture
-   * silently substituted, which is worse than the effect being honestly dead. */
+  /* BLUR TOO — the eighth of the nine, and the one he actually reaches for. It is NOT a colour matrix
+   * (it reads neighbouring pixels), so it is a separate separable two-pass Gaussian.
+   * 📐 THE SIGMA CONSTANT WAS MEASURED, NOT LOOKED UP: the specs disagree about whether `blur(Npx)`
+   * means a standard deviation of N or of N/2, and at N/2 the mean per-pixel alpha error against the
+   * real ctx.filter was 6-19 out of 255. At sigma = N it is 0.57-1.08 across radii 2 to 24. */
+  test('#661: blur reproduces ctx.filter on the GPU path', { item: '661' }, function () {
+    if (!FM.glColor || !FM.glColor.blur) throw new Error('FM.glColor.blur is missing');
+    if (!FM.glColor.available()) throw new Error('WebGL is not available: ' + FM.glColor.stats().reason);
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter here, so there is no reference to compare against');
+    const W = 96, H = 96;
+    const src = document.createElement('canvas'); src.width = W; src.height = H;
+    const sx = src.getContext('2d', { willReadFrequently: true });
+    sx.fillStyle = '#ffffff'; sx.fillRect(26, 26, 44, 44);       // a hard edge is a blur's whole signature
+    const ref = document.createElement('canvas'); ref.width = W; ref.height = H;
+    const rx = ref.getContext('2d', { willReadFrequently: true });
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const ox = out.getContext('2d', { willReadFrequently: true });
+    const bad = [];
+    for (const r of [2, 4, 8, 16]) {
+      rx.clearRect(0, 0, W, H); rx.filter = 'blur(' + r + 'px)'; rx.drawImage(src, 0, 0); rx.filter = 'none';
+      FM.glColor._reset();
+      const g = FM.glColor.blur(src, W, H, r);
+      if (!g) throw new Error('blur(' + r + ') returned nothing: ' + FM.glColor.stats().reason);
+      ox.clearRect(0, 0, W, H); ox.drawImage(g, 0, 0);
+      const A = rx.getImageData(0, 0, W, H).data, B = ox.getImageData(0, 0, W, H).data;
+      let e = 0;
+      for (let i = 3; i < A.length; i += 4) e += Math.abs(A[i] - B[i]);
+      const mean = e / (A.length / 4);
+      /* A THRESHOLD, and a control on the other side: a blur that did NOTHING would also have a small
+         error against a small radius, so the sharp edge has to have actually softened. */
+      if (mean > 4) bad.push('r=' + r + ' mean alpha error ' + mean.toFixed(2));
+      let edge = 0;
+      for (let x = 0; x < W; x++) { const a2 = B[((26) * W + x) * 4 + 3]; if (a2 > 8 && a2 < 247) edge++; }
+      if (!(edge > 2)) bad.push('r=' + r + ' produced no soft edge at all — it is not blurring');
+    }
+    if (bad.length) throw new Error('the GPU blur does not match ctx.filter: ' + bad.join(' · '));
+  });
+
+  /* GLOW IS STILL REFUSED, AND A STACK CONTAINING IT IS LEFT ENTIRELY ALONE. It is a stacked
+   * drop-shadow — the silhouette composited BEHIND the layer, not a filter over it — so the shader
+   * cannot express it. Applying the colours and silently dropping the glow would substitute a
+   * different picture, which is worse than the effect being honestly dead. */
   test('#661: a stack the shader cannot express is not half-applied', { item: '661' }, function () {
     if (!FM.glColor) throw new Error('FM.glColor is missing');
-    if (FM.glColor.supports('blur')) throw new Error('the shader claims to support blur — it reads neighbouring pixels and cannot');
+    if (FM.glColor.supports('glow')) throw new Error('the shader claims to support glow — it is a composited drop-shadow, not a per-pixel map');
     if (!FM.glColor.supports('grayscale')) throw new Error('the shader does not support grayscale, which is the whole point');
     const was = FM._forceNoCtxFilter;
     try {
@@ -45551,15 +45590,14 @@
       FM.glColor._reset();
       const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 90, shapeH: 90, fill: '#e8443f' });
       L.start = 0; L.duration = 2;
-      const g = FM.fxRegistry.makeInstance('grayscale'), b = FM.fxRegistry.makeInstance('blur');
-      if (!g || !b) throw new Error('could not build the mixed stack');
-      L.effects = [g, b];
+      const g = FM.fxRegistry.makeInstance('grayscale'), gl2 = FM.fxRegistry.makeInstance('glow');
+      if (!g || !gl2) throw new Error('could not build the mixed stack');
+      L.effects = [g, gl2];
       const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120;
       const cx = cv.getContext('2d', { willReadFrequently: true });
       FM.renderScene(cx, { project: { name: 'p', width: 120, height: 120, fps: 30, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
       if (FM.glColor.stats().gpu > 0)
-        throw new Error('the shader ran on a stack containing blur — it would have applied the colours and dropped the blur, silently substituting a different picture');
-      // and the frame must still be drawn by the old path rather than lost
+        throw new Error('the shader ran on a stack containing glow — it would have applied the colours and dropped the glow, silently substituting a different picture');
       const px = cx.getImageData(60, 60, 1, 1).data;
       if (px[3] < 200) throw new Error('the layer disappeared entirely when the shader declined it (alpha ' + px[3] + ')');
     } finally { FM._forceNoCtxFilter = was; FM.glColor._reset(); }

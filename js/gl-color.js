@@ -67,10 +67,62 @@
     '}'
   ].join('\n');
 
+  /* MEASURED, not read off a spec: CSS `blur(Npx)` and an feGaussianBlur of stdDeviation N do not
+     agree across the specs, and the only answer that counts is what ctx.filter draws here. The suite
+     compares the two paths and fails on a wrong value. */
+  const BLUR_SIGMA = 1.0;
+  const BLUR_FS = [
+    'precision highp float;',
+    'varying vec2 uv;',
+    'uniform sampler2D src;',
+    'uniform vec2 step;',
+    'uniform float sigma;',
+    'uniform int taps;',
+    'uniform float flip;',
+    'void main(){',
+    '  vec2 base = vec2(uv.x, flip > 0.5 ? 1.0 - uv.y : uv.y);',
+    '  vec2 st = vec2(step.x, flip > 0.5 ? -step.y : step.y);',
+    '  float wsum = 0.0;',
+    '  vec4 acc = vec4(0.0);',
+    '  for (int i = -64; i <= 64; i++) {',
+    '    if (i < -taps || i > taps) continue;',
+    '    float fi = float(i);',
+    '    float w = exp(-(fi * fi) / (2.0 * sigma * sigma));',
+    '    acc += texture2D(src, base + st * fi) * w;',
+    '    wsum += w;',
+    '  }',
+    '  gl_FragColor = acc / max(wsum, 1e-5);',
+    '}'
+  ].join('\n');
+
   let _cv = null, _gl = null, _tex = null, _quad = null, _prog = null, _u = null, _dead = false;
+  let _blurProg = null, _ub = null, _fb = null, _fbTex = null, _fbW = 0, _fbH = 0;
   const _stats = { gpu: 0, cpu: 0, compiled: 0, lost: 0, reason: '' };
 
-  function reset() { _gl = null; _cv = null; _tex = null; _quad = null; _prog = null; _u = null; }
+  function reset() {
+    _gl = null; _cv = null; _tex = null; _quad = null; _prog = null; _u = null;
+    _blurProg = null; _ub = null; _fb = null; _fbTex = null; _fbW = 0; _fbH = 0;
+  }
+
+  function compileBlur(g) {
+    if (_blurProg) return _blurProg;
+    const sh = (type, src) => {
+      const s2 = g.createShader(type); g.shaderSource(s2, src); g.compileShader(s2);
+      if (!g.getShaderParameter(s2, g.COMPILE_STATUS)) throw new Error('blur shader: ' + g.getShaderInfoLog(s2));
+      return s2;
+    };
+    const p = g.createProgram();
+    g.attachShader(p, sh(g.VERTEX_SHADER, VS));
+    g.attachShader(p, sh(g.FRAGMENT_SHADER, BLUR_FS));
+    g.linkProgram(p);
+    if (!g.getProgramParameter(p, g.LINK_STATUS)) throw new Error('blur link: ' + g.getProgramInfoLog(p));
+    _blurProg = p;
+    _ub = { src: g.getUniformLocation(p, 'src'), step: g.getUniformLocation(p, 'step'),
+            sigma: g.getUniformLocation(p, 'sigma'), taps: g.getUniformLocation(p, 'taps'),
+            flip: g.getUniformLocation(p, 'flip') };
+    _stats.compiled++;
+    return p;
+  }
 
   function gl() {
     if (_dead) return null;
@@ -209,6 +261,76 @@
         g.uniform4f(_u.off, acc.o[0], acc.o[1], acc.o[2], 0);
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
+        _stats.gpu++;
+        return _cv;
+      } catch (e) { _stats.cpu++; _stats.reason = String(e && e.message || e); return null; }
+    },
+    /* ═══ BLUR — the eighth of the nine, and the one he uses (queue 661) ══════════════════════════
+     * A Gaussian is NOT a colour matrix: it reads neighbouring pixels, so it needs two passes and a
+     * place to put the first one. That is the whole reason it was left out of the matrix path rather
+     * than bolted onto it.
+     * SEPARABLE: a 2-D Gaussian is the same as a horizontal pass followed by a vertical one, which
+     * turns an N×N kernel into 2N taps. At radius 20 that is 41 taps instead of 1,681.
+     * ⚠️ THE RADIUS→SIGMA CONSTANT IS MEASURED, NOT LOOKED UP. The specs disagree with each other about
+     * whether `blur(Npx)` means a standard deviation of N or of N/2, and the only answer that matters is
+     * the one that matches what `ctx.filter` actually draws on this machine. The suite compares the two
+     * and would fail on a wrong constant, so the number below is the one that agreed. */
+    blur: function (srcCanvas, W, H, radiusPx) {
+      if (FM._noGL) { _stats.cpu++; return null; }
+      if (!srcCanvas || !(W > 0) || !(H > 0) || !(radiusPx > 0.05)) { _stats.cpu++; return null; }
+      const g = gl();
+      if (!g) { _stats.cpu++; return null; }
+      try {
+        if (g.isContextLost && g.isContextLost()) { reset(); _stats.cpu++; return null; }
+        const p = compileBlur(g);
+        if (_cv.width !== W || _cv.height !== H) { _cv.width = W; _cv.height = H; }
+        // A ping-pong target for the horizontal pass. Allocated once and resized with the canvas.
+        if (!_fbTex) {
+          _fbTex = g.createTexture();
+          g.bindTexture(g.TEXTURE_2D, _fbTex);
+          g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+          g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+          g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+          g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+          _fb = g.createFramebuffer();
+        }
+        if (_fbW !== W || _fbH !== H) {
+          g.bindTexture(g.TEXTURE_2D, _fbTex);
+          g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, W, H, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+          _fbW = W; _fbH = H;
+        }
+        const sigma = Math.max(0.2, radiusPx * BLUR_SIGMA);
+        const taps = Math.min(64, Math.max(1, Math.ceil(sigma * 3)));
+        g.useProgram(p);
+        g.bindBuffer(g.ARRAY_BUFFER, _quad);
+        const loc = g.getAttribLocation(p, 'p');
+        g.enableVertexAttribArray(loc);
+        g.vertexAttribPointer(loc, 2, g.FLOAT, false, 0, 0);
+        g.uniform1i(_ub.src, 0);
+        g.uniform1f(_ub.sigma, sigma);
+        g.uniform1i(_ub.taps, taps);
+        g.viewport(0, 0, W, H);
+
+        // pass 1 — horizontal, source canvas → framebuffer texture
+        g.bindFramebuffer(g.FRAMEBUFFER, _fb);
+        g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, _fbTex, 0);
+        g.activeTexture(g.TEXTURE0);
+        g.bindTexture(g.TEXTURE_2D, _tex);
+        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
+        g.uniform2f(_ub.step, 1 / W, 0);
+        g.uniform1f(_ub.flip, 1);      // the canvas upload is top-down; the framebuffer is not
+        g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
+        g.drawArrays(g.TRIANGLES, 0, 3);
+
+        // pass 2 — vertical, framebuffer texture → the visible canvas
+        g.bindFramebuffer(g.FRAMEBUFFER, null);
+        g.bindTexture(g.TEXTURE_2D, _fbTex);
+        g.uniform2f(_ub.step, 0, 1 / H);
+        g.uniform1f(_ub.flip, 0);      // …and pass 2 reads a framebuffer, which is already bottom-up
+        g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
+        g.drawArrays(g.TRIANGLES, 0, 3);
+
+        g.bindTexture(g.TEXTURE_2D, _tex);
         _stats.gpu++;
         return _cv;
       } catch (e) { _stats.cpu++; _stats.reason = String(e && e.message || e); return null; }
