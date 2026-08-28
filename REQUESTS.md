@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.01
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.02
 >
-> **State:** v14.01, 1050 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.02, 1051 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -56,9 +56,9 @@
 > are drawn with the graphics card when that feature is missing — the same trick as this morning's speed
 > work. Proven by making a healthy browser pretend to be broken, so the exact path your phone takes is
 > tested here rather than only by you.
-> ✅ **Blur works now too (v13.98)** — eight of the nine are covered. **Only Glow is still dead** on
-> such a device: it is a shadow drawn *behind* the layer rather than a filter over it, so it needs
-> different machinery again, and I would rather say so than fake it. And I still cannot prove this is YOUR fault line: if the effects work
+> ✅ **Blur and Glow work now too (v13.98, v14.02) — ALL NINE are covered.** Glow was the awkward one:
+> it is a shadow drawn *behind* the layer rather than a filter over it, so it is the blurred silhouette
+> tinted and composited underneath, once per pass. And I still cannot prove this is YOUR fault line: if the effects work
 > for you now it was the device; if not, the readout now names the real reason.
 >
 > **🎨 ONE LETTER FROM YOU CLOSES #98 — I have sent you a picture.** How big should text be when you
@@ -25755,12 +25755,24 @@ re-opened #480, which I had marked done and had not fixed.
              `blur(Npx)` means a standard deviation of N or of N/2. At N/2 the mean per-pixel alpha error
              against the real `ctx.filter` was **6–19 out of 255**; at sigma = N it is **0.57–1.08**
              across radii 2, 4, 8, 16 and 24. The number that shipped is the one that agreed.
-             🛑 **GLOW is still refused, and a stack containing it is left ENTIRELY alone** — it is a
-             stacked drop-shadow, i.e. the silhouette composited BEHIND the layer rather than a filter
-             over it, so the shader genuinely cannot express it. Applying the colours and dropping the
-             glow would silently substitute a different picture, which is worse than the effect not
-             working. There is a test for that, and one asserting the blur really softens an edge (a
-             blur that did nothing would also score a small error against a small radius).
+      4. [x] **GLOW LANDED TOO, v14.02 — ALL NINE ARE NOW COVERED.** It is not a filter over the pixels:
+             it is the layer's own alpha, blurred, filled with the glow colour and composited BEHIND it,
+             once per pass, **each pass shadowing the previous RESULT** — which is what turns a halo into
+             something that reads as light. Built from the blur shader plus 2-D compositing.
+             ⚠️ **TWO BUGS ON THE WAY, and the second one is the interesting one.**
+             **(a)** The strip-and-re-enter contract forgot to strip GLOW, so the copy handed back to
+             `drawLayer` still carried it and recursed: **one frame made 550 GPU calls and a halo five
+             times too wide.** The test counts GPU calls now, which is the cheapest possible guard.
+             **(b) THE SPEC WAS WRONG.** CSS defines `drop-shadow(x y B color)` as a Gaussian of
+             stdDeviation **B/2**, so 0.5 is the documented answer and it is what shipped first — and it
+             gave a halo of **1752 pixels against the real filter's 3380**. Swept it:
+             `0.5 → error 5.09 · 0.7 → 2.87 · **1.0 → 0.45, halo 3460** · 1.4 → 4.71`. Chrome treats the
+             drop-shadow length exactly as it treats `blur()`. **The number that ships is the one that
+             agreed with the picture, not the one in the document.**
+             🔒 **And the refusal guard is kept even though nothing can trigger it any more** — all nine
+             are expressible, so the test fabricates a TENTH effect rather than waiting for one to exist.
+             It also asserts every shipped CSS effect IS expressible, so the guard cannot start firing on
+             something real and quietly disable the fallback.
       📐 **MEASURED with the flag on:** a red square with grayscale renders **grey, and the same grey
       `ctx.filter` produces** — the test asserts both, plus a control proving the reference path greys it
       in the first place, plus that the layer does not simply vanish.

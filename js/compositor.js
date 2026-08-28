@@ -5994,10 +5994,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * of ops) and a list of BLUR radii (one pass each). GLOW is still refused outright — it is a stacked
    * drop-shadow, which needs the silhouette composited behind the layer rather than a filter over it,
    * and half-applying a stack would silently substitute a different picture. */
+  /* MEASURED against the real ctx.filter, not read off a spec — and the spec would have been WRONG here.
+     CSS defines `drop-shadow(x y B color)` as an feGaussianBlur of stdDeviation B/2, so 0.5 is the
+     documented answer and it is what shipped first. 📐 Swept against the genuine article at radius 14:
+       0.5 → mean red error 5.09, halo 1752 px against the reference's 3380  (far too tight)
+       0.7 → 2.87, 2416
+       1.0 → **0.45, 3460**  ← what this browser actually draws
+       1.4 → 4.71, 4852
+     So Chrome treats the drop-shadow length the same way it treats blur(). The number that ships is the
+     one that agreed with the picture, not the one in the document. */
+  const GLOW_SIGMA = 1.0;
+
   function cssColorOps(layer, t) {
     if (!FM.glColor) return null;
     const list = (layer && layer.effects) || [];
-    const matrix = [], blurs = [];
+    const matrix = [], blurs = [], glows = [];
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (!e || e.enabled === false) continue;
@@ -6008,11 +6019,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
       }
-      if (!FM.glColor.supports(e.type)) return null;          // glow → leave the whole stack alone
+      if (e.type === 'glow') {
+        /* GLOW IS A STACKED DROP-SHADOW: the layer's own alpha, blurred, filled with the glow colour and
+         * composited BEHIND it — repeated `passes` times, each pass shadowing the previous RESULT, which
+         * is what turns a halo into something that reads as light. It is not a filter over the pixels,
+         * so it is neither a colour matrix nor a plain blur; it is both plus a composite. */
+        const gr = FM.evalProp(p.radius, t);
+        const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
+        glows.push({ radius: Number.isFinite(gr) ? Math.max(0, gr) : 12,
+                     color: (FM.evalProp(p.color, t) || '#ffffff'), passes: gp });
+        continue;
+      }
+      if (!FM.glColor.supports(e.type)) return null;          // anything still unknown → leave it all alone
       const raw = e.type === 'hue' ? FM.evalProp(p.deg, t) : FM.evalProp(p.amount, t);
       matrix.push({ type: e.type, value: Number.isFinite(raw) ? raw : (e.type === 'hue' ? 0 : 1) });
     }
-    return (matrix.length || blurs.length) ? { matrix: matrix, blurs: blurs } : null;
+    return (matrix.length || blurs.length || glows.length) ? { matrix: matrix, blurs: blurs, glows: glows } : null;
   }
 
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
@@ -6031,7 +6053,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const actx = wA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-      const keep = new Set(ops.matrix.map(o => o.type).concat(ops.blurs.length ? ['blur'] : []));
+      /* ⚠️ EVERY TYPE THIS PASS CONSUMES, INCLUDING GLOW — this is what makes the recursion terminate.
+       * It listed the matrix types and 'blur' and forgot 'glow', so the stripped copy handed back to
+       * drawLayer still carried the glow, took this branch again, and recursed. MEASURED: one frame made
+       * **550 GPU calls** and a halo five times too wide, because the glow was applied over and over.
+       * The set has to be exactly what was removed, or the "strip and re-enter" contract is broken. */
+      const keep = new Set(ops.matrix.map(o => o.type)
+        .concat(ops.blurs.length ? ['blur'] : [])
+        .concat(ops.glows.length ? ['glow'] : []));
       const tmp = Object.assign({}, layer, {
         blendMode: 'normal',
         effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
@@ -6043,6 +6072,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * second would read what it is writing. `wB` is the plate pool's other half, already the right
        * size, already allocated — the same canvas drawWarpEffect uses for its output. */
       let cur = wA;
+      /* A THIRD scratch, because a glow pass needs the halo, the source and a place to combine them at
+         once — two canvases cannot hold three things. Allocated lazily so a stack with no glow in it
+         never pays for it. */
+      const needC = () => {
+        const pool = _wpPool[d];
+        if (!pool.C) pool.C = document.createElement('canvas');
+        const wC = pool.C;
+        if (wC.width !== W || wC.height !== H) { wC.width = W; wC.height = H; }
+        const cx2 = wC.getContext('2d');
+        cx2.setTransform(1, 0, 0, 1, 0, 0);
+        cx2.globalCompositeOperation = 'source-over';
+        cx2.clearRect(0, 0, W, H);
+        return { cv: wC, cx: cx2 };
+      };
       const needB = () => {
         const wB = _wpPool[d].B;
         if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
@@ -6059,7 +6102,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
         const o = FM.glColor.blur(cur, W, H, ops.blurs[bi] * ps);
         if (!o) return false;
-        if (bi < ops.blurs.length - 1) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+        const last = bi === ops.blurs.length - 1 && !ops.glows.length;
+        if (!last) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+      }
+      /* ⚠️ EACH PASS SHADOWS THE PREVIOUS RESULT, not the original — that is what `drop-shadow(...)
+       * drop-shadow(...)` means in a filter chain, and it is why stacking reads as light rather than as
+       * a thicker halo. Reproducing it any other way would be a different picture. */
+      for (let gi = 0; gi < ops.glows.length; gi++) {
+        const g = ops.glows[gi];
+        for (let pass = 0; pass < g.passes; pass++) {
+          const halo = FM.glColor.blur(cur, W, H, Math.max(0.05, g.radius * ps * GLOW_SIGMA));
+          if (!halo) return false;
+          const c = needC();
+          // the blurred ALPHA, filled with the glow colour…
+          c.cx.drawImage(halo, 0, 0);
+          c.cx.globalCompositeOperation = 'source-in';
+          c.cx.fillStyle = g.color;
+          c.cx.fillRect(0, 0, W, H);
+          c.cx.globalCompositeOperation = 'source-over';
+          // …and the layer itself back on top of its own halo
+          c.cx.drawImage(cur, 0, 0);
+          const b2 = needB(); b2.cx.drawImage(c.cv, 0, 0); cur = b2.cv;
+        }
       }
       const outCv = cur;
       if (!outCv || outCv === wA) return false;                // nothing was applied — let the old path run

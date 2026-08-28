@@ -45580,37 +45580,109 @@
    * drop-shadow — the silhouette composited BEHIND the layer, not a filter over it — so the shader
    * cannot express it. Applying the colours and silently dropping the glow would substitute a
    * different picture, which is worse than the effect being honestly dead. */
-  test('#661: a stack the shader cannot express is not half-applied', { item: '661' }, function () {
+  /* GLOW WORKS TOO NOW (queue 661) — nine of nine. It is not a filter over the pixels: it is the
+   * layer's own alpha, blurred, filled with the glow colour and composited BEHIND it, once per pass,
+   * each pass shadowing the previous RESULT. Built from the blur shader plus 2-D compositing rather
+   * than a new shader.
+   * 📐 The sigma was MEASURED and the spec was wrong: CSS defines drop-shadow's length as an
+   * feGaussianBlur of stdDeviation B/2, and at 0.5 the halo came out at 1752 pixels against the real
+   * filter's 3380. At 1.0 it is 3460 with a mean per-pixel error of 0.45 out of 255. */
+  test('#661: glow renders on the GPU path', { item: '661' }, function () {
     if (!FM.glColor) throw new Error('FM.glColor is missing');
-    if (FM.glColor.supports('glow')) throw new Error('the shader claims to support glow — it is a composited drop-shadow, not a per-pixel map');
-    if (!FM.glColor.supports('grayscale')) throw new Error('the shader does not support grayscale, which is the whole point');
+    if (!FM.glColor.available()) throw new Error('WebGL is not available: ' + FM.glColor.stats().reason);
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter here, so there is no reference');
+    const W = 140, H = 140;
+    const build = () => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 70, y: 70, shapeW: 44, shapeH: 44, fill: '#ffffff' });
+      L.start = 0; L.duration = 2;
+      const g = FM.fxRegistry.makeInstance('glow');
+      if (!g) throw new Error('could not make a glow instance');
+      g.params = g.params || {}; g.params.radius = 14; g.params.passes = 1; g.params.color = '#ff0000';
+      L.effects = [g];
+      return { project: { name: 'p', width: W, height: H, fps: 30, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const shot = () => {
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(cx, build(), 0.5);
+      return cx.getImageData(0, 0, W, H).data;
+    };
+    // count the RED halo outside the white square — that is the glow and nothing else
+    const halo = D => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (x >= 48 && x < 92 && y >= 48 && y < 92) continue;
+      if (D[(y * W + x) * 4] > 20) n++; } return n; };
     const was = FM._forceNoCtxFilter;
     try {
+      FM._forceNoCtxFilter = false; FM.glColor._reset();
+      const ref = shot();
+      const refHalo = halo(ref);
+      if (!(refHalo > 500)) throw new Error('the control failed: with ctx.filter available the glow produced only ' + refHalo + ' halo pixels, so there is nothing to compare against');
+
+      FM._forceNoCtxFilter = true; FM.glColor._reset();
+      const got = shot();
+      const st = FM.glColor.stats();
+      if (!(st.gpu > 0)) throw new Error('the GPU path never ran (' + st.reason + ')');
+      /* ⚠️ AND IT MUST RUN A SENSIBLE NUMBER OF TIMES. The first version recursed — the stripped copy
+         still carried the glow — and one frame made 550 GPU calls with a halo five times too wide. A
+         call count is the cheapest possible guard against that coming back. */
+      if (st.gpu > 8) throw new Error('one frame made ' + st.gpu + ' GPU calls — the strip-and-re-enter contract is broken and the glow is being applied repeatedly');
+      const gotHalo = halo(got);
+      if (!(gotHalo > 500)) throw new Error('the GPU path drew no glow at all (' + gotHalo + ' halo pixels)');
+      const ratio = gotHalo / refHalo;
+      if (ratio < 0.75 || ratio > 1.33)
+        throw new Error('the GPU glow is ' + ratio.toFixed(2) + 'x the size of the real one (' + gotHalo + ' vs ' + refHalo + ' halo pixels) — the blur sigma is wrong');
+      let e = 0;
+      for (let i = 0; i < ref.length; i += 4) e += Math.abs(ref[i] - got[i]);
+      const mean = e / (ref.length / 4);
+      if (mean > 6) throw new Error('the GPU glow differs from ctx.filter by a mean of ' + mean.toFixed(2) + ' per pixel');
+    } finally { FM._forceNoCtxFilter = was; FM.glColor._reset(); }
+  });
+
+  /* …AND ANYTHING STILL UNKNOWN IS REFUSED WHOLESALE rather than half-applied.
+   * ⚠️ THERE IS NO LONGER A REAL EFFECT TO TEST THIS WITH, and that is the good news: all nine members
+   * of FM.CSS_FX are now expressible, so nothing in the app can trigger the refusal. The guard still
+   * matters — the tenth CSS effect anyone adds MUST be refused rather than silently dropped while its
+   * neighbours are applied, which would substitute a different picture with no warning. So the test
+   * fabricates that tenth effect instead of waiting for one to exist. */
+  test('#661: a stack the shader cannot express is not half-applied', { item: '661' }, function () {
+    if (!FM.glColor) throw new Error('FM.glColor is missing');
+    if (!FM.CSS_FX) throw new Error('FM.CSS_FX is not reachable');
+    /* THE CONTROL: every effect that exists today must be expressible, or the refusal below could be
+       firing on something real and the fallback would be quietly doing nothing on his phone. */
+    const cant = Object.keys(FM.CSS_FX).filter(k => k !== 'blur' && k !== 'glow' && !FM.glColor.supports(k));
+    if (cant.length) throw new Error('these shipped CSS effects are not expressible: ' + cant.join(', ') + ' — the fallback silently declines any stack containing one');
+
+    const was = FM._forceNoCtxFilter, hadFake = 'fmfaketest' in FM.CSS_FX;
+    try {
+      FM.CSS_FX.fmfaketest = 1;                       // the tenth effect, which the shader cannot know
       FM._forceNoCtxFilter = true;
       FM.glColor._reset();
       const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 90, shapeH: 90, fill: '#e8443f' });
       L.start = 0; L.duration = 2;
-      const g = FM.fxRegistry.makeInstance('grayscale'), gl2 = FM.fxRegistry.makeInstance('glow');
-      if (!g || !gl2) throw new Error('could not build the mixed stack');
-      L.effects = [g, gl2];
+      const g = FM.fxRegistry.makeInstance('grayscale');
+      if (!g) throw new Error('could not make a grayscale instance');
+      L.effects = [g, { type: 'fmfaketest', enabled: true, params: {} }];
       const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120;
       const cx = cv.getContext('2d', { willReadFrequently: true });
       FM.renderScene(cx, { project: { name: 'p', width: 120, height: 120, fps: 30, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
       if (FM.glColor.stats().gpu > 0)
-        throw new Error('the shader ran on a stack containing glow — it would have applied the colours and dropped the glow, silently substituting a different picture');
+        throw new Error('the shader ran on a stack containing an effect it cannot express — it would have applied grayscale and dropped the other, silently substituting a different picture');
       const px = cx.getImageData(60, 60, 1, 1).data;
       if (px[3] < 200) throw new Error('the layer disappeared entirely when the shader declined it (alpha ' + px[3] + ')');
-    } finally { FM._forceNoCtxFilter = was; FM.glColor._reset(); }
+    } finally {
+      if (!hadFake) delete FM.CSS_FX.fmfaketest;
+      FM._forceNoCtxFilter = was;
+      FM.glColor._reset();
+    }
   });
 
   /* ═══ QUEUE 649 — THE NEW-PROJECT DIALOG'S HEADING WAS BLACK ON A DARK PANEL ════════════════════
-   * *"text un readable"*, with the heading circled. `#hm-dialog` lives inside `#home-screen`, and the
-   * light look sets near-black ink there; the dialog's card is DARK and declared no colour, so anything
-   * inside it that did not set its own inherited the light page's. Every other row sets one explicitly,
-   * which is why only the heading suffered.
-   * 🚨 THE SECOND TIME THIS EXACT SHAPE HAS BITTEN — #647 was a light-theme rule covering
-   * `.hm-empty` and `.hm-empty-sub` while missing `.hm-empty-title`. So the assertion is the general
-   * one: **nothing inside the dark dialog may be darker than the panel it sits on.** */
+   * `#hm-dialog` lives inside `#home-screen`, and the light look sets near-black ink there; the
+   * dialog's card is DARK and declared no colour, so anything inside it that did not set its own
+   * inherited the light page's. Every other row sets one explicitly, which is why only the heading
+   * suffered. Second occurrence of the shape — #647 was a rule covering `.hm-empty` and
+   * `.hm-empty-sub` while missing `.hm-empty-title` — so the assertion is the GENERAL one: nothing
+   * inside the dark dialog may be darker than the panel it sits on. */
   test('#649: the New project dialog is readable on the light home', { item: '649' }, function () {
     const dlg = document.getElementById('hm-dialog');
     if (!dlg) throw new Error('#hm-dialog is not in the document');
@@ -45621,7 +45693,7 @@
     const was = root.getAttribute('data-home');
     const wasHidden = dlg.classList.contains('hidden');
     try {
-      root.setAttribute('data-home', 'light');            // the look this bug only appears in
+      root.setAttribute('data-home', 'light');
       dlg.classList.remove('hidden');
       const lum = c => {
         const m = String(c).match(/(\d+(?:\.\d+)?)/g);
@@ -45630,15 +45702,11 @@
       };
       const bg = lum(getComputedStyle(card).backgroundColor);
       const ink = lum(getComputedStyle(title).color);
-      if (bg == null || ink == null) throw new Error('could not read the colours: bg ' + getComputedStyle(card).backgroundColor + ', ink ' + getComputedStyle(title).color);
-      /* THE CONTROL: the panel has to actually be DARK, or "the ink is lighter than the panel" is
-         satisfied by a light panel and this test would pass on a dialog nobody can read. */
+      if (bg == null || ink == null) throw new Error('could not read the colours');
       if (!(bg < 128)) throw new Error('the dialog card is not dark (luminance ' + bg.toFixed(0) + ') — this test cannot judge contrast on it');
       if (!(ink > bg + 60))
         throw new Error('the dialog heading is luminance ' + ink.toFixed(0) + ' on a panel of ' + bg.toFixed(0) +
-                        ' — that is dark ink on a dark panel, which is exactly what he circled (#649)');
-      /* …AND EVERY OTHER PIECE OF TEXT IN IT, because the bug is "a family rule that misses one
-         member" and pinning only the member that broke invites the third occurrence. */
+                        ' — dark ink on a dark panel, which is what he circled (#649)');
       const bad = [];
       dlg.querySelectorAll('.hm-dlg-title, .hm-fld-label, .hm-dlg-scroll div, label, span').forEach(n => {
         if (!n.textContent || !n.textContent.trim()) return;
@@ -45653,54 +45721,9 @@
     }
   });
 
-  /* ═══ QUEUE 666 — THE WAY OUT OF SELECT MODE WAS OFF THE SIDE OF THE SCREEN ═════════════════════
-   * Found by the family-rule sweep, not by him — MEASURED at 375px on the Projects tab: the bar is 375
-   * wide, its contents are 410, and **Cancel spanned 337–410**. Thirty-five pixels of the one control
-   * that gets you OUT hanging past the edge, with `flex-wrap: nowrap` and `overflow-x: visible`, so it
-   * could neither fold nor be scrolled to.
-   * ⚠️ PROJECTS-TAB ONLY, which is why it survived: Templates and Elements drop the Duplicate button and
-   * fit with room to spare, so any check that happened to run on those tabs passed. */
-  test('#666: nothing in the select bar hangs off a phone screen', { item: '666' }, async function () {
-    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
-    return await atPhoneWidth(async function () {
-      try {
-        if (FM.home && FM.home.open) FM.home.open();
-        await sleep(500);
-        const btn = document.getElementById('hm-select-btn');
-        if (!btn) throw new Error('#hm-select-btn is not on the home screen');
-        btn.click();
-        await sleep(400);
-        const bar = document.querySelector('.hm-selbar');
-        if (!bar) throw new Error('the select bar did not appear, so this test measured nothing');
-        const kids = [].slice.call(bar.children);
-        /* THE CONTROL: the bar has to be carrying its full set of buttons. On Templates it drops one and
-           fits trivially, which is exactly how this went unnoticed — a pass on a shorter bar is empty. */
-        if (kids.length < 5) throw new Error('the select bar only has ' + kids.length + ' children — this is not the crowded Projects-tab bar the bug lives on');
-        const vw = window.innerWidth;
-        const off = kids.filter(c => c.getBoundingClientRect().right > vw + 0.5)
-                        .map(c => (c.className || c.tagName).split(' ')[0] + ' ends at ' + Math.round(c.getBoundingClientRect().right));
-        if (off.length)
-          throw new Error(off.length + ' control(s) hang off a ' + vw + 'px screen: ' + off.join(' · ') +
-                          ' — on the Projects tab that is Cancel, the one button that gets you out of select mode');
-        // …and every button must still be a real touch target rather than shrunk to fit
-        const small = kids.filter(c => /hm-selbtn/.test(c.className || '') && c.getBoundingClientRect().height < 30);
-        if (small.length) throw new Error(small.length + ' select-bar button(s) are under 30px tall — fitting the row by shrinking the targets is not a fix');
-      } finally {
-        const c = [].slice.call(document.querySelectorAll('.hm-selbtn')).filter(b => /cancel/i.test(b.textContent || ''))[0];
-        if (c) { try { c.click(); } catch (e) {} }
-        await sleep(150);
-        try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
-      }
-    });
-  });
-
   /* ═══ QUEUE 664 — "just add them as effects, they should already be" ════════════════════════════
-   * His answer when offered the REMOVAL of a duplicated text control was the opposite of what was
-   * offered: he wants the text panel's controls promoted INTO the effects list, where they can be
-   * stacked, keyframed and previewed like everything else. "They should already be" is the operative
-   * phrase — he assumed they were.
-   * ⚠️ AND HALF OF IT ALREADY WAS: Line height is a parameter of Text Spacing. Curve was not — it was
-   * read straight off `layer.textCurve` at the draw site, so nothing in the effects rail could reach it. */
+   * Half of it already was: Line height is a parameter of Text Spacing. Curve was NOT — it was read
+   * straight off `layer.textCurve` at the draw site, so nothing in the effects rail could reach it. */
   test('#664: Curve is an effect and reaches the renderer', { item: '664' }, function () {
     if (!FM.applyTextEffects) throw new Error('FM.applyTextEffects is not reachable');
     if (!FM.fxRegistry || !FM.fxRegistry.makeInstance) throw new Error('the registry is not reachable');
@@ -45714,15 +45737,14 @@
     const inst = FM.fxRegistry.makeInstance('textcurve');
     if (!inst) throw new Error('there is no "textcurve" effect — the whole point of this item');
     inst.params = inst.params || {};
-    inst.params.curve = 90; inst.params.mode = 0;              // Replaces
+    inst.params.curve = 90; inst.params.mode = 0;
     L.effects = [inst];
     const rep = FM.applyTextEffects(L, 'Text', 0, 0, FM.scene);
     if (rep.curve !== 90) throw new Error('Replaces gave ' + rep.curve + ' instead of 90');
-    inst.params.mode = 1;                                       // Adds to layer
+    inst.params.mode = 1;
     const add2 = FM.applyTextEffects(L, 'Text', 0, 0, FM.scene);
     if (add2.curve !== 132) throw new Error('Adds gave ' + add2.curve + ' instead of 42 + 90 = 132');
 
-    // and it must be TEXT-ONLY, or it appears on shapes and does nothing
     if (FM.fxRegistry.supportsLayer) {
       const shape = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
       if (FM.fxRegistry.supportsLayer('textcurve', shape)) throw new Error('Text Curve is offered on a shape layer, where it can do nothing');
@@ -45740,18 +45762,54 @@
       L.effects = [i];
       return FM.applyTextEffects(L, 'ab cd', 0, 0, FM.scene).text;
     };
-    /* Each assertion states the WHOLE expected string rather than "it changed", because "it changed"
-       is satisfied by an effect that mangles the text in some other way entirely. */
+    /* Each assertion states the WHOLE expected string rather than "it changed", because "it changed" is
+       satisfied by an effect that mangles the text in some other way entirely. */
     if (run('textreverse', { unit: 0 }) !== 'dc ba') throw new Error('reverse by character gave "' + run('textreverse', { unit: 0 }) + '"');
     if (run('textreverse', { unit: 1 }) !== 'cd ab') throw new Error('reverse by word gave "' + run('textreverse', { unit: 1 }) + '"');
     if (run('textrepeat', { count: 3, sep: 0 }) !== 'ab cd ab cd ab cd') throw new Error('repeat gave "' + run('textrepeat', { count: 3, sep: 0 }) + '"');
     if (run('textrepeat', { count: 1, sep: 0 }) !== 'ab cd') throw new Error('repeat with 1 copy must be a no-op');
     if (run('textpad', { length: 8, ch: 0, side: 0 }) !== '000ab cd') throw new Error('pad gave "' + run('textpad', { length: 8, ch: 0, side: 0 }) + '"');
     if (run('textpad', { length: 3, ch: 0, side: 0 }) !== 'ab cd') throw new Error('padding to a width SHORTER than the text must leave it alone');
-    /* THE CONTROL: an unrelated text effect must not be quietly doing these. If every id returned the
-       same string, the assertions above would be measuring one shared bug rather than four effects. */
+    /* THE CONTROL: four effects that all returned the same string would read as four working passes. */
     const upper = run('texttransform', { mode: 0 });
     if (upper !== 'AB CD') throw new Error('the control failed: texttransform gave "' + upper + '"');
+  });
+
+  /* ═══ QUEUE 666 — THE WAY OUT OF SELECT MODE WAS OFF THE SIDE OF THE SCREEN ═════════════════════
+   * MEASURED at 375px on the Projects tab: the bar is 375 wide, its contents 410, and Cancel spanned
+   * 337–410. `flex-wrap: nowrap` and `overflow-x: visible`, so it could neither fold nor be scrolled
+   * to. Projects-tab only — Templates and Elements drop a button and fit, which is how it survived. */
+  test('#666: nothing in the select bar hangs off a phone screen', { item: '666' }, async function () {
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    return await atPhoneWidth(async function () {
+      try {
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(500);
+        const btn = document.getElementById('hm-select-btn');
+        if (!btn) throw new Error('#hm-select-btn is not on the home screen');
+        btn.click();
+        await sleep(400);
+        const bar = document.querySelector('.hm-selbar');
+        if (!bar) throw new Error('the select bar did not appear, so this test measured nothing');
+        const kids = [].slice.call(bar.children);
+        /* THE CONTROL: the bar must be carrying its full set. On Templates it drops one and fits
+           trivially, which is exactly how this went unnoticed — a pass on a shorter bar is empty. */
+        if (kids.length < 5) throw new Error('the select bar only has ' + kids.length + ' children — this is not the crowded Projects-tab bar the bug lives on');
+        const vw = window.innerWidth;
+        const off = kids.filter(c => c.getBoundingClientRect().right > vw + 0.5)
+                        .map(c => (c.className || c.tagName).split(' ')[0] + ' ends at ' + Math.round(c.getBoundingClientRect().right));
+        if (off.length)
+          throw new Error(off.length + ' control(s) hang off a ' + vw + 'px screen: ' + off.join(' · ') +
+                          ' — on the Projects tab that is Cancel, the one button that gets you out of select mode');
+        const small = kids.filter(c => /hm-selbtn/.test(c.className || '') && c.getBoundingClientRect().height < 30);
+        if (small.length) throw new Error(small.length + ' select-bar button(s) are under 30px tall — fitting the row by shrinking the targets is not a fix');
+      } finally {
+        const c = [].slice.call(document.querySelectorAll('.hm-selbtn')).filter(b => /cancel/i.test(b.textContent || ''))[0];
+        if (c) { try { c.click(); } catch (e) {} }
+        await sleep(150);
+        try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      }
+    });
   });
 
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
