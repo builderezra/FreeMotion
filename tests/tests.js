@@ -46392,6 +46392,58 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 631 — SAVING THE LAST FRAME MUST NOT GIVE A BLACK IMAGE ═══════════════════════════
+   * Ezra: *"I did save Frame as pnj on the last frame and I got a black image"*.
+   * 📐 MEASURED on a 4s project at 30fps before the fix — lit pixels: end-2f 40,000 · end-1f 40,000 ·
+   * **end 0** · end+1f 0. A clip runs [start, start+duration), so at exactly the end nothing is drawn.
+   * Correct for the renderer, wrong for a person: "the last frame" means the last one with a picture.
+   * 🚨 And FM.setTime(3.999) snaps FORWARD to 4.000, so the final fraction of a second rounds into the
+   * blank instant — dragging the playhead to the end lands there without trying.
+   * Third of a family: #626 and #627 were the same boundary where the app JUMPS; this is where it
+   * EXPORTS. */
+  test('#631: saving the frame at the end of the timeline gives the picture, not black', { item: '631' }, function () {
+    if (!FM.frameExportTime) throw new Error('FM.frameExportTime is missing — the clamp was reverted or renamed');
+    const S = FM.scene, P = S.project;
+    const keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration, ofps = P.fps, wasT = FM._exportTransparent;
+    try {
+      FM._exportTransparent = true;    // the opaque project background would light every pixel
+      const W = 240, H = 240; P.width = W; P.height = H; P.duration = 4; P.fps = 30;
+      S.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 160, shapeH: 160, fill: '#ffffff' });
+      L.start = 0; L.duration = 4; S.layers.push(L);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const lit = t => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, S, t); const d = cx.getImageData(0, 0, W, H).data;
+                         let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; };
+
+      /* THE BUG MUST STILL BE THERE TO CLAMP AWAY FROM. If rendering at exactly the end ever starts
+         producing a picture on its own, this test would pass while proving nothing about the clamp —
+         so assert the raw renderer still behaves the way the measurement said it does. */
+      if (lit(P.duration) !== 0) throw new Error('rendering at exactly the end is no longer blank, so this test is not measuring the thing it was written for');
+      if (!(lit(P.duration - 1 / 30) > 1000)) throw new Error('the frame before the end is blank too — the fixture is not drawing anything');
+
+      const t = FM.frameExportTime(P.duration);
+      if (!(t < P.duration)) throw new Error('frameExportTime returned ' + t + ' at the end of the project — it did not clamp, so the PNG is still black');
+      if (!(lit(t) > 1000)) throw new Error('the clamped instant (' + t.toFixed(3) + 's) still renders blank');
+
+      /* PAST the end clamps too — the playhead can be parked there and setTime does not stop it. */
+      if (!(lit(FM.frameExportTime(P.duration + 2)) > 1000)) throw new Error('a time past the end still renders blank');
+
+      /* ⚠️ AND IT MUST NOT TOUCH ANY OTHER MOMENT. A blank instant in the MIDDLE of a timeline is the
+         truth about that instant, and silently shifting it would make the saved frame a lie. */
+      for (const mid of [0, 0.5, 2, P.duration - 1 / 30]) {
+        if (FM.frameExportTime(mid) !== mid) throw new Error('frameExportTime moved ' + mid + 's to ' + FM.frameExportTime(mid) + ' — it must only clamp the end');
+      }
+      S.layers.length = 0;   // an empty project has nothing to clamp to, and must not throw
+      if (!(FM.frameExportTime(P.duration) >= 0)) throw new Error('frameExportTime returned a negative or invalid time on an empty project');
+    } finally {
+      FM._exportTransparent = wasT;
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od; P.fps = ofps;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 610 — BORDER & SHADOW IS A PANEL, NOT A DEBUG FORM ════════════════════════════════
    * Ezra, and it was a REPEAT of an earlier ask he had already made: *"You still haven't re designed
    * the border and shadow section to look better instead of the simple tick boxes as it is"*.

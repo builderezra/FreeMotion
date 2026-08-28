@@ -3034,16 +3034,37 @@ window.FM = window.FM || {};
     return out;
   };
 
+  /* ═══ WHICH INSTANT A SAVED FRAME IS TAKEN AT (queue 631) ═══════════════════════════════════════
+   * Ezra: *"I did save Frame as pnj on the last frame and I got a black image"*.
+   * 📐 MEASURED on a 4-second project at 30fps, lit pixels at each instant:
+   *     end - 2 frames 40,000 · end - 1 frame 40,000 · **end 0** · end + 1 frame 0
+   * A clip occupies `[start, start+duration)`, so at EXACTLY the end nothing is on screen. That is the
+   * correct rule for the renderer and the wrong answer for a person: "the last frame" to him is the
+   * last frame that has a picture in it.
+   * 🚨 AND IT IS NOT A CORNER HE HAD TO HUNT FOR. `FM.setTime(3.999)` snaps FORWARD to 4.000 — the
+   * final fraction of a second rounds INTO the blank instant — so simply dragging the playhead to the
+   * end lands exactly there. This is the same boundary that produced #626 and #627; those were fixed
+   * where the app JUMPS, and this is the other half the entry named: where it EXPORTS an end.
+   * A frame past the end is clamped back to the last real one. Anything else is untouched, so a
+   * genuinely empty moment mid-timeline still saves as empty — which is the truth about that moment. */
+  FM.frameExportTime = function (t) {
+    const P = FM.scene.project, fps = P.fps || 30;
+    if (!(t >= P.duration)) return t;
+    return Math.max(0, P.duration - 1 / fps);
+  };
+
   // Export the current frame as a PNG (clean render, no onion/overlays).
   FM.snapshotPNG = function () {
     const P = FM.scene.project;
+    const t = FM.frameExportTime(FM.time);
     const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
-    FM.renderScene(c.getContext('2d'), FM.scene, FM.time);
+    FM.renderScene(c.getContext('2d'), FM.scene, t);
     const base = (P.name || 'frame').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'frame';
     c.toBlob(blob => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = base + '-' + FM.time.toFixed(2) + 's.png';
+      // the filename names the instant that was actually RENDERED, not the one the playhead sat on
+      const a = document.createElement('a'); a.href = url; a.download = base + '-' + t.toFixed(2) + 's.png';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, 'image/png');

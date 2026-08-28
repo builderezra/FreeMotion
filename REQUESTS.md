@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.20
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.21
 >
-> **State:** v14.20, 1069 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.21, 1070 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23740,12 +23740,11 @@ re-opened #480, which I had marked done and had not fixed.
       what `layerSize`/bounds a group reports** — an anchor expressed as a fraction of a size that is
       wrong for groups would land the pivot in a corner and would also explain #628.
 
-- [ ] **631 — 🔴 "Save frame as PNG" on the LAST frame gives a black image.** (27 Aug, at v13.53.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **631 — 🔴 "Save frame as PNG" on the LAST frame gives a black image.** (27 Aug, at v13.53.)
       His words, verbatim:
       > I did save Frame as pnj on the last frame and I got a black image
 
-      1. [ ] **Exporting the last frame must produce the picture, not black.**
+      1. [x] **Exporting the last frame must produce the picture, not black.**  ✅ v14.21
       🚨 **THIS IS THE THIRD REPORT IN A ROW ABOUT THE END OF THE TIMELINE BEING EMPTY, and that is
       the most useful thing about it.** Read all three together — they are very likely ONE boundary rule:
       · **#626** — every clip sped up the same amount, all ending together, *"the end of the clip is blank"*.
@@ -23762,6 +23761,33 @@ re-opened #480, which I had marked done and had not fixed.
       `end − 1/fps`, at `end`, and at `end + 1/fps` and read the lit-pixel count at each.**
       ⚠️ **And check whether the PNG path renders at a DIFFERENT time from the preview** — "save frame"
       may round or clamp its own way, in which case #631 is its own bug and only #626/#627 share a cause.
+
+
+      ═══ ✅ **29 AUG (v14.21) — MEASURED FIRST, AND THE HYPOTHESIS WAS RIGHT.** ═══
+      This entry demanded a measurement before touching the comparison, and it was right to: an
+      off-by-one at a boundary is exactly the kind of thing that looks obvious and turns out to be
+      something else. **On a 4-second project at 30fps, lit pixels:**
+      | instant | lit |
+      |---|---|
+      | end − 2 frames | 40,000 |
+      | end − 1 frame | 40,000 |
+      | **exactly the end** | **0** |
+      | end + 1 frame | 0 |
+      A clip occupies `[start, start+duration)`, so at exactly the end nothing is on screen. That is
+      correct for the renderer and **wrong for a person** — "the last frame" means the last one with a
+      picture in it.
+      🚨 **AND IT IS NOT A CORNER YOU HAD TO HUNT FOR, which the entry did not know:** `setTime(3.999)`
+      **snaps FORWARD to 4.000**. The final fraction of a second rounds INTO the blank instant, so
+      dragging the playhead to the end lands there without trying. That is why you hit it first go.
+      ✅ **A saved frame at or past the end now clamps back to the last real frame**, and the filename
+      names the instant actually RENDERED rather than the one the playhead sat on.
+      🔗 **The entry's own hunch about #626 and #627 was correct — same boundary, three symptoms.**
+      Those two were fixed where the app JUMPS (v13.76, v13.77); this is the other half the entry
+      named, where it EXPORTS.
+      🔒 **The test asserts the renderer is STILL BLANK at the end before checking the clamp** — if that
+      ever stopped being true the test would pass while proving nothing — and that **no other instant
+      moves**, because a blank moment in the middle of a timeline is the truth about that moment and
+      shifting it would make a saved frame a lie. Mutation-checked.
 
 - [ ] **632 — Inside a group, the left of the timeline wastes a lot of space.** (27 Aug, phone
       **STATUS: 🟢 READY — nothing is stopping this**
