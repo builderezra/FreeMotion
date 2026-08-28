@@ -1,0 +1,135 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:390px;height:800px;border:0"></iframe>
+<script>
+/* QUEUE 508 — "the project you press doesn't smoothly glide to the left and then the project comes in
+ * from the right. It's always junkie every time."
+ *
+ * ⛔ THIS ENTRY WAS SKIPPED ONCE FOR WANT OF A MEASUREMENT, and rightly: the preview pane reported
+ * document.hidden true and rAF fired 0 frames in 1.6s, so nothing about smoothness could be read. Its
+ * own instruction is to measure the frame gaps BEFORE picking an easing curve, because the alternative
+ * — choosing a nicer curve by eye and declaring it smoother — is the exact pattern #125 spent five
+ * passes documenting.
+ * The pane was the problem, not the app. This is a real headless browser where rAF runs, so the
+ * measurement it was waiting for is available here. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.home && w.FM.projects)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document;
+    /* THE CONTROL FIRST — rule 11. If rAF does not advance here either, every number below is fiction
+       and the honest answer is "still cannot be measured". */
+    var ctlFrames = 0, ctlT0 = performance.now();
+    await new Promise(function(r){
+      (function tick(){ ctlFrames++; if (performance.now()-ctlT0 < 500) w.requestAnimationFrame(tick); else r(); })();
+    });
+    say('CONTROL: rAF fired ' + ctlFrames + ' frames in 500ms  ' +
+        (ctlFrames > 10 ? 'OK — smoothness can be measured here' : 'TOO FEW — nothing below is trustworthy'));
+    if (ctlFrames <= 10) { window.__done = true; return; }
+    say('');
+
+    if (FM.home && FM.home.open) FM.home.open();
+    await new Promise(function(r){ setTimeout(r,900); });
+    var card = d.querySelector('.hm-card[data-pid]');
+    if (!card) {
+      var r2 = await FM.projects.create({ name: 'open-anim probe' });
+      await new Promise(function(x){ setTimeout(x,600); });
+      FM.home.open(); await new Promise(function(x){ setTimeout(x,700); });
+      card = d.querySelector('.hm-card[data-pid]');
+    }
+    if (!card) return say('no project card to open');
+
+    var app = d.getElementById('app');
+    var cs0 = w.getComputedStyle(card);
+    say('BEFORE the tap:');
+    say('  card animation : ' + cs0.animationName + '   transition: ' + cs0.transition.slice(0,60));
+    say('  card transform : ' + cs0.transform);
+
+    // sample every frame across the transition
+    var samples = [], t0 = performance.now(), last = t0, worst = 0;
+    card.click();
+    await new Promise(function(r){
+      (function tick(){
+        var now = performance.now(), gap = now - last; last = now;
+        if (samples.length) worst = Math.max(worst, gap);
+        var cc = card.isConnected ? w.getComputedStyle(card) : null;
+        var ac = app ? w.getComputedStyle(app) : null;
+        samples.push({ t: now - t0, gap: gap,
+                       card: cc ? cc.transform : 'gone',
+                       cardOp: cc ? cc.opacity : '-',
+                       appAnim: ac ? ac.animationName : '-' });
+        if (now - t0 < 900) w.requestAnimationFrame(tick); else r();
+      })();
+    });
+    say('');
+    say('DURING the open — ' + samples.length + ' frames over 900ms');
+    var moved = samples.filter(function(s){ return s.card !== 'gone' && s.card !== 'none'; });
+    say('  frames where the CARD had a transform : ' + moved.length);
+    say('  distinct card transforms              : ' + (new Set(samples.map(function(s){return s.card;}))).size);
+    say('  #app animation seen                   : ' + (new Set(samples.map(function(s){return s.appAnim;}))).size + ' distinct  ' +
+        JSON.stringify([].concat.apply([], [Array.from(new Set(samples.map(function(s){return s.appAnim;})))])).slice(0,60));
+    say('  worst frame gap                       : ' + worst.toFixed(1) + 'ms');
+    var late = samples.filter(function(s,i){ return i && s.gap > 33; }).length;
+    say('  frames over 33ms                      : ' + late + ' of ' + samples.length);
+    say('');
+    if ((new Set(samples.map(function(s){return s.card;}))).size <= 1)
+      say('🚨 THE CARD NEVER MOVES — there is no glide-out at all, which is exactly what he described.');
+    else
+      say('the card does move; the question is then whether it is SMOOTH — see the gaps above.');
+
+    /* ── WHAT DOES THE CARDS' BACKDROP BLUR COST DURING THE TRANSITION? ──────────────────────────
+       theme-glass.css puts `backdrop-filter: blur(14px) saturate(140%)` on EVERY card, and its own
+       comment says a backdrop-filter over an ANIMATING backdrop "forces a readback per grain frame,
+       per card" — and the grain crossfades every 180ms. So at the exact moment the open transition
+       needs the frame budget, the home screen is doing a per-card GPU readback.
+       Measure it rather than assume: run the same open with the blur suppressed and compare. */
+    async function openRun(label, suppress){
+      FM.home.open();
+      await new Promise(function(r){ setTimeout(r,900); });
+      var st = null;
+      if (suppress) { st = d.createElement('style'); st.textContent = '.hm-card{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}'; d.head.appendChild(st); await new Promise(function(r){ setTimeout(r,250); }); }
+      var c2 = d.querySelector('.hm-card[data-pid]');
+      if (!c2) { if (st) st.remove(); return null; }
+      var n2 = d.querySelectorAll('.hm-card').length;
+      var gaps = [], l2 = performance.now(), s0 = l2;
+      c2.click();
+      await new Promise(function(r){
+        (function tk(){ var now = performance.now(); gaps.push(now - l2); l2 = now;
+          if (now - s0 < 800) w.requestAnimationFrame(tk); else r(); })();
+      });
+      if (st) st.remove();
+      gaps.shift();
+      gaps.sort(function(x,y){return x-y;});
+      var med = gaps[gaps.length>>1], wst = gaps[gaps.length-1];
+      var late = gaps.filter(function(g){ return g > 33; }).length;
+      say('  ' + label + '  cards ' + n2 + '  median gap ' + med.toFixed(1) + 'ms  worst ' + wst.toFixed(1) + 'ms  over-33ms ' + late + '/' + gaps.length);
+      return { med: med, worst: wst, late: late };
+    }
+    say('');
+    say('── THE CARDS\' BACKDROP BLUR, DURING THE OPEN ──');
+    /* ⚠️ THE COST IS PER CARD, so measuring it with ONE card measures nothing — the first run of this
+       did exactly that and read "no meaningful difference", which would have been a confident wrong
+       answer. His own home has at least seventeen projects (Project 2, 3, 5, 11, 17 are visible in his
+       screenshots), so the fixture has to be his size or the reading is not about him. */
+    var have = d.querySelectorAll('.hm-card[data-pid]').length;
+    for (var mk = have; mk < 16; mk++) { try { await FM.projects.create({ name: 'blurload ' + mk }); } catch(e){} }
+    FM.home.open(); await new Promise(function(r){ setTimeout(r,900); });
+    say('  fixture now has ' + d.querySelectorAll('.hm-card').length + ' cards on screen');
+    var withBlur = await openRun('with blur   ', false);
+    var noBlur   = await openRun('blur off    ', true);
+    if (withBlur && noBlur) {
+      say('');
+      say('  worst frame ' + withBlur.worst.toFixed(1) + 'ms -> ' + noBlur.worst.toFixed(1) + 'ms' +
+          (withBlur.worst > noBlur.worst * 1.2 ? '   <<< the blur is a real cost during the transition' : '   (no meaningful difference here)'));
+    }
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

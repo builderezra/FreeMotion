@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.09
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.10
 >
-> **State:** v14.09, 1053 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.10, 1053 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -19057,7 +19057,30 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ➡️ **NOT BLOCKED — there is no question in this entry at all.** It is measurable work (the card should glide out rather than cut), not a decision for him.
+      ❓ASK: is opening a project still janky on your phone at v14.10? It measures smooth here even with sixteen cards on screen, so if it is still bad it is your device and the next step is a reading from it.
+      ═══ ✅ **28 AUG (v14.10) — MEASURED AT LAST, AND IT RULES THINGS OUT.** ═══
+      **This entry was SKIPPED once for want of a measurement and that was right** — the preview pane
+      reported `document.hidden` true and rAF fired 0 frames in 1.6s, so nothing about smoothness could
+      be read. **The pane was the problem, not the app**: a headless browser runs rAF normally, and the
+      control confirms it (32 frames in 500ms) before any number below is believed.
+      📐 **THE OPEN TRANSITION, sampled every frame at 390px:**
+      | | |
+      |---|---|
+      | frames captured | 56 over 900ms |
+      | **the card DOES glide** | **24 distinct transforms** — it is not a cut |
+      | `#app` | animates `fm-push-in` |
+      | worst frame gap | **17.9 ms** |
+      | frames over 33 ms | **0 of 56** |
+      🛑 **AND A GOOD HYPOTHESIS, REFUTED.** `theme-glass.css` puts `backdrop-filter: blur(14px)` on
+      EVERY card, and its own comment warns that a backdrop-filter over an ANIMATING backdrop "forces a
+      readback per grain frame, per card" — with the grain crossfading every 180ms. That is real work
+      landing exactly when the transition needs the budget.
+      ⚠️ **The first run of that test used ONE card and read "no meaningful difference", which would have
+      been a confident wrong answer — the cost is PER CARD.** Re-run with **sixteen** cards, his own
+      scale: **16.9 ms median with the blur, 16.6 ms without. No difference.** The blur is not it.
+      ➡️ **SO: the transition exists, it animates, and it is smooth on this machine at his card count.**
+      That is the same wall as #95, #125 and #387 — and the difference now is that the ruling-out is
+      recorded rather than the entry being skipped again.
       His words, verbatim:
       > Also the animation when opening a project still looks really Jany like the button you press on like the project you press one to open doesn't smoothly glide to the left with like a nice animation and then the project comes in smoothly from the right. It's always junkie every time it doesn't look good.
       **He is describing a specific transition**, not "make it nicer": the card he tapped slides OUT to the
