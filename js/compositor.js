@@ -986,6 +986,11 @@ window.FM = window.FM || {};
       { key: 'size', label: 'Tile', min: 8, max: 400, step: 1, def: 120, unit: 'px' },
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
     ] },
+    // ---- Wrap Shift (queue 484: AM's Offset, our name) — slide the frame, wrap the overflow ----
+    { type: 'wrapshift', label: 'Wrap Shift', params: [
+      { key: 'offsetx', label: 'Shift X', min: -100, max: 100, step: 1, def: 25, unit: '%' },
+      { key: 'offsety', label: 'Shift Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'palettemap', label: 'Palette Map', params: [
       { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4 },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -2651,7 +2656,7 @@ window.FM = window.FM || {};
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
     squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
-    turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
+    turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
@@ -7653,6 +7658,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
+    /* WRAP SHIFT (queue 484 clause 2 — Alight Motion calls it Offset, and he asked for their gaps
+       filled "but change the names"). Slide the picture and let whatever leaves one edge come back in
+       the other, so a keyframed 0→100% is a seamless loop.
+       ⚠️ THE SHIFTS ARE A PERCENTAGE OF THE FRAME, WHICH IS WHY `ps` IS UNUSED. W and H are PLATE
+       dimensions and already carry the plate scale, so W*(pct/100) is the same fraction of the picture
+       at every render scale. Multiplying by `ps` the way wave and ripple must — their amplitudes are
+       absolute px — would apply the scale TWICE, and a reduced preview would slide further than the
+       export does. That is a preview/export mismatch, which is the class of bug renderScale exists for.
+       The shift is ROUNDED to a whole plate pixel because the sampler truncates anyway (`sx = m[0]|0`),
+       so 105.4 and 106 already draw the same frame — nothing is lost, and it leaves every quantity an
+       exact small integer, which a float holds exactly on both the CPU and the GPU. That removes the
+       floor-boundary disagreement the gridrepeat note warns about rather than tolerating it. */
+    wrapshift: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.wrapshift.prep(W,H,cx,cy,maxR,p,t,ps); return [((x-C.dx)%W+W)%W, ((y-C.dy)%H+H)%H]; },
   };
   Object.setPrototypeOf(WARP_FX, null);   // own keys only — see POSTFX
   /* THE REFERENCE BODIES MUST NOT LIVE IN WARP_FX, and the suite is what taught me that. I parked
@@ -7977,6 +7995,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'sx = mod(mod(sx, res.x) + res.x, res.x);',
     'sy = mod(mod(sy, res.y) + res.y, res.y);',
     'return vec2(sx, sy);'
+  ].join('\n');
+
+  /* WRAP SHIFT — both shifts are frame constants, so they are worked out once here instead of twice
+     per pixel. The prep doubles as the SHADER'S uniforms (drawWarpEffect falls back to `prep` when a
+     kernel has no `glslPrep`), so the kernel and its twin read the same two numbers and cannot drift.
+     The defaults must match the catalog row exactly: an older project, or a node an AI op wrote, can
+     arrive with the keys absent and this is what it renders at. */
+  WARP_FX.wrapshift.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var px = p.offsetx == null ? 25 : FM.evalProp(p.offsetx, t);
+    var py = p.offsety == null ? 0 : FM.evalProp(p.offsety, t);
+    return { dx: Math.round(W * (px || 0) / 100), dy: Math.round(H * (py || 0) / 100) };
+  };
+  /* ⚠️ THE DOUBLE MOD IS TRANSCRIBED, NOT SIMPLIFIED — the same decision tileshift's shader records,
+     for the same reason. JavaScript's `%` keeps the sign of the DIVIDEND; GLSL's `mod` is floor-based;
+     they disagree on a negative input. `mod(mod(a,n)+n, n)` is the one shape that returns the same
+     non-negative answer in both languages for any input, and it costs nothing.
+     The wrapper's `clamp(s, 0.0, res-1.0)` is a no-op here in BOTH paths, and that is the effect
+     working: the mod has already put every sample inside the plate, so nothing is pinned to an edge. */
+  WARP_FX.wrapshift.glsl = [
+    'vec2 s = xy - vec2(u_dx, u_dy);',
+    'return mod(mod(s, res) + res, res);'
   ].join('\n');
 
   /* CURL — a swirl whose angle oscillates with radius. ⚠️ At the exact centre GLSL's atan(0,0) is

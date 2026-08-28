@@ -46385,6 +46385,55 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 484 CLAUSE 2 — WRAP SHIFT, the first of the gaps he asked to be filled ════════════
+   * *"look for effects alight motion has that we don't, add them but change the names."* Theirs is
+   * called Offset; ours is Wrap Shift. It slides the picture and brings whatever leaves one edge back
+   * in the other.
+   * ⚠️ THE ASSERTION IS THAT IT IS A PERMUTATION, and that is chosen rather than convenient. "Some
+   * pixels moved" would pass for a plain translate too, and a translate is the thing this must NOT
+   * be: a translate throws away what falls off and clamps a whole strip onto the edge column, so its
+   * sources collapse and the frame empties. Requiring every source to be distinct is the one property
+   * that separates wrapping from sliding, and it fails loudly for the wrong implementation. */
+  test('#484: Wrap Shift wraps the frame instead of sliding it off the edge', { item: '484' }, function () {
+    const k = FM._warpFx && FM._warpFx.wrapshift;
+    if (!k) throw new Error('WARP_FX.wrapshift is missing — the kernel was reverted or renamed');
+    if (!FM.fxRegistry.makeInstance('wrapshift')) throw new Error('wrapshift is not registered, so it is unreachable dead code — a WARP_FX kernel with no POSTFX entry never runs');
+    const W = 128, H = 96, P = { offsetx: 25, offsety: 0 };
+    const pre = k.prep(W, H, W / 2, H / 2, Math.hypot(W / 2, H / 2), P, 0, 1);
+    const seen = new Set();
+    let moved = 0, outside = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const m = k(x, y, W, H, W / 2, H / 2, Math.hypot(W / 2, H / 2), P, 0, 1, pre);
+        const sx = m[0] | 0, sy = m[1] | 0;
+        if (sx < 0 || sx >= W || sy < 0 || sy >= H) outside++;
+        if (sx !== x || sy !== y) moved++;
+        seen.add(sy * W + sx);
+      }
+    }
+    if (outside) throw new Error(outside + ' samples landed outside the frame — a wrap must never need the edge clamp');
+    if (seen.size !== W * H) throw new Error('the kernel read only ' + seen.size + ' of ' + (W * H) +
+      ' distinct source pixels — it is SLIDING and clamping, not wrapping, so part of the frame is being thrown away and a strip of edge pixels smeared in its place');
+    if (moved < W * H * 0.9) throw new Error('only ' + moved + ' pixels moved at the default 25% shift — the effect does nothing at the value it ships with, which is exactly the #661 complaint');
+
+    /* AT ZERO IT MUST BE THE IDENTITY. An effect that shifts the picture when you have asked for no
+       shift cannot be keyframed from a rest position, which is the entire use his description names. */
+    const z = k.prep(W, H, W / 2, H / 2, 1, { offsetx: 0, offsety: 0 }, 0, 1);
+    for (const [x, y] of [[0, 0], [7, 11], [W - 1, H - 1]]) {
+      const m = k(x, y, W, H, W / 2, H / 2, 1, { offsetx: 0, offsety: 0 }, 0, 1, z);
+      if ((m[0] | 0) !== x || (m[1] | 0) !== y) throw new Error('at 0% the kernel moved (' + x + ',' + y + ') to (' + (m[0] | 0) + ',' + (m[1] | 0) + ')');
+    }
+    /* A NEGATIVE SHIFT MUST WRAP TOO — JavaScript's % keeps the sign of the dividend, so the naive
+       single mod returns a negative index here and the sampler clamps it to column 0. */
+    const n = k.prep(W, H, W / 2, H / 2, 1, { offsetx: -30, offsety: -40 }, 0, 1);
+    for (const [x, y] of [[0, 0], [3, 2]]) {
+      const m = k(x, y, W, H, W / 2, H / 2, 1, { offsetx: -30, offsety: -40 }, 0, 1, n);
+      if (m[0] < 0 || m[1] < 0) throw new Error('a negative shift produced a negative source (' + m[0] + ',' + m[1] + ') — the double mod is what stops that');
+    }
+    /* AND IT CARRIES A SHADER TWIN, which is the thing that makes it cheap on his phone. */
+    if (!k.glsl) throw new Error('wrapshift has no .glsl twin, so it runs the per-pixel JavaScript loop on a device that could do it in one shader pass');
+  });
+
   /* ═══ QUEUE 645 — THE WARNING MUST STOP WHEN THE EFFECTS START WORKING ═════════════════════════
    * #661 existed because the app told him nine colour effects were fine on a device where they drew
    * NOTHING: *"These effects still don't work on mobile, this is probably the biggest issue you still

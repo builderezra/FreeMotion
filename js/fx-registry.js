@@ -83,7 +83,7 @@ window.FM = window.FM || {};
     // batch 27
     touchup: 'matte',     // Remove Object — content-aware rectangular fill (delogo-style)
     // batch 28 (more AM Distortion/Warp + Procedural + Color parity)
-    turbulentdisplace: 'distort', stretchseg: 'distort', tileshift: 'distort', tilerotate: 'distort',
+    turbulentdisplace: 'distort', stretchseg: 'distort', tileshift: 'distort', tilerotate: 'distort', wrapshift: 'distort',
     palettemap: 'color', lightning: 'proc',
     // batch 29 (layer-referencing displacement)
     displacemap: 'distort', polardisplace: 'distort',
@@ -354,6 +354,7 @@ window.FM = window.FM || {};
     tunnel: 'Pulls the frame into a receding tunnel around the centre.',
     stretchseg: 'Grabs one horizontal band and stretches it — the glitchy pulled-taffy smear.',
     tileshift: 'Chops the frame into tiles and slides alternate rows sideways.',
+    wrapshift: 'Slides the picture across the frame, and whatever leaves one edge comes back in the other. Keyframe it from 0 to 100% for a seamless loop.',
     tilerotate: 'Chops the frame into tiles and rotates each one in place.',
     squish: 'Makes the canvas edges solid: a layer sliding off-frame squashes against the edge instead of being cut off. Pair it with a Bounce ease on Position and the impact squash comes free.',
     displacemap: 'Pushes each pixel by the colour of another layer at that spot — red moves it sideways, green up and down.',

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.15
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.16
 >
-> **State:** v14.15, 1064 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.16, 1065 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -13939,6 +13939,34 @@ wait for them to report back."*
       exponent is what it is needs the word.
       ⚠️ **This is a publishing blocker, not tidying** — see BEFORE-PUBLISHING.md. Clause 2 (the ~30 AM
       effects we lack, under our own names) is still open and is workable now.
+
+      ═══ ✅ **29 AUG (v14.16) — CLAUSE 2 IS STARTED: "WRAP SHIFT" IS IN.** ═══
+      Their **Offset**, our **Wrap Shift**. It slides the picture and whatever leaves one edge comes
+      back in the other, so a keyframed 0 → 100% is a seamless loop. **It runs on the graphics card**
+      (it carries a `.glsl` twin), so it is nearly free on your phone, and the existing GPU-parity test
+      picked it up automatically — that test derives its own list from any kernel with a shader, which
+      is why porting one cannot ship untested.
+      🔒 **Its test asserts the kernel is a PERMUTATION of the frame, and that choice is the point.**
+      "Some pixels moved" would pass for a plain slide too — and a plain slide is exactly what this
+      must not be, because it throws away what falls off and smears an edge column in its place.
+      Requiring every source pixel to be read exactly once is the one property that tells wrapping from
+      sliding. Measured on a real frame through the compositor: **23.4% of pixels change at the default
+      25%, and the lit-pixel count is identical before and after** — nothing is lost, which is the whole
+      effect.
+      ⚠️ **AND THREE MORE WERE DESIGNED AND NOT SHIPPED, WHICH IS THE USEFUL HALF OF THIS ENTRY.**
+      Sway, Spill Remover and Duplicate Array were each designed and then checked against the existing
+      199 effects, and **not one survived**:
+      · **Duplicate Array is largely already there** — `linearrepeat` ("Trail") does most of it. Adding
+        it would make the effects list harder to search, which is a complaint you have already made.
+        **Needs a real difference or it should not exist.**
+      · **Spill Remover and Sway would both have been INVISIBLE at their default settings** on the
+        sample the effect tiles render against. **That is #661 exactly** — an effect that does nothing
+        until you drag a slider reads as broken, and that entry cost weeks.
+      · Wrap Shift's own first draft claimed in its description that the frame "never empties", which
+        is only true when the layer fills the plate. **Reworded before shipping.**
+      ➡️ **So clause 2 stays open, deliberately, with the next batch better specified than the last.**
+      Three of four designs were wrong in ways that would have shipped as bugs, and finding that before
+      writing them is worth more than four effects that each need a fix.
 
 - [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
       Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it
