@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.08
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.09
 >
-> **State:** v14.08, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.09, 1053 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -13594,9 +13594,18 @@ wait for them to report back."*
       **Asked him to resend** — this is the same *"maybe my images arent going through"* problem he has
       hit before, so it is recorded rather than guessed at.
       **Clauses:**
-      1. [ ] **Rename effects whose names are distinctively AM's.** His own line drawn for me: *"simple
-             things like exposure are fine"* — generic, descriptive, industry-standard names (Exposure,
-             Contrast, Gaussian Blur, Chroma Key) are not the problem. Coined or distinctive names are.
+      1. [x] ✅ **DONE v14.09 — all twenty-two renamed.** Copy Background → **Backdrop Clone**, Text
+             Progress → **Type-On**, Radial Repeat → **Ring Array**, Hexagon Array → **Honeycomb**,
+             Flip Layer → **Card Flip**, and the rest of the table below.
+             **The ~40 industry-standard names are deliberately untouched** — his own line is *"simple
+             things like exposure are fine"*, and renaming Chroma Key or Vignette would make the app
+             harder to understand while protecting nothing. **The test asserts that too**, because a
+             sweep that renamed everything would pass every other check and be exactly wrong.
+             🚨 **THE RISK WAS NEVER THE WORDS, IT WAS THE KEY.** An effect's `type` is what every saved
+             project and preset stores — change one and his existing work loses that effect SILENTLY:
+             the project opens, the layer is there, the effect is simply gone. **Only labels moved**, and
+             the test resolves all twenty-two keys to prove it.
+             ➡️ **Every name is his to veto** — say the word and any of them changes.
       2. [ ] **Add effects AM has that we lack — under OUR OWN names.**
       3. [ ] **Add anything else genuinely good for this app**, his invitation.
       🔗 **THIS IS [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) TERRITORY** and the standing rule says to

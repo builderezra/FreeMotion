@@ -45859,6 +45859,58 @@
     }
   });
 
+  /* ═══ QUEUE 484 — RENAMED, AND THE GUARANTEE THAT MAKES IT SAFE ════════════════════════════════
+   * *"names where we are obviously copying should be changed"* — twenty-two effect names that no other
+   * editor uses, renamed. The forty industry-standard ones (Chroma Key, Vignette, Wipe, Lens Flare…)
+   * are deliberately untouched: his own line is *"simple things like exposure are fine"*, and renaming
+   * those would make the app harder to understand and protect nothing.
+   * 🚨 THE RISK IS NOT THE WORDS, IT IS THE KEY. An effect's `type` is what every saved project and
+   * every saved preset stores. Change a type and his existing work loses that effect silently — the
+   * project opens, the layer is there, and the effect is simply gone. **Only the label may move.**
+   * This asserts the types still exist, which is the half a reader cannot check by eye. */
+  test('#484: renaming effects did not move any stored key', { item: '484' }, function () {
+    if (!FM.fxRegistry) throw new Error('the registry is not reachable');
+    const RENAMED = ['copybg', 'fillbehind', 'magnifybg', 'counter', 'textprogress', 'textrandomizer',
+                     'textspacing', 'texttransform', 'pulseopacity', 'mattefringe', 'solidmatte',
+                     'gridrepeat', 'linearrepeat', 'radialrepeat', 'blocknoise', 'hexarray', 'rays',
+                     'rasterextrude', 'starpoly3d', 'axiscross3d', 'hollowbox3d', 'fliplayer'];
+    const gone = RENAMED.filter(t => !FM.fxRegistry.makeInstance(t));
+    if (gone.length)
+      throw new Error('these effect keys no longer exist: ' + gone.join(', ') +
+                      ' — every saved project and preset stores the TYPE, so his existing work has silently lost them');
+    /* …and each still renders. A key that resolves to a dead entry is the same loss one step later. */
+    const dead = RENAMED.filter(t => {
+      const i = FM.fxRegistry.makeInstance(t);
+      return !i || i.type !== t;
+    });
+    if (dead.length) throw new Error('these keys resolve to the wrong type: ' + dead.join(', '));
+
+    /* THE RENAME ITSELF, on a sample — otherwise this test passes just as well on the old names and
+       proves only that nothing broke, which was never in doubt. */
+    const want = { copybg: 'Backdrop Clone', textprogress: 'Type-On', radialrepeat: 'Ring Array',
+                   hexarray: 'Honeycomb', fliplayer: 'Card Flip' };
+    const wrong = [];
+    for (const k of Object.keys(want)) {
+      const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
+      const d = defs.filter(x => (x.key || x.id || x.type) === k)[0];
+      const label = d && (d.label || d.name);
+      if (label && label !== want[k]) wrong.push(k + ' reads "' + label + '", expected "' + want[k] + '"');
+    }
+    if (wrong.length) throw new Error('the rename did not reach these: ' + wrong.join(' · '));
+
+    /* AND THE ONES HE SAID TO LEAVE ALONE MUST BE LEFT ALONE — *"simple things like exposure are fine"*.
+       A sweep that renamed everything would satisfy the assertions above and be exactly wrong. */
+    const keepNames = { chromakey: /chroma/i, vignette: /vignette/i, wipe: /wipe/i };
+    const moved = [];
+    for (const k of Object.keys(keepNames)) {
+      const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
+      const d = defs.filter(x => (x.key || x.id || x.type) === k)[0];
+      const label = d && (d.label || d.name);
+      if (label && !keepNames[k].test(label)) moved.push(k + ' is now "' + label + '"');
+    }
+    if (moved.length) throw new Error('industry-standard names were renamed too: ' + moved.join(' · ') + ' — he said those are fine');
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

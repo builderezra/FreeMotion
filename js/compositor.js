@@ -350,7 +350,7 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'drift', label: 'Drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
     ] },
-    { type: 'rays', label: 'Radial Rays', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
+    { type: 'rays', label: 'Sunburst', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'count', label: 'Rays', min: 3, max: 64, step: 1, def: 16 },
       { key: 'x', label: 'Source X', min: -50, max: 150, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Source Y', min: -50, max: 150, step: 1, def: 50, unit: '%' },
@@ -416,7 +416,7 @@ window.FM = window.FM || {};
       // project saved before this keeps its exact pixels; only a newly added Film Grain gets the lift.
       { key: 'highlights', label: 'In highlights', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ] },
-    { type: 'blocknoise', label: 'Block Noise', params: [
+    { type: 'blocknoise', label: 'Chunk Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'size', label: 'Block size', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
       { key: 'aspect', label: 'Block aspect', min: 0.1, max: 6, step: 0.05, def: 1 },
@@ -529,7 +529,7 @@ window.FM = window.FM || {};
     /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
        them: this one darkens, it does not make the layer vanish (queue 349). */
     { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }] },
-    { type: 'pulseopacity', label: 'Pulse Opacity', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }] },
+    { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }] },
     { type: 'dissolve', label: 'Dissolve', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Everywhere'], [1, 'From the left'], [2, 'From the right'], [3, 'From the top'], [4, 'From the bottom']] },
@@ -556,19 +556,19 @@ window.FM = window.FM || {};
        old step could hold is still exactly representable. */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
-    { type: 'solidmatte', label: 'Solid Matte', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
+    { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
       { key: 'feather', label: 'Feather', min: 0, max: 20, step: 1, def: 0, unit: 'px' },
       { key: 'contrast', label: 'Edge contrast', min: -1, max: 1, step: 0.05, def: 0 },
     ] },
-    { type: 'mattefringe', label: 'Matte Fringe', color: true, defColor: '#00e0ff', colorLabel: 'Fringe', params: [
+    { type: 'mattefringe', label: 'Edge Halo', color: true, defColor: '#00e0ff', colorLabel: 'Fringe', params: [
       { key: 'width', label: 'Width', min: 1, max: 12, step: 1, def: 3, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'feather', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0 },
     ] },
     // ---- batch 15: Repeat (tiled-coordinate warps) ----
-    { type: 'gridrepeat', label: 'Grid Repeat', params: [
+    { type: 'gridrepeat', label: 'Tile Grid', params: [
       { key: 'count', label: 'Columns', min: 1, max: 10, step: 1, def: 3 },
       { key: 'rows', label: 'Rows', min: 0, max: 10, step: 1, def: 0, note: '0 = same as columns' },
       { key: 'mirror', label: 'Mirror', def: 0, options: [[0, 'Off'], [1, 'X'], [2, 'Y'], [3, 'Both']] },
@@ -579,13 +579,13 @@ window.FM = window.FM || {};
        each cell; it draws real copies at original size now, so it needs the controls a repeat actually
        has. `count` keeps its key and its default, so an existing instance keeps the number it was set
        to and simply stops squishing. */
-    { type: 'linearrepeat', label: 'Linear Repeat', params: [
+    { type: 'linearrepeat', label: 'Trail', params: [
       { key: 'count', label: 'Copies', min: 1, max: 12, step: 1, def: 4 },
       { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
     ] },
-    { type: 'radialrepeat', label: 'Radial Repeat', params: [
+    { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
       { key: 'rotate', label: 'Seam angle', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'mirror', label: 'Mirror wedges', def: 0, options: [[0, 'Off'], [1, 'On']] },
@@ -623,7 +623,7 @@ window.FM = window.FM || {};
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
-    { type: 'hexarray', label: 'Hexagon Array', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
+    { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
@@ -702,14 +702,14 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
     ] },
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
-    { type: 'counter', label: 'Count Up/Down', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
-    { type: 'textprogress', label: 'Text Progress', params: [
+    { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
+    { type: 'textprogress', label: 'Type-On', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
     ] },
-    { type: 'textrandomizer', label: 'Text Randomizer', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
+    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -731,13 +731,13 @@ window.FM = window.FM || {};
       { key: 'ch', label: 'Pad with', def: 0, options: [[0, 'Zeros'], [1, 'Spaces'], [2, 'Dots'], [3, 'Dashes']] },
       { key: 'side', label: 'Side', def: 0, options: [[0, 'Before'], [1, 'After']] },
     ] },
-    { type: 'textspacing', label: 'Text Spacing', params: [
+    { type: 'textspacing', label: 'Letter Spread', params: [
       { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
       { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
     ] },
-    { type: 'texttransform', label: 'Text Transform', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
+    { type: 'texttransform', label: 'Per-Letter Motion', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
     { type: 'timecode', label: 'Timecode', params: [
       { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
@@ -820,18 +820,18 @@ window.FM = window.FM || {};
     { type: 'octahedron3d', label: 'Octahedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
     { type: 'hexprism3d', label: 'Hexagonal Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 55, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'starprism3d', label: 'Star Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'points', label: 'Points', min: 4, max: 10, step: 1, def: 5 }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 40, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
-    { type: 'starpoly3d', label: 'Star Polyhedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 2.5, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
+    { type: 'starpoly3d', label: 'Spiked Star', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 2.5, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
     { type: 'heart3d', label: 'Heart', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 45, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
-    { type: 'hollowbox3d', label: 'Hollow Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
-    { type: 'axiscross3d', label: 'Three-axis Cross', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'hollowbox3d', label: 'Open Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'axiscross3d', label: 'Cross Beam', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'pagecurl', label: 'Page Curl', params: [{ key: 'amount', label: 'Curl', min: 0, max: 1, step: 0.01, def: 0.45 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }, { key: 'radius', label: 'Radius', min: 5, max: 60, step: 1, def: 20, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.5 }] },
-    { type: 'fliplayer', label: 'Flip Layer', params: [
+    { type: 'fliplayer', label: 'Card Flip', params: [
       { key: 'mode', label: 'Flips', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'rasterextrude', label: 'Raster Extrude', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
+    { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
     { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
     // Shake is a headline tool for beat-drop edits, so it runs HOT: violent ranges, a zoom punch, a
@@ -1027,7 +1027,7 @@ window.FM = window.FM || {};
     // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
     // full-screen shape + Copy Background = an adjustment/colour-grade layer you can mask & animate.
-    { type: 'copybg', label: 'Copy Background', params: [] },
+    { type: 'copybg', label: 'Backdrop Clone', params: [] },
     // ---- Magnify Background: Copy Background with a lens. Same plate, same footprint, but the
     // copied backdrop is scaled about this layer's own anchor before it is clipped — so a shape
     // over the scene becomes a magnifying glass you can mask, animate and grade.
@@ -1039,7 +1039,7 @@ window.FM = window.FM || {};
     // (A WARP_FX / PIXEL_FX / CANVAS_FX kernel with no POSTFX entry is merely dead code, not a bug:
     // those tables are only read from inside applyPostFx, which POSTFX alone gates. POSTFX is the
     // one list to keep it out of.)
-    { type: 'magnifybg', label: 'Magnify Background', params: [
+    { type: 'magnifybg', label: 'Backdrop Lens', params: [
       { key: 'zoom', label: 'Zoom', min: 0.1, max: 8, step: 0.1, def: 2, unit: '×' },   // U+00D7, matching Glitch's "RGB tear" — the catalog's only other multiplier
     ] },
     // ---- Fill Behind: the blurred-backdrop fill every phone video app has. When the layer does NOT
@@ -1059,7 +1059,7 @@ window.FM = window.FM || {};
     // pixels). paintFillBehind is dispatched from fillBehindPass, before the stack draws.
     // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
     // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
-    { type: 'fillbehind', label: 'Fill Behind', params: [
+    { type: 'fillbehind', label: 'Backfill', params: [
       { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px' },
       { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×' },
       { key: 'dim', label: 'Dim', min: 0, max: 100, step: 1, def: 22, unit: '%' },
