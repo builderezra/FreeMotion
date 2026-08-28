@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.05
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.06
 >
-> **State:** v14.05, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.06, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -66,6 +66,15 @@
 > changed until you say. Everything else in that entry turned out to be closed already: the two tick
 > buttons are Safari's own keyboard bar (your photo settled that), and the "225pt but tiny" complaint
 > was measured — the number and the picture agree.
+>
+> **📮 EVERYTHING THAT IS WAITING ON A WORD FROM YOU IS NOW IN ONE PLACE: `./tools/asks.sh`.**
+> **44 of your 81 open items are waiting on an answer**, and until now those questions were scattered
+> through this file — one inside each entry, with no way to see them together. Part of the honest answer
+> to *"why are you so selective"* is that several of them were waiting on a word you were never shown you
+> owed. The tool reads the entries rather than keeping a list, so it cannot go stale.
+> ⚠️ **And it found something that is MY fault: 19 of those 44 do not say what they are waiting for.**
+> An item marked "waiting on Ezra" that never wrote down the question can sit forever and nobody notices.
+> Those are getting their questions written, or getting unblocked.
 >
 > **📋 YOUR NEXT SILENT EXPORT CAN END THIS — one tap.** Settings → **"Your last export"** → Copy →
 > send it to me. It says whether a soundtrack was written, which of the five reasons dropped it, and

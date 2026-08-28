@@ -133,7 +133,40 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **STATE, 28 Aug, v13.80 — 1030 tests green. The loop is running on a one-minute cron.**
+📍 **STATE, 28 Aug, v14.05 — 1052 tests green. The loop is running on a one-minute cron.**
+
+🔴 **HIS BIGGEST ISSUE IS #661 AND IT IS BUILT, BUT NOT CONFIRMED.** *"These effects still don't work on
+mobile, this is probably the biggest issue you still haven't solved."* Seven tiles badged "no change at
+this value" on a RED square. **The badge was lying and refutes itself** — grayscale can only reach that
+wording on a non-grey pixel, and grayscale on a non-grey pixel must change it. The only way both happen
+is `ctx.filter` never applying. **All nine CSS effects now render through a GPU shader when it does not**
+(js/gl-color.js, v13.95–v14.02), exact against the real filter, exercised via `FM._forceNoCtxFilter` so
+the path his phone takes is testable HERE.
+⚠️ **AND THE HONEST COST: effects that did nothing were FREE.** Drawing them costs **1.19x** per frame.
+Not a regression — they were broken, not cheap — but say it rather than selling the fix as free.
+
+🔑 **THE ONE SENTENCE THAT CHANGED EVERYTHING TODAY:** *"The export issues I have were on mobile, I don't
+got my pc rn but I've exported pc before just fine."* **#604's header says the bug being on BOTH devices
+"kills any 'his phone is odd' theory" — that is now withdrawn.** Every measurement in #604 and #215 was
+taken on the device that works. **Settings → "Your last export" → Copy** now answers it from his phone.
+
+🚨 **FOUR TIMES TODAY THE APP HAD WORKED OUT THE ANSWER AND WRITTEN IT SOMEWHERE HE COULD NEVER READ IT.**
+#129 (the H.265 sniff never ran on Safari), #215 (all five audio warnings painted behind the export
+overlay), #661 (perf-probe has said "THIS DEVICE CANNOT RUN CANVAS FILTERS" for weeks), #662 (every export
+value had no readers outside the suite). **When a report is unreproducible, check whether the app is
+already saying the answer somewhere invisible before hunting for a new cause.**
+
+🧪 **THE TOOLS CAUGHT ME THREE TIMES AND I WOULD HAVE SHIPPED ALL THREE:**
+· a **half-pixel** error across every warp kernel, which I had already written up as expected resample
+  noise, citing rule 14. **A tolerance chosen to accommodate a difference hides its cause.**
+· **two dead tests** that passed with their own fix removed (the quality ladder, and the contrast sweep —
+  the second because a broader selector still cannot see an element that was never rendered).
+· **queued GPU work timed as finished work**, three times in three disguises, including a "cliff at six
+  effects" that did not exist. **Every GPU timing needs a fence the driver cannot defer past.**
+
+🛑 **AND I DELETED FOUR TESTS WITH A TEXT EDIT AND THE SUITE WENT GREEN.** Found only by diffing test
+NAMES against HEAD by hand. **ship.sh now refuses that** (declare with `DROPS TEST:`). The test-FLOOR
+check does not cover it — it compares counts, so deletions and additions net out.
 
 🔥 **READ #645 FIRST — AND THE CAUSE IS NOW ALMOST CERTAINLY KNOWN. IT IS MOBILE-ONLY.**
 His words, after three sessions of desktop testing found nothing: *"I noticed that on pc the effects i
