@@ -45385,6 +45385,102 @@
                       'and an unparseable ctx.filter is silently ignored: every effect on the layer dies at once');
   });
 
+  /* ═══ QUEUE 661 — THE COLOUR FILTERS ON THE GPU, FOR DEVICES THAT CANNOT RUN ctx.filter ═════════
+   * Saying "your device cannot do this" (v13.94) is not the same as making it work. js/gl-color.js is
+   * the half that makes it work: the seven COLOUR members of FM.CSS_FX as one shader matrix.
+   * ⚠️ THE ONLY PLACE THE TWO PATHS CAN BE COMPARED IS A HEALTHY MACHINE — his phone cannot run the
+   * thing being replaced, so the reference does not exist there. So the suite asserts the GPU path
+   * against the REAL ctx.filter here, which is exactly what the fallback has to reproduce on a device
+   * where nobody can check. */
+  test('#661: the GPU colour path reproduces ctx.filter', { item: '661' }, function () {
+    if (!FM.glColor) throw new Error('FM.glColor is missing — js/gl-color.js did not load');
+    if (!FM.glColor.available()) throw new Error('WebGL is not available to the suite, so the colour fallback is UNTESTED: ' + FM.glColor.stats().reason);
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('this browser cannot run ctx.filter, so there is no reference to compare against');
+
+    const W = 64, H = 64;
+    // A spread of colours AND a semi-transparent column, because premultiplied alpha is where a
+    // colour-matrix port goes wrong and the error only shows on soft edges.
+    const src = document.createElement('canvas'); src.width = W; src.height = H;
+    const sx = src.getContext('2d', { willReadFrequently: true });
+    const COLS = ['#e8443f', '#3fa9e8', '#7ae83f', '#ffffff', '#000000', '#808080', '#ff00ff', '#123456'];
+    COLS.forEach((c, i) => { sx.fillStyle = c; sx.fillRect(i * 8, 0, 8, H); });
+    sx.globalAlpha = 0.4; sx.fillStyle = '#ffcc00'; sx.fillRect(0, 40, W, 12); sx.globalAlpha = 1;
+
+    const ref = document.createElement('canvas'); ref.width = W; ref.height = H;
+    const rx = ref.getContext('2d', { willReadFrequently: true });
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const ox = out.getContext('2d', { willReadFrequently: true });
+
+    const CASES = [
+      { css: 'grayscale(1)', ops: [{ type: 'grayscale', value: 1 }] },
+      { css: 'sepia(1)', ops: [{ type: 'sepia', value: 1 }] },
+      { css: 'invert(1)', ops: [{ type: 'invert', value: 1 }] },
+      { css: 'saturate(2)', ops: [{ type: 'saturate', value: 2 }] },
+      { css: 'saturate(0)', ops: [{ type: 'saturate', value: 0 }] },
+      { css: 'brightness(1.4)', ops: [{ type: 'brightness', value: 1.4 }] },
+      { css: 'contrast(1.6)', ops: [{ type: 'contrast', value: 1.6 }] },
+      { css: 'hue-rotate(90deg)', ops: [{ type: 'hue', value: 90 }] },
+      { css: 'grayscale(0.5)', ops: [{ type: 'grayscale', value: 0.5 }] },
+      // …and a CHAIN, because the matrices are multiplied and order is not commutative — which is the
+      // whole subject of queue 593/603 (his stack put the colour back).
+      { css: 'grayscale(1) sepia(1) invert(1)', ops: [{ type: 'grayscale', value: 1 }, { type: 'sepia', value: 1 }, { type: 'invert', value: 1 }] },
+    ];
+
+    const bad = [];
+    for (const c of CASES) {
+      rx.clearRect(0, 0, W, H); rx.filter = c.css; rx.drawImage(src, 0, 0); rx.filter = 'none';
+      FM.glColor._reset();
+      const got = FM.glColor.apply(src, W, H, c.ops);
+      if (!got) throw new Error(c.css + ': the GPU path returned nothing (' + FM.glColor.stats().reason + ')');
+      if (!(FM.glColor.stats().gpu > 0)) throw new Error(c.css + ': the GPU path did not run, so this comparison is empty');
+      ox.clearRect(0, 0, W, H); ox.drawImage(got, 0, 0);
+      const A = rx.getImageData(0, 0, W, H).data, B = ox.getImageData(0, 0, W, H).data;
+      let worst = 0, off = 0;
+      for (let i = 0; i < A.length; i += 4) {
+        for (let k = 0; k < 4; k++) {
+          const d = Math.abs(A[i + k] - B[i + k]);
+          if (d > worst) worst = d;
+          if (d > 8) { off++; break; }
+        }
+      }
+      const pct = 100 * off / (A.length / 4);
+      if (pct > 1) bad.push(c.css + ' — ' + pct.toFixed(2) + '% of pixels differ, worst channel ' + worst);
+    }
+    if (bad.length)
+      throw new Error('the GPU colour path does not reproduce ctx.filter: ' + bad.join(' · ') +
+                      ' — this is the path his phone would use, and it is the only place the two can be compared');
+  });
+
+  /* THE ARITHMETIC ON ITS OWN, so a failure above can be read. A pixel comparison says "wrong" without
+   * saying "which matrix", and this file's own history says an opaque red failure costs a session. */
+  test('#661: the colour matrices are the CSS ones', { item: '661' }, function () {
+    if (typeof FM._glColorMatrix !== 'function') throw new Error('FM._glColorMatrix is not exposed');
+    const m = (t, v) => FM._glColorMatrix(t, v);
+    const near = (a, b, e) => Math.abs(a - b) <= (e == null ? 1e-4 : e);
+    // grayscale(1) must be the luminance row, three times over
+    const g = m('grayscale', 1);
+    if (!near(g.m[0], 0.2126) || !near(g.m[1], 0.7152) || !near(g.m[2], 0.0722))
+      throw new Error('grayscale(1) is not the sRGB luminance row: ' + g.m.slice(0, 3));
+    // grayscale(0) must be the identity, or a slider at zero would still change the picture
+    const g0 = m('grayscale', 0);
+    if (!near(g0.m[0], 1) || !near(g0.m[1], 0) || !near(g0.m[4], 1))
+      throw new Error('grayscale(0) is not the identity: ' + g0.m);
+    // invert(1) must flip: c → 1 - c
+    const i1 = m('invert', 1);
+    if (!near(i1.m[0], -1) || !near(i1.o[0], 1)) throw new Error('invert(1) is not 1-c: m ' + i1.m[0] + ', o ' + i1.o[0]);
+    // saturate(1) is the identity; saturate(0) is the luminance matrix
+    const s1 = m('saturate', 1);
+    if (!near(s1.m[0], 1) || !near(s1.m[1], 0)) throw new Error('saturate(1) is not the identity: ' + s1.m.slice(0, 3));
+    const s0 = m('saturate', 0);
+    if (!near(s0.m[0], 0.2126) || !near(s0.m[1], 0.7152)) throw new Error('saturate(0) is not the luminance matrix: ' + s0.m.slice(0, 3));
+    // contrast pivots on 0.5 — a mid grey must be unmoved at any amount
+    const c2 = m('contrast', 2);
+    if (!near(0.5 * c2.m[0] + c2.o[0], 0.5)) throw new Error('contrast does not pivot on mid grey');
+    // blur and glow read neighbours and must be refused rather than approximated
+    if (m('blur', 4)) throw new Error('blur claims to be a colour matrix — it reads neighbouring pixels and cannot be');
+    if (m('glow', 1)) throw new Error('glow claims to be a colour matrix');
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.94
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.95
 >
-> **State:** v13.94, 1041 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.95, 1043 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25677,6 +25677,37 @@ re-opened #480, which I had marked done and had not fixed.
       against the browser's own subject, with no stack at all.
       ⚠️ **AND HE IS RIGHT THAT IT IS THE BIGGEST ONE.** Four entries have circled this and every one
       closed on reasoning rather than on this specific evidence.
+
+      ✅ **v13.94 — THE APP STOPPED LYING ABOUT IT.** The probe proves its own instrument on every call
+      (a pixel through `invert(1)` that must move); a keyframed glow colour no longer poisons the whole
+      filter string (it was read RAW, so `[object Object]` went into `ctx.filter`, which is silently
+      ignored — killing every effect on that layer at once); and the honest cause now appears in the
+      effects browser instead of only in a diagnostics readout.
+      ✅ **v13.95 — THE SHADER THAT MAKES THEM WORK IS BUILT AND PROVEN: `js/gl-color.js`.**
+      The seven colour members of `FM.CSS_FX` — brightness · contrast · saturate · hue · grayscale ·
+      sepia · invert, exactly the seven on his screenshot — as ONE matrix, so a chain of ten costs the
+      same as a chain of one. 📐 **It reproduces the real `ctx.filter` EXACTLY**, asserted against the
+      genuine article on a healthy machine, which is the only place the two can be compared: every test
+      colour matches to the byte, including a 40%-alpha band.
+      ⚠️ **TWO BUGS ON THE WAY, both found by PRINTING THE NUMBERS rather than reasoning:**
+      **(1)** the output was vertically MIRRORED — the framebuffer's origin is bottom-left while an
+      uploaded canvas puts row 0 at the top. The colour values were right and in the wrong rows, which
+      reads as "the maths is broken" and is not. **(2)** the premultiply maths was applied TWICE:
+      grayscale of a 40%-alpha pixel came back as **exactly its own alpha**, the fingerprint of a value
+      driven past 1.0 and clamped. `UNPACK_PREMULTIPLY_ALPHA_WEBGL` and `premultipliedAlpha` are both
+      false, so the colour is un-premultiplied throughout and needs no alpha arithmetic at all.
+      🛑 **IT IS NOT WIRED IN YET, AND THE EFFECTS STILL DO NOT WORK ON HIS PHONE.** Routing the draw
+      path through it when `ctx.filter` is unavailable means restructuring the hottest function in the
+      app the way `drawWarpEffect` is structured — render the layer to a plate, filter the plate, blit —
+      **and the fallback path cannot be exercised on a healthy machine without a force flag, so that
+      flag is part of the work rather than an afterthought.** Rushing it at the end of a long session is
+      how the half-pixel bug got shipped this morning.
+      ➡️ **NEXT, and it is the whole remaining value of this entry:**
+      1. [ ] **A force flag** (`FM._forceNoCtxFilter`) so `ctxFilterOK()` can be made to report false,
+             and the fallback can be tested HERE rather than only on a device nobody can debug.
+      2. [ ] **Wire the fallback** into the two `ctx.filter = effectFilter(...)` sites.
+      3. [ ] **blur and glow are still dead on such a device** — both read neighbouring pixels, so they
+             need a convolution rather than a matrix. Say so honestly rather than implying all nine work.
 
 - [ ] **662 — The export bug is MOBILE-ONLY. PC exports fine.** (28 Aug — answering the question #604
       **STATUS: 🟢 READY — nothing is stopping this**
