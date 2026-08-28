@@ -54,9 +54,15 @@ def launch(port, width, height, profile):
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
-        # the suite renders to canvas constantly; software GL is the reliable one headless
-        "--use-gl=swiftshader",
-        "--enable-unsafe-swiftshader",
+        # the suite renders to canvas constantly; software GL is the reliable one headless.
+        # ⚠️ AND IT SILENTLY INVALIDATES ANY GPU MEASUREMENT TAKEN HERE (28 Aug). A WebGL probe for the
+        # oldest queue item reported "6.4x" and "the read-back costs 30 ms" — both were SwiftShader,
+        # a CPU renderer, so neither number said anything about the device Ezra actually uses.
+        # `FM_GL=angle tools/probe.sh …` opts a single probe out onto the real GPU. The DEFAULT stays
+        # swiftshader, because the suite's stability is worth more than one probe's convenience, and a
+        # flag that changed it for everyone would trade a known-good 1030-test run for a measurement.
+        *(["--use-angle=default", "--enable-gpu"] if os.environ.get("FM_GL") == "angle"
+          else ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"]),
         "--autoplay-policy=no-user-gesture-required",
         "about:blank",
     ]

@@ -1,0 +1,198 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* THE OLDEST OPEN ITEM, the only lever it has left: WebGL.
+ * Its own conclusion after three months — "a per-pixel JavaScript loop cannot close it", gap ~50x,
+ * best single kernel win 11x. A fragment shader is a STRING, so it needs no build step, no bundler
+ * and no npm, which is the only reason it fits this project at all.
+ *
+ * THE SEAM IS ALREADY THERE. js/compositor.js has a WARP_FX family — wave, ripple, twirl, bulge, curl,
+ * kaleidoscope, gridrepeat, radialrepeat, pinch — all driven through ONE function, drawWarpEffect,
+ * which walks every pixel and asks the kernel where to sample from. That is exactly what a fragment
+ * shader is for, and porting the DRIVER gets every one of those effects at once.
+ *
+ * THIS PROBE ONLY ANSWERS THE GATING QUESTIONS, because a port is worthless if any of them is no:
+ *   1. Is WebGL2 available where the app actually runs?
+ *   2. What does a full-size warp pass cost on the GPU vs the CPU kernel it would replace?
+ *   3. Does the GPU produce the same picture? (a fast wrong answer is not an answer) */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+
+var VS = 'attribute vec2 p; varying vec2 uv; void main(){ uv = p*0.5+0.5; gl_Position = vec4(p,0.,1.); }';
+/* The TWIRL kernel, transcribed from WARP_FX.twirl in js/compositor.js:
+ *   dx,dy = point - centre;  f = max(0, 1 - r/maxR);  d = ang*f*f;  rotate (dx,dy) by d
+ * It is an INVERSE map — "where does this output pixel read from" — which is what a shader wants
+ * anyway, so the transcription is direct rather than an inversion. */
+var FS = [
+'precision highp float;',
+'varying vec2 uv;',
+'uniform sampler2D src;',
+'uniform vec2 res;',
+'uniform vec2 ctr;',
+'uniform float ang;',
+'uniform float imaxR;',
+'void main(){',
+'  vec2 xy = vec2(uv.x*res.x, (1.0-uv.y)*res.y);',
+'  vec2 dxy = xy - ctr;',
+'  float r = length(dxy);',
+'  float f = max(0.0, 1.0 - r*imaxR);',
+'  float d = ang*f*f;',
+'  float cD = cos(d), sD = sin(d);',
+'  vec2 s = ctr + vec2(dxy.x*cD - dxy.y*sD, dxy.y*cD + dxy.x*sD);',
+'  // texImage2D from a canvas puts the image\'s FIRST row at v=0, so source v is NOT flipped.',
+'  // Flipping it here (the first version did) mirrors the picture vertically and reports 62% of',
+'  // pixels "materially different" — which reads exactly like a wrong kernel and is not one.',
+'  vec2 suv = vec2(s.x/res.x, s.y/res.y);',
+'  if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) { gl_FragColor = vec4(0.0); return; }',
+'  gl_FragColor = texture2D(src, suv);',
+'}'].join('\n');
+
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var W = 1080, H = 1350;
+    P.width = W; P.height = H; P.duration = 6;
+
+    say('Q1 — IS WEBGL AVAILABLE WHERE THE APP RUNS?');
+    var gcv = d.createElement('canvas'); gcv.width = W; gcv.height = H;
+    var gl = gcv.getContext('webgl2') || gcv.getContext('webgl') || gcv.getContext('experimental-webgl');
+    if (!gl) { say('   ❌ NO WebGL context at all — the whole idea is dead here, and that is the answer'); window.__done = true; return; }
+    say('   ✅ ' + (gcv.getContext('webgl2') ? 'webgl2' : 'webgl1') + '  renderer: ' +
+        (function(){ var e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : '(hidden)'; })());
+    say('   max texture ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + 'px (needs ' + Math.max(W,H) + ')');
+
+    // --- a real source picture, drawn by the app itself so it is representative -------------------
+    FM.scene.layers.length = 0;
+    for (var i=0;i<6;i++){
+      var L = FM.makeLayer('shape', { shape:'rect', x: 200 + (i%3)*340, y: 300 + Math.floor(i/3)*500,
+                                      shapeW: 300, shapeH: 400, fill: (i%2 ? '#4fd1ff' : '#ff9a4f') });
+      L.start = 0; L.duration = 6; L.effects = [];
+      FM.scene.layers.push(L);
+    }
+    await new Promise(function(r){ setTimeout(r,600); });
+    var src = d.createElement('canvas'); src.width = W; src.height = H;
+    FM.renderScene(src.getContext('2d'), FM.scene, 0.7);
+
+    // --- the CPU cost of ONE twirl over the same picture, using the app's own kernel --------------
+    var cpuCv = d.createElement('canvas'); cpuCv.width = W; cpuCv.height = H;
+    var cpuCx = cpuCv.getContext('2d', { willReadFrequently: true });
+    var srcData = src.getContext('2d').getImageData(0,0,W,H);
+    var cx0 = W/2, cy0 = H/2, maxR = Math.hypot(W,H)/2, angDeg = 120;
+    var ang = angDeg*Math.PI/180, imaxR = 1/maxR;
+    function cpuTwirl(){
+      var o = cpuCx.createImageData(W,H), S = srcData.data, D = o.data;
+      for (var y=0;y<H;y++) for (var x=0;x<W;x++){
+        var dx = x-cx0, dy = y-cy0, r = Math.sqrt(dx*dx+dy*dy);
+        var f = 1 - r*imaxR; if (f<0) f=0;
+        var dd = ang*f*f, cD = Math.cos(dd), sD = Math.sin(dd);
+        var sx = (cx0 + dx*cD - dy*sD)|0, sy = (cy0 + dy*cD + dx*sD)|0;
+        var di = (y*W+x)*4;
+        if (sx<0||sy<0||sx>=W||sy>=H) { D[di+3]=0; continue; }
+        var si = (sy*W+sx)*4;
+        D[di]=S[si]; D[di+1]=S[si+1]; D[di+2]=S[si+2]; D[di+3]=S[si+3];
+      }
+      cpuCx.putImageData(o,0,0);
+    }
+    cpuTwirl();
+    var ct=[]; for (var r1=0;r1<5;r1++){ var t0=performance.now(); cpuTwirl(); ct.push(performance.now()-t0); }
+    ct.sort(function(a,b){return a-b;});
+    var cpuMs = ct[2];
+
+    // --- the same warp on the GPU ------------------------------------------------------------------
+    function sh(type, srcTxt){ var s = gl.createShader(type); gl.shaderSource(s, srcTxt); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('shader: ' + gl.getShaderInfoLog(s)); return s; }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.uniform2f(gl.getUniformLocation(prog,'res'), W, H);
+    gl.uniform2f(gl.getUniformLocation(prog,'ctr'), cx0, cy0);
+    gl.uniform1f(gl.getUniformLocation(prog,'ang'), ang);
+    gl.uniform1f(gl.getUniformLocation(prog,'imaxR'), imaxR);
+    gl.viewport(0,0,W,H);
+    /* ⚠️ gl.finish() DOES NOT BLOCK ON ANGLE/METAL, and the first version of this probe believed it did:
+       it reported **0.0 ms** for upload + draw + readback of a 5.8 MB texture and printed "Infinityx".
+       LOOP.md's own rule — *"a probe that reports zero is a broken probe, not a fast app"* — and it was
+       written after this exact mistake was made once already.
+       So: a batch of N passes inside one timed region, ended by a 1x1 readPixels, which is a REAL sync
+       point the driver cannot defer past. The per-pass figure is the batch divided by N. */
+    var N = 30, px1 = new Uint8Array(4);
+    function sync(){ gl.readPixels(0,0,1,1, gl.RGBA, gl.UNSIGNED_BYTE, px1); }
+    function gpuTwirl(){
+      // upload counts: in the real thing the plate has to reach the GPU every frame, so timing the
+      // draw alone would be a lie by omission.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    gpuTwirl(); sync();
+    var gt=[];
+    for (var r2=0;r2<5;r2++){ var t1=performance.now(); for (var q1=0;q1<N;q1++) gpuTwirl(); sync(); gt.push((performance.now()-t1)/N); }
+    gt.sort(function(a,b){return a-b;});
+    var gpuMs = gt[2];
+    // …and the read-back, which the 2D compositor needs and which is usually the real cost
+    var back = d.createElement('canvas'); back.width = W; back.height = H;
+    var bctx = back.getContext('2d', { willReadFrequently: true });
+    function gpuFull(){ gpuTwirl(); bctx.clearRect(0,0,W,H); bctx.drawImage(gcv,0,0); }
+    gpuFull();
+    var ft=[];
+    for (var r3=0;r3<5;r3++){ var t2=performance.now(); for (var q2=0;q2<N;q2++) gpuFull(); sync(); ft.push((performance.now()-t2)/N); }
+    ft.sort(function(a,b){return a-b;});
+    var fullMs = ft[2];
+    /* AND THE ONE THE COMPOSITOR ACTUALLY NEEDS: getImageData off the 2D canvas. Every WARP_FX kernel
+       today ends with pixels in an ImageData, so a GPU path that cannot hand those back cheaply has not
+       replaced anything — it has moved the cost to the fence. Timed separately and honestly. */
+    function gpuToPixels(){ gpuFull(); return bctx.getImageData(0,0,W,H); }
+    gpuToPixels();
+    var pt=[]; for (var r4=0;r4<3;r4++){ var t3=performance.now(); gpuToPixels(); pt.push(performance.now()-t3); }
+    pt.sort(function(a,b){return a-b;});
+    var pixMs = pt[1];
+
+    say('');
+    say('Q2 — ONE FULL-SIZE TWIRL AT ' + W + 'x' + H + ':');
+    say('   CPU kernel (the app’s own maths)  ' + cpuMs.toFixed(1) + ' ms');
+    say('   GPU draw + upload                ' + gpuMs.toFixed(2) + ' ms   → ' + (cpuMs/gpuMs).toFixed(0) + 'x');
+    say('   GPU + blit back to a 2D canvas   ' + fullMs.toFixed(2) + ' ms   → ' + (cpuMs/fullMs).toFixed(0) + 'x');
+    say('   GPU + blit + getImageData        ' + pixMs.toFixed(1) + ' ms   → ' + (cpuMs/pixMs).toFixed(1) + 'x  ← THE HONEST NUMBER');
+    say('   (' + N + ' passes per timed batch, ended by a readPixels fence — gl.finish() does not block here)');
+
+    // --- Q3: same picture? -------------------------------------------------------------------------
+    var A = cpuCx.getImageData(0,0,W,H).data, B = bctx.getImageData(0,0,W,H).data;
+    var diff=0, big=0, lit=0;
+    for (var q=0;q<A.length;q+=4){
+      if (A[q+3]>4) lit++;
+      var e = Math.max(Math.abs(A[q]-B[q]), Math.abs(A[q+1]-B[q+1]), Math.abs(A[q+2]-B[q+2]), Math.abs(A[q+3]-B[q+3]));
+      if (e>0) diff++; if (e>24) big++;
+    }
+    say('');
+    say('Q3 — IS IT THE SAME PICTURE?');
+    say('   pixels differing at all   ' + diff + ' (' + (100*diff/(A.length/4)).toFixed(2) + '%)   of ' + lit + ' lit');
+    say('   differing by more than 24 levels ' + big + ' (' + (100*big/(A.length/4)).toFixed(2) + '%)');
+    say('   ' + (big*100/(A.length/4) < 1
+      ? '✅ the same picture — the rest is sampling-grid rounding, which is what rule 14 warns to expect'
+      : '🚨 materially different — the shader is not the same kernel'));
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

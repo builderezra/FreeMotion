@@ -1,0 +1,106 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* THE OLDEST OPEN ITEM — "Editing lags, and gets bad fast."
+ * Its own summary says the measurable half is finished and what is left is architectural: five effects
+ * on six SHAPES already gives 45 fps on a fast desktop and 17 fps at 6x, and a per-pixel JS loop cannot
+ * close a 50x gap. So the next lever is not making a kernel faster — it is NOT RUNNING IT.
+ *
+ * THE HYPOTHESIS: while you EDIT, the playhead does not move, and most of what you do (select a layer,
+ * open a panel, rebuild the timeline) calls requestRender() and repaints a picture that is
+ * BYTE-IDENTICAL to the one already on screen. If that is true, a frame cache turns every one of those
+ * repaints into a blit.
+ *
+ * THIS PROBE DOES NOT BUILD THE CACHE. It answers the two questions that decide whether to:
+ *   1. Is a second render at the same time byte-identical? (If not, a cache is unsafe — stop.)
+ *   2. What does one repaint cost, at his own project size, with his own kind of stack?
+ * Answering these takes minutes; guessing wrong costs a session on the wrong half. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    P.width = 1080; P.height = 1350; P.duration = 6;
+    FM.scene.layers.length = 0;
+
+    /* HIS OWN SLOW CASE, as the entry describes it: six shapes, five effects. Built with
+       fxRegistry.makeInstance — the probe that reported "renderScene 0.00ms at every throttle" was
+       building {id, params} by hand, so every effect was silently ignored and it timed an empty scene.
+       A probe that reports zero is a broken probe, not a fast app. */
+    var FXN = ['gaussianblur','twirl','ripple','kaleidoscope','gridrepeat'];
+    var made = 0;
+    for (var i=0;i<6;i++){
+      var L = FM.makeLayer('shape', { shape:'rect', x: 200 + (i%3)*340, y: 300 + Math.floor(i/3)*500,
+                                      shapeW: 300, shapeH: 400, fill: (i%2 ? '#4fd1ff' : '#ff9a4f') });
+      L.start = 0; L.duration = 6; L.effects = [];
+      for (var k=0;k<FXN.length;k++){
+        var inst = FM.fxRegistry.makeInstance ? FM.fxRegistry.makeInstance(FXN[k]) : null;
+        if (inst) { L.effects.push(inst); made++; }
+      }
+      FM.scene.layers.push(L);
+    }
+    if (!made) return say('❌ no effect instances were made — this probe would be timing an empty scene, which is exactly the trap the entry warns about');
+    say('built 6 shapes at ' + P.width + 'x' + P.height + ' carrying ' + made + ' effect instances (' + (made/6) + ' each)');
+    await new Promise(function(r){ setTimeout(r,700); });
+
+    var cv = d.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    function shot(){ cx.clearRect(0,0,cv.width,cv.height); FM.renderScene(cx, FM.scene, 0.7); return cx.getImageData(0,0,cv.width,cv.height).data; }
+    function timeOne(){ var t0 = performance.now(); cx.clearRect(0,0,cv.width,cv.height); FM.renderScene(cx, FM.scene, 0.7); return performance.now()-t0; }
+
+    // warm everything up first — the first render allocates plates and compiles nothing useful to time
+    timeOne();
+    var A = shot(), B = shot();
+    var diff = 0, lit = 0;
+    for (var p=0;p<A.length;p+=4){ if (A[p+3]>4) lit++;
+      if (A[p]!==B[p]||A[p+1]!==B[p+1]||A[p+2]!==B[p+2]||A[p+3]!==B[p+3]) diff++; }
+    say('');
+    say('Q1 — IS A REPEAT RENDER AT THE SAME TIME IDENTICAL?');
+    say('   differing pixels : ' + diff + ' of ' + (A.length/4) + '   (' + lit + ' lit)');
+    say('   ' + (diff === 0
+      ? '✅ BYTE-IDENTICAL — a frame cache would be exact, not an approximation'
+      : '🚨 NOT identical — something in the chain is non-deterministic, and a cache would FREEZE it'));
+
+    var ts = [];
+    for (var r=0;r<7;r++) ts.push(timeOne());
+    ts.sort(function(a,b){return a-b;});
+    var med = ts[3];
+    say('');
+    say('Q2 — WHAT DOES ONE REPAINT COST AT HIS PROJECT SIZE?');
+    say('   renderScene median ' + med.toFixed(1) + ' ms   (' + ts.map(function(x){return x.toFixed(0);}).join(', ') + ')');
+    say('   a phone is roughly 4-6x this machine → ' + (med*4).toFixed(0) + '-' + (med*6).toFixed(0) + ' ms per repaint');
+
+    /* Q3 — HOW MANY REPAINTS DOES ORDINARY EDITING ASK FOR? requestRender() already collapses
+       everything inside one animation frame, so the question is how many SEPARATE frames a few taps
+       cost. Count real renderScene calls rather than requestRender calls. */
+    var calls = 0, realRender = FM.renderScene;
+    FM.renderScene = function(){ calls++; return realRender.apply(this, arguments); };
+    try {
+      var ids = FM.scene.layers.map(function(l){ return l.id; });
+      for (var s=0;s<6;s++){
+        FM.selectLayer(ids[s]);
+        if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+        await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+      }
+    } finally { FM.renderScene = realRender; }
+    say('');
+    say('Q3 — SELECTING SIX LAYERS IN TURN, PLAYHEAD PARKED:');
+    say('   full renderScene calls : ' + calls);
+    say('   at ' + med.toFixed(0) + ' ms each that is ' + (calls*med).toFixed(0) + ' ms on this Mac, ' +
+        (calls*med*5/1000).toFixed(1) + ' s on a phone');
+    say('   ' + (diff === 0 && calls > 1
+      ? '✅ every one of those after the first draws a picture identical to the one already on screen'
+      : 'ⓘ see Q1 — a cache is only worth building if the repeat is identical'));
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

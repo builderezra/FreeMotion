@@ -296,6 +296,60 @@ _ORDER = [
 ]
 
 
+# ═══ WHAT THE LOOP WORKS NEXT — AND "BLOCKED" IS IN IT (queue 660, 28 Aug) ═════════════════════════
+# Ezra: *"Dont ask questions like that dont stop to ask questions, log ur question and ask it me when
+# i ask for me, just keep going, also ur not doing oldest first"*.
+# He said both halves in one breath because they are one fault. `next.sh` built its START HERE list
+# from ACTIONABLE alone, and the classifier files **43 of 76 open items as "blocked on Ezra"** — so
+# more than half the list was invisible and the loop worked the newest third while believing it was
+# working oldest-first. #47, #95, #96, #98, #125, #129, #148 and #202 all sat open and unreachable
+# while 610/631/632 were being offered as "START HERE (oldest first)".
+# "Blocked" was only ever a reason to skip because ASKING was treated as a precondition. It is not one
+# any more: write the question into the entry, build every part that does not depend on the answer,
+# move on. So a blocked item is WORK, and it goes back in the queue.
+# ⚠️ THIS IS NOT `next_up`, AND THE TWO MUST NOT BE MERGED. `next_up` decides what may be CLOSED, and
+# it still excludes blocked items — a gate that demanded an unanswerable item be closed first would
+# stop every release. WORK includes blocked; CLOSE does not. Same file, different question.
+# 'held by Ezra' stays out: he has said explicitly not to do those, which is an answer, not a gap.
+WORKABLE = ('ACTIONABLE', 'blocked on Ezra')
+
+
+def work_queue(buckets):
+    """buckets = {bucket_name: [(tag, title, line), ...]}. Returns [(tag, title, line, bucket), ...]
+    oldest first — unnumbered entries before every number, letter suffixes sorted inside their number."""
+    items = []
+    for k in WORKABLE:
+        for row in buckets.get(k, []):
+            items.append((row[0], row[1], row[2], k))
+
+    def key(t):
+        m = re.match(r'(\d+)([a-z]?)$', str(t[0]))
+        return (1, int(m.group(1)), m.group(2)) if m else (0, 0, '')
+    return sorted(items, key=key)
+
+
+_WORK = [
+    # THE BUG ITSELF: a blocked #47 must come out AHEAD of an actionable #610, not be hidden by it.
+    ({'ACTIONABLE': [('610', 'border and shadow', 5)],
+      'blocked on Ezra': [('47', 'export on a crash', 9)]},
+     ['47', '610'],
+     'a blocked older item leads the WORK queue — hiding it is what made the loop stop being oldest-first'),
+    # Unnumbered entries predate the numbering, so they are older than #1 — same rule next.sh already has.
+    ({'ACTIONABLE': [('12', 'a numbered one', 3), ('(unnumbered)', 'an old one', 1)],
+      'blocked on Ezra': []},
+     ['(unnumbered)', '12'],
+     'an unnumbered entry outranks every number in the work queue too'),
+    # Letter suffixes sort INSIDE their number, not at the bottom. This bug shipped once already.
+    ({'ACTIONABLE': [('32', 'later', 3)], 'blocked on Ezra': [('31b', 'earlier', 1)]},
+     ['31b', '32'],
+     '#31b sorts inside 31 — the same mis-sort the first next.sh shipped'),
+    # HELD is not a gap in my knowledge, it is his decision. It must stay OUT of the work queue.
+    ({'ACTIONABLE': [('610', 'border', 5)], 'held by Ezra': [('206', 'shape edit points', 1)]},
+     ['610'],
+     'an item HE held must not be handed back as work — that would be ignoring him, not obeying him'),
+]
+
+
 if __name__ == '__main__':
     import sys as _s
     bad = 0
@@ -310,7 +364,13 @@ if __name__ == '__main__':
         if got2 != want:
             bad += 1
             print('FAIL: next_up expected %-14s got %-14s — %s' % (want, got2, why))
+    for buckets, want, why in _WORK:
+        got = [r[0] for r in work_queue(buckets)]
+        if got != want:
+            bad += 1
+            print('FAIL: work_queue expected %-22s got %-22s — %s' % (want, got, why))
+    _total = len(_CASES) + len(_ORDER) + len(_WORK)
     if bad:
-        print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, len(_CASES) + len(_ORDER)))
+        print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)
-    print('classifier self-test: %d/%d ok' % (len(_CASES) + len(_ORDER), len(_CASES) + len(_ORDER)))
+    print('classifier self-test: %d/%d ok' % (_total, _total))

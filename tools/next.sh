@@ -372,19 +372,27 @@ for n, i in enumerate(starts):
     buckets[key].append((tag, title, i + 1))
 for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
     print('%-22s %d' % (k + ':', len(buckets[k])))
-act = buckets['ACTIONABLE']
-if act:
+# ⚠️ THIS LIST INCLUDES ITEMS BLOCKED ON HIM, ON PURPOSE (queue 660). It used to show ACTIONABLE only,
+# and the classifier files 43 of 76 open items as blocked — so more than half the list was invisible and
+# the loop worked the newest third while reporting that it was oldest-first. #47, #95, #96, #98, #125,
+# #129, #148 and #202 were all open and unreachable. His instruction is that a question NEVER stops the
+# loop: write it in the entry, build the half that does not depend on it, move on. So blocked is work.
+from _classify import work_queue
+wq = work_queue(buckets)
+if wq:
     print('\nSTART HERE (oldest first) — but READ THE CODE BEFORE YOU BUILD:')
     print('  On 20 Aug THREE open entries turned out to be already done — 395 (audio export shipped')
     print('  under 216), 277 (nine of ten clauses), 418 clause 2 (already at 1.8). Each was found by')
     print('  opening the file the entry names. An entry is a record of what was ASKED, not of what is')
     print('  still missing, and nothing keeps the two in step automatically.')
-    def key(t):
-        mm = re.match(r'(\d+)', t[0])
-        return (0, 0) if not mm else (1, int(mm.group(1)))
-    for tag, title, ln in sorted(act, key=key)[:5]:
-        print('  %-6s line %-6d %s' % (tag, ln, title))
+    for tag, title, ln, bucket in wq[:8]:
+        mark = '  ' if bucket == 'ACTIONABLE' else '❓'
+        print('%s%-6s line %-6d %s' % (mark, tag, ln, title))
+    if any(b != 'ACTIONABLE' for _, _, _, b in wq[:8]):
+        print('  ❓ = a question is open in it. That is NOT a reason to skip it — his words, 28 Aug:')
+        print('     "dont stop to ask questions, log ur question and ask it me when i ask for me, just')
+        print('     keep going". Build the half that does not need the answer and write the question down.')
 else:
-    print('\nNothing classified as actionable — bug hunts are the fallback (his explicit instruction).')
+    print('\nNothing left in the work queue — bug hunts are the fallback (his explicit instruction).')
 print('\n(A guess from the prose. If one is wrong, the entry is what to fix, not this script.)')
 PY
